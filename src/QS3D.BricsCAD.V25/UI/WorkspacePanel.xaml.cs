@@ -57,9 +57,11 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnView3DClick(object sender, RoutedEventArgs e)
         {
-            var family = FamilyList.SelectedItem as ProjectFamily; _viewModel.SetActiveFamily(family);
-            var command = family?.Category == ElementCategory.ArchitecturalWall ? "QS3DWALL" : family?.Category == ElementCategory.Room ? "QS3DROOM" : family?.Category == ElementCategory.Door ? "QS3DDOOR" : family?.Category == ElementCategory.WallOpening ? "QS3DOPENING" : "QS3DTAKEOFF"; Send(command);
+            var family = FamilyList.SelectedItem as ProjectFamily;
+            _viewModel.SetActiveFamily(family);
+            Send(CommandFor(family?.Category));
         }
+
         private void OnCreateFinishesClick(object sender, RoutedEventArgs e) => Send("QS3DFINISH");
         private void OnQuantityClick(object sender, RoutedEventArgs e) => Send("QS3DBQ");
         private void OnHealthClick(object sender, RoutedEventArgs e) => Send("QS3DHEALTH");
@@ -68,6 +70,27 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnLocateSelectedClick(object sender, RoutedEventArgs e) { var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null || _inspection.Count == 0) return; var count = Cad.CadHandleService.Select(doc, _inspection.Select(x => x.Handle)); SetStatus("Đã chọn lại " + count + " đối tượng CAD."); }
         private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e) { if (_loadingContext) return; var family = FamilyList.SelectedItem as ProjectFamily; _viewModel.SetActiveFamily(family); }
         private void OnFamilySearchChanged(object sender, TextChangedEventArgs e) { var text = FamilySearch.Text?.Trim() ?? string.Empty; var view = System.Windows.Data.CollectionViewSource.GetDefaultView(FamilyList.ItemsSource); if (view == null) return; view.Filter = item => item is ProjectFamily f && (text.Length == 0 || f.Name.IndexOf(text, StringComparison.CurrentCultureIgnoreCase) >= 0 || f.Category.ToString().IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0); }
+
+        private static string CommandFor(ElementCategory? category)
+        {
+            switch (category)
+            {
+                case ElementCategory.ArchitecturalWall: return "QS3DWALL";
+                case ElementCategory.StructuralWall: return "QS3DSTRUCTWALL";
+                case ElementCategory.Room: return "QS3DROOM";
+                case ElementCategory.Door: return "QS3DDOOR";
+                case ElementCategory.WallOpening: return "QS3DOPENING";
+                case ElementCategory.Beam: return "QS3DBEAM";
+                case ElementCategory.Slab: return "QS3DSLAB";
+                case ElementCategory.Column: return "QS3DCOLUMN";
+                case ElementCategory.Foundation: return "QS3DFOUNDATION";
+                case ElementCategory.Stair: return "QS3DSTAIR";
+                case ElementCategory.Railing: return "QS3DRAILING";
+                case ElementCategory.Earthwork: return "QS3DEARTHWORK";
+                default: return "QS3DTAKEOFF";
+            }
+        }
+
         private static void Send(string command) => Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + " ", true, false, false);
     }
 }

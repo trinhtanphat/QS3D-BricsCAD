@@ -1,14 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
+using Microsoft.Win32;
 using QS3D.BricsCAD.V25.Reporting;
 using QS3D.BricsCAD.V25.Ribbon;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
+using QS3D.Core.Export;
+using QS3D.Core.Rebar;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
 using QS3D.Core.Units;
@@ -36,6 +40,7 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DBQ", () =>
             {
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var regenerated = RegenerateProject(project);
                 IReadOnlyList<QuantityReportRow> rows; Action<QuantityReportRow>? locate = null;
                 if (project.Elements.Count > 0)
                 {
@@ -43,13 +48,58 @@ namespace QS3D.BricsCAD.V25
                     locate = row => { var handles = row.ElementIds.SelectMany(id => project.FindElement(id)?.SourceHandles ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(); var count = Cad.CadHandleService.Select(doc, handles); PaletteCoordinator.SetStatus("BQ Locate: " + count + " CAD object"); };
                 }
                 else rows = SnapshotQuantityAdapter.Build(Cad.EntitySnapshotReader.ReadCurrentSelection(doc), DrawingUnit.Millimeter);
+                if (regenerated > 0) PaletteCoordinator.SetStatus("BQ: đã regenerate " + regenerated + " lượt cấu kiện trước khi tổng hợp.");
                 Application.ShowModelessWindow(IntPtr.Zero, new QuantitySummaryWindow(rows, locate), true);
+            });
+        }
+
+        [CommandMethod("QS3DBBS", CommandFlags.Modal)]
+        public void ExportBbs()
+        {
+            var doc = Active(); if (doc == null) return;
+            Guard(doc, "QS3DBBS", () =>
+            {
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                RegenerateProject(project);
+                var rows = ProjectRebarScheduleBuilder.Build(project);
+                if (rows.Count == 0) { doc.Editor.WriteMessage("\nQS3D BBS: chưa có cấu kiện nào khai báo RebarNotation."); return; }
+                var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
+                var dialog = new SaveFileDialog { Title = "Xuất Bar Bending Schedule", Filter = "Excel Workbook (*.xlsx)|*.xlsx", DefaultExt = ".xlsx", AddExtension = true, OverwritePrompt = true, FileName = drawingName + "-BBS.xlsx" };
+                if (dialog.ShowDialog() != true) return;
+                XlsxRebarScheduleExporter.Export(dialog.FileName, rows);
+                var totalWeight = rows.Sum(x => x.TotalWeightKg);
+                var status = "BBS: " + rows.Count + " bar mark • " + totalWeight.ToString("0.###") + " kg • " + dialog.FileName;
+                PaletteCoordinator.SetStatus(status); doc.Editor.WriteMessage("\nQS3D " + status);
+            });
+        }
+
+        [CommandMethod("QS3DREGEN", CommandFlags.Modal)]
+        public void Regenerate()
+        {
+            var doc = Active(); if (doc == null) return;
+            Guard(doc, "QS3DREGEN", () =>
+            {
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var count = RegenerateProject(project);
+                PaletteCoordinator.RefreshProject();
+                var message = count == 0 ? "QS3D: không có cấu kiện dirty cần regenerate." : "QS3D: đã regenerate " + count + " lượt cấu kiện.";
+                PaletteCoordinator.SetStatus(message); doc.Editor.WriteMessage("\n" + message);
             });
         }
 
         [CommandMethod("QS3DSAVE", CommandFlags.Modal)] public void SaveProject() { var doc = Active(); if (doc == null) return; Guard(doc, "QS3DSAVE", () => { var path = ProjectContextCoordinator.Save(doc); PaletteCoordinator.SetStatus("Đã lưu " + path); doc.Editor.WriteMessage("\nQS3D saved: " + path); }); }
         [CommandMethod("QS3DRELOAD", CommandFlags.Modal)] public void ReloadProject() { var doc = Active(); if (doc == null) return; Guard(doc, "QS3DRELOAD", () => { ProjectContextCoordinator.Reload(doc); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Đã nạp lại project từ .qsdb"); }); }
-        [CommandMethod("QS3DREFRESH", CommandFlags.Modal)] public void Refresh() { PaletteCoordinator.RefreshAll(); Write("QS3D đã làm mới Project/Layer/Xref."); }
+        [CommandMethod("QS3DREFRESH", CommandFlags.Modal)]
+        public void Refresh()
+        {
+            var doc = Active(); if (doc == null) { PaletteCoordinator.RefreshAll(); return; }
+            Guard(doc, "QS3DREFRESH", () =>
+            {
+                var count = RegenerateProject(ProjectContextCoordinator.GetOrCreate(doc));
+                PaletteCoordinator.RefreshAll();
+                doc.Editor.WriteMessage("\nQS3D đã làm mới Project/Layer/Xref" + (count > 0 ? " và regenerate " + count + " lượt cấu kiện." : "."));
+            });
+        }
         [CommandMethod("QS3DTAKEOFF", CommandFlags.UsePickSet)] public void QuickTakeoff() => Capture(ElementCategory.CustomQuantity, "Quick Takeoff");
 
         [CommandMethod("QS3DWALL", CommandFlags.UsePickSet)]
@@ -70,6 +120,14 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DROOM", CommandFlags.UsePickSet)] public void CaptureRoom() => Capture(ElementCategory.Room, "Phòng");
         [CommandMethod("QS3DOPENING", CommandFlags.UsePickSet)] public void CaptureOpening() => Capture(ElementCategory.WallOpening, "Lỗ Mở Vách");
         [CommandMethod("QS3DDOOR", CommandFlags.UsePickSet)] public void CaptureDoor() => Capture(ElementCategory.Door, "Cửa Đi");
+        [CommandMethod("QS3DBEAM", CommandFlags.UsePickSet)] public void CaptureBeam() => Capture(ElementCategory.Beam, "Dầm");
+        [CommandMethod("QS3DSLAB", CommandFlags.UsePickSet)] public void CaptureSlab() => Capture(ElementCategory.Slab, "Sàn");
+        [CommandMethod("QS3DCOLUMN", CommandFlags.UsePickSet)] public void CaptureColumn() => Capture(ElementCategory.Column, "Cột");
+        [CommandMethod("QS3DSTRUCTWALL", CommandFlags.UsePickSet)] public void CaptureStructuralWall() => Capture(ElementCategory.StructuralWall, "Vách BTCT");
+        [CommandMethod("QS3DFOUNDATION", CommandFlags.UsePickSet)] public void CaptureFoundation() => Capture(ElementCategory.Foundation, "Móng");
+        [CommandMethod("QS3DSTAIR", CommandFlags.UsePickSet)] public void CaptureStair() => Capture(ElementCategory.Stair, "Cầu thang");
+        [CommandMethod("QS3DRAILING", CommandFlags.UsePickSet)] public void CaptureRailing() => Capture(ElementCategory.Railing, "Lan can");
+        [CommandMethod("QS3DEARTHWORK", CommandFlags.UsePickSet)] public void CaptureEarthwork() => Capture(ElementCategory.Earthwork, "Đào đất");
 
         [CommandMethod("QS3DLINKHOST", CommandFlags.UsePickSet)]
         public void LinkOpeningHost()
@@ -81,11 +139,10 @@ namespace QS3D.BricsCAD.V25
                 var selectedHandles = new HashSet<string>(Cad.EntitySnapshotReader.ReadCurrentSelection(doc).Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
                 var selected = project.Elements.Where(x => x.SourceHandles.Any(selectedHandles.Contains)).ToList();
                 var opening = selected.FirstOrDefault(x => x.Category == ElementCategory.WallOpening || x.Category == ElementCategory.Door);
-                var wall = selected.FirstOrDefault(x => x.Category == ElementCategory.ArchitecturalWall || x.Category == ElementCategory.GlassWall || x.Category == ElementCategory.WallPier);
-                if (opening == null || wall == null) { doc.Editor.WriteMessage("\nChọn đồng thời 1 Tường KT và 1 Cửa/Lỗ Mở đã được QS3D capture, rồi chạy QS3DLINKHOST."); return; }
+                var wall = selected.FirstOrDefault(x => x.Category == ElementCategory.ArchitecturalWall || x.Category == ElementCategory.GlassWall || x.Category == ElementCategory.WallPier || x.Category == ElementCategory.StructuralWall);
+                if (opening == null || wall == null) { doc.Editor.WriteMessage("\nChọn đồng thời 1 tường/vách và 1 Cửa/Lỗ Mở đã được QS3D capture, rồi chạy QS3DLINKHOST."); return; }
                 new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
-                new OpeningRegenerator().Regenerate(project, opening); opening.MarkClean(ElementDirtyFlags.All);
-                new WallRegenerator().Regenerate(project, wall); wall.MarkClean(ElementDirtyFlags.All);
+                RegenerateProject(project);
                 project.Touch(); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Đã link " + opening.Id + " → " + wall.Id);
             });
         }
@@ -125,6 +182,8 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3D " + label, () => { var count = SemanticCaptureService.Capture(doc, category); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus(label + ": đã ghi " + count + " cấu kiện."); doc.Editor.WriteMessage("\nQS3D " + label + ": " + count + " element(s)."); });
         }
+
+        private static int RegenerateProject(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
         private static void Write(string message) => Active()?.Editor.WriteMessage("\n" + message);
         private static void Guard(Document document, string operation, Action action) { try { action(); } catch (Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }

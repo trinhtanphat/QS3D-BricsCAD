@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
+using QS3D.Core.Rebar;
 
 namespace QS3D.Core.Diagnostics
 {
@@ -54,6 +55,7 @@ namespace QS3D.Core.Diagnostics
                 if (element.Dirty != ElementDirtyFlags.None) issues.Add(new ModelHealthIssue("DIRTY", HealthSeverity.Info, "Khối lượng/cấu kiện cần cập nhật.", element.Id));
                 if ((element.Category == ElementCategory.WallOpening || element.Category == ElementCategory.Door) && !element.Properties.ContainsKey("HostWallId")) issues.Add(new ModelHealthIssue("MISSING_HOST", HealthSeverity.Error, "Cửa/lỗ mở chưa có Host Wall.", element.Id));
                 if (RequiresMaterial(element.Category) && !HasMaterial(project, element)) issues.Add(new ModelHealthIssue("MISSING_MATERIAL", HealthSeverity.Warning, "Cấu kiện chưa có vật liệu.", element.Id));
+                ValidateRebar(element, issues);
 
                 foreach (var handle in element.SourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)))
                 {
@@ -67,6 +69,22 @@ namespace QS3D.Core.Diagnostics
             return issues;
         }
 
+        private static void ValidateRebar(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            if (!element.Properties.TryGetValue("RebarNotation", out var notation) || string.IsNullOrWhiteSpace(notation)) return;
+            try { RebarNotationParser.Parse(notation); }
+            catch (Exception ex) when (ex is FormatException || ex is ArgumentException || ex is OverflowException)
+            {
+                issues.Add(new ModelHealthIssue("INVALID_REBAR", HealthSeverity.Error, "Ký hiệu thép không hợp lệ: " + ex.Message, element.Id));
+                return;
+            }
+
+            var hasLength = element.Properties.TryGetValue("RebarCuttingLengthM", out var cutting) && !string.IsNullOrWhiteSpace(cutting);
+            if (!hasLength) hasLength = element.Properties.TryGetValue("LengthM", out var length) && !string.IsNullOrWhiteSpace(length);
+            if (!hasLength) hasLength = element.Quantities.TryGetValue("LengthM", out var quantityLength) && quantityLength > 0d;
+            if (!hasLength) issues.Add(new ModelHealthIssue("REBAR_LENGTH_MISSING", HealthSeverity.Warning, "Thép có notation nhưng chưa có chiều dài cắt/chiều dài cấu kiện.", element.Id));
+        }
+
         private static bool HasMaterial(ProjectState project, ProjectElement element)
         {
             if (element.Properties.TryGetValue("Material", out var own) && !string.IsNullOrWhiteSpace(own)) return true;
@@ -78,6 +96,13 @@ namespace QS3D.Core.Diagnostics
         {
             switch (category)
             {
+                case ElementCategory.Beam:
+                case ElementCategory.Slab:
+                case ElementCategory.Column:
+                case ElementCategory.StructuralWall:
+                case ElementCategory.Foundation:
+                case ElementCategory.Stair:
+                case ElementCategory.Railing:
                 case ElementCategory.ArchitecturalWall:
                 case ElementCategory.GlassWall:
                 case ElementCategory.WallPier:
