@@ -44,6 +44,7 @@ namespace QS3D.Core.Reporting
                 row.BottomAreaM2 += Q(element, "BottomAreaM2", element.Category == ElementCategory.FloorFinish || element.Category == ElementCategory.Waterproofing ? Q(element, "AreaM2") : 0d);
                 row.TopAreaM2 += Q(element, "TopAreaM2", element.Category == ElementCategory.CeilingFinish ? Q(element, "AreaM2") : 0d);
                 row.OtherAreaM2 += Q(element, "OtherAreaM2");
+                row.SteelWeightKg += Q(element, "SteelWeightKg");
             }
 
             return order.Select(x => rows[x]).ToList();
