@@ -1,4 +1,4 @@
-# Implementation status — 2026-08-09
+# Implementation status — 2026-08-10
 
 ## Implemented in source
 
@@ -8,7 +8,10 @@
 - Multi-document lifecycle refresh on document created/activated/destroyed.
 - Project / Zone / Floor / Family / semantic Element model.
 - Data-driven Family property editor with active Zone/Floor/Family context.
-- `.qsdb` load/save, backup/temp replacement and single-writer project lock.
+- QSDB schema v2 with deterministic v1 → v2 migration and migration provenance metadata.
+- validated `.qsdb` temp-save, atomic replace where supported, `.bak` recovery and single-writer project lock.
+- corrupted primary QSDB fallback to valid backup; if both are unreadable, the BricsCAD context enters protected recovery state and refuses to overwrite the existing project file.
+- Model Health reports backup recovery and protected project-load failures.
 - dependency graph, dirty propagation, deterministic regenerators, formula/rule foundation.
 - semantic capture for Room, Tường KT, Opening, Door and custom takeoff.
 - Tường KT native `Solid3d` generation for selected plan-view LINE entities.
@@ -17,10 +20,21 @@
 - live Xref listing and LayerTable listing/search/show/hide.
 - selection inspection and handle-based Locate/select.
 - semantic BQ grouped by floor/category/family, column visibility, filters, Locate and real `.xlsx` export.
-- Model Health window + checks for missing host/family/floor/zone/material, orphan/duplicate handles, dirty elements.
+- Excel exporter headers now match `SideAreaM2`, `BottomAreaM2`, `TopAreaM2`, `OtherAreaM2`; first row is frozen and the quantity range has AutoFilter.
+- Model Health checks missing host/family/floor/zone/material, orphan/duplicate handles and dirty elements; material may inherit from Family.
 - bulk edit, revision snapshots/diff, audit, feature flags, template profile and unit/tolerance policies in core.
-- expanded source preflight + smoke-test source.
-- GitHub Actions remain `workflow_dispatch` only.
+- expanded source preflight + deterministic hardening smoke tests.
+- `main` GitHub Actions workflows remain `workflow_dispatch` only.
+
+## Verified in GitHub-hosted CI
+
+- baseline Core CI run `31341101835`: PASS.
+- hardening Core CI run `31341548469`: PASS.
+- both runs passed preflight, Release build of `QS3D.Core`, and deterministic smoke tests.
+
+## Gate C blocker
+
+BricsCAD V25 integration probe run `31341184031` is queued because no matching self-hosted runner is assigned for `[self-hosted, windows, x64, bricscad-v25]`. Therefore the V25 plugin build has not yet executed and is not claimed successful or failed.
 
 ## Runtime-gated / not yet claimed complete
 
@@ -36,4 +50,4 @@ These require a licensed BricsCAD V25 Windows runner/session and are **not claim
 - full structural Beam/Slab/Column/Foundation 3D authoring and advanced rebar/BBS;
 - installer/code signing/update service and commercial licensing backend.
 
-The source intentionally distinguishes these from implemented/testable deterministic core work so a design mock or unverified API path is never reported as a successful BricsCAD runtime test.
+The source intentionally distinguishes implemented/tested deterministic core work from API paths that still require an actual BricsCAD V25 runtime.
