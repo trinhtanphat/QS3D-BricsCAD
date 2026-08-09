@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>QS3D.Core</AssemblyName>
+    <RootNamespace>QS3D.Core</RootNamespace>
+  </PropertyGroup>
+</Project>
