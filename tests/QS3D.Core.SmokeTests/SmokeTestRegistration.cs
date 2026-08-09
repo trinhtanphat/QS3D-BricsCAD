@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
             ProjectQuantitySmoke.Run();
             PersistenceHardeningSmoke.Run();
             FullDomainSmoke.Run();
+            DomainHealthSmoke.Run();
         }
     }
 }
