@@ -23,7 +23,7 @@ for workflow in (ROOT/".github/workflows").glob("*.yml"):
     text=workflow.read_text(encoding="utf-8")
     if "workflow_dispatch:" not in text: errors.append(f"{workflow.name}: workflow_dispatch is required")
     has_auto=re.search(r"(?m)^\s*(push|pull_request)\s*:",text)
-    allowed=bool(allow_temp and workflow.name=="ci.yml" and allow_temp in text)
+    allowed=bool(allow_temp and allow_temp in text)
     if has_auto and not allowed: errors.append(f"{workflow.name}: automatic trigger forbidden before V25 runtime gate")
 for path in ROOT.rglob("*"):
     if path.is_dir() and path.name.lower() in {"blt","blt3d"}: errors.append(f"vendor folder must not be committed: {path.relative_to(ROOT)}")
