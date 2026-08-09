@@ -38,7 +38,7 @@ namespace QS3D.Core.Domain
 
     public sealed class ProjectState
     {
-        public const int CurrentSchemaVersion = 1;
+        public const int CurrentSchemaVersion = 2;
 
         public ProjectState(string projectId, string name)
         {
