@@ -1,0 +1,95 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using Bricscad.ApplicationServices;
+using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
+
+namespace QS3D.BricsCAD.V25
+{
+    internal static class ProjectContextCoordinator
+    {
+        private static readonly Dictionary<string, ProjectState> Projects = new Dictionary<string, ProjectState>(StringComparer.OrdinalIgnoreCase);
+        private static readonly QsdbProjectStore Store = new QsdbProjectStore();
+
+        public static ProjectState GetOrCreate(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var key = GetKey(document);
+            if (Projects.TryGetValue(key, out var existing)) return existing;
+
+            var path = GetProjectPath(document);
+            ProjectState project;
+            if (File.Exists(path))
+            {
+                try { project = Store.Load(path); }
+                catch { project = CreateDefault(document); }
+            }
+            else project = CreateDefault(document);
+            Projects[key] = project;
+            return project;
+        }
+
+        public static string Save(Document document)
+        {
+            var project = GetOrCreate(document);
+            var path = GetProjectPath(document);
+            using (ProjectFileLock.Acquire(path)) Store.Save(project, path);
+            return path;
+        }
+
+        public static ProjectState Reload(Document document)
+        {
+            var path = GetProjectPath(document);
+            if (!File.Exists(path)) throw new FileNotFoundException("QS3D project file was not found.", path);
+            var project = Store.Load(path);
+            Projects[GetKey(document)] = project;
+            return project;
+        }
+
+        public static void Forget(Document document)
+        {
+            if (document != null) Projects.Remove(GetKey(document));
+        }
+
+        public static string GetProjectPath(Document document)
+        {
+            var drawing = document.Name;
+            if (string.IsNullOrWhiteSpace(drawing) || !Path.IsPathRooted(drawing))
+            {
+                var safe = string.IsNullOrWhiteSpace(drawing) ? "Untitled" : Path.GetFileNameWithoutExtension(drawing);
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QS3D", "Projects", safe + ".qsdb");
+            }
+            return Path.ChangeExtension(drawing, ".qsdb");
+        }
+
+        private static string GetKey(Document document) => string.IsNullOrWhiteSpace(document.Name) ? document.GetHashCode().ToString() : document.Name;
+
+        private static ProjectState CreateDefault(Document document)
+        {
+            var project = new ProjectState(Guid.NewGuid().ToString("N"), Path.GetFileNameWithoutExtension(document.Name));
+            project.DrawingPath = document.Name ?? string.Empty;
+            project.DrawingFingerprint = document.Name ?? string.Empty;
+            project.Zones.Add(new ZoneDefinition("zone-1", "Vùng-1"));
+            project.Floors.Add(new FloorDefinition("floor-0", "Nền 0.00", 0d));
+            project.ActiveZoneId = "zone-1";
+            project.ActiveFloorId = "floor-0";
+
+            var room = new ProjectFamily("room-default", "Phòng-1", ElementCategory.Room);
+            room.Properties["HeightM"] = "3.6";
+            project.Families.Add(room);
+            var wall = new ProjectFamily("wall-200", "Tường Gạch 200", ElementCategory.ArchitecturalWall);
+            wall.Properties["ThicknessM"] = "0.2";
+            wall.Properties["HeightM"] = "3.6";
+            wall.Properties["Material"] = "Gạch";
+            project.Families.Add(wall);
+            var opening = new ProjectFamily("opening-default", "Lỗ Mở Vách", ElementCategory.WallOpening);
+            opening.Properties["HeightM"] = "2.2";
+            project.Families.Add(opening);
+            var door = new ProjectFamily("door-default", "Cửa Đi", ElementCategory.Door);
+            door.Properties["HeightM"] = "2.2";
+            project.Families.Add(door);
+            return project;
+        }
+    }
+}
