@@ -21,6 +21,7 @@ namespace QS3D.Core.Reporting
                     grouped.Add(key, row); order.Add(key);
                 }
                 row.Count++;
+                row.ElementIds.Add(element.Id);
                 row.GrossConcreteM3 += element.GrossConcreteM3;
                 row.DeductionM3 += element.DeductionM3;
                 row.NetConcreteM3 += element.NetConcreteM3;

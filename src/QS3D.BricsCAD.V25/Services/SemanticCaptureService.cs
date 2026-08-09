@@ -19,7 +19,7 @@ namespace QS3D.BricsCAD.V25.Services
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
             if (snapshots.Count == 0) return 0;
             var project = ProjectContextCoordinator.GetOrCreate(document);
-            var family = project.Families.FirstOrDefault(x => x.Category == category) ?? CreateFamily(project, category);
+            var family = ResolveFamily(project, category);
             var count = 0;
             foreach (var snapshot in snapshots)
             {
@@ -30,19 +30,19 @@ namespace QS3D.BricsCAD.V25.Services
                     element = new ProjectElement(id, category, family.Id, project.ActiveFloorId, project.ActiveZoneId);
                     project.Elements.Add(element);
                 }
-                element.SourceHandles.Clear();
-                element.SourceHandles.Add(snapshot.Handle);
+                element.Category = category;
+                element.FamilyId = family.Id;
+                element.FloorId = project.ActiveFloorId;
+                element.ZoneId = project.ActiveZoneId;
+                element.SourceHandles.Clear(); element.SourceHandles.Add(snapshot.Handle);
                 element.DrawingFingerprint = project.DrawingFingerprint;
                 element.Properties["Layer"] = snapshot.Layer;
                 if (snapshot.LengthDrawingUnits.HasValue) element.Properties["LengthM"] = Units.ToMeters(snapshot.LengthDrawingUnits.Value).ToString("R", CultureInfo.InvariantCulture);
                 if (snapshot.AreaDrawingUnitsSquared.HasValue) element.Properties["AreaM2"] = Units.AreaToSquareMeters(snapshot.AreaDrawingUnitsSquared.Value).ToString("R", CultureInfo.InvariantCulture);
                 ApplyFamilyDefaults(element, family);
-                element.MarkDirty(ElementDirtyFlags.All);
-                Regenerate(project, element);
-                count++;
+                element.MarkDirty(ElementDirtyFlags.All); Regenerate(project, element); count++;
             }
-            project.Touch();
-            return count;
+            project.Touch(); return count;
         }
 
         public static int GenerateRoomFinishes(Document document)
@@ -54,52 +54,71 @@ namespace QS3D.BricsCAD.V25.Services
             var created = 0;
             foreach (var room in rooms)
             {
-                foreach (var category in new[] { ElementCategory.FloorFinish, ElementCategory.Skirting, ElementCategory.WallFinish, ElementCategory.CeilingFinish })
+                foreach (var category in new[] { ElementCategory.FloorFinish, ElementCategory.Waterproofing, ElementCategory.Skirting, ElementCategory.WallFinish, ElementCategory.CeilingFinish })
                 {
                     var id = room.Id + "-" + category.ToString();
-                    if (project.FindElement(id) != null) continue;
-                    var family = project.Families.FirstOrDefault(x => x.Category == category) ?? CreateFamily(project, category);
-                    var finish = new ProjectElement(id, category, family.Id, room.FloorId, room.ZoneId);
-                    finish.DependsOn.Add(room.Id);
-                    Copy(room, finish, "AreaM2");
-                    Copy(room, finish, "PerimeterM");
-                    Copy(room, finish, "HeightM");
-                    finish.MarkDirty(ElementDirtyFlags.All);
-                    Regenerate(project, finish);
-                    project.Elements.Add(finish);
-                    created++;
+                    var finish = project.FindElement(id);
+                    if (finish == null)
+                    {
+                        var family = ResolveFamily(project, category);
+                        finish = new ProjectElement(id, category, family.Id, room.FloorId, room.ZoneId);
+                        finish.DependsOn.Add(room.Id); project.Elements.Add(finish); created++;
+                    }
+                    Copy(room, finish, "AreaM2"); Copy(room, finish, "PerimeterM"); Copy(room, finish, "HeightM"); Copy(room, finish, "OpeningAreaM2"); Copy(room, finish, "DoorWidthM");
+                    finish.MarkDirty(ElementDirtyFlags.All); Regenerate(project, finish);
                 }
             }
-            project.Touch();
-            return created;
+            project.Touch(); return created;
+        }
+
+        private static ProjectFamily ResolveFamily(ProjectState project, ElementCategory category)
+        {
+            if (project.Metadata.TryGetValue("ActiveFamilyId", out var activeId))
+            {
+                var active = project.FindFamily(activeId);
+                if (active != null && active.Category == category) return active;
+            }
+            return project.Families.FirstOrDefault(x => x.Category == category) ?? CreateFamily(project, category);
         }
 
         private static void Regenerate(ProjectState project, ProjectElement element)
         {
             IElementRegenerator regenerator = element.Category == ElementCategory.ArchitecturalWall || element.Category == ElementCategory.GlassWall || element.Category == ElementCategory.WallPier
                 ? (IElementRegenerator)new WallRegenerator()
-                : element.Category == ElementCategory.WallOpening || element.Category == ElementCategory.Door
-                    ? new OpeningRegenerator()
-                    : new RoomRegenerator();
-            regenerator.Regenerate(project, element);
-            element.MarkClean(ElementDirtyFlags.All);
+                : element.Category == ElementCategory.WallOpening || element.Category == ElementCategory.Door ? new OpeningRegenerator() : new RoomRegenerator();
+            regenerator.Regenerate(project, element); element.MarkClean(ElementDirtyFlags.All);
         }
 
         private static ProjectFamily CreateFamily(ProjectState project, ElementCategory category)
         {
-            var family = new ProjectFamily("auto-" + category.ToString().ToLowerInvariant(), category.ToString(), category);
-            if (category == ElementCategory.ArchitecturalWall) { family.Properties["ThicknessM"] = "0.2"; family.Properties["HeightM"] = "3.6"; }
+            var family = new ProjectFamily("auto-" + category.ToString().ToLowerInvariant(), DefaultName(category), category);
+            if (category == ElementCategory.ArchitecturalWall) { family.Properties["ThicknessM"] = "0.2"; family.Properties["HeightM"] = "3.6"; family.Properties["Material"] = "Gạch"; }
             if (category == ElementCategory.Room || category == ElementCategory.WallFinish) family.Properties["HeightM"] = "3.6";
             if (category == ElementCategory.WallOpening || category == ElementCategory.Door) family.Properties["HeightM"] = "2.2";
-            project.Families.Add(family);
-            return family;
+            project.Families.Add(family); return family;
+        }
+
+        private static string DefaultName(ElementCategory category)
+        {
+            switch (category)
+            {
+                case ElementCategory.Room: return "Phòng";
+                case ElementCategory.ArchitecturalWall: return "Tường Gạch";
+                case ElementCategory.WallOpening: return "Lỗ Mở Vách";
+                case ElementCategory.Door: return "Cửa Đi";
+                case ElementCategory.FloorFinish: return "Sàn Hoàn Thiện";
+                case ElementCategory.Waterproofing: return "Chống Thấm";
+                case ElementCategory.Skirting: return "Chân Tường";
+                case ElementCategory.WallFinish: return "Hoàn Thiện Tường";
+                case ElementCategory.CeilingFinish: return "Trần Hoàn Thiện";
+                default: return category.ToString();
+            }
         }
 
         private static void ApplyFamilyDefaults(ProjectElement element, ProjectFamily family)
         {
             foreach (var property in family.Properties) if (!element.Properties.ContainsKey(property.Key)) element.Properties[property.Key] = property.Value;
-            if ((element.Category == ElementCategory.WallOpening || element.Category == ElementCategory.Door) && !element.Properties.ContainsKey("WidthM"))
-                element.Properties["WidthM"] = element.Properties.TryGetValue("LengthM", out var length) ? length : "0.9";
+            if ((element.Category == ElementCategory.WallOpening || element.Category == ElementCategory.Door) && !element.Properties.ContainsKey("WidthM")) element.Properties["WidthM"] = element.Properties.TryGetValue("LengthM", out var length) ? length : "0.9";
             if (element.Category == ElementCategory.Room && element.Properties.TryGetValue("LengthM", out var perimeter)) element.Properties["PerimeterM"] = perimeter;
         }
 

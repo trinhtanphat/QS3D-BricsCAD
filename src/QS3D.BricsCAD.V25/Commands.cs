@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
@@ -8,6 +9,7 @@ using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
+using QS3D.Core.Reporting;
 using QS3D.Core.Units;
 using Teigha.Runtime;
 
@@ -32,9 +34,25 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DBQ", () =>
             {
-                var snapshots = Cad.EntitySnapshotReader.ReadCurrentSelection(doc);
-                var rows = SnapshotQuantityAdapter.Build(snapshots, DrawingUnit.Millimeter);
-                var window = new QuantitySummaryWindow(rows);
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                IReadOnlyList<QuantityReportRow> rows;
+                Action<QuantityReportRow>? locate = null;
+                if (project.Elements.Count > 0)
+                {
+                    rows = ProjectQuantityReportBuilder.Group(project);
+                    locate = row =>
+                    {
+                        var handles = row.ElementIds.SelectMany(id => project.FindElement(id)?.SourceHandles ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                        var count = Cad.CadHandleService.Select(doc, handles);
+                        PaletteCoordinator.SetStatus("BQ Locate: " + count + " CAD object");
+                    };
+                }
+                else
+                {
+                    var snapshots = Cad.EntitySnapshotReader.ReadCurrentSelection(doc);
+                    rows = SnapshotQuantityAdapter.Build(snapshots, DrawingUnit.Millimeter);
+                }
+                var window = new QuantitySummaryWindow(rows, locate);
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
             });
         }
@@ -64,7 +82,7 @@ namespace QS3D.BricsCAD.V25
         public void GenerateFinishes()
         {
             var doc = Active(); if (doc == null) return;
-            Guard(doc, "QS3DFINISH", () => { var count = SemanticCaptureService.GenerateRoomFinishes(doc); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Đã tạo " + count + " cấu kiện HT_Phòng."); doc.Editor.WriteMessage("\nQS3D: generated " + count + " room finish element(s)."); });
+            Guard(doc, "QS3DFINISH", () => { var count = SemanticCaptureService.GenerateRoomFinishes(doc); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Đã tạo/cập nhật " + count + " cấu kiện HT_Phòng mới."); doc.Editor.WriteMessage("\nQS3D: generated " + count + " new room finish element(s)."); });
         }
 
         [CommandMethod("QS3DHEALTH", CommandFlags.Modal)]
@@ -76,11 +94,17 @@ namespace QS3D.BricsCAD.V25
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
                 var handles = project.Elements.SelectMany(x => x.SourceHandles).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
                 var live = Cad.CadHandleService.GetLiveHandles(doc, handles);
-                var summary = new HealthSummary(new ModelHealthService().Inspect(project, live));
+                var issues = new ModelHealthService().Inspect(project, live);
+                var summary = new HealthSummary(issues);
                 var text = "Model Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
-                PaletteCoordinator.SetStatus(text);
-                doc.Editor.WriteMessage("\nQS3D " + text);
-                foreach (var issue in summary.Issues.Take(20)) doc.Editor.WriteMessage("\n - [" + issue.Severity + "] " + issue.Code + " " + issue.ElementId + ": " + issue.Message);
+                PaletteCoordinator.SetStatus(text); doc.Editor.WriteMessage("\nQS3D " + text);
+                var window = new ModelHealthWindow(issues, issue =>
+                {
+                    var element = project.FindElement(issue.ElementId); if (element == null) return;
+                    var count = Cad.CadHandleService.Select(doc, element.SourceHandles);
+                    PaletteCoordinator.SetStatus("Health Locate " + element.Id + " • " + count + " CAD object");
+                });
+                Application.ShowModelessWindow(IntPtr.Zero, window, true);
             });
         }
 
@@ -94,34 +118,22 @@ namespace QS3D.BricsCAD.V25
             {
                 var element = ProjectContextCoordinator.GetOrCreate(doc).FindElement(result.StringResult);
                 if (element == null) { doc.Editor.WriteMessage("\nKhông tìm thấy QS3D element."); return; }
-                var count = Cad.CadHandleService.Select(doc, element.SourceHandles);
-                PaletteCoordinator.SetStatus("Locate " + element.Id + " • " + count + " CAD object");
+                var count = Cad.CadHandleService.Select(doc, element.SourceHandles); PaletteCoordinator.SetStatus("Locate " + element.Id + " • " + count + " CAD object");
             });
         }
 
-        [CommandMethod("QS3DRESETUI", CommandFlags.Modal)]
-        public void ResetUi() { PaletteCoordinator.Dispose(); PaletteCoordinator.EnsureCreated(); PaletteCoordinator.Show(); RibbonBootstrapper.Reset(); RibbonBootstrapper.TryInitialize(); Write("QS3D UI đã reset."); }
+        [CommandMethod("QS3DRESETUI", CommandFlags.Modal)] public void ResetUi() { PaletteCoordinator.Dispose(); PaletteCoordinator.EnsureCreated(); PaletteCoordinator.Show(); RibbonBootstrapper.Reset(); RibbonBootstrapper.TryInitialize(); Write("QS3D UI đã reset."); }
         [CommandMethod("QS3DSAFEMODE", CommandFlags.Modal)] public void SafeMode() { PaletteCoordinator.Dispose(); PaletteCoordinator.EnsureCreated(); PaletteCoordinator.ShowSafeMode(); Write("QS3D Safe Mode đã bật."); }
         [CommandMethod("QS3DABOUT", CommandFlags.Modal)] public void About() => Write("QS3D for BricsCAD V25 — clean-room quantity takeoff / semantic QS workspace.");
 
         private static void Capture(ElementCategory category, string label)
         {
             var doc = Active(); if (doc == null) return;
-            Guard(doc, "QS3D " + label, () =>
-            {
-                var count = SemanticCaptureService.Capture(doc, category);
-                PaletteCoordinator.RefreshProject();
-                PaletteCoordinator.SetStatus(label + ": đã ghi " + count + " cấu kiện.");
-                doc.Editor.WriteMessage("\nQS3D " + label + ": " + count + " element(s).");
-            });
+            Guard(doc, "QS3D " + label, () => { var count = SemanticCaptureService.Capture(doc, category); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus(label + ": đã ghi " + count + " cấu kiện."); doc.Editor.WriteMessage("\nQS3D " + label + ": " + count + " element(s)."); });
         }
 
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
         private static void Write(string message) => Active()?.Editor.WriteMessage("\n" + message);
-        private static void Guard(Document document, string operation, Action action)
-        {
-            try { action(); }
-            catch (Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); }
-        }
+        private static void Guard(Document document, string operation, Action action) { try { action(); } catch (Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }
     }
 }
