@@ -39,12 +39,17 @@ namespace QS3D.Core.Export
             {
                 "Tầng", "Loại", "Tên cấu kiện", "SL", "BT gộp (m³)", "Trừ giao (m³)", "BT còn (m³)",
                 "Cốp pha (m²)", "Dài (m)", "Chu vi ngoài (m)", "Chu vi trong (m)", "DT cửa (m²)",
-                "Thành bên (m²)", "Đỉnh cửa (m²)", "DT trát thô (m²)", "DT trát (m²)"
+                "Thành bên (m²)", "DT đáy (m²)", "DT đỉnh (m²)", "DT khác (m²)"
             };
 
+            var lastRow = Math.Max(1, rows.Count + 1);
+            var range = "A1:P" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-            sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+            sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+            sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
+            sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
+            sb.Append("<sheetData>");
             sb.Append("<row r=\"1\">");
             for (var c = 0; c < headers.Length; c++) AppendInlineStringCell(sb, CellRef(c, 1), headers[c], 1);
             sb.Append("</row>");
@@ -73,7 +78,7 @@ namespace QS3D.Core.Export
                 sb.Append("</row>");
             }
 
-            sb.Append("</sheetData></worksheet>");
+            sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
             return sb.ToString();
         }
 
