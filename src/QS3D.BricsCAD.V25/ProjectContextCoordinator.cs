@@ -9,6 +9,7 @@ namespace QS3D.BricsCAD.V25
 {
     internal static class ProjectContextCoordinator
     {
+        private const string RecoveryRequiredKey = "QS3D.ReadOnlyRecoveryRequired";
         private static readonly Dictionary<string, ProjectState> Projects = new Dictionary<string, ProjectState>(StringComparer.OrdinalIgnoreCase);
         private static readonly QsdbProjectStore Store = new QsdbProjectStore();
 
@@ -17,21 +18,37 @@ namespace QS3D.BricsCAD.V25
             if (document == null) throw new ArgumentNullException(nameof(document));
             var key = GetKey(document); if (Projects.TryGetValue(key, out var existing)) return existing;
             var path = GetProjectPath(document); ProjectState project;
-            if (File.Exists(path)) { try { project = Store.Load(path); } catch { project = CreateDefault(document); } } else project = CreateDefault(document);
+            if (File.Exists(path))
+            {
+                try { project = LoadProject(path); }
+                catch (Exception ex)
+                {
+                    project = CreateDefault(document);
+                    project.Metadata[RecoveryRequiredKey] = "true";
+                    project.Metadata["QS3D.LoadWarning"] = ex.GetType().Name + ": " + ex.Message;
+                    project.Metadata["QS3D.FailedProjectPath"] = path;
+                }
+            }
+            else project = CreateDefault(document);
             Projects[key] = project; return project;
         }
 
         public static string Save(Document document)
         {
             var project = GetOrCreate(document); var path = GetProjectPath(document);
+            if (File.Exists(path) && project.Metadata.TryGetValue(RecoveryRequiredKey, out var blocked) && string.Equals(blocked, "true", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("QS3D project load failed and the existing .qsdb will not be overwritten. Recover or move the damaged project file first.");
             using (ProjectFileLock.Acquire(path)) Store.Save(project, path);
+            project.Metadata.Remove("QS3D.RecoveredFromBackup");
+            project.Metadata.Remove("QS3D.RecoverySource");
+            project.Metadata.Remove("QS3D.PrimaryLoadFailure");
             return path;
         }
 
         public static ProjectState Reload(Document document)
         {
             var path = GetProjectPath(document); if (!File.Exists(path)) throw new FileNotFoundException("QS3D project file was not found.", path);
-            var project = Store.Load(path); Projects[GetKey(document)] = project; return project;
+            var project = LoadProject(path); Projects[GetKey(document)] = project; return project;
         }
 
         public static void Forget(Document document) { if (document != null) Projects.Remove(GetKey(document)); }
@@ -52,6 +69,19 @@ namespace QS3D.BricsCAD.V25
                 return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QS3D", "Projects", safe + ".qsdb");
             }
             return Path.ChangeExtension(drawing, ".qsdb");
+        }
+
+        private static ProjectState LoadProject(string path)
+        {
+            var loaded = Store.LoadWithBackupFallback(path);
+            var project = loaded.Project;
+            if (loaded.RecoveredFromBackup)
+            {
+                project.Metadata["QS3D.RecoveredFromBackup"] = "true";
+                project.Metadata["QS3D.RecoverySource"] = loaded.SourcePath;
+                project.Metadata["QS3D.PrimaryLoadFailure"] = loaded.PrimaryFailureMessage;
+            }
+            return project;
         }
 
         private static string GetKey(Document document) => string.IsNullOrWhiteSpace(document.Name) ? document.GetHashCode().ToString() : document.Name;
