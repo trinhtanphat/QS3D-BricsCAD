@@ -92,9 +92,10 @@ namespace QS3D.Core.Rebar
                 var parsed = RebarNotationParser.Parse(notation);
                 if (parsed.Count > 0)
                 {
-                    if (diameter <= 0d) diameter = parsed[0].DiameterMm;
-                    if (quantity <= 0 && parsed[0].Quantity.HasValue) quantity = parsed[0].Quantity.Value;
-                    if (spacing <= 0d && parsed[0].SpacingMm.HasValue) spacing = parsed[0].SpacingMm.Value;
+                    var parsedGroup = parsed[0];
+                    if (diameter <= 0d) diameter = parsedGroup.DiameterMm;
+                    if (quantity <= 0 && parsedGroup.Quantity is int parsedQuantity) quantity = parsedQuantity;
+                    if (spacing <= 0d && parsedGroup.SpacingMm is double parsedSpacing) spacing = parsedSpacing;
                 }
             }
             if (quantity <= 0 && spacing > 0d)
