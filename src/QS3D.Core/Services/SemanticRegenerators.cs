@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Services
@@ -21,7 +22,9 @@ namespace QS3D.Core.Services
             var length = SemanticNumber.Get(element, "LengthM");
             var height = SemanticNumber.Get(element, "HeightM");
             var thickness = SemanticNumber.Get(element, "ThicknessM");
-            var openingArea = SemanticNumber.Get(element, "OpeningAreaM2");
+            var linkedOpeningArea = project.Elements.Where(x => (x.Category == ElementCategory.WallOpening || x.Category == ElementCategory.Door) && x.Properties.TryGetValue("HostWallId", out var host) && string.Equals(host, element.Id, StringComparison.OrdinalIgnoreCase)).Sum(x => x.Quantities.TryGetValue("OpeningAreaM2", out var area) ? area : SemanticNumber.Get(x, "WidthM") * SemanticNumber.Get(x, "HeightM"));
+            var explicitOpeningArea = SemanticNumber.Get(element, "OpeningAreaM2");
+            var openingArea = Math.Max(explicitOpeningArea, linkedOpeningArea);
             var grossArea = Math.Max(0d, length * height);
             var netArea = Math.Max(0d, grossArea - openingArea);
             element.SetQuantity("LengthM", length);
@@ -38,16 +41,10 @@ namespace QS3D.Core.Services
         public bool CanRegenerate(ElementCategory category) => category == ElementCategory.Room || category == ElementCategory.FloorFinish || category == ElementCategory.Waterproofing || category == ElementCategory.Skirting || category == ElementCategory.WallFinish || category == ElementCategory.CeilingFinish;
         public void Regenerate(ProjectState project, ProjectElement element)
         {
-            var area = SemanticNumber.Get(element, "AreaM2");
-            var perimeter = SemanticNumber.Get(element, "PerimeterM");
-            var height = SemanticNumber.Get(element, "HeightM");
-            var openings = SemanticNumber.Get(element, "OpeningAreaM2");
-            element.SetQuantity("AreaM2", Math.Max(0d, area));
-            element.SetQuantity("PerimeterM", Math.Max(0d, perimeter));
-            if (element.Category == ElementCategory.WallFinish)
-                element.SetQuantity("NetFinishAreaM2", Math.Max(0d, perimeter * height - openings));
-            if (element.Category == ElementCategory.Skirting)
-                element.SetQuantity("SkirtingLengthM", Math.Max(0d, perimeter - SemanticNumber.Get(element, "DoorWidthM")));
+            var area = SemanticNumber.Get(element, "AreaM2"); var perimeter = SemanticNumber.Get(element, "PerimeterM"); var height = SemanticNumber.Get(element, "HeightM"); var openings = SemanticNumber.Get(element, "OpeningAreaM2");
+            element.SetQuantity("AreaM2", Math.Max(0d, area)); element.SetQuantity("PerimeterM", Math.Max(0d, perimeter));
+            if (element.Category == ElementCategory.WallFinish) element.SetQuantity("NetFinishAreaM2", Math.Max(0d, perimeter * height - openings));
+            if (element.Category == ElementCategory.Skirting) element.SetQuantity("SkirtingLengthM", Math.Max(0d, perimeter - SemanticNumber.Get(element, "DoorWidthM")));
         }
     }
 
@@ -56,11 +53,9 @@ namespace QS3D.Core.Services
         public bool CanRegenerate(ElementCategory category) => category == ElementCategory.WallOpening || category == ElementCategory.Door;
         public void Regenerate(ProjectState project, ProjectElement element)
         {
-            var width = SemanticNumber.Get(element, "WidthM");
-            var height = SemanticNumber.Get(element, "HeightM");
-            var area = Math.Max(0d, width * height);
-            element.SetQuantity("OpeningAreaM2", area);
-            element.SetQuantity("Count", 1d);
+            var width = SemanticNumber.Get(element, "WidthM"); var height = SemanticNumber.Get(element, "HeightM"); var area = Math.Max(0d, width * height);
+            element.SetQuantity("OpeningAreaM2", area); element.SetQuantity("Count", 1d);
+            if (element.Properties.TryGetValue("HostWallId", out var hostId)) project.FindElement(hostId)?.MarkDirty(ElementDirtyFlags.Quantity);
         }
     }
 }
