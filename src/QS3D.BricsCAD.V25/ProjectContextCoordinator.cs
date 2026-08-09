@@ -38,11 +38,19 @@ namespace QS3D.BricsCAD.V25
             var project = GetOrCreate(document); var path = GetProjectPath(document);
             if (File.Exists(path) && project.Metadata.TryGetValue(RecoveryRequiredKey, out var blocked) && string.Equals(blocked, "true", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("QS3D project load failed and the existing .qsdb will not be overwritten. Recover or move the damaged project file first.");
-            using (ProjectFileLock.Acquire(path)) Store.Save(project, path);
-            project.Metadata.Remove("QS3D.RecoveredFromBackup");
-            project.Metadata.Remove("QS3D.RecoverySource");
-            project.Metadata.Remove("QS3D.PrimaryLoadFailure");
-            return path;
+
+            var recoveryMetadata = CaptureRecoveryMetadata(project);
+            ClearRecoveryMetadata(project);
+            try
+            {
+                using (ProjectFileLock.Acquire(path)) Store.Save(project, path);
+                return path;
+            }
+            catch
+            {
+                RestoreMetadata(project, recoveryMetadata);
+                throw;
+            }
         }
 
         public static ProjectState Reload(Document document)
@@ -82,6 +90,26 @@ namespace QS3D.BricsCAD.V25
                 project.Metadata["QS3D.PrimaryLoadFailure"] = loaded.PrimaryFailureMessage;
             }
             return project;
+        }
+
+        private static Dictionary<string, string> CaptureRecoveryMetadata(ProjectState project)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in new[] { "QS3D.RecoveredFromBackup", "QS3D.RecoverySource", "QS3D.PrimaryLoadFailure" })
+                if (project.Metadata.TryGetValue(key, out var value)) result[key] = value;
+            return result;
+        }
+
+        private static void ClearRecoveryMetadata(ProjectState project)
+        {
+            project.Metadata.Remove("QS3D.RecoveredFromBackup");
+            project.Metadata.Remove("QS3D.RecoverySource");
+            project.Metadata.Remove("QS3D.PrimaryLoadFailure");
+        }
+
+        private static void RestoreMetadata(ProjectState project, IDictionary<string, string> metadata)
+        {
+            foreach (var item in metadata) project.Metadata[item.Key] = item.Value;
         }
 
         private static string GetKey(Document document) => string.IsNullOrWhiteSpace(document.Name) ? document.GetHashCode().ToString() : document.Name;
