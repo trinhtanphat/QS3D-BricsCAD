@@ -1,32 +1,58 @@
 # CI readiness gate
 
-**Automatic CI is intentionally disabled.** Both workflows remain `workflow_dispatch` only. Do not add `push` or `pull_request` triggers without explicit approval after V25 runtime gates pass.
+**Automatic CI on `main` remains intentionally disabled.** Both repository workflows on `main` stay `workflow_dispatch` only. Temporary branch-scoped `push` triggers may be used only to prove a gate when the connector cannot dispatch a manual workflow; those temporary workflow changes are never merged to `main`.
 
-## Gate A — source/static review before Actions
+## Gate A — source/static review — PASS
 
-Required:
-- `scripts/preflight.py` source guard is reviewed for the current tree;
-- no BricsCAD/BLT proprietary binaries and no private DWG/DOCX are committed;
-- XAML/XML and code-behind handler guards cover all current windows/palettes;
-- net48 adapter guard rejects `Enumerable.ToHashSet` usage and nonexistent formula API names;
-- workflows contain only manual dispatch.
+Current guards cover:
+- required architecture/persistence/UI/test files;
+- no BricsCAD/BLT proprietary binaries and no private DWG/DOCX in the public repository;
+- XML/XAML parsing and code-behind event handlers;
+- C# delimiter sanity;
+- net48 adapter guards for incompatible `ToHashSet` use and stale/nonexistent formula APIs;
+- no placeholder UX strings;
+- manual-only workflows on the release tree.
 
-## Gate B — manual Core CI
+## Gate B — Core CI — PASS
 
-Only when explicitly approved, run `QS3D Core CI` on GitHub-hosted `windows-latest`:
+GitHub-hosted Windows validation has passed twice:
+
+1. baseline Core gate — Actions run `31341101835`;
+2. persistence/export hardening gate — Actions run `31341548469`.
+
+Both runs passed:
 - preflight;
-- build `QS3D.Core`;
-- deterministic smoke tests including geometry, units, formulas, rebar notation, reports/XLSX, dependency/regeneration, `.qsdb`, health, revision and lock behavior.
+- `QS3D.Core` Release build;
+- deterministic smoke tests.
 
-## Gate C — manual BricsCAD V25 integration build
+The hardening suite additionally covers:
+- QSDB schema v1 → v2 migration;
+- validated temp save + backup recovery;
+- duplicate-ID rejection;
+- project health recovery states;
+- corrected Excel quantity headers, frozen header row and AutoFilter.
 
-Requires a licensed Windows self-hosted runner labelled `bricscad-v25` and repository variable `BRICSCAD_V25_DIR`:
-- validate installed `BrxMgd.dll` / `TD_Mgd.dll`;
-- build `net48/x64` plugin;
-- artifact contains QS3D assemblies only.
+## Gate C — BricsCAD V25 integration build — BLOCKED BY RUNNER
 
-## Gate D — interactive runtime test
+A real probe was created as Actions run `31341184031`. The plugin job remained queued with labels:
 
+`[self-hosted, windows, x64, bricscad-v25]`
+
+and no assigned `runner_id` / `runner_name`. This means Gate C has **not failed the plugin build**; it has not started because no matching self-hosted runner is currently available to the repository.
+
+Gate C requires:
+- Windows x64 self-hosted GitHub Actions runner;
+- labels `self-hosted`, `windows`, `x64`, `bricscad-v25`;
+- licensed BricsCAD V25 installation;
+- repository variable `BRICSCAD_V25_DIR` pointing at that installation directory;
+- installed `BrxMgd.dll` and `TD_Mgd.dll` under that path;
+- no vendor DLL uploaded to GitHub.
+
+See `docs/V25-RUNNER.md`.
+
+## Gate D — interactive runtime test — PENDING GATE C
+
+After a Gate C build artifact exists:
 - NETLOAD in BricsCAD V25;
 - Ribbon and left/right palettes;
 - multi-DWG create/activate/close;
@@ -35,10 +61,10 @@ Requires a licensed Windows self-hosted runner labelled `bricscad-v25` and repos
 - Opening/Door capture + Host Link + quantity deduction;
 - Layer/Xref manager;
 - BQ Locate + XLSX;
-- `.qsdb` save/reload and Model Health;
+- `.qsdb` save/reload, backup recovery and Model Health;
 - repeated open/close, Unicode and DPI 100/125/150/200%;
 - close BricsCAD without dispose exceptions.
 
-## Gate E/F
+## Gate E/F — pending runtime
 
-Private sample-DWG quantity regression, persistence/reopen regression, UI screenshot comparison and performance corpus. Only after these are green should automatic PR CI or a release candidate be enabled.
+Private sample-DWG quantity regression, persistence/reopen regression, UI screenshot comparison, performance corpus, packaging and installer tests. Only after these are green should automatic PR CI or a release candidate be enabled.
