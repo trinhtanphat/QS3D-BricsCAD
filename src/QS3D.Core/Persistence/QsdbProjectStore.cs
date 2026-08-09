@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Xml;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
 
@@ -19,25 +20,37 @@ namespace QS3D.Core.Persistence
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
             var tempPath = fullPath + ".tmp";
             var backupPath = fullPath + ".bak";
-            var document = Serialize(project);
-            document.Save(tempPath, SaveOptions.DisableFormatting);
 
-            if (File.Exists(fullPath))
+            project.SchemaVersion = ProjectState.CurrentSchemaVersion;
+            project.Touch();
+            var document = Serialize(project);
+
+            try
             {
-                File.Copy(fullPath, backupPath, true);
-                try
+                document.Save(tempPath, SaveOptions.DisableFormatting);
+                ValidateSerializedFile(tempPath);
+
+                if (File.Exists(fullPath))
                 {
-                    File.Replace(tempPath, fullPath, backupPath, true);
+                    try
+                    {
+                        File.Replace(tempPath, fullPath, backupPath, true);
+                    }
+                    catch (PlatformNotSupportedException)
+                    {
+                        File.Copy(fullPath, backupPath, true);
+                        File.Delete(fullPath);
+                        File.Move(tempPath, fullPath);
+                    }
                 }
-                catch (PlatformNotSupportedException)
+                else
                 {
-                    File.Delete(fullPath);
                     File.Move(tempPath, fullPath);
                 }
             }
-            else
+            finally
             {
-                File.Move(tempPath, fullPath);
+                if (File.Exists(tempPath)) File.Delete(tempPath);
             }
         }
 
@@ -45,18 +58,17 @@ namespace QS3D.Core.Persistence
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
             var document = XDocument.Load(path, LoadOptions.None);
+            ProjectSchemaMigrator.MigrateToCurrent(document);
             var root = document.Root ?? throw new InvalidDataException("QSDB has no root element.");
-            var schema = Int(root.Attribute("schema")?.Value, 0);
-            if (schema <= 0 || schema > ProjectState.CurrentSchemaVersion)
-                throw new InvalidDataException("Unsupported QSDB schema version: " + schema.ToString(CultureInfo.InvariantCulture));
 
             var project = new ProjectState(Required(root, "projectId"), Required(root, "name"))
             {
-                SchemaVersion = schema,
+                SchemaVersion = ProjectState.CurrentSchemaVersion,
                 DrawingPath = Value(root, "drawingPath"),
                 DrawingFingerprint = Value(root, "drawingFingerprint"),
                 ActiveZoneId = Value(root, "activeZoneId"),
-                ActiveFloorId = Value(root, "activeFloorId")
+                ActiveFloorId = Value(root, "activeFloorId"),
+                UpdatedUtc = Date(root.Attribute("updatedUtc")?.Value)
             };
 
             var zones = root.Element("zones");
@@ -101,7 +113,32 @@ namespace QS3D.Core.Persistence
             }
 
             ReadStringMap(root.Element("metadata"), "p", project.Metadata);
+            ValidateProject(project);
             return project;
+        }
+
+        public ProjectLoadResult LoadWithBackupFallback(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
+            var fullPath = Path.GetFullPath(path);
+            try
+            {
+                return new ProjectLoadResult(Load(fullPath), fullPath, false, string.Empty);
+            }
+            catch (Exception primary) when (IsRecoverableDataFailure(primary))
+            {
+                var backupPath = fullPath + ".bak";
+                if (!File.Exists(backupPath)) throw;
+                try
+                {
+                    var project = Load(backupPath);
+                    return new ProjectLoadResult(project, backupPath, true, primary.Message);
+                }
+                catch (Exception backup) when (IsRecoverableDataFailure(backup))
+                {
+                    throw new InvalidDataException("Both the QSDB project and its backup are invalid.", new AggregateException(primary, backup));
+                }
+            }
         }
 
         private static XDocument Serialize(ProjectState project)
@@ -110,6 +147,7 @@ namespace QS3D.Core.Persistence
                 new XAttribute("schema", ProjectState.CurrentSchemaVersion),
                 new XAttribute("projectId", project.ProjectId),
                 new XAttribute("name", project.Name),
+                new XAttribute("updatedUtc", project.UpdatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)),
                 new XAttribute("drawingPath", project.DrawingPath ?? string.Empty),
                 new XAttribute("drawingFingerprint", project.DrawingFingerprint ?? string.Empty),
                 new XAttribute("activeZoneId", project.ActiveZoneId ?? string.Empty),
@@ -127,6 +165,31 @@ namespace QS3D.Core.Persistence
                     new XElement("quantities", x.Quantities.OrderBy(q => q.Key, StringComparer.OrdinalIgnoreCase).Select(q => new XElement("q", new XAttribute("name", q.Key), new XAttribute("value", F(q.Value))))))))));
         }
 
+        private static void ValidateSerializedFile(string path)
+        {
+            var document = XDocument.Load(path, LoadOptions.None);
+            var root = document.Root ?? throw new InvalidDataException("Serialized QSDB has no root element.");
+            if (!string.Equals(root.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Serialized QSDB root is invalid.");
+            var schema = Int(root.Attribute("schema")?.Value, 0);
+            if (schema != ProjectState.CurrentSchemaVersion) throw new InvalidDataException("Serialized QSDB schema is invalid.");
+            Required(root, "projectId");
+            Required(root, "name");
+        }
+
+        private static void ValidateProject(ProjectState project)
+        {
+            var duplicateFamily = project.Families.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicateFamily != null) throw new InvalidDataException("Duplicate family id in QSDB: " + duplicateFamily.Key);
+            var duplicateElement = project.Elements.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicateElement != null) throw new InvalidDataException("Duplicate element id in QSDB: " + duplicateElement.Key);
+            var duplicateZone = project.Zones.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicateZone != null) throw new InvalidDataException("Duplicate zone id in QSDB: " + duplicateZone.Key);
+            var duplicateFloor = project.Floors.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicateFloor != null) throw new InvalidDataException("Duplicate floor id in QSDB: " + duplicateFloor.Key);
+        }
+
+        private static bool IsRecoverableDataFailure(Exception exception) => exception is InvalidDataException || exception is XmlException || exception is FormatException;
+
         private static XElement Map(string name, System.Collections.Generic.IDictionary<string, string> values) =>
             new XElement(name, values.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).Select(x => new XElement("p", new XAttribute("name", x.Key), new XAttribute("value", x.Value ?? string.Empty))));
 
@@ -140,6 +203,7 @@ namespace QS3D.Core.Persistence
         private static string Value(XElement element, string attribute) => element.Attribute(attribute)?.Value?.Trim() ?? string.Empty;
         private static double Double(string? value) => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ? result : 0d;
         private static int Int(string? value, int fallback) => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) ? result : fallback;
+        private static DateTime Date(string? value) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var result) ? result.ToUniversalTime() : new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         private static string F(double value) => value.ToString("R", CultureInfo.InvariantCulture);
     }
 }
