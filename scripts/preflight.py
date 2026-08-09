@@ -9,11 +9,13 @@ errors = []
 
 required = [
     "Directory.Build.props", "README.md", "src/QS3D.Core/QS3D.Core.csproj",
-    "src/QS3D.Core/Export/XlsxQuantityExporter.cs",
-    "src/QS3D.Core/Reporting/QuantityReportBuilder.cs",
-    "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
-    "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml",
-    "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml",
+    "src/QS3D.Core/Domain/ProjectState.cs", "src/QS3D.Core/Domain/ProjectElement.cs",
+    "src/QS3D.Core/Persistence/QsdbProjectStore.cs", "src/QS3D.Core/Diagnostics/ModelHealthService.cs",
+    "src/QS3D.Core/Rules/QuantityRuleEngine.cs", "src/QS3D.Core/Services/DependencyGraph.cs",
+    "src/QS3D.Core/Export/XlsxQuantityExporter.cs", "src/QS3D.Core/Reporting/QuantityReportBuilder.cs",
+    "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj", "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs",
+    "src/QS3D.BricsCAD.V25/Cad/DrawingCatalogReader.cs", "src/QS3D.BricsCAD.V25/Cad/LayerVisibilityService.cs",
+    "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml", "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml",
     "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml",
     "tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj",
     ".github/workflows/ci.yml", ".github/workflows/bricscad-v25.yml",
@@ -50,20 +52,19 @@ for workflow in (ROOT / ".github/workflows").glob("*.yml"):
 for path in ROOT.rglob("*"):
     if path.is_dir() and path.name.lower() in {"blt", "blt3d"}: errors.append(f"vendor folder must not be committed: {path.relative_to(ROOT)}")
 
-# Basic XAML code-behind event check.
 for xaml in ROOT.rglob("*.xaml"):
     if xaml.name == "Theme.xaml": continue
     code = xaml.with_suffix(xaml.suffix + ".cs")
     if not code.exists(): continue
     xaml_text = xaml.read_text(encoding="utf-8")
     code_text = code.read_text(encoding="utf-8")
-    handlers = set(re.findall(r'\b(?:Click|TextChanged|SelectionChanged)="([A-Za-z_][A-Za-z0-9_]*)"', xaml_text))
+    handlers = set(re.findall(r'\b(?:Click|TextChanged|SelectionChanged|Checked|Unchecked)="([A-Za-z_][A-Za-z0-9_]*)"', xaml_text))
     for handler in handlers:
         if not re.search(r"\b" + re.escape(handler) + r"\s*\(", code_text): errors.append(f"{xaml.relative_to(ROOT)}: missing code-behind handler {handler}")
 
-# Simple delimiter balance catches many truncated-generation errors without pretending to compile C#.
 for path in ROOT.rglob("*.cs"):
-    text = re.sub(r"//.*?$|/\*.*?\*/|(?:\$|@|\$@|@\$)?\"(?:\"\"|\\.|[^\"\\])*\"|'(?:\\.|[^'\\])'", '', path.read_text(encoding='utf-8'), flags=re.M|re.S)
+    raw = path.read_text(encoding="utf-8")
+    text = re.sub(r"//.*?$|/\*.*?\*/|(?:\$|@|\$@|@\$)?\"(?:\"\"|\\.|[^\"\\])*\"|'(?:\\.|[^'\\])'", '', raw, flags=re.M|re.S)
     pairs = {'{':'}','(':')','[':']'}
     stack=[]
     for ch in text:
@@ -74,10 +75,21 @@ for path in ROOT.rglob("*.cs"):
     else:
         if stack: errors.append(f"{path.relative_to(ROOT)}: unbalanced delimiter(s)")
 
+plugin_source = ROOT / "src/QS3D.BricsCAD.V25"
+for path in plugin_source.rglob("*.cs"):
+    text = path.read_text(encoding="utf-8")
+    if ".ToHashSet(" in text: errors.append(f"{path.relative_to(ROOT)}: avoid ToHashSet in net48 adapter; construct HashSet explicitly")
+    if "FormulaEngine" in text: errors.append(f"{path.relative_to(ROOT)}: FormulaEngine does not exist; use ExpressionEvaluator")
+
+for path in ROOT.rglob("*.cs"):
+    text = path.read_text(encoding="utf-8")
+    if "foundation is ready" in text or "after the first runtime gate" in text:
+        errors.append(f"{path.relative_to(ROOT)}: placeholder UX text must not ship")
+
 print("QS3D preflight")
 print("root:", ROOT)
 if errors:
     for e in errors: print("ERROR:", e)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML, handler, delimiter, proprietary-file and manual-CI guards are clean.")
+print("PASS: structure, XML/XAML, handler, delimiter, proprietary-file, net48-compatibility and manual-CI guards are clean.")

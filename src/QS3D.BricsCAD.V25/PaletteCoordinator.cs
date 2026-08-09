@@ -20,9 +20,9 @@ namespace QS3D.BricsCAD.V25
             if (_workspace != null && _right != null) return;
             _workspacePanel = new WorkspacePanel();
             _rightPanel = new RightPanel();
-            _workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid) { DockEnabled = DockSides.Left | DockSides.Right, Dock = DockSides.Left, Visible = false, MinimumSize = new System.Drawing.Size(620, 420) };
+            _workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid) { DockEnabled = DockSides.Left | DockSides.Right, Dock = DockSides.Left, Visible = false };
             _workspace.AddVisual("Mô hình", _workspacePanel, true);
-            _right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid) { DockEnabled = DockSides.Left | DockSides.Right, Dock = DockSides.Right, Visible = false, MinimumSize = new System.Drawing.Size(280, 420) };
+            _right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid) { DockEnabled = DockSides.Left | DockSides.Right, Dock = DockSides.Right, Visible = false };
             _right.AddVisual("Quản lý", _rightPanel, true);
         }
 

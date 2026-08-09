@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
@@ -47,7 +48,7 @@ namespace QS3D.BricsCAD.V25.Services
         public static int GenerateRoomFinishes(Document document)
         {
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
-            var handles = snapshots.Select(x => x.Handle).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var rooms = project.Elements.Where(x => x.Category == ElementCategory.Room && x.SourceHandles.Any(handles.Contains)).ToList();
             var created = 0;
