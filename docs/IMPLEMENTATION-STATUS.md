@@ -11,6 +11,7 @@
 - QSDB schema v2 with deterministic v1 → v2 migration and migration provenance metadata.
 - validated `.qsdb` temp-save, atomic replace where supported, `.bak` recovery and single-writer project lock.
 - corrupted primary QSDB fallback to valid backup; if both are unreadable, the BricsCAD context enters protected recovery state and refuses to overwrite the existing project file.
+- recovery metadata is cleared before a successful save and restored in memory if the save fails, preventing stale backup warnings from being persisted.
 - Model Health reports backup recovery and protected project-load failures.
 - dependency graph, dirty propagation, deterministic regenerators, formula/rule foundation.
 - semantic capture for Room, Tường KT, Opening, Door and custom takeoff.
@@ -20,7 +21,7 @@
 - live Xref listing and LayerTable listing/search/show/hide.
 - selection inspection and handle-based Locate/select.
 - semantic BQ grouped by floor/category/family, column visibility, filters, Locate and real `.xlsx` export.
-- Excel exporter headers now match `SideAreaM2`, `BottomAreaM2`, `TopAreaM2`, `OtherAreaM2`; first row is frozen and the quantity range has AutoFilter.
+- Excel exporter headers match `SideAreaM2`, `BottomAreaM2`, `TopAreaM2`, `OtherAreaM2`; first row is frozen and the quantity range has AutoFilter.
 - Model Health checks missing host/family/floor/zone/material, orphan/duplicate handles and dirty elements; material may inherit from Family.
 - bulk edit, revision snapshots/diff, audit, feature flags, template profile and unit/tolerance policies in core.
 - expanded source preflight + deterministic hardening smoke tests.
@@ -29,8 +30,9 @@
 ## Verified in GitHub-hosted CI
 
 - baseline Core CI run `31341101835`: PASS.
-- hardening Core CI run `31341548469`: PASS.
-- both runs passed preflight, Release build of `QS3D.Core`, and deterministic smoke tests.
+- persistence/export hardening run `31341548469`: PASS.
+- final hardening snapshot run `31341704360`: PASS.
+- the final run passed preflight, Release build of `QS3D.Core`, and deterministic smoke tests.
 
 ## Gate C blocker
 
