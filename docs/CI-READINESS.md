@@ -15,17 +15,18 @@ Current guards cover:
 
 ## Gate B — Core CI — PASS
 
-GitHub-hosted Windows validation has passed twice:
+GitHub-hosted Windows validation has passed on the baseline and both hardening snapshots:
 
 1. baseline Core gate — Actions run `31341101835`;
-2. persistence/export hardening gate — Actions run `31341548469`.
+2. persistence/export hardening gate — Actions run `31341548469`;
+3. final hardening snapshot gate — Actions run `31341704360`.
 
-Both runs passed:
+The final gate passed:
 - preflight;
 - `QS3D.Core` Release build;
 - deterministic smoke tests.
 
-The hardening suite additionally covers:
+The hardening suite covers:
 - QSDB schema v1 → v2 migration;
 - validated temp save + backup recovery;
 - duplicate-ID rejection;
