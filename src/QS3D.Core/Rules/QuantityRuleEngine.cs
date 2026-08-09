@@ -15,17 +15,20 @@ namespace QS3D.Core.Rules
             Expression = Required(expression, nameof(expression));
             Version = Required(version, nameof(version));
         }
+
         public string Id { get; }
         public ElementCategory Category { get; }
         public string OutputName { get; }
         public string Expression { get; }
         public string Version { get; }
-        private static string Required(string value, string name) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Value is required.", name) : value.Trim();
+
+        private static string Required(string value, string name) =>
+            string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Value is required.", name) : value.Trim();
     }
 
     public sealed class QuantityRuleEngine
     {
-        private readonly FormulaEngine _formulaEngine = new FormulaEngine();
+        private readonly ExpressionEvaluator _evaluator = new ExpressionEvaluator();
 
         public void Apply(ProjectElement element, QuantityRule rule, IReadOnlyDictionary<string, double> variables)
         {
@@ -33,7 +36,8 @@ namespace QS3D.Core.Rules
             if (rule == null) throw new ArgumentNullException(nameof(rule));
             if (variables == null) throw new ArgumentNullException(nameof(variables));
             if (element.Category != rule.Category) return;
-            var result = _formulaEngine.Evaluate(rule.Expression, variables);
+
+            var result = _evaluator.Evaluate(rule.Expression, variables);
             element.SetQuantity(rule.OutputName, result);
             element.Properties["Rule:" + rule.OutputName] = rule.Id + "@" + rule.Version;
         }
