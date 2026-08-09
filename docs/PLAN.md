@@ -1,25 +1,37 @@
-# QS3D BricsCAD V25 plan
+# QS3D BricsCAD V25 master plan
 
-## Implemented foundation in this batch
-- V25/net48/x64 plugin project with external BricsCAD references.
-- Docked left/right WPF palettes.
-- Semantic category/family domain models for room/wall/opening requirements.
-- Selection snapshot reader with curve length + closed polyline area.
-- Quantity report grouping/totals.
-- Modeless BQ window.
-- Dependency-free real `.xlsx` exporter.
-- Formula/rebar/unit/geometry foundations.
-- Manual-only CI gates.
-- Public-repo guard against proprietary BricsCAD/BLT files and private DWG/DOCX fixtures.
+## V1 implemented foundation
 
-## Next integration milestones after first successful V25 build
-1. Native BricsCAD ribbon tabs/buttons wired to QS3D commands.
-2. CAD transactions for create/delete/update semantic elements.
-3. Persistent `.qsdb` project model and source-handle traceability.
-4. HT_Phòng automatic finish generation from room boundaries.
-5. Tường KT 3D generation from centerline/profile/thickness/levels.
-6. Door/opening boolean deductions and host-wall linking.
-7. Layer/Xref manager wired to the current drawing database.
-8. Locate/highlight/zoom from BQ rows back to source handles.
-9. Concrete/formwork/opening/finish deterministic formulas.
-10. Revision/diff and audit trail.
+- clean-room layered architecture: Core + V25 adapter + WPF UI;
+- source-of-truth policy, `.qsdb`, project lock/backup;
+- dependency/regeneration/rules/health/revision foundations;
+- native Ribbon bootstrapper and BLT3D-familiar QS3D workspace;
+- active Zone/Floor/Family and semantic property flow;
+- Room / Tường KT / Opening / Door semantic capture;
+- first native 3D Tường KT path for selected LINE geometry;
+- HT_Phòng finish generation;
+- host linking and wall-opening quantity deduction;
+- live Layer/Xref read/control;
+- BQ semantic grouping/filter/column visibility/Locate/XLSX;
+- manual-only CI gates.
+
+## Remaining V1 runtime-hardening sequence
+
+1. Gate A source/preflight review.
+2. Gate B Core CI **only when explicitly approved**.
+3. Gate C licensed Windows BricsCAD V25 build.
+4. Gate D `NETLOAD`, Ribbon/palette, multi-DWG and Unicode/HiDPI smoke test.
+5. private sample DWG regression: wall/room/opening/finish/BQ/save/reopen.
+6. harden wall polylines/corners/joins and opening solid boolean transaction after real V25 geometry results are known.
+7. visual screenshot comparison against the approved QS3D target UI.
+8. only after A-D + regression are green, consider automatic PR CI.
+
+## V1.5 / V2
+
+- advanced Beam/Slab/Column/StructuralWall/Foundation/Cầu thang authoring;
+- rebar geometry + BBS beyond notation/weight core;
+- revision visualization and richer audit provenance;
+- template/material/classification import/export ecosystem;
+- recognition engine + optional AI suggestion layer;
+- installer, signed updater, optional Cloudflare license/update backend;
+- future AutoCAD adapter reusing `QS3D.Core`.
