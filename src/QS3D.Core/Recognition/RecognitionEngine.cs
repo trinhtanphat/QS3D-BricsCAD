@@ -45,7 +45,14 @@ namespace QS3D.Core.Recognition
         public IReadOnlyList<RecognitionCandidate> Candidates { get; }
         public RecognitionCandidate? TopCandidate => Candidates.Count == 0 ? null : Candidates[0];
         public double Margin => Candidates.Count < 2 ? (TopCandidate?.Confidence ?? 0d) : Candidates[0].Confidence - Candidates[1].Confidence;
-        public bool RequiresReview => TopCandidate == null || TopCandidate.Confidence < 0.82d || Margin < 0.15d;
+        public bool RequiresReview
+        {
+            get
+            {
+                var top = TopCandidate;
+                return top == null || top.Confidence < 0.82d || Margin < 0.15d;
+            }
+        }
         public string Handle => Snapshot.Handle;
         public string SuggestedCategory => TopCandidate?.Category.ToString() ?? string.Empty;
         public double Confidence => TopCandidate?.Confidence ?? 0d;
@@ -59,7 +66,7 @@ namespace QS3D.Core.Recognition
             if (results == null) throw new ArgumentNullException(nameof(results));
             if (autoAcceptConfidence < 0d || autoAcceptConfidence > 1d) throw new ArgumentOutOfRangeException(nameof(autoAcceptConfidence));
             Results = results.ToList();
-            AutoAccepted = Results.Where(x => x.TopCandidate != null && x.TopCandidate.Confidence >= autoAcceptConfidence && x.Margin >= minimumMargin).ToList();
+            AutoAccepted = Results.Where(x => x.TopCandidate is RecognitionCandidate candidate && candidate.Confidence >= autoAcceptConfidence && x.Margin >= minimumMargin).ToList();
             ReviewRequired = Results.Except(AutoAccepted).ToList();
         }
         public IReadOnlyList<RecognitionResult> Results { get; }
