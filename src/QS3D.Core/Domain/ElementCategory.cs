@@ -22,6 +22,7 @@ namespace QS3D.Core.Domain
         Stair,
         Foundation,
         Earthwork,
-        CustomQuantity
+        CustomQuantity,
+        Rebar
     }
 }
