@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import os, re, sys, xml.etree.ElementTree as ET
+import re, sys, xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]; errors=[]
 required=["Directory.Build.props","README.md","src/QS3D.Core/QS3D.Core.csproj","src/QS3D.Core/Domain/ProjectState.cs","src/QS3D.Core/Domain/ProjectElement.cs","src/QS3D.Core/Persistence/QsdbProjectStore.cs","src/QS3D.Core/Diagnostics/ModelHealthService.cs","src/QS3D.Core/Rules/QuantityRuleEngine.cs","src/QS3D.Core/Services/DependencyGraph.cs","src/QS3D.Core/Services/HostLinkService.cs","src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs","src/QS3D.Core/Export/XlsxQuantityExporter.cs","src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj","src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs","src/QS3D.BricsCAD.V25/DocumentLifecycleCoordinator.cs","src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs","src/QS3D.BricsCAD.V25/Cad/DrawingCatalogReader.cs","src/QS3D.BricsCAD.V25/Cad/LayerVisibilityService.cs","src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml","src/QS3D.BricsCAD.V25/UI/RightPanel.xaml","src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml","src/QS3D.BricsCAD.V25/UI/ModelHealthWindow.xaml","tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj",".github/workflows/ci.yml",".github/workflows/bricscad-v25.yml"]
 for rel in required:
@@ -18,13 +18,10 @@ if plugin.exists():
     text=plugin.read_text(encoding="utf-8")
     for needle,message in {"<TargetFramework>net48</TargetFramework>":"plugin must target net48","$(BRICSCAD_V25_DIR)\\BrxMgd.dll":"plugin must use external BrxMgd reference","<Private>false</Private>":"BricsCAD references must not be copied locally"}.items():
         if needle not in text: errors.append(message)
-allow_temp=os.environ.get("QS3D_TEMP_CI_BRANCH","").strip()
 for workflow in (ROOT/".github/workflows").glob("*.yml"):
     text=workflow.read_text(encoding="utf-8")
-    if "workflow_dispatch:" not in text: errors.append(f"{workflow.name}: workflow_dispatch is required")
-    has_auto=re.search(r"(?m)^\s*(push|pull_request)\s*:",text)
-    allowed=bool(allow_temp and allow_temp in text)
-    if has_auto and not allowed: errors.append(f"{workflow.name}: automatic trigger forbidden before V25 runtime gate")
+    if "workflow_dispatch:" not in text: errors.append(f"{workflow.name}: must be manual-only")
+    if re.search(r"(?m)^\s*(push|pull_request)\s*:",text): errors.append(f"{workflow.name}: automatic trigger forbidden before V25 runtime gate")
 for path in ROOT.rglob("*"):
     if path.is_dir() and path.name.lower() in {"blt","blt3d"}: errors.append(f"vendor folder must not be committed: {path.relative_to(ROOT)}")
 for xaml in ROOT.rglob("*.xaml"):
@@ -52,4 +49,4 @@ for path in ROOT.rglob("*.cs"):
 print("QS3D preflight"); print("root:",ROOT)
 if errors:
     [print("ERROR:",e) for e in errors]; print(f"FAILED with {len(errors)} error(s)."); sys.exit(1)
-print("PASS: structure, XML/XAML, handlers, delimiters, proprietary-file, net48 and CI guards are clean.")
+print("PASS: structure, XML/XAML, handlers, delimiters, proprietary-file, net48 and manual-CI guards are clean.")
