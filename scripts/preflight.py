@@ -46,7 +46,19 @@ for path in (ROOT/"src/QS3D.BricsCAD.V25").rglob("*.cs"):
 for path in ROOT.rglob("*.cs"):
     text=path.read_text(encoding="utf-8")
     if "foundation is ready" in text or "after the first runtime gate" in text: errors.append(f"{path.relative_to(ROOT)}: placeholder UX text must not ship")
+store=ROOT/"src/QS3D.Core/Persistence/QsdbProjectStore.cs"
+if store.exists():
+    text=store.read_text(encoding="utf-8")
+    for needle,message in {"RestorePersistenceState":"QSDB dirty-state restore missing","new XAttribute(\"dirty\"":"QSDB dirty-state persistence missing","double.IsNaN(result)":"QSDB numeric corruption guard missing"}.items():
+        if needle not in text: errors.append(message)
+report=ROOT/"src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs"
+if report.exists():
+    text=report.read_text(encoding="utf-8")
+    if 'var key = floor + "\\u001f" + category + "\\u001f" + familyName;' in text: errors.append("BQ grouping must use stable Floor/Family IDs, not display names")
+workspace=ROOT/"src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs"
+if workspace.exists() and "ApplyFamilyProperty" not in workspace.read_text(encoding="utf-8"):
+    errors.append("Family property edits must propagate dirty state to existing family elements")
 print("QS3D preflight"); print("root:",ROOT)
 if errors:
     [print("ERROR:",e) for e in errors]; print(f"FAILED with {len(errors)} error(s)."); sys.exit(1)
-print("PASS: structure, XML/XAML, handlers, delimiters, proprietary-file, net48 and manual-CI guards are clean.")
+print("PASS: structure, XML/XAML, handlers, delimiters, proprietary-file, persistence, stable-BQ, family-propagation, net48 and manual-CI guards are clean.")

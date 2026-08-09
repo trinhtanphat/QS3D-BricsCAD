@@ -17,7 +17,11 @@ namespace QS3D.Core.SmokeTests
         {
             V1Migration();
             BackupRecovery();
+            MissingPrimaryBackupRecovery();
             DuplicateIdRejected();
+            InvalidNumericRejected();
+            DirtyStateRoundtrip();
+            StableIdQuantityGrouping();
             ExportHeadersAndWorksheetUx();
             HealthRecoveryStates();
         }
@@ -60,6 +64,22 @@ namespace QS3D.Core.SmokeTests
             finally { Delete(path); Delete(path + ".bak"); Delete(path + ".tmp"); }
         }
 
+        private static void MissingPrimaryBackupRecovery()
+        {
+            var path = Temp("missing-primary", ".qsdb");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(NewProject("p", "First"), path);
+                store.Save(NewProject("p", "Second"), path);
+                Delete(path);
+                var recovered = store.LoadWithBackupFallback(path);
+                Require(recovered.RecoveredFromBackup, "Missing primary QSDB did not fall back to backup.");
+                Require(recovered.Project.Name == "First", "Missing-primary recovery loaded the wrong backup generation.");
+            }
+            finally { Delete(path); Delete(path + ".bak"); Delete(path + ".tmp"); }
+        }
+
         private static void DuplicateIdRejected()
         {
             var path = Temp("duplicate", ".qsdb");
@@ -75,6 +95,65 @@ namespace QS3D.Core.SmokeTests
                 Require(rejected, "Duplicate QSDB ids were accepted.");
             }
             finally { Delete(path); }
+        }
+
+        private static void InvalidNumericRejected()
+        {
+            var path = Temp("invalid-number", ".qsdb");
+            try
+            {
+                File.WriteAllText(path,
+                    "<qs3d schema=\"2\" projectId=\"p\" name=\"Invalid\" updatedUtc=\"2026-08-10T00:00:00.0000000Z\" drawingPath=\"\" drawingFingerprint=\"\" activeZoneId=\"z\" activeFloorId=\"f\">" +
+                    "<metadata/><zones><zone id=\"z\" name=\"A\"/></zones>" +
+                    "<floors><floor id=\"f\" name=\"Floor\" elevationM=\"not-a-number\"/></floors><families/><elements/></qs3d>", Encoding.UTF8);
+                var rejected = false;
+                try { new QsdbProjectStore().Load(path); }
+                catch (InvalidDataException) { rejected = true; }
+                Require(rejected, "Invalid QSDB numeric data was silently converted to zero.");
+            }
+            finally { Delete(path); }
+        }
+
+        private static void DirtyStateRoundtrip()
+        {
+            var path = Temp("dirty", ".qsdb");
+            try
+            {
+                var project = NewProject("p", "Dirty");
+                var family = new ProjectFamily("wall", "Tường 200", ElementCategory.ArchitecturalWall);
+                project.Families.Add(family);
+                var element = new ProjectElement("W1", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
+                element.SetQuantity("NetVolumeM3", 3d);
+                element.MarkClean(ElementDirtyFlags.All);
+                element.SetProperty("LengthM", "5.5");
+                var expectedDirty = element.Dirty;
+                project.Elements.Add(element);
+
+                var store = new QsdbProjectStore();
+                store.Save(project, path);
+                var restored = store.Load(path).Elements.Single();
+                Require(restored.Dirty == expectedDirty, "Element dirty flags were lost across QSDB save/reload.");
+                Require((restored.Dirty & ElementDirtyFlags.Quantity) != 0, "Stale quantity state was incorrectly restored as clean.");
+                Require(restored.UpdatedUtc.Kind == DateTimeKind.Utc, "Element updatedUtc did not roundtrip as UTC.");
+            }
+            finally { Delete(path); Delete(path + ".bak"); Delete(path + ".tmp"); }
+        }
+
+        private static void StableIdQuantityGrouping()
+        {
+            var project = new ProjectState("grouping", "Grouping");
+            project.Zones.Add(new ZoneDefinition("z", "Vùng-1"));
+            project.Floors.Add(new FloorDefinition("f1", "Tầng Trệt", 0d));
+            project.Floors.Add(new FloorDefinition("f2", "Tầng Trệt", 3.6d));
+            var familyA = new ProjectFamily("fa", "Tường 200", ElementCategory.ArchitecturalWall);
+            var familyB = new ProjectFamily("fb", "Tường 200", ElementCategory.ArchitecturalWall);
+            project.Families.Add(familyA);
+            project.Families.Add(familyB);
+            var a = new ProjectElement("A", ElementCategory.ArchitecturalWall, familyA.Id, "f1", "z"); a.SetQuantity("NetVolumeM3", 1d); a.MarkClean(ElementDirtyFlags.All);
+            var b = new ProjectElement("B", ElementCategory.ArchitecturalWall, familyB.Id, "f2", "z"); b.SetQuantity("NetVolumeM3", 2d); b.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(a); project.Elements.Add(b);
+            var rows = ProjectQuantityReportBuilder.Group(project);
+            Require(rows.Count == 2, "BQ merged different Floor/Family IDs because their display names matched.");
         }
 
         private static void ExportHeadersAndWorksheetUx()

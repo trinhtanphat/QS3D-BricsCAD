@@ -18,7 +18,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) throw new ArgumentNullException(nameof(document));
             var key = GetKey(document); if (Projects.TryGetValue(key, out var existing)) return existing;
             var path = GetProjectPath(document); ProjectState project;
-            if (File.Exists(path))
+            if (File.Exists(path) || File.Exists(path + ".bak"))
             {
                 try { project = LoadProject(path); }
                 catch (Exception ex)
@@ -36,7 +36,7 @@ namespace QS3D.BricsCAD.V25
         public static string Save(Document document)
         {
             var project = GetOrCreate(document); var path = GetProjectPath(document);
-            if (File.Exists(path) && project.Metadata.TryGetValue(RecoveryRequiredKey, out var blocked) && string.Equals(blocked, "true", StringComparison.OrdinalIgnoreCase))
+            if ((File.Exists(path) || File.Exists(path + ".bak")) && project.Metadata.TryGetValue(RecoveryRequiredKey, out var blocked) && string.Equals(blocked, "true", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("QS3D project load failed and the existing .qsdb will not be overwritten. Recover or move the damaged project file first.");
 
             var recoveryMetadata = CaptureRecoveryMetadata(project);
@@ -55,7 +55,8 @@ namespace QS3D.BricsCAD.V25
 
         public static ProjectState Reload(Document document)
         {
-            var path = GetProjectPath(document); if (!File.Exists(path)) throw new FileNotFoundException("QS3D project file was not found.", path);
+            var path = GetProjectPath(document);
+            if (!File.Exists(path) && !File.Exists(path + ".bak")) throw new FileNotFoundException("QS3D project file was not found.", path);
             var project = LoadProject(path); Projects[GetKey(document)] = project; return project;
         }
 
@@ -64,8 +65,8 @@ namespace QS3D.BricsCAD.V25
         {
             if (string.IsNullOrWhiteSpace(drawingName)) return;
             Projects.Remove(drawingName);
-            var full = Path.GetFullPath(drawingName);
-            Projects.Remove(full);
+            try { Projects.Remove(Path.GetFullPath(drawingName)); }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException) { }
         }
 
         public static string GetProjectPath(Document document)

@@ -50,7 +50,7 @@ namespace QS3D.Core.Persistence
             }
             finally
             {
-                if (File.Exists(tempPath)) File.Delete(tempPath);
+                TryDelete(tempPath);
             }
         }
 
@@ -107,7 +107,7 @@ namespace QS3D.Core.Persistence
                     var quantities = item.Element("quantities");
                     if (quantities != null)
                         foreach (var q in quantities.Elements("q")) element.SetQuantity(Required(q, "name"), Double(q.Attribute("value")?.Value));
-                    element.MarkClean(ElementDirtyFlags.All);
+                    element.RestorePersistenceState(Dirty(item.Attribute("dirty")?.Value), Date(item.Attribute("updatedUtc")?.Value));
                     project.Elements.Add(element);
                 }
             }
@@ -159,6 +159,8 @@ namespace QS3D.Core.Persistence
                 new XElement("elements", project.Elements.Select(x => new XElement("element",
                     new XAttribute("id", x.Id), new XAttribute("category", x.Category), new XAttribute("familyId", x.FamilyId ?? string.Empty),
                     new XAttribute("floorId", x.FloorId ?? string.Empty), new XAttribute("zoneId", x.ZoneId ?? string.Empty), new XAttribute("drawingFingerprint", x.DrawingFingerprint ?? string.Empty),
+                    new XAttribute("dirty", ((int)x.Dirty).ToString(CultureInfo.InvariantCulture)),
+                    new XAttribute("updatedUtc", x.UpdatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)),
                     new XElement("handles", x.SourceHandles.Select(h => new XElement("h", h))),
                     new XElement("dependencies", x.DependsOn.Select(d => new XElement("d", d))),
                     Map("properties", x.Properties),
@@ -188,7 +190,7 @@ namespace QS3D.Core.Persistence
             if (duplicateFloor != null) throw new InvalidDataException("Duplicate floor id in QSDB: " + duplicateFloor.Key);
         }
 
-        private static bool IsRecoverableDataFailure(Exception exception) => exception is InvalidDataException || exception is XmlException || exception is FormatException;
+        private static bool IsRecoverableDataFailure(Exception exception) => exception is InvalidDataException || exception is XmlException || exception is FormatException || exception is FileNotFoundException;
 
         private static XElement Map(string name, System.Collections.Generic.IDictionary<string, string> values) =>
             new XElement(name, values.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).Select(x => new XElement("p", new XAttribute("name", x.Key), new XAttribute("value", x.Value ?? string.Empty))));
@@ -201,9 +203,40 @@ namespace QS3D.Core.Persistence
 
         private static string Required(XElement element, string attribute) => element.Attribute(attribute)?.Value is string value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new InvalidDataException("Missing attribute: " + attribute);
         private static string Value(XElement element, string attribute) => element.Attribute(attribute)?.Value?.Trim() ?? string.Empty;
-        private static double Double(string? value) => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ? result : 0d;
+
+        private static double Double(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return 0d;
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) || double.IsNaN(result) || double.IsInfinity(result))
+                throw new InvalidDataException("Invalid QSDB numeric value: " + value);
+            return result;
+        }
+
         private static int Int(string? value, int fallback) => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) ? result : fallback;
-        private static DateTime Date(string? value) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var result) ? result.ToUniversalTime() : new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        private static DateTime Date(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var result))
+                throw new InvalidDataException("Invalid QSDB UTC timestamp: " + value);
+            return result.ToUniversalTime();
+        }
+
+        private static ElementDirtyFlags Dirty(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return ElementDirtyFlags.None;
+            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var raw) || raw < 0 || (raw & ~(int)ElementDirtyFlags.All) != 0)
+                throw new InvalidDataException("Invalid QSDB dirty flags: " + value);
+            return (ElementDirtyFlags)raw;
+        }
+
+        private static void TryDelete(string path)
+        {
+            try { if (File.Exists(path)) File.Delete(path); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
         private static string F(double value) => value.ToString("R", CultureInfo.InvariantCulture);
     }
 }

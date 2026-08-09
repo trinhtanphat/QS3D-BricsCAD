@@ -87,9 +87,26 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 var key = pair.Key;
                 var row = new PropertyRowViewModel { Group = "THUỘC TÍNH", Name = key, Unit = UnitFor(key) };
                 row.Value = pair.Value;
-                row.Apply = value => { family.Properties[key] = value; _project?.Touch(); };
+                row.Apply = value => ApplyFamilyProperty(family, key, value);
                 Properties.Add(row);
             }
+        }
+
+        private void ApplyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var next = value ?? string.Empty;
+            family.Properties[key] = next;
+            if (_project == null) return;
+
+            var affected = 0;
+            foreach (var element in _project.Elements.Where(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                element.SetProperty(key, next);
+                affected++;
+            }
+
+            _project.Touch();
+            Status = "Đã cập nhật " + key + " cho Family • " + affected + " cấu kiện cần tính lại";
         }
 
         private static string UnitFor(string key)
