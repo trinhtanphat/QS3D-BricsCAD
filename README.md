@@ -2,8 +2,6 @@
 
 Clean-room BricsCAD V25 quantity takeoff / 3D QS plugin inspired by the workflow shown in the supplied BLT3D references. This repository does **not** contain BLT source, BLT binaries, BricsCAD proprietary assemblies, or private drawings.
 
-> Active implementation is reviewed on `agent/full-implementation-20260809` before fast-forwarding `main`. GitHub Actions remain manual-only until the V25 runtime gates pass.
-
 ## Target
 - BricsCAD V25 on Windows x64
 - Plugin: C# / .NET Framework 4.8 / WPF / BricsCAD .NET API
