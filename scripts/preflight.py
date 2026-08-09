@@ -2,7 +2,7 @@
 from pathlib import Path
 import re, sys, xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]; errors=[]
-required=["Directory.Build.props","README.md","src/QS3D.Core/QS3D.Core.csproj","src/QS3D.Core/Domain/ProjectState.cs","src/QS3D.Core/Domain/ProjectElement.cs","src/QS3D.Core/Persistence/QsdbProjectStore.cs","src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs","src/QS3D.Core/Persistence/ProjectLoadResult.cs","src/QS3D.Core/Diagnostics/ModelHealthService.cs","src/QS3D.Core/Rules/QuantityRuleEngine.cs","src/QS3D.Core/Services/DependencyGraph.cs","src/QS3D.Core/Services/HostLinkService.cs","src/QS3D.Core/Services/StructuralQuantityCalculator.cs","src/QS3D.Core/Services/StructuralRegenerators.cs","src/QS3D.Core/Rebar/RebarSchedule.cs","src/QS3D.Core/Rebar/RebarRegenerator.cs","src/QS3D.Core/Recognition/RecognitionEngine.cs","src/QS3D.Core/Revisions/QuantityRevisionReport.cs","src/QS3D.Core/Export/RebarCsvExporter.cs","src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs","src/QS3D.Core/Export/XlsxQuantityExporter.cs","src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj","src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs","src/QS3D.BricsCAD.V25/DocumentLifecycleCoordinator.cs","src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs","src/QS3D.BricsCAD.V25/Cad/DrawingCatalogReader.cs","src/QS3D.BricsCAD.V25/Cad/LayerVisibilityService.cs","src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml","src/QS3D.BricsCAD.V25/UI/RightPanel.xaml","src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml","src/QS3D.BricsCAD.V25/UI/ModelHealthWindow.xaml","tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj","tests/QS3D.Core.SmokeTests/PersistenceHardeningSmoke.cs","tests/QS3D.Core.SmokeTests/FullDomainSmoke.cs",".github/workflows/ci.yml",".github/workflows/bricscad-v25.yml"]
+required=["Directory.Build.props","README.md","scripts/package-v25.ps1","docs/COMMANDS.md","docs/RUNTIME-TEST-CHECKLIST.md","src/QS3D.Core/QS3D.Core.csproj","src/QS3D.Core/Domain/ProjectState.cs","src/QS3D.Core/Domain/ProjectElement.cs","src/QS3D.Core/Persistence/QsdbProjectStore.cs","src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs","src/QS3D.Core/Persistence/ProjectLoadResult.cs","src/QS3D.Core/Diagnostics/ModelHealthService.cs","src/QS3D.Core/Rules/QuantityRuleEngine.cs","src/QS3D.Core/Services/DependencyGraph.cs","src/QS3D.Core/Services/HostLinkService.cs","src/QS3D.Core/Services/StructuralQuantityCalculator.cs","src/QS3D.Core/Services/StructuralRegenerators.cs","src/QS3D.Core/Services/GenericQuantityRegenerator.cs","src/QS3D.Core/Rebar/RebarSchedule.cs","src/QS3D.Core/Rebar/RebarRegenerator.cs","src/QS3D.Core/Recognition/RecognitionEngine.cs","src/QS3D.Core/Revisions/QuantityRevisionReport.cs","src/QS3D.Core/Revisions/RevisionSnapshotStore.cs","src/QS3D.Core/Export/RebarCsvExporter.cs","src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs","src/QS3D.Core/Export/XlsxQuantityExporter.cs","src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj","src/QS3D.BricsCAD.V25/DomainCommands.cs","src/QS3D.BricsCAD.V25/Services/RevisionCoordinator.cs","src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs","src/QS3D.BricsCAD.V25/DocumentLifecycleCoordinator.cs","src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs","src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs","src/QS3D.BricsCAD.V25/Cad/DrawingCatalogReader.cs","src/QS3D.BricsCAD.V25/Cad/LayerVisibilityService.cs","src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml","src/QS3D.BricsCAD.V25/UI/RightPanel.xaml","src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml","src/QS3D.BricsCAD.V25/UI/ModelHealthWindow.xaml","src/QS3D.BricsCAD.V25/UI/RebarScheduleWindow.xaml","src/QS3D.BricsCAD.V25/UI/RecognitionWindow.xaml","src/QS3D.BricsCAD.V25/UI/RevisionWindow.xaml","tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj","tests/QS3D.Core.SmokeTests/PersistenceHardeningSmoke.cs","tests/QS3D.Core.SmokeTests/FullDomainSmoke.cs",".github/workflows/ci.yml",".github/workflows/bricscad-v25.yml"]
 for rel in required:
     if not (ROOT/rel).exists(): errors.append(f"missing required file: {rel}")
 for path in list(ROOT.rglob("*.csproj"))+list(ROOT.rglob("*.xaml")):
@@ -27,7 +27,7 @@ for path in ROOT.rglob("*"):
 for xaml in ROOT.rglob("*.xaml"):
     if xaml.name=="Theme.xaml": continue
     code=xaml.with_suffix(xaml.suffix+".cs")
-    if not code.exists(): continue
+    if not code.exists(): errors.append(f"{xaml.relative_to(ROOT)}: missing code-behind file"); continue
     xt=xaml.read_text(encoding="utf-8"); ct=code.read_text(encoding="utf-8")
     for handler in set(re.findall(r'\b(?:Click|TextChanged|SelectionChanged|Checked|Unchecked|MouseDoubleClick)="([A-Za-z_][A-Za-z0-9_]*)"',xt)):
         if not re.search(r"\b"+re.escape(handler)+r"\s*\(",ct): errors.append(f"{xaml.relative_to(ROOT)}: missing code-behind handler {handler}")
@@ -46,7 +46,10 @@ for path in (ROOT/"src/QS3D.BricsCAD.V25").rglob("*.cs"):
 for path in ROOT.rglob("*.cs"):
     text=path.read_text(encoding="utf-8")
     if "foundation is ready" in text or "after the first runtime gate" in text: errors.append(f"{path.relative_to(ROOT)}: placeholder UX text must not ship")
+package=(ROOT/"scripts/package-v25.ps1").read_text(encoding="utf-8") if (ROOT/"scripts/package-v25.ps1").exists() else ""
+for forbidden in ("BrxMgd.dll","TD_Mgd.dll","TD_MgdBrep.dll"):
+    if forbidden not in package: errors.append(f"package-v25.ps1: missing proprietary DLL guard for {forbidden}")
 print("QS3D preflight"); print("root:",ROOT)
 if errors:
     [print("ERROR:",e) for e in errors]; print(f"FAILED with {len(errors)} error(s)."); sys.exit(1)
-print("PASS: structure, XML/XAML, handlers, delimiters, proprietary-file, net48 and manual-CI guards are clean.")
+print("PASS: full-domain tree, XML/XAML handlers, delimiters, proprietary-file, net48, packaging and manual-CI guards are clean.")
