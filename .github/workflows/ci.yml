@@ -2,9 +2,15 @@ name: QS3D Core CI
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - ci/core-gate-20260810
 
 permissions:
   contents: read
+
+env:
+  QS3D_TEMP_CI_BRANCH: ci/core-gate-20260810
 
 jobs:
   preflight:
