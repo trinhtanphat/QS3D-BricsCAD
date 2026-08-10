@@ -17,7 +17,7 @@ The repository is beyond prototype stage. Source currently includes:
 - BLT-style three-pane workspace: Model tree, Family/Type list, grouped property inspector, selected-object review, HT_Phòng, Xref/Drawing manager and Layer manager.
 - Category-aware **Bóc chọn** flow so a user can select a model group/Family and capture the current CAD selection without memorizing commands.
 - Property inspector with Vietnamese labels/groups, units, finite-number validation, typed controls (`TextBox`, boolean `CheckBox`, editable choice `ComboBox`) and **Family / Type vs Đối tượng / Instance** scope. A single semantic selection opens Instance scope; overrides can be reset to the Family value, and later Family edits preserve true instance overrides instead of overwriting them.
-- Selected-object review actions for Locate/Zoom, **Focus**, **Cô lập/Khôi phục**, plus semantic-reference matching so Room Auto boundary-derived elements remain discoverable without duplicating source ownership.
+- Selected-object review actions for Locate/Zoom, **Focus**, **Cô lập/Khôi phục**, plus semantic-reference matching so Room Auto boundary-derived elements remain discoverable without duplicating source ownership. Guarded Section Box / Section Plane / clip display review commands are also exposed through Ribbon/Hub.
 - Semantic Project/Zone/Floor/Family/Element model, `.qsdb` schema migration, deterministic regeneration, audit, revision baseline/diff, template import/export and Model Health.
 - Tường KT workflows for Tường Gạch, Vách Kính and Trụ Tường, including explicit semantic capture commands and a shared guarded 3D pipeline.
 - Tường KT 3D source paths accept LINE and open POLYLINE centerlines for all three variants; polyline bulges are tessellated and converted through the deterministic wall-footprint engine.
@@ -27,10 +27,13 @@ The repository is beyond prototype stage. Source currently includes:
 - Door/Opening manual host linking plus `QS3DAUTOLINKHOSTS`. Auto Host uses compatible semantic wall candidates, surface gap, Floor/Zone scope, ambiguity rejection and an independent elevation gate; it only establishes the semantic host and never silently performs a physical cut.
 - Physical Door/Opening subtraction supports generated LINE hosts and guarded straight, non-bulged POLYLINE wall segments where the opening can be projected safely without crossing a corner. Supported categories include ArchitecturalWall/Tường Gạch, GlassWall/Vách Kính, WallPier/Trụ Tường and StructuralWall/Vách BTCT. Curved/bulged polyline-host cuts remain rejected rather than guessed.
 - Beam/Slab/Column/StructuralWall/Foundation/Stair/Railing/Earthwork semantic quantities and guarded native Solid3d source paths.
-- Rebar notation/BBS, XLSX/CSV export, review/Locate, rectangular-column rebar 3D, generated-rebar ownership/health guards, deterministic linear distribution and BBS-shape-driven 3D source paths for supported straight/L/U/Z/custom leg/turn definitions.
+- Rebar notation/BBS, XLSX/CSV export, review/Locate, rectangular-column longitudinal rebar 3D, generated-rebar ownership/health guards, deterministic linear distribution and BBS-shape-driven 3D source paths for supported straight/L/U/Z/custom leg/turn definitions.
+- Beam stirrup source path: `QS3DBEAMSTIRRUP3D` uses the deterministic beam-stirrup layout planner to generate rectangular loop solids along supported horizontal Beam LINE sources; spacing/count/cover/diameter are bounded and generated ownership is health-checkable through `QS3DBEAMSTIRRUPHEALTH`.
+- Column tie source path: `QS3DREBARTIES3D` generates guarded rectangular column tie loop solids along supported closed 4-vertex rectangle Column footprints; tie diameter/spacing/cover/clearances are bounded, protected ownership is enforced and `QS3DREBARTIEHEALTH` reviews generated tie state.
+- Current beam stirrup/column tie geometry intentionally uses segmented-cylinder rectangular loops. Production fabrication hooks, bend radii and code-specific detailing are **not** inferred without explicit dimensions.
 - BQ grouping/filtering/Locate/XLSX, Quick Takeoff, recognition/review/auto-accept, Layer/Xref adapters, Ribbon, Full Domain Hub, viewport tools and release packaging/DemandLoad scripts.
-- Ribbon/Workspace/Domain Hub expose the major BLT-style workflows consistently: Tường KT, Giao tường, Snap xem/áp, Auto/Manual Host, Cửa/Lỗ, Room Auto, Focus/Isolate, BQ/BBS, column rebar and shape rebar.
-- Static preflights and deterministic Core smoke coverage include geometry/rebar/Room Auto/Auto Host/wall-snap guards, command uniqueness, typed Family/Instance inspector contracts and XAML well-formedness checks. `scripts/preflight-blt-workspace.py` specifically guards the primary Workspace/Ribbon/Hub workflow parity.
+- Ribbon/Workspace/Domain Hub expose the major BLT-style workflows consistently: Tường KT, Giao tường, Snap xem/áp, Auto/Manual Host, Cửa/Lỗ, Room Auto, Focus/Isolate, Section review, BQ/BBS, column longitudinal rebar, BBS shape rebar, beam stirrups and column ties.
+- Static preflights and deterministic Core smoke coverage include geometry/rebar/Room Auto/Auto Host/wall-snap guards, command uniqueness, typed Family/Instance inspector contracts and XAML well-formedness checks. `scripts/preflight-blt-workspace.py` specifically guards primary Workspace/Ribbon/Hub workflow parity including beam-stirrup/column-tie entry points.
 
 ## Main commands
 
@@ -50,8 +53,12 @@ The repository is beyond prototype stage. Source currently includes:
 ### Quantity / rebar / review
 - `QS3DBQ`
 - `QS3DBBSVIEW`, `QS3DBBS`, `QS3DBBSCSV`
-- `QS3DREBAR3D`, `QS3DREBAR3DSHAPE`, `QS3DREBARHEALTH`, `QS3DREBARSHAPEHEALTH`
+- `QS3DREBAR3D`, `QS3DREBARHEALTH`
+- `QS3DREBAR3DSHAPE`, `QS3DREBARSHAPEHEALTH`
+- `QS3DBEAMSTIRRUP3D`, `QS3DBEAMSTIRRUPHEALTH`
+- `QS3DREBARTIES3D`, `QS3DREBARTIEHEALTH`
 - `QS3DHIGHLIGHT`, `QS3DUNHIGHLIGHT`, `QS3DFOCUS`, `QS3DISOLATE`, `QS3DUNISOLATE`
+- `QS3DSECTIONBOX`, `QS3DSECTIONPLANE`, `QS3DCLIPDISPLAY`
 - `QS3DRECOGNIZE`, `QS3DRECOGNIZEAUTO`
 - `QS3DREVBASE`, `QS3DREVDIFF`
 
@@ -72,10 +79,10 @@ Source presence is **not** the same as BricsCAD V25 runtime proof. Before callin
 1. compile the V25 adapter against the exact V25 managed assemblies;
 2. NETLOAD/DemandLoad the produced DLL and run command/Ribbon/palette smoke tests;
 3. test private representative DWGs, save/reopen and multi-DWG lifecycle;
-4. verify native Solid3d wall/opening/rebar behavior, including LINE/open-POLYLINE Tường KT, wall snap preview/apply, guarded straight-polyline opening cuts and supported BBS shape bars;
+4. verify native Solid3d wall/opening/rebar behavior, including LINE/open-POLYLINE Tường KT, wall snap preview/apply, guarded straight-polyline opening cuts, BBS shape bars, beam stirrups and column ties;
 5. verify Auto Host against ambiguous/nearby/multi-level real drawings without accidental host assignment;
 6. verify Room Auto with mixed LINE/POLYLINE/ARC/SPLINE plan-view boundaries, chord/sagitta controls and non-planar rejection;
-7. verify Focus/Isolate/restore lifecycle and Family/Instance property editing in the real V25 palette host;
+7. verify Focus/Isolate/Section review lifecycle and Family/Instance property editing in the real V25 palette host;
 8. capture visual regressions at 100/125/150/200% DPI with Vietnamese Unicode;
 9. run performance tests on large room-boundary, wall-junction/Auto Host, quantity and rebar models.
 
