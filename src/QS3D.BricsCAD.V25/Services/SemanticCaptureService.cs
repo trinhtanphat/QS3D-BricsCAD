@@ -56,11 +56,12 @@ namespace QS3D.BricsCAD.V25.Services
             if (GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle, out var generatedOwner, out var generatedSlot))
                 throw new InvalidOperationException("CAD handle " + snapshot.Handle + " là output do QS3D sinh từ " + generatedOwner!.Id + " (" + generatedSlot + ") và không thể dùng làm semantic source. Hãy chọn CAD source gốc.");
 
-            var collision = project.Elements.FirstOrDefault(x => x.Category != category && x.SourceHandles.Any(h => string.Equals(h, snapshot.Handle, StringComparison.OrdinalIgnoreCase)));
+            var sourceOwner = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, snapshot.Handle);
+            var collision = sourceOwner != null && sourceOwner.Category != category ? sourceOwner : null;
             if (collision != null) throw new InvalidOperationException("CAD handle " + snapshot.Handle + " đang được QS3D theo dõi dưới loại " + collision.Category + ". Bỏ theo dõi trước khi đổi loại cấu kiện.");
 
             var id = category.ToString().ToUpperInvariant() + "-" + snapshot.Handle;
-            var element = project.FindElement(id);
+            var element = SemanticHandleOwnershipResolver.ResolveCaptureTarget(project, snapshot.Handle, category, id);
             ProjectFamily family;
             if (element == null)
             {
