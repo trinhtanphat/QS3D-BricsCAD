@@ -2,7 +2,7 @@ using System;
 
 namespace QS3D.Core.Reporting
 {
-    internal static class QuantityReportMath
+    public static class QuantityReportMath
     {
         public static double Finite(double value, string label)
         {

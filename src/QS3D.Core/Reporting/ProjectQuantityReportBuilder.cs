@@ -33,19 +33,31 @@ namespace QS3D.Core.Reporting
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
                 row.ElementIds.Add(element.Id);
                 AddHandles(row.SourceHandles, SourceHandleResolver.Resolve(project, new[] { element.Id }));
-                var gross = Q(element, "GrossConcreteM3", Q(element, "GrossVolumeM3"));
-                var net = Q(element, "NetConcreteM3", Q(element, "NetVolumeM3", gross));
+                var gross = QFirst(element, "GrossConcreteM3", "GrossVolumeM3");
+                var net = QFirstOrFallback(element, gross, "NetConcreteM3", "NetVolumeM3");
                 row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, gross, element.Id + "/GrossConcreteM3");
                 row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3, net, element.Id + "/NetConcreteM3");
                 row.DeductionM3 = QuantityReportMath.Add(row.DeductionM3, Q(element, "DeductionM3", Math.Max(0d, gross - net)), element.Id + "/DeductionM3");
                 row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, Q(element, "FormworkM2"), element.Id + "/FormworkM2");
                 row.LengthM = QuantityReportMath.Add(row.LengthM, Q(element, "LengthM"), element.Id + "/LengthM");
-                row.OuterPerimeterM = QuantityReportMath.Add(row.OuterPerimeterM, Q(element, "OuterPerimeterM", element.Category == ElementCategory.Room ? Q(element, "PerimeterM") : 0d), element.Id + "/OuterPerimeterM");
-                row.InnerPerimeterM = QuantityReportMath.Add(row.InnerPerimeterM, Q(element, "InnerPerimeterM", element.Category == ElementCategory.Skirting ? Q(element, "PerimeterM") : 0d), element.Id + "/InnerPerimeterM");
-                row.DoorAreaM2 = QuantityReportMath.Add(row.DoorAreaM2, element.Category == ElementCategory.Door || element.Category == ElementCategory.WallOpening ? Q(element, "OpeningAreaM2") : Q(element, "DoorAreaM2"), element.Id + "/DoorAreaM2");
-                row.SideAreaM2 = QuantityReportMath.Add(row.SideAreaM2, Q(element, "SideAreaM2", element.Category == ElementCategory.WallFinish ? Q(element, "NetFinishAreaM2") : 0d), element.Id + "/SideAreaM2");
-                row.BottomAreaM2 = QuantityReportMath.Add(row.BottomAreaM2, Q(element, "BottomAreaM2", element.Category == ElementCategory.FloorFinish || element.Category == ElementCategory.Waterproofing ? Q(element, "AreaM2") : 0d), element.Id + "/BottomAreaM2");
-                row.TopAreaM2 = QuantityReportMath.Add(row.TopAreaM2, Q(element, "TopAreaM2", element.Category == ElementCategory.CeilingFinish ? Q(element, "AreaM2") : 0d), element.Id + "/TopAreaM2");
+                row.OuterPerimeterM = QuantityReportMath.Add(row.OuterPerimeterM,
+                    element.Category == ElementCategory.Room ? QFirst(element, "OuterPerimeterM", "PerimeterM") : Q(element, "OuterPerimeterM"),
+                    element.Id + "/OuterPerimeterM");
+                row.InnerPerimeterM = QuantityReportMath.Add(row.InnerPerimeterM,
+                    element.Category == ElementCategory.Skirting ? QFirst(element, "InnerPerimeterM", "PerimeterM") : Q(element, "InnerPerimeterM"),
+                    element.Id + "/InnerPerimeterM");
+                row.DoorAreaM2 = QuantityReportMath.Add(row.DoorAreaM2,
+                    element.Category == ElementCategory.Door || element.Category == ElementCategory.WallOpening ? Q(element, "OpeningAreaM2") : Q(element, "DoorAreaM2"),
+                    element.Id + "/DoorAreaM2");
+                row.SideAreaM2 = QuantityReportMath.Add(row.SideAreaM2,
+                    element.Category == ElementCategory.WallFinish ? QFirst(element, "SideAreaM2", "NetFinishAreaM2") : Q(element, "SideAreaM2"),
+                    element.Id + "/SideAreaM2");
+                row.BottomAreaM2 = QuantityReportMath.Add(row.BottomAreaM2,
+                    element.Category == ElementCategory.FloorFinish || element.Category == ElementCategory.Waterproofing ? QFirst(element, "BottomAreaM2", "AreaM2") : Q(element, "BottomAreaM2"),
+                    element.Id + "/BottomAreaM2");
+                row.TopAreaM2 = QuantityReportMath.Add(row.TopAreaM2,
+                    element.Category == ElementCategory.CeilingFinish ? QFirst(element, "TopAreaM2", "AreaM2") : Q(element, "TopAreaM2"),
+                    element.Id + "/TopAreaM2");
                 row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, Q(element, "OtherAreaM2"), element.Id + "/OtherAreaM2");
             }
 
@@ -56,6 +68,20 @@ namespace QS3D.Core.Reporting
         {
             foreach (var handle in source.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()))
                 if (!destination.Contains(handle, StringComparer.OrdinalIgnoreCase)) destination.Add(handle);
+        }
+
+        private static double QFirst(ProjectElement element, params string[] keys)
+        {
+            foreach (var key in keys)
+                if (element.Quantities.ContainsKey(key)) return Q(element, key);
+            return 0d;
+        }
+
+        private static double QFirstOrFallback(ProjectElement element, double fallback, params string[] keys)
+        {
+            foreach (var key in keys)
+                if (element.Quantities.ContainsKey(key)) return Q(element, key);
+            return QuantityReportMath.Finite(fallback, element.Id + "/fallback");
         }
 
         private static double Q(ProjectElement element, string name, double fallback = 0d)

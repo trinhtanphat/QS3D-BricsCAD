@@ -96,9 +96,18 @@ namespace QS3D.BricsCAD.V25.UI
             if (query.Length > 0) views = views.Where(x => x.SearchText.Contains(query));
             var visible = views.ToList();
             ScheduleGrid.ItemsSource = visible;
+
+            var elementCount = 0;
+            var openingAreaM2 = 0d;
+            foreach (var row in visible)
+            {
+                elementCount = QuantityReportMath.AddCount(elementCount, row.Count);
+                openingAreaM2 = QuantityReportMath.Add(openingAreaM2, row.OpeningAreaM2, "Door/Opening visible area");
+            }
+
             GroupCountText.Text = visible.Count.ToString(CultureInfo.InvariantCulture);
-            ElementCountText.Text = visible.Sum(x => x.Count).ToString(CultureInfo.InvariantCulture);
-            AreaText.Text = visible.Sum(x => x.OpeningAreaM2).ToString("0.###", CultureInfo.InvariantCulture) + " m²";
+            ElementCountText.Text = elementCount.ToString(CultureInfo.InvariantCulture);
+            AreaText.Text = openingAreaM2.ToString("0.###", CultureInfo.InvariantCulture) + " m²";
             HostCountText.Text = visible.SelectMany(x => x.Source.HostIds).Distinct(StringComparer.OrdinalIgnoreCase).Count().ToString(CultureInfo.InvariantCulture);
         }
 

@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             DuplicateProvenanceIsRejected();
             TopologyChangeMarksStale();
             StaleRoomsAndDependentsAreExcludedFromBq();
+            RoomFinishProvenanceUsesCanonicalPropertyAndDependency();
+            OrphanAndConflictingRoomFinishProvenanceAreSafe();
             ReactivationClearsStaleState();
             FamilyDefaultsPreserveInstanceOverrides();
         }
@@ -78,16 +80,59 @@ namespace QS3D.Core.SmokeTests
             finish.DependsOn.Add(stale.Id);
             finish.SetQuantity("AreaM2", 20d);
             finish.MarkClean(ElementDirtyFlags.All);
+            var propertyOnlyFinish = new ProjectElement("STALE-FINISH-PROPERTY", ElementCategory.CeilingFinish, "finish", "f", "z");
+            propertyOnlyFinish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = stale.Id;
+            propertyOnlyFinish.SetQuantity("AreaM2", 7d);
+            propertyOnlyFinish.MarkClean(ElementDirtyFlags.All);
+            var nested = new ProjectElement("STALE-NESTED", ElementCategory.CustomQuantity, "nested", "f", "z");
+            nested.DependsOn.Add(finish.Id);
+            nested.SetQuantity("AreaM2", 4d);
+            nested.MarkClean(ElementDirtyFlags.All);
             project.Families.Add(new ProjectFamily("finish", "Finish", ElementCategory.FloorFinish));
-            project.Elements.Add(stale); project.Elements.Add(active); project.Elements.Add(finish);
+            project.Families.Add(new ProjectFamily("nested", "Nested", ElementCategory.CustomQuantity));
+            project.Elements.Add(stale); project.Elements.Add(active); project.Elements.Add(finish); project.Elements.Add(propertyOnlyFinish); project.Elements.Add(nested);
 
             True(AutoRoomLifecycle.IsExcludedFromQuantity(project, stale));
             True(AutoRoomLifecycle.IsExcludedFromQuantity(project, finish));
+            True(AutoRoomLifecycle.IsExcludedFromQuantity(project, propertyOnlyFinish));
+            True(AutoRoomLifecycle.IsExcludedFromQuantity(project, nested));
             True(!AutoRoomLifecycle.IsExcludedFromQuantity(project, active));
             var rows = ProjectQuantityReportBuilder.Group(project);
             Equal(1, rows.Count);
             Equal(1, rows[0].Count);
             Equal(active.Id, rows[0].ElementIds.Single());
+        }
+
+        private static void RoomFinishProvenanceUsesCanonicalPropertyAndDependency()
+        {
+            var project = NewProject();
+            var room = AutoRoom("ROOM-LINK", "L1;L2;L3", project);
+            AutoRoomLifecycle.MarkActive(room, "L1;L2;L3");
+            project.Elements.Add(room);
+            var finish = new ProjectElement("FINISH-LINK", ElementCategory.WallFinish, "finish", "f", "z");
+            finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
+            finish.DependsOn.Add(room.Id);
+            project.Elements.Add(finish);
+            Equal(room.Id, AutoRoomLifecycle.ResolveRoomReferenceId(project, finish));
+            True(!AutoRoomLifecycle.IsExcludedFromQuantity(project, finish));
+        }
+
+        private static void OrphanAndConflictingRoomFinishProvenanceAreSafe()
+        {
+            var project = NewProject();
+            var orphan = new ProjectElement("ORPHAN-FINISH", ElementCategory.FloorFinish, "finish", "f", "z");
+            orphan.Properties[AutoRoomLifecycle.RoomSourceIdKey] = "MISSING-ROOM";
+            project.Elements.Add(orphan);
+            True(AutoRoomLifecycle.IsExcludedFromQuantity(project, orphan));
+
+            var first = AutoRoom("ROOM-A", "A1;A2;A3", project);
+            var second = AutoRoom("ROOM-B", "B1;B2;B3", project);
+            project.Elements.Add(first); project.Elements.Add(second);
+            var conflict = new ProjectElement("CONFLICT-FINISH", ElementCategory.WallFinish, "finish", "f", "z");
+            conflict.Properties[AutoRoomLifecycle.RoomSourceIdKey] = first.Id;
+            conflict.Properties["ParentRoomId"] = second.Id;
+            project.Elements.Add(conflict);
+            Throws<InvalidOperationException>(() => AutoRoomLifecycle.ResolveRoomReferenceId(project, conflict));
         }
 
         private static void ReactivationClearsStaleState()
