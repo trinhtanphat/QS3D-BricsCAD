@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -43,15 +42,17 @@ namespace QS3D.Core.Rules
 
     public sealed class QuantityRuleElementPreview
     {
-        internal QuantityRuleElementPreview(string projectId, string elementId, ElementCategory category, IEnumerable<QuantityRulePreviewChange> changes)
+        internal QuantityRuleElementPreview(string projectId, long sourceChangeVersion, string elementId, ElementCategory category, IEnumerable<QuantityRulePreviewChange> changes)
         {
             ProjectId = projectId ?? string.Empty;
+            SourceChangeVersion = sourceChangeVersion;
             ElementId = elementId ?? string.Empty;
             Category = category;
             Changes = (changes ?? Enumerable.Empty<QuantityRulePreviewChange>()).ToList().AsReadOnly();
         }
 
         public string ProjectId { get; }
+        public long SourceChangeVersion { get; }
         public string ElementId { get; }
         public ElementCategory Category { get; }
         public IReadOnlyList<QuantityRulePreviewChange> Changes { get; }
@@ -60,13 +61,15 @@ namespace QS3D.Core.Rules
 
     public sealed class QuantityRuleProjectPreview
     {
-        internal QuantityRuleProjectPreview(string projectId, IEnumerable<QuantityRuleElementPreview> elements)
+        internal QuantityRuleProjectPreview(string projectId, long sourceChangeVersion, IEnumerable<QuantityRuleElementPreview> elements)
         {
             ProjectId = projectId ?? string.Empty;
+            SourceChangeVersion = sourceChangeVersion;
             Elements = (elements ?? Enumerable.Empty<QuantityRuleElementPreview>()).ToList().AsReadOnly();
         }
 
         public string ProjectId { get; }
+        public long SourceChangeVersion { get; }
         public IReadOnlyList<QuantityRuleElementPreview> Elements { get; }
         public int ChangedElementCount => Elements.Count(x => x.HasChanges);
         public int ChangeCount => Elements.Sum(x => x.Changes.Count);
@@ -96,18 +99,19 @@ namespace QS3D.Core.Rules
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var detachedElement = detached.FindElement(element.Id)
                 ?? throw new InvalidOperationException("Detached quantity-rule preview lost element " + element.Id + ".");
-            return PreviewDetached(detached, detachedElement);
+            return PreviewDetached(detached, detachedElement, project.ChangeVersion);
         }
 
         public QuantityRuleProjectPreview PreviewProject(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            var sourceChangeVersion = project.ChangeVersion;
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var previews = detached.Elements
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                .Select(x => PreviewDetached(detached, x))
+                .Select(x => PreviewDetached(detached, x, sourceChangeVersion))
                 .ToList();
-            return new QuantityRuleProjectPreview(project.ProjectId, previews);
+            return new QuantityRuleProjectPreview(project.ProjectId, sourceChangeVersion, previews);
         }
 
         public int ApplyElement(ProjectState project, ProjectElement element, QuantityRuleElementPreview preview)
@@ -115,6 +119,8 @@ namespace QS3D.Core.Rules
             RequireOwnedElement(project, element);
             if (preview == null) throw new ArgumentNullException(nameof(preview));
             RequirePreviewIdentity(project, element, preview);
+            if (preview.SourceChangeVersion != project.ChangeVersion)
+                throw new InvalidOperationException("Quantity-rule preview is stale because the project changed after preview; recompute before applying.");
             var current = PreviewElement(project, element);
             if (!Equivalent(preview, current))
                 throw new InvalidOperationException("Quantity-rule preview is stale for element " + element.Id + "; recompute preview before applying.");
@@ -164,6 +170,8 @@ namespace QS3D.Core.Rules
             if (preview == null) throw new ArgumentNullException(nameof(preview));
             if (!string.Equals(preview.ProjectId, project.ProjectId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Quantity-rule project preview belongs to a different project.");
+            if (preview.SourceChangeVersion != project.ChangeVersion)
+                throw new InvalidOperationException("Quantity-rule project preview is stale because the project changed after preview; recompute before applying.");
 
             var current = PreviewProject(project);
             if (!Equivalent(preview, current))
@@ -182,7 +190,7 @@ namespace QS3D.Core.Rules
             return applied;
         }
 
-        private QuantityRuleElementPreview PreviewDetached(ProjectState detached, ProjectElement element)
+        private QuantityRuleElementPreview PreviewDetached(ProjectState detached, ProjectElement element, long sourceChangeVersion)
         {
             var beforeQuantities = new Dictionary<string, double>(element.Quantities, StringComparer.OrdinalIgnoreCase);
             var beforeProvenance = ManagedProvenance(element);
@@ -227,7 +235,7 @@ namespace QS3D.Core.Rules
                     afterRule));
             }
 
-            return new QuantityRuleElementPreview(detached.ProjectId, element.Id, element.Category, changes);
+            return new QuantityRuleElementPreview(detached.ProjectId, sourceChangeVersion, element.Id, element.Category, changes);
         }
 
         private static Dictionary<string, string> ManagedProvenance(ProjectElement element)
@@ -266,6 +274,7 @@ namespace QS3D.Core.Rules
         private static bool Equivalent(QuantityRuleElementPreview left, QuantityRuleElementPreview right)
         {
             if (!string.Equals(left.ProjectId, right.ProjectId, StringComparison.Ordinal) ||
+                left.SourceChangeVersion != right.SourceChangeVersion ||
                 !string.Equals(left.ElementId, right.ElementId, StringComparison.OrdinalIgnoreCase) ||
                 left.Category != right.Category ||
                 left.Changes.Count != right.Changes.Count)
@@ -288,7 +297,9 @@ namespace QS3D.Core.Rules
 
         private static bool Equivalent(QuantityRuleProjectPreview left, QuantityRuleProjectPreview right)
         {
-            if (!string.Equals(left.ProjectId, right.ProjectId, StringComparison.Ordinal) || left.Elements.Count != right.Elements.Count)
+            if (!string.Equals(left.ProjectId, right.ProjectId, StringComparison.Ordinal) ||
+                left.SourceChangeVersion != right.SourceChangeVersion ||
+                left.Elements.Count != right.Elements.Count)
                 return false;
             for (var i = 0; i < left.Elements.Count; i++)
                 if (!Equivalent(left.Elements[i], right.Elements[i])) return false;
