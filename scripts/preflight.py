@@ -1,11 +1,27 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import re
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 errors = []
+
+def committable_files():
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        errors.append("could not enumerate Git-tracked/non-ignored files: " + result.stderr.decode("utf-8", errors="replace").strip())
+        return []
+    return [Path(item.decode("utf-8")) for item in result.stdout.split(b"\0") if item]
+
+eligible_files = committable_files()
 
 required = [
     "Directory.Build.props", "README.md", "AGENTS.md", "CI_POLICY.md",
@@ -46,8 +62,9 @@ allowed_synthetic_cad = {
 }
 for ext in ("*.dwg", "*.dxf", "*.docx"):
     found = []
-    for path in ROOT.rglob(ext):
-        relative = path.relative_to(ROOT)
+    for relative in eligible_files:
+        if not relative.match(ext):
+            continue
         if ext in ("*.dwg", "*.dxf") and relative in allowed_synthetic_cad:
             continue
         found.append(str(relative))
@@ -78,7 +95,9 @@ for xaml in ROOT.rglob("*.xaml"):
     if xaml.name == "Theme.xaml": continue
     code = xaml.with_suffix(xaml.suffix + ".cs")
     if not code.exists(): continue
-    xt = xaml.read_text(encoding="utf-8"); ct = code.read_text(encoding="utf-8")
+    xt = xaml.read_text(encoding="utf-8")
+    companions = sorted(xaml.parent.glob(xaml.stem + "*.cs"))
+    ct = "\n".join(path.read_text(encoding="utf-8") for path in companions)
     for handler in set(re.findall(r'\b(?:Click|TextChanged|SelectionChanged|SelectedItemChanged|Checked|Unchecked|MouseDoubleClick)="([A-Za-z_][A-Za-z0-9_]*)"', xt)):
         if not re.search(r"\b" + re.escape(handler) + r"\s*\(", ct): errors.append(f"{xaml.relative_to(ROOT)}: missing code-behind handler {handler}")
 
@@ -220,7 +239,7 @@ if selection_sync.exists() and "ReferenceEquals(document, Application.DocumentMa
 palette = ROOT / "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs"
 if palette.exists():
     text = palette.read_text(encoding="utf-8")
-    if "MinimumSize = new Size(460, 420)" not in text: errors.append("workspace PaletteSet minimum width must match compact BLT workspace target")
+    if "MinimumSize = new DrawingSize(460, 420)" not in text: errors.append("workspace PaletteSet minimum width must match compact BLT workspace target")
     if "MinimumSize = new Size(520, 420)" in text: errors.append("workspace PaletteSet still forces the old oversized minimum width")
 
 right = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs"
@@ -252,7 +271,7 @@ if quantity.exists():
     if "VisibleBqColumnsKey" not in text or "PersistColumnPreferences" not in text: errors.append("BQ visible columns must round-trip through project metadata")
 if commands.exists():
     text = commands.read_text(encoding="utf-8")
-    if "new QuantitySummaryWindow(rows, locate, recalculate)" not in text: errors.append("BQ command does not wire recalculation callback")
+    if "new QuantitySummaryWindow(doc, rows, locate, recalculate)" not in text: errors.append("BQ command does not wire recalculation callback")
     if "CadUnitService.GetDrawingUnit(doc)" not in text: errors.append("BQ snapshot fallback still assumes millimeters")
     if "GetLiveSolidHandles" not in text or "liveGeneratedSolids" not in text: errors.append("QS3DHEALTH must verify generated Solid3d liveness")
     if "QS3DED2" not in text or "QS3DEXCELLOCATE" not in text or "XlsxHandleReader.ReadHandleLookup" not in text: errors.append("ED2 Excel/Handle round-trip workflow missing")

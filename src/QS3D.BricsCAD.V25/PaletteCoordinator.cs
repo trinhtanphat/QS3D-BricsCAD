@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using Bricscad.ApplicationServices;
 using Bricscad.Windows;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Model;
+using DrawingSize = System.Drawing.Size;
+using WpfSize = System.Windows.Size;
 
 namespace QS3D.BricsCAD.V25
 {
@@ -33,9 +34,9 @@ namespace QS3D.BricsCAD.V25
                 Dock = DockSides.Left,
                 Visible = false,
                 KeepFocus = false,
-                MinimumSize = new Size(460, 420)
+                MinimumSize = new DrawingSize(460, 420)
             };
-            _workspace.DeviceIndependentSize = new Size(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);
+            _workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);
             _workspace.AddVisual("Mô hình", _workspacePanel, true);
 
             _right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid)
@@ -44,9 +45,9 @@ namespace QS3D.BricsCAD.V25
                 Dock = DockSides.Right,
                 Visible = false,
                 KeepFocus = false,
-                MinimumSize = new Size(255, 420)
+                MinimumSize = new DrawingSize(255, 420)
             };
-            _right.DeviceIndependentSize = new Size(layout.RightPaletteWidth, layout.RightPaletteHeight);
+            _right.DeviceIndependentSize = new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight);
             _right.AddVisual("Quản lý", _rightPanel, true);
         }
 
@@ -101,13 +102,13 @@ namespace QS3D.BricsCAD.V25
                 {
                     if (workspaceSize.HasValue)
                     {
-                        layout.WorkspacePaletteWidth = workspaceSize.Value.Width;
-                        layout.WorkspacePaletteHeight = workspaceSize.Value.Height;
+                        layout.WorkspacePaletteWidth = checked((int)Math.Round(workspaceSize.Value.Width, MidpointRounding.AwayFromZero));
+                        layout.WorkspacePaletteHeight = checked((int)Math.Round(workspaceSize.Value.Height, MidpointRounding.AwayFromZero));
                     }
                     if (rightSize.HasValue)
                     {
-                        layout.RightPaletteWidth = rightSize.Value.Width;
-                        layout.RightPaletteHeight = rightSize.Value.Height;
+                        layout.RightPaletteWidth = checked((int)Math.Round(rightSize.Value.Width, MidpointRounding.AwayFromZero));
+                        layout.RightPaletteHeight = checked((int)Math.Round(rightSize.Value.Height, MidpointRounding.AwayFromZero));
                     }
                 });
             }

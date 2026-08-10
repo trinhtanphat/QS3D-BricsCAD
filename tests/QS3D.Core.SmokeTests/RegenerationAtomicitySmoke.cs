@@ -15,8 +15,8 @@ namespace QS3D.Core.SmokeTests
         private static void FailedBatchRestoresWholeProjectSnapshot()
         {
             var project = new ProjectState("regen-atomic", "Atomic regeneration");
-            var first = new ProjectElement("A", ElementCategory.Wall, string.Empty, string.Empty, string.Empty);
-            var second = new ProjectElement("B", ElementCategory.Wall, string.Empty, string.Empty, string.Empty);
+            var first = new ProjectElement("A", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            var second = new ProjectElement("B", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
             project.Elements.Add(first);
             project.Elements.Add(second);
             project.Metadata["Stable"] = "before";
@@ -41,7 +41,7 @@ namespace QS3D.Core.SmokeTests
 
         private sealed class MutateThenFailRegenerator : IElementRegenerator
         {
-            public bool CanRegenerate(ElementCategory category) => category == ElementCategory.Wall;
+            public bool CanRegenerate(ElementCategory category) => category == ElementCategory.ArchitecturalWall;
 
             public void Regenerate(ProjectState project, ProjectElement element)
             {

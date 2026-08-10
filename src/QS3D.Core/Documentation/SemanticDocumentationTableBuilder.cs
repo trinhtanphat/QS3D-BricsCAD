@@ -123,7 +123,7 @@ namespace QS3D.Core.Documentation
         private static string Required(string? value, string name, int maxLength)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
-            var normalized = value.Trim();
+            var normalized = value!.Trim();
             if (normalized.Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
             return normalized;
         }

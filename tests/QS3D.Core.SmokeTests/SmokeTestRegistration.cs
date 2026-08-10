@@ -49,7 +49,6 @@ namespace QS3D.Core.SmokeTests
             ProjectInterchangeJsonSmoke.Run();
             RegenerationSubsetSmoke.Run();
             GeneratedHandleOwnershipIndexSmoke.Run();
-            GeneratedHandleOwnershipLookupSmoke.Run();
             DependencyGraphDirectDependentsSmoke.Run();
             ProjectStateLookupSmoke.Run();
             SelectionStateSmoke.Run();

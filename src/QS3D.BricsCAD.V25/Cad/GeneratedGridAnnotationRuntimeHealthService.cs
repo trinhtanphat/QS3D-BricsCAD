@@ -76,7 +76,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 return;
             }
 
-            Entity entity;
+            Entity? entity;
             try { entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity; }
             catch
             {

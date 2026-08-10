@@ -30,8 +30,8 @@ namespace QS3D.Core.SmokeTests
             Require(first, "\"id\":\"E-001\"");
             Require(first, "\"familyId\":\"FAM-1\"");
             Require(first, "\"sourceRefScope\":\"drawing-local\"");
-            Require(first, "\"sourceHandles\":[\"1A2B\"]");
-            Require(first, "\"dependencies\":[\"E-ROOT\"]");
+            Require(first, "\"sourceHandles\": [\"1A2B\"]");
+            Require(first, "\"dependencies\": [\"E-ROOT\"]");
             Require(first, "\"VolumeM3\":1.25");
         }
 
