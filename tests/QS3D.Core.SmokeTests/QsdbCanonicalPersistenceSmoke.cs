@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             PaddedQuantityNameFailsBeforePersistence();
             NonCanonicalHandleAndDependencyFailBeforePersistence();
             NullAuditEventFailsClosed();
+            NonUtcTimestampFailsBeforePersistence();
         }
 
         private static void PaddedMapKeyFailsBeforePersistence()
@@ -59,6 +60,21 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject("null-audit");
             project.AuditEvents.Add(null!);
             RejectSave(project, "Null audit event reached serialization instead of failing validation.");
+        }
+
+        private static void NonUtcTimestampFailsBeforePersistence()
+        {
+            var project = NewProject("project-time");
+            project.UpdatedUtc = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Unspecified);
+            RejectSave(project, "Unspecified project UpdatedUtc was converted using machine timezone during persistence.");
+
+            project = NewProject("audit-time");
+            project.AuditEvents.Add(new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Local),
+                Action = "test"
+            });
+            RejectSave(project, "Local audit timestamp was converted using machine timezone during persistence.");
         }
 
         private static ProjectState NewProject(string id)
