@@ -32,6 +32,7 @@ namespace QS3D.BricsCAD.V25
                 var stirrupHandles = PropertyHandles(project, "GeneratedBeamStirrupHandles");
                 var slabMeshHandles = PropertyHandles(project, "GeneratedSlabMeshHandles");
                 var wallMeshHandles = PropertyHandles(project, "GeneratedWallMeshHandles");
+                var foundationMeshHandles = PropertyHandles(project, FoundationMeshSolidBuilder.HandlesKey);
 
                 var liveSources = CadHandleService.GetLiveHandles(document, sourceHandles);
                 var liveMain = CadHandleService.GetLiveSolidHandles(document, mainHandles);
@@ -41,6 +42,7 @@ namespace QS3D.BricsCAD.V25
                 var liveStirrups = CadHandleService.GetLiveSolidHandles(document, stirrupHandles);
                 var liveSlabMesh = CadHandleService.GetLiveSolidHandles(document, slabMeshHandles);
                 var liveWallMesh = CadHandleService.GetLiveSolidHandles(document, wallMeshHandles);
+                var liveFoundationMesh = CadHandleService.GetLiveSolidHandles(document, foundationMeshHandles);
 
                 var combined = new List<ModelHealthIssue>();
                 combined.AddRange(new ModelHealthService().Inspect(project, liveSources, liveMain));
@@ -50,6 +52,7 @@ namespace QS3D.BricsCAD.V25
                 combined.AddRange(new GeneratedBeamStirrupHealthService().Inspect(project, liveStirrups));
                 combined.AddRange(new GeneratedSlabMeshHealthService().Inspect(project, liveSlabMesh));
                 combined.AddRange(new GeneratedWallMeshHealthService().Inspect(project, liveWallMesh));
+                combined.AddRange(new GeneratedFoundationMeshHealthService().Inspect(project, liveFoundationMesh));
                 combined.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
                 combined.AddRange(new GeneratedRebarModeHealthService().Inspect(project));
 
@@ -96,6 +99,7 @@ namespace QS3D.BricsCAD.V25
         private static IEnumerable<string> LocateHandles(ProjectElement element, string code)
         {
             var normalized = (code ?? string.Empty).ToUpperInvariant();
+            if (normalized.Contains("FOUNDATION_MESH")) return SplitPropertyHandles(element, FoundationMeshSolidBuilder.HandlesKey);
             if (normalized.Contains("WALL_MESH")) return SplitPropertyHandles(element, "GeneratedWallMeshHandles");
             if (normalized.Contains("SLAB_MESH")) return SplitPropertyHandles(element, "GeneratedSlabMeshHandles");
             if (normalized.Contains("BEAM_STIRRUP")) return SplitPropertyHandles(element, "GeneratedBeamStirrupHandles");
