@@ -33,7 +33,7 @@ if not errors:
         "MapOptional(plan.Remap, InterchangeRemapIdentityKind.Zone",
         "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, dependency)",
         "string.Equals(property.Key, HostWallIdKey, StringComparison.OrdinalIgnoreCase)",
-        "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, property.Value.Trim())",
+        "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, sourceHost)",
         "LooksLikeUnregisteredSemanticReference(property.Key, property.Value)",
         "IsImportedOwnershipMetadata(property.Key)",
         'k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
@@ -49,6 +49,21 @@ if not errors:
     for needle in required_importer:
         if needle not in i:
             errors.append("remap append importer missing atomic/ownership/rewrite contract: " + needle)
+
+    # Plan is a preview contract: blocked plans must remain inspectable by the adapter.
+    plan_start = i.index("public static ProjectInterchangeRemapAppendPlan Plan")
+    import_start = i.index("public static ProjectInterchangeRemapAppendResult Import", plan_start)
+    plan_body = i[plan_start:import_start]
+    if "ValidateExecutionSafety(" in plan_body:
+        errors.append("Import As New Plan must return BLOCKED plans for inspection instead of enforcing mutation safety")
+
+    # Import must re-plan and enforce execution safety before any rollback-capable mutation snapshot.
+    import_end = i.index("private static void ValidateExecutionSafety", import_start)
+    import_body = i[import_start:import_end]
+    safety_at = import_body.find("ValidateExecutionSafety(source, plan);")
+    snapshot_at = import_body.find("ProjectStateSnapshot.Capture(target)")
+    if safety_at < 0 or snapshot_at < 0 or safety_at > snapshot_at:
+        errors.append("Import As New must enforce the fresh plan before capturing/mutating target state")
 
     # Planner preview and executor must recognize the exact same conservative ID/ref suffix set.
     reference_suffixes = ["Id", "Ids", "Ref", "Refs", "RefId", "RefIds"]
@@ -83,6 +98,8 @@ if not errors:
         "ProjectInterchangeRemapAppendImporter.Plan(project, json)",
         "ProjectInterchangeRemapAppendImporter.Import(project, json)",
         "if (!plan.CanImport)",
+        "Interchange Import As New BLOCKED",
+        "Chưa mutate project/DWG",
         "if (plan.IdRemapCount == 0 && plan.NameRemapCount == 0)",
         "QS3DINTERCHANGEAPPEND",
         "ProjectInterchangeJsonValidator.MaxFileBytes",
@@ -98,6 +115,8 @@ if not errors:
     for needle in required_command:
         if needle not in c:
             errors.append("remap append command missing guarded UX contract: " + needle)
+    if 'throw new InvalidOperationException("Import As New plan is not executable.' in c:
+        errors.append("blocked Import As New preview must report the plan and return instead of converting a policy block into an exception")
 
     all_cs = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in (root / "src").rglob("*.cs"))
     registrations = len(re.findall(r'\[CommandMethod\("QS3DINTERCHANGEREMAPAPPEND"', all_cs))
@@ -120,4 +139,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New re-plans immediately before semantic mutation, keeps planner/executor opaque-reference policy aligned, rewrites only registered relations, strips incoming native ownership, preserves all existing target identities, and rolls back semantic state on failure.")
+print("Import As New keeps blocked plans inspectable, re-plans and enforces safety before mutation, aligns opaque-reference policy, strips incoming native ownership, preserves existing target identities, and rolls back semantic state on failure.")
