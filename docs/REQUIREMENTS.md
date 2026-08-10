@@ -1,5 +1,17 @@
 # Requirements baseline from the supplied BRC document
 
+## Product/runtime boundary
+
+QS3D's selected product target is a **BricsCAD V25 x64 .NET plugin**, not a standalone CAD desktop application.
+
+- BricsCAD V25 is required at runtime and remains the native DWG/viewport/document host.
+- The QS3D adapter is built as `QS3D.BricsCAD.V25.dll` and loaded by DemandLoad or `NETLOAD`; a standalone `QS3D.exe` is not part of the current requirement.
+- QS3D Ribbon, palettes and modeless/full-screen-style WPF windows are plugin UI launched from inside BricsCAD. “Full-screen” below describes window size/workflow, not an independent desktop shell.
+- `QS3D.Core` may run deterministic tests outside CAD, but that does not change the shipping product into a standalone application.
+- BLT/BLT3D screenshots and terminology define clean-room workflow/UX expectations only. They do not define QS3D packaging or executable form.
+
+See `docs/PRODUCT-BOUNDARY.md`. Any future standalone/CAD-engine direction requires a separate explicit owner decision and is not implied by “giống BLT”.
+
 The supplied document explicitly marks these areas for completion:
 
 1. Build the missing functions.
@@ -25,7 +37,7 @@ The embedded screenshots add the following UI/workflow expectations:
 - Opening properties: width, height, thickness, bottom level/sill offset, display, metadata/material.
 
 ## Quantity report / BQ
-- Full-screen modeless summary window.
+- Full-screen modeless summary window hosted by the BricsCAD plugin.
 - Filter by floor/category/search.
 - Group elements by floor + type + family.
 - Quantity columns include count, gross/deduction/net concrete, formwork, length, perimeter and finish/opening areas.

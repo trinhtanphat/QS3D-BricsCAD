@@ -4,6 +4,8 @@ Updated 2026-08-10.
 
 ## Policy
 
+This runbook builds and releases the **QS3D BricsCAD V25 plugin package**. The expected product artifacts are the adapter/Core DLLs plus install/update/checksum/sample helpers loaded by BricsCAD; a standalone `QS3D.exe` is not part of this release contract. See `docs/PRODUCT-BOUNDARY.md`.
+
 QS3D does **not** use automatic GitHub CI/CD.
 
 Every workflow in `.github/workflows/` must remain `workflow_dispatch` only. Every executable job is additionally hard-guarded to `github.event_name == 'workflow_dispatch'`. Commits, pushes, pull requests, merges, documentation updates, source fixes, reviews and `continue all` requests must leave GitHub Actions idle.
@@ -13,12 +15,12 @@ A workflow may be dispatched only after the repository owner explicitly requests
 ## Available manual workflows
 
 - `ci.yml` — Core/static validation.
-- `bricscad-v25.yml` — V25 integration build/runtime evidence.
+- `bricscad-v25.yml` — V25 plugin integration build/runtime evidence.
 - `curved-opening.yml` — focused curved-opening validation.
 - `geometry-extensions.yml` — focused geometry-extension validation.
 - `project-data-gate.yml` — Zone/Floor/Family/Material/Project Tools/project-assignment-integrity validation.
 - `schedule-gate.yml` — Schedule Hub / Room Finish / Material / Door-Opening schedule-export validation.
-- `release-v25.yml` — complete owner-approved V25 build/package/GitHub Release flow.
+- `release-v25.yml` — complete owner-approved V25 plugin build/package/GitHub Release flow.
 
 Focused workflows also run `scripts/preflight-ci-manual-only.py` so policy drift is detected when the owner explicitly dispatches one.
 
@@ -43,14 +45,14 @@ The workflow deliberately has no automatic/event-driven trigger. Its release job
 4. compiles `QS3D.Core` in Release;
 5. runs deterministic Core smoke tests;
 6. verifies `BRICSCAD_V25_DIR` and required licensed V25 runtime files;
-7. compiles `QS3D.BricsCAD.V25` Release/x64 against the installed V25 assemblies;
+7. compiles `QS3D.BricsCAD.V25` Release/x64 **plugin DLL** against the installed V25 assemblies;
 8. optionally performs real V25 NETLOAD/runtime validation and captures evidence;
 9. runs `scripts/package-v25.ps1` against `bin/x64/Release/net48`;
 10. creates `dist/QS3D-BricsCAD-V25.zip` plus `dist/QS3D-BricsCAD-V25.zip.sha256`;
 11. uploads build/runtime artifacts;
 12. publishes a GitHub Release and attaches ZIP/checksum only after required preceding steps succeed.
 
-The package script generates `COMMANDS.txt` from current `[CommandMethod]` source declarations, verifies required QS3D DLLs, includes synthetic sample fixtures/install-update helpers and excludes BricsCAD-owned runtime assemblies.
+The package script generates `COMMANDS.txt` from current `[CommandMethod]` source declarations, verifies required QS3D DLLs, includes synthetic sample fixtures/install-update helpers and excludes BricsCAD-owned runtime assemblies. It does not expect a standalone QS3D executable.
 
 ## Required runner
 
@@ -97,6 +99,7 @@ Production certificate/key custody, timestamping and publication infrastructure 
 - Keep `confirm_release=RELEASE` as an explicit publication gate.
 - Keep `scripts/preflight-ci-manual-only.py` in the aggregate gate.
 - Never package BricsCAD-owned DLLs, BLT/vendor source, customer/private DWGs, signing secrets or certificates.
+- Never relabel the plugin ZIP/DLL delivery as a standalone QS3D CAD application.
 - For a production candidate, exercise upgrade rollback from a known previous version and reject an intentionally mismatched/relabelled update package before publication.
 
 The only repository DWG/DXF fixtures allowed by source policy are the explicitly reviewed synthetic samples under `samples/generated`.
@@ -111,7 +114,7 @@ Use the exact requested commit/tag, run `release-v25.yml` manually, keep runtime
 
 - source/preflight result;
 - Core build/smoke result;
-- V25 adapter build result;
+- V25 plugin adapter build result;
 - runtime/NETLOAD result;
 - representative-DWG / `QS3DRELEASECHECK` result when performed;
 - install/update rollback + signed-manifest/version-binding qualification when performed;
@@ -120,4 +123,4 @@ Use the exact requested commit/tag, run `release-v25.yml` manually, keep runtime
 
 Source implementation progress and static review remain distinct from CI/runtime proof.
 
-See `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the latest deep source review and remaining product/runtime gates.
+See `docs/PRODUCT-BOUNDARY.md` and `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the product boundary, latest deep source review and remaining product/runtime gates.

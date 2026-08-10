@@ -1,8 +1,12 @@
 # Source-of-truth and synchronization policy
 
+## Product hosting truth
+
+QS3D's product form is a **BricsCAD V25 plugin**. BricsCAD is the authoritative live CAD runtime/viewport/database host; `.qsdb` and `QS3D.Core` supplement that host with semantic/project and deterministic derived data. The existence of CAD-independent Core logic does not make QS3D a standalone CAD application. See `docs/PRODUCT-BOUNDARY.md`.
+
 | Data | Authoritative source | Derived/cached copies |
 |---|---|---|
-| CAD geometry | DWG | normalized metrics in QS3D element |
+| CAD geometry | DWG in the active BricsCAD host | normalized metrics in QS3D element |
 | project / zone / floor / family | `.qsdb` | workspace view-models |
 | element semantic metadata | `.qsdb` | property-grid rows |
 | host/element relationships | `.qsdb` | dependency graph |

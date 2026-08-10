@@ -2,9 +2,17 @@
 
 Updated 2026-08-10 for the current `main` source baseline plus the full-repository ownership/capture/release hardening audit.
 
+## Locked product direction
+
+QS3D remains a **BricsCAD V25 x64 plugin product**. The current roadmap does not target a standalone `QS3D.exe`, a QS3D-owned DWG/CAD engine or a separate native viewport. BricsCAD remains the runtime host and the release form remains plugin DLLs loaded by DemandLoad/`NETLOAD`.
+
+`QS3D.Core` stays CAD-independent for deterministic tests/reuse and future hosted adapters; that separation must not be reinterpreted as a standalone desktop product. `BLT-style`/`BLT3D-familiar` roadmap language means workflow/UX parity only. See `docs/PRODUCT-BOUNDARY.md`.
+
+Any future standalone direction requires an explicit owner requirement and a new architecture/build/licensing/release plan; it is not part of this master plan.
+
 ## Implemented source baseline
 
-- clean-room layered architecture: `QS3D.Core` + BricsCAD V25 adapter + WPF/Ribbon UI;
+- clean-room layered plugin architecture: `QS3D.Core` + BricsCAD V25 adapter + WPF/Ribbon UI hosted by BricsCAD;
 - `.qsdb` semantic source-of-truth with schema migration, locking, validated temp save, backup/recovery, persisted dirty/generated-snapshot state, project QuantityRules and audit provenance;
 - dependency/fixed-point regeneration, formula engine, Model Health / Full Health, revision baseline/diff and company template import/export;
 - dependency cycles are detected as explicit Model Health errors and therefore block `QS3DRELEASECHECK` instead of leaving regeneration as an opaque stall;
@@ -40,7 +48,7 @@ Updated 2026-08-10 for the current `main` source baseline plus the full-reposito
 - per-user DemandLoad install/replace is transactional: failed install restores the prior files/registry state or removes a partial new install;
 - updater version decisions are bound to the cryptographically verified signed manifest; expected-version substitution/replay mismatch is rejected before install;
 - feature-specific static preflights cover Room curves/lifecycle, wall junction/snap, Auto Host, opening cuts, WallPier, slab/wall/foundation mesh, Curtain opening-aware lifecycle, unified/release health, canonical generated ownership/B4D exclusion, transactional semantic capture/default parity, dependency cycles, installer rollback, updater version binding, command uniqueness and XAML contracts;
-- `scripts/preflight-all.py` discovers feature preflights; GitHub Actions on `main` remain **manual-only**.
+- `scripts/preflight-all.py` discovers feature preflights, including the product-boundary documentation/source guard; GitHub Actions on `main` remain **manual-only**.
 
 ## Next validation gates
 
@@ -65,8 +73,8 @@ Updated 2026-08-10 for the current `main` source baseline plus the full-reposito
 - real V25 proof for Section Box/BIM command availability, transient isolate/highlight lifecycle and palette behavior;
 - richer commercial icon/context-menu/Ribbon grouping/persisted splitter/accessibility/DPI polish based on real V25 screenshots;
 - production Authenticode certificate/signing operations, signed release publication and optional commercial licensing/team-sync backend. Source-side manifest verification/version binding/rollback is implemented, but production signing infrastructure is still external release work;
-- future AutoCAD adapter reusing `QS3D.Core`.
+- future AutoCAD **plugin adapter** reusing `QS3D.Core`.
 
 Items depending on BricsCAD V25 runtime, private drawings, production signing infrastructure or external services must not be marked complete from repository inspection alone.
 
-See `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` and `docs/FULL-REPO-AUDIT-2026-08-10.md` for audit rationale and validation boundaries.
+See `docs/PRODUCT-BOUNDARY.md`, `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` and `docs/FULL-REPO-AUDIT-2026-08-10.md` for product boundary, audit rationale and validation boundaries.

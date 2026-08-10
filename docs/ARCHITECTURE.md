@@ -1,5 +1,13 @@
 # QS3D architecture — BricsCAD V25
 
+## Hosted-plugin boundary
+
+QS3D is a **BricsCAD V25 hosted plugin**. `QS3D.BricsCAD.V25` is a .NET Framework library loaded into the BricsCAD process through DemandLoad or `NETLOAD`; it is **not a standalone CAD executable** and does not own an independent DWG engine or viewport.
+
+BricsCAD owns the live DWG database, document/editor lifecycle, native viewport, selection and CAD transactions. QS3D adds commands, Ribbon/palettes/modeless WPF UI, semantic/project state, deterministic quantity logic and guarded native geometry through the BricsCAD API.
+
+`QS3D.Core` intentionally has no BricsCAD assembly dependency for deterministic testing and reuse. That layering must not be described as a standalone QS3D application. See `docs/PRODUCT-BOUNDARY.md`.
+
 ## Source of truth
 
 QS3D deliberately separates original/authoritative data from calculated data:
@@ -14,17 +22,17 @@ Persistent CAD references use drawing identity + hexadecimal entity handles. Run
 ## Layering
 
 ```text
-BricsCAD V25 / BrxMgd / TD_Mgd
+BricsCAD V25 host / BrxMgd / TD_Mgd
         │
         ▼
-QS3D.BricsCAD.V25
+QS3D.BricsCAD.V25  (plugin DLL)
   Commands / Ribbon / PaletteSet
   selection + handle adapters
   LayerTable / Xref adapters
   CAD transaction services
         │
         ▼
-QS3D.Core
+QS3D.Core  (CAD-independent library)
   project domain
   geometry/unit policy
   dependency + regeneration
@@ -36,17 +44,17 @@ QS3D.Core
 .qsdb
 ```
 
-The core has no BricsCAD assembly dependency so deterministic calculations remain testable outside CAD.
+The core has no BricsCAD assembly dependency so deterministic calculations remain testable outside CAD; the shipping product remains hosted by BricsCAD.
 
 ## Lifecycle
 
-1. user/CAD event changes the active drawing or QS element;
-2. adapter normalizes geometry into metres / square metres / cubic metres;
+1. user/CAD event changes the active drawing or QS element inside BricsCAD;
+2. plugin adapter normalizes geometry into metres / square metres / cubic metres;
 3. semantic element is updated and marked dirty;
 4. dependency graph propagates dirty state;
 5. deterministic regenerator recalculates quantities;
 6. `.qsdb` is saved atomically on explicit save;
-7. UI/BQ is refreshed;
+7. plugin UI/BQ is refreshed;
 8. Model Health can report broken hosts, missing CAD handles, missing family/floor/zone/material and dirty elements.
 
 ## Transaction rule

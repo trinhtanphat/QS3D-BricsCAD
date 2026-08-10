@@ -2,6 +2,18 @@
 
 Clean-room quantity-takeoff / semantic 3D QS plugin for BricsCAD V25, inspired by the day-to-day workflow shown in BLT3D references while keeping the implementation independent. The repository does **not** contain BLT source/binaries, BricsCAD proprietary assemblies, customer/private drawings or vendor project data.
 
+## Product form — BricsCAD plugin, not standalone EXE
+
+QS3D is intentionally shipped and developed as a **BricsCAD V25 x64 plugin**. **BricsCAD V25 is required at runtime.**
+
+- The shipping CAD adapter is `QS3D.BricsCAD.V25.dll`; it is a .NET Framework library loaded by BricsCAD through DemandLoad or `NETLOAD`.
+- The package also carries `QS3D.Core.dll` and install/update/checksum/sample helpers. A standalone `QS3D.exe` is **not** a required or expected product artifact.
+- BricsCAD owns the DWG database, document/editor lifecycle and native 2D/3D viewport; QS3D adds Ribbon, palettes/modeless WPF windows, commands, semantic data, takeoff/reporting and guarded generated geometry inside that host.
+- `QS3D.Core` being CAD-independent is an architecture/testability choice, not evidence of a separate QS3D CAD application.
+- `BLT-like`, `BLT-style` and `BLT3D-familiar` describe workflow/UX familiarity only. They do not define QS3D packaging and must not be interpreted as a standalone-EXE requirement.
+
+The canonical product/hosting decision is documented in [`docs/PRODUCT-BOUNDARY.md`](docs/PRODUCT-BOUNDARY.md). A standalone CAD application or launcher is out of the current scope unless the repository owner explicitly reopens that product requirement.
+
 ## Target
 
 - BricsCAD V25 on Windows x64
@@ -146,7 +158,7 @@ See [`docs/COMMANDS.md`](docs/COMMANDS.md) for detailed workflow notes.
 ## Architecture
 
 - `src/QS3D.Core` — CAD-independent domain, persistence, geometry, quantities, diagnostics, recognition, revision, rebar and reporting.
-- `src/QS3D.BricsCAD.V25` — BricsCAD document/database adapters, native geometry builders, commands, WPF palettes and Ribbon integration.
+- `src/QS3D.BricsCAD.V25` — BricsCAD document/database adapters, native geometry builders, commands, WPF palettes and Ribbon integration. This is the hosted plugin adapter, not a standalone executable.
 - `tests/QS3D.Core.SmokeTests` — deterministic Core regression/smoke suite.
 - `samples/generated` — repository-owned synthetic DXF/DWG/QSDB/XLSX/template fixtures only.
 - `scripts` — static preflights, V25 packaging, DemandLoad installer/updater and runtime harness.
@@ -202,4 +214,4 @@ See [`CI_POLICY.md`](CI_POLICY.md), [`docs/CI.md`](docs/CI.md) and [`docs/MANUAL
 - The only committed DWG/DXF exceptions are the explicitly reviewed repository-owned synthetic sample fixtures under `samples/generated`; `scripts/preflight.py` keeps all other CAD/reference artifacts fail-closed.
 - This is a multi-agent repository. Sync current `main` before each shared-file write and never force/revert newer concurrent work.
 
-Read `CI_POLICY.md` and `AGENTS.md` before changing CI or dispatching any GitHub Action.
+Read `CI_POLICY.md`, `AGENTS.md` and `docs/PRODUCT-BOUNDARY.md` before changing product architecture, CI or release behavior.

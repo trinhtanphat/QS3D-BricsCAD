@@ -2,19 +2,28 @@
 
 This repository is expected to have multiple agents working concurrently. Every agent must protect other agents' work and choose tasks that match its actual execution environment.
 
+## Locked product form: BricsCAD plugin
+
+QS3D is a **BricsCAD V25 x64 .NET plugin**, not a standalone CAD desktop executable. BricsCAD is required at runtime; the native BricsCAD viewport/database/editor remain the CAD host. `QS3D.BricsCAD.V25` builds as a library/DLL and is loaded by DemandLoad or `NETLOAD`.
+
+`BLT-like`, `BLT-style`, `BLT3D-familiar`, “giống BLT” and similar wording refer to clean-room **workflow/UX familiarity only**. Do not reinterpret those phrases, modeless/full-screen window wording, or the CAD-independent `QS3D.Core` layer as a requirement for `QS3D.exe` or a QS3D-owned CAD engine.
+
+The canonical boundary is `docs/PRODUCT-BOUNDARY.md`. Changing the product into a standalone application requires a new explicit owner requirement and coordinated architecture/build/release changes; agents must never infer that change on their own.
+
 ## Mandatory handoff reading order
 
 Before starting substantive work, read in this order:
 
 1. `AGENTS.md` (this file);
-2. `CI_POLICY.md`;
-3. fetch the latest `main`;
-4. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — **canonical current source/status handoff**;
-5. `docs/IMPLEMENTATION-STATUS.md`;
-6. `docs/PLAN.md` and `docs/COMMANDS.md`;
-7. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
+2. `docs/PRODUCT-BOUNDARY.md` — **canonical product/hosting boundary**;
+3. `CI_POLICY.md`;
+4. fetch the latest `main`;
+5. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — **canonical current source/status handoff**;
+6. `docs/IMPLEMENTATION-STATUS.md`;
+7. `docs/PLAN.md` and `docs/COMMANDS.md`;
+8. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
 
-The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the latest handoff or current source, current `main` wins.
+The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the latest handoff or current source, current `main` wins. For product-form/hosting ambiguity, `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes that requirement.
 
 ## Mandatory sync discipline
 

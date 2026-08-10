@@ -1,5 +1,11 @@
 # BricsCAD V25 install / DemandLoad
 
+## What is being installed
+
+This installs a **BricsCAD V25 plugin**, not a standalone desktop application. There is intentionally no `QS3D.exe` in the current release target. Users start BricsCAD V25; QS3D is then loaded as `QS3D.BricsCAD.V25.dll` through DemandLoad or `NETLOAD` and exposes its commands, Ribbon, palettes and modeless windows inside BricsCAD.
+
+`QS3D.Core.dll` is a supporting library, not an independent CAD executable. See `docs/PRODUCT-BOUNDARY.md`.
+
 QS3D supports two source-level loading paths for BricsCAD V25 x64.
 
 ## Recommended release package
@@ -14,6 +20,8 @@ The package generates:
 - `SHA256SUMS.txt` covering every shipped payload file;
 - `install-v25-autoload.ps1` and `uninstall-v25-autoload.ps1`;
 - a ZIP suitable for release evidence/artifact storage.
+
+A standalone `QS3D.exe` is not expected from this packaging flow.
 
 ## DemandLoad registration
 

@@ -2,6 +2,12 @@
 
 The objective is workflow familiarity and modern CAD ergonomics, not copying proprietary BLT assets.
 
+## Plugin hosting boundary
+
+This UI spec describes interfaces **hosted by the QS3D BricsCAD V25 plugin**. BricsCAD's native viewport remains the CAD canvas; QS3D adds Ribbon content, palettes and modeless WPF windows from inside the BricsCAD process. There is **no separate QS3D desktop shell, standalone EXE or QS3D-owned CAD viewport** in the current product target.
+
+`BLT3D-familiar` and `BLT-style` below mean workflow/UX familiarity only and do not imply that QS3D copies or matches BLT's packaging/application form. See `docs/PRODUCT-BOUNDARY.md`.
+
 ## Final layout target
 
 - BricsCAD native viewport remains the center renderer.
@@ -79,4 +85,4 @@ Source parity is not the same as visual/runtime parity. Remaining work after lic
 
 ## Visual acceptance gate
 
-A design render is only a target. Before release, screenshots must come from a compiled V25 plugin at 100%, 125%, 150% and 200% scaling and be compared against the approved layout for panel widths, wrapping/clipping, Family/Instance/Floor-Level scope, typed controls, Curtain Hub/Geometry Extensions, selected/hover/disabled/error state, Vietnamese Unicode, command discoverability and native viewport preservation.
+A design render is only a target. Before release, screenshots must come from a compiled V25 **plugin** at 100%, 125%, 150% and 200% scaling and be compared against the approved layout for panel widths, wrapping/clipping, Family/Instance/Floor-Level scope, typed controls, Curtain Hub/Geometry Extensions, selected/hover/disabled/error state, Vietnamese Unicode, command discoverability and native viewport preservation.

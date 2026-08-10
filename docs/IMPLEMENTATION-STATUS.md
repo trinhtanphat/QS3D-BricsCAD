@@ -2,11 +2,24 @@
 
 This file distinguishes **implemented source paths** from behavior that still requires licensed BricsCAD V25/private-DWG runtime proof.
 
+## Product form
+
+The current and intended shipping form is a **BricsCAD V25 x64 plugin**:
+
+- `QS3D.BricsCAD.V25` builds as a .NET Framework **Library/DLL**, not an EXE;
+- BricsCAD loads the plugin through DemandLoad or `NETLOAD` and remains the DWG/database/editor/viewport host;
+- QS3D UI is Ribbon/palette/modeless WPF UI hosted from BricsCAD;
+- `QS3D.Core` is CAD-independent for deterministic logic and testing, but is not a standalone CAD application;
+- no standalone `QS3D.exe` is implemented or required by the current product scope;
+- BLT-style terminology in this file refers to workflow/UX familiarity only.
+
+See `docs/PRODUCT-BOUNDARY.md`. Any future standalone product requires a separate explicit owner decision.
+
 ## Implemented in source
 
 ### Platform / persistence / project integrity
 
-- BricsCAD V25 `net48/x64` adapter with external `BrxMgd.dll` / `TD_Mgd.dll` references and `Private=false`.
+- BricsCAD V25 `net48/x64` plugin adapter with external `BrxMgd.dll` / `TD_Mgd.dll` references and `Private=false`.
 - Project / Zone / Floor / Family / semantic Element model with `.qsdb` schema migration, dirty flags, deterministic regeneration, audit, revision and template persistence.
 - Multi-document project cache bound to live Document/DWG identity with fingerprint and Save As guards.
 - Floor/Zone/Family assignment and object-based Bulk Edit require the actual `ProjectElement` instance owned by the project; same-ID foreign objects fail closed.
@@ -113,7 +126,7 @@ Fabrication-grade hook/bend-radius/anchorage/code-specific detailing is not infe
 
 - `QS3DRELEASECHECK` includes Model Health, Dependency Health, safe generated ownership, longitudinal/shape/tie/stirrup/slab/wall/Foundation mesh health, Curtain health/live state, stale state, generated-rebar mode semantics and BOM/live-solid release guards.
 - Release generated-handle collection and Locate use the shared owner enumeration instead of a separate property parser, so future generated owner families participate in live-solid validation without another release-code list update.
-- `scripts/package-v25.ps1` packages the x64 Release/net48 adapter output, requires QS3D adapter/Core DLLs, excludes BricsCAD-owned assemblies, includes installer/updater/sample assets, generates hashes and creates `COMMANDS.txt` directly from `[CommandMethod]` source declarations.
+- `scripts/package-v25.ps1` packages the x64 Release/net48 **plugin adapter** output, requires QS3D adapter/Core DLLs, excludes BricsCAD-owned assemblies, includes installer/updater/sample assets, generates hashes and creates `COMMANDS.txt` directly from `[CommandMethod]` source declarations. It does not expect a standalone `QS3D.exe`.
 - Secure update source is HTTPS-only, package-host bounded, archive traversal/size/entry guarded, SHA-256 verified and Authenticode signer-pinned for executable payloads.
 - Update manifest/package metadata version is bound to the Authenticode-verified `QS3D.BricsCAD.V25.dll` assembly version before install, closing the signed-payload replay/relabel gap.
 - V25 installer snapshots targeted DemandLoad registration and rolls back registry plus payload atomically if an install/upgrade step fails; fresh-install failures remove the newly committed payload.
@@ -125,6 +138,7 @@ Fabrication-grade hook/bend-radius/anchorage/code-specific detailing is not infe
 Current source preflights cover, among other things:
 
 - manual-only GitHub Actions policy and per-job manual guards;
+- product-boundary documentation/source markers that keep the shipping target explicitly a BricsCAD plugin;
 - command uniqueness and key XAML contracts;
 - project-editor active-DWG affinity and project-owned mutation integrity;
 - semantic selection including dynamic future generated owner slots;
@@ -142,7 +156,7 @@ Current source preflights cover, among other things:
 - schedule/export hub wiring;
 - synthetic sample provenance/private-file policy.
 
-`scripts/preflight-all.py` auto-discovers feature preflights.
+`scripts/preflight-all.py` auto-discovers feature preflights, including `preflight-product-boundary.py`.
 
 ## Manual GitHub Actions policy
 
@@ -184,4 +198,6 @@ The current final SHA still requires an explicitly approved build/runtime valida
 - production code-signing certificate/key custody, timestamp/publication infrastructure and a real signed package/install/update/rollback exercise;
 - optional commercial licensing/backend work if that product requirement is pursued.
 
-See `docs/CONTINUE-ALL-DEEP-AUDIT-2026-08-10.md` for this deep pass, `docs/DEEP-AUDIT-2026-08-10.md` for the Beam/rebar review, `docs/FULL-REPO-AUDIT-2026-08-10.md` for shared ownership/capture hardening, and `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the broader runtime/product boundary.
+A standalone QS3D CAD executable is **not** a remaining gap; it is outside the current product boundary.
+
+See `docs/PRODUCT-BOUNDARY.md`, `docs/CONTINUE-ALL-DEEP-AUDIT-2026-08-10.md`, `docs/DEEP-AUDIT-2026-08-10.md`, `docs/FULL-REPO-AUDIT-2026-08-10.md` and `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the product boundary, deep passes and broader runtime/product boundary.

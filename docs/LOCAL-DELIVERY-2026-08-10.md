@@ -2,6 +2,8 @@
 
 This source snapshot is prepared as the recoverable handoff whenever GitHub publication is unavailable from this machine.
 
+> **Product boundary:** every local delivery described here is a **BricsCAD V25 plugin** delivery. It contains/validates plugin DLLs and supporting files, not a standalone `QS3D.exe`. BricsCAD remains required for real runtime/NETLOAD/DemandLoad acceptance. See `docs/PRODUCT-BOUNDARY.md`.
+
 ## Reconciled source
 
 - Reconciled remote baseline: `b00d03f` (`ci: auto discover all feature preflight gates`).
@@ -11,7 +13,7 @@ This source snapshot is prepared as the recoverable handoff whenever GitHub publ
 ## Local verification
 
 - Core smoke suite: `ALL PASS`.
-- BricsCAD V25.2.10 Release/x64 compile: 0 warnings, 0 errors.
+- BricsCAD V25.2.10 Release/x64 **plugin adapter** compile: 0 warnings, 0 errors.
 - All twenty-one repository `preflight*.py` scripts: PASS.
 - GitHub Actions were not dispatched.
 
