@@ -187,7 +187,7 @@ namespace QS3D.Core.Diagnostics
             foreach (var element in project.Elements)
             {
                 foreach (var handle in element.SourceHandles) Reserve(ownership, handle, element.Id + "/SourceHandles");
-                foreach (var key in new[] { "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles", "GeneratedSlabMeshHandles", "GeneratedWallMeshHandles", HandlesKey })
+                foreach (var key in new[] { "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles", "GeneratedSlabMeshHandles", "GeneratedWallMeshHandles", "GeneratedFoundationMeshHandles", HandlesKey })
                     ReserveProperty(ownership, element, key);
             }
             return ownership;
