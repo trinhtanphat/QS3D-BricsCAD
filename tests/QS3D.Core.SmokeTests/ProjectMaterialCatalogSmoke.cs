@@ -9,8 +9,26 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CustomRoundTripAndUpdate();
+            RenamePreservesReferences();
             ReferencedMaterialsAreDiscovered();
             RejectsDuplicateBuiltInAndCorruptStorage();
+        }
+
+        private static void RenamePreservesReferences()
+        {
+            var project = new ProjectState("p-rename", "Rename Materials");
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-panel", "Panel cũ", "m²", "");
+            var family = new ProjectFamily("f-rename", "Vách", ElementCategory.GlassWall);
+            family.Properties["Material"] = "Panel cũ";
+            project.Families.Add(family);
+            var element = new ProjectElement("e-rename", ElementCategory.GlassWall, "f-rename", "floor", "zone");
+            element.Properties["CurtainFrameMaterial"] = "Panel cũ";
+            project.Elements.Add(element);
+
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-panel", "Panel mới", "m²", "");
+
+            if (family.Properties["Material"] != "Panel mới") throw new Exception("Family material reference was not renamed.");
+            if (element.Properties["CurtainFrameMaterial"] != "Panel mới") throw new Exception("Instance material reference was not renamed.");
         }
 
         private static void CustomRoundTripAndUpdate()

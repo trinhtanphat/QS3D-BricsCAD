@@ -101,7 +101,7 @@ namespace QS3D.Core.Domain
             }
 
             WriteCustom(project, custom);
-            if (!string.IsNullOrWhiteSpace(previousName) && !string.Equals(previousName, material.Name, StringComparison.Ordinal))
+            if (previousName != null && !string.IsNullOrWhiteSpace(previousName) && !string.Equals(previousName, material.Name, StringComparison.Ordinal))
                 RenameReferences(project, previousName, material.Name);
             project.Touch();
             return material;
