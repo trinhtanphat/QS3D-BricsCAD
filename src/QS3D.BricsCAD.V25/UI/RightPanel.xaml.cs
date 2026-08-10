@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -15,6 +16,7 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private readonly RightPanelViewModel _viewModel = new RightPanelViewModel();
         private bool _refreshingLayers;
+        private bool _refreshingDrawings;
 
         public RightPanel()
         {
@@ -29,27 +31,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (doc == null) return;
             try
             {
-                var selectedDrawing = DrawingList?.SelectedItem as DrawingItemViewModel;
-                _viewModel.Drawings.Clear();
-                _viewModel.Drawings.Add(new DrawingItemViewModel
-                {
-                    Name = System.IO.Path.GetFileName(doc.Name),
-                    Path = doc.Name,
-                    Kind = "MODEL",
-                    IsLocked = false,
-                    IsXref = false
-                });
-                foreach (var item in DrawingCatalogReader.ReadReferences(doc))
-                    _viewModel.Drawings.Add(new DrawingItemViewModel
-                    {
-                        Name = item.Name,
-                        Path = item.Path,
-                        Kind = "XREF",
-                        IsLocked = false,
-                        IsXref = true
-                    });
-                if (selectedDrawing != null && DrawingList != null)
-                    DrawingList.SelectedItem = _viewModel.Drawings.FirstOrDefault(x => x.IsXref == selectedDrawing.IsXref && string.Equals(x.Name, selectedDrawing.Name, StringComparison.OrdinalIgnoreCase));
+                RefreshDrawingsOnly();
                 RefreshLayers();
                 _viewModel.Status = _viewModel.Drawings.Count + " bản vẽ • " + _viewModel.Layers.Count + " layer";
             }
@@ -92,6 +74,43 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
+        private void RefreshDrawingsOnly()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            var selectedDrawing = DrawingList?.SelectedItem as DrawingItemViewModel;
+            _refreshingDrawings = true;
+            try
+            {
+                _viewModel.Drawings.Clear();
+                _viewModel.Drawings.Add(new DrawingItemViewModel
+                {
+                    Name = System.IO.Path.GetFileName(doc.Name),
+                    Path = doc.Name,
+                    Kind = "MODEL",
+                    LockState = "—",
+                    InstanceText = "—",
+                    IsXref = false
+                });
+                foreach (var item in DrawingCatalogReader.ReadReferences(doc))
+                    _viewModel.Drawings.Add(new DrawingItemViewModel
+                    {
+                        Name = item.Name,
+                        Path = item.Path,
+                        Kind = "XREF",
+                        LockState = item.LockState,
+                        InstanceText = item.InstanceCount.ToString(CultureInfo.InvariantCulture),
+                        IsXref = true
+                    });
+                if (selectedDrawing != null && DrawingList != null)
+                    DrawingList.SelectedItem = _viewModel.Drawings.FirstOrDefault(x => x.IsXref == selectedDrawing.IsXref && string.Equals(x.Name, selectedDrawing.Name, StringComparison.OrdinalIgnoreCase));
+            }
+            finally
+            {
+                _refreshingDrawings = false;
+            }
+        }
+
         private void OnRefreshClick(object sender, RoutedEventArgs e) => Refresh();
         private void OnLayerSearchChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) RefreshLayers(); }
         private void OnShowLayersClick(object sender, RoutedEventArgs e) => SetSelectedLayers(true);
@@ -116,6 +135,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnDrawingSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (_refreshingDrawings) return;
             var doc = Application.DocumentManager.MdiActiveDocument;
             var item = DrawingList.SelectedItem as DrawingItemViewModel;
             if (doc == null || item == null || !item.IsXref) return;
@@ -191,11 +211,13 @@ namespace QS3D.BricsCAD.V25.UI
                 var count = LayerVisibilityService.SetLocked(doc, names, locked);
                 _viewModel.Status = (locked ? "Đã khóa " : "Đã mở khóa ") + count + " layer";
                 RefreshLayers();
+                RefreshDrawingsOnly();
             }
             catch (Exception ex)
             {
                 _viewModel.Status = ex.Message;
                 RefreshLayers();
+                RefreshDrawingsOnly();
             }
         }
 
