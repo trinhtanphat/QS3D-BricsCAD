@@ -19,16 +19,22 @@ checks = {
     required[0]: [
         'x:Class="QS3D.BricsCAD.V25.UI.ScheduleHubWindow"', 'x:Name="ElementCountText"', 'x:Name="FinishCountText"',
         'x:Name="DoorCountText"', 'x:Name="CurtainCountText"', 'x:Name="MaterialCountText"',
+        'Text="SCHEDULE-SAFE SNAPSHOT"', 'Text="Cấu kiện BQ"', 'Text="Vật liệu dùng"',
         'Tag="QS3DBQ"', 'Tag="QS3DREGEN"', 'Tag="QS3DFINISHSCHEDULE"', 'Tag="QS3DFINISHXLSX"',
         'Tag="QS3DMATERIALS"', 'Tag="QS3DMATERIALXLSX"', 'Tag="QS3DCURTAIN"', 'Tag="QS3DCURTAINXLSX"',
         'Tag="QS3DDOORSCHEDULE"', 'Tag="QS3DDOORXLSX"', 'Tag="QS3DREBARHUB"', 'Tag="QS3DBBS"', 'Tag="QS3DBBSCSV"',
-        'Click="OnCommandClick"', "Schedule Hub khóa theo bản vẽ đã mở",
+        'Click="OnCommandClick"', "Các badge dùng cùng builder/validation với schedule",
     ],
     required[1]: [
         "private readonly Document _document", "ScheduleHubWindow(Document document)", "ProjectContextCoordinator.GetOrCreate(_document)",
-        "IsRoomFinish", "ElementCategory.FloorFinish", "ElementCategory.WallFinish", "ElementCategory.Door", "ElementCategory.WallOpening",
-        "ElementCategory.GlassWall", "ProjectMaterialCatalog.ReferencedMaterialNames(project)",
-        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)", "EnsureActive", "_document.SendStringToExecute", "DrawingLabel(_document)",
+        "RegenerationEngine", "DependencyGraph", "RegeneratorCatalog.CreateDefault()",
+        "ProjectQuantityReportBuilder.Group(project)", "RoomFinishScheduleBuilder.Build(project)",
+        "DoorOpeningScheduleBuilder.Build(project)", "CurtainWallScheduleBuilder.Build(project)",
+        "MaterialUsageScheduleBuilder.Build(project)", "QuantityReportMath.AddCount",
+        "CountBqElements", "CountFinishElements", "CountDoorElements", "CountCurtainElements",
+        "Distinct(StringComparer.OrdinalIgnoreCase)",
+        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
+        "số đang hiển thị được giữ nguyên", "EnsureActive", "_document.SendStringToExecute", "DrawingLabel(_document)",
     ],
     required[2]: ['CommandMethod("QS3DSCHEDULES"', "new ScheduleHubWindow(document)", "ShowModelessWindow"],
     required[3]: ['Tag="QS3DSCHEDULES"', "Schedule / Bóc khối lượng"],
@@ -40,6 +46,10 @@ for relative, needles in checks.items():
     text = path.read_text(encoding="utf-8")
     for needle in needles:
         if needle not in text: errors.append(relative + " missing Schedule Hub guard/token: " + needle)
+
+code = (ROOT / required[1]).read_text(encoding="utf-8") if (ROOT / required[1]).is_file() else ""
+for forbidden in ("ProjectMaterialCatalog.ReferencedMaterialNames(project)", "project.Elements.Count(x => IsRoomFinish", "project.Elements.Count(x => x.Category == ElementCategory.Door"):
+    if forbidden in code: errors.append("Schedule Hub must not use raw schedule badge counting: " + forbidden)
 
 xaml = (ROOT / required[0]).read_text(encoding="utf-8") if (ROOT / required[0]).is_file() else ""
 if "QS3DBBSC SV" in xaml: errors.append("Schedule Hub must not retain the dead QS3DBBSC SV command typo")
@@ -56,4 +66,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: document-bound Schedule Hub exposes BQ, room-finish, material, curtain, door/opening and rebar schedule/export workflows and remains discoverable from Project Tools and Full Domain Hub.")
+print("PASS: document-bound Schedule Hub uses the same validated BQ/finish/material/curtain/door builders for badges and exposes all schedule/export workflows without recomputing a background DWG.")
