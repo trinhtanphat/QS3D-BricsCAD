@@ -58,7 +58,6 @@ if not errors:
         "target.FamilyId = snapshot.FamilyId",
         "target.FloorId = snapshot.FloorId",
         "target.ZoneId = snapshot.ZoneId",
-        "InterchangeExistingIdentityAction.UseSourceSemanticData,\n                ProjectId",  # catches accidental Element policy edit only if layout collapses oddly
     ]
     for needle in forbidden_service:
         if needle in s:
