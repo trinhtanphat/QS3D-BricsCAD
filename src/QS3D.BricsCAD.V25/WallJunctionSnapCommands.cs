@@ -11,6 +11,7 @@ using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 using Teigha.Runtime;
@@ -125,50 +126,76 @@ namespace QS3D.BricsCAD.V25
                 var touchedOwners = ResolveUniqueWallOwners(project, touchedHandles);
                 var updatedLengthsM = BuildUpdatedSourceLengths(plan, touchedHandles, touchedOwners);
                 var units = CadUnitService.GetPolicy(document);
-                GeneratedGeometryInvalidation invalidation;
-                using (document.LockDocument())
-                using (var transaction = document.Database.TransactionManager.StartTransaction())
+                var rollback = ProjectStateSnapshot.Capture(project);
+                var cadCommitted = false;
+                var invalidatedElements = 0;
+                try
                 {
-                    RequireSourceFingerprint(transaction, units, plan);
-                    invalidation = GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, touchedOwners);
-                    foreach (var edit in plan.Edits)
+                    using (document.LockDocument())
+                    using (var transaction = document.Database.TransactionManager.StartTransaction())
                     {
-                        var entity = transaction.GetObject(edit.ObjectId, OpenMode.ForWrite, false) as Entity;
-                        if (entity == null || entity.IsErased) throw new InvalidOperationException("Wall source không còn live: " + edit.SourceHandle);
-                        var x = units.FromMeters(edit.Target.X);
-                        var y = units.FromMeters(edit.Target.Y);
-                        if (edit.IsLine)
+                        RequireSourceFingerprint(transaction, units, plan);
+                        var invalidation = GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, touchedOwners);
+                        foreach (var edit in plan.Edits)
                         {
-                            var line = entity as Line ?? throw new InvalidOperationException("Wall source type đã đổi từ LINE: " + edit.SourceHandle);
-                            if (edit.LineEndpoint == WallEndpointKind.Start) line.StartPoint = new Point3d(x, y, line.StartPoint.Z);
-                            else line.EndPoint = new Point3d(x, y, line.EndPoint.Z);
+                            var entity = transaction.GetObject(edit.ObjectId, OpenMode.ForWrite, false) as Entity;
+                            if (entity == null || entity.IsErased) throw new InvalidOperationException("Wall source không còn live: " + edit.SourceHandle);
+                            var x = units.FromMeters(edit.Target.X);
+                            var y = units.FromMeters(edit.Target.Y);
+                            if (edit.IsLine)
+                            {
+                                var line = entity as Line ?? throw new InvalidOperationException("Wall source type đã đổi từ LINE: " + edit.SourceHandle);
+                                if (edit.LineEndpoint == WallEndpointKind.Start) line.StartPoint = new Point3d(x, y, line.StartPoint.Z);
+                                else line.EndPoint = new Point3d(x, y, line.EndPoint.Z);
+                            }
+                            else
+                            {
+                                var polyline = entity as Polyline ?? throw new InvalidOperationException("Wall source type đã đổi từ POLYLINE: " + edit.SourceHandle);
+                                if (polyline.Closed || edit.VertexIndex < 0 || edit.VertexIndex >= polyline.NumberOfVertices) throw new InvalidOperationException("Polyline endpoint mapping không còn hợp lệ: " + edit.SourceHandle);
+                                if (Math.Abs(polyline.GetBulgeAt(Math.Min(edit.VertexIndex, polyline.NumberOfVertices - 2))) > 1e-12d && edit.VertexIndex < polyline.NumberOfVertices - 1)
+                                    throw new InvalidOperationException("Không apply snap vào vertex thuộc bulged segment: " + edit.SourceHandle);
+                                polyline.SetPointAt(edit.VertexIndex, new Point2d(x, y));
+                            }
                         }
-                        else
+
+                        // Keep semantic cleanup/state in the same failure boundary as the CAD edits.
+                        // If any semantic mutation/audit step throws, disposing this uncommitted CAD
+                        // transaction restores source + generated objects and the snapshot restores the project.
+                        invalidation.CommitMetadata();
+                        invalidatedElements = invalidation.ElementCount;
+                        foreach (var element in touchedOwners)
                         {
-                            var polyline = entity as Polyline ?? throw new InvalidOperationException("Wall source type đã đổi từ POLYLINE: " + edit.SourceHandle);
-                            if (polyline.Closed || edit.VertexIndex < 0 || edit.VertexIndex >= polyline.NumberOfVertices) throw new InvalidOperationException("Polyline endpoint mapping không còn hợp lệ: " + edit.SourceHandle);
-                            if (Math.Abs(polyline.GetBulgeAt(Math.Min(edit.VertexIndex, polyline.NumberOfVertices - 2))) > 1e-12d && edit.VertexIndex < polyline.NumberOfVertices - 1)
-                                throw new InvalidOperationException("Không apply snap vào vertex thuộc bulged segment: " + edit.SourceHandle);
-                            polyline.SetPointAt(edit.VertexIndex, new Point2d(x, y));
+                            element.Properties["LengthM"] = updatedLengthsM[element.Id].ToString("R", CultureInfo.InvariantCulture);
+                            element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Quantity);
+                        }
+                        var owners = touchedOwners.Count;
+                        ClearPreview(project);
+                        project.Touch();
+                        AuditTrail.ForProject(project).Record("wall.junction.snap.apply", string.Empty,
+                            plan.Edits.Count.ToString(CultureInfo.InvariantCulture) + " endpoint edit(s) • owners=" + owners.ToString(CultureInfo.InvariantCulture) + " • invalidated3d=" + invalidatedElements.ToString(CultureInfo.InvariantCulture) + " • sourceLengthSynced=true");
+
+                        transaction.Commit();
+                        cadCommitted = true;
+                    }
+                }
+                catch (Exception operationError)
+                {
+                    if (!cadCommitted)
+                    {
+                        try { rollback.Restore(project); }
+                        catch (Exception restoreError)
+                        {
+                            throw new InvalidOperationException(
+                                "Wall Snap failed before CAD commit and project rollback also failed.",
+                                new AggregateException(operationError, restoreError));
                         }
                     }
-                    transaction.Commit();
+                    throw;
                 }
 
-                invalidation.CommitMetadata();
-                foreach (var element in touchedOwners)
-                {
-                    element.Properties["LengthM"] = updatedLengthsM[element.Id].ToString("R", CultureInfo.InvariantCulture);
-                    element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Quantity);
-                }
-                var owners = touchedOwners.Count;
-                ClearPreview(project);
-                project.Touch();
-                AuditTrail.ForProject(project).Record("wall.junction.snap.apply", string.Empty,
-                    plan.Edits.Count.ToString(CultureInfo.InvariantCulture) + " endpoint edit(s) • owners=" + owners.ToString(CultureInfo.InvariantCulture) + " • invalidated3d=" + invalidation.ElementCount.ToString(CultureInfo.InvariantCulture) + " • sourceLengthSynced=true");
                 document.Editor.Regen();
                 PaletteCoordinator.RefreshProject();
-                var summary = "Wall Snap applied: " + plan.Edits.Count + " endpoint(s) • " + owners + " semantic owner(s) • source LengthM synchronized • generated 3D/rebar invalidated. Rebuild 3D/Regenerate trước khi xuất BQ.";
+                var summary = "Wall Snap applied: " + plan.Edits.Count + " endpoint(s) • " + touchedOwners.Count + " semantic owner(s) • source LengthM synchronized • generated 3D/rebar invalidated. Rebuild 3D/Regenerate trước khi xuất BQ.";
                 PaletteCoordinator.SetStatus(summary);
                 document.Editor.WriteMessage("\nQS3D " + summary);
             });
