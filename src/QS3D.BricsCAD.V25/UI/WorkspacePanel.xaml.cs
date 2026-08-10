@@ -80,14 +80,14 @@ namespace QS3D.BricsCAD.V25.UI
             project.Families.Remove(family); if (project.Metadata.TryGetValue("ActiveFamilyId", out var id) && string.Equals(id, family.Id, StringComparison.OrdinalIgnoreCase)) project.Metadata.Remove("ActiveFamilyId"); project.Touch(); RefreshProject(); SetStatus("Đã xóa Family.");
         }
 
-        private void OnView3DClick(object sender, RoutedEventArgs e) { var family = FamilyList.SelectedItem as ProjectFamily; _viewModel.SetActiveFamily(family); SetStatus("Vẽ 3D: " + (family?.Name ?? "Quick Takeoff")); Send(CommandFor(family?.Category)); }
+        private void OnView3DClick(object sender, RoutedEventArgs e) { var family = FamilyList.SelectedItem as ProjectFamily; _viewModel.SetActiveFamily(family); SetStatus("Vẽ/Cập nhật 3D: " + (family?.Name ?? "chưa chọn Family")); Send("QS3DBUILD3D"); }
         private void OnViewModel3DClick(object sender, RoutedEventArgs e) => Send("QS3DVIEW3D");
         private void OnOrbitClick(object sender, RoutedEventArgs e) => Send("QS3DORBIT");
         private void OnZoomSelectionClick(object sender, RoutedEventArgs e) => Send("QS3DZOOMSELECTED");
         private void OnTopViewClick(object sender, RoutedEventArgs e) => Send("QS3DVIEWTOP");
         private void OnAddFinishClick(object sender, RoutedEventArgs e) => Send("QS3DFINISH");
         private void OnRemoveFinishClick(object sender, RoutedEventArgs e) => Send("QS3DUNTRACK");
-        private void OnPickRoomClick(object sender, RoutedEventArgs e) => Send("QS3DINSPECT");
+        private void OnPickRoomClick(object sender, RoutedEventArgs e) => Send("QS3DROOM");
         private void OnQuantityClick(object sender, RoutedEventArgs e) => Send("QS3DBQ");
         private void OnHealthClick(object sender, RoutedEventArgs e) => Send("QS3DHEALTH");
         private void OnSaveClick(object sender, RoutedEventArgs e) => Send("QS3DSAVE");
