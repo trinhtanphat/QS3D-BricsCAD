@@ -4,7 +4,7 @@ Updated: 2026-08-10 (UTC+7)
 
 ## Status
 
-This note records the **source-implemented** Direct Draw P1 expansion on top of the existing P0 authoring architecture.
+This note records the **source-implemented** Direct Draw P1 expansion on top of the hardened P0 authoring architecture.
 
 It does not replace `docs/DIRECT-DRAW-WORKFLOW.md`; that document remains the product requirement and design boundary.
 
@@ -26,25 +26,26 @@ Existing capture commands remain supported for pre-existing CAD geometry.
 
 ## Shared authoring contract
 
-P1 deliberately reuses the same `DirectDrawCommands.ExecuteDirect` orchestration used by P0:
+P1 deliberately reuses the same `DirectDrawCommands.ExecuteDirect` orchestration and current P0 hardening:
 
 1. require Model Space;
-2. acquire guarded plan-view points;
-3. create a real DWG source entity;
-4. capture through `SemanticCaptureService`;
-5. regenerate semantic/rule state before native CAD mutation;
-6. reuse the existing native builder for the category;
-7. preserve generated ownership/stale metadata;
-8. select the new source and synchronize the QS3D workspace;
-9. on failure, restore `ProjectStateSnapshot` and remove the Direct Draw source/new owned output.
+2. acquire guarded plan-view points with the unit-aware 5 mm vertical tolerance;
+3. resolve the active compatible Family (or current category Family) and fail closed when an explicitly stored numeric Family value is invalid;
+4. prompt/inherit the key instance dimensions and bottom offset before source creation;
+5. create a real DWG source entity;
+6. capture through `SemanticCaptureService`;
+7. regenerate semantic/rule state before native CAD mutation;
+8. reuse the existing native builder for the category;
+9. preserve generated ownership/stale metadata and select the generated host when available;
+10. on failure, restore `ProjectStateSnapshot` and remove the Direct Draw source/new owned output.
 
-The rollback path keeps the newer ownership-XData recovery through `GeneratedGeometryService.FindMatchingOwnedHandles`, so a generated solid that committed before project metadata completed can still be discovered for cleanup.
+The rollback path keeps ownership-XData recovery through `GeneratedGeometryService.FindMatchingOwnedHandles`, so a generated solid that committed before project metadata completed can still be discovered for cleanup.
 
-## Category-specific geometry
+## Category-specific behavior
 
 ### GlassWall
 
-`QS3DDRAWGLASSWALL` acquires an open plan path.
+`QS3DDRAWGLASSWALL` acquires an open plan path and prompts/inherits `ThicknessM`, `HeightM` and `BottomOffsetM`.
 
 - two points create a `LINE` source;
 - three or more points create an open `POLYLINE` source;
@@ -53,17 +54,17 @@ The rollback path keeps the newer ownership-XData recovery through `GeneratedGeo
 
 ### WallPier
 
-`QS3DDRAWWALLPIER` always creates an **open POLYLINE**, including the two-point case.
+`QS3DDRAWWALLPIER` prompts/inherits `ThicknessM`, `HeightM` and `BottomOffsetM`, but always creates an **open POLYLINE**, including the two-point case.
 
-This is intentional: the generated solid must reach `PolylineWallSolidBuilder` and `WallPierPathProfilePlanner` so current `Rectangular` / `Chamfered` path-profile semantics and derived metadata are preserved. The P1 command must not silently downgrade a two-point WallPier to the generic LINE box path.
+This is intentional: the generated solid must reach `PolylineWallSolidBuilder` and `WallPierPathProfilePlanner` so current `Rectangular` / `Chamfered` path-profile semantics and derived metadata are preserved. The P1 command must not silently downgrade a two-point WallPier to the generic LINE box path. Profile mode/chamfer remain inherited semantic/Family configuration rather than being guessed by Direct Draw.
 
 ### StructuralWall
 
-`QS3DDRAWSTRUCTWALL` acquires exactly two plan-view points and creates a real `LINE` source. Native output is delegated to `StructuralSolidBuilder`, including its current near-horizontal/fail-closed geometry guards.
+`QS3DDRAWSTRUCTWALL` acquires exactly two plan-view points, prompts/inherits `ThicknessM`, `HeightM` and `BottomOffsetM`, and creates a real `LINE` source. Native output is delegated to `StructuralSolidBuilder`, including its current near-horizontal/fail-closed geometry guards.
 
 ### Foundation
 
-`QS3DDRAWFOUNDATION` acquires a closed planar boundary with at least three vertices and creates a closed `POLYLINE` source. Native output is delegated to `StructuralSolidBuilder` using the same guarded footprint-mass path as existing captured Foundation geometry.
+`QS3DDRAWFOUNDATION` acquires a closed planar boundary with at least three vertices, prompts/inherits `ThicknessM` and `BottomOffsetM`, and creates a closed `POLYLINE` source. Native output is delegated to `StructuralSolidBuilder` using the same guarded footprint-mass path as existing captured Foundation geometry.
 
 This Direct Draw command does not broaden Foundation rebar mesh support: `QS3DFOUNDATIONREBAR3D` still has its own rectangular-mesh adapter contract.
 
@@ -79,7 +80,7 @@ Door/Opening authoring requires a host-aware commit contract covering semantic h
 
 ## Validation boundary
 
-`scripts/preflight-direct-draw.py` contains static regression contracts for command uniqueness, builder reuse, authoring UI, rollback ordering and the WallPier open-POLYLINE invariant.
+`scripts/preflight-direct-draw.py` contains static regression contracts for command uniqueness, current P0/P1 prompt/Family guards, builder reuse, authoring UI, rollback ordering, Model-Space/source resolution and the WallPier open-POLYLINE invariant.
 
 Current wording must remain precise:
 
@@ -89,7 +90,7 @@ Before describing Direct Draw P1 as runtime complete, validate the exact current
 
 - create GlassWall, WallPier, StructuralWall and Foundation from an ordinary DWG;
 - ESC/cancel and invalid-geometry rollback;
-- active compatible Family inheritance;
+- active compatible Family inheritance and invalid-Family fail-closed behavior;
 - native generated ownership and Health All;
 - save/reopen and rebuild;
 - WallPier rectangular/chamfered profile behavior;
