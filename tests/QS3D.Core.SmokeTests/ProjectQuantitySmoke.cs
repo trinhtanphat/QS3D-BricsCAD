@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             LinkedOpeningReport();
             DetailRowsPreserveOneElementProvenance();
             MeasuredSolidMassOverridesDefaultPrismVolume();
+            MeasuredWallFinishSolidPreservesVolumeAndSurface();
             PreferredBqQuantityDoesNotEvaluateUnusedFallbacks();
             WallFinishPrefersRegeneratedNetArea();
         }
@@ -81,6 +82,26 @@ namespace QS3D.Core.SmokeTests
             var report = ProjectQuantityReportBuilder.Group(project).Single();
             if (Math.Abs(report.GrossConcreteM3 - 1.75d) > 1e-12 || Math.Abs(report.NetConcreteM3 - 1.75d) > 1e-12 || Math.Abs(report.OtherAreaM2 - 55d) > 1e-12)
                 throw new Exception("Measured Solid3d volume/surface area did not reach the BQ report.");
+        }
+
+        private static void MeasuredWallFinishSolidPreservesVolumeAndSurface()
+        {
+            var project = new ProjectState("wall-finish-solid", "Measured Wall Finish");
+            project.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            var family = new ProjectFamily("wf-solid", "3D Wall Finish", ElementCategory.WallFinish);
+            project.Families.Add(family);
+            var finish = new ProjectElement("WF-SOLID", ElementCategory.WallFinish, family.Id, "f", "z");
+            finish.Properties[MeasuredSolidQuantityPolicy.VolumeProperty] = "1.875";
+            finish.Properties[MeasuredSolidQuantityPolicy.SurfaceAreaProperty] = "12.5";
+            project.Elements.Add(finish);
+
+            var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+            if (regenerated != 1 || Math.Abs(finish.Quantities["GrossVolumeM3"] - 1.875d) > 1e-12 || Math.Abs(finish.Quantities["NetVolumeM3"] - 1.875d) > 1e-12)
+                throw new Exception("Measured WallFinish Solid3d volume must survive semantic regeneration.");
+            var report = ProjectQuantityReportBuilder.Group(project).Single();
+            if (Math.Abs(report.GrossConcreteM3 - 1.875d) > 1e-12 || Math.Abs(report.NetConcreteM3 - 1.875d) > 1e-12 || Math.Abs(report.OtherAreaM2 - 12.5d) > 1e-12)
+                throw new Exception("Measured WallFinish Solid3d volume/surface did not reach the BQ/ED2 report.");
         }
 
         private static void LinkedOpeningReport()

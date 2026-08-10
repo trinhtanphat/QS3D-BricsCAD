@@ -80,7 +80,7 @@ namespace QS3D.Core.Persistence
             {
                 foreach (var item in families.Elements("family"))
                 {
-                    if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category)) throw new InvalidDataException("Invalid family category.");
+                    var category = Category(item, "family");
                     var family = new ProjectFamily(Required(item, "id"), Required(item, "name"), category);
                     ReadStringMap(item.Element("properties"), "p", family.Properties);
                     project.Families.Add(family);
@@ -92,7 +92,7 @@ namespace QS3D.Core.Persistence
             {
                 foreach (var item in rules.Elements("rule"))
                 {
-                    if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category)) throw new InvalidDataException("Invalid quantity rule category.");
+                    var category = Category(item, "quantity rule");
                     project.QuantityRules.Add(new QuantityRule(
                         Required(item, "id"), category, Required(item, "output"), Required(item, "expression"), Required(item, "version")));
                 }
@@ -103,7 +103,7 @@ namespace QS3D.Core.Persistence
             {
                 foreach (var item in elements.Elements("element"))
                 {
-                    if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category)) throw new InvalidDataException("Invalid element category.");
+                    var category = Category(item, "element");
                     var element = new ProjectElement(Required(item, "id"), category, Value(item, "familyId"), Value(item, "floorId"), Value(item, "zoneId"))
                     {
                         DrawingFingerprint = Value(item, "drawingFingerprint")
@@ -242,6 +242,9 @@ namespace QS3D.Core.Persistence
             if (project.Families.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || string.IsNullOrWhiteSpace(x.Name))) throw new InvalidDataException("QSDB families require non-empty ids and names.");
             if (project.Elements.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id))) throw new InvalidDataException("QSDB elements require non-empty ids.");
             if (project.QuantityRules.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || string.IsNullOrWhiteSpace(x.OutputName))) throw new InvalidDataException("QSDB quantity rules require non-empty ids and outputs.");
+            if (project.Families.Any(x => !Enum.IsDefined(typeof(ElementCategory), x.Category))) throw new InvalidDataException("QSDB family category is undefined.");
+            if (project.Elements.Any(x => !Enum.IsDefined(typeof(ElementCategory), x.Category))) throw new InvalidDataException("QSDB element category is undefined.");
+            if (project.QuantityRules.Any(x => !Enum.IsDefined(typeof(ElementCategory), x.Category))) throw new InvalidDataException("QSDB quantity rule category is undefined.");
             if (project.AuditEvents.Any(x => x == null)) throw new InvalidDataException("QSDB audit trail cannot contain null events.");
             ValidateUtcTimestamp(project.UpdatedUtc, "project UpdatedUtc");
             var duplicateFamily = project.Families.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
@@ -325,6 +328,14 @@ namespace QS3D.Core.Persistence
 
         private static string Required(XElement element, string attribute) => element.Attribute(attribute)?.Value is string value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new InvalidDataException("Missing attribute: " + attribute);
         private static string Value(XElement element, string attribute) => element.Attribute(attribute)?.Value?.Trim() ?? string.Empty;
+
+        private static ElementCategory Category(XElement element, string label)
+        {
+            var raw = Required(element, "category");
+            if (!Enum.TryParse(raw, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
+                throw new InvalidDataException("Invalid " + label + " category: " + raw + ".");
+            return category;
+        }
 
         private static double Double(string? value)
         {

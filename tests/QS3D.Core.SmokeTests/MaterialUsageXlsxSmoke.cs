@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Xml;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 
@@ -44,6 +45,11 @@ namespace QS3D.Core.SmokeTests
                         if (xml.IndexOf("Kính", StringComparison.Ordinal) < 0) throw new Exception("Material XLSX material name is missing.");
                     }
                 }
+                File.WriteAllText(path, "ORIGINAL");
+                var invalidRow = new MaterialUsageRow { FamilyName = "Invalid\u0001Family" };
+                try { MaterialUsageXlsxExporter.Export(path, new List<MaterialUsageRow> { invalidRow }); throw new Exception("Invalid XML text must reject material XLSX export."); }
+                catch (XmlException) { }
+                if (File.ReadAllText(path) != "ORIGINAL") throw new Exception("Rejected material XLSX export replaced the existing destination.");
             }
             finally
             {
