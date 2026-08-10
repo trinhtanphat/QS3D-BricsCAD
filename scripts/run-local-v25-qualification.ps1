@@ -7,7 +7,12 @@ param(
     [switch]$SkipRuntime,
     [switch]$SkipScreenshot,
     [switch]$Package,
-    [string]$ReleaseTag = ""
+    [string]$ReleaseTag = "",
+    [switch]$SignPackage,
+    [ValidatePattern('^[0-9A-Fa-f]{40}$')]
+    [string]$SigningCertThumbprint = "",
+    [ValidatePattern('^https://')]
+    [string]$TimestampUrl = ""
 )
 
 Set-StrictMode -Version Latest
@@ -28,9 +33,15 @@ $branchName = ""
 $pluginDll = Join-Path $repoRoot "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll"
 $runtimeArtifacts = Join-Path $ArtifactDir "runtime"
 $reportPath = Join-Path $ArtifactDir "qualification.json"
+$packageDir = Join-Path $repoRoot "dist\QS3D-BricsCAD-V25"
+$packageZip = Join-Path $repoRoot "dist\QS3D-BricsCAD-V25.zip"
 $startedAt = [DateTime]::UtcNow
 $sourceBuildCompleted = $false
 $runtimeSmokeCompleted = $false
+$packageCompleted = $false
+$signingQualified = $false
+$packageZipSha256 = ""
+$normalizedSignerThumbprint = ""
 
 function Invoke-ExternalChecked {
     param(
@@ -78,6 +89,27 @@ try {
     }
     if (-not [Environment]::UserInteractive -and -not $SkipRuntime) {
         throw "Interactive Windows is required unless -SkipRuntime is explicitly used."
+    }
+    if ($SignPackage -and -not $Package) {
+        throw "-SignPackage requires -Package so the exact packaged payload is signed and finalized."
+    }
+    if ($SignPackage -and $SkipRuntime) {
+        throw "-SignPackage cannot be combined with -SkipRuntime. Signed release qualification requires the real licensed V25 runtime gate."
+    }
+    if ($SignPackage) {
+        if ([string]::IsNullOrWhiteSpace($SigningCertThumbprint)) {
+            throw "-SignPackage requires -SigningCertThumbprint with the 40-hex certificate thumbprint from Cert:\CurrentUser\My."
+        }
+        if ([string]::IsNullOrWhiteSpace($TimestampUrl)) {
+            throw "-SignPackage requires -TimestampUrl using HTTPS."
+        }
+        $normalizedSignerThumbprint = $SigningCertThumbprint.Replace(' ', '').ToUpperInvariant()
+        if ($normalizedSignerThumbprint -notmatch '^[0-9A-F]{40}$') {
+            throw "Signing certificate thumbprint must contain exactly 40 hexadecimal characters."
+        }
+        if ($TimestampUrl -notmatch '^https://') {
+            throw "Timestamp URL must use HTTPS."
+        }
     }
 
     foreach ($command in @("git", "python", "dotnet")) {
@@ -177,11 +209,56 @@ try {
                 finally {
                     $env:RELEASE_TAG = $oldReleaseTag
                 }
-                $zip = Join-Path $repoRoot "dist\QS3D-BricsCAD-V25.zip"
-                if (-not (Test-Path -LiteralPath $zip -PathType Leaf)) {
-                    throw "Local package step completed without the expected ZIP: $zip"
+                if (-not (Test-Path -LiteralPath $packageDir -PathType Container)) {
+                    throw "Local package step completed without the expected package directory: $packageDir"
+                }
+                if (-not (Test-Path -LiteralPath $packageZip -PathType Leaf)) {
+                    throw "Local package step completed without the expected ZIP: $packageZip"
                 }
             }
+            $packageCompleted = $true
+        }
+
+        if ($SignPackage) {
+            $signedPayload = @(
+                (Join-Path $packageDir "QS3D.BricsCAD.V25.dll"),
+                (Join-Path $packageDir "QS3D.Core.dll"),
+                (Join-Path $packageDir "install-v25-autoload.ps1"),
+                (Join-Path $packageDir "uninstall-v25-autoload.ps1"),
+                (Join-Path $packageDir "update-v25.ps1")
+            )
+            Invoke-QualificationStep "Authenticode sign packaged executable payload" {
+                foreach ($path in $signedPayload) {
+                    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                        throw "Expected signable package payload is missing: $path"
+                    }
+                }
+                & (Join-Path $PSScriptRoot "sign-v25.ps1") `
+                    -Path $signedPayload `
+                    -CertificateThumbprint $normalizedSignerThumbprint `
+                    -TimestampServer $TimestampUrl `
+                    -Confirm:$false
+            }
+            Invoke-QualificationStep "Verify Authenticode signer and trusted timestamp" {
+                & (Join-Path $PSScriptRoot "verify-v25-signatures.ps1") `
+                    -Path $signedPayload `
+                    -ExpectedThumbprint $normalizedSignerThumbprint
+            }
+            Invoke-QualificationStep "Finalize signed package metadata / hashes / ZIP" {
+                & (Join-Path $PSScriptRoot "finalize-v25-signed-package.ps1") `
+                    -PackageDirectory $packageDir `
+                    -PackageZip $packageZip `
+                    -ExpectedSignerThumbprint $normalizedSignerThumbprint `
+                    -Confirm:$false
+                if (-not (Test-Path -LiteralPath $packageZip -PathType Leaf)) {
+                    throw "Signed package finalization did not produce the expected ZIP: $packageZip"
+                }
+                $script:packageZipSha256 = (Get-FileHash -LiteralPath $packageZip -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+            $signingQualified = $true
+        }
+        elseif ($Package -and (Test-Path -LiteralPath $packageZip -PathType Leaf)) {
+            $packageZipSha256 = (Get-FileHash -LiteralPath $packageZip -Algorithm SHA256).Hash.ToLowerInvariant()
         }
     }
     finally {
@@ -201,13 +278,17 @@ finally {
     $automatedGateStatus = if ($null -eq $fatal) { "PASS" } else { "FAIL" }
     $sourceBuildStatus = if ($sourceBuildCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
     $runtimeSmokeStatus = if ($SkipRuntime) { "NOT_RUN" } elseif ($runtimeSmokeCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
-    $qualificationScope = if ($runtimeSmokeCompleted) { "source-build+runtime-smoke" } elseif ($sourceBuildCompleted) { "source-build" } else { "incomplete" }
+    $packageStatus = if (-not $Package) { "NOT_REQUESTED" } elseif ($packageCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
+    $signingStatus = if (-not $SignPackage) { "NOT_REQUESTED" } elseif ($signingQualified) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
+    $qualificationScope = if ($signingQualified) { "source-build+runtime-smoke+package+authenticode" } elseif ($runtimeSmokeCompleted -and $packageCompleted) { "source-build+runtime-smoke+package" } elseif ($runtimeSmokeCompleted) { "source-build+runtime-smoke" } elseif ($sourceBuildCompleted) { "source-build" } else { "incomplete" }
     $report = [ordered]@{
-        schema = 2
+        schema = 3
         status = $automatedGateStatus
         automatedGateStatus = $automatedGateStatus
         sourceBuildStatus = $sourceBuildStatus
         runtimeSmokeStatus = $runtimeSmokeStatus
+        packageStatus = $packageStatus
+        signingStatus = $signingStatus
         fullInteractiveMatrixStatus = "NOT_RUN"
         customerReleaseQualified = $false
         qualificationScope = $qualificationScope
@@ -223,7 +304,14 @@ finally {
         runtimeSkipped = [bool]$SkipRuntime
         runtimeMetadata = if (Test-Path -LiteralPath $runtimeMetadata -PathType Leaf) { $runtimeMetadata } else { "" }
         packageRequested = [bool]$Package
+        packageQualified = [bool]$packageCompleted
         releaseTag = $ReleaseTag
+        packageZip = if ($packageCompleted) { $packageZip } else { "" }
+        packageZipSha256 = $packageZipSha256
+        signingRequested = [bool]$SignPackage
+        signingQualified = [bool]$signingQualified
+        signerThumbprint = if ($SignPackage) { $normalizedSignerThumbprint } else { "" }
+        timestampUrl = if ($SignPackage) { $TimestampUrl } else { "" }
         manualScenarioChecklist = "docs/LOCAL-V25-QUALIFICATION.md"
         steps = @($steps)
         error = if ($null -eq $fatal) { "" } else { $fatal.Exception.Message }
@@ -241,8 +329,12 @@ Write-Host ""
 if ($SkipRuntime) {
     Write-Host "AUTOMATED SOURCE/BUILD GATES PASS for exact SHA $headSha; licensed V25 runtime smoke NOT RUN."
 }
+elseif ($signingQualified) {
+    Write-Host "AUTOMATED SOURCE/BUILD + LICENSED V25 RUNTIME + SIGNED/FINALIZED PACKAGE GATES PASS for exact SHA $headSha."
+}
 else {
     Write-Host "AUTOMATED SOURCE/BUILD + LICENSED V25 NETLOAD/RIBBON/PALETTE SMOKE PASS for exact SHA $headSha."
 }
 Write-Host "FULL INTERACTIVE/PRIVATE-DWG PRODUCT MATRIX: NOT RUN by this script."
+Write-Host "This does not replace the manual/private-DWG scenario checklist in docs/LOCAL-V25-QUALIFICATION.md."
 Write-Host "Customer release qualification remains false until docs/LOCAL-V25-QUALIFICATION.md is executed and recorded for the same SHA/package."
