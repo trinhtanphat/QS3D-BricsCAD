@@ -5,6 +5,7 @@ using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Domain;
+using QS3D.Core.Model;
 using QS3D.Core.Services;
 using QS3D.Core.Units;
 
@@ -16,36 +17,68 @@ namespace QS3D.BricsCAD.V25.Services
 
         public static int Capture(Document document, ElementCategory category)
         {
-            var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
-            if (snapshots.Count == 0) return 0;
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            return CaptureSnapshots(document, EntitySnapshotReader.ReadCurrentSelection(document), category);
+        }
+
+        public static int CaptureSnapshots(Document document, IEnumerable<EntitySnapshot> snapshots, ElementCategory category)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (snapshots == null) throw new ArgumentNullException(nameof(snapshots));
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var family = ResolveFamily(project, category);
             var count = 0;
             foreach (var snapshot in snapshots)
             {
+                if (CaptureSnapshot(project, snapshot, category, family)) count++;
+            }
+            if (count > 0) project.Touch();
+            return count;
+        }
+
+        public static bool CaptureSnapshot(Document document, EntitySnapshot snapshot, ElementCategory category)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var changed = CaptureSnapshot(project, snapshot, category, ResolveFamily(project, category));
+            if (changed) project.Touch();
+            return changed;
+        }
+
+        private static bool CaptureSnapshot(ProjectState project, EntitySnapshot snapshot, ElementCategory category, ProjectFamily family)
+        {
+            var element = project.Elements.FirstOrDefault(x => x.SourceHandles.Any(h => string.Equals(h, snapshot.Handle, StringComparison.OrdinalIgnoreCase)));
+            if (element == null)
+            {
                 var id = category.ToString().ToUpperInvariant() + "-" + snapshot.Handle;
-                var element = project.FindElement(id);
+                element = project.FindElement(id);
                 if (element == null)
                 {
                     element = new ProjectElement(id, category, family.Id, project.ActiveFloorId, project.ActiveZoneId);
                     project.Elements.Add(element);
                 }
-                element.Category = category;
-                element.FamilyId = family.Id;
-                element.FloorId = project.ActiveFloorId;
-                element.ZoneId = project.ActiveZoneId;
-                element.SourceHandles.Clear(); element.SourceHandles.Add(snapshot.Handle);
-                element.DrawingFingerprint = project.DrawingFingerprint;
-                element.Properties["Layer"] = snapshot.Layer;
-                if (snapshot.LengthDrawingUnits.HasValue) element.Properties["LengthM"] = Units.ToMeters(snapshot.LengthDrawingUnits.Value).ToString("R", CultureInfo.InvariantCulture);
-                if (snapshot.AreaDrawingUnitsSquared.HasValue) element.Properties["AreaM2"] = Units.AreaToSquareMeters(snapshot.AreaDrawingUnitsSquared.Value).ToString("R", CultureInfo.InvariantCulture);
-                ApplyFamilyDefaults(element, family);
-                element.MarkDirty(ElementDirtyFlags.All);
-                Regenerate(project, element);
-                count++;
             }
-            project.Touch();
-            return count;
+
+            element.Category = category;
+            element.FamilyId = family.Id;
+            element.FloorId = project.ActiveFloorId;
+            element.ZoneId = project.ActiveZoneId;
+            element.SourceHandles.Clear();
+            element.SourceHandles.Add(snapshot.Handle);
+            element.DrawingFingerprint = project.DrawingFingerprint;
+            element.Properties["Layer"] = snapshot.Layer;
+            element.Properties["EntityType"] = snapshot.EntityType;
+            if (snapshot.LengthDrawingUnits.HasValue)
+                element.Properties["LengthM"] = Units.ToMeters(snapshot.LengthDrawingUnits.Value).ToString("R", CultureInfo.InvariantCulture);
+            if (snapshot.AreaDrawingUnitsSquared.HasValue)
+                element.Properties["AreaM2"] = Units.AreaToSquareMeters(snapshot.AreaDrawingUnitsSquared.Value).ToString("R", CultureInfo.InvariantCulture);
+            foreach (var pair in snapshot.Metadata)
+                element.Properties["CAD:" + pair.Key] = pair.Value ?? string.Empty;
+            ApplyFamilyDefaults(element, family);
+            element.MarkDirty(ElementDirtyFlags.All);
+            Regenerate(project, element);
+            return true;
         }
 
         public static int GenerateRoomFinishes(Document document)
@@ -59,7 +92,7 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 foreach (var category in new[] { ElementCategory.FloorFinish, ElementCategory.Waterproofing, ElementCategory.Skirting, ElementCategory.WallFinish, ElementCategory.CeilingFinish })
                 {
-                    var id = room.Id + "-" + category.ToString();
+                    var id = room.Id + "-" + category;
                     var finish = project.FindElement(id);
                     if (finish == null)
                     {
@@ -109,8 +142,7 @@ namespace QS3D.BricsCAD.V25.Services
                     regenerator = takeoff.CanRegenerate(element.Category) ? (IElementRegenerator)takeoff : new RoomRegenerator();
                 }
             }
-
-            if (regenerator.CanRegenerate(element.Category)) regenerator.Regenerate(project, element);
+            if (regenerator != null && regenerator.CanRegenerate(element.Category)) regenerator.Regenerate(project, element);
             element.MarkClean(ElementDirtyFlags.All);
         }
 
@@ -136,7 +168,7 @@ namespace QS3D.BricsCAD.V25.Services
                 case ElementCategory.Railing:
                     family.Properties["Material"] = "Thép"; break;
                 case ElementCategory.Earthwork:
-                    family.Properties["DepthM"] = "1"; break;
+                    family.Properties["DepthM"] = "1"; family.Properties["SwellFactor"] = "0.15"; break;
             }
             if (category == ElementCategory.Room || category == ElementCategory.WallFinish) family.Properties["HeightM"] = "3.6";
             if (category == ElementCategory.WallOpening || category == ElementCategory.Door) family.Properties["HeightM"] = "2.2";
