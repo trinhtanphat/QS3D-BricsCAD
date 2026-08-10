@@ -53,7 +53,6 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("xuất Door/Opening XLSX");
-                if (_rows.Count == 0) throw new InvalidOperationException("Schedule hiện chưa có dòng để xuất.");
                 var drawingName = string.IsNullOrWhiteSpace(_document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(_document.Name);
                 var dialog = new SaveFileDialog
                 {
@@ -65,8 +64,13 @@ namespace QS3D.BricsCAD.V25.UI
                     FileName = drawingName + "-Cua-Lo-Mo.xlsx"
                 };
                 if (dialog.ShowDialog() != true) return;
-                DoorOpeningXlsxExporter.Export(dialog.FileName, _rows);
-                SetStatus("Đã xuất " + _rows.Count + " nhóm Cửa/Lỗ → " + dialog.FileName);
+
+                var current = BuildCurrentRows(out var regenerated);
+                if (current.Count == 0) throw new InvalidOperationException("Schedule hiện không có dòng để xuất.");
+                _rows = current;
+                ApplyFilter();
+                DoorOpeningXlsxExporter.Export(dialog.FileName, current);
+                SetStatus("Đã làm mới (regen " + regenerated + ") và xuất " + current.Count + " nhóm Cửa/Lỗ → " + dialog.FileName);
             }
             catch (Exception ex) { SetStatus("Xuất Door/Opening XLSX lỗi: " + ex.Message); }
         }
@@ -75,10 +79,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureActive("làm mới Door/Opening Schedule");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                _rows = DoorOpeningScheduleBuilder.Build(project);
+                _rows = BuildCurrentRows(out var regenerated);
                 Title = "QS3D • Cửa / Lỗ mở • " + DrawingLabel(_document);
                 ApplyFilter();
                 SetStatus("Đã nạp " + _rows.Count + " nhóm schedule • regen " + regenerated + " cấu kiện dirty.");
@@ -89,6 +90,14 @@ namespace QS3D.BricsCAD.V25.UI
                 ApplyFilter();
                 SetStatus("Đọc Door/Opening Schedule lỗi: " + ex.Message);
             }
+        }
+
+        private IReadOnlyList<DoorOpeningScheduleRow> BuildCurrentRows(out int regenerated)
+        {
+            EnsureActive("đọc Door/Opening Schedule hiện hành");
+            var project = ProjectContextCoordinator.GetOrCreate(_document);
+            regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+            return DoorOpeningScheduleBuilder.Build(project);
         }
 
         private void ApplyFilter()
@@ -130,7 +139,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void SetStatus(string text)
         {
             StatusText.Text = text ?? string.Empty;
-            PaletteCoordinator.SetStatus(StatusText.Text);
+            try { PaletteCoordinator.SetStatus(StatusText.Text); } catch { }
         }
     }
 }

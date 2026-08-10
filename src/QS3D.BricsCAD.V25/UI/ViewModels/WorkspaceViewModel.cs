@@ -187,8 +187,8 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 var key = pair.Key;
                 var unit = UnitFor(key);
                 var row = CreatePropertyRow(key, pair.Value, unit);
-                row.Apply = value => ApplyFamilyProperty(family, key, unit, value);
-                row.Value = pair.Value;
+                row.Apply = value => ToDisplayValue(key, ApplyFamilyProperty(family, key, unit, value));
+                row.Value = ToDisplayValue(key, pair.Value);
                 Properties.Add(row);
             }
         }
@@ -214,15 +214,15 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                     row.Group = "NGUỒN CAD / ĐO ĐẠC";
                     row.IsReadOnly = true;
                     row.CanReset = false;
-                    row.Value = current;
+                    row.Value = ToDisplayValue(key, current);
                 }
                 else
                 {
                     row.Group = "INSTANCE • " + GroupFor(key);
                     row.CanReset = hasInstance && !string.Equals(current, familyValue, StringComparison.Ordinal);
-                    row.Value = current;
-                    row.Apply = value => ApplyInstanceProperty(element, family, key, unit, row, value);
-                    row.Reset = () => row.Value = familyValue;
+                    row.Value = ToDisplayValue(key, current);
+                    row.Apply = value => ToDisplayValue(key, ApplyInstanceProperty(element, family, key, unit, row, value));
+                    row.Reset = () => row.Value = ToDisplayValue(key, familyValue);
                 }
                 Properties.Add(row);
             }
@@ -235,7 +235,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 sourceRow.Group = "NGUỒN CAD / ĐO ĐẠC";
                 sourceRow.IsReadOnly = true;
                 sourceRow.CanReset = false;
-                sourceRow.Value = sourceValue;
+                sourceRow.Value = ToDisplayValue(key, sourceValue);
                 Properties.Add(sourceRow);
             }
         }
@@ -322,8 +322,9 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             element.MarkDirty(ElementDirtyFlags.All);
             _project?.Touch();
             row.CanReset = !string.Equals(next, familyValue, StringComparison.Ordinal);
+            var displayValue = ToDisplayValue(key, next);
             Status = row.CanReset
-                ? "Instance override: " + DisplayNameFor(key) + " = " + next
+                ? "Instance override: " + DisplayNameFor(key) + " = " + displayValue + (unit.Length > 0 ? " " + unit : string.Empty)
                 : "Đã đưa " + DisplayNameFor(key) + " về giá trị Family.";
             return next;
         }
@@ -350,6 +351,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                     valid = false;
                     return previousValue;
                 }
+                if (UsesMillimeterPresentation(key)) number /= 1000d;
                 if (RequiresPositiveNumber(key) && !(number > 0d))
                 {
                     Status = DisplayNameFor(key) + ": phải lớn hơn 0; đã giữ giá trị cũ.";
@@ -395,6 +397,22 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             return !double.IsNaN(number) && !double.IsInfinity(number);
         }
 
+        private static string ToDisplayValue(string key, string? storageValue)
+        {
+            var raw = (storageValue ?? string.Empty).Trim();
+            if (!UsesMillimeterPresentation(key) || !TryFiniteNumber(raw, out var value)) return raw;
+            return (value * 1000d).ToString("0.###############", CultureInfo.InvariantCulture);
+        }
+
+        private static bool UsesMillimeterPresentation(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            if (key.EndsWith("Mm", StringComparison.OrdinalIgnoreCase) ||
+                key.EndsWith("M2", StringComparison.OrdinalIgnoreCase) ||
+                key.EndsWith("M3", StringComparison.OrdinalIgnoreCase)) return false;
+            return key.EndsWith("M", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static bool TryBoolean(string value, out bool boolean)
         {
             var text = (value ?? string.Empty).Trim();
@@ -407,6 +425,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
         private static bool IsBooleanProperty(string key, string? current)
         {
+            if (IsNumericProperty(key)) return false;
             if (TryBoolean(current ?? string.Empty, out _)) return true;
             if (string.IsNullOrWhiteSpace(key)) return false;
             return key.StartsWith("Is", StringComparison.OrdinalIgnoreCase) ||
@@ -526,7 +545,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             if (key.EndsWith("Mm", StringComparison.OrdinalIgnoreCase)) return "mm";
             if (key.EndsWith("M2", StringComparison.OrdinalIgnoreCase)) return "m²";
             if (key.EndsWith("M3", StringComparison.OrdinalIgnoreCase)) return "m³";
-            if (key.EndsWith("M", StringComparison.OrdinalIgnoreCase)) return "m";
+            if (UsesMillimeterPresentation(key)) return "mm";
             if (key.EndsWith("Deg", StringComparison.OrdinalIgnoreCase)) return "°";
             if (key.EndsWith("Percent", StringComparison.OrdinalIgnoreCase)) return "%";
             return string.Empty;

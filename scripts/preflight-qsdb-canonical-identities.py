@@ -10,7 +10,7 @@ errors = []
 
 for path in (STORE, SMOKE, REG):
     if not path.is_file():
-        errors.append("missing QSDB canonical identity contract file: " + str(path.relative_to(ROOT)))
+        errors.append("missing QSDB canonical persistence contract file: " + str(path.relative_to(ROOT)))
 
 if STORE.is_file():
     text = STORE.read_text(encoding="utf-8")
@@ -21,6 +21,10 @@ if STORE.is_file():
         "foreach (var key in values.Keys) ValidateCanonicalKey",
         "must not contain leading/trailing whitespace",
         "project.AuditEvents.Any(x => x == null)",
+        "ValidateUtcTimestamp(project.UpdatedUtc",
+        "ValidateUtcTimestamp(element.UpdatedUtc",
+        "ValidateUtcTimestamp(audit.Utc",
+        "value.Kind != DateTimeKind.Utc",
     ):
         if token not in text:
             errors.append("QsdbProjectStore.cs missing canonical persistence token: " + token)
@@ -32,6 +36,9 @@ if SMOKE.is_file():
         "PaddedQuantityNameFailsBeforePersistence",
         "NonCanonicalHandleAndDependencyFailBeforePersistence",
         "NullAuditEventFailsClosed",
+        "NonUtcTimestampFailsBeforePersistence",
+        "DateTimeKind.Unspecified",
+        "DateTimeKind.Local",
         "if (File.Exists(path)) throw new Exception",
     ):
         if token not in text:
@@ -46,4 +53,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QSDB Save rejects non-canonical identity keys/handles/dependencies before persistence instead of relying on Load-time trim/drop normalization.")
+print("PASS: QSDB Save rejects non-canonical identity keys/handles/dependencies and non-UTC persisted timestamps before serialization can silently normalize them.")

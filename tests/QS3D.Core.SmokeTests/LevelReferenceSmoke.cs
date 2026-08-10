@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             LegacyPlacementRemainsSourceRelative();
             BottomAndTopLevelsResolveAbsolutePlacement();
             TopAssignmentRequiresBottomAndValidRange();
+            DuplicateLevelIdsFailClosedDuringPlacement();
             FloorMutationTracksAllReferenceKinds();
             HealthRejectsBrokenLevelReferences();
             HealthBlocksValidLevelReferencesUntilNativeQualification();
@@ -67,6 +68,15 @@ namespace QS3D.Core.SmokeTests
             Equal(1, ProjectFloorService.AssignBottomLevel(project, "L2", new[] { invalidRange }));
             Throws<InvalidOperationException>(() => ProjectFloorService.AssignTopLevel(project, "L1", new[] { invalidRange }));
             True(!invalidRange.Properties.ContainsKey(ProjectFloorService.TopLevelIdKey));
+        }
+
+        private static void DuplicateLevelIdsFailClosedDuringPlacement()
+        {
+            var project = NewProject();
+            project.Floors.Add(new FloorDefinition("l1", "Ambiguous Level 1", 30d));
+            var element = NewElement(project, "duplicate-level");
+            element.Properties[ProjectFloorService.BottomLevelIdKey] = "L1";
+            Throws<InvalidOperationException>(() => ElementVerticalPlacementService.Resolve(project, element, 0d, 3d, 0d));
         }
 
         private static void FloorMutationTracksAllReferenceKinds()

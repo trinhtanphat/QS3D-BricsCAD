@@ -1,0 +1,104 @@
+using System;
+using QS3D.Core.Domain;
+using QS3D.Core.Services;
+
+namespace QS3D.Core.SmokeTests
+{
+    internal static class ProjectFamilyAssignmentAtomicitySmoke
+    {
+        public static void Run()
+        {
+            DuplicatePreviousFamilyBlocksWholeAssignmentBatch();
+            DuplicatePreviousFamilyBlocksBulkEditBatch();
+            CorruptProjectElementListBlocksPropertyPropagationBeforeMutation();
+        }
+
+        private static void DuplicatePreviousFamilyBlocksWholeAssignmentBatch()
+        {
+            var setup = CreateDuplicatePreviousFamilyProject("family-atomic");
+            var beforeUpdated = setup.Project.UpdatedUtc;
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(setup.Project, setup.Target.Id, new[] { setup.First, setup.Second }));
+            AssertUnchanged(setup, beforeUpdated, "ProjectFamilyService.Assign");
+        }
+
+        private static void DuplicatePreviousFamilyBlocksBulkEditBatch()
+        {
+            var setup = CreateDuplicatePreviousFamilyProject("bulk-family-atomic");
+            var beforeUpdated = setup.Project.UpdatedUtc;
+
+            Throws<InvalidOperationException>(() => new BulkEditService().AssignFamily(setup.Project, new[] { setup.First.Id, setup.Second.Id }, setup.Target.Id));
+            AssertUnchanged(setup, beforeUpdated, "BulkEditService.AssignFamily");
+        }
+
+        private static void CorruptProjectElementListBlocksPropertyPropagationBeforeMutation()
+        {
+            var project = new ProjectState("family-property-atomic", "Family property atomicity");
+            var family = new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall);
+            family.Properties["WidthM"] = "0.2";
+            project.Families.Add(family);
+            project.Elements.Add(null!);
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.SetProperty(project, family.Id, "WidthM", "0.3"));
+            Equal("0.2", family.Properties["WidthM"], "Family property mutated before corrupt member list validation completed.");
+        }
+
+        private static Setup CreateDuplicatePreviousFamilyProject(string id)
+        {
+            var project = new ProjectState(id, "Family atomicity");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            target.Properties["ThicknessM"] = "0.3";
+            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.ArchitecturalWall);
+            previous.Properties["ThicknessM"] = "0.2";
+            project.Families.Add(target);
+            project.Families.Add(previous);
+            project.Families.Add(new ProjectFamily("DUP", "Duplicate A", ElementCategory.ArchitecturalWall));
+            project.Families.Add(new ProjectFamily("dup", "Duplicate B", ElementCategory.ArchitecturalWall));
+
+            var first = new ProjectElement("E1", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
+            first.Properties["ThicknessM"] = "0.2";
+            var second = new ProjectElement("E2", ElementCategory.ArchitecturalWall, "DUP", string.Empty, string.Empty);
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+            return new Setup(project, target, previous, first, second);
+        }
+
+        private static void AssertUnchanged(Setup setup, DateTime beforeUpdated, string operation)
+        {
+            Equal(setup.Previous.Id, setup.First.FamilyId, operation + " changed the first element before later duplicate-family validation failed.");
+            Equal("0.2", setup.First.Properties["ThicknessM"], operation + " changed inherited properties before whole-batch validation completed.");
+            Equal("DUP", setup.Second.FamilyId, operation + " changed the second element despite failed batch.");
+            if (setup.Project.UpdatedUtc != beforeUpdated) throw new Exception(operation + " touched project timestamp on a rejected batch.");
+        }
+
+        private static void Equal(string expected, string actual, string message)
+        {
+            if (!string.Equals(expected, actual, StringComparison.Ordinal)) throw new Exception(message + " Expected " + expected + ", got " + actual + ".");
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            try { action(); }
+            catch (T) { return; }
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private sealed class Setup
+        {
+            public Setup(ProjectState project, ProjectFamily target, ProjectFamily previous, ProjectElement first, ProjectElement second)
+            {
+                Project = project;
+                Target = target;
+                Previous = previous;
+                First = first;
+                Second = second;
+            }
+
+            public ProjectState Project { get; }
+            public ProjectFamily Target { get; }
+            public ProjectFamily Previous { get; }
+            public ProjectElement First { get; }
+            public ProjectElement Second { get; }
+        }
+    }
+}

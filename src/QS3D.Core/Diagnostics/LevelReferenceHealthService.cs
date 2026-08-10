@@ -12,14 +12,23 @@ namespace QS3D.Core.Diagnostics
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
             var floors = new Dictionary<string, FloorDefinition>(StringComparer.OrdinalIgnoreCase);
+            var duplicateFloorIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var floor in project.Floors)
             {
                 if (floor == null || string.IsNullOrWhiteSpace(floor.Id)) continue;
-                if (!floors.ContainsKey(floor.Id)) floors[floor.Id] = floor;
+                var id = floor.Id.Trim();
+                if (!floors.ContainsKey(id))
+                {
+                    floors[id] = floor;
+                    continue;
+                }
+                if (duplicateFloorIds.Add(id))
+                    issues.Add(new ModelHealthIssue("DUPLICATE_LEVEL_ID", HealthSeverity.Error, "Trùng mã Floor/Level: " + id + ".", id));
             }
 
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 var issueCountBefore = issues.Count;
                 var bottomId = Property(element, ProjectFloorService.BottomLevelIdKey);
                 var topId = Property(element, ProjectFloorService.TopLevelIdKey);
@@ -38,11 +47,14 @@ namespace QS3D.Core.Diagnostics
                 }
 
                 FloorDefinition? bottom = null;
-                if (!floors.TryGetValue(bottomId, out var resolvedBottom))
+                if (duplicateFloorIds.Contains(bottomId))
+                {
+                    issues.Add(new ModelHealthIssue("BOTTOM_LEVEL_REFERENCE_AMBIGUOUS", HealthSeverity.Error, "BottomLevelId trỏ tới mã Floor/Level bị trùng: " + bottomId + ".", element.Id));
+                }
+                else if (!floors.TryGetValue(bottomId, out bottom))
                 {
                     issues.Add(new ModelHealthIssue("BOTTOM_LEVEL_REFERENCE_INVALID", HealthSeverity.Error, "BottomLevelId không trỏ tới Level/Tầng còn tồn tại: " + bottomId, element.Id));
                 }
-                else bottom = resolvedBottom;
 
                 var bottomOffsetValid = TryOffset(element, ProjectFloorService.BottomLevelOffsetKey, out var bottomOffset);
                 if (!bottomOffsetValid)
@@ -57,11 +69,14 @@ namespace QS3D.Core.Diagnostics
                 }
 
                 FloorDefinition? top = null;
-                if (!floors.TryGetValue(topId, out var resolvedTop))
+                if (duplicateFloorIds.Contains(topId))
+                {
+                    issues.Add(new ModelHealthIssue("TOP_LEVEL_REFERENCE_AMBIGUOUS", HealthSeverity.Error, "TopLevelId trỏ tới mã Floor/Level bị trùng: " + topId + ".", element.Id));
+                }
+                else if (!floors.TryGetValue(topId, out top))
                 {
                     issues.Add(new ModelHealthIssue("TOP_LEVEL_REFERENCE_INVALID", HealthSeverity.Error, "TopLevelId không trỏ tới Level/Tầng còn tồn tại: " + topId, element.Id));
                 }
-                else top = resolvedTop;
 
                 var topOffsetValid = TryOffset(element, ProjectFloorService.TopLevelOffsetKey, out var topOffset);
                 if (!topOffsetValid)

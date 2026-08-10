@@ -64,8 +64,8 @@ if revision.is_file() and "EnsureActive();\n                _locate(row);" not i
     errors.append("Revision Locate must verify its source DWG before invoking the CAD callback")
 
 health = windows["Model Health"]
-if health.is_file() and "EnsureActive();\n                _locate(issue);" not in health.read_text(encoding="utf-8"):
-    errors.append("Model Health Locate must verify its source DWG before invoking the CAD callback")
+if health.is_file() and "EnsureActiveAndCurrent();\n                _locate(issue);" not in health.read_text(encoding="utf-8"):
+    errors.append("Model Health Locate must verify its source DWG and current project snapshot before invoking the CAD callback")
 
 print("QS3D modeless review-window preflight")
 if errors:

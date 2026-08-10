@@ -39,12 +39,15 @@ namespace QS3D.Core.SmokeTests
             CurtainFrameOpeningHealthSmoke.Run();
             BomReleaseGuardSmoke.Run();
             LevelReferenceSmoke.Run();
+            ModelHealthIdentityAmbiguitySmoke.Run();
             GridNamingSmoke.Run();
             GridNamingHealthSmoke.Run();
             GridIntersectionPlannerSmoke.Run();
             GridSpatialOrderingSmoke.Run();
             GridSystemPlannerSmoke.Run();
             PolygonScanlineClipperSmoke.Run();
+            PolygonRegionScanlineSmoke.Run();
+            PolygonalSlabMeshHolesSmoke.Run();
             BulgedPolygonFootprintSmoke.Run();
             SemanticTagRendererSmoke.Run();
             GeneratedSemanticTagHealthSmoke.Run();
@@ -59,6 +62,7 @@ namespace QS3D.Core.SmokeTests
             BulkEditCanonicalizationSmoke.Run();
             RegenerationAtomicitySmoke.Run();
             HostLinkCanonicalizationSmoke.Run();
+            ProjectFamilyAssignmentAtomicitySmoke.Run();
             ProjectSessionAuditSmoke.Run();
             ProjectInterchangeValidationSmoke.Run();
             QsdbSaveAtomicitySmoke.Run();

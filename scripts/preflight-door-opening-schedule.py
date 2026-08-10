@@ -45,7 +45,7 @@ checks = {
         "private readonly Document _document", "DoorOpeningScheduleWindow(Document document)", "DoorOpeningScheduleBuilder.Build(project)",
         "DoorOpeningXlsxExporter.Export", "RegenerationEngine", "SearchText.Contains(query)", "Distinct(StringComparer.OrdinalIgnoreCase)",
         "DrawingLabel(_document)", "EnsureActive", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
-        'EnsureActive("làm mới Door/Opening Schedule")', 'EnsureActive("xuất Door/Opening XLSX")',
+        'EnsureActive("đọc Door/Opening Schedule hiện hành")', 'EnsureActive("xuất Door/Opening XLSX")',
         "QuantityReportMath.AddCount", "QuantityReportMath.Add", '"Door/Opening visible area"',
     ],
     required[6]: [

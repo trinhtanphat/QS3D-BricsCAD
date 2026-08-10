@@ -68,17 +68,16 @@ namespace QS3D.Core.Documentation
             if (columns == null) throw new ArgumentNullException(nameof(columns));
 
             var normalizedTitle = Required(title, nameof(title), MaxTitleLength);
-            var ids = orderedElementIds
+            var rawIds = MaterializeBounded(orderedElementIds, MaxRows, "rows");
+            var ids = rawIds
                 .Select((value, index) => Required(value, "orderedElementIds[" + index + "]", MaxElementIdLength))
                 .ToList();
             if (ids.Count == 0) throw new InvalidOperationException("Documentation table requires at least one semantic element.");
-            if (ids.Count > MaxRows) throw new InvalidOperationException("Documentation table supports at most " + MaxRows + " rows.");
             if (ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count)
                 throw new InvalidOperationException("Documentation table input contains duplicate semantic element ids.");
 
-            var columnList = columns.ToList();
+            var columnList = MaterializeBounded(columns, MaxColumns, "columns");
             if (columnList.Count == 0) throw new InvalidOperationException("Documentation table requires at least one column.");
-            if (columnList.Count > MaxColumns) throw new InvalidOperationException("Documentation table supports at most " + MaxColumns + " columns.");
 
             var normalizedColumns = new List<SemanticDocumentationColumn>(columnList.Count);
             var headers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -108,6 +107,21 @@ namespace QS3D.Core.Documentation
                 normalizedTitle,
                 normalizedColumns.Select(x => x.Header).ToArray(),
                 rows);
+        }
+
+        private static List<T> MaterializeBounded<T>(IEnumerable<T> source, int maxCount, string label)
+        {
+            var result = new List<T>(Math.Min(maxCount, 256));
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= maxCount)
+                        throw new InvalidOperationException("Documentation table supports at most " + maxCount + " " + label + ".");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result;
         }
 
         private static string Required(string? value, string name, int maxLength)

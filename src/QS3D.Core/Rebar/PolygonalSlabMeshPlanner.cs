@@ -8,6 +8,7 @@ namespace QS3D.Core.Rebar
     public sealed class PolygonalSlabMeshInput
     {
         public IReadOnlyList<Point2> FootprintM { get; set; } = Array.Empty<Point2>();
+        public IReadOnlyList<IReadOnlyList<Point2>> HoleFootprintsM { get; set; } = Array.Empty<IReadOnlyList<Point2>>();
         public double ThicknessM { get; set; }
         public double CoverM { get; set; }
         public double XDiameterMm { get; set; }
@@ -69,7 +70,9 @@ namespace QS3D.Core.Rebar
         public static PolygonalSlabMeshLayout Plan(PolygonalSlabMeshInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
-            var footprint = PolygonScanlineClipper.NormalizeAndValidate(input.FootprintM);
+            if (input.HoleFootprintsM == null) throw new ArgumentNullException(nameof(input.HoleFootprintsM));
+            var region = PolygonRegionScanlineClipper.NormalizeAndValidate(input.FootprintM, input.HoleFootprintsM);
+            var footprint = region.Outer;
             var thickness = RebarMath.Positive(input.ThicknessM, nameof(input.ThicknessM));
             var cover = RebarMath.NonNegative(input.CoverM, nameof(input.CoverM));
             var xDiameter = RebarMath.Positive(input.XDiameterMm, nameof(input.XDiameterMm));
@@ -108,10 +111,10 @@ namespace QS3D.Core.Rebar
             var yClearance = RebarMath.Add(cover, yRadius, "polygonal slab Y edge clearance");
             var elevations = ResolveElevations(thickness, cover, xRadius, yRadius, input.XClosestToFace, input.IncludeBottom, input.IncludeTop);
 
-            var xSegments = BuildSegments(footprint, PolygonScanAxis.Horizontal, centerY, xDistribution.OffsetsM, xClearance);
-            var ySegments = BuildSegments(footprint, PolygonScanAxis.Vertical, centerX, yDistribution.OffsetsM, yClearance);
-            if (xSegments.Count == 0) throw new InvalidOperationException("Polygonal slab footprint leaves no cover-compliant X rebar segments.");
-            if (ySegments.Count == 0) throw new InvalidOperationException("Polygonal slab footprint leaves no cover-compliant Y rebar segments.");
+            var xSegments = BuildSegments(region, PolygonScanAxis.Horizontal, centerY, xDistribution.OffsetsM, xClearance);
+            var ySegments = BuildSegments(region, PolygonScanAxis.Vertical, centerX, yDistribution.OffsetsM, yClearance);
+            if (xSegments.Count == 0) throw new InvalidOperationException("Polygonal slab region leaves no cover-compliant X rebar segments.");
+            if (ySegments.Count == 0) throw new InvalidOperationException("Polygonal slab region leaves no cover-compliant Y rebar segments.");
 
             var faceCount = (input.IncludeBottom ? 1L : 0L) + (input.IncludeTop ? 1L : 0L);
             var projected = faceCount * ((long)xSegments.Count + ySegments.Count);
@@ -127,7 +130,7 @@ namespace QS3D.Core.Rebar
         }
 
         private static List<PolygonScanSegment> BuildSegments(
-            IReadOnlyList<Point2> footprint,
+            PolygonRegion2 region,
             PolygonScanAxis axis,
             double centerAcross,
             IReadOnlyList<double> offsets,
@@ -137,10 +140,10 @@ namespace QS3D.Core.Rebar
             foreach (var offset in offsets)
             {
                 var coordinate = CheckedAdd(centerAcross, offset, "polygonal slab scanline coordinate");
-                var clipped = PolygonScanlineClipper.Clip(footprint, axis, coordinate);
+                var clipped = PolygonRegionScanlineClipper.Clip(region, axis, coordinate);
                 foreach (var interior in clipped)
                 {
-                    foreach (var safe in SubtractBoundaryClearance(footprint, axis, coordinate, interior, clearance))
+                    foreach (var safe in SubtractBoundaryClearance(region.BoundaryLoops, axis, coordinate, interior, clearance))
                     {
                         result.Add(safe);
                         if (result.Count > MaxBars) throw new InvalidOperationException("Polygonal slab mesh exceeds the supported " + MaxBars + " bar limit.");
@@ -151,20 +154,23 @@ namespace QS3D.Core.Rebar
         }
 
         private static IReadOnlyList<PolygonScanSegment> SubtractBoundaryClearance(
-            IReadOnlyList<Point2> footprint,
+            IReadOnlyList<IReadOnlyList<Point2>> boundaryLoops,
             PolygonScanAxis axis,
             double coordinate,
             PolygonScanSegment interior,
             double clearance)
         {
             var forbidden = new List<Interval>();
-            for (var index = 0; index < footprint.Count; index++)
+            foreach (var loop in boundaryLoops)
             {
-                var a = footprint[index];
-                var b = footprint[(index + 1) % footprint.Count];
-                AppendCapsuleIntersection(forbidden, axis, coordinate, a, b, clearance);
-                if (forbidden.Count > MaxForbiddenIntervalsPerScanline)
-                    throw new InvalidOperationException("Polygonal slab boundary clearance exceeds the supported interval limit.");
+                for (var index = 0; index < loop.Count; index++)
+                {
+                    var a = loop[index];
+                    var b = loop[(index + 1) % loop.Count];
+                    AppendCapsuleIntersection(forbidden, axis, coordinate, a, b, clearance);
+                    if (forbidden.Count > MaxForbiddenIntervalsPerScanline)
+                        throw new InvalidOperationException("Polygonal slab boundary clearance exceeds the supported interval limit.");
+                }
             }
 
             if (forbidden.Count == 0) return new[] { interior };

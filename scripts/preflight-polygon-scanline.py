@@ -52,15 +52,15 @@ for token in [
 
 for token in [
     "PolygonalSlabMeshPlanner",
-    "PolygonScanlineClipper.NormalizeAndValidate",
+    "PolygonRegionScanlineClipper.NormalizeAndValidate",
     "SubtractBoundaryClearance",
     "AppendCapsuleIntersection",
     "RebarMath.Add(cover, xRadius",
     "RebarMath.Add(cover, yRadius",
     "MaxBars = 8192",
     "MaxForbiddenIntervalsPerScanline = 16384",
-    "Polygonal slab footprint leaves no cover-compliant X rebar segments",
-    "Polygonal slab footprint leaves no cover-compliant Y rebar segments",
+    "Polygonal slab region leaves no cover-compliant X rebar segments",
+    "Polygonal slab region leaves no cover-compliant Y rebar segments",
 ]:
     require(mesh, token, "polygon mesh planner")
 
