@@ -57,6 +57,19 @@ namespace QS3D.BricsCAD.V25.Cad
             return Finite(maximum * Math.Sqrt(1d + ratio * ratio), label);
         }
 
+        public static double Hypot3(double first, double second, double third, string label)
+        {
+            first = Math.Abs(Finite(first, label + "/x"));
+            second = Math.Abs(Finite(second, label + "/y"));
+            third = Math.Abs(Finite(third, label + "/z"));
+            var maximum = Math.Max(first, Math.Max(second, third));
+            if (maximum <= 0d) return 0d;
+            var x = first / maximum;
+            var y = second / maximum;
+            var z = third / maximum;
+            return Finite(maximum * Math.Sqrt(x * x + y * y + z * z), label);
+        }
+
         public static double Midpoint(double first, double second, string label)
         {
             first = Finite(first, label + "/first");
@@ -69,6 +82,20 @@ namespace QS3D.BricsCAD.V25.Cad
             first = Finite(first, label + "/first");
             second = Finite(second, label + "/second");
             return Finite(first + second, label);
+        }
+
+        public static double Subtract(double first, double second, string label)
+        {
+            first = Finite(first, label + "/first");
+            second = Finite(second, label + "/second");
+            return Finite(first - second, label);
+        }
+
+        public static double Multiply(double first, double second, string label)
+        {
+            first = Finite(first, label + "/first");
+            second = Finite(second, label + "/second");
+            return Finite(first * second, label);
         }
 
         private static double ParseFinite(string text, string label)
