@@ -128,29 +128,15 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Không tạo được solid từ source đang chọn. Tường KT cần LINE hoặc open POLYLINE; các cấu kiện khác phải đúng source profile được builder hỗ trợ.");
 
                 project.Touch();
-                PaletteCoordinator.RefreshProject();
-                document.Editor.Regen();
 
-                // Prefer selecting the newly generated result, like BLT. A subsequent QS3DBUILD3D
-                // still resolves that generated selection back to the stable source handles above.
-                var generatedHandles = selectedElements
-                    .Select(x => x.Properties.TryGetValue("GeneratedSolidHandle", out var handle) ? handle : string.Empty)
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                if (generatedHandles.Count > 0) CadHandleService.Select(document, generatedHandles);
-                else CadHandleService.Select(document, sourceHandles);
-
-                var status = "Vẽ/Cập nhật 3D: " + built + " solid • " + selectedElements.Count + " semantic • " + category + " • regenerate " + regenerated + ".";
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
-                document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
+                // At this point native CAD + semantic ownership already committed successfully.
+                // Palette/selection/regen/view dispatch are convenience UI and must never turn a
+                // completed rebuild into a false QS3DBUILD3D failure report.
+                FinalizeUi(document, selectedElements, sourceHandles, built, regenerated, category);
             }
             catch (Exception ex)
             {
-                var message = "QS3DBUILD3D lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                Report(document, "QS3DBUILD3D lỗi: " + ex.Message);
             }
         }
 
@@ -200,6 +186,11 @@ namespace QS3D.BricsCAD.V25
                 error = "QS3DBUILD3D: Tường KT selection chứa source type chưa hỗ trợ native build: " + string.Join(", ", unsupportedTypes) + ".";
                 return false;
             }
+            if (sourceTypes.Count == 0)
+            {
+                error = "QS3DBUILD3D: không xác định được source type LINE/open POLYLINE cho wall selection. Đã dừng trước khi native build; chạy Health/Locate và kiểm tra source handle.";
+                return false;
+            }
             if (sourceTypes.Count > 1)
             {
                 error = "QS3DBUILD3D: không build chung LINE và open POLYLINE trong một lần vì hai builder có transaction riêng. Chọn một source type mỗi lần để giữ atomic/fail-closed.";
@@ -228,6 +219,40 @@ namespace QS3D.BricsCAD.V25
                 : 0;
         }
 
+        private static void FinalizeUi(
+            Document document,
+            IReadOnlyCollection<ProjectElement> selectedElements,
+            IReadOnlyCollection<string> sourceHandles,
+            int built,
+            int regenerated,
+            ElementCategory category)
+        {
+            var status = "Vẽ/Cập nhật 3D: " + built + " solid • " + selectedElements.Count + " semantic • " + category + " • regenerate " + regenerated + ".";
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                document.Editor.Regen();
+
+                // Prefer selecting the newly generated result, like BLT. A subsequent QS3DBUILD3D
+                // still resolves that generated selection back to the stable source handles above.
+                var generatedHandles = selectedElements
+                    .Select(x => x.Properties.TryGetValue("GeneratedSolidHandle", out var handle) ? handle : string.Empty)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (generatedHandles.Count > 0) CadHandleService.Select(document, generatedHandles);
+                else CadHandleService.Select(document, sourceHandles);
+
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\nQS3D " + status);
+                document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
+            }
+            catch (Exception ex)
+            {
+                TryWriteMessage(document, "\nQS3D " + status + " UI sync warning: " + ex.Message);
+            }
+        }
+
         private static bool IsWallCategory(ElementCategory category) =>
             category == ElementCategory.ArchitecturalWall ||
             category == ElementCategory.GlassWall ||
@@ -236,10 +261,19 @@ namespace QS3D.BricsCAD.V25
         private static bool IsNativeBuildCategory(ElementCategory category) =>
             IsWallCategory(category) || StructuralSolidBuilder.Supports(category);
 
-        private static void Write(Document document, string message)
+        private static void Write(Document document, string message) => Report(document, message);
+
+        private static void Report(Document document, string message)
         {
-            PaletteCoordinator.SetStatus(message);
-            document.Editor.WriteMessage("\nQS3D " + message);
+            try { PaletteCoordinator.SetStatus(message); }
+            catch { }
+            TryWriteMessage(document, "\nQS3D " + message);
+        }
+
+        private static void TryWriteMessage(Document document, string message)
+        {
+            try { document.Editor.WriteMessage(message); }
+            catch { }
         }
     }
 }
