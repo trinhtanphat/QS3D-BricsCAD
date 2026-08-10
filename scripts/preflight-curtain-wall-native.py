@@ -20,6 +20,7 @@ files = {
     "ui": ROOT / "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml",
     "ui_code": ROOT / "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml.cs",
     "defaults": ROOT / "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
+    "smoke": ROOT / "tests/QS3D.Core.SmokeTests/GeneratedCurtainFrameHealthSmoke.cs",
 }
 for path in files.values():
     if not path.is_file(): errors.append("missing native curtain file: " + str(path.relative_to(ROOT)))
@@ -29,17 +30,20 @@ if files["ui"].is_file():
     except ET.ParseError as exc: errors.append("CurtainWallWindow.xaml is not well-formed: " + str(exc))
 
 checks = {
-    "detail": ["VerticalFrames", "HorizontalFrames", "MaxDetailSolids", "PanelAreaM2"],
+    "detail": ["VerticalFrames", "HorizontalFrames", "MaxDetailSolids", "projectedDetailSolids", "layout.PanelCount", "solidCount != projectedDetailSolids"],
     "builder": [
         'HandlesKey = "GeneratedCurtainFrameHandles"', 'Mode = "LineFrameOverlay"',
         "CurtainWallDetailPlanner.Plan", "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192",
         "GeneratedCurtainFrameOwnershipGuard.Build", "ownership.EnsureOwned", "CurtainFrameDepthM",
         "GeneratedCurtainFrameColumns", "GeneratedCurtainFrameRows", "GeneratedCurtainFrameSourceLengthM",
-        "GeneratedCurtainFrameHeightM", "CreateBox", "GlassWall", "LINE nằm ngang",
+        "GeneratedCurtainFrameHeightM", "GeneratedCurtainFrameConfigFingerprint", "CurtainWallFrameFingerprint.Compute",
+        "CreateBox", "GlassWall", "LINE nằm ngang", "document.Editor.GetSelection()", "document.Editor.SetImpliedSelection",
+        "CadGeometryGuard.Subtract", "CadGeometryGuard.Multiply", "CadGeometryGuard.Add", "CadGeometryGuard.Hypot",
     ],
     "owner": [
         'GeneratedCurtainFrameHandles', 'GeneratedSolidHandle', 'PhysicalOpeningCutSolidHandle',
-        'GeneratedSlabMeshHandles', 'GeneratedWallMeshHandles',
+        'GeneratedRebarHandles', 'GeneratedShapeRebarHandles', 'GeneratedTieRebarHandles',
+        'GeneratedBeamStirrupHandles', 'GeneratedSlabMeshHandles', 'GeneratedWallMeshHandles',
     ],
     "invalidator": [
         'GeneratedCurtainFrameHandles', 'GeneratedCurtainFrameCount', 'GeneratedCurtainFrameMode',
@@ -49,6 +53,9 @@ checks = {
         'GeneratedCurtainFrameHandles', 'CURTAIN_FRAME_GENERATED_SOLID_MISSING',
         'CURTAIN_FRAME_GRID_COUNT_MISMATCH', 'GeneratedCurtainFrameDepthM',
         'GeneratedCurtainFrameSourceLengthM', 'GeneratedCurtainFrameHeightM', 'ElementCategory.GlassWall',
+        'GeneratedCurtainFrameConfigFingerprint', 'CURTAIN_FRAME_CONFIG_STALE', 'CurtainWallFrameFingerprint.Compute',
+        'class OwnershipIndex', 'HashSet<string> Conflicts', 'ownership.Conflicts.Contains(handle)',
+        'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT', 'CURTAIN_FRAME_GENERATED_STALE',
     ],
     "frame_command": ['CommandMethod("QS3DCURTAINFRAMES3D"', 'CurtainWallFrameSolidBuilder.BuildSelectedLineWalls'],
     "health_command": ['CommandMethod("QS3DCURTAINFRAMEHEALTH"', 'GeneratedCurtainFrameHealthService().Inspect'],
@@ -59,6 +66,7 @@ checks = {
     "ui": ['x:Name="FrameDepthBox"', 'Tag="QS3DCURTAINFRAMES3D"', 'Tag="QS3DCURTAINFRAMEHEALTH"'],
     "ui_code": ['CurtainFrameDepthM', 'FrameDepthBox.Text', 'yield return FrameDepthBox'],
     "defaults": ['CurtainFrameDepthM'],
+    "smoke": ['ModuleInitializer', 'LaterGeneratedOwnerStillConflictsWithCurtainFrames', 'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT'],
 }
 for key, needles in checks.items():
     path = files[key]
@@ -66,6 +74,13 @@ for key, needles in checks.items():
     text = path.read_text(encoding="utf-8")
     for needle in needles:
         if needle not in text: errors.append(str(path.relative_to(ROOT)) + " missing curtain native token: " + needle)
+
+if files["detail"].is_file():
+    text = files["detail"].read_text(encoding="utf-8")
+    projected = text.find("var projectedDetailSolids")
+    build_panels = text.find("BuildPanelCells(verticalFrames, horizontalFrames)")
+    if projected < 0 or build_panels < 0 or projected > build_panels:
+        errors.append("Curtain detail native-solid budget must be checked before panel-list allocation.")
 
 owners = {"QS3DCURTAIN3D": [], "QS3DCURTAINFRAMES3D": [], "QS3DCURTAINFRAMEHEALTH": []}
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
@@ -86,4 +101,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: GlassWall LINE keeps one backing host for opening booleans and adds guarded dedicated curtain-frame overlays with Family depth, ownership, invalidation and health. Curved frame overlay remains intentionally unsupported/runtime-gated.")
+print("PASS: GlassWall keeps its backing host and adds bounded, finite, selectable curtain-frame overlays with fingerprint stale detection, order-independent ownership health, invalidation and UI/build command wiring. Curved frame overlay remains intentionally unsupported/runtime-gated.")
