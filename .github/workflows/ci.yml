@@ -24,6 +24,8 @@ jobs:
         run: python scripts/preflight-geometry-completion.py
       - name: Direct room curve-source guard
         run: python scripts/preflight-room-curve-sources.py
+      - name: Wall junction source guard
+        run: python scripts/preflight-wall-junctions.py
       - name: Validate release PowerShell syntax
         shell: pwsh
         run: |
