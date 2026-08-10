@@ -25,6 +25,10 @@ if runner.is_file():
         "tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj",
         "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
         "BRICSCAD_V25_DIR",
+        "test-wpf-theme-runtime.ps1",
+        "test-wpf-palettes-runtime.ps1",
+        "WPF theme resource smoke",
+        "WPF Workspace / RightPanel layout smoke",
         "test-bricscad-v25-runtime.ps1",
         "qualification.json",
         "runtimeSkipped",
@@ -76,4 +80,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: local V25 work is exact-SHA/clean-tree gated, runs source/Core/adapter/runtime checks, records local evidence outside Git, and hands interactive/private-DWG scenarios to local-capable agents without weakening manual-only CI policy.")
+print("PASS: local V25 work is exact-SHA/clean-tree gated, runs source/Core/adapter/WPF/runtime checks, records local evidence outside Git, and hands interactive/private-DWG scenarios to local-capable agents without weakening manual-only CI policy.")
