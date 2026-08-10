@@ -14,6 +14,7 @@ required = {
         "Locked product form: BricsCAD plugin",
         "docs/PRODUCT-BOUNDARY.md",
         "Do not reinterpret",
+        "docs/AGENT-HANDOFF-CURRENT-2026-08-10.md",
     ],
     "docs/PRODUCT-BOUNDARY.md": [
         "QS3D is intentionally a **BricsCAD V25 x64 .NET plugin**",
@@ -44,6 +45,23 @@ required = {
         "Product-form clarification",
         "BricsCAD V25 plugin",
         "workflow/UX only",
+    ],
+    "docs/DIRECT-DRAW-WORKFLOW.md": [
+        "QS3D must remain a **BricsCAD V25 x64 .NET plugin**",
+        "not a request to create a standalone",
+    ],
+    "docs/DIRECT-DRAW-P0-IMPLEMENTATION.md": [
+        "QS3D remains a **BricsCAD V25 x64 .NET plugin**",
+        "does not introduce a standalone CAD engine",
+    ],
+    "docs/DIRECT-DRAW-P1-IMPLEMENTATION.md": [
+        "QS3D remains a **BricsCAD V25 x64 .NET plugin**",
+        "not a standalone CAD application",
+    ],
+    "docs/AGENT-HANDOFF-CURRENT-2026-08-10.md": [
+        "QS3D is a **BricsCAD V25 x64 .NET plugin**",
+        "not a standalone",
+        "docs/PRODUCT-BOUNDARY.md",
     ],
 }
 
@@ -80,4 +98,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: canonical docs and source keep QS3D explicitly scoped as a BricsCAD V25 plugin; BLT wording cannot silently redefine it as a standalone EXE.")
+print("PASS: canonical docs, Direct Draw handoffs and source keep QS3D explicitly scoped as a BricsCAD V25 plugin; BLT wording cannot silently redefine it as a standalone EXE.")
