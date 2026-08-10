@@ -53,6 +53,7 @@
 
                     <TextBlock Text="CỐT THÉP / KHỐI LƯỢNG" Style="{StaticResource SectionLabel}" Margin="0,14,0,4"/>
                     <Button Content="Tạo / cập nhật cốt thép cột 3D" Tag="QS3DREBAR3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Kiểm tra solid cốt thép 3D" Tag="QS3DREBARHEALTH" Click="OnCommandClick"/>
                     <Button Content="Xem bảng cốt thép" Tag="QS3DBBSVIEW" Click="OnCommandClick"/>
                     <Button Content="Xuất BBS Excel" Tag="QS3DBBS" Click="OnCommandClick"/>
                     <Button Content="Xuất BBS CSV UTF-8" Tag="QS3DBBSCSV" Click="OnCommandClick"/>
