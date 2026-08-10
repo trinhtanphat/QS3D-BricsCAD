@@ -36,7 +36,8 @@
 - `QS3DWALLSNAPPREVIEW` / `QS3DWALLSNAPAPPLY` implement review-gated source-centerline endpoint cleanup for tracked wall LINE/open **straight** POLYLINE geometry. Preview stores a SHA-256 signature over geometry/targets/tolerances; Apply refuses stale previews, curved/bulged polylines and nonsemantic wall source. Edited semantic owners are marked `Geometry|Quantity` dirty after CAD mutation.
 - manual Door/Opening host linking propagates dirty state and audit records.
 - `OpeningHostMatcher` + `QS3DAUTOLINKHOSTS` provide safe automatic host matching for selected Door/Opening semantics. The matcher scores wall **surface gap** (`centerline distance - thickness/2`), groups tessellated segments by semantic host, rejects near-tie ambiguity, caps input segments, respects assigned Floor/Zone scope and adds an independent source-Z/elevation tolerance before linking. Auto Host never silently executes the physical boolean cut; `QS3DLINKHOST` remains the explicit manual override.
-- `QS3DCUTOPENINGS` physically subtracts linked openings from compatible generated wall solids. LINE hosts are supported for ArchitecturalWall, GlassWall, WallPier and StructuralWall. Straight non-bulged POLYLINE hosts are also handled when `PolylineOpeningCutPlanner` can safely project the opening to a single segment without crossing a corner/junction. Curved/bulged polyline-host cuts are rejected rather than guessed.
+- `QS3DCUTOPENINGS` physically subtracts linked openings from compatible generated wall solids. LINE hosts are supported for ArchitecturalWall, GlassWall, WallPier and StructuralWall. Straight non-bulged POLYLINE hosts are handled when `PolylineOpeningCutPlanner` can safely project the opening to a single segment without crossing a corner/junction.
+- `CurvedOpeningFootprintPlanner` + `QS3DCUTOPENINGSCURVED` add a separate guarded source path for linked openings on generated open-POLYLINE wall hosts containing bulge arcs. The cutter footprint is bounded and validated before native boolean mutation; this does not imply arbitrary freeform/corner-crossing curved-host support.
 - opening cut preparation/fingerprints include live host/opening placement and dimensions; changed geometry on the same already-cut solid requires a host rebuild before re-cut.
 
 ### Structure / quantity / recognition
@@ -54,30 +55,31 @@
 - `BeamLongitudinalRebarPlanner` + `QS3DBEAMREBAR3D` provide deterministic top/bottom longitudinal bars for supported horizontal Beam `LINE` sources. Explicit layer counts are supported; ambiguous compound placement is rejected. Per-element/batch generation is bounded and previous generated bars require ownership proof before erase.
 - `BeamStirrupLayoutPlanner` + `QS3DREBARSTIRRUP3D` generate bounded rectangular Beam stirrup loops with dedicated metadata/health/ownership.
 - `ColumnTieLayoutPlanner` + `QS3DREBARTIES3D` generate bounded rectangular Column tie loops with dedicated metadata/health/ownership and quantity support.
-- linear rebar distribution planning supports count/spacing modes with bounded bar counts and deterministic offsets. `RectangularRebarLayoutPlanner` now caps requested perimeter bars before allocation and rejects non-finite interpolation deltas.
+- linear rebar distribution planning supports count/spacing modes with bounded bar counts and deterministic offsets. `RectangularRebarLayoutPlanner` caps requested perimeter bars before allocation and rejects non-finite interpolation deltas.
 - BBS-shape geometry source includes `RebarShapePath` + `ProjectRebarShapePlanner` and `QS3DREBAR3DSHAPE`. Supported source paths include straight and configured L/U/Z/custom leg/turn definitions; cutting-length consistency and distribution placement are validated before native geometry mutation.
 - shape-generated bars use separate ownership metadata and `QS3DREBARSHAPEHEALTH`; destructive replacement refuses ambiguous/protected ownership.
 - `OrthogonalRebarMatPlanner` + `QS3DREBARMAT3D` add deterministic X/Y reinforcement mats for supported rectangular Slab/Foundation footprints. X/Y direction notation uses spacing groups, `RebarMatFaces` selects Bottom/Top/Both, crossing layers are vertically separated by radii and top/bottom overlap is rejected. Native mutation is capped at 1,200 bars/element and 4,000 bars/batch.
 - Rebar Mat uses dedicated `GeneratedRebarMat*` metadata, participates in generated-dependent invalidation and cross-set ownership checks, and has `QS3DREBARMATHEALTH`.
-- `QS3DREBARHEALTHALL` now actually aggregates Column/Beam longitudinal, BBS shape, Column ties, Beam stirrups and Slab/Foundation mat health/Locate paths. Longitudinal health is mode/category-aware and flags dirty generated geometry as stale.
-- Beam longitudinal and Orthogonal Mat Core regression sources are explicitly registered with ModuleInitializers so they execute with the deterministic smoke suite.
+- `QS3DREBARHEALTHALL` aggregates Column/Beam longitudinal, BBS shape, Column ties, Beam stirrups and Slab/Foundation mat health/Locate paths. `QS3DHEALTHALL` also includes the Mat set in whole-model health aggregation. Longitudinal health is mode/category-aware and flags dirty generated geometry as stale.
+- Beam longitudinal, Orthogonal Mat and Mat-health Core regression sources are explicitly registered with ModuleInitializers so they execute with the deterministic smoke suite.
 
 ### Packaging / guards
 
 - V25 release packaging produces command manifest, metadata, hashes and DemandLoad install/uninstall helpers while excluding BricsCAD-owned runtime assemblies.
 - per-user DemandLoad installer supports hash verification, optional Authenticode enforcement, `-WhatIf`/confirmation semantics and does not lower `SECURELOAD`.
-- signing source now includes signing/verification PowerShell helpers and static signing preflight; actual production certificates/signing remain release-environment concerns.
-- generic/full-domain/geometry/room-curve/advanced-geometry static preflights cover command uniqueness, geometry/rebar safety, Room Auto lifecycle, wall junction analysis + review-gated snap apply, straight-polyline opening cuts, safe Auto Host matching/elevation/ambiguity separation, Family/Instance inspector contracts, semantic selection sync and key XAML well-formedness.
-- `scripts/preflight-rebar-mat.py` guards Mat planner/builder/ownership/invalidation/health contracts. `scripts/preflight-session-final-audit.py` reconciles the session-promised Beam/Mat features, UI command parity, smoke registration, duplicate commands and manual-only workflow policy.
+- signing source includes signing/verification PowerShell helpers and static signing preflight; actual production certificates/signing remain release-environment concerns.
+- generic/full-domain/geometry/room-curve/advanced-geometry static preflights cover command uniqueness, geometry/rebar safety, Room Auto lifecycle, wall junction analysis + review-gated snap apply, straight/curved opening source paths, safe Auto Host matching/elevation/ambiguity separation, Family/Instance inspector contracts, semantic selection sync and key XAML well-formedness.
+- `scripts/preflight-rebar-mat.py` guards Mat planner/builder/ownership/invalidation/health contracts. `scripts/preflight-session-final-audit.py` reconciles session-promised Beam/Mat features, UI command parity, smoke registration, duplicate commands and manual-only workflow policy.
+- `scripts/preflight-all.py` discovers all `preflight-*.py` gates, so the Mat/session gates join the existing aggregate manual CI without a dedicated extra workflow.
 - `scripts/preflight-blt-workspace.py` specifically guards typed Family/Instance controls, reset override, semantic selection sync, Workspace/Ribbon/Hub Giao tường + Snap Preview/Apply + Auto Host + review entry-point parity and key XAML well-formedness.
-- workflows remain `workflow_dispatch` only. The new Rebar Mat source gate is also manual-only; no workflow was dispatched as part of this source audit.
+- workflows remain `workflow_dispatch` only; no workflow was dispatched as part of this source audit.
 
 ## Verified in earlier GitHub-hosted CI
 
 - Earlier full-domain integration gates passed generic/full-domain preflights, Core Release build and deterministic smoke suites.
 - Release-candidate run `31346731964` passed generic/full-domain/release preflight, PowerShell AST parsing, Core Release build and the then-current deterministic smoke suite.
 - Integrated release-tree run `31346906413` repeated those checks after Audit/Template UI integration.
-- These runs **predate** the newest Room ARC/SPLINE lifecycle hardening, wall-junction/snap/polyline-opening/Auto-Host work, expanded rebar geometry/health, Rebar Mat, review commands and Family/Instance UI batches. The current head must not be described as CI-verified until a later explicitly approved run covers it.
+- These runs **predate** the newest Room ARC/SPLINE lifecycle hardening, wall-junction/snap/polyline-opening/Auto-Host/curved-opening work, expanded rebar geometry/health, Rebar Mat, review commands, licensing and Family/Instance UI batches. The current head must not be described as CI-verified until a later explicitly approved run covers it.
 
 ## Gate C blocker
 
@@ -86,11 +88,11 @@ Historical V25 integration probe run `31341184031` remained queued because no ma
 ## Runtime/product work still remaining
 
 - compile the newest adapter against the exact installed V25 `BrxMgd.dll` / `TD_Mgd.dll`, then real DemandLoad/NETLOAD command/Ribbon/palette regression;
-- private-DWG and save/reopen/multi-DWG regression for Room Auto, wall centerlines/snap cleanup, Auto Host, straight-polyline opening cuts, structure, BQ/BBS and all generated rebar paths;
+- private-DWG and save/reopen/multi-DWG regression for Room Auto, wall centerlines/snap cleanup, Auto Host, straight/curved opening cuts, structure, BQ/BBS and all generated rebar paths;
 - real V25 validation of Family/Instance scope, typed controls, Focus/Isolate/restore and Unicode/HiDPI behavior;
 - production-grade Vách Kính curtain-wall framing/panels and specialized Trụ Tường profiles/material presentation beyond the generic Tường KT extrusion;
 - physical wall-solid reconciliation/union at L/T/X/Multi junctions remains product work even though guarded **source centerline endpoint snap cleanup** is now implemented;
-- generalized opening booleans for curved/bulged polyline wall hosts and complex corner-crossing cases;
+- generalized opening booleans for arbitrary curved/freeform hosts and complex corner-crossing cases beyond the guarded current curved-host path;
 - generalized clipped/polygonal Slab/Foundation rebar mats beyond the current safe rectangular adapter, plus broader structural rebar authoring for walls, multi-zone beam reinforcement, fabrication hooks/bend radii/anchorage and richer editing/manipulation;
 - transient section-box and deeper isolate/highlight UX proven on V25;
 - commercial icon/Ribbon grouping/context-menu/DPI polish based on real screenshots;
