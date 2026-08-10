@@ -33,7 +33,7 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 var element = matches[0];
-                var window = new RebarMeshSetupWindow(project, element, () =>
+                var window = new RebarMeshSetupWindow(document, project, element, () =>
                 {
                     PaletteCoordinator.RefreshProject();
                     PaletteCoordinator.SetStatus("Đã lưu mesh input cho " + element.Id + ". Rebuild 3D để cập nhật generated bars.");
