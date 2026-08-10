@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.Core.Export;
 using QS3D.Core.Rebar;
+using QS3D.Core.Reporting;
 using BcadApplication = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -26,7 +26,18 @@ namespace QS3D.BricsCAD.V25.UI
             _document = BcadApplication.DocumentManager.MdiActiveDocument ?? throw new InvalidOperationException("Không có DWG active khi mở BBS.");
             InitializeComponent();
             Grid.ItemsSource = _rows;
-            Totals.Text = "TỔNG: " + _rows.Sum(x => x.Quantity) + " thanh • " + _rows.Sum(x => x.TotalLengthM).ToString("N3") + " m • " + _rows.Sum(x => x.TotalWeightKg).ToString("N3") + " kg";
+
+            var quantity = 0;
+            var totalLengthM = 0d;
+            var totalWeightKg = 0d;
+            foreach (var row in _rows)
+            {
+                if (row == null) throw new InvalidOperationException("BBS không được chứa dòng null.");
+                quantity = QuantityReportMath.AddCount(quantity, row.Quantity);
+                totalLengthM = QuantityReportMath.Add(totalLengthM, row.TotalLengthM, "BBS visible total length");
+                totalWeightKg = QuantityReportMath.Add(totalWeightKg, row.TotalWeightKg, "BBS visible total weight");
+            }
+            Totals.Text = "TỔNG: " + quantity + " thanh • " + totalLengthM.ToString("N3") + " m • " + totalWeightKg.ToString("N3") + " kg";
         }
 
         private void OnLocateClick(object sender, RoutedEventArgs e) => Locate();
@@ -37,7 +48,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (_locate == null || !(Grid.SelectedItem is RebarScheduleRow row)) return;
             try
             {
-                EnsureActive();
+                EnsureActive("định vị BBS");
                 _locate(row);
             }
             catch (Exception ex)
@@ -48,16 +59,22 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnExportClick(object sender, RoutedEventArgs e)
         {
-            var dialog = new SaveFileDialog { Title = "Xuất BBS QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = _defaultFileName, AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
-            if (dialog.ShowDialog(this) != true) return;
-            try { XlsxRebarScheduleExporter.Export(dialog.FileName, _rows); MessageBox.Show(this, "Đã xuất BBS XLSX.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Information); }
+            try
+            {
+                EnsureActive("xuất BBS XLSX");
+                if (_rows.Count == 0) throw new InvalidOperationException("BBS hiện chưa có dòng để xuất.");
+                var dialog = new SaveFileDialog { Title = "Xuất BBS QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = _defaultFileName, AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
+                if (dialog.ShowDialog(this) != true) return;
+                XlsxRebarScheduleExporter.Export(dialog.FileName, _rows);
+                MessageBox.Show(this, "Đã xuất BBS XLSX.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
-        private void EnsureActive()
+        private void EnsureActive(string operation)
         {
             if (!ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, _document))
-                throw new InvalidOperationException("Bảng BBS này thuộc một DWG khác. Hãy kích hoạt lại đúng bản vẽ trước khi định vị.");
+                throw new InvalidOperationException("Bảng BBS này thuộc một DWG khác. Hãy kích hoạt lại đúng bản vẽ trước khi " + operation + ".");
         }
     }
 }
