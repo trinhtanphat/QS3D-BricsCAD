@@ -10,18 +10,22 @@ errors = []
 files = {
     "planner": ROOT / "src/QS3D.Core/Geometry/CurtainWallLayoutPlanner.cs",
     "detail": ROOT / "src/QS3D.Core/Geometry/CurtainWallDetailPlanner.cs",
+    "opening_planner": ROOT / "src/QS3D.Core/Geometry/CurtainFrameOpeningPlanner.cs",
     "fingerprint": ROOT / "src/QS3D.Core/Geometry/CurtainWallFrameFingerprint.cs",
     "builder": ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs",
     "owner": ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedCurtainFrameOwnershipGuard.cs",
     "invalidator": ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
     "health": ROOT / "src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs",
+    "host_link": ROOT / "src/QS3D.Core/Services/HostLinkService.cs",
+    "regenerators": ROOT / "src/QS3D.Core/Services/SemanticRegenerators.cs",
     "frame_command": ROOT / "src/QS3D.BricsCAD.V25/CurtainWallFrameCommands.cs",
     "health_command": ROOT / "src/QS3D.BricsCAD.V25/CurtainWallFrameHealthCommands.cs",
     "build_command": ROOT / "src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs",
     "ui": ROOT / "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml",
     "ui_code": ROOT / "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml.cs",
     "defaults": ROOT / "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
-    "smoke": ROOT / "tests/QS3D.Core.SmokeTests/GeneratedCurtainFrameHealthSmoke.cs",
+    "health_smoke": ROOT / "tests/QS3D.Core.SmokeTests/GeneratedCurtainFrameHealthSmoke.cs",
+    "logic_smoke": ROOT / "tests/QS3D.Core.SmokeTests/LogicRegressionSmoke.cs",
 }
 for path in files.values():
     if not path.is_file(): errors.append("missing native curtain file: " + str(path.relative_to(ROOT)))
@@ -35,6 +39,9 @@ checks = {
         "VerticalFrames", "HorizontalFrames", "MaxDetailSolids", "PanelAreaM2",
         "projectedDetailSolids", "layout.PanelCount", "solidCount != projectedDetailSolids",
     ],
+    "opening_planner": [
+        "CurtainOpeningRect", "Interrupt", "MaxOpenings", "MaxOutputFragments",
+    ],
     "fingerprint": [
         "CurtainWallFrameFingerprintInput", "CURTAIN_FRAME_V1", "SHA256.Create()",
         "MaxPanelWidthM", "MaxPanelHeightM", "PerimeterFrameWidthM", "MullionWidthM",
@@ -42,10 +49,13 @@ checks = {
     ],
     "builder": [
         'HandlesKey = "GeneratedCurtainFrameHandles"', 'Mode = "LineFrameOverlay"',
+        'OpeningAwareMode = "LineFrameOverlay.OpeningAware"',
         "CurtainWallDetailPlanner.Plan", "CurtainWallFrameFingerprint.Compute", "CurtainWallFrameFingerprintInput",
+        "CurtainFrameOpeningPlanner.Interrupt", "ReadLinkedOpenings", "OpeningCutPlanner.Plan",
         "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192",
         "GeneratedCurtainFrameOwnershipGuard.Build", "ownership.EnsureOwned", "CurtainFrameDepthM",
-        "GeneratedCurtainFrameColumns", "GeneratedCurtainFrameRows", "GeneratedCurtainFrameSourceLengthM",
+        "GeneratedCurtainFrameColumns", "GeneratedCurtainFrameRows", "GeneratedCurtainFrameBaseCount",
+        "GeneratedCurtainFrameOpeningCount", "GeneratedCurtainFrameSourceLengthM",
         "GeneratedCurtainFrameHeightM", "GeneratedCurtainFrameConfigFingerprint", "CreateBox", "GlassWall", "LINE nằm ngang",
         "document.Editor.GetSelection()", "document.Editor.SetImpliedSelection",
         "CadGeometryGuard.Subtract", "CadGeometryGuard.Multiply", "CadGeometryGuard.Add", "CadGeometryGuard.Hypot",
@@ -56,19 +66,27 @@ checks = {
         'GeneratedBeamStirrupHandles', 'GeneratedSlabMeshHandles', 'GeneratedWallMeshHandles',
     ],
     "invalidator": [
-        'GeneratedCurtainFrameHandles', 'GeneratedCurtainFrameCount', 'GeneratedCurtainFrameConfigFingerprint',
+        'GeneratedCurtainFrameHandles', 'GeneratedCurtainFrameCount', 'GeneratedCurtainFrameBaseCount',
+        'GeneratedCurtainFrameOpeningCount', 'GeneratedCurtainFrameConfigFingerprint',
         'GeneratedCurtainFrameMode', 'GeneratedCurtainFrameOwnershipGuard.Build', 'EraseCurtainFrames',
         'PhysicalOpeningCutMode',
     ],
     "health": [
         'GeneratedCurtainFrameHandles', 'CURTAIN_FRAME_GENERATED_SOLID_MISSING',
-        'CURTAIN_FRAME_GRID_COUNT_MISMATCH', 'GeneratedCurtainFrameDepthM',
-        'GeneratedCurtainFrameSourceLengthM', 'GeneratedCurtainFrameHeightM',
+        'CURTAIN_FRAME_GRID_COUNT_MISMATCH', 'GeneratedCurtainFrameBaseCount', 'GeneratedCurtainFrameOpeningCount',
+        'LineFrameOverlay.OpeningAware', 'CURTAIN_FRAME_OPENING_MODE_MISMATCH',
+        'GeneratedCurtainFrameDepthM', 'GeneratedCurtainFrameSourceLengthM', 'GeneratedCurtainFrameHeightM',
         'GeneratedCurtainFrameConfigFingerprint', 'CurtainWallFrameFingerprint.Compute',
         'CURTAIN_FRAME_CONFIG_FINGERPRINT_MISSING', 'CURTAIN_FRAME_CONFIG_STALE',
         'CURTAIN_FRAME_CONFIG_INVALID', 'ElementCategory.GlassWall',
         'class OwnershipIndex', 'HashSet<string> Conflicts', 'ownership.Conflicts.Contains(handle)',
         'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT', 'CURTAIN_FRAME_GENERATED_STALE',
+    ],
+    "host_link": [
+        'MarkGeneratedCurtainFrameStale', 'MarkHostOpeningRelationChanged', 'linked/re-hosted', 'unlinked/re-hosted',
+    ],
+    "regenerators": [
+        'host.MarkGeneratedCurtainFrameStale("Linked opening " + element.Id + " changed.")',
     ],
     "frame_command": ['CommandMethod("QS3DCURTAINFRAMES3D"', 'CurtainWallFrameSolidBuilder.BuildSelectedLineWalls'],
     "health_command": ['CommandMethod("QS3DCURTAINFRAMEHEALTH"', 'GeneratedCurtainFrameHealthService().Inspect'],
@@ -79,7 +97,8 @@ checks = {
     "ui": ['x:Name="FrameDepthBox"', 'Tag="QS3DCURTAINFRAMES3D"', 'Tag="QS3DCURTAINFRAMEHEALTH"'],
     "ui_code": ['CurtainFrameDepthM', 'FrameDepthBox.Text', 'yield return FrameDepthBox'],
     "defaults": ['CurtainFrameDepthM'],
-    "smoke": ['ModuleInitializer', 'LaterGeneratedOwnerStillConflictsWithCurtainFrames', 'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT'],
+    "health_smoke": ['ModuleInitializer', 'LaterGeneratedOwnerStillConflictsWithCurtainFrames', 'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT'],
+    "logic_smoke": ['CurtainFramesStaleOnLinkRehostAndUnlink', '!wallA.IsGeneratedSolidStale()', '!wallB.IsGeneratedSolidStale()'],
 }
 for key, needles in checks.items():
     path = files[key]
@@ -114,4 +133,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: GlassWall keeps its backing host and adds bounded, finite, selectable curtain-frame overlays with deterministic fingerprint stale detection, order-independent ownership health, invalidation and UI/build command wiring. Curved frame overlay remains intentionally unsupported/runtime-gated.")
+print("PASS: GlassWall keeps its backing host and adds bounded, finite, selectable opening-aware curtain-frame overlays with deterministic fingerprint stale detection, relation/property stale propagation, order-independent ownership health, complete invalidation metadata cleanup and UI/build command wiring. Curved frame overlay remains intentionally unsupported/runtime-gated.")
