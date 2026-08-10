@@ -34,6 +34,18 @@ namespace QS3D.BricsCAD.V25.Cad
                 issues,
                 "GeneratedSemanticElementTableRuntimeHealthService",
                 () => GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project));
+            AddProviderSafely(
+                issues,
+                "DoorOpeningNativeTableBuilder",
+                () => DoorOpeningNativeTableBuilder.Inspect(document, project));
+            AddProviderSafely(
+                issues,
+                "RoomFinishNativeTableBuilder",
+                () => RoomFinishNativeTableBuilder.Inspect(document, project));
+            AddProviderSafely(
+                issues,
+                "MaterialUsageNativeTableBuilder",
+                () => MaterialUsageNativeTableBuilder.Inspect(document, project));
             return issues.AsReadOnly();
         }
 

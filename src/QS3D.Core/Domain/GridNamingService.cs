@@ -73,10 +73,12 @@ namespace QS3D.Core.Domain
             if (options.StartIndex > MaxSequenceIndex - (ids.Count - 1))
                 throw new InvalidOperationException("Grid label sequence exceeds the supported sequence range.");
 
+            var projectElements = ResolveProjectElements(project);
             var targets = new List<ProjectElement>(ids.Count);
             foreach (var id in ids)
             {
-                var element = project.FindElement(id) ?? throw new InvalidOperationException("Grid element does not exist: " + id);
+                if (!projectElements.TryGetValue(id, out var element))
+                    throw new InvalidOperationException("Grid element does not exist: " + id);
                 if (element.Category != ElementCategory.Grid)
                     throw new InvalidOperationException("Element is not a Grid reference: " + element.Id);
                 targets.Add(element);
@@ -84,7 +86,7 @@ namespace QS3D.Core.Domain
 
             var targetIds = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
             var reservedLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var grid in project.Elements.Where(x => x.Category == ElementCategory.Grid && !targetIds.Contains(x.Id)))
+            foreach (var grid in projectElements.Values.Where(x => x.Category == ElementCategory.Grid && !targetIds.Contains(x.Id)))
             {
                 if (!grid.Properties.TryGetValue(GridLabelKey, out var existing) || string.IsNullOrWhiteSpace(existing)) continue;
                 reservedLabels.Add(existing.Trim());
@@ -132,6 +134,22 @@ namespace QS3D.Core.Domain
             var result = prefix + core + suffix;
             if (result.Length > MaxLabelLength) throw new InvalidOperationException("Grid label exceeds " + MaxLabelLength + " characters.");
             return result;
+        }
+
+        private static Dictionary<string, ProjectElement> ResolveProjectElements(ProjectState project)
+        {
+            var resolved = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("Project contains an element with a blank semantic id.");
+                if (!resolved.TryAdd(elementId, element))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
+            }
+            return resolved;
         }
 
         private static bool SetIfChanged(ProjectElement element, string key, string value)

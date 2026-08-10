@@ -117,8 +117,12 @@ namespace QS3D.Core.Domain
             if (activeRoomIds == null) throw new ArgumentNullException(nameof(activeRoomIds));
             if (selectedSourceHandles == null) throw new ArgumentNullException(nameof(selectedSourceHandles));
             var selected = new HashSet<string>(selectedSourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
+            var rooms = ResolveProjectElements(project)
+                .Where(IsAutoRoom)
+                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
             var stale = new List<ProjectElement>();
-            foreach (var room in project.Elements.Where(IsAutoRoom).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            foreach (var room in rooms)
             {
                 if (activeRoomIds.Contains(room.Id)) continue;
                 if (!string.Equals(room.FloorId, floorId ?? string.Empty, StringComparison.OrdinalIgnoreCase)) continue;
@@ -253,6 +257,24 @@ namespace QS3D.Core.Domain
                 }
             }
             return false;
+        }
+
+        private static IReadOnlyList<ProjectElement> ResolveProjectElements(ProjectState project)
+        {
+            var resolved = new List<ProjectElement>(project.Elements.Count);
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("Project contains an element with a blank semantic id.");
+                if (!ids.Add(elementId))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
+                resolved.Add(element);
+            }
+            return resolved.AsReadOnly();
         }
 
         private static bool HasStaleAutoRoomAncestor(ProjectState project, ProjectElement element, ISet<string> visited)
