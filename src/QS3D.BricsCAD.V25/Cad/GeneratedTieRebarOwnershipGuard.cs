@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
+using CoreOwnershipPolicy = QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy;
 
 namespace QS3D.BricsCAD.V25.Cad
 {
@@ -32,20 +33,15 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 foreach (var handle in element.SourceHandles)
                     AddProtected(handle, element.Id + "/SourceHandles", owners);
-                AddProtectedProperty(element, "GeneratedSolidHandle", owners);
-                AddProtectedProperty(element, "PhysicalOpeningCutSolidHandle", owners);
-                AddProtectedProperty(element, "GeneratedCurtainFrameHandles", owners);
+                foreach (var property in element.Properties)
+                {
+                    if (!CoreOwnershipPolicy.IsOwnerSlot(property.Key) || CoreOwnershipPolicy.IsRebarOwnerSlot(property.Key)) continue;
+                    AddProtectedProperty(element, property.Key, owners);
+                }
             }
             foreach (var element in project.Elements)
-            {
-                Add(element, "GeneratedRebarHandles", owners);
-                Add(element, "GeneratedShapeRebarHandles", owners);
-                Add(element, "GeneratedTieRebarHandles", owners);
-                Add(element, "GeneratedBeamStirrupHandles", owners);
-                Add(element, "GeneratedSlabMeshHandles", owners);
-                Add(element, "GeneratedWallMeshHandles", owners);
-                Add(element, "GeneratedFoundationMeshHandles", owners);
-            }
+                foreach (var key in CoreOwnershipPolicy.RebarHandleKeys)
+                    Add(element, key, owners);
             return new OwnershipIndex(owners);
         }
 
