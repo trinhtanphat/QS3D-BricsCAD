@@ -143,7 +143,7 @@ if DOC.is_file():
         "QS3DINTERCHANGEVALIDATE",
         "READ-ONLY / NOT IMPORTED",
         "does **not** claim",
-        "ID collision resolution",
+        "automatic skip/rename/remap collision execution",
         "current-DWG source-handle rebinding",
         "preflight-interchange-validation.py",
     ):
@@ -157,4 +157,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DINTERCHANGEVALIDATE remains bounded/read-only, requires strict UTF-8 and the complete v1 structural containers/names, uses iterative dependency-cycle validation, is exposed beside export in Project Tools and cannot be mistaken for project/DWG import or generated ownership reconstruction.")
+print("PASS: QS3DINTERCHANGEVALIDATE remains bounded/read-only, requires strict UTF-8 and the complete v1 structural containers/names, uses iterative dependency-cycle validation, is exposed beside export in Project Tools and cannot be mistaken for broader merge/replace or generated ownership reconstruction.")
