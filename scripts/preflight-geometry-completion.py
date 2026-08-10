@@ -17,6 +17,12 @@ required = [
     "src/QS3D.BricsCAD.V25/OpeningBooleanCommands.cs",
     "src/QS3D.BricsCAD.V25/RebarGeometryCommands.cs",
     "src/QS3D.BricsCAD.V25/RebarHealthCommands.cs",
+    "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
+    "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml",
+    "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs",
+    "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs",
+    "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml",
+    "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs",
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs",
 ]
 for relative in required:
@@ -37,13 +43,32 @@ checks = {
         "WallFootprintEngine", "BulgeArcTessellator.Tessellate", "Region.CreateFromCurves", "CreateExtrudedSolid", "WallJoinMode"
     ],
     "src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs": [
-        "OpeningCutPlanner.Plan", "PhysicalOpeningCutSolidHandle", "PhysicalOpeningCutFingerprint", "BooleanOperationType.BoolSubtract", "FingerprintPart"
+        "OpeningCutPlanner.Plan", "PhysicalOpeningCutSolidHandle", "PhysicalOpeningCutFingerprint", "BooleanOperationType.BoolSubtract", "FingerprintPart", "HostFingerprint"
     ],
     "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs": [
         "RectangularRebarLayoutPlanner.Plan", "CreateFrustum", "GeneratedRebarHandles", "RebarBarsAlongWidth", "RebarBarsAlongDepth"
     ],
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": [
         "REBAR_GENERATED_OWNERSHIP_CONFLICT", "REBAR_GENERATED_SOLID_MISSING", "REBAR_GENERATED_COUNT_MISMATCH"
+    ],
+    "src/QS3D.BricsCAD.V25/TktVariantCommands.cs": [
+        "QS3DGLASSWALL", "QS3DWALLPIER", "AxisLeftOffsetM", "AxisRightOffsetM", "ThicknessM"
+    ],
+    "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml": [
+        "Bóc chọn", "OnCaptureSelectedClick", "Vẽ 3D"
+    ],
+    "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs": [
+        "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DFINISH", "CommandFor"
+    ],
+    "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs": [
+        "DisplayNameFor", "GroupFor", "IsNumericProperty", "Bề dày", "CỐT THÉP"
+    ],
+    "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
+        'Tag="QS3DGLASSWALL"', 'Tag="QS3DWALLPIER"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DREBAR3D"'
+    ],
+    "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
+        'new RibbonButtonSpec("Vách Kính", "QS3DGLASSWALL")', 'new RibbonButtonSpec("Trụ Tường", "QS3DWALLPIER")',
+        'new RibbonButtonSpec("Khoét Cửa/Lỗ", "QS3DCUTOPENINGS")', 'new RibbonButtonSpec("Cốt thép 3D", "QS3DREBAR3D")'
     ],
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs": [
         "StraightWallFootprint", "PolylineWallCorner", "OpeningCutPlan", "RectangularRebarLayout", "GeneratedRebarHealth"
@@ -66,7 +91,7 @@ commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
     text = path.read_text(encoding="utf-8")
     commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', text)
-for required_command in ("QS3DCUTOPENINGS", "QS3DREBAR3D", "QS3DREBARHEALTH", "QS3DBUILD3D"):
+for required_command in ("QS3DCUTOPENINGS", "QS3DREBAR3D", "QS3DREBARHEALTH", "QS3DBUILD3D", "QS3DGLASSWALL", "QS3DWALLPIER"):
     if required_command not in commands:
         errors.append("missing command: " + required_command)
 if len(commands) != len(set(x.upper() for x in commands)):
@@ -84,4 +109,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: polyline wall footprints, opening boolean planning, rectangular rebar geometry/health and registered regression guards are present.")
+print("PASS: polyline wall footprints, opening boolean planning, rectangular rebar geometry/health and BLT-style TKT/UI workflow guards are present.")
