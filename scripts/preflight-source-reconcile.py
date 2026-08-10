@@ -33,10 +33,10 @@ checks = {
         "ExpandInvalidationTargets",
         "graph.Rebuild(project.Elements);",
         "graph.GetDirectDependents(current.Id)",
+        "graph.TryGetElement(dependentId, out var dependent)",
         "new Queue<ProjectElement>()",
-        "EnqueueOpeningHost(current, byId, result, queue)",
+        "EnqueueOpeningHost(current, graph, result, queue)",
         "EnqueueInvalidationTarget(dependent, result, queue)",
-        "Source reconcile cannot resolve duplicate semantic element id",
         "GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets)",
         "ProjectStateSnapshot.Capture(project)",
         "var cadCommitted = false;",
@@ -44,7 +44,9 @@ checks = {
         "dependent.MarkDirty(ElementDirtyFlags.All)",
         "RegenerateAffectedToStable",
         "MaxStableRegenerationPasses = 8",
+        "affected.Count(HasSemanticDirty)",
         "engine.RegenerateDirtySubset(project, affectedIds)",
+        "affected\n                .Where(HasSemanticDirty)",
         "invalidation.CommitMetadata()",
         "project.Touch()",
         "transaction.Commit();",
@@ -84,9 +86,12 @@ checks = {
         "Unknown regeneration target: ",
         "return RegenerateTransactional(project, targets, targets.Count);",
         "var dirty = _graph.TopologicalDirtyOrder(candidateList);",
+        "_graph.TryGetElement(normalizedId, out var source)",
     ],
     dependency_graph: [
         "public IReadOnlyList<string> GetDirectDependents(string sourceId)",
+        "public bool TryGetElement(string elementId, out ProjectElement? element)",
+        "_elementsById.TryGetValue(normalized, out element)",
         "_dependents.TryGetValue(normalized, out var dependents)",
         "dependents.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)",
     ],
@@ -121,6 +126,8 @@ checks = {
     direct_dependency_smoke: [
         "DirectLookupIsDeterministicAndNonTransitive",
         "LookupNormalizesSourceId",
+        "ElementLookupNormalizesAndRetainsReference",
+        "FailedDuplicateRebuildPreservesPreviousIndex",
         "MissingSourceIsEmpty",
     ],
     registration: [
@@ -178,9 +185,21 @@ if service.is_file():
     graph_build = closure.find("graph.Rebuild(project.Elements)")
     queue_loop = closure.find("while (queue.Count > 0)")
     if min(graph_build, queue_loop) < 0 or graph_build > queue_loop:
-        errors.append("Source reconcile must build the reverse dependency index once before queue-based invalidation closure traversal")
+        errors.append("Source reconcile must build the reverse dependency/element index once before queue-based invalidation closure traversal")
+    if "new Dictionary<string, ProjectElement>" in closure or "foreach (var element in project.Elements)" in closure:
+        errors.append("Source reconcile closure must reuse DependencyGraph's retained element index instead of rescanning project elements into byId")
     if "while (expanded)" in closure or "candidate.DependsOn.Any(result.ContainsKey)" in closure:
         errors.append("Source reconcile invalidation closure must not repeatedly rescan all project elements")
+    if "graph.TryGetElement(dependentId" not in closure or "EnqueueOpeningHost(current, graph" not in closure:
+        errors.append("Source reconcile closure must resolve direct dependents and linked opening hosts through the committed DependencyGraph element index")
+
+    stable_start = text.find("private static int RegenerateAffectedToStable")
+    stable_end = text.find("private static bool HasSemanticDirty", stable_start)
+    stable = text[stable_start:stable_end] if stable_start >= 0 and stable_end > stable_start else ""
+    if "project.Elements" in stable:
+        errors.append("Source reconcile convergence accounting must scan only the affected closure, not the full project")
+    if stable.count("affected.Count(HasSemanticDirty)") < 2 or "affected\n                .Where(HasSemanticDirty)" not in stable:
+        errors.append("Source reconcile convergence must count/report unresolved semantic dirtiness directly from the affected closure")
 
     if "GeneratedHandleOwnershipLookupStatus" in text:
         errors.append("GeneratedHandleOwnershipLookupStatus is not part of the current Core ownership API")
@@ -206,6 +225,12 @@ if engine.is_file():
     if "_graph.Rebuild(project.Elements)" in regen_body:
         errors.append("Regeneration pass loop must not rebuild the reverse dependency index; TopologicalDirtyOrder reads candidate DependsOn directly")
 
+    mark_start = text.find("public void MarkChanged(ProjectState project")
+    mark_end = text.find("public int RegenerateDirty(ProjectState project)", mark_start)
+    mark = text[mark_start:mark_end] if mark_start >= 0 and mark_end > mark_start else ""
+    if "new Dictionary<string, ProjectElement>" in mark or "foreach (var element in project.Elements)" in mark:
+        errors.append("MarkChanged must reuse DependencyGraph's retained element index instead of rescanning project elements after Rebuild")
+
 commands = []
 source_root = ROOT / "src/QS3D.BricsCAD.V25"
 if source_root.is_dir():
@@ -221,4 +246,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE builds generated/source ownership and reverse dependency indexes once per operation, preserves ambiguous/untracked fail-closed behavior, traverses linked-host/DependsOn invalidation through a bounded queue, removes generated dependents ownership-safely, refreshes source-derived semantic state, regenerates only the affected semantic closure to stability, resolves each targeted regeneration subset with one project-order scan, avoids redundant reverse-graph rebuilds during regeneration passes, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
+print("PASS: QS3DSYNCSOURCE builds generated/source ownership plus reverse-dependency/element indexes once per operation, reuses the committed graph index for dependents/linked hosts, scans only the affected closure for convergence accounting, preserves ambiguous/untracked fail-closed behavior, removes generated dependents ownership-safely, refreshes authoritative source-derived semantic state, regenerates only the affected closure to stability, avoids redundant full-model scans/reverse-graph rebuilds, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
