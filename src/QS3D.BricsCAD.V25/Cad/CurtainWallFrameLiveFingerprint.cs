@@ -81,7 +81,6 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (hostSource is Line line)
             {
-                text.Append("kind=LINE|");
                 Point(text, line.StartPoint);
                 text.Append('|');
                 Point(text, line.EndPoint);
