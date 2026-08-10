@@ -44,6 +44,7 @@ required = [
     "tests/QS3D.Core.SmokeTests/PolylineOpeningCutSmoke.cs",
     "tests/QS3D.Core.SmokeTests/RebarShapeGeometrySmoke.cs",
     "tests/QS3D.Core.SmokeTests/ProjectRebarShapeSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/RebarOwnershipHealthSmoke.cs",
 ]
 for relative in required:
     if not (ROOT / relative).is_file():
@@ -81,10 +82,12 @@ checks = {
     ],
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": [
         "REBAR_GENERATED_OWNERSHIP_CONFLICT", "REBAR_GENERATED_SOLID_MISSING", "REBAR_GENERATED_COUNT_MISMATCH",
-        "GeneratedShapeRebarHandles", "InspectShape", "InspectAll", "SHAPE_REBAR"
+        "GeneratedShapeRebarHandles", "InspectShape", "InspectAll", "SHAPE_REBAR", "BuildOwnershipIndex",
+        "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "SourceHandles"
     ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": [
-        "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "EnsureOwned", "ownership conflict", "Refusing destructive erase"
+        "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "EnsureOwned", "ownership conflict", "Refusing destructive erase",
+        "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "SourceHandles", "AddProtected"
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
         "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
@@ -106,7 +109,8 @@ checks = {
     "src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs": [
         "RebarShapePathBuilder.Build", "GeneratedShapeRebarHandles", "GeneratedRebarOwnershipGuard.Build(project)", "ownership.EnsureOwned",
         "BooleanOperationType.BoolUnite", "MaxBarsPerBatch", "OpenSelectedSource", "selectedHandles",
-        "Multiple shape rebars require a positive usable distribution span", "Refusing destructive erase"
+        "Multiple shape rebars require a positive usable distribution span", "Refusing destructive erase",
+        "DistributionCentered", "AxisStartsAtBoundary", "edgeInset", "ElementCategory.GlassWall", "ElementCategory.WallPier"
     ],
     "src/QS3D.BricsCAD.V25/ShapeRebarGeometryCommands.cs": [
         'CommandMethod("QS3DREBAR3DSHAPE"', "ShapeRebarSolidBuilder.BuildSelected", "geometry.rebar3d.shape"
@@ -177,6 +181,9 @@ checks = {
     "tests/QS3D.Core.SmokeTests/ProjectRebarShapeSmoke.cs": [
         "BuildsLShapeFromElementProperties", "StraightShapeNeedsNoLegMetadata", "MismatchedLegTotalIsRejected"
     ],
+    "tests/QS3D.Core.SmokeTests/RebarOwnershipHealthSmoke.cs": [
+        "RebarCannotClaimHostGeneratedSolid", "ShapeCannotClaimAnotherElementsSource", "ShapeHealthSeesColumnRebarConflict"
+    ],
 }
 for relative, needles in checks.items():
     path = ROOT / relative
@@ -198,6 +205,8 @@ if registration.is_file():
         errors.append("PolylineOpeningCutSmoke is not registered")
     if "ProjectRebarShapeSmoke.Run();" not in registration_text:
         errors.append("ProjectRebarShapeSmoke is not registered")
+    if "RebarOwnershipHealthSmoke.Run();" not in registration_text:
+        errors.append("RebarOwnershipHealthSmoke is not registered")
 
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
@@ -217,4 +226,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: TKT wall/opening geometry, far-origin-safe wall/junction math, rectangular/linear/BBS-shape rebar ownership+health, well-formed BLT-style XAML, typed Family/Instance editors with reset, semantic selection sync and junction/Focus/Isolate workflows are present.")
+print("PASS: TKT wall/opening geometry, far-origin-safe wall/junction math, protected semantic/host handles, rectangular/linear/BBS-shape rebar ownership+health, well-formed BLT-style XAML, typed Family/Instance editors with reset, semantic selection sync and junction/Focus/Isolate workflows are present.")
