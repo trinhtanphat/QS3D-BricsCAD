@@ -16,8 +16,13 @@ namespace QS3D.Core.Persistence
 
         public static ProjectStateSnapshot Capture(ProjectState project)
         {
+            return new ProjectStateSnapshot(CreateDetachedCopy(project));
+        }
+
+        public static ProjectState CreateDetachedCopy(ProjectState project)
+        {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            return new ProjectStateSnapshot(Clone(project));
+            return Clone(project);
         }
 
         public void Restore(ProjectState project)
