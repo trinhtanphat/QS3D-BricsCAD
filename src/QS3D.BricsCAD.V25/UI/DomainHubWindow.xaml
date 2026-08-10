@@ -51,7 +51,8 @@
                     <TextBlock Text="Tường KT hỗ trợ LINE hoặc open POLYLINE tim tường (kể cả bulge). Vách Kính LINE có backing host + frame overlay opening-aware; open/curved POLYLINE hiện chỉ dựng host. Wall Snap chỉ apply LINE/open straight POLYLINE đã capture và bắt buộc Preview trước. Kết cấu dùng LINE/closed POLYLINE theo loại. Phòng Auto nhận LINE/POLYLINE/ARC/SPLINE plan-view." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
 
                     <TextBlock Text="DỰ ÁN &amp; TEMPLATE" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
-                    <Button Content="Lưu project QS3D" Tag="QS3DSAVE" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Schedule / Bóc khối lượng Hub" Tag="QS3DSCHEDULES" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Lưu project QS3D" Tag="QS3DSAVE" Click="OnCommandClick"/>
                     <Button Content="Nạp Template" Tag="QS3DTEMPLATEIMPORT" Click="OnCommandClick"/>
                     <Button Content="Xuất Template" Tag="QS3DTEMPLATEEXPORT" Click="OnCommandClick"/>
                     <Button Content="Nhật ký thay đổi" Tag="QS3DAUDIT" Click="OnCommandClick"/>
