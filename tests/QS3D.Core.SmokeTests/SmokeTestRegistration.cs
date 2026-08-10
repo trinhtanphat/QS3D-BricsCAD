@@ -47,6 +47,7 @@ namespace QS3D.Core.SmokeTests
             PolygonScanlineClipperSmoke.Run();
             BulgedPolygonFootprintSmoke.Run();
             SemanticTagRendererSmoke.Run();
+            GeneratedSemanticTagHealthSmoke.Run();
             SemanticDocumentationTableSmoke.Run();
             ProjectInterchangeJsonSmoke.Run();
             ProjectInterchangeImportPreviewSmoke.Run();
@@ -61,6 +62,7 @@ namespace QS3D.Core.SmokeTests
             ProjectSessionAuditSmoke.Run();
             ProjectInterchangeValidationSmoke.Run();
             QsdbSaveAtomicitySmoke.Run();
+            QsdbCanonicalPersistenceSmoke.Run();
             AuditTrailSnapshotSmoke.Run();
         }
     }

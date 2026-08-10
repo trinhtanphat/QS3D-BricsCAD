@@ -91,26 +91,16 @@ namespace QS3D.Core.Documentation
                 normalizedColumns.Add(new SemanticDocumentationColumn(header, template));
             }
 
+            var context = new SemanticTagRenderContext(project);
             var elements = new List<ProjectElement>(ids.Count);
-            foreach (var id in ids)
-            {
-                ProjectElement? match = null;
-                foreach (var candidate in project.Elements)
-                {
-                    if (!string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (match != null) throw new InvalidOperationException("Documentation table semantic element id is ambiguous: " + id + ".");
-                    match = candidate;
-                }
-                if (match == null) throw new InvalidOperationException("Documentation table semantic element does not exist: " + id + ".");
-                elements.Add(match);
-            }
+            foreach (var id in ids) elements.Add(context.ResolveElement(id));
 
             var rows = new List<SemanticDocumentationRow>(elements.Count);
             foreach (var element in elements)
             {
                 var cells = new List<string>(normalizedColumns.Count);
                 foreach (var column in normalizedColumns)
-                    cells.Add(SemanticTagRenderer.Render(project, element, column.Template, allowEmpty: true));
+                    cells.Add(SemanticTagRenderer.Render(context, element, column.Template, allowEmpty: true));
                 rows.Add(new SemanticDocumentationRow(element.Id, cells));
             }
 
