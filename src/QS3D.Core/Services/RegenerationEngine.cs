@@ -72,17 +72,29 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            var ids = new HashSet<string>(
+            var unresolved = new HashSet<string>(
                 elementIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
                 StringComparer.OrdinalIgnoreCase);
-            if (ids.Count == 0) return 0;
+            if (unresolved.Count == 0) return 0;
 
-            var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in project.Elements) byId[element.Id] = element;
-            foreach (var id in ids)
-                if (!byId.ContainsKey(id)) throw new KeyNotFoundException("Unknown regeneration target: " + id);
+            // Resolve the requested subset in one project-order scan. The previous implementation
+            // built a full by-id dictionary and then scanned project.Elements again to recover
+            // project order, which doubled O(project-size) work on every targeted regeneration pass.
+            var targets = new List<ProjectElement>(unresolved.Count);
+            var seenProjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (!seenProjectIds.Add(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+                if (unresolved.Remove(element.Id)) targets.Add(element);
+            }
+            if (unresolved.Count > 0)
+            {
+                var missing = unresolved.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).First();
+                throw new KeyNotFoundException("Unknown regeneration target: " + missing);
+            }
 
-            var targets = project.Elements.Where(x => ids.Contains(x.Id)).ToList();
             return RegenerateTransactional(project, targets, targets.Count);
         }
 
@@ -115,7 +127,9 @@ namespace QS3D.Core.Services
 
             for (var pass = 0; pass < maxPasses; pass++)
             {
-                _graph.Rebuild(project.Elements);
+                // TopologicalDirtyOrder derives ordering directly from each candidate's DependsOn
+                // list. Rebuilding the reverse-dependency index here never participates in that
+                // ordering and previously caused a redundant full-project scan on every pass.
                 var dirty = _graph.TopologicalDirtyOrder(candidateList);
                 if (dirty.Count == 0) break;
                 var progress = 0;
