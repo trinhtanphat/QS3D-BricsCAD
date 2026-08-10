@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             SourceAndGeneratedCollisionIsReported();
             RebarAndCurtainCrossTypeCollisionIsReported();
             DuplicateWithinSameSlotIsNotCrossOwnerConflict();
+            NonOwnerHandleMetadataIsIgnored();
         }
 
         private static void SourceAndGeneratedCollisionIsReported()
@@ -45,6 +46,19 @@ namespace QS3D.Core.SmokeTests
             var slab = new ProjectElement("SLAB", ElementCategory.Slab, string.Empty, string.Empty, string.Empty);
             slab.Properties["GeneratedSlabMeshHandles"] = "CD;CD";
             project.Elements.Add(slab);
+            var issues = new GeneratedHandleOwnershipHealthService().Inspect(project);
+            Equal(0, Count(issues, "GENERATED_HANDLE_OWNERSHIP_CONFLICT"));
+        }
+
+        private static void NonOwnerHandleMetadataIsIgnored()
+        {
+            var project = new ProjectState("OWN4", "Ownership policy");
+            var first = new ProjectElement("A", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            first.Properties["PreviewHandle"] = "EF";
+            var second = new ProjectElement("B", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
+            second.Properties["PreviewHandle"] = "EF";
+            project.Elements.Add(first);
+            project.Elements.Add(second);
             var issues = new GeneratedHandleOwnershipHealthService().Inspect(project);
             Equal(0, Count(issues, "GENERATED_HANDLE_OWNERSHIP_CONFLICT"));
         }
