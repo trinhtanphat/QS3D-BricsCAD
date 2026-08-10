@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         {
             GroupsAreaAndLengthFinishesByRoom();
             FamilyMaterialAndInstanceOverrideSplitRows();
+            SameRoomLabelsRemainSeparateByStableId();
+            PreferredQuantityDoesNotEvaluateUnusedLegacyFallbacks();
             UnlinkedFinishRemainsSchedulable();
         }
 
@@ -58,6 +60,45 @@ namespace QS3D.Core.SmokeTests
             var rows = RoomFinishScheduleBuilder.Build(project).OrderBy(x => x.Material).ToList();
             if (rows.Count != 2 || rows[0].Material != "Gạch A" || rows[1].Material != "Gạch B") throw new Exception("Material override must split finish schedule rows.");
             Near(20d, rows[0].PrimaryQuantity); Near(5d, rows[1].PrimaryQuantity);
+        }
+
+        private static void SameRoomLabelsRemainSeparateByStableId()
+        {
+            var project = BaseProject();
+            var roomFamily = project.Families.Single(x => x.Category == ElementCategory.Room);
+            var secondRoom = new ProjectElement("room-2", ElementCategory.Room, roomFamily.Id, "f1", "z");
+            secondRoom.Properties["RoomName"] = "Phòng 101";
+            project.Elements.Add(secondRoom);
+
+            var finishFamily = new ProjectFamily("wf-shared-name", "Sơn nước", ElementCategory.WallFinish);
+            project.Families.Add(finishFamily);
+            var first = Finish("wf-room-1", ElementCategory.WallFinish, finishFamily.Id, "room-1");
+            first.Quantities["NetFinishAreaM2"] = 10d;
+            var second = Finish("wf-room-2", ElementCategory.WallFinish, finishFamily.Id, "room-2");
+            second.Quantities["NetFinishAreaM2"] = 12d;
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+
+            var rows = RoomFinishScheduleBuilder.Build(project).Where(x => x.Category == "WallFinish").ToList();
+            if (rows.Count != 2) throw new Exception("Rooms with the same display label must remain separate by stable room id.");
+            if (rows.Any(x => x.Room != "Phòng 101" || x.RoomIds.Count != 1)) throw new Exception("Room label/provenance must remain readable while grouping uses stable ids.");
+            Near(22d, rows.Sum(x => x.PrimaryQuantity));
+        }
+
+        private static void PreferredQuantityDoesNotEvaluateUnusedLegacyFallbacks()
+        {
+            var project = BaseProject();
+            var family = new ProjectFamily("wf-priority", "Sơn ưu tiên", ElementCategory.WallFinish);
+            project.Families.Add(family);
+            var finish = Finish("wf-priority-1", ElementCategory.WallFinish, family.Id, "room-1");
+            finish.Quantities["NetFinishAreaM2"] = 9d;
+            finish.Quantities["SideAreaM2"] = double.NaN;
+            finish.Quantities["AreaM2"] = -1d;
+            project.Elements.Add(finish);
+
+            var row = RoomFinishScheduleBuilder.Build(project).Single(x => x.Category == "WallFinish");
+            Near(9d, row.AreaM2);
+            Near(9d, row.PrimaryQuantity);
         }
 
         private static void UnlinkedFinishRemainsSchedulable()
