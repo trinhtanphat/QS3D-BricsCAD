@@ -55,7 +55,7 @@ namespace QS3D.Core.SmokeTests
             wall.Properties["WidthM"] = "0.2";
             wall.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(wall);
-            project.Elements.Add(null);
+            project.Elements.Add(null!);
 
             Throws<InvalidOperationException>(() => new BulkEditService().SetProperty(project, new[] { wall }, "WidthM", "0.25"));
             if (wall.Properties["WidthM"] != "0.2") throw new Exception("Rejected bulk set must not partially mutate a target.");
