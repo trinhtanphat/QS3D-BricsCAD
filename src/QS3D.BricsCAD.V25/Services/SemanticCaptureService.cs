@@ -156,7 +156,27 @@ namespace QS3D.BricsCAD.V25.Services
             var family = new ProjectFamily("auto-" + category.ToString().ToLowerInvariant(), DefaultName(category), category);
             switch (category)
             {
-                case ElementCategory.ArchitecturalWall: family.Properties["ThicknessM"] = "0.2"; family.Properties["HeightM"] = "3.6"; family.Properties["Material"] = "Gạch"; break;
+                case ElementCategory.ArchitecturalWall:
+                    family.Properties["ThicknessM"] = "0.2";
+                    family.Properties["HeightM"] = "3.6";
+                    family.Properties["Material"] = "Gạch";
+                    break;
+                case ElementCategory.GlassWall:
+                    family.Properties["ThicknessM"] = "0.012";
+                    family.Properties["HeightM"] = "3.6";
+                    family.Properties["Material"] = "Kính";
+                    family.Properties["CurtainMaxPanelWidthM"] = "1.2";
+                    family.Properties["CurtainMaxPanelHeightM"] = "1.5";
+                    family.Properties["CurtainPerimeterFrameWidthM"] = "0.05";
+                    family.Properties["CurtainMullionWidthM"] = "0.05";
+                    family.Properties["CurtainTransomWidthM"] = "0.05";
+                    family.Properties["CurtainFrameMaterial"] = "Nhôm";
+                    break;
+                case ElementCategory.WallPier:
+                    family.Properties["ThicknessM"] = "0.2";
+                    family.Properties["HeightM"] = "3.6";
+                    family.Properties["Material"] = "Gạch";
+                    break;
                 case ElementCategory.StructuralWall: family.Properties["ThicknessM"] = "0.2"; family.Properties["HeightM"] = "3.6"; family.Properties["Material"] = "Bê tông"; break;
                 case ElementCategory.Beam: family.Properties["WidthM"] = "0.3"; family.Properties["HeightM"] = "0.5"; family.Properties["Material"] = "Bê tông"; break;
                 case ElementCategory.Slab: family.Properties["ThicknessM"] = "0.12"; family.Properties["Material"] = "Bê tông"; break;
@@ -175,11 +195,27 @@ namespace QS3D.BricsCAD.V25.Services
         {
             switch (category)
             {
-                case ElementCategory.Room: return "Phòng"; case ElementCategory.ArchitecturalWall: return "Tường Gạch"; case ElementCategory.StructuralWall: return "Vách BTCT"; case ElementCategory.Beam: return "Dầm BTCT";
-                case ElementCategory.Slab: return "Sàn BTCT"; case ElementCategory.Column: return "Cột BTCT"; case ElementCategory.Foundation: return "Móng BTCT"; case ElementCategory.Stair: return "Cầu thang";
-                case ElementCategory.Railing: return "Lan can"; case ElementCategory.Earthwork: return "Đào đất"; case ElementCategory.WallOpening: return "Lỗ Mở Vách"; case ElementCategory.Door: return "Cửa Đi";
-                case ElementCategory.FloorFinish: return "Sàn Hoàn Thiện"; case ElementCategory.Waterproofing: return "Chống Thấm"; case ElementCategory.Skirting: return "Chân Tường"; case ElementCategory.WallFinish: return "Hoàn Thiện Tường";
-                case ElementCategory.CeilingFinish: return "Trần Hoàn Thiện"; case ElementCategory.CustomQuantity: return "Quick Takeoff"; default: return category.ToString();
+                case ElementCategory.Room: return "Phòng";
+                case ElementCategory.ArchitecturalWall: return "Tường Gạch";
+                case ElementCategory.GlassWall: return "Vách Kính";
+                case ElementCategory.WallPier: return "Trụ Tường";
+                case ElementCategory.StructuralWall: return "Vách BTCT";
+                case ElementCategory.Beam: return "Dầm BTCT";
+                case ElementCategory.Slab: return "Sàn BTCT";
+                case ElementCategory.Column: return "Cột BTCT";
+                case ElementCategory.Foundation: return "Móng BTCT";
+                case ElementCategory.Stair: return "Cầu thang";
+                case ElementCategory.Railing: return "Lan can";
+                case ElementCategory.Earthwork: return "Đào đất";
+                case ElementCategory.WallOpening: return "Lỗ Mở Vách";
+                case ElementCategory.Door: return "Cửa Đi";
+                case ElementCategory.FloorFinish: return "Sàn Hoàn Thiện";
+                case ElementCategory.Waterproofing: return "Chống Thấm";
+                case ElementCategory.Skirting: return "Chân Tường";
+                case ElementCategory.WallFinish: return "Hoàn Thiện Tường";
+                case ElementCategory.CeilingFinish: return "Trần Hoàn Thiện";
+                case ElementCategory.CustomQuantity: return "Quick Takeoff";
+                default: return category.ToString();
             }
         }
 
