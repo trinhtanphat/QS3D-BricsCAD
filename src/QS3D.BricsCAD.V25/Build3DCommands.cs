@@ -120,7 +120,10 @@ namespace QS3D.BricsCAD.V25
                 // committing any replacement Solid3d so those blockers cannot leave a partial CAD rebuild.
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
-                var built = BuildCategory(document, project, category);
+                var sourceType = IsWallCategory(category)
+                    ? sourceSnapshots.Select(x => x.EntityType).Distinct(StringComparer.OrdinalIgnoreCase).Single()
+                    : string.Empty;
+                var built = BuildCategory(document, project, category, sourceType);
                 if (built <= 0)
                     throw new InvalidOperationException("Không tạo được solid từ source đang chọn. Tường KT cần LINE hoặc open POLYLINE; các cấu kiện khác phải đúng source profile được builder hỗ trợ.");
 
@@ -205,12 +208,19 @@ namespace QS3D.BricsCAD.V25
             return true;
         }
 
-        private static int BuildCategory(Document document, ProjectState project, ElementCategory category)
+        private static int BuildCategory(Document document, ProjectState project, ElementCategory category, string sourceType)
         {
             if (IsWallCategory(category))
             {
-                var count = WallSolidBuilder.BuildSelectedLineWalls(document, project, category);
-                return count + PolylineWallSolidBuilder.BuildSelected(document, project, category);
+                if (string.Equals(sourceType, "Line", StringComparison.OrdinalIgnoreCase))
+                {
+                    return category == ElementCategory.WallPier
+                        ? WallPierProfileSolidBuilder.BuildSelectedLinePiers(document, project)
+                        : WallSolidBuilder.BuildSelectedLineWalls(document, project, category);
+                }
+                if (string.Equals(sourceType, "Polyline", StringComparison.OrdinalIgnoreCase))
+                    return PolylineWallSolidBuilder.BuildSelected(document, project, category);
+                return 0;
             }
 
             return StructuralSolidBuilder.Supports(category)
