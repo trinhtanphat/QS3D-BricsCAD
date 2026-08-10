@@ -2,6 +2,16 @@
 
 This is the newest short canonical source delta for agents continuing from `main`. Always fetch current `main` first; current source wins over this text if concurrent commits move ahead.
 
+## Continue-all delta — 2026-08-11 06:48 UTC+7
+
+Interchange Import As New was re-reviewed after the remap dry-run/executor wave landed. Concurrent source already aligned the conservative opaque-reference suffix policy (`Id`, `Ids`, `Ref`, `Refs`, `RefId`, `RefIds`), added Family-property preview warnings and skipped drawing-local ownership metadata consistently. Reuse that implementation; do not reopen or duplicate it.
+
+One remaining review-before-mutation regression was fixed in the follow-up batch: `ProjectInterchangeRemapAppendImporter.Plan(...)` must return an inspectable `ProjectInterchangeRemapAppendPlan` even when `CanImport == false`. It no longer runs `ValidateExecutionSafety` inside the planning API. The adapter can therefore surface the first blocked Family/Element property reference and return with **no semantic/DWG mutation**. `Import(...)` still re-reads/re-plans against current target state and runs `ValidateExecutionSafety(source, plan)` before `ProjectStateSnapshot.Capture(target)` and before any mutation.
+
+`scripts/preflight-interchange-remap-append.py` now locks this boundary and also tracks the current `sourceHost` HostWall rewrite token so the static gate does not drift behind source refactors. A blocked preview must remain reportable; mutation enforcement remains fail-closed.
+
+No GitHub Actions were dispatched. This is source/static hardening only; exact BricsCAD V25 UI/runtime behavior remains subject to the existing LOCAL_ONLY qualification boundary.
+
 ## Product/source wave added in this continue-all batch
 
 The owner requested a detailed product-logic review plus implementation of meaningful remote-safe features. The source wave deliberately focused on BLT-style review-before-mutation, semantic transaction safety and supportability rather than adding cosmetic features or pretending LOCAL_ONLY native gaps are complete.
