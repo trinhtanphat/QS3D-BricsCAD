@@ -14,6 +14,15 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public const string FamilyScope = "Family / Type";
         public const string InstanceScope = "Đối tượng / Instance";
 
+        private static readonly string[] SourceDerivedInstanceKeys =
+        {
+            "LengthM",
+            "AreaM2",
+            "VolumeM3",
+            "PerimeterM",
+            "Layer"
+        };
+
         private string _status = "Sẵn sàng";
         private string _selectedFamilyName = string.Empty;
         private string _selectedPropertyScope = FamilyScope;
@@ -199,12 +208,35 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 var current = hasInstance ? stored ?? string.Empty : familyValue;
                 var unit = UnitFor(key);
                 var row = CreatePropertyRow(key, current, unit);
-                row.Group = "INSTANCE • " + GroupFor(key);
-                row.CanReset = hasInstance && !string.Equals(current, familyValue, StringComparison.Ordinal);
-                row.Value = current;
-                row.Apply = value => ApplyInstanceProperty(element, family, key, unit, row, value);
-                row.Reset = () => row.Value = familyValue;
+                var isSourceDerived = hasInstance && IsSourceDerivedInstanceKey(key);
+                if (isSourceDerived)
+                {
+                    row.Group = "NGUỒN CAD / ĐO ĐẠC";
+                    row.IsReadOnly = true;
+                    row.CanReset = false;
+                    row.Value = current;
+                }
+                else
+                {
+                    row.Group = "INSTANCE • " + GroupFor(key);
+                    row.CanReset = hasInstance && !string.Equals(current, familyValue, StringComparison.Ordinal);
+                    row.Value = current;
+                    row.Apply = value => ApplyInstanceProperty(element, family, key, unit, row, value);
+                    row.Reset = () => row.Value = familyValue;
+                }
                 Properties.Add(row);
+            }
+
+            foreach (var key in SourceDerivedInstanceKeys)
+            {
+                if (family.Properties.ContainsKey(key)) continue;
+                if (!element.Properties.TryGetValue(key, out var sourceValue) || string.IsNullOrWhiteSpace(sourceValue)) continue;
+                var sourceRow = CreatePropertyRow(key, sourceValue, UnitFor(key));
+                sourceRow.Group = "NGUỒN CAD / ĐO ĐẠC";
+                sourceRow.IsReadOnly = true;
+                sourceRow.CanReset = false;
+                sourceRow.Value = sourceValue;
+                Properties.Add(sourceRow);
             }
         }
 
@@ -318,6 +350,18 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                     valid = false;
                     return previousValue;
                 }
+                if (RequiresPositiveNumber(key) && !(number > 0d))
+                {
+                    Status = DisplayNameFor(key) + ": phải lớn hơn 0; đã giữ giá trị cũ.";
+                    valid = false;
+                    return previousValue;
+                }
+                if (RequiresNonNegativeNumber(key) && number < 0d)
+                {
+                    Status = DisplayNameFor(key) + ": không được âm; đã giữ giá trị cũ.";
+                    valid = false;
+                    return previousValue;
+                }
                 valid = true;
                 return number.ToString("R", CultureInfo.InvariantCulture);
             }
@@ -397,6 +441,32 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                    key.IndexOf("Confidence", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        private static bool IsSourceDerivedInstanceKey(string key) =>
+            SourceDerivedInstanceKeys.Any(x => string.Equals(x, key, StringComparison.OrdinalIgnoreCase));
+
+        private static bool RequiresPositiveNumber(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            if (key.Equals("LengthM", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.Equals("SillHeightM", StringComparison.OrdinalIgnoreCase)) return false;
+            return key.IndexOf("Thickness", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   key.IndexOf("Width", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   key.IndexOf("Depth", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   key.IndexOf("Diameter", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   key.IndexOf("Spacing", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   key.IndexOf("Radius", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   key.EndsWith("HeightM", StringComparison.OrdinalIgnoreCase) ||
+                   key.IndexOf("Sagitta", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool RequiresNonNegativeNumber(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            return key.Equals("SillHeightM", StringComparison.OrdinalIgnoreCase) ||
+                   key.Equals("BooleanClearanceM", StringComparison.OrdinalIgnoreCase) ||
+                   key.Equals("CoverM", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static string GroupFor(string key)
         {
             if (key.IndexOf("Rebar", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Bar", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -429,8 +499,8 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 case "AreaM2": return "Diện tích";
                 case "VolumeM3": return "Thể tích";
                 case "PerimeterM": return "Chu vi";
-                case "BottomOffsetM": return "Cao độ đáy";
-                case "TopOffsetM": return "Cao độ đỉnh";
+                case "BottomOffsetM": return "Offset đáy (so với source)";
+                case "TopOffsetM": return "Offset đỉnh (so với source)";
                 case "SillHeightM": return "Cao độ bậu";
                 case "AxisLeftOffsetM": return "Lệch tim trái";
                 case "AxisRightOffsetM": return "Lệch tim phải";
