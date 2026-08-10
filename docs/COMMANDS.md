@@ -48,7 +48,7 @@ P0 is intentionally guarded: Model Space only, unit-aware 5 mm planarity checks,
 ### Guarded P1 native subset
 
 - `QS3DDRAWGLASSWALL` — draw a GlassWall from two or more plan-view points, prompt/inherit thickness/height/bottom offset, capture semantic state and reuse `QS3DBUILD3D` for the backing native GlassWall host. Dedicated Curtain frames remain a `QS3DCURTAIN3D` / Curtain Hub workflow.
-- `QS3DDRAWWALLPIER` — draw a WallPier from LINE/open-POLYLINE source, prompt/inherit thickness/height/bottom offset, capture semantic state and reuse the guarded WallPier/native dispatch. This does not claim arbitrary specialized/freeform profile parity.
+- `QS3DDRAWWALLPIER` — pick exactly two plan-view points and create a LINE source, prompt/inherit thickness/height/bottom offset, then reuse the specialized WallPier dispatch. The LINE path preserves current Rectangular/Chamfered `WallPierProfileSolidBuilder` semantics; multi-segment Direct Draw is deliberately rejected until a deterministic profile-around-corners contract exists.
 - `QS3DDRAWSTRUCTWALL` — draw a two-point StructuralWall LINE, prompt/inherit thickness/height/bottom offset and reuse canonical `QS3DBUILD3D` / structural builder behavior.
 - `QS3DDRAWFOUNDATION` — draw a closed Foundation POLYLINE from at least three plan-view points, prompt/inherit thickness/bottom offset and reuse canonical `QS3DBUILD3D` / structural builder behavior.
 

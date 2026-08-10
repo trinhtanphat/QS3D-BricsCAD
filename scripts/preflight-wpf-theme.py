@@ -21,6 +21,7 @@ else:
 
     color_keys = set()
     brush_keys = set()
+    panel_title_style = None
     if theme_root is not None:
         for element in theme_root.iter():
             local = element.tag.rsplit("}", 1)[-1]
@@ -29,6 +30,8 @@ else:
                 color_keys.add(key)
             elif local.endswith("Brush") and key:
                 brush_keys.add(key)
+            elif local == "Style" and key == "PanelTitle":
+                panel_title_style = element
 
     resource_pattern = re.compile(r"^\{StaticResource\s+([^}\s]+)\}$")
     for path in sorted(UI.glob("*.xaml")):
@@ -55,10 +58,37 @@ else:
                         + "; use a SolidColorBrush resource"
                     )
 
-    required_brushes = {"Bg0Brush", "Bg1Brush", "Bg2Brush", "BgHoverBrush", "BgSelectedBrush", "TextBrush", "MutedBrush"}
+    required_brushes = {
+        "Bg0Brush",
+        "Bg1Brush",
+        "Bg2Brush",
+        "BgHoverBrush",
+        "BgSelectedBrush",
+        "TextBrush",
+        "MutedBrush",
+    }
     missing = sorted(required_brushes - brush_keys)
     if missing:
         errors.append("Theme.xaml is missing required brush resource(s): " + ", ".join(missing))
+
+    # A keyed TextBlock style does not inherit the implicit TextBlock style. When QS3D
+    # is hosted by a BricsCAD palette, omitting Foreground here can leak the host/system
+    # foreground (black) into dark headings such as "ĐỐI TƯỢNG ĐANG CHỌN".
+    if panel_title_style is None:
+        errors.append("Theme.xaml is missing the PanelTitle style")
+    else:
+        foreground = None
+        for child in panel_title_style:
+            if child.tag.rsplit("}", 1)[-1] != "Setter":
+                continue
+            if child.attrib.get("Property") == "Foreground":
+                foreground = child.attrib.get("Value")
+                break
+        if foreground != "{StaticResource TextBrush}":
+            errors.append(
+                "PanelTitle must explicitly set Foreground to {StaticResource TextBrush}; "
+                "do not rely on the implicit TextBlock style or BricsCAD host foreground"
+            )
 
 print("QS3D WPF theme resource preflight")
 if errors:
@@ -67,4 +97,7 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Color resources are used only as Color values; WPF Background/Foreground/border styles resolve SolidColorBrush resources.")
+print(
+    "PASS: WPF colors resolve through Brush resources and PanelTitle explicitly keeps "
+    "high-contrast text inside BricsCAD dark palettes."
+)
