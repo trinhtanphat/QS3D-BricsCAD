@@ -57,8 +57,8 @@ namespace QS3D.Core.Diagnostics
                 if (element.Category != ElementCategory.Beam)
                     issues.Add(new ModelHealthIssue("BEAM_STIRRUP_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated beam stirrup metadata chỉ hợp lệ trên Beam element.", element.Id));
 
-                if (element.Dirty != ElementDirtyFlags.None)
-                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_STALE", HealthSeverity.Warning, "Beam đang dirty nhưng vẫn còn generated beam stirrup; rebuild/health-check trước khi phát hành bản vẽ.", element.Id));
+                if (element.IsGeneratedBeamStirrupStale())
+                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_STALE", HealthSeverity.Warning, "Generated beam stirrup snapshot không còn khớp semantic/source hiện tại; rebuild stirrups trước khi phát hành bản vẽ.", element.Id));
             }
             return issues;
         }
