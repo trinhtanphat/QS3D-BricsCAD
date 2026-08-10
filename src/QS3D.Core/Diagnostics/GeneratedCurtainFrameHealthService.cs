@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using QS3D.Core.Domain;
+using QS3D.Core.Geometry;
 
 namespace QS3D.Core.Diagnostics
 {
@@ -57,11 +58,12 @@ namespace QS3D.Core.Diagnostics
                         issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "Số frame không khớp Columns+Rows+2.", element.Id));
                 }
 
-                ValidatePositive(element, "GeneratedCurtainFrameDepthM", "CURTAIN_FRAME_DEPTH_INVALID", issues);
+                var storedDepth = PositiveValue(element, "GeneratedCurtainFrameDepthM", "CURTAIN_FRAME_DEPTH_INVALID", issues);
                 var storedLength = PositiveValue(element, "GeneratedCurtainFrameSourceLengthM", "CURTAIN_FRAME_SOURCE_LENGTH_INVALID", issues);
                 var storedHeight = PositiveValue(element, "GeneratedCurtainFrameHeightM", "CURTAIN_FRAME_HEIGHT_INVALID", issues);
                 CompareCurrent(element, "LengthM", storedLength, "CURTAIN_FRAME_SOURCE_LENGTH_STALE", issues);
                 CompareCurrent(element, "HeightM", storedHeight, "CURTAIN_FRAME_HEIGHT_STALE", issues);
+                ValidateConfigFingerprint(project, element, storedLength, storedHeight, storedDepth, issues);
 
                 if (!element.Properties.TryGetValue("GeneratedCurtainFrameMode", out var mode) || !string.Equals(mode, "LineFrameOverlay", StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_MODE_INVALID", HealthSeverity.Warning, "GeneratedCurtainFrameMode thiếu hoặc không hợp lệ.", element.Id));
@@ -73,6 +75,53 @@ namespace QS3D.Core.Diagnostics
             return issues;
         }
 
+        private static void ValidateConfigFingerprint(ProjectState project, ProjectElement element, double? storedLength, double? storedHeight, double? storedDepth, List<ModelHealthIssue> issues)
+        {
+            if (!element.Properties.TryGetValue("GeneratedCurtainFrameConfigFingerprint", out var storedFingerprint) || string.IsNullOrWhiteSpace(storedFingerprint))
+            {
+                issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CONFIG_FINGERPRINT_MISSING", HealthSeverity.Warning, "Thiếu GeneratedCurtainFrameConfigFingerprint; rebuild curtain frames để nâng metadata.", element.Id));
+                return;
+            }
+            if (!storedLength.HasValue || !storedHeight.HasValue || !storedDepth.HasValue) return;
+            var family = project.FindFamily(element.FamilyId);
+            try
+            {
+                var current = CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
+                {
+                    LengthM = Number(element, family, "LengthM", storedLength.Value, true),
+                    HeightM = Number(element, family, "HeightM", storedHeight.Value, true),
+                    BottomOffsetM = Number(element, family, "BottomOffsetM", 0d, false),
+                    MaxPanelWidthM = Number(element, family, "CurtainMaxPanelWidthM", 1.2d, true),
+                    MaxPanelHeightM = Number(element, family, "CurtainMaxPanelHeightM", 1.5d, true),
+                    PerimeterFrameWidthM = Number(element, family, "CurtainPerimeterFrameWidthM", 0.05d, false, true),
+                    MullionWidthM = Number(element, family, "CurtainMullionWidthM", 0.05d, false, true),
+                    TransomWidthM = Number(element, family, "CurtainTransomWidthM", 0.05d, false, true),
+                    FrameDepthM = Number(element, family, "CurtainFrameDepthM", storedDepth.Value, true)
+                });
+                if (!string.Equals(current, storedFingerprint.Trim(), StringComparison.OrdinalIgnoreCase))
+                    issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CONFIG_STALE", HealthSeverity.Warning, "Panel grid/frame depth/offset hiện tại không còn khớp generated curtain frames; rebuild curtain frames.", element.Id));
+            }
+            catch (Exception ex)
+            {
+                issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CONFIG_INVALID", HealthSeverity.Warning, "Không thể kiểm tra curtain-frame config hiện tại: " + ex.Message, element.Id));
+            }
+        }
+
+        private static double Number(ProjectElement element, ProjectFamily? family, string key, double fallback, bool positive, bool nonNegative = false)
+        {
+            var raw = element.Properties.TryGetValue(key, out var own) && !string.IsNullOrWhiteSpace(own)
+                ? own
+                : family != null && family.Properties.TryGetValue(key, out var inherited) && !string.IsNullOrWhiteSpace(inherited)
+                    ? inherited
+                    : null;
+            var value = fallback;
+            if (raw != null && (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value) || double.IsNaN(value) || double.IsInfinity(value)))
+                throw new InvalidOperationException(key + " không phải số hữu hạn.");
+            if (positive && value <= 0d) throw new InvalidOperationException(key + " phải > 0.");
+            if (nonNegative && value < 0d) throw new InvalidOperationException(key + " phải >= 0.");
+            return value;
+        }
+
         private static int? Integer(ProjectElement element, string key, List<ModelHealthIssue> issues, string code)
         {
             if (!element.Properties.TryGetValue(key, out var raw) || !int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) || value < 1)
@@ -82,8 +131,6 @@ namespace QS3D.Core.Diagnostics
             }
             return value;
         }
-
-        private static void ValidatePositive(ProjectElement element, string key, string code, List<ModelHealthIssue> issues) => PositiveValue(element, key, code, issues);
 
         private static double? PositiveValue(ProjectElement element, string key, string code, List<ModelHealthIssue> issues)
         {
