@@ -14,6 +14,13 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+
+            var phase = "semantic regeneration";
+            var regenerated = 0;
+            var lineHostSolids = 0;
+            var pathHostSolids = 0;
+            var lineFrames = new CurtainFrameBuildResult();
+            var pathFrames = new CurtainFrameBuildResult();
             try
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
@@ -21,14 +28,24 @@ namespace QS3D.BricsCAD.V25
                 // Resolve rule/dependency failures before any host/frame builder commits native CAD.
                 // Native host and detail builders intentionally remain separate transaction families,
                 // so semantic blockers must never be discovered only after those transactions succeed.
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
-                var hostSolids = WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall);
-                hostSolids += PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.GlassWall);
-                var lineFrames = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
-                var pathFrames = CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project);
+                phase = "LINE host replacement";
+                lineHostSolids = WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall);
+
+                phase = "open-POLYLINE host replacement";
+                pathHostSolids = PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.GlassWall);
+
+                phase = "LINE frame replacement";
+                lineFrames = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
+
+                phase = "open/bulged path frame replacement";
+                pathFrames = CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project);
+
+                var hostSolids = checked(lineHostSolids + pathHostSolids);
                 var frameElements = checked(lineFrames.Elements + pathFrames.Elements);
                 var frameSolids = checked(lineFrames.Frames + pathFrames.Frames);
+                phase = "live fingerprint stamp";
                 var stampWarning = string.Empty;
                 var stamped = frameElements > 0 ? CurtainWallFrameLiveStateService.TryStampSelected(document, project, out stampWarning) : 0;
                 if (hostSolids == 0 && frameSolids == 0)
@@ -41,8 +58,34 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                Report(document, "QS3DCURTAIN3D lỗi: " + ex.Message);
+                ReportPhaseFailure(document, phase, lineHostSolids, pathHostSolids, lineFrames, pathFrames, ex);
             }
+        }
+
+        private static void ReportPhaseFailure(
+            Document document,
+            string phase,
+            int lineHostSolids,
+            int pathHostSolids,
+            CurtainFrameBuildResult lineFrames,
+            CurtainFrameBuildResult pathFrames,
+            Exception error)
+        {
+            var committedHosts = checked(lineHostSolids + pathHostSolids);
+            var committedFrames = checked((lineFrames?.Frames ?? 0) + (pathFrames?.Frames ?? 0));
+            if (committedHosts == 0 && committedFrames == 0)
+            {
+                Report(document, "QS3DCURTAIN3D lỗi tại " + phase + ": " + error.Message);
+                return;
+            }
+
+            var status = "Curtain 3D PARTIAL COMMIT: host LINE=" + lineHostSolids +
+                " • host path=" + pathHostSolids +
+                " • frame LINE=" + (lineFrames?.Frames ?? 0) +
+                " • frame path=" + (pathFrames?.Frames ?? 0) +
+                " • lỗi tại " + phase + ": " + error.Message +
+                ". Các phase trước đã commit bằng transaction riêng và không bị giả vờ rollback. Chạy QS3DCURTAINFRAMEHEALTH/QS3DHEALTHALL, sửa lỗi rồi rebuild host hoặc chạy QS3DCURTAINFRAMES3D theo kết quả health.";
+            Report(document, status);
         }
 
         private static void FinalizeUi(Document document, int hostSolids, int frameSolids, int stamped, int regenerated, string stampWarning)
