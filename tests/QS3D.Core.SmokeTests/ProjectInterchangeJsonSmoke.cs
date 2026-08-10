@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             SnapshotIsDeterministicAndUsesStableIds();
             GeneratedOwnershipIsExcluded();
             NumericContractFailsClosed();
+            SourceReferencesFailClosedWithoutNormalization();
             DetachedCopyDoesNotMutateLiveProject();
         }
 
@@ -57,10 +58,30 @@ namespace QS3D.Core.SmokeTests
         {
             var project = BuildFixture();
             project.FindElement("E-001")!.Quantities["Broken"] = double.NaN;
-            var failed = false;
-            try { ProjectInterchangeJsonExporter.Build(project); }
-            catch (System.IO.InvalidDataException) { failed = true; }
-            if (!failed) throw new Exception("Non-finite interchange quantities must fail closed.");
+            ThrowsInvalidData(() => ProjectInterchangeJsonExporter.Build(project), "Non-finite interchange quantities must fail closed.");
+        }
+
+        private static void SourceReferencesFailClosedWithoutNormalization()
+        {
+            var paddedHandle = BuildFixture();
+            paddedHandle.FindElement("E-001")!.SourceHandles[0] = " 1A2B ";
+            ThrowsInvalidData(() => ProjectInterchangeJsonExporter.Build(paddedHandle), "Padded source handles must not be silently trimmed during export.");
+
+            var duplicateHandle = BuildFixture();
+            duplicateHandle.FindElement("E-001")!.SourceHandles.Add("1a2b");
+            ThrowsInvalidData(() => ProjectInterchangeJsonExporter.Build(duplicateHandle), "Case-insensitive duplicate source handles must not be silently deduplicated during export.");
+
+            var blankDependency = BuildFixture();
+            blankDependency.FindElement("E-001")!.DependsOn.Add(" ");
+            ThrowsInvalidData(() => ProjectInterchangeJsonExporter.Build(blankDependency), "Blank dependencies must not be silently dropped during export.");
+
+            var paddedDependency = BuildFixture();
+            paddedDependency.FindElement("E-001")!.DependsOn[0] = " E-ROOT ";
+            ThrowsInvalidData(() => ProjectInterchangeJsonExporter.Build(paddedDependency), "Padded dependencies must not be silently trimmed during export.");
+
+            var duplicateDependency = BuildFixture();
+            duplicateDependency.FindElement("E-001")!.DependsOn.Add("e-root");
+            ThrowsInvalidData(() => ProjectInterchangeJsonExporter.Build(duplicateDependency), "Case-insensitive duplicate dependencies must not be silently deduplicated during export.");
         }
 
         private static void DetachedCopyDoesNotMutateLiveProject()
@@ -109,6 +130,13 @@ namespace QS3D.Core.SmokeTests
             element.SetQuantity("VolumeM3", 1.25d);
             project.Elements.Add(element);
             return project;
+        }
+
+        private static void ThrowsInvalidData(Action action, string message)
+        {
+            try { action(); }
+            catch (System.IO.InvalidDataException) { return; }
+            throw new Exception(message);
         }
 
         private static void Require(string text, string token)
