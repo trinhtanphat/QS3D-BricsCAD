@@ -47,6 +47,7 @@ namespace QS3D.BricsCAD.V25.Services
             EnsureActive(document, "Source reconcile / mutation");
 
             var invalidationTargets = ExpandInvalidationTargets(project, targets.Select(x => x.Element));
+            var annotatedGridTargets = invalidationTargets.Where(HasGridAnnotationIntent).ToList();
             var sourceTargetIds = new HashSet<string>(targets.Select(x => x.Element.Id), StringComparer.OrdinalIgnoreCase);
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
@@ -66,7 +67,14 @@ namespace QS3D.BricsCAD.V25.Services
                         dependent.MarkDirty(ElementDirtyFlags.All);
 
                     regenerated = RegenerateAffectedToStable(project, invalidationTargets);
+
+                    // Clear metadata for invalidated outputs before rebuilding optional Grid annotations.
+                    // Only Grids that already had generated annotation before reconcile are rebuilt, so
+                    // QS3DSYNCSOURCE preserves user intent without forcing annotation onto every Grid.
                     invalidation.CommitMetadata();
+                    foreach (var grid in annotatedGridTargets)
+                        GridAnnotationBuilder.RebuildInTransaction(document, transaction, project, grid);
+
                     project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
@@ -215,6 +223,11 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static bool HasSemanticDirty(ProjectElement element) =>
             (element.Dirty & (ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity)) != ElementDirtyFlags.None;
+
+        private static bool HasGridAnnotationIntent(ProjectElement element) =>
+            element.Category == ElementCategory.Grid &&
+            element.Properties.TryGetValue(GridAnnotationBuilder.HandlesKey, out var raw) &&
+            !string.IsNullOrWhiteSpace(raw);
 
         private static void RefreshSourceDerivedState(ProjectState project, ProjectElement element, EntitySnapshot snapshot, ProjectUnitPolicy units)
         {
