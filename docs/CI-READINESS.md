@@ -4,68 +4,67 @@
 
 ## Gate A — source/static review — PASS
 
-Current guards cover:
-- required architecture/persistence/UI/test files;
-- no BricsCAD/BLT proprietary binaries and no private DWG/DOCX in the public repository;
-- XML/XAML parsing and code-behind event handlers;
+Current preflight covers:
+- complete full-domain architecture/persistence/structural/rebar/recognition/revision/UI/test/package files;
+- no BricsCAD/BLT proprietary binaries and no private DWG/DXF/DOCX in the public repository;
+- XML/XAML parsing, required code-behind files and event handlers;
 - C# delimiter sanity;
 - net48 adapter guards for incompatible `ToHashSet` use and stale/nonexistent formula APIs;
+- packaging guard that rejects BricsCAD vendor assemblies;
 - no placeholder UX strings;
 - manual-only workflows on the release tree.
 
-## Gate B — Core CI — PASS
+## Gate B — hosted Core CI — PASS
 
-GitHub-hosted Windows validation has passed on the baseline and both hardening snapshots:
+Green validation history:
+1. `31341101835` — baseline Core;
+2. `31341548469` — persistence/export hardening;
+3. `31341704360` — hardening snapshot;
+4. `31342458832` — structural/rebar/recognition/revision Core after fixing compiler-reported nullable issues;
+5. `31342976121` — full-domain snapshot;
+6. **`31343166796` — release-tree gate: PASS**.
 
-1. baseline Core gate — Actions run `31341101835`;
-2. persistence/export hardening gate — Actions run `31341548469`;
-3. final hardening snapshot gate — Actions run `31341704360`.
-
-The final gate passed:
+The release-tree gate passed:
 - preflight;
 - `QS3D.Core` Release build;
 - deterministic smoke tests.
 
-The hardening suite covers:
-- QSDB schema v1 → v2 migration;
-- validated temp save + backup recovery;
-- duplicate-ID rejection;
-- project health recovery states;
-- corrected Excel quantity headers, frozen header row and AutoFilter.
+The current suite covers geometry/units/formulas, quantity rules, structural Beam/Slab/Column/Structural Wall/Foundation/Earthwork calculations, generic takeoff, rebar notation/BBS/weight, recognition confidence/review behavior, project BQ steel aggregation, revision quantity diff + persistent revision store, QSDB migration/backup/recovery/locking, XLSX/CSV packaging and structural/earthwork/rebar Model Health validation.
 
 ## Gate C — BricsCAD V25 integration build — BLOCKED BY RUNNER
 
-A real probe was created as Actions run `31341184031`. The plugin job remained queued with labels:
+Probe run `31341184031` is queued for:
 
 `[self-hosted, windows, x64, bricscad-v25]`
 
-and no assigned `runner_id` / `runner_name`. This means Gate C has **not failed the plugin build**; it has not started because no matching self-hosted runner is currently available to the repository.
+with no assigned runner. This does **not** represent a failed plugin build; the V25 job has not started.
 
 Gate C requires:
 - Windows x64 self-hosted GitHub Actions runner;
 - labels `self-hosted`, `windows`, `x64`, `bricscad-v25`;
 - licensed BricsCAD V25 installation;
-- repository variable `BRICSCAD_V25_DIR` pointing at that installation directory;
-- installed `BrxMgd.dll` and `TD_Mgd.dll` under that path;
-- no vendor DLL uploaded to GitHub.
+- repository variable `BRICSCAD_V25_DIR` pointing at the local V25 installation directory;
+- local `BrxMgd.dll` and `TD_Mgd.dll` under that path;
+- no vendor DLL committed or uploaded as a project artifact.
 
 See `docs/V25-RUNNER.md`.
 
-## Gate D — interactive runtime test — PENDING GATE C
+## Gate D — interactive runtime — PENDING GATE C
 
-After a Gate C build artifact exists:
-- NETLOAD in BricsCAD V25;
-- Ribbon and left/right palettes;
-- multi-DWG create/activate/close;
-- LINE → Tường KT semantic + Solid3d;
-- closed polyline → Room → HT_Phòng;
-- Opening/Door capture + Host Link + quantity deduction;
-- Layer/Xref manager;
-- BQ Locate + XLSX;
-- `.qsdb` save/reload, backup recovery and Model Health;
-- repeated open/close, Unicode and DPI 100/125/150/200%;
-- close BricsCAD without dispose exceptions.
+After a Gate C artifact exists, execute `docs/RUNTIME-TEST-CHECKLIST.md`, including:
+- NETLOAD, Ribbon, left/right palettes and multi-DWG lifecycle;
+- LINE → architectural wall / Beam / Structural Wall;
+- closed polyline → Room / Slab / Column / Foundation;
+- Room → finishes;
+- Opening/Door → Host Link → quantity deduction;
+- Earthwork quantity;
+- Rebar/BBS/CSV and BQ steel kg;
+- recognition review/auto-confidence behavior;
+- `.qsdb` save/reopen/backup recovery and `.qsrev` revision baseline/diff;
+- Layer/Xref manager and Locate;
+- Unicode, DPI 100/125/150/200%, repeated load/unload and clean BricsCAD shutdown;
+- package script + NETLOAD from packaged folder.
 
 ## Gate E/F — pending runtime
 
-Private sample-DWG quantity regression, persistence/reopen regression, UI screenshot comparison, performance corpus, packaging and installer tests. Only after these are green should automatic PR CI or a release candidate be enabled.
+Private sample-DWG regression, generated-solid lifecycle/undo tests, UI screenshot comparison, performance corpus, installer/code signing/update tests and release-candidate qualification. Automatic PR CI or production release should stay disabled until the relevant runtime gates are green.
