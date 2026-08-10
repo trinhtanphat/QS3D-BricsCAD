@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         {
             PropertyUpdatesPreserveOverrides();
             FamilyAssignmentDropsOldInheritedDefaultsButKeepsOverrides();
+            FamilyAssignmentRejectsSpoofedSameIdElement();
             DuplicateRenameDeleteGuards();
         }
 
@@ -63,6 +64,20 @@ namespace QS3D.Core.SmokeTests
 
             var wrong = ProjectFamilyService.Create(project, "wall", "Tường", ElementCategory.ArchitecturalWall);
             Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(project, wrong.Id, new[] { element }));
+        }
+
+        private static void FamilyAssignmentRejectsSpoofedSameIdElement()
+        {
+            var project = new ProjectState("p-spoof", "Family ownership");
+            var oldFamily = ProjectFamilyService.Create(project, "old", "Cột cũ", ElementCategory.Column);
+            var nextFamily = ProjectFamilyService.Create(project, "next", "Cột mới", ElementCategory.Column);
+            var owned = new ProjectElement("same-id", ElementCategory.Column, oldFamily.Id, "floor", "zone");
+            project.Elements.Add(owned);
+            var spoofed = new ProjectElement("same-id", ElementCategory.Column, oldFamily.Id, "floor", "zone");
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(project, nextFamily.Id, new[] { spoofed }));
+            if (owned.FamilyId != oldFamily.Id) throw new Exception("Rejected spoofed Family assignment must not mutate the project-owned element.");
+            if (spoofed.FamilyId != oldFamily.Id) throw new Exception("Rejected spoofed Family assignment must not mutate the foreign element.");
         }
 
         private static void DuplicateRenameDeleteGuards()
