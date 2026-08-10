@@ -16,10 +16,10 @@ checks = {
         "SelectImplied", "StartOpenCloseTransaction", "SemanticHandleOwnershipResolver.Resolve(project, selectedHandles)"
     ],
     "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs": [
-        "SemanticSelectionResolver.ResolveImplied(document, project)", "floor.assign"
+        "SemanticSelectionResolver.ResolveImplied(", "floor.assign", "EnsureBoundDrawingIsActive"
     ],
     "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs": [
-        "SemanticSelectionResolver.ResolveImplied(document, project)", "material.assign"
+        "SemanticSelectionResolver.ResolveImplied(", "material.assign", "MdiActiveDocument"
     ],
     "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipSmoke.cs": [
         "ModuleInitializer", "UnrelatedAmbiguityDoesNotBlockCleanSelection", "SelectedAmbiguityIsRejected",
@@ -50,4 +50,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Floor/Material bulk selection resolves only selected ownership handles, rejects selected ambiguity, ignores unrelated conflicts and supports generated geometry channels.")
+print("PASS: bound-drawing Floor/Material bulk selection resolves only selected ownership handles, rejects selected ambiguity, ignores unrelated conflicts and supports generated geometry channels.")
