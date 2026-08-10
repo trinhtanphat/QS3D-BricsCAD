@@ -45,9 +45,11 @@ if not errors:
             errors.append("Family replacement must never direct-clear properties because it bypasses inherited-instance semantics")
 
     required_domain = [
-        "public static void SetProperty",
-        "public static void RemoveProperty",
-        "string.Equals(current, oldValue, StringComparison.OrdinalIgnoreCase)",
+        "public static FamilyPropertyUpdateResult SetProperty",
+        "public static FamilyPropertyUpdateResult RemoveProperty",
+        "if (!hasInstance || (hadPrevious && string.Equals(instance, previous, StringComparison.Ordinal)))",
+        "if (string.Equals(instance, previous, StringComparison.Ordinal))",
+        "result.OverridesPreserved++",
     ]
     for needle in required_domain:
         if needle not in f:
