@@ -1,0 +1,50 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.DoorOpeningScheduleWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Cửa / Lỗ mở" Width="1120" Height="700"
+        WindowStartupLocation="CenterOwner" Background="#17191C">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Border Background="{StaticResource Bg1Brush}" Padding="14" BorderThickness="0,0,0,1">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel><TextBlock Text="CỬA / LỖ MỞ SCHEDULE" FontSize="19" FontWeight="Bold"/><TextBlock Text="Floor • Family • kích thước • vật liệu • host • diện tích" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/></StackPanel>
+                <WrapPanel Grid.Column="1"><Button Content="Làm mới" Click="OnRefreshClick"/><Button Content="Xuất Excel" Style="{StaticResource AccentButton}" Click="OnExportClick" Margin="8,0,0,0"/></WrapPanel>
+            </Grid>
+        </Border>
+        <Border Grid.Row="1" Background="{StaticResource Bg1Brush}" Padding="10" Margin="12,10,12,0">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="280"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBox x:Name="SearchBox" Grid.Column="0" TextChanged="OnSearchChanged" ToolTip="Tìm tầng, loại, family, vật liệu, host..."/>
+                <Grid Grid.Column="1" Margin="14,0,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0"><TextBlock Text="Nhóm" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="GroupCountText" Text="0" FontWeight="SemiBold"/></StackPanel>
+                    <StackPanel Grid.Column="1"><TextBlock Text="Cửa/Lỗ" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="ElementCountText" Text="0" FontWeight="SemiBold"/></StackPanel>
+                    <StackPanel Grid.Column="2"><TextBlock Text="Diện tích mở" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="AreaText" Text="0 m²" FontWeight="SemiBold"/></StackPanel>
+                    <StackPanel Grid.Column="3"><TextBlock Text="Host" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="HostCountText" Text="0" FontWeight="SemiBold"/></StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+        <DataGrid x:Name="ScheduleGrid" Grid.Row="2" Margin="12,10,12,10" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Tầng" Binding="{Binding Floor}" Width="120"/>
+                <DataGridTextColumn Header="Loại" Binding="{Binding Category}" Width="100"/>
+                <DataGridTextColumn Header="Family / Loại" Binding="{Binding FamilyName}" Width="180"/>
+                <DataGridTextColumn Header="Vật liệu" Binding="{Binding Material}" Width="130"/>
+                <DataGridTextColumn Header="Rộng" Binding="{Binding WidthM, StringFormat=0.###}" Width="75"/>
+                <DataGridTextColumn Header="Cao" Binding="{Binding HeightM, StringFormat=0.###}" Width="75"/>
+                <DataGridTextColumn Header="Cao bậu" Binding="{Binding SillHeightM, StringFormat=0.###}" Width="80"/>
+                <DataGridTextColumn Header="Dày" Binding="{Binding ThicknessM, StringFormat=0.###}" Width="70"/>
+                <DataGridTextColumn Header="SL" Binding="{Binding Count}" Width="55"/>
+                <DataGridTextColumn Header="DT mở" Binding="{Binding OpeningAreaM2, StringFormat=0.###}" Width="85"/>
+                <DataGridTextColumn Header="SL host" Binding="{Binding HostCount}" Width="65"/>
+                <DataGridTextColumn Header="Host IDs" Binding="{Binding HostIdsText}" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+        <Border Grid.Row="3" Background="{StaticResource Bg1Brush}" Padding="10" BorderThickness="0,1,0,0"><TextBlock x:Name="StatusText" Text="Sẵn sàng" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/></Border>
+    </Grid>
+</Window>
