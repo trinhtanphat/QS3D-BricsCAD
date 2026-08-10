@@ -19,7 +19,10 @@ namespace QS3D.Core.Services
             var relationshipChanged = !string.Equals(previousHost, wall.Id, StringComparison.OrdinalIgnoreCase);
             ProjectElement? previousHostElement = null;
             if (previousHost.Length > 0 && relationshipChanged)
+            {
                 previousHostElement = project.FindElement(previousHost);
+                EnsureCanLeavePhysicalCutHost(opening, previousHostElement, previousHost, "re-host");
+            }
 
             if (previousHost.Length > 0 && relationshipChanged)
             {
@@ -47,6 +50,8 @@ namespace QS3D.Core.Services
             EnsureOpening(opening, openingId);
             var hostId = opening.Properties.TryGetValue("HostWallId", out var value) ? (value ?? string.Empty).Trim() : string.Empty;
             var host = hostId.Length > 0 ? project.FindElement(hostId) : null;
+            if (hostId.Length > 0)
+                EnsureCanLeavePhysicalCutHost(opening, host, hostId, "unlink");
 
             opening.Properties.Remove("HostWallId");
             var dependencyRemoved = RemoveDependencies(opening, hostId) > 0;
@@ -60,6 +65,38 @@ namespace QS3D.Core.Services
             }
             project.Touch();
             AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
+        }
+
+        private static void EnsureCanLeavePhysicalCutHost(ProjectElement opening, ProjectElement? host, string hostId, string operation)
+        {
+            if (host == null) return;
+
+            var hasSolid = host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var solidHandle) && !string.IsNullOrWhiteSpace(solidHandle);
+            var hasFingerprint = host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var fingerprint) && !string.IsNullOrWhiteSpace(fingerprint);
+            var hasTargets = host.Properties.ContainsKey(PhysicalOpeningCutTargetStateCodec.OpeningIdsKey);
+            if (!hasSolid && !hasFingerprint && !hasTargets) return;
+
+            if (hasSolid != hasFingerprint)
+                throw new InvalidOperationException(
+                    "Host " + hostId + " has incomplete physical opening cut state. Rebuild its 3D geometry before " + operation + " of opening " + opening.Id + ".");
+            if (!hasSolid && hasTargets)
+                throw new InvalidOperationException(
+                    "Host " + hostId + " has orphan physical opening target-state. Rebuild its 3D geometry before " + operation + " of opening " + opening.Id + ".");
+
+            // Legacy/curved physical cuts may have been created before the exact opening-id target
+            // state was persisted. We cannot prove that this opening is not baked into the host solid,
+            // so changing HostWallId must fail closed rather than leaving an irreversible hole behind.
+            if (!hasTargets)
+                throw new InvalidOperationException(
+                    "Host " + hostId + " has a physical opening cut without exact target-state. Rebuild its 3D geometry before " + operation + " of opening " + opening.Id + ".");
+
+            if (!PhysicalOpeningCutTargetStateCodec.TryRead(host, out var targetIds))
+                throw new InvalidOperationException(
+                    "Host " + hostId + " physical opening target-state is unavailable. Rebuild its 3D geometry before " + operation + ".");
+            if (!targetIds.Any(x => string.Equals(x, opening.Id, StringComparison.OrdinalIgnoreCase))) return;
+
+            throw new InvalidOperationException(
+                "Opening " + opening.Id + " is physically boolean-cut into host " + hostId + ". Rebuild the old host 3D geometry first, then " + operation + " and cut the opening on its new host.");
         }
 
         private static int RemoveDependencies(ProjectElement opening, string hostId)
