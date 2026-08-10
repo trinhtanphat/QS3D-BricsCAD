@@ -28,6 +28,18 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            // Reserve semantic/source and host-generated geometry before indexing any
+            // destructive rebar ownership. Corrupted rebar metadata must never make a
+            // source entity or generated host solid eligible for erase.
+            foreach (var element in project.Elements)
+            {
+                foreach (var handle in element.SourceHandles)
+                    AddProtected(handle, element.Id + "/SourceHandles", owners);
+                AddProtectedProperty(element, "GeneratedSolidHandle", owners);
+                AddProtectedProperty(element, "PhysicalOpeningCutSolidHandle", owners);
+            }
+
             foreach (var element in project.Elements)
             {
                 Add(element, "GeneratedRebarHandles", owners);
@@ -40,15 +52,37 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (!element.Properties.TryGetValue(propertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0))
+            foreach (var handle in SplitHandles(raw))
             {
                 if (!local.Add(handle)) continue;
                 var token = OwnerToken(element, propertyKey);
                 if (owners.TryGetValue(handle, out var existing) && !string.Equals(existing, token, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Generated rebar handle ownership conflict: " + handle + " is claimed by both " + existing + " and " + token + ".");
+                    throw new InvalidOperationException("Generated rebar handle ownership conflict: " + handle + " is claimed by both " + existing + " and " + token + ". Refusing destructive erase.");
                 owners[handle] = token;
             }
         }
+
+        private static void AddProtectedProperty(ProjectElement element, string propertyKey, Dictionary<string, string> owners)
+        {
+            if (!element.Properties.TryGetValue(propertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            foreach (var handle in SplitHandles(raw)) AddProtected(handle, element.Id + "/" + propertyKey, owners);
+        }
+
+        private static void AddProtected(string? handle, string token, Dictionary<string, string> owners)
+        {
+            var normalized = (handle ?? string.Empty).Trim();
+            if (normalized.Length == 0) return;
+            if (owners.TryGetValue(normalized, out var existing) && !string.Equals(existing, token, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("CAD handle ownership conflict: " + normalized + " is claimed by both " + existing + " and " + token + ". Refusing destructive erase.");
+            owners[normalized] = token;
+        }
+
+        private static IEnumerable<string> SplitHandles(string raw) =>
+            (raw ?? string.Empty)
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .Where(x => x.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
 
         private static string OwnerToken(ProjectElement element, string propertyKey) => element.Id + "/" + propertyKey;
     }
