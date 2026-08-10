@@ -31,6 +31,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var sourceIds = selection.Value.GetObjectIds();
             if (sourceIds.Length == 0) return 0;
             var pending = new List<PendingUpdate>();
+            var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
@@ -42,23 +43,33 @@ namespace QS3D.BricsCAD.V25.Cad
                     var line = transaction.GetObject(id, OpenMode.ForRead, false) as Line;
                     if (line == null) continue;
                     var sourceHandle = line.Handle.ToString();
-                    var element = project.Elements.FirstOrDefault(x => x.Category == ElementCategory.ArchitecturalWall && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)));
-                    if (element == null) continue;
+                    var matches = project.Elements
+                        .Where(x => x.Category == ElementCategory.ArchitecturalWall && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)))
+                        .Take(2)
+                        .ToList();
+                    if (matches.Count == 0) continue;
+                    if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + sourceHandle + " đang thuộc nhiều QS3D wall element.");
+                    var element = matches[0];
+                    if (!processedElements.Add(element.Id)) throw new InvalidOperationException("Wall element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
 
                     var family = project.FindFamily(element.FamilyId);
-                    var thicknessM = Number(element, family, "ThicknessM", .2d);
-                    var heightM = Number(element, family, "HeightM", 3.6d);
-                    var bottomOffsetM = Number(element, family, "BottomOffsetM", 0d);
-                    var dx = line.EndPoint.X - line.StartPoint.X;
-                    var dy = line.EndPoint.Y - line.StartPoint.Y;
-                    var length = Math.Sqrt(dx * dx + dy * dy);
-                    if (length <= 1e-6 || thicknessM <= 0d || heightM <= 0d) continue;
+                    var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .2d), element.Id + "/ThicknessM");
+                    var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
+                    var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                    var dx = CadGeometryGuard.Finite(line.EndPoint.X - line.StartPoint.X, element.Id + "/dx");
+                    var dy = CadGeometryGuard.Finite(line.EndPoint.Y - line.StartPoint.Y, element.Id + "/dy");
+                    var length = CadGeometryGuard.Hypot(dx, dy, element.Id + "/source length");
+                    if (length <= 1e-6) throw new InvalidOperationException("Wall source LINE quá ngắn: " + element.Id);
 
-                    var thickness = CadUnitService.MetersToDrawingUnits(document, thicknessM);
-                    var height = CadUnitService.MetersToDrawingUnits(document, heightM);
-                    var bottomOffset = CadUnitService.MetersToDrawingUnits(document, bottomOffsetM);
-                    var angle = Math.Atan2(dy, dx);
-                    var mid = new Point3d((line.StartPoint.X + line.EndPoint.X) / 2d, (line.StartPoint.Y + line.EndPoint.Y) / 2d, line.StartPoint.Z + bottomOffset + height / 2d);
+                    var thickness = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, thicknessM, element.Id + "/ThicknessM"), element.Id + "/Thickness drawing units");
+                    var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/HeightM"), element.Id + "/Height drawing units");
+                    var bottomOffset = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
+                    var angle = CadGeometryGuard.Finite(Math.Atan2(dy, dx), element.Id + "/angle");
+                    var midX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/mid X");
+                    var midY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/mid Y");
+                    var midZ = CadGeometryGuard.Add(line.StartPoint.Z, bottomOffset, element.Id + "/base Z");
+                    midZ = CadGeometryGuard.Add(midZ, height / 2d, element.Id + "/mid Z");
+                    var mid = new Point3d(midX, midY, midZ);
 
                     var solid = new Solid3d();
                     try
@@ -78,7 +89,7 @@ namespace QS3D.BricsCAD.V25.Cad
                             Element = element,
                             PreviousHandle = previousHandle,
                             GeneratedHandle = solid.Handle.ToString(),
-                            LengthM = CadUnitService.DrawingUnitsToMeters(document, length),
+                            LengthM = CadGeometryGuard.ToMeters(document, length, element.Id + "/source length"),
                             ThicknessM = thicknessM,
                             HeightM = heightM
                         });
@@ -106,19 +117,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 project.Touch();
             }
             return pending.Count;
-        }
-
-        private static double Number(ProjectElement element, ProjectFamily? family, string name, double fallback)
-        {
-            if (element.Properties.TryGetValue(name, out var value) && TryFinite(value, out var direct)) return direct;
-            if (family != null && family.Properties.TryGetValue(name, out value) && TryFinite(value, out var inherited)) return inherited;
-            return fallback;
-        }
-
-        private static bool TryFinite(string value, out double number)
-        {
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number)) return false;
-            return !double.IsNaN(number) && !double.IsInfinity(number);
         }
     }
 }

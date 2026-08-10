@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
@@ -35,6 +34,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var ids = selection.Value.GetObjectIds();
             if (ids.Length == 0) return 0;
             var pending = new List<PendingUpdate>();
+            var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
@@ -44,20 +44,32 @@ namespace QS3D.BricsCAD.V25.Cad
                 foreach (var id in ids)
                 {
                     var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
-                    if (entity == null) continue;
+                    if (entity == null || entity.IsErased) continue;
                     var handle = entity.Handle.ToString();
-                    var element = project.Elements.FirstOrDefault(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)));
-                    if (element == null) continue;
+                    var matches = project.Elements
+                        .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
+                        .Take(2)
+                        .ToList();
+                    if (matches.Count == 0) continue;
+                    if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + handle + " đang thuộc nhiều QS3D " + category + " element.");
+                    var element = matches[0];
+                    if (!processedElements.Add(element.Id)) throw new InvalidOperationException(category + " element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
 
-                    Solid3d? solid = null;
+                    var family = project.FindFamily(element.FamilyId);
+                    Solid3d solid;
+                    if (UsesLine(category))
+                    {
+                        if (!(entity is Line line)) throw new InvalidOperationException(category + " element " + element.Id + " cần source LINE để dựng 3D.");
+                        solid = BuildLinePrism(document, line, element, family, category);
+                    }
+                    else
+                    {
+                        if (!(entity is Polyline polyline) || !polyline.Closed) throw new InvalidOperationException(category + " element " + element.Id + " cần closed POLYLINE để dựng 3D.");
+                        solid = BuildClosedPolylinePrism(document, polyline, element, family, category);
+                    }
+
                     try
                     {
-                        if ((category == ElementCategory.Beam || category == ElementCategory.StructuralWall || category == ElementCategory.Railing) && entity is Line line)
-                            solid = BuildLinePrism(document, line, element, project.FindFamily(element.FamilyId), category);
-                        else if ((category == ElementCategory.Slab || category == ElementCategory.Column || category == ElementCategory.Foundation || category == ElementCategory.Stair || category == ElementCategory.Earthwork) && entity is Polyline polyline && polyline.Closed)
-                            solid = BuildClosedPolylinePrism(document, polyline, element, project.FindFamily(element.FamilyId), category);
-                        if (solid == null) continue;
-
                         solid.Layer = entity.Layer;
                         var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, element);
                         modelSpace.AppendEntity(solid);
@@ -72,7 +84,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
                     catch
                     {
-                        solid?.Dispose();
+                        solid.Dispose();
                         throw;
                     }
                 }
@@ -93,6 +105,9 @@ namespace QS3D.BricsCAD.V25.Cad
             return pending.Count;
         }
 
+        private static bool UsesLine(ElementCategory category) =>
+            category == ElementCategory.Beam || category == ElementCategory.StructuralWall || category == ElementCategory.Railing;
+
         private static Solid3d BuildLinePrism(Document document, Line line, ProjectElement element, ProjectFamily? family, ElementCategory category)
         {
             double widthM;
@@ -100,32 +115,38 @@ namespace QS3D.BricsCAD.V25.Cad
             switch (category)
             {
                 case ElementCategory.Beam:
-                    widthM = Number(element, family, "WidthM", .3d);
-                    heightM = Number(element, family, "HeightM", .5d);
+                    widthM = CadGeometryGuard.Number(element, family, "WidthM", .3d);
+                    heightM = CadGeometryGuard.Number(element, family, "HeightM", .5d);
                     break;
                 case ElementCategory.StructuralWall:
-                    widthM = Number(element, family, "ThicknessM", .2d);
-                    heightM = Number(element, family, "HeightM", 3.6d);
+                    widthM = CadGeometryGuard.Number(element, family, "ThicknessM", .2d);
+                    heightM = CadGeometryGuard.Number(element, family, "HeightM", 3.6d);
                     break;
                 case ElementCategory.Railing:
-                    widthM = Number(element, family, "ProfileWidthM", .05d);
-                    heightM = Number(element, family, "HeightM", 1.1d);
+                    widthM = CadGeometryGuard.Number(element, family, "ProfileWidthM", .05d);
+                    heightM = CadGeometryGuard.Number(element, family, "HeightM", 1.1d);
                     break;
                 default:
                     throw new InvalidOperationException("Category không hỗ trợ LINE prism: " + category);
             }
-            var bottomM = Number(element, family, "BottomOffsetM", 0d);
-            var dx = line.EndPoint.X - line.StartPoint.X;
-            var dy = line.EndPoint.Y - line.StartPoint.Y;
-            var length = Math.Sqrt(dx * dx + dy * dy);
-            if (length <= 1e-6 || widthM <= 0d || heightM <= 0d || double.IsNaN(length) || double.IsInfinity(length))
-                throw new InvalidOperationException("Kích thước structural LINE không hợp lệ.");
+            widthM = CadGeometryGuard.Positive(widthM, element.Id + "/3D width");
+            heightM = CadGeometryGuard.Positive(heightM, element.Id + "/3D height");
+            var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+            var dx = CadGeometryGuard.Finite(line.EndPoint.X - line.StartPoint.X, element.Id + "/dx");
+            var dy = CadGeometryGuard.Finite(line.EndPoint.Y - line.StartPoint.Y, element.Id + "/dy");
+            var length = CadGeometryGuard.Hypot(dx, dy, element.Id + "/source length");
+            if (length <= 1e-6) throw new InvalidOperationException("Structural LINE quá ngắn: " + element.Id);
 
-            var width = CadUnitService.MetersToDrawingUnits(document, widthM);
-            var height = CadUnitService.MetersToDrawingUnits(document, heightM);
-            var bottom = CadUnitService.MetersToDrawingUnits(document, bottomM);
-            var angle = Math.Atan2(dy, dx);
-            var mid = new Point3d((line.StartPoint.X + line.EndPoint.X) / 2d, (line.StartPoint.Y + line.EndPoint.Y) / 2d, line.StartPoint.Z + bottom + height / 2d);
+            var width = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, widthM, element.Id + "/3D width"), element.Id + "/3D width drawing units");
+            var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/3D height"), element.Id + "/3D height drawing units");
+            var bottom = CadGeometryGuard.ToDrawingUnits(document, bottomM, element.Id + "/BottomOffsetM");
+            var angle = CadGeometryGuard.Finite(Math.Atan2(dy, dx), element.Id + "/angle");
+            var midX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/mid X");
+            var midY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/mid Y");
+            var midZ = CadGeometryGuard.Add(line.StartPoint.Z, bottom, element.Id + "/base Z");
+            midZ = CadGeometryGuard.Add(midZ, height / 2d, element.Id + "/mid Z");
+            var mid = new Point3d(midX, midY, midZ);
+
             var solid = new Solid3d();
             solid.SetDatabaseDefaults(document.Database);
             solid.CreateBox(length, width, height);
@@ -141,19 +162,20 @@ namespace QS3D.BricsCAD.V25.Cad
             double heightM;
             switch (category)
             {
-                case ElementCategory.Slab: heightM = Number(element, family, "ThicknessM", .12d); break;
-                case ElementCategory.Foundation: heightM = Number(element, family, "ThicknessM", .5d); break;
-                case ElementCategory.Stair: heightM = Number(element, family, "ThicknessM", .15d); break;
-                case ElementCategory.Earthwork: heightM = Number(element, family, "DepthM", 1d); direction = -1d; break;
-                case ElementCategory.Column: heightM = Number(element, family, "HeightM", 3.6d); break;
+                case ElementCategory.Slab: heightM = CadGeometryGuard.Number(element, family, "ThicknessM", .12d); break;
+                case ElementCategory.Foundation: heightM = CadGeometryGuard.Number(element, family, "ThicknessM", .5d); break;
+                case ElementCategory.Stair: heightM = CadGeometryGuard.Number(element, family, "ThicknessM", .15d); break;
+                case ElementCategory.Earthwork: heightM = CadGeometryGuard.Number(element, family, "DepthM", 1d); direction = -1d; break;
+                case ElementCategory.Column: heightM = CadGeometryGuard.Number(element, family, "HeightM", 3.6d); break;
                 default: throw new InvalidOperationException("Category không hỗ trợ closed polyline prism: " + category);
             }
+            heightM = CadGeometryGuard.Positive(heightM, element.Id + "/extrusion height");
             var offsetKey = category == ElementCategory.Earthwork ? "TopOffsetM" : "BottomOffsetM";
-            var offsetM = Number(element, family, offsetKey, 0d);
-            if (heightM <= 0d || double.IsNaN(heightM) || double.IsInfinity(heightM)) throw new InvalidOperationException("Chiều cao/depth extrusion phải lớn hơn 0.");
+            var offsetM = CadGeometryGuard.Number(element, family, offsetKey, 0d);
+            var heightMagnitude = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/extrusion height"), element.Id + "/extrusion drawing height");
+            var height = CadGeometryGuard.Finite(heightMagnitude * direction, element.Id + "/signed extrusion height");
+            var offset = CadGeometryGuard.ToDrawingUnits(document, offsetM, element.Id + "/" + offsetKey);
 
-            var height = CadUnitService.MetersToDrawingUnits(document, heightM) * direction;
-            var offset = CadUnitService.MetersToDrawingUnits(document, offsetM);
             var solid = new Solid3d();
             solid.SetDatabaseDefaults(document.Database);
             solid.CreateExtrudedSolid(polyline, new Vector3d(0d, 0d, height), new SweepOptions());
@@ -170,19 +192,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 case ElementCategory.Earthwork: return "DownwardFootprintMass";
                 default: return "NativePrism";
             }
-        }
-
-        private static double Number(ProjectElement element, ProjectFamily? family, string name, double fallback)
-        {
-            if (element.Properties.TryGetValue(name, out var value) && TryFinite(value, out var direct)) return direct;
-            if (family != null && family.Properties.TryGetValue(name, out value) && TryFinite(value, out var inherited)) return inherited;
-            return fallback;
-        }
-
-        private static bool TryFinite(string value, out double number)
-        {
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number)) return false;
-            return !double.IsNaN(number) && !double.IsInfinity(number);
         }
     }
 }
