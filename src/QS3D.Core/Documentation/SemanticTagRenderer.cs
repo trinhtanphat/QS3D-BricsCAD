@@ -14,6 +14,11 @@ namespace QS3D.Core.Documentation
 
         public static string Render(ProjectState project, ProjectElement element, string template)
         {
+            return Render(project, element, template, allowEmpty: false);
+        }
+
+        public static string Render(ProjectState project, ProjectElement element, string template, bool allowEmpty)
+        {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
             EnsureUniqueProjectElement(project, element);
@@ -46,7 +51,7 @@ namespace QS3D.Core.Documentation
                 index = close + 1;
             }
 
-            if (output.Length == 0) throw new InvalidOperationException("Semantic tag rendered to an empty label.");
+            if (output.Length == 0 && !allowEmpty) throw new InvalidOperationException("Semantic tag rendered to an empty label.");
             return output.ToString();
         }
 
