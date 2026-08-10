@@ -1,0 +1,44 @@
+name: QS3D Merge Gate Beam Stirrup Current
+
+on:
+  push:
+    branches:
+      - ci/merge-gate-beam-stirrup-current-20260810
+
+permissions:
+  contents: write
+
+jobs:
+  merge-gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beam-stirrup-release-current-20260810
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Merge latest main without committing
+        shell: pwsh
+        run: |
+          git fetch origin main
+          git config user.name 'trinhtanphat'
+          git config user.email '89531707+trinhtanphat@users.noreply.github.com'
+          git merge --no-ff --no-commit origin/main
+      - name: Generic preflight on merged tree
+        run: python scripts/preflight.py
+      - name: Aggregate feature preflight on merged tree
+        run: python scripts/preflight-all.py
+      - name: Build Core Release on merged tree
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic Core smoke suite on merged tree
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+      - name: Commit and push tested merge tree
+        shell: pwsh
+        run: |
+          git commit -m 'merge: sync latest main into validated stirrup batch'
+          git push origin HEAD:agent/beam-stirrup-release-current-20260810
