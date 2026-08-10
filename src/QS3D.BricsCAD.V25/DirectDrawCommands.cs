@@ -40,7 +40,7 @@ namespace QS3D.BricsCAD.V25
                 if (!thicknessM.HasValue) return;
                 var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Tường (m)", FamilyNumber(project, ElementCategory.ArchitecturalWall, "HeightM", 3.6d));
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Cao độ đáy Tường (m)", FamilyFiniteNumber(project, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d));
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d));
                 if (!bottomOffsetM.HasValue) return;
 
                 ExecuteDirect(
@@ -72,7 +72,7 @@ namespace QS3D.BricsCAD.V25
                 if (!widthM.HasValue) return;
                 var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Dầm (m)", FamilyNumber(project, ElementCategory.Beam, "HeightM", 0.5d));
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Cao độ đáy Dầm (m)", FamilyFiniteNumber(project, ElementCategory.Beam, "BottomOffsetM", 0d));
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Dầm so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.Beam, "BottomOffsetM", 0d));
                 if (!bottomOffsetM.HasValue) return;
 
                 ExecuteDirect(
@@ -102,7 +102,7 @@ namespace QS3D.BricsCAD.V25
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Sàn (m)", FamilyNumber(project, ElementCategory.Slab, "ThicknessM", 0.12d));
                 if (!thicknessM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Cao độ đáy Sàn (m)", FamilyFiniteNumber(project, ElementCategory.Slab, "BottomOffsetM", 0d));
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Sàn so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.Slab, "BottomOffsetM", 0d));
                 if (!bottomOffsetM.HasValue) return;
 
                 ExecuteDirect(
@@ -135,7 +135,7 @@ namespace QS3D.BricsCAD.V25
                 if (!depthM.HasValue) return;
                 var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Cột (m)", FamilyNumber(project, ElementCategory.Column, "HeightM", 3.6d));
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Cao độ đáy Cột (m)", FamilyFiniteNumber(project, ElementCategory.Column, "BottomOffsetM", 0d));
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Cột so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.Column, "BottomOffsetM", 0d));
                 if (!bottomOffsetM.HasValue) return;
 
                 ExecuteDirect(
@@ -424,21 +424,30 @@ namespace QS3D.BricsCAD.V25
         private static double FamilyNumber(ProjectState project, ElementCategory category, string key, double fallback)
         {
             var value = FamilyFiniteNumber(project, category, key, fallback);
-            return value > 0d ? value : fallback;
+            if (!(value > 0d))
+                throw new InvalidOperationException("Family " + category + "/" + key + " phải là số hữu hạn > 0 trước khi Direct Draw.");
+            return value;
         }
 
         private static double FamilyFiniteNumber(ProjectState project, ElementCategory category, string key, double fallback)
         {
-            ProjectFamily? family = null;
+            var family = PreferredFamily(project, category);
+            if (family == null || !family.Properties.TryGetValue(key, out var raw)) return fallback;
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsNaN(value) || double.IsInfinity(value))
+                throw new InvalidOperationException("Family '" + family.Name + "' (" + category + ") có " + key + " không hợp lệ: '" + (raw ?? string.Empty) + "'. Sửa Family trước khi Direct Draw.");
+            return value;
+        }
+
+        private static ProjectFamily? PreferredFamily(ProjectState project, ElementCategory category)
+        {
             if (project.Metadata.TryGetValue("ActiveFamilyId", out var activeId))
             {
                 var active = project.FindFamily(activeId);
-                if (active != null && active.Category == category) family = active;
+                if (active != null && active.Category == category) return active;
             }
-            family = family ?? project.Families.FirstOrDefault(x => x.Category == category);
-            if (family == null || !family.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return fallback;
-            if (!double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value)) return fallback;
-            return value;
+            return project.Families.FirstOrDefault(x => x.Category == category);
         }
 
         private static void RequireModelSpace(Document document)
