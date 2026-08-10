@@ -29,12 +29,12 @@ if PROJECT_TOOLS.is_file():
 
 if RUNTIME_CHECK.is_file():
     text = RUNTIME_CHECK.read_text(encoding="utf-8")
-    if '[CommandMethod("QS3DRUNTIMECHECK")]' not in text:
+    if '[CommandMethod("QS3DRUNTIMECHECK", CommandFlags.Modal)]' not in text:
         errors.append("RuntimeDiagnosticsCommands.cs must register QS3DRUNTIMECHECK")
 
 if RUNTIME_PROBE.is_file():
     text = RUNTIME_PROBE.read_text(encoding="utf-8")
-    if '[CommandMethod("QS3DRUNTIMEPROBE")]' not in text:
+    if '[CommandMethod("QS3DRUNTIMEPROBE", CommandFlags.Modal)]' not in text:
         errors.append("RuntimeProbeCommands.cs must register QS3DRUNTIMEPROBE")
     if 'QS3D_RUNTIME_RESULT' not in text:
         errors.append("QS3DRUNTIMEPROBE must remain bound to QS3D_RUNTIME_RESULT automation output")

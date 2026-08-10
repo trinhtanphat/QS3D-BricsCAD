@@ -20,7 +20,7 @@ if PREVIEW.is_file():
         "public const int MaxDetailedItems = 10000",
         "var validation = ProjectInterchangeJsonValidator.Validate(json);",
         "if (!validation.IsValid)",
-        "var manifest = ParseValidatedManifest(json);",
+        "var source = ProjectInterchangeValidatedSnapshotReader.Read(json);",
         "InterchangeIdentityDisposition.New",
         "InterchangeIdentityDisposition.ExistingNeedsPolicy",
         "InterchangeIdentityDisposition.ExistingIncompatible",
@@ -30,14 +30,14 @@ if PREVIEW.is_file():
         "Import preview refuses ambiguous target identity",
         "total > items.Count",
         "Items = (items ?? Enumerable.Empty<InterchangeImportPreviewItem>()).ToList().AsReadOnly()",
-        "Enum.TryParse<ElementCategory>((raw ?? string.Empty).Trim(), false, out var category)",
-        "Enum.IsDefined(typeof(ElementCategory), category)",
+        "foreach (var family in source.Families)",
+        "foreach (var element in source.Elements)",
     )
     for token in required:
         if token not in text:
             errors.append("ProjectInterchangeImportPreview.cs missing preview/fail-closed token: " + token)
-    if text.find("var validation = ProjectInterchangeJsonValidator.Validate(json);") > text.find("var manifest = ParseValidatedManifest(json);"):
-        errors.append("import preview must validate before parsing its collision manifest")
+    if text.find("var validation = ProjectInterchangeJsonValidator.Validate(json);") > text.find("var source = ProjectInterchangeValidatedSnapshotReader.Read(json);"):
+        errors.append("import preview must validate before reading its canonical typed snapshot")
     for token in (
         "targetProject.Zones.Add(", "targetProject.Floors.Add(", "targetProject.Families.Add(", "targetProject.Elements.Add(",
         "targetProject.Name =", "targetProject.DrawingFingerprint =", "targetProject.ActiveZoneId =", "targetProject.ActiveFloorId =",
@@ -93,4 +93,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Semantic Snapshot v1 collision preview is validation-first, bounded, immutable-output and target-read-only; merge/import, source-handle rebinding and native ownership reconstruction remain explicitly unimplemented.")
+print("PASS: Semantic Snapshot v1 collision preview is validation-first, uses the canonical typed reader, stays bounded/immutable/target-read-only, and grants no source-handle or native-ownership authority.")
