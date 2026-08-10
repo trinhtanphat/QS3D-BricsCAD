@@ -41,6 +41,7 @@ namespace QS3D.BricsCAD.V25.UI
             _saved = saved ?? throw new ArgumentNullException(nameof(saved));
             _keys = KeysFor(element.Category) ?? throw new ArgumentException("Rebar Mesh Setup only supports Slab, StructuralWall or Foundation.", nameof(element));
             InitializeComponent();
+            DocumentBoundWindowLifetime.Attach(this, _document);
             Configure();
             Title = "QS3D • Rebar Mesh Setup • " + DrawingLabel(_document);
         }
@@ -88,6 +89,8 @@ namespace QS3D.BricsCAD.V25.UI
                     throw new InvalidOperationException("Chọn rõ phương nào nằm gần mặt bê tông hơn.");
 
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
+                if (!ReferenceEquals(project, _project))
+                    throw new InvalidOperationException("Project của DWG này đã được reload/thay thế trong khi Rebar Mesh Setup đang mở. Đóng và mở lại cửa sổ trước khi lưu.");
                 var element = project.FindElement(_element.Id) ?? throw new InvalidOperationException("Semantic element " + _element.Id + " không còn tồn tại trong project hiện tại. Đóng và mở lại Rebar Mesh Setup.");
                 if (element.Category != _element.Category || KeysFor(element.Category) == null)
                     throw new InvalidOperationException("Semantic element " + _element.Id + " đã đổi category. Đóng và mở lại Rebar Mesh Setup.");
