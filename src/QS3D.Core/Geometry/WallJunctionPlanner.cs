@@ -68,6 +68,76 @@ namespace QS3D.Core.Geometry
             public HashSet<string> SegmentIds { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
+        private readonly struct CellKey : IEquatable<CellKey>
+        {
+            public CellKey(long x, long y) { X = x; Y = y; }
+            public long X { get; }
+            public long Y { get; }
+            public bool Equals(CellKey other) => X == other.X && Y == other.Y;
+            public override bool Equals(object? obj) => obj is CellKey other && Equals(other);
+            public override int GetHashCode()
+            {
+                unchecked { return (X.GetHashCode() * 397) ^ Y.GetHashCode(); }
+            }
+        }
+
+        private sealed class CandidateIndex
+        {
+            private readonly double _tolerance;
+            private readonly Dictionary<CellKey, List<Candidate>> _buckets = new Dictionary<CellKey, List<Candidate>>();
+            private readonly List<Candidate> _all = new List<Candidate>();
+
+            public CandidateIndex(double tolerance) { _tolerance = tolerance; }
+            public IReadOnlyList<Candidate> All => _all;
+
+            public void Add(Point2 point, string segmentId)
+            {
+                var key = Cell(point);
+                Candidate? best = null;
+                var bestDistance = double.PositiveInfinity;
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    for (var dy = -1; dy <= 1; dy++)
+                    {
+                        var neighbor = new CellKey(checked(key.X + dx), checked(key.Y + dy));
+                        if (!_buckets.TryGetValue(neighbor, out var bucket)) continue;
+                        foreach (var candidate in bucket)
+                        {
+                            var distance = candidate.Point.DistanceTo(point);
+                            if (distance <= _tolerance && distance < bestDistance)
+                            {
+                                best = candidate;
+                                bestDistance = distance;
+                            }
+                        }
+                    }
+                }
+
+                if (best == null)
+                {
+                    best = new Candidate { Point = point };
+                    _all.Add(best);
+                    if (!_buckets.TryGetValue(key, out var bucket))
+                    {
+                        bucket = new List<Candidate>();
+                        _buckets[key] = bucket;
+                    }
+                    bucket.Add(best);
+                }
+                best.SegmentIds.Add(segmentId);
+            }
+
+            private CellKey Cell(Point2 point) => new CellKey(Quantize(point.X, _tolerance), Quantize(point.Y, _tolerance));
+
+            private static long Quantize(double value, double tolerance)
+            {
+                var scaled = value / tolerance;
+                if (double.IsNaN(scaled) || double.IsInfinity(scaled) || scaled <= long.MinValue + 2d || scaled >= long.MaxValue - 2d)
+                    throw new InvalidOperationException("Wall junction coordinate/tolerance ratio exceeds the supported spatial-index range.");
+                return (long)Math.Floor(scaled);
+            }
+        }
+
         public IReadOnlyList<WallJunction> Plan(IEnumerable<WallAxisSegment> source, double tolerance = 0.005d, double angularToleranceRadians = 1e-4d)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
@@ -103,11 +173,11 @@ namespace QS3D.Core.Geometry
             }
             if (segments.Count == 0) return Array.Empty<WallJunction>();
 
-            var candidates = new List<Candidate>(segments.Count * 2);
+            var candidates = new CandidateIndex(tolerance);
             foreach (var segment in segments)
             {
-                AddCandidate(candidates, segment.Segment.Start, segment.Segment.Id, tolerance);
-                AddCandidate(candidates, segment.Segment.End, segment.Segment.Id, tolerance);
+                candidates.Add(segment.Segment.Start, segment.Segment.Id);
+                candidates.Add(segment.Segment.End, segment.Segment.Id);
             }
 
             var ordered = segments.OrderBy(x => x.MinX).ThenBy(x => x.MinY).ThenBy(x => x.Segment.Id, StringComparer.OrdinalIgnoreCase).ToList();
@@ -122,8 +192,8 @@ namespace QS3D.Core.Geometry
                     if (other.MaxY < current.MinY - tolerance || current.MaxY < other.MinY - tolerance) continue;
                     foreach (var point in Intersections(other, current, tolerance))
                     {
-                        AddCandidate(candidates, point, other.Segment.Id, tolerance);
-                        AddCandidate(candidates, point, current.Segment.Id, tolerance);
+                        candidates.Add(point, other.Segment.Id);
+                        candidates.Add(point, current.Segment.Id);
                     }
                 }
                 active.Add(current);
@@ -131,18 +201,12 @@ namespace QS3D.Core.Geometry
 
             var byId = segments.ToDictionary(x => x.Segment.Id, StringComparer.OrdinalIgnoreCase);
             var result = new List<WallJunction>();
-            foreach (var candidate in candidates)
+            foreach (var candidate in candidates.All)
             {
-                var incident = new HashSet<string>(candidate.SegmentIds, StringComparer.OrdinalIgnoreCase);
-                foreach (var segment in segments)
-                    if (!incident.Contains(segment.Segment.Id) && PointOnSegment(candidate.Point, segment, tolerance)) incident.Add(segment.Segment.Id);
-
+                var incident = candidate.SegmentIds;
                 var rays = new List<Point2>();
                 foreach (var id in incident.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
-                {
-                    var segment = byId[id];
-                    AddRays(candidate.Point, segment, tolerance, rays);
-                }
+                    AddRays(candidate.Point, byId[id], tolerance, rays);
                 var uniqueRays = MergeDirections(rays, angularToleranceRadians);
                 var kind = Classify(uniqueRays);
                 result.Add(new WallJunction(
@@ -159,27 +223,6 @@ namespace QS3D.Core.Geometry
                 .ThenBy(x => x.Kind)
                 .ToList()
                 .AsReadOnly();
-        }
-
-        private static void AddCandidate(List<Candidate> candidates, Point2 point, string segmentId, double tolerance)
-        {
-            Candidate? best = null;
-            var bestDistance = double.PositiveInfinity;
-            foreach (var candidate in candidates)
-            {
-                var distance = candidate.Point.DistanceTo(point);
-                if (distance <= tolerance && distance < bestDistance)
-                {
-                    best = candidate;
-                    bestDistance = distance;
-                }
-            }
-            if (best == null)
-            {
-                best = new Candidate { Point = point };
-                candidates.Add(best);
-            }
-            best.SegmentIds.Add(segmentId);
         }
 
         private static IEnumerable<Point2> Intersections(SegmentInfo a, SegmentInfo b, double tolerance)
