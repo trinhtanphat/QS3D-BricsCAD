@@ -37,8 +37,16 @@ if BUILDER.is_file():
         '"QS3D BBS • Bar Bending Schedule"',
     ) + row_tokens:
         if token not in text: errors.append("BbsNativeTableBuilder.cs missing authoritative/lifecycle token: " + token)
-    if 'new RebarScheduleInput' in text or 'RebarNotationParser.Parse' in text:
-        errors.append("BBS native Table must consume ProjectRebarScheduleBuilder instead of duplicating BBS calculations")
+    for forbidden in (
+        'new RebarScheduleInput',
+        'RebarNotationParser',
+        'RebarMath',
+        'RebarWeight',
+        'KilogramsPerMeter(',
+        'TotalKilograms(',
+    ):
+        if forbidden in text:
+            errors.append("BBS native Table must consume ProjectRebarScheduleBuilder without duplicating Core rebar calculation/parsing: " + forbidden)
 
 if COMMANDS.is_file():
     text = COMMANDS.read_text(encoding="utf-8")
@@ -104,4 +112,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BBS native Table consumes authoritative ProjectRebarScheduleBuilder rows across all 15 schedule/provenance fields, regenerates semantic state before build/refresh, uses shared project-level QS3DDOC ownership/rollback/live drift health, remains read-only in health, is fail-isolated in Release Check runtime health and is discoverable from Schedule Hub without claiming licensed V25 qualification.")
+print("PASS: BBS native Table consumes authoritative ProjectRebarScheduleBuilder rows across all 15 schedule/provenance fields, forbids native rebar calculation/parsing duplication, regenerates semantic state before build/refresh, uses shared project-level QS3DDOC ownership/rollback/live drift health, remains read-only in health, is fail-isolated in Release Check runtime health and is discoverable from Schedule Hub without claiming licensed V25 qualification.")
