@@ -10,13 +10,31 @@ using System.Xml.Linq;
 
 namespace QS3D.Core.Export
 {
+    public sealed class XlsxHandleLookupResult
+    {
+        public XlsxHandleLookupResult(IEnumerable<string> handles, string drawingFingerprint, bool usesLegacyDecimalHandles)
+        {
+            if (handles == null) throw new ArgumentNullException(nameof(handles));
+            Handles = handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+            DrawingFingerprint = (drawingFingerprint ?? string.Empty).Trim();
+            UsesLegacyDecimalHandles = usesLegacyDecimalHandles;
+        }
+
+        public IReadOnlyList<string> Handles { get; }
+        public string DrawingFingerprint { get; }
+        public bool UsesLegacyDecimalHandles { get; }
+    }
+
     public static class XlsxHandleReader
     {
         private const long MaxWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
         private static readonly Regex DecimalHandlePattern = new Regex(@"\$(\d+)", RegexOptions.CultureInvariant);
+        private static readonly Regex LegacyDecimalCellPattern = new Regex(@"^\s*(?:\$\d+\s*)+$", RegexOptions.CultureInvariant);
 
-        public static IReadOnlyList<string> ReadHandles(string path, int rowNumber)
+        public static IReadOnlyList<string> ReadHandles(string path, int rowNumber) => ReadHandleLookup(path, rowNumber).Handles;
+
+        public static XlsxHandleLookupResult ReadHandleLookup(string path, int rowNumber)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Excel path is required.", nameof(path));
             if (rowNumber < 1) throw new ArgumentOutOfRangeException(nameof(rowNumber));
@@ -34,23 +52,43 @@ namespace QS3D.Core.Export
                 XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
                 var rows = sheet.Descendants(ns + "row").ToList();
                 var target = rows.FirstOrDefault(x => ParsePositiveInt((string?)x.Attribute("r")) == rowNumber);
-                if (target == null) return Array.Empty<string>();
+                if (target == null) return new XlsxHandleLookupResult(Array.Empty<string>(), string.Empty, false);
 
                 var targetCells = ReadCells(target, ns, sharedStrings);
-                var decimalHandles = ParseDecimalHandles(targetCells.Values);
-                if (decimalHandles.Count > 0) return decimalHandles;
-
                 var handleColumns = new HashSet<int>();
+                var fingerprintColumns = new HashSet<int>();
+                var hasQs3dElementIdHeader = false;
                 foreach (var headerRow in rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) < rowNumber).Take(10))
                     foreach (var cell in ReadCells(headerRow, ns, sharedStrings))
+                    {
                         if (cell.Value.IndexOf("handle", StringComparison.OrdinalIgnoreCase) >= 0) handleColumns.Add(cell.Key);
-                if (handleColumns.Count == 0) return Array.Empty<string>();
+                        if (cell.Value.IndexOf("fingerprint", StringComparison.OrdinalIgnoreCase) >= 0) fingerprintColumns.Add(cell.Key);
+                        if (cell.Value.IndexOf("QS3D Element ID", StringComparison.OrdinalIgnoreCase) >= 0) hasQs3dElementIdHeader = true;
+                    }
 
-                var result = new List<string>();
+                var explicitHandles = new List<string>();
                 foreach (var column in handleColumns)
-                    if (targetCells.TryGetValue(column, out var value)) AddHexHandles(result, value);
-                return result;
+                    if (targetCells.TryGetValue(column, out var value)) AddHexHandles(explicitHandles, value);
+
+                var drawingFingerprint = ReadDrawingFingerprint(targetCells, fingerprintColumns);
+                var decimalHandles = ParseDecimalHandles(targetCells.Values);
+                var preferLegacy = decimalHandles.Count > 0 && string.IsNullOrWhiteSpace(drawingFingerprint) && !hasQs3dElementIdHeader;
+                if (preferLegacy || (explicitHandles.Count == 0 && decimalHandles.Count > 0))
+                    return new XlsxHandleLookupResult(decimalHandles, drawingFingerprint, true);
+                return new XlsxHandleLookupResult(explicitHandles, drawingFingerprint, false);
             }
+        }
+
+        private static string ReadDrawingFingerprint(IReadOnlyDictionary<int, string> cells, IEnumerable<int> columns)
+        {
+            var values = columns
+                .Where(cells.ContainsKey)
+                .Select(x => cells[x]?.Trim() ?? string.Empty)
+                .Where(x => x.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (values.Count > 1) throw new InvalidDataException("Excel row contains conflicting drawing fingerprints.");
+            return values.Count == 0 ? string.Empty : values[0];
         }
 
         private static IReadOnlyList<string> ReadSharedStrings(ZipArchive archive)
@@ -100,8 +138,12 @@ namespace QS3D.Core.Export
         {
             var result = new List<string>();
             foreach (var value in values)
-                foreach (Match match in DecimalHandlePattern.Matches(value ?? string.Empty))
+            {
+                var candidate = value ?? string.Empty;
+                if (!LegacyDecimalCellPattern.IsMatch(candidate)) continue;
+                foreach (Match match in DecimalHandlePattern.Matches(candidate))
                     if (long.TryParse(match.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number > 0) AddUnique(result, number.ToString("X", CultureInfo.InvariantCulture));
+            }
             return result;
         }
 

@@ -116,10 +116,63 @@ namespace QS3D.BricsCAD.V25
         private static void SyncDrawingIdentity(ProjectState project, Document document)
         {
             var drawing = document.Name ?? string.Empty;
-            if (string.Equals(project.DrawingPath, drawing, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(project.DrawingFingerprint, drawing, StringComparison.OrdinalIgnoreCase)) return;
+            var fingerprint = GetDrawingFingerprint(document, drawing);
+            var storedPath = project.DrawingPath ?? string.Empty;
+            var storedFingerprint = project.DrawingFingerprint ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(storedFingerprint) || IsLegacyPathFingerprint(storedPath, storedFingerprint, drawing))
+            {
+                AdoptDrawingIdentity(project, drawing, fingerprint, storedFingerprint);
+                return;
+            }
+
+            if (!string.Equals(storedFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "QS3D drawing identity mismatch. The .qsdb belongs to a different DWG fingerprint. " +
+                    "Move/recover the matching sidecar or explicitly reconcile the project before using CAD Handles. " +
+                    "Stored=" + storedFingerprint + ", current=" + fingerprint + ".");
+
+            if (SameDrawingName(storedPath, drawing)) return;
             project.DrawingPath = drawing;
-            project.DrawingFingerprint = drawing;
+            project.Touch();
+        }
+
+        private static string GetDrawingFingerprint(Document document, string drawing)
+        {
+            try
+            {
+                var fingerprint = document.Database.FingerprintGuid;
+                if (!string.IsNullOrWhiteSpace(fingerprint)) return fingerprint.Trim();
+            }
+            catch (Exception)
+            {
+                // Some host/database states may not expose a fingerprint yet. The normalized path fallback
+                // remains deterministic and, unlike the old raw-name assignment, detects a copied sidecar.
+            }
+
+            try { return "path:" + Path.GetFullPath(drawing).Trim().ToUpperInvariant(); }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            {
+                return "path:" + (drawing ?? string.Empty).Trim().ToUpperInvariant();
+            }
+        }
+
+        private static bool IsLegacyPathFingerprint(string storedPath, string storedFingerprint, string drawing)
+        {
+            return string.Equals(storedPath, storedFingerprint, StringComparison.OrdinalIgnoreCase) &&
+                   SameDrawingName(storedPath, drawing);
+        }
+
+        private static void AdoptDrawingIdentity(ProjectState project, string drawing, string fingerprint, string previousFingerprint)
+        {
+            project.DrawingPath = drawing;
+            project.DrawingFingerprint = fingerprint;
+            foreach (var element in project.Elements)
+            {
+                if (string.IsNullOrWhiteSpace(element.DrawingFingerprint) ||
+                    string.Equals(element.DrawingFingerprint, previousFingerprint, StringComparison.OrdinalIgnoreCase))
+                    element.DrawingFingerprint = fingerprint;
+            }
             project.Touch();
         }
 
@@ -162,7 +215,7 @@ namespace QS3D.BricsCAD.V25
         {
             var project = new ProjectState(Guid.NewGuid().ToString("N"), Path.GetFileNameWithoutExtension(document.Name));
             project.DrawingPath = document.Name ?? string.Empty;
-            project.DrawingFingerprint = document.Name ?? string.Empty;
+            project.DrawingFingerprint = GetDrawingFingerprint(document, project.DrawingPath);
             project.Zones.Add(new ZoneDefinition("zone-1", "Vùng-1"));
             project.Floors.Add(new FloorDefinition("floor-0", "Nền 0.00", 0d));
             project.ActiveZoneId = "zone-1";

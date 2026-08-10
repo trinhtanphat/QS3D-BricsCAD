@@ -53,7 +53,7 @@ namespace QS3D.BricsCAD.V25
                     summary + " • sourceSegments=" + segments.Count.ToString(CultureInfo.InvariantCulture) +
                     " • planarityToleranceM=" + planarityTolerance.ToString("R", CultureInfo.InvariantCulture));
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DWALLJUNCTIONS lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);

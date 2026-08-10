@@ -21,7 +21,7 @@ required = [
     "src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/OpeningBooleanCommands.cs",
     "src/QS3D.BricsCAD.V25/RebarGeometryCommands.cs",
-    "src/QS3D.BricsCAD.V25/RebarShapeGeometryCommands.cs",
+    "src/QS3D.BricsCAD.V25/ShapeRebarGeometryCommands.cs",
     "src/QS3D.BricsCAD.V25/RebarHealthCommands.cs",
     "src/QS3D.BricsCAD.V25/ShapeRebarHealthCommands.cs",
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
@@ -60,24 +60,30 @@ checks = {
         "Specify exactly one of Count or SpacingMm", "MaxBars", "usableSpanM", "ActualSpacingM", "OffsetsM"
     ],
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": [
-        "REBAR_GENERATED_OWNERSHIP_CONFLICT", "REBAR_GENERATED_SOLID_MISSING", "REBAR_GENERATED_COUNT_MISMATCH",
-        "GeneratedShapeRebarHandles", "InspectShape", "InspectAll", "SHAPE_REBAR"
+        "CodePrefix = \"REBAR\"", "CodePrefix = \"SHAPE_REBAR\"",
+        "spec.CodePrefix + \"_GENERATED_OWNERSHIP_CONFLICT\"", "spec.CodePrefix + \"_GENERATED_SOLID_MISSING\"",
+        "spec.CodePrefix + \"_GENERATED_COUNT_MISMATCH\"", "GeneratedShapeRebarHandles", "InspectShape", "InspectAll"
     ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": [
         "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "EnsureOwned", "ownership conflict", "Refusing destructive erase"
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
         "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
-        "GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
+        "GeneratedGeometryService.PrepareReplacement(document, transaction, project, element)",
+        "GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category)",
+        "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
     ],
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs": [
         "WallFootprintEngine", "BulgeArcTessellator.Tessellate", "Region.CreateFromCurves", "CreateExtrudedSolid", "WallJoinMode",
-        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelected(Document document, ProjectState project, ElementCategory category)"
+        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelected(Document document, ProjectState project, ElementCategory category)",
+        "GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category)",
+        "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
     ],
     "src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs": [
         "OpeningCutPlanner.Plan", "PolylineOpeningCutPlanner.Plan", "PreparePolylineHost", "PhysicalOpeningCutSolidHandle", "PhysicalOpeningCutFingerprint",
         "BooleanOperationType.BoolSubtract", "FingerprintPart", "HostFingerprint", "curved/bulged wall POLYLINE",
-        "ElementCategory.ArchitecturalWall", "ElementCategory.GlassWall", "ElementCategory.WallPier", "ElementCategory.StructuralWall"
+        "ElementCategory.ArchitecturalWall", "ElementCategory.GlassWall", "ElementCategory.WallPier", "ElementCategory.StructuralWall",
+        "GeneratedGeometryService.RequireMatchingOwnership"
     ],
     "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs": [
         "RectangularRebarLayoutPlanner.Plan", "CreateFrustum", "GeneratedRebarHandles", "RebarBarsAlongWidth", "RebarBarsAlongDepth",
@@ -115,7 +121,8 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
         'new RibbonButtonSpec("Vách Kính", "QS3DGLASSWALL")', 'new RibbonButtonSpec("Trụ Tường", "QS3DWALLPIER")',
-        'new RibbonButtonSpec("Khoét Cửa/Lỗ", "QS3DCUTOPENINGS")', 'new RibbonButtonSpec("Cốt thép 3D", "QS3DREBAR3D")'
+        'new RibbonButtonSpec("Khoét Cửa/Lỗ", "QS3DCUTOPENINGS")', 'new RibbonButtonSpec("Cốt thép cột 3D", "QS3DREBAR3D")',
+        'new RibbonButtonSpec("Cốt thép shape 3D", "QS3DREBAR3DSHAPE")'
     ],
     "src/QS3D.BricsCAD.V25/ReviewCommands.cs": [
         "IsTktWall(category.Value)", "ElementCategory.GlassWall", "ElementCategory.WallPier",

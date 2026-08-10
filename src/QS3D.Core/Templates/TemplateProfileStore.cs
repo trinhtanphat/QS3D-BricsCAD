@@ -244,12 +244,14 @@ namespace QS3D.Core.Templates
             foreach (var element in project.Elements.Where(x => string.Equals(x.FamilyId, source.Id, StringComparison.OrdinalIgnoreCase)))
             {
                 var changed = false;
+                var geometryChanged = false;
                 foreach (var oldProperty in previousProperties)
                 {
                     if (source.Properties.ContainsKey(oldProperty.Key)) continue;
                     if (!element.Properties.TryGetValue(oldProperty.Key, out var current) || !string.Equals(current, oldProperty.Value ?? string.Empty, StringComparison.Ordinal)) continue;
                     element.Properties.Remove(oldProperty.Key);
                     changed = true;
+                    if (ElementGeometryPolicy.AffectsGeneratedGeometry(element.Category, oldProperty.Key)) geometryChanged = true;
                 }
 
                 foreach (var property in source.Properties)
@@ -261,10 +263,13 @@ namespace QS3D.Core.Templates
                     if (hasCurrent && string.Equals(current, next, StringComparison.Ordinal)) continue;
                     element.Properties[property.Key] = next;
                     changed = true;
+                    if (ElementGeometryPolicy.AffectsGeneratedGeometry(element.Category, property.Key)) geometryChanged = true;
                 }
 
                 if (!changed) continue;
-                element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
+                var dirty = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
+                if (geometryChanged) dirty |= ElementDirtyFlags.Geometry;
+                element.MarkDirty(dirty);
                 affected.Add(element.Id);
             }
         }

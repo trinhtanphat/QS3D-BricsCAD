@@ -55,16 +55,28 @@ namespace QS3D.BricsCAD.V25.Services
             element.Category = category;
             element.SourceHandles.Clear(); element.SourceHandles.Add(snapshot.Handle); element.DrawingFingerprint = project.DrawingFingerprint;
             element.Properties["Layer"] = snapshot.Layer;
+            foreach (var key in element.Properties.Keys.Where(x => x.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase)).ToList()) element.Properties.Remove(key);
             foreach (var item in snapshot.Metadata) element.Properties["CAD." + item.Key] = item.Value ?? string.Empty;
 
             var units = CadUnitService.GetPolicy(document);
             project.Metadata["QS3D.DrawingUnit"] = CadUnitService.Describe(document);
             if (CadUnitService.IsAssumedMillimeter(document)) project.Metadata["QS3D.DrawingUnitAssumption"] = "INSUNITS unsupported/undefined; assumed Millimeter";
             else project.Metadata.Remove("QS3D.DrawingUnitAssumption");
-            if (snapshot.LengthDrawingUnits.HasValue) element.Properties["LengthM"] = units.ToMeters(snapshot.LengthDrawingUnits.Value).ToString("R", CultureInfo.InvariantCulture);
-            if (snapshot.AreaDrawingUnitsSquared.HasValue) element.Properties["AreaM2"] = units.AreaToSquareMeters(snapshot.AreaDrawingUnitsSquared.Value).ToString("R", CultureInfo.InvariantCulture);
-            if (snapshot.VolumeDrawingUnitsCubed.HasValue) element.Properties["VolumeM3"] = units.VolumeToCubicMeters(snapshot.VolumeDrawingUnitsCubed.Value).ToString("R", CultureInfo.InvariantCulture);
+            ReplaceSourceMetric(element, "LengthM", snapshot.LengthDrawingUnits.HasValue ? units.ToMeters(snapshot.LengthDrawingUnits.Value) : (double?)null);
+            ReplaceSourceMetric(element, "AreaM2", snapshot.AreaDrawingUnitsSquared.HasValue ? units.AreaToSquareMeters(snapshot.AreaDrawingUnitsSquared.Value) : (double?)null);
+            ReplaceSourceMetric(element, "VolumeM3", snapshot.VolumeDrawingUnitsCubed.HasValue ? units.VolumeToCubicMeters(snapshot.VolumeDrawingUnitsCubed.Value) : (double?)null);
             ApplyFamilyDefaults(element, family); element.MarkDirty(ElementDirtyFlags.All); Regenerate(project, element); project.Touch(); return true;
+        }
+
+        private static void ReplaceSourceMetric(ProjectElement element, string key, double? value)
+        {
+            if (!value.HasValue)
+            {
+                element.Properties.Remove(key);
+                return;
+            }
+            if (double.IsNaN(value.Value) || double.IsInfinity(value.Value)) throw new InvalidOperationException("CAD source metric must be finite: " + key + ".");
+            element.Properties[key] = value.Value.ToString("R", CultureInfo.InvariantCulture);
         }
 
         public static int GenerateRoomFinishes(Document document)
@@ -158,7 +170,7 @@ namespace QS3D.BricsCAD.V25.Services
                 else { var takeoff = new GenericTakeoffRegenerator(); regenerator = takeoff.CanRegenerate(element.Category) ? (IElementRegenerator)takeoff : new RoomRegenerator(); }
             }
             if (regenerator.CanRegenerate(element.Category)) regenerator.Regenerate(project, element);
-            element.MarkClean(ElementDirtyFlags.All);
+            element.MarkClean(ElementGeometryPolicy.SemanticCleanFlags(element.Category));
         }
 
         private static ProjectFamily CreateFamily(ProjectState project, ElementCategory category)

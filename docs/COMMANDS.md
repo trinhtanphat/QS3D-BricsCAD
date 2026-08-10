@@ -54,8 +54,8 @@ Updated for the current source baseline on 2026-08-10. Commands that create nati
 
 - `QS3DRECOGNIZE`, `QS3DRECOGNIZEAUTO` — deterministic recognition + review/auto-accept.
 - `QS3DB4D` — scan every entity in the active Current Space; read curve/closed-area/Region/Hatch/Solid3d metrics, auto-apply only high-confidence recognition and leave the rest in the review window.
-- `QS3DBQ`, `QS3DED2` — quantity summary and XLSX workflow. Exported rows include stable QS3D Element IDs and hexadecimal CAD handles.
-- `QS3DEXCELLOCATE` — choose an `.xlsx` file and row, resolve exported QS3D handles or legacy BLT hidden `$<decimal handle>` tokens, then select and zoom the live CAD entities.
+- `QS3DBQ`, `QS3DED2` — quantity summary and XLSX workflow. Exported rows include stable QS3D Element IDs, hexadecimal CAD handles and the owning DWG fingerprint.
+- `QS3DEXCELLOCATE` — choose an `.xlsx` file and row, verify the exported DWG fingerprint, then select/zoom the live CAD entities. A mismatched fingerprint fails closed; legacy BLT hidden `$<decimal handle>` rows without a fingerprint require typing `YES` before the active selection may change.
 - `QS3DBBSVIEW` — BBS review/Locate window.
 - `QS3DBBS` — BBS XLSX export.
 - `QS3DBBSCSV` — UTF-8 CSV export with spreadsheet formula-injection guards.

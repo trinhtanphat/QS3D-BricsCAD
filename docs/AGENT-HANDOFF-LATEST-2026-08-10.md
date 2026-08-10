@@ -3,7 +3,7 @@
 **Audit/update date:** 2026-08-10 (UTC+7)  
 **Repository:** `trinhtanphat/QS3D-BricsCAD`  
 **Branch:** `main`  
-**Repository/source reconciliation cutoff for this edition:** `f127360` (`feat(room): support curved polyline boundary discovery`) plus the B4D/ED2/Handle and local V25 compile patch documented below.
+**Repository/source reconciliation cutoff for this edition:** `904442c` (`test(preflight): guard typed editors and instance overrides`) plus rebased B4D/ED2/Handle commit `645b399` and the DWG-identity/generated-ownership hardening documented below.
 **Historical exhaustive session handoff:** `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md`  
 **Status of this file:** **canonical for current source status and continuation**. The older session-history handoff is retained as the detailed historical audit trail, but any source-status statement in that older file that conflicts with this file or newer `main` is superseded.
 
@@ -162,6 +162,7 @@ Current source has:
 - family property propagation to member elements with derived quantities dirtied;
 - multi-DWG live cache keyed by `Document` identity rather than mutable drawing filename;
 - Save As drawing identity synchronization;
+- live DWG identity based on BricsCAD `Database.FingerprintGuid`, with a same-path legacy migration and fail-closed rejection of copied/mismatched `.qsdb` Handle identities;
 - **QSDB schema v3**, with deterministic **v1 → v2 → v3** migration;
 - persisted `QuantityRule` definitions and audit provenance;
 - persisted dirty flags and UTC update state;
@@ -179,6 +180,7 @@ Current regeneration model includes:
 
 - dependency graph and dirty propagation;
 - bounded fixed-point regeneration;
+- semantic regeneration preserves `Geometry` dirty state for native-solid categories; a successful committed CAD builder is the only path that clears that flag;
 - explicit `QS3DREGEN`;
 - BQ/BBS/Refresh regenerate deterministic dirty quantities before consuming them;
 - guarded `QuantityMath` for finite/non-negative multiply/add/subtract/divide/hypotenuse/clamp operations;
@@ -292,6 +294,7 @@ Important safety work now present:
 
 - source/generated handles are distinct;
 - generated geometry replacement uses guarded/two-phase behavior;
+- generated entities receive versioned QS3D XData ownership (`ProjectId`, `ElementId`, category); erase/replacement and physical opening boolean modification require a matching live marker;
 - health validates generated Solid3d ownership/liveness/category;
 - erased/non-Entity source handles are not considered live;
 - 3D builders reject ambiguous semantic ownership of one CAD source;
@@ -313,9 +316,9 @@ Current BQ behavior includes:
 - XLSX export;
 - finite/overflow-safe report accumulation rather than unchecked `+=`;
 - filters/freeze/header behavior covered by deterministic source/tests.
-- exported aggregate rows carry stable QS3D Element IDs and hexadecimal CAD handles;
+- exported aggregate rows carry stable QS3D Element IDs, hexadecimal CAD handles and the owning DWG fingerprint;
 - `QS3DED2` aliases the BQ/export workflow;
-- `QS3DEXCELLOCATE` reads a QS3D export row or the supplied legacy BLT hidden `$<decimal handle>` convention and selects/zooms the corresponding live CAD entities;
+- `QS3DEXCELLOCATE` rejects a QS3D export whose fingerprint differs from the active DWG; the supplied legacy BLT hidden `$<decimal handle>` convention remains readable but requires explicit `YES` confirmation because it has no fingerprint;
 - derived room-finish rows resolve handles transitively through their source-room dependency without duplicating semantic handle ownership.
 
 ### 7.10 Rebar / BBS
@@ -358,7 +361,7 @@ Current behavior includes:
 - invalid confidence/margin and ambiguous mappings rejected;
 - semantic category collision protection;
 - **project/company layer mappings can override fallback heuristics deterministically**.
-- `QS3DB4D` performs a whole-Current-Space scan, excludes QS3D-generated solids, reads Polyline/Region/Hatch/Solid3d metrics and auto-applies only high-confidence results while leaving ambiguous results in review.
+- `QS3DB4D` performs a bounded whole-Current-Space scan, excludes QS3D-generated mass/rebar/shape-rebar solids, reads Polyline/Region/Hatch/Solid3d metrics and auto-applies only high-confidence results while leaving ambiguous results in review. Rescan replaces prior source-derived metrics and `CAD.*` metadata instead of retaining values no longer exposed by the live entity.
 - rescanning an already tracked object preserves its assigned Family/Floor/Zone instead of silently moving it to the active context.
 
 ### 7.12 Templates and company standards
@@ -813,7 +816,8 @@ Runtime blocker/history:
 
 Current reconciliation cutoff for this document:
 
-- `fc59fccc5d116b28758ddcbc77bdf10217f71f21` — deterministic QuantityRule dependency hardening.
+- `904442c` — typed editor/instance override guards plus project BBS shape planning, focus/isolate actions and unified rebar health;
+- `645b399` — B4D whole-space scan and ED2 Excel/Handle round-trip rebased onto that mainline.
 
 The older handoff cutoff `c987b34...` is an ancestor of later `main`; subsequent full-domain/release work was layered/merged on top rather than using a destructive reset.
 

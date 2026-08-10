@@ -6,6 +6,7 @@
 - Clean-room WPF UI design system, left workspace, right Drawing/Layer manager, Full Domain Hub and audit-log review UI.
 - Native Ribbon bootstrapper with QS3D workflow tabs; it fails closed and leaves palettes available if V25 ribbon runtime differs.
 - Multi-document lifecycle refresh with project cache keyed by live `Document` identity instead of mutable drawing names; Save As synchronizes the sidecar drawing identity and unsaved drawing filenames are sanitized.
+- DWG identity now uses the BricsCAD database `FingerprintGuid`. Same-path legacy sidecars migrate once, while a copied/mismatched `.qsdb` fails closed before Handle-based work instead of silently overwriting its identity.
 - Project / Zone / Floor / Family / semantic Element model with finite floor elevation validation.
 - Data-driven Family property editor with active Zone/Floor/Family context; common geometry/rebar fields now have BLT-style Vietnamese display labels/groups/units, finite-number validation is not dependent on whether a unit label exists, and edits propagate to existing member elements while marking derived quantities dirty.
 - BLT-style category workflow in the main palette: select semantic group + Family, select CAD objects, press **Bóc chọn**, then edit grouped properties / build 3D / review BQ without memorizing category command names.
@@ -14,6 +15,7 @@
 - corrupted or missing primary QSDB fallback to a valid backup; unrecoverable existing project data enters protected recovery state and is not silently overwritten.
 - element dirty flags and UTC update timestamps persist across `.qsdb` save/reopen; invalid persisted numeric/timestamp/dirty-state data is rejected.
 - dependency graph + bounded fixed-point regeneration. Matching project quantity rules run after semantic regeneration using deterministic dependency ordering and numeric Family/instance/quantity variables.
+- semantic quantity regeneration no longer clears `Geometry` for native-solid categories; dimension/family edits keep geometry dirty until a committed BricsCAD builder replacement marks it clean.
 - semantic regeneration arithmetic is guarded against non-finite values/overflow before derived quantities are committed.
 - `QS3DREGEN` is available explicitly; BQ, BBS and Refresh regenerate dirty deterministic semantic quantities before consuming them.
 - semantic capture for Room, Tường Gạch/ArchitecturalWall, Vách Kính/GlassWall, Trụ Tường/WallPier, Opening, Door, structural categories and custom takeoff. `QS3DGLASSWALL` / `QS3DWALLPIER` create safe starter Family properties when that category has no Family yet.
@@ -26,6 +28,7 @@
 - deterministic structural quantity regeneration for Beam, Slab, Column, StructuralWall, Foundation, Stair, Railing and Earthwork.
 - BricsCAD semantic capture commands and Ribbon/Domain Hub actions for Tường KT/Cửa plus Dầm/Sàn/Cột/Vách BTCT/Móng/Cầu thang/Lan can/Đào đất.
 - source-level native 3D adapters cover Tường Gạch/ArchitecturalWall, Vách Kính/GlassWall and Trụ Tường/WallPier from LINE and open POLYLINE centerlines, plus Beam, Slab, Column, StructuralWall, Foundation, Stair footprint mass, Railing line-prism and downward Earthwork footprint mass. All three Tường KT variants share the guarded centerline extrusion path; polyline bulges are tessellated into the deterministic `WallFootprintEngine`; generated geometry uses guarded two-phase replacement and CAD geometry validation.
+- generated solids carry versioned QS3D XData ownership (`ProjectId`, `ElementId`, category). Replacement and physical opening boolean operations fail closed unless the live marker matches; Model Health reports missing or mismatched ownership metadata.
 - host linking supports Door/Opening deduction, safe re-host dirty propagation and persisted audit events for link/unlink operations.
 - physical Door/Opening boolean subtraction source is exposed as `QS3DCUTOPENINGS` for compatible generated LINE-host solids across ArchitecturalWall, GlassWall, WallPier and StructuralWall. The service prepares cuts before mutation and fingerprints live host + opening placement/dimensions, preventing a moved opening from being silently mistaken for an already-applied cut; changed geometry on the same cut solid requires rebuilding the host first.
 - HT_Phòng semantic generation for floor finish, waterproofing, skirting, wall finish and ceiling finish.
@@ -37,9 +40,9 @@
 - deterministic recognition core is wired to `QS3DRECOGNIZE` review UI and `QS3DRECOGNIZEAUTO`; auto mode only applies high-confidence/margin results, rejects ambiguous mappings/invalid confidence and refuses semantic category collisions.
 - project/company layer mappings can override recognition deterministically before fallback heuristics.
 - `.qstemplate` import/export is implemented for Families, QuantityRules, layer mappings and BQ column layout with rollback/confirmation safety for destructive apply.
-- BQ XLSX rows now include QS3D Element IDs and CAD handles; `QS3DED2` aliases the BQ/export workflow and `QS3DEXCELLOCATE` performs the reverse workbook-row → handle → live CAD selection path. The reader also supports the supplied BLT hidden `$<decimal handle>` convention.
+- BQ XLSX rows now include QS3D Element IDs, CAD handles and the owning DWG fingerprint; `QS3DED2` aliases the BQ/export workflow and `QS3DEXCELLOCATE` performs the reverse workbook-row → fingerprint/handle → live CAD selection path. A mismatched fingerprint fails closed. The reader also supports the supplied BLT hidden `$<decimal handle>` convention, but a legacy row without a fingerprint requires explicit `YES` confirmation before selection changes.
 - derived finish semantics resolve source handles transitively through their room dependency, so BQ export, Locate and finish-only untrack operate on the actual room geometry without duplicating handle ownership.
-- `QS3DB4D` is a whole-Current-Space scan rather than a selection alias; the V25 adapter reads curve length, Polyline/Region/Hatch/Solid3d area and Solid3d volume before deterministic recognition.
+- `QS3DB4D` is a bounded whole-Current-Space scan rather than a selection alias; the V25 adapter reads curve length, Polyline/Region/Hatch/Solid3d area and Solid3d volume before deterministic recognition. QS3D-generated mass/rebar/shape-rebar handles are excluded, and a rescan replaces source-derived metrics/metadata so a removed Area/Volume/Text value cannot remain stale.
 - generic Family properties can carry material/classification codes, so company classification data round-trips through templates without hard-coding a vendor classification schema.
 - V25 runtime probe source verifies actual palette visibility rather than treating command dispatch alone as UI success.
 - V25 release packaging generates a command manifest from `CommandMethod` declarations, package metadata, SHA-256 hashes for shipped payloads, installer/uninstaller helpers and a release ZIP while excluding BricsCAD-owned runtime assemblies.
@@ -52,7 +55,7 @@
 ## Locally verified on 2026-08-10
 
 - Core smoke suite: `ALL PASS`.
-- Exact installed BricsCAD V25.2.10 managed references: Release/x64 plugin build succeeded with 0 warnings and 0 errors.
+- Current integrated tree (latest remote geometry/UI batch plus B4D/ED2 and ownership/dirty-state hardening) compiled against the exact installed BricsCAD V25.2.10 managed references in Release/x64 with 0 warnings and 0 errors.
 - Read-only check of the supplied `DGKL.xlsx`: Excel row 5 resolved decimal handles `12510,12512` to hexadecimal `30DE,30E0`; row 6 resolved to `30DF,30E1`.
 - Both repository preflight suites pass. No GitHub Action was dispatched.
 
@@ -72,7 +75,6 @@ Historical BricsCAD V25 integration probe run `31341184031` remained queued beca
 
 These still require the actual BricsCAD V25 environment or external release infrastructure:
 
-- full plugin compile against the exact installed V25 `BrxMgd.dll` / `TD_Mgd.dll` after the newest source changes;
 - real DemandLoad install/uninstall and `NETLOAD`, Ribbon/palette plus recognition/template/revision/BBS/domain/audit/`QS3DROOMAUTO`/physical-cut/rebar-3D/Tường KT variant commands on V25.1/V25.2;
 - private sample-DWG regression and Unicode/HiDPI visual comparison;
 - production proof/performance for Tường Gạch/Vách Kính/Trụ Tường LINE/open-POLYLINE/curved centerlines; dedicated curtain-wall framing/panels, specialized pier profiles, wall-to-wall joins/T-junction cleanup and freeform wall profiles remain product work;
