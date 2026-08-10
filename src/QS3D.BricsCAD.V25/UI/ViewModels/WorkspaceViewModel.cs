@@ -11,27 +11,54 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 {
     public sealed class WorkspaceViewModel : INotifyPropertyChanged
     {
+        public const string FamilyScope = "Family / Type";
+        public const string InstanceScope = "Đối tượng / Instance";
+
         private string _status = "Sẵn sàng";
         private string _selectedFamilyName = string.Empty;
+        private string _selectedPropertyScope = FamilyScope;
         private ProjectState? _project;
+        private ProjectFamily? _selectedFamily;
+        private ProjectElement? _selectedElement;
 
         public ObservableCollection<string> Zones { get; } = new ObservableCollection<string>();
         public ObservableCollection<string> Floors { get; } = new ObservableCollection<string>();
         public ObservableCollection<ProjectFamily> Families { get; } = new ObservableCollection<ProjectFamily>();
         public ObservableCollection<PropertyRowViewModel> Properties { get; } = new ObservableCollection<PropertyRowViewModel>();
+        public ObservableCollection<string> PropertyScopes { get; } = new ObservableCollection<string> { FamilyScope, InstanceScope };
         public string Status { get => _status; set { if (_status == value) return; _status = value ?? string.Empty; OnChanged(); } }
         public string SelectedFamilyName { get => _selectedFamilyName; set { if (_selectedFamilyName == value) return; _selectedFamilyName = value ?? string.Empty; OnChanged(); } }
+        public string SelectedPropertyScope
+        {
+            get => _selectedPropertyScope;
+            set
+            {
+                var requested = string.Equals(value, InstanceScope, StringComparison.Ordinal) ? InstanceScope : FamilyScope;
+                if (requested == InstanceScope && _selectedElement == null)
+                {
+                    Status = "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance.";
+                    requested = FamilyScope;
+                }
+                if (_selectedPropertyScope == requested) return;
+                _selectedPropertyScope = requested;
+                OnChanged();
+                LoadCurrentProperties();
+            }
+        }
 
         public void Load(ProjectState project)
         {
             _project = project ?? throw new ArgumentNullException(nameof(project));
+            _selectedElement = null;
+            _selectedPropertyScope = FamilyScope;
+            OnChanged(nameof(SelectedPropertyScope));
             Zones.Clear(); foreach (var item in project.Zones) Zones.Add(item.Name);
             Floors.Clear(); foreach (var item in project.Floors.OrderBy(x => x.ElevationM)) Floors.Add(item.Name);
             Families.Clear(); foreach (var item in project.Families.OrderBy(x => x.Category).ThenBy(x => x.Name)) Families.Add(item);
             var activeFamilyId = project.Metadata.TryGetValue("ActiveFamilyId", out var stored) ? stored : string.Empty;
-            var selected = Families.FirstOrDefault(x => string.Equals(x.Id, activeFamilyId, StringComparison.OrdinalIgnoreCase)) ?? Families.FirstOrDefault();
-            SelectedFamilyName = selected?.Name ?? string.Empty;
-            LoadProperties(selected);
+            _selectedFamily = Families.FirstOrDefault(x => string.Equals(x.Id, activeFamilyId, StringComparison.OrdinalIgnoreCase)) ?? Families.FirstOrDefault();
+            SelectedFamilyName = _selectedFamily?.Name ?? string.Empty;
+            LoadCurrentProperties();
             Status = project.Elements.Count + " cấu kiện • " + project.Families.Count + " family";
         }
 
@@ -68,16 +95,72 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public void SetActiveFamily(ProjectFamily? family)
         {
             if (_project == null || family == null) return;
+            _selectedFamily = family;
+            if (_selectedElement != null && !string.Equals(_selectedElement.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                _selectedElement = null;
+                _selectedPropertyScope = FamilyScope;
+                OnChanged(nameof(SelectedPropertyScope));
+            }
             if (!_project.Metadata.TryGetValue("ActiveFamilyId", out var activeId) || !string.Equals(activeId, family.Id, StringComparison.OrdinalIgnoreCase))
             {
                 _project.Metadata["ActiveFamilyId"] = family.Id;
                 _project.Touch();
             }
             SelectedFamilyName = family.Name;
-            LoadProperties(family);
+            LoadCurrentProperties();
         }
 
-        public void LoadProperties(ProjectFamily? family)
+        public void ShowFamilyProperties()
+        {
+            if (_selectedPropertyScope != FamilyScope)
+            {
+                _selectedPropertyScope = FamilyScope;
+                OnChanged(nameof(SelectedPropertyScope));
+            }
+            LoadCurrentProperties();
+        }
+
+        public void SetSelectedElement(ProjectElement? element)
+        {
+            if (_project == null || element == null)
+            {
+                _selectedElement = null;
+                ShowFamilyProperties();
+                return;
+            }
+            var family = _project.FindFamily(element.FamilyId);
+            if (family == null)
+            {
+                _selectedElement = null;
+                Status = "Cấu kiện " + element.Id + " chưa có Family hợp lệ.";
+                ShowFamilyProperties();
+                return;
+            }
+
+            _selectedElement = element;
+            _selectedFamily = family;
+            SelectedFamilyName = family.Name;
+            if (!_project.Metadata.TryGetValue("ActiveFamilyId", out var activeId) || !string.Equals(activeId, family.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                _project.Metadata["ActiveFamilyId"] = family.Id;
+                _project.Touch();
+            }
+            _selectedPropertyScope = InstanceScope;
+            OnChanged(nameof(SelectedPropertyScope));
+            LoadCurrentProperties();
+            Status = "Instance: " + element.Id + " • " + family.Name;
+        }
+
+        private void LoadCurrentProperties()
+        {
+            if (_selectedPropertyScope == InstanceScope && _selectedElement != null && _selectedFamily != null)
+                LoadInstanceProperties(_selectedElement, _selectedFamily);
+            else
+                LoadFamilyProperties(_selectedFamily);
+        }
+
+        private void LoadFamilyProperties(ProjectFamily? family)
         {
             Properties.Clear();
             if (family == null) return;
@@ -91,18 +174,47 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             {
                 var key = pair.Key;
                 var unit = UnitFor(key);
-                var row = new PropertyRowViewModel
-                {
-                    Group = GroupFor(key),
-                    Name = DisplayNameFor(key),
-                    Unit = unit,
-                    EditorKind = EditorKindFor(key, pair.Value),
-                    Choices = ChoicesFor(key, pair.Value)
-                };
+                var row = CreatePropertyRow(key, pair.Value, unit);
                 row.Apply = value => ApplyFamilyProperty(family, key, unit, value);
                 row.Value = pair.Value;
                 Properties.Add(row);
             }
+        }
+
+        private void LoadInstanceProperties(ProjectElement element, ProjectFamily family)
+        {
+            Properties.Clear();
+            var idRow = new PropertyRowViewModel { Group = "ĐỐI TƯỢNG", Name = "Element ID", IsReadOnly = true };
+            idRow.Value = element.Id; Properties.Add(idRow);
+            var categoryRow = new PropertyRowViewModel { Group = "ĐỐI TƯỢNG", Name = "Loại cấu kiện", IsReadOnly = true };
+            categoryRow.Value = element.Category.ToString(); Properties.Add(categoryRow);
+            foreach (var pair in family.Properties.OrderBy(x => GroupFor(x.Key)).ThenBy(x => DisplayNameFor(x.Key)))
+            {
+                var key = pair.Key;
+                var familyValue = pair.Value ?? string.Empty;
+                var hasInstance = element.Properties.TryGetValue(key, out var stored);
+                var current = hasInstance ? stored ?? string.Empty : familyValue;
+                var unit = UnitFor(key);
+                var row = CreatePropertyRow(key, current, unit);
+                row.Group = "INSTANCE • " + GroupFor(key);
+                row.CanReset = hasInstance && !string.Equals(current, familyValue, StringComparison.Ordinal);
+                row.Value = current;
+                row.Apply = value => ApplyInstanceProperty(element, family, key, unit, row, value);
+                row.Reset = () => row.Value = familyValue;
+                Properties.Add(row);
+            }
+        }
+
+        private PropertyRowViewModel CreatePropertyRow(string key, string current, string unit)
+        {
+            return new PropertyRowViewModel
+            {
+                Group = GroupFor(key),
+                Name = DisplayNameFor(key),
+                Unit = unit,
+                EditorKind = EditorKindFor(key, current),
+                Choices = ChoicesFor(key, current)
+            };
         }
 
         private string ApplyFamilyName(ProjectFamily family, string value)
@@ -129,28 +241,10 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
         private string ApplyFamilyProperty(ProjectFamily family, string key, string unit, string value)
         {
-            var next = (value ?? string.Empty).Trim();
-            family.Properties.TryGetValue(key, out var previousFamilyValue);
-            if (IsBooleanProperty(key, previousFamilyValue))
-            {
-                if (!TryBoolean(next, out var boolean))
-                {
-                    Status = DisplayNameFor(key) + ": chỉ nhận Bật/Tắt (true/false).";
-                    return previousFamilyValue ?? string.Empty;
-                }
-                next = boolean ? "true" : "false";
-            }
-            else if (unit.Length > 0 || IsNumericProperty(key))
-            {
-                if (!TryFiniteNumber(next, out var number))
-                {
-                    Status = DisplayNameFor(key) + ": giá trị số không hợp lệ; đã giữ giá trị cũ.";
-                    return previousFamilyValue ?? string.Empty;
-                }
-                next = number.ToString("R", CultureInfo.InvariantCulture);
-            }
-
-            if (string.Equals(previousFamilyValue, next, StringComparison.Ordinal)) return previousFamilyValue ?? string.Empty;
+            var next = NormalizePropertyValue(key, unit, family.Properties.TryGetValue(key, out var previous) ? previous : string.Empty, value, out var valid);
+            var previousFamilyValue = previous ?? string.Empty;
+            if (!valid) return previousFamilyValue;
+            if (string.Equals(previousFamilyValue, next, StringComparison.Ordinal)) return previousFamilyValue;
             family.Properties[key] = next;
             if (_project == null) return next;
 
@@ -174,6 +268,57 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
             _project.Touch();
             Status = "Đã cập nhật " + DisplayNameFor(key) + " • kế thừa " + inherited + " cấu kiện" + (overrides > 0 ? " • giữ " + overrides + " instance override" : string.Empty);
+            return next;
+        }
+
+        private string ApplyInstanceProperty(ProjectElement element, ProjectFamily family, string key, string unit, PropertyRowViewModel row, string value)
+        {
+            var familyValue = family.Properties.TryGetValue(key, out var familyRaw) ? familyRaw ?? string.Empty : string.Empty;
+            var current = element.Properties.TryGetValue(key, out var stored) ? stored ?? string.Empty : familyValue;
+            var next = NormalizePropertyValue(key, unit, current, value, out var valid);
+            if (!valid) return current;
+            if (string.Equals(current, next, StringComparison.Ordinal))
+            {
+                row.CanReset = !string.Equals(next, familyValue, StringComparison.Ordinal);
+                return current;
+            }
+
+            element.SetProperty(key, next);
+            element.MarkDirty(ElementDirtyFlags.All);
+            _project?.Touch();
+            row.CanReset = !string.Equals(next, familyValue, StringComparison.Ordinal);
+            Status = row.CanReset
+                ? "Instance override: " + DisplayNameFor(key) + " = " + next
+                : "Đã đưa " + DisplayNameFor(key) + " về giá trị Family.";
+            return next;
+        }
+
+        private string NormalizePropertyValue(string key, string unit, string previousValue, string value, out bool valid)
+        {
+            var next = (value ?? string.Empty).Trim();
+            if (IsBooleanProperty(key, previousValue))
+            {
+                if (!TryBoolean(next, out var boolean))
+                {
+                    Status = DisplayNameFor(key) + ": chỉ nhận Bật/Tắt (true/false).";
+                    valid = false;
+                    return previousValue;
+                }
+                valid = true;
+                return boolean ? "true" : "false";
+            }
+            if (unit.Length > 0 || IsNumericProperty(key))
+            {
+                if (!TryFiniteNumber(next, out var number))
+                {
+                    Status = DisplayNameFor(key) + ": giá trị số không hợp lệ; đã giữ giá trị cũ.";
+                    valid = false;
+                    return previousValue;
+                }
+                valid = true;
+                return number.ToString("R", CultureInfo.InvariantCulture);
+            }
+            valid = true;
             return next;
         }
 
