@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+EXPORTER = ROOT / "scripts/export-local-v25-sanitized-summary.py"
+errors = []
+
+if not EXPORTER.is_file():
+    errors.append("missing scripts/export-local-v25-sanitized-summary.py")
+else:
+    text = EXPORTER.read_text(encoding="utf-8")
+    for needle in (
+        "qualification-summary.md",
+        "sanitized summary",
+        "runtime was explicitly skipped",
+        "NOT PROVED BY THIS SUMMARY",
+        "private DWG names/content",
+        "raw error messages",
+    ):
+        if needle not in text:
+            errors.append("sanitized evidence exporter missing contract token: " + needle)
+
+if not errors:
+    fixture = {
+        "schema": 1,
+        "status": "PASS",
+        "exactSha": "a" * 40,
+        "branch": "main",
+        "runnerUser": "PRIVATE_USER_SENTINEL",
+        "interactive": True,
+        "bricsCadDir": r"C:\\Users\\PRIVATE_USER_SENTINEL\\Program Files\\Bricsys\\BricsCAD V25",
+        "pluginDll": r"D:\\PRIVATE_BUILD_SENTINEL\\QS3D.BricsCAD.V25.dll",
+        "pluginSha256": "b" * 64,
+        "runtimeSkipped": True,
+        "runtimeMetadata": r"C:\\PRIVATE_RUNTIME_SENTINEL\\runtime-metadata.json",
+        "packageRequested": False,
+        "releaseTag": "v0.1.0-preview.2",
+        "manualScenarioChecklist": "docs/LOCAL-V25-QUALIFICATION.md",
+        "steps": [
+            {
+                "name": "Core deterministic smoke suite",
+                "status": "PASS",
+                "error": r"PRIVATE_ERROR_SENTINEL C:\\Customer\\Acme\\secret.dwg",
+            },
+            {
+                "name": "Licensed V25 NETLOAD / Ribbon / Palette runtime probe",
+                "status": "SKIPPED",
+                "error": "PRIVATE_STEP_ERROR_SENTINEL",
+            },
+        ],
+        "error": r"PRIVATE_FATAL_SENTINEL C:\\Customer\\Acme\\secret.dwg",
+    }
+
+    with tempfile.TemporaryDirectory(prefix="qs3d-v25-sanitize-") as temp_dir:
+        temp = Path(temp_dir)
+        source = temp / "qualification.json"
+        output = temp / "qualification-summary.md"
+        source.write_text(json.dumps(fixture), encoding="utf-8")
+        completed = subprocess.run(
+            [sys.executable, str(EXPORTER), "--input", str(source), "--output", str(output)],
+            cwd=str(ROOT),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if completed.returncode != 0:
+            errors.append("sanitized evidence exporter failed on deterministic fixture: " + completed.stderr.strip())
+        elif not output.is_file():
+            errors.append("sanitized evidence exporter did not create qualification-summary.md")
+        else:
+            summary = output.read_text(encoding="utf-8")
+            for forbidden in (
+                "PRIVATE_USER_SENTINEL",
+                "PRIVATE_BUILD_SENTINEL",
+                "PRIVATE_RUNTIME_SENTINEL",
+                "PRIVATE_ERROR_SENTINEL",
+                "PRIVATE_STEP_ERROR_SENTINEL",
+                "PRIVATE_FATAL_SENTINEL",
+                "secret.dwg",
+                "C:\\Customer",
+                "bricsCadDir",
+                "pluginDll",
+                "runtimeMetadata",
+                "runnerUser",
+            ):
+                if forbidden in summary:
+                    errors.append("sanitized summary leaked private/raw field: " + forbidden)
+            for required in (
+                "`" + ("a" * 40) + "`",
+                "`" + ("b" * 64) + "`",
+                "Runtime skipped: **YES**",
+                "This result cannot qualify a customer release",
+                "Core deterministic smoke suite",
+                "Manual/private-DWG checklist: **NOT PROVED BY THIS SUMMARY**",
+                "Known blockers: `SANITIZED TEXT ONLY`",
+            ):
+                if required not in summary:
+                    errors.append("sanitized summary missing safe handoff field: " + required)
+
+print("QS3D local V25 sanitized evidence preflight")
+if errors:
+    for error in errors:
+        print("ERROR:", error)
+    print("FAILED with", len(errors), "error(s).")
+    raise SystemExit(1)
+
+print("PASS: local V25 qualification evidence can be exported to a deterministic Markdown handoff without carrying machine/user/path/private-DWG/raw-error fields, and runtime-skip remains visibly non-release-qualified.")
