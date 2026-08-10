@@ -46,7 +46,8 @@ checks = {
         "OpeningCutPlanner.Plan", "PhysicalOpeningCutSolidHandle", "PhysicalOpeningCutFingerprint", "BooleanOperationType.BoolSubtract", "FingerprintPart", "HostFingerprint"
     ],
     "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs": [
-        "RectangularRebarLayoutPlanner.Plan", "CreateFrustum", "GeneratedRebarHandles", "RebarBarsAlongWidth", "RebarBarsAlongDepth"
+        "RectangularRebarLayoutPlanner.Plan", "CreateFrustum", "GeneratedRebarHandles", "RebarBarsAlongWidth", "RebarBarsAlongDepth",
+        "processedElements", "Refusing to orphan or overwrite rebar ownership"
     ],
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": [
         "REBAR_GENERATED_OWNERSHIP_CONFLICT", "REBAR_GENERATED_SOLID_MISSING", "REBAR_GENERATED_COUNT_MISMATCH"
@@ -109,4 +110,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: polyline wall footprints, opening boolean planning, rectangular rebar geometry/health and BLT-style TKT/UI workflow guards are present.")
+print("PASS: polyline wall footprints, opening boolean planning, fail-safe rectangular rebar geometry/health and BLT-style TKT/UI workflow guards are present.")
