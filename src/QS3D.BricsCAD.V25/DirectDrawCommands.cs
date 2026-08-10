@@ -119,10 +119,14 @@ namespace QS3D.BricsCAD.V25
 
                 configureElement?.Invoke(element);
 
+                // Resolve dependency/rule failures before any native builder commits Solid3d output.
+                // This is especially important for Column Direct Draw because instance dimensions are
+                // configured after the initial capture and therefore need a deterministic regen pass.
+                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+
                 var solids = BuildSelected(document, project, category);
                 if (solids <= 0) throw new InvalidOperationException("Native 3D builder không tạo được solid cho " + category + ".");
 
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 project.Touch();
                 PaletteCoordinator.RefreshProject();
                 document.Editor.SetImpliedSelection(new[] { sourceId });
@@ -320,22 +324,31 @@ namespace QS3D.BricsCAD.V25
 
         private static void EraseHandles(Document document, IEnumerable<string> handles)
         {
-            var ids = CadHandleService.Resolve(document, handles);
-            if (ids.Count == 0) return;
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (handles == null) throw new ArgumentNullException(nameof(handles));
+
+            var normalized = new HashSet<string>(
+                handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            if (normalized.Count == 0) return;
+
+            var ids = CadHandleService.Resolve(document, normalized);
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
                 foreach (var id in ids)
                 {
-                    try
-                    {
-                        var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
-                        if (entity != null && !entity.IsErased) entity.Erase(true);
-                    }
-                    catch { }
+                    var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
+                    if (entity == null)
+                        throw new InvalidOperationException("Direct Draw rollback handle " + id.Handle + " không còn trỏ tới Entity hợp lệ.");
+                    if (!entity.IsErased) entity.Erase(true);
                 }
                 transaction.Commit();
             }
+
+            var remaining = CadHandleService.GetLiveHandles(document, normalized);
+            if (remaining.Count > 0)
+                throw new InvalidOperationException("Direct Draw rollback còn CAD handle chưa xóa: " + string.Join(", ", remaining.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)) + ".");
             document.Editor.Regen();
         }
 
