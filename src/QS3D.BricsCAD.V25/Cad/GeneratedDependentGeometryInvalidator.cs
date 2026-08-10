@@ -54,6 +54,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 Remove(element, "GeneratedBeamStirrupActualSpacingM");
                 Remove(element, "GeneratedBeamStirrupNotation");
                 Remove(element, "GeneratedBeamStirrupMode");
+                element.ClearGeneratedGeometryStale();
             }
         }
 
