@@ -107,6 +107,23 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public void SetActiveFamily(ProjectFamily? family)
         {
             if (_project == null || family == null) return;
+            ProjectFamily? ownedFamily;
+            try
+            {
+                ownedFamily = _project.FindFamily(family.Id);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Status = "Không thể chọn Family: " + ex.Message;
+                return;
+            }
+            if (ownedFamily == null || !ReferenceEquals(ownedFamily, family))
+            {
+                Status = "Family " + family.Id + " không thuộc project đang mở.";
+                return;
+            }
+
+            family = ownedFamily;
             _selectedFamily = family;
             if (_selectedElement != null && !string.Equals(_selectedElement.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase))
             {
@@ -141,16 +158,37 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 ShowFamilyProperties();
                 return;
             }
-            var family = _project.FindFamily(element.FamilyId);
+
+            ProjectElement? ownedElement;
+            ProjectFamily? family;
+            try
+            {
+                ownedElement = _project.FindElement(element.Id);
+                if (ownedElement == null || !ReferenceEquals(ownedElement, element))
+                {
+                    _selectedElement = null;
+                    Status = "Cấu kiện " + element.Id + " không thuộc project đang mở.";
+                    ShowFamilyProperties();
+                    return;
+                }
+                family = _project.FindFamily(ownedElement.FamilyId);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _selectedElement = null;
+                Status = "Không thể chọn cấu kiện: " + ex.Message;
+                ShowFamilyProperties();
+                return;
+            }
             if (family == null)
             {
                 _selectedElement = null;
-                Status = "Cấu kiện " + element.Id + " chưa có Family hợp lệ.";
+                Status = "Cấu kiện " + ownedElement.Id + " chưa có Family hợp lệ.";
                 ShowFamilyProperties();
                 return;
             }
 
-            _selectedElement = element;
+            _selectedElement = ownedElement;
             _selectedFamily = family;
             SelectedFamilyName = family.Name;
             if (!_project.Metadata.TryGetValue("ActiveFamilyId", out var activeId) || !string.Equals(activeId, family.Id, StringComparison.OrdinalIgnoreCase))
@@ -161,7 +199,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             _selectedPropertyScope = InstanceScope;
             OnChanged(nameof(SelectedPropertyScope));
             LoadCurrentProperties();
-            Status = "Instance: " + element.Id + " • " + family.Name;
+            Status = "Instance: " + ownedElement.Id + " • " + family.Name;
         }
 
         private void LoadCurrentProperties()
