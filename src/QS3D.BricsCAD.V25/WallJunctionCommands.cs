@@ -33,7 +33,8 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var nodes = new WallJunctionPlanner().Plan(segments, tolerance);
+                var plan = new WallJunctionAdjustmentPlanner().Plan(segments, tolerance);
+                var nodes = plan.Junctions;
                 var grouped = nodes.GroupBy(x => x.Kind).ToDictionary(x => x.Key, x => x.Count());
                 string Count(WallJunctionKind kind) => grouped.TryGetValue(kind, out var count) ? count.ToString(CultureInfo.InvariantCulture) : "0";
                 var summary = "Wall Junctions: L=" + Count(WallJunctionKind.L) +
@@ -41,14 +42,23 @@ namespace QS3D.BricsCAD.V25
                               " • X=" + Count(WallJunctionKind.X) +
                               " • Straight=" + Count(WallJunctionKind.Straight) +
                               " • End=" + Count(WallJunctionKind.End) +
-                              " • Multi=" + Count(WallJunctionKind.Multi);
+                              " • Multi=" + Count(WallJunctionKind.Multi) +
+                              " • SnapPlan=" + plan.Adjustments.Count.ToString(CultureInfo.InvariantCulture);
                 PaletteCoordinator.SetStatus(summary);
                 document.Editor.WriteMessage("\nQS3D " + summary);
                 foreach (var node in nodes.Where(x => x.Kind == WallJunctionKind.L || x.Kind == WallJunctionKind.T || x.Kind == WallJunctionKind.X || x.Kind == WallJunctionKind.Multi).Take(100))
                 {
                     document.Editor.WriteMessage("\n  " + node.Kind + " @ (" + node.Point.X.ToString("0.###", CultureInfo.InvariantCulture) + ", " + node.Point.Y.ToString("0.###", CultureInfo.InvariantCulture) + ") • " + string.Join(",", node.SegmentIds));
                 }
-                if (nodes.Count > 100) document.Editor.WriteMessage("\n  … output truncated; total nodes=" + nodes.Count.ToString(CultureInfo.InvariantCulture));
+                foreach (var adjustment in plan.Adjustments.Take(100))
+                {
+                    document.Editor.WriteMessage("\n  SNAP " + adjustment.SegmentId + "/" + adjustment.Endpoint +
+                        " • " + adjustment.Distance.ToString("0.####", CultureInfo.InvariantCulture) + "m → (" +
+                        adjustment.To.X.ToString("0.###", CultureInfo.InvariantCulture) + ", " +
+                        adjustment.To.Y.ToString("0.###", CultureInfo.InvariantCulture) + ") • " + adjustment.JunctionKind);
+                }
+                if (nodes.Count > 100 || plan.Adjustments.Count > 100)
+                    document.Editor.WriteMessage("\n  … output truncated; nodes=" + nodes.Count.ToString(CultureInfo.InvariantCulture) + ", snapPlan=" + plan.Adjustments.Count.ToString(CultureInfo.InvariantCulture));
                 AuditTrail.ForProject(project).Record("wall.junction.analyze", string.Empty,
                     summary + " • sourceSegments=" + segments.Count.ToString(CultureInfo.InvariantCulture) +
                     " • planarityToleranceM=" + planarityTolerance.ToString("R", CultureInfo.InvariantCulture));
