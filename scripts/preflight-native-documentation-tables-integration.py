@@ -128,8 +128,13 @@ if HUB.is_file():
         if ('Tag="' + command + '"') not in text: errors.append("Schedule Hub missing native Table launcher: " + command)
 if HUB_CODE.is_file():
     text = HUB_CODE.read_text(encoding="utf-8")
-    for token in ("OnCommandClick", 'SendStringToExecute(command + " ", true, false, false)'):
-        if token not in text: errors.append("Schedule Hub lost generic command dispatch token: " + token)
+    for token in (
+        "OnCommandClick",
+        "var normalizedCommand = command.Trim();",
+        'EnsureActive("chạy " + normalizedCommand);',
+        'SendStringToExecute(normalizedCommand + " ", true, false, false)',
+    ):
+        if token not in text: errors.append("Schedule Hub lost guarded generic command dispatch token: " + token)
 
 if QSDB.is_file():
     text = QSDB.read_text(encoding="utf-8")
@@ -149,4 +154,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors)); sys.exit(1)
 
-print("PASS: generic, Door/Opening, Room Finish, Material Usage and BQ native Tables have unique commands/artifact identities/metadata prefixes, project-level QS3DDOC ownership, rollback-safe QSDB persistence, namespaced diagnostics, fail-isolated runtime/Release wiring, Schedule Hub launchers and deliberate exclusion from portable Semantic Snapshot interchange.")
+print("PASS: generic, Door/Opening, Room Finish, Material Usage and BQ native Tables have unique commands/artifact identities/metadata prefixes, project-level QS3DDOC ownership, rollback-safe QSDB persistence, namespaced diagnostics, fail-isolated runtime/Release wiring, guarded Schedule Hub launchers and deliberate exclusion from portable Semantic Snapshot interchange.")
