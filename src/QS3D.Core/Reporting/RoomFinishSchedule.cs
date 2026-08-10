@@ -36,6 +36,7 @@ namespace QS3D.Core.Reporting
         public static IReadOnlyList<RoomFinishScheduleRow> Build(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            RoomFinishIdentityService.ValidateProject(project);
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rooms = project.Elements.Where(x => x.Category == ElementCategory.Room).ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
