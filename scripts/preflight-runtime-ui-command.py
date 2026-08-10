@@ -29,13 +29,13 @@ if PROJECT_TOOLS.is_file():
 
 if RUNTIME_CHECK.is_file():
     text = RUNTIME_CHECK.read_text(encoding="utf-8")
-    if '[CommandMethod("QS3DRUNTIMECHECK")]' not in text:
-        errors.append("RuntimeDiagnosticsCommands.cs must register QS3DRUNTIMECHECK")
+    if '[CommandMethod("QS3DRUNTIMECHECK", CommandFlags.Modal)]' not in text:
+        errors.append("RuntimeDiagnosticsCommands.cs must register modal QS3DRUNTIMECHECK")
 
 if RUNTIME_PROBE.is_file():
     text = RUNTIME_PROBE.read_text(encoding="utf-8")
-    if '[CommandMethod("QS3DRUNTIMEPROBE")]' not in text:
-        errors.append("RuntimeProbeCommands.cs must register QS3DRUNTIMEPROBE")
+    if '[CommandMethod("QS3DRUNTIMEPROBE", CommandFlags.Modal)]' not in text:
+        errors.append("RuntimeProbeCommands.cs must register modal QS3DRUNTIMEPROBE")
     if 'QS3D_RUNTIME_RESULT' not in text:
         errors.append("QS3DRUNTIMEPROBE must remain bound to QS3D_RUNTIME_RESULT automation output")
 
@@ -62,6 +62,6 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: Project Tools exposes QS3DRUNTIMECHECK while the result-file "
-    "QS3DRUNTIMEPROBE remains automation-only."
+    "PASS: Project Tools exposes modal QS3DRUNTIMECHECK while the result-file "
+    "QS3DRUNTIMEPROBE remains modal automation-only."
 )
