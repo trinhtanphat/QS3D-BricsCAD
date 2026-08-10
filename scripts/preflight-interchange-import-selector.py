@@ -28,18 +28,25 @@ if not errors:
         "InterchangeUseSourceElementImportService.Import(document, json)",
         "InterchangeUseSourceCatalogImportService.Plan(project, json)",
         "InterchangeUseSourceCatalogImportService.Import(document, json)",
+        "InterchangeUseSourceAllImportService.Plan(project, json)",
+        "InterchangeUseSourceAllImportService.Import(document, json)",
         "CollisionPolicyChoice.UseSourceElement",
         "CollisionPolicyChoice.UseSourceCatalog",
-        "UseSource Element và UseSource Catalog là hai mutation policy tách biệt",
+        "CollisionPolicyChoice.UseSourceAll",
+        "YES — REPLACE ALL SEMANTIC (ATOMIC)",
+        "MỘT ProjectStateSnapshot và MỘT native CAD transaction",
+        "ALL không sequentially chạy hai importer partial",
+        "NO — chọn PARTIAL scope",
         "YES — REPLACE ELEMENT SEMANTIC",
         "NO — REPLACE CATALOG SEMANTIC",
+        "selector chỉ chạy đúng một path được chọn và không sequence hai partial importer",
         "System.Windows.MessageBoxButton.YesNoCancel",
         "System.Windows.MessageBoxResult.Cancel",
         "System.Windows.MessageBoxResult.No",
         "ProjectInterchangeJsonValidator.MaxFileBytes",
         "new UTF8Encoding(false, true)",
         "EnsureActive(document",
-        "Incoming source CAD handles vẫn không trở thành target ownership",
+        "Incoming source CAD handles không trở thành target ownership",
         "rebuild explicit",
     ]
     for needle in required:
@@ -55,23 +62,37 @@ if not errors:
         "SourceHandles.Clear()",
         "QS3DBUILD3D",
         "transaction.Commit()",
-        "InterchangeUseSourceCatalogImportService.Import(document, json);\n                InterchangeUseSourceElementImportService.Import(document, json)",
-        "InterchangeUseSourceElementImportService.Import(document, json);\n                InterchangeUseSourceCatalogImportService.Import(document, json)",
     ]
     for needle in forbidden:
         if needle in c:
-            errors.append(f"selector must delegate exactly one mutation policy instead of duplicating/sequencing lower-layer behavior: {needle}")
+            errors.append(f"selector must delegate exactly one mutation policy instead of duplicating lower-layer behavior: {needle}")
+
+    # A selected route may reference all importer methods in separate helpers, but no helper/case may
+    # sequence multiple mutation services. Keep the dispatch branches one-call-only.
+    switch_match = re.search(r"switch \(choice\.Value\)(.*?)default:", c, re.S)
+    if not switch_match:
+        errors.append("generic selector switch dispatch not found")
+    else:
+        switch_body = switch_match.group(1)
+        for case_name, runner in [
+            ("KeepTarget", "RunKeepTarget"),
+            ("UseSourceElement", "RunUseSourceElement"),
+            ("UseSourceCatalog", "RunUseSourceCatalog"),
+            ("UseSourceAll", "RunUseSourceAll"),
+        ]:
+            pattern = rf"case CollisionPolicyChoice\.{case_name}:\s*{runner}\([^;]+;\s*return;"
+            if not re.search(pattern, switch_body, re.S):
+                errors.append(f"selector must dispatch {case_name} to exactly its dedicated runner")
 
     all_cs = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in (root / "src").rglob("*.cs"))
     registrations = len(re.findall(r'\[CommandMethod\("QS3DINTERCHANGEIMPORT"', all_cs))
     if registrations != 1:
         errors.append(f"QS3DINTERCHANGEIMPORT command registration count must be 1, got {registrations}")
 
-    # Project Tools is the user-facing discoverability surface. Keep specialist commands visible
-    # so runtime qualification can exercise each policy path independently.
     for tag, label in [
         ('QS3DINTERCHANGEIMPORT', "generic import selector"),
         ('QS3DINTERCHANGEAPPEND', "dedicated append-only command"),
+        ('QS3DINTERCHANGEUSESOURCEALL', "dedicated atomic UseSource ALL command"),
         ('QS3DINTERCHANGEUSESOURCE', "dedicated UseSource Element command"),
         ('QS3DINTERCHANGEUSESOURCECATALOG', "dedicated UseSource Catalog command"),
     ]:
@@ -81,11 +102,13 @@ if not errors:
     for needle in [
         "Nạp Snapshot (Chọn policy)",
         "Append-only khi không collision",
-        "KeepTarget, Replace Element semantic hoặc Replace Catalog semantic",
+        "KeepTarget, Replace ALL semantic, Replace Element semantic hoặc Replace Catalog semantic",
+        "Nạp Snapshot (Replace ALL semantic)",
+        "một CAD transaction",
         "Nạp Snapshot (Replace Catalog semantic)",
     ]:
         if needle not in ui:
-            errors.append(f"Project Tools missing generic/catalog policy UX: {needle}")
+            errors.append(f"Project Tools missing all-scope/catalog policy UX: {needle}")
 
 if errors:
     print("preflight-interchange-import-selector: FAIL")
@@ -94,4 +117,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-import-selector: PASS")
-print("Generic import command routes explicitly to Append-only, KeepTarget, CAD-safe Element UseSource, or CAD-safe Catalog UseSource without sequencing mutation policies or duplicating lower-layer mutation logic.")
+print("Generic import command routes explicitly to Append-only, KeepTarget, atomic all-scope UseSource, or one partial UseSource scope without duplicating/sequencing lower-layer mutation logic.")
