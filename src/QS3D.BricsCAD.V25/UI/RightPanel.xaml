@@ -43,17 +43,30 @@
                         <TextBlock Text="QUẢN LÝ LỚP" Style="{StaticResource PanelTitle}"/>
                         <Button DockPanel.Dock="Right" Content="Làm mới" Click="OnRefreshClick" Style="{StaticResource DenseButton}"/>
                     </DockPanel>
-                    <TextBlock Text="Bỏ tick = ẩn. Ctrl/Shift để chọn nhiều lớp." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <TextBlock Text="Tick đầu = hiện/ẩn; ô khóa = trạng thái native. Ctrl/Shift để chọn nhiều lớp." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
                     <TextBox x:Name="LayerSearchBox" ToolTip="Tìm layer" Margin="0,0,0,4" TextChanged="OnLayerSearchChanged"/>
                     <WrapPanel>
                         <Button Content="Hiện" Click="OnShowLayersClick" Style="{StaticResource DenseButton}"/>
                         <Button Content="Ẩn" Click="OnHideLayersClick" Style="{StaticResource DenseButton}"/>
+                        <Button Content="Khóa" Click="OnLockLayersClick" Style="{StaticResource DenseButton}"/>
+                        <Button Content="Mở khóa" Click="OnUnlockLayersClick" Style="{StaticResource DenseButton}"/>
                         <Button Content="Đảo chọn" Click="OnInvertSelectionClick" Style="{StaticResource DenseButton}"/>
                         <Button Content="Bỏ chọn" Click="OnClearLayerSelectionClick" Style="{StaticResource DenseButton}"/>
                     </WrapPanel>
                 </StackPanel>
                 <ListView x:Name="LayerList" ItemsSource="{Binding Layers}" SelectionMode="Extended">
-                    <ListView.ItemTemplate><DataTemplate><Grid Margin="0,1"><Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="17"/><ColumnDefinition Width="*"/><ColumnDefinition Width="38"/></Grid.ColumnDefinitions><CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}" Checked="OnLayerChecked" Unchecked="OnLayerUnchecked"/><Border Grid.Column="1" Width="9" Height="9" CornerRadius="1" Background="{StaticResource AccentBrush}" Opacity="0.75"/><TextBlock Grid.Column="2" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/><TextBlock Grid.Column="3" Text="{Binding ColorIndex}" Style="{StaticResource Caption}" HorizontalAlignment="Right"/></Grid></DataTemplate></ListView.ItemTemplate>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="20"/><ColumnDefinition Width="17"/><ColumnDefinition Width="*"/><ColumnDefinition Width="38"/></Grid.ColumnDefinitions>
+                                <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}" Checked="OnLayerChecked" Unchecked="OnLayerUnchecked" ToolTip="Hiện/ẩn layer"/>
+                                <CheckBox Grid.Column="1" IsChecked="{Binding IsLocked}" IsEnabled="False" HorizontalAlignment="Center" ToolTip="Trạng thái khóa native của layer"/>
+                                <Border Grid.Column="2" Width="9" Height="9" CornerRadius="1" Background="{Binding ColorBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0.5" ToolTip="Màu layer native"/>
+                                <TextBlock Grid.Column="3" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="4" Text="{Binding ColorIndex}" Style="{StaticResource Caption}" HorizontalAlignment="Right"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
                 </ListView>
             </DockPanel>
         </Border>
