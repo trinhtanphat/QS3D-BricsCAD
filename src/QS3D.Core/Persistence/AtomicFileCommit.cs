@@ -65,11 +65,19 @@ namespace QS3D.Core.Persistence
 
         private static void MoveWithRecovery(string tempPath, string destinationPath, string backupPath, bool keepBackup)
         {
-            if (File.Exists(backupPath)) File.Delete(backupPath);
-            File.Move(destinationPath, backupPath);
+            string? previousBackupSafety = null;
+            if (File.Exists(backupPath))
+            {
+                previousBackupSafety = backupPath + "." + Guid.NewGuid().ToString("N") + ".previous";
+                File.Move(backupPath, previousBackupSafety);
+            }
+
+            var destinationStaged = false;
             var installed = false;
             try
             {
+                File.Move(destinationPath, backupPath);
+                destinationStaged = true;
                 File.Move(tempPath, destinationPath);
                 installed = true;
             }
@@ -77,17 +85,36 @@ namespace QS3D.Core.Persistence
             {
                 if (!installed)
                 {
-                    try
+                    if (destinationStaged)
                     {
-                        if (!File.Exists(destinationPath) && File.Exists(backupPath))
-                            File.Move(backupPath, destinationPath);
+                        try
+                        {
+                            if (!File.Exists(destinationPath) && File.Exists(backupPath))
+                                File.Move(backupPath, destinationPath);
+                        }
+                        catch (IOException) { }
+                        catch (UnauthorizedAccessException) { }
                     }
-                    catch (IOException) { }
-                    catch (UnauthorizedAccessException) { }
+                    RestorePreviousBackup(previousBackupSafety, backupPath);
+                }
+                else if (!string.IsNullOrWhiteSpace(previousBackupSafety))
+                {
+                    TryDelete(previousBackupSafety);
                 }
             }
 
             if (!keepBackup) TryDelete(backupPath);
+        }
+
+        private static void RestorePreviousBackup(string? previousBackupSafety, string backupPath)
+        {
+            if (string.IsNullOrWhiteSpace(previousBackupSafety) || !File.Exists(previousBackupSafety)) return;
+            try
+            {
+                if (!File.Exists(backupPath)) File.Move(previousBackupSafety, backupPath);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         private static void Validate(string tempPath, string destinationPath)
