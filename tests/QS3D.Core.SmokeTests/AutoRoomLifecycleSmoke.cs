@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             ReusesMatchingProvenance();
             DuplicateProvenanceIsRejected();
             TopologyChangeMarksStale();
+            CorruptCollectionFailsBeforeStaleMutation();
             StaleRoomsAndDependentsAreExcludedFromBq();
             RoomFinishProvenanceUsesCanonicalPropertyAndDependency();
             OrphanAndConflictingRoomFinishProvenanceAreSafe();
@@ -63,6 +64,24 @@ namespace QS3D.Core.SmokeTests
             True(!AutoRoomLifecycle.IsStaleAutoRoom(active));
             True(!AutoRoomLifecycle.IsStaleAutoRoom(unrelated));
             Equal("2026-08-10T01:02:03.0000000Z", old.Properties["BoundaryStaleUtc"]);
+        }
+
+        private static void CorruptCollectionFailsBeforeStaleMutation()
+        {
+            var project = NewProject();
+            var old = AutoRoom("OLD-CORRUPT", "A;B;C;D", project);
+            project.Elements.Add(old);
+            project.Elements.Add(null);
+
+            Throws<InvalidOperationException>(() => AutoRoomLifecycle.MarkStaleForSelection(
+                project,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>(new[] { "A", "B", "C", "D" }, StringComparer.OrdinalIgnoreCase),
+                "f", "z", new DateTime(2026, 8, 10, 1, 2, 3, DateTimeKind.Utc)));
+
+            True(!AutoRoomLifecycle.IsStaleAutoRoom(old));
+            True(!old.Properties.ContainsKey("BoundaryStaleUtc"));
+            True(!old.Properties.ContainsKey("BoundaryStaleReason"));
         }
 
         private static void StaleRoomsAndDependentsAreExcludedFromBq()
