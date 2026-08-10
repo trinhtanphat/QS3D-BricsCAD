@@ -127,34 +127,70 @@ namespace QS3D.Core.Services
 
         private static void RegenerateStair(ProjectElement element)
         {
-            var area = Positive(SemanticNumber.Get(element, "AreaM2"));
+            var planArea = Positive(SemanticNumber.Get(element, "AreaM2"));
+            var width = Positive(SemanticNumber.Get(element, "WidthM"));
+            var runLength = Positive(SemanticNumber.Get(element, "RunLengthM"));
+            var totalRise = Positive(SemanticNumber.Get(element, "TotalRiseM", SemanticNumber.Get(element, "HeightM")));
             var thickness = Positive(SemanticNumber.Get(element, "ThicknessM"));
-            var gross = area * thickness;
-            element.SetQuantity("AreaM2", area);
+            var stepCount = Positive(SemanticNumber.Get(element, "StepCount"));
+            var tread = Positive(SemanticNumber.Get(element, "TreadM", stepCount > 0d && runLength > 0d ? runLength / stepCount : 0d));
+            var riser = Positive(SemanticNumber.Get(element, "RiserM", stepCount > 0d && totalRise > 0d ? totalRise / stepCount : 0d));
+            var slopeLength = runLength > 0d && totalRise > 0d ? Math.Sqrt(runLength * runLength + totalRise * totalRise) : 0d;
+            var waistArea = width > 0d && slopeLength > 0d ? width * slopeLength : planArea;
+            var waistVolume = waistArea * thickness;
+            var stepVolume = stepCount > 0d && width > 0d && tread > 0d && riser > 0d
+                ? 0.5d * width * tread * riser * stepCount
+                : 0d;
+            var gross = waistVolume + stepVolume;
+
+            element.SetQuantity("AreaM2", planArea);
+            element.SetQuantity("RunLengthM", runLength);
+            element.SetQuantity("TotalRiseM", totalRise);
+            element.SetQuantity("SlopeLengthM", slopeLength);
+            element.SetQuantity("StepCount", stepCount);
+            element.SetQuantity("StairWaistAreaM2", waistArea);
+            element.SetQuantity("StepVolumeM3", stepVolume);
             element.SetQuantity("GrossVolumeM3", gross);
             element.SetQuantity("NetVolumeM3", gross);
-            element.SetQuantity("FormworkM2", area);
+            element.SetQuantity("SoffitAreaM2", waistArea);
+            element.SetQuantity("FormworkM2", waistArea);
         }
 
         private static void RegenerateRailing(ProjectElement element)
         {
             var length = Positive(SemanticNumber.Get(element, "LengthM"));
+            var height = Positive(SemanticNumber.Get(element, "HeightM", 1.1d));
+            var postSpacing = Positive(SemanticNumber.Get(element, "PostSpacingM", 1d));
+            var postCount = length <= 0d ? 0d : postSpacing > 0d ? Math.Ceiling(length / postSpacing) + 1d : 2d;
             element.SetQuantity("LengthM", length);
-            element.SetQuantity("Count", 1d);
+            element.SetQuantity("HeightM", height);
+            element.SetQuantity("HandrailLengthM", length);
+            element.SetQuantity("PostCount", postCount);
+            element.SetQuantity("InfillAreaM2", length * height);
+            element.SetQuantity("Count", length > 0d ? 1d : 0d);
         }
 
         private static void RegenerateEarthwork(ProjectElement element)
         {
             var area = Positive(SemanticNumber.Get(element, "ExcavationAreaM2", SemanticNumber.Get(element, "AreaM2")));
             var depth = Positive(SemanticNumber.Get(element, "DepthM"));
-            var volume = area * depth;
+            var bulkingFactor = SemanticNumber.Get(element, "BulkingFactor", 1d);
+            if (double.IsNaN(bulkingFactor) || double.IsInfinity(bulkingFactor) || bulkingFactor <= 0d) bulkingFactor = 1d;
+            var backfill = Positive(SemanticNumber.Get(element, "BackfillM3"));
+            var cutVolume = area * depth;
+            var bulkedVolume = cutVolume * bulkingFactor;
+            var netExport = Math.Max(0d, bulkedVolume - backfill);
             element.SetQuantity("AreaM2", area);
             element.SetQuantity("DepthM", depth);
-            element.SetQuantity("GrossVolumeM3", volume);
-            element.SetQuantity("NetVolumeM3", volume);
+            element.SetQuantity("CutVolumeM3", cutVolume);
+            element.SetQuantity("GrossVolumeM3", cutVolume);
+            element.SetQuantity("NetVolumeM3", cutVolume);
+            element.SetQuantity("BulkedVolumeM3", bulkedVolume);
+            element.SetQuantity("BackfillM3", backfill);
+            element.SetQuantity("NetExportM3", netExport);
         }
 
-        private static double Positive(double value) => value > 0d ? value : 0d;
+        private static double Positive(double value) => value > 0d && !double.IsNaN(value) && !double.IsInfinity(value) ? value : 0d;
         private static double Clamp(double value, double minimum, double maximum) => Math.Max(minimum, Math.Min(maximum, value));
     }
 
