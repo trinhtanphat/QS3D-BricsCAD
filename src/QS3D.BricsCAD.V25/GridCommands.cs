@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Services;
+using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
 using Teigha.Runtime;
 
