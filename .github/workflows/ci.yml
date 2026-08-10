@@ -20,6 +20,8 @@ jobs:
         run: python scripts/preflight-full-domain.py
       - name: Auto-room lifecycle source guard
         run: python scripts/preflight-room-lifecycle.py
+      - name: Geometry completion source guard
+        run: python scripts/preflight-geometry-completion.py
       - name: Validate release PowerShell syntax
         shell: pwsh
         run: |
