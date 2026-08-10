@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -10,14 +11,20 @@ namespace QS3D.BricsCAD.V25
     internal static class ProjectContextCoordinator
     {
         private const string RecoveryRequiredKey = "QS3D.ReadOnlyRecoveryRequired";
-        private static readonly Dictionary<string, ProjectState> Projects = new Dictionary<string, ProjectState>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<Document, ProjectState> Projects = new Dictionary<Document, ProjectState>();
         private static readonly QsdbProjectStore Store = new QsdbProjectStore();
 
         public static ProjectState GetOrCreate(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            var key = GetKey(document); if (Projects.TryGetValue(key, out var existing)) return existing;
-            var path = GetProjectPath(document); ProjectState project;
+            if (Projects.TryGetValue(document, out var existing))
+            {
+                SyncDrawingIdentity(existing, document);
+                return existing;
+            }
+
+            var path = GetProjectPath(document);
+            ProjectState project;
             if (File.Exists(path) || File.Exists(path + ".bak"))
             {
                 try { project = LoadProject(path); }
@@ -30,12 +37,18 @@ namespace QS3D.BricsCAD.V25
                 }
             }
             else project = CreateDefault(document);
-            Projects[key] = project; return project;
+
+            SyncDrawingIdentity(project, document);
+            Projects[document] = project;
+            return project;
         }
 
         public static string Save(Document document)
         {
-            var project = GetOrCreate(document); var path = GetProjectPath(document);
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var project = GetOrCreate(document);
+            SyncDrawingIdentity(project, document);
+            var path = GetProjectPath(document);
             if ((File.Exists(path) || File.Exists(path + ".bak")) && project.Metadata.TryGetValue(RecoveryRequiredKey, out var blocked) && string.Equals(blocked, "true", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("QS3D project load failed and the existing .qsdb will not be overwritten. Recover or move the damaged project file first.");
 
@@ -55,27 +68,34 @@ namespace QS3D.BricsCAD.V25
 
         public static ProjectState Reload(Document document)
         {
+            if (document == null) throw new ArgumentNullException(nameof(document));
             var path = GetProjectPath(document);
             if (!File.Exists(path) && !File.Exists(path + ".bak")) throw new FileNotFoundException("QS3D project file was not found.", path);
-            var project = LoadProject(path); Projects[GetKey(document)] = project; return project;
+            var project = LoadProject(path);
+            SyncDrawingIdentity(project, document);
+            Projects[document] = project;
+            return project;
         }
 
-        public static void Forget(Document document) { if (document != null) Projects.Remove(GetKey(document)); }
+        public static void Forget(Document document)
+        {
+            if (document != null) Projects.Remove(document);
+        }
+
         public static void ForgetByName(string? drawingName)
         {
             if (string.IsNullOrWhiteSpace(drawingName)) return;
-            Projects.Remove(drawingName);
-            try { Projects.Remove(Path.GetFullPath(drawingName)); }
-            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException) { }
+            foreach (var document in Projects.Keys.Where(x => SameDrawingName(x.Name, drawingName)).ToArray()) Projects.Remove(document);
         }
 
         public static string GetProjectPath(Document document)
         {
+            if (document == null) throw new ArgumentNullException(nameof(document));
             var drawing = document.Name;
             if (string.IsNullOrWhiteSpace(drawing) || !Path.IsPathRooted(drawing))
             {
-                var safe = string.IsNullOrWhiteSpace(drawing) ? "Untitled" : Path.GetFileNameWithoutExtension(drawing);
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QS3D", "Projects", safe + ".qsdb");
+                var stem = SafeFileStem(string.IsNullOrWhiteSpace(drawing) ? "Untitled" : Path.GetFileNameWithoutExtension(drawing));
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QS3D", "Projects", stem + ".qsdb");
             }
             return Path.ChangeExtension(drawing, ".qsdb");
         }
@@ -91,6 +111,31 @@ namespace QS3D.BricsCAD.V25
                 project.Metadata["QS3D.PrimaryLoadFailure"] = loaded.PrimaryFailureMessage;
             }
             return project;
+        }
+
+        private static void SyncDrawingIdentity(ProjectState project, Document document)
+        {
+            var drawing = document.Name ?? string.Empty;
+            if (string.Equals(project.DrawingPath, drawing, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(project.DrawingFingerprint, drawing, StringComparison.OrdinalIgnoreCase)) return;
+            project.DrawingPath = drawing;
+            project.DrawingFingerprint = drawing;
+            project.Touch();
+        }
+
+        private static bool SameDrawingName(string? left, string? right)
+        {
+            if (string.Equals(left, right, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
+            try { return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase); }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException) { return false; }
+        }
+
+        private static string SafeFileStem(string? value)
+        {
+            var stem = string.IsNullOrWhiteSpace(value) ? "Untitled" : value.Trim();
+            foreach (var invalid in Path.GetInvalidFileNameChars()) stem = stem.Replace(invalid, '_');
+            return string.IsNullOrWhiteSpace(stem) ? "Untitled" : stem;
         }
 
         private static Dictionary<string, string> CaptureRecoveryMetadata(ProjectState project)
@@ -113,15 +158,20 @@ namespace QS3D.BricsCAD.V25
             foreach (var item in metadata) project.Metadata[item.Key] = item.Value;
         }
 
-        private static string GetKey(Document document) => string.IsNullOrWhiteSpace(document.Name) ? document.GetHashCode().ToString() : document.Name;
         private static ProjectState CreateDefault(Document document)
         {
-            var project = new ProjectState(Guid.NewGuid().ToString("N"), Path.GetFileNameWithoutExtension(document.Name)); project.DrawingPath = document.Name ?? string.Empty; project.DrawingFingerprint = document.Name ?? string.Empty;
-            project.Zones.Add(new ZoneDefinition("zone-1", "Vùng-1")); project.Floors.Add(new FloorDefinition("floor-0", "Nền 0.00", 0d)); project.ActiveZoneId = "zone-1"; project.ActiveFloorId = "floor-0";
+            var project = new ProjectState(Guid.NewGuid().ToString("N"), Path.GetFileNameWithoutExtension(document.Name));
+            project.DrawingPath = document.Name ?? string.Empty;
+            project.DrawingFingerprint = document.Name ?? string.Empty;
+            project.Zones.Add(new ZoneDefinition("zone-1", "Vùng-1"));
+            project.Floors.Add(new FloorDefinition("floor-0", "Nền 0.00", 0d));
+            project.ActiveZoneId = "zone-1";
+            project.ActiveFloorId = "floor-0";
             var room = new ProjectFamily("room-default", "Phòng-1", ElementCategory.Room); room.Properties["HeightM"] = "3.6"; project.Families.Add(room);
             var wall = new ProjectFamily("wall-200", "Tường Gạch 200", ElementCategory.ArchitecturalWall); wall.Properties["ThicknessM"] = "0.2"; wall.Properties["HeightM"] = "3.6"; wall.Properties["Material"] = "Gạch"; project.Families.Add(wall);
             var opening = new ProjectFamily("opening-default", "Lỗ Mở Vách", ElementCategory.WallOpening); opening.Properties["HeightM"] = "2.2"; project.Families.Add(opening);
-            var door = new ProjectFamily("door-default", "Cửa Đi", ElementCategory.Door); door.Properties["HeightM"] = "2.2"; project.Families.Add(door); return project;
+            var door = new ProjectFamily("door-default", "Cửa Đi", ElementCategory.Door); door.Properties["HeightM"] = "2.2"; project.Families.Add(door);
+            return project;
         }
     }
 }

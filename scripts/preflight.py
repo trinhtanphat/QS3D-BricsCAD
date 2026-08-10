@@ -8,18 +8,20 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 required = [
-    "Directory.Build.props", "README.md", "AGENTS.md", "docs/CI_POLICY.md",
+    "Directory.Build.props", "README.md", "AGENTS.md", "CI_POLICY.md",
     "src/QS3D.Core/QS3D.Core.csproj", "src/QS3D.Core/Persistence/QsdbProjectStore.cs",
     "src/QS3D.Core/Services/RegenerationEngine.cs", "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs",
     "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj", "src/QS3D.BricsCAD.V25/Commands.cs",
     "src/QS3D.BricsCAD.V25/ReviewCommands.cs", "src/QS3D.BricsCAD.V25/ViewportCommands.cs",
-    "src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs", "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs",
-    "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs", "src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs",
-    "src/QS3D.BricsCAD.V25/Cad/XrefService.cs", "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml",
-    "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml", "src/QS3D.BricsCAD.V25/UI/Theme.xaml",
-    "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml", "src/QS3D.BricsCAD.V25/UI/RecognitionWindow.xaml",
-    "src/QS3D.BricsCAD.V25/UI/RevisionWindow.xaml", "tests/QS3D.Core.SmokeTests/HardeningRegressionSmoke.cs",
-    "scripts/install-bricscad-v25.ps1", ".github/workflows/ci.yml", ".github/workflows/bricscad-v25.yml"
+    "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs", "src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs",
+    "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs", "src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs", "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
+    "src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs", "src/QS3D.BricsCAD.V25/Cad/XrefService.cs",
+    "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml", "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml",
+    "src/QS3D.BricsCAD.V25/UI/Theme.xaml", "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml",
+    "src/QS3D.BricsCAD.V25/UI/RecognitionWindow.xaml", "src/QS3D.BricsCAD.V25/UI/RevisionWindow.xaml",
+    "tests/QS3D.Core.SmokeTests/HardeningRegressionSmoke.cs", "scripts/install-bricscad-v25.ps1",
+    ".github/workflows/ci.yml", ".github/workflows/bricscad-v25.yml"
 ]
 for rel in required:
     if not (ROOT / rel).exists(): errors.append("missing required file: " + rel)
@@ -57,7 +59,7 @@ for xaml in ROOT.rglob("*.xaml"):
     if not code.exists(): continue
     xt = xaml.read_text(encoding="utf-8")
     ct = code.read_text(encoding="utf-8")
-    for handler in set(re.findall(r'\b(?:Click|TextChanged|SelectionChanged|Checked|Unchecked|MouseDoubleClick)="([A-Za-z_][A-Za-z0-9_]*)"', xt)):
+    for handler in set(re.findall(r'\b(?:Click|TextChanged|SelectionChanged|SelectedItemChanged|Checked|Unchecked|MouseDoubleClick)="([A-Za-z_][A-Za-z0-9_]*)"', xt)):
         if not re.search(r"\b" + re.escape(handler) + r"\s*\(", ct): errors.append(f"{xaml.relative_to(ROOT)}: missing code-behind handler {handler}")
 
 store = ROOT / "src/QS3D.Core/Persistence/QsdbProjectStore.cs"
@@ -95,6 +97,25 @@ for rel in ("src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs", "src/QS3D.BricsCAD.
         text = path.read_text(encoding="utf-8")
         if "transaction.Commit();" not in text or "CommitReplacement" not in text: errors.append(rel + ": two-phase generated geometry commit missing")
         if "double.IsNaN" not in text or "double.IsInfinity" not in text: errors.append(rel + ": non-finite dimension guard missing")
+
+context = ROOT / "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs"
+if context.exists():
+    text = context.read_text(encoding="utf-8")
+    if "Dictionary<Document, ProjectState>" not in text: errors.append("project cache must use Document identity so Save As cannot orphan in-memory project state")
+    if "SyncDrawingIdentity" not in text: errors.append("project cache must synchronize drawing identity after Save As")
+    if "SafeFileStem" not in text: errors.append("unsaved drawing project path must sanitize the local filename")
+    if "GetKey(Document" in text: errors.append("project cache must not key live documents by mutable document.Name")
+
+selection_sync = ROOT / "src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs"
+if selection_sync.exists():
+    text = selection_sync.read_text(encoding="utf-8")
+    if "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)" not in text: errors.append("selection sync must ignore inactive documents")
+
+palette = ROOT / "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs"
+if palette.exists():
+    text = palette.read_text(encoding="utf-8")
+    if "MinimumSize = new Size(460, 420)" not in text: errors.append("workspace PaletteSet minimum width must match compact BLT workspace target")
+    if "MinimumSize = new Size(520, 420)" in text: errors.append("workspace PaletteSet still forces the old oversized minimum width")
 
 right = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs"
 if right.exists():
@@ -141,4 +162,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, manual CI, proprietary-file guard, QSDB hardening, units, two-phase 3D geometry, Xref selection, family validation, finish safety, dark UI, BQ recalculation and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, manual CI, proprietary-file guard, QSDB hardening, units, two-phase 3D geometry, document lifecycle, active-document selection sync, compact palettes, Xref selection, family validation, finish safety, dark UI, BQ recalculation and installer verification are present.")
