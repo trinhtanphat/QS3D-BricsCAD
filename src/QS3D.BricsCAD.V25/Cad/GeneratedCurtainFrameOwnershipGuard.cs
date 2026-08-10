@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
+using CoreOwnershipPolicy = QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy;
 
 namespace QS3D.BricsCAD.V25.Cad
 {
@@ -32,16 +33,13 @@ namespace QS3D.BricsCAD.V25.Cad
             var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                foreach (var handle in element.SourceHandles) Reserve(owners, handle, element.Id + "/SourceHandles");
-                ReserveProperty(owners, element, "GeneratedSolidHandle");
-                ReserveProperty(owners, element, "PhysicalOpeningCutSolidHandle");
-                ReserveProperty(owners, element, "GeneratedRebarHandles");
-                ReserveProperty(owners, element, "GeneratedShapeRebarHandles");
-                ReserveProperty(owners, element, "GeneratedTieRebarHandles");
-                ReserveProperty(owners, element, "GeneratedBeamStirrupHandles");
-                ReserveProperty(owners, element, "GeneratedSlabMeshHandles");
-                ReserveProperty(owners, element, "GeneratedWallMeshHandles");
-                ReserveProperty(owners, element, "GeneratedFoundationMeshHandles");
+                foreach (var handle in element.SourceHandles)
+                    Reserve(owners, handle, element.Id + "/SourceHandles");
+                foreach (var property in element.Properties)
+                {
+                    if (!CoreOwnershipPolicy.IsOwnerSlot(property.Key) || string.Equals(property.Key, HandlesKey, StringComparison.OrdinalIgnoreCase)) continue;
+                    ReserveProperty(owners, element, property.Key);
+                }
             }
             foreach (var element in project.Elements) ReserveProperty(owners, element, HandlesKey);
             return new OwnershipIndex(owners);
