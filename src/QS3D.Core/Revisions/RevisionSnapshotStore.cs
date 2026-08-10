@@ -57,7 +57,10 @@ namespace QS3D.Core.Revisions
                 }
                 foreach (var handle in node.Element("sourceHandles")?.Elements("h") ?? Enumerable.Empty<XElement>())
                 {
-                    var value = handle.Attribute("value")?.Value?.Trim(); if (!string.IsNullOrWhiteSpace(value) && !item.SourceHandles.Contains(value, StringComparer.OrdinalIgnoreCase)) item.SourceHandles.Add(value);
+                    var value = handle.Attribute("value")?.Value?.Trim();
+                    if (string.IsNullOrWhiteSpace(value)) continue;
+                    var safeValue = value!;
+                    if (!item.SourceHandles.Contains(safeValue, StringComparer.OrdinalIgnoreCase)) item.SourceHandles.Add(safeValue);
                 }
                 snapshot.Elements.Add(item);
             }
