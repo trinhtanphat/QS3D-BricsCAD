@@ -14,6 +14,7 @@ services = [
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedBeamStirrupHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedWallMeshHealthService.cs",
+    ROOT / "src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarModeHealthService.cs",
 ]
@@ -37,6 +38,7 @@ if command.is_file():
         "new GeneratedBeamStirrupHealthService().Inspect",
         "new GeneratedSlabMeshHealthService().Inspect",
         "new GeneratedWallMeshHealthService().Inspect",
+        "new GeneratedCurtainFrameHealthService().Inspect",
         "new GeneratedRebarOwnershipHealthService().Inspect",
         "new GeneratedRebarModeHealthService().Inspect",
         'PropertyHandles(project, "GeneratedSolidHandle")',
@@ -46,8 +48,10 @@ if command.is_file():
         'PropertyHandles(project, "GeneratedBeamStirrupHandles")',
         'PropertyHandles(project, "GeneratedSlabMeshHandles")',
         'PropertyHandles(project, "GeneratedWallMeshHandles")',
+        'PropertyHandles(project, "GeneratedCurtainFrameHandles")',
         'normalized.Contains("SLAB_MESH")',
         'normalized.Contains("WALL_MESH")',
+        'normalized.Contains("CURTAIN_FRAME")',
         "GroupBy(x => x.Severity +",
         "LocateHandles",
         "QS3DZOOMSELECTED",
@@ -66,4 +70,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: full model/generated/rebar health aggregation covers longitudinal, shape, tie, stirrup, slab mesh, wall mesh, cross-family ownership, mode semantics, dedupe and Locate wiring.")
+print("PASS: full model/generated/rebar/curtain health aggregation covers longitudinal, shape, tie, stirrup, slab mesh, wall mesh, curtain frames, cross-family ownership, mode semantics, dedupe and Locate wiring.")
