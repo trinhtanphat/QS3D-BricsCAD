@@ -23,6 +23,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class DirectDrawP1Commands
     {
         private const double PlanarityToleranceM = 0.005d;
+        private const double UcsAxisTolerance = 1e-9d;
 
         [CommandMethod("QS3DDRAWGLASSWALL", CommandFlags.Modal)]
         public void DrawGlassWall()
@@ -296,6 +297,7 @@ namespace QS3D.BricsCAD.V25
                 var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
                 var line = new Line(start, end);
                 line.SetDatabaseDefaults(document.Database);
+                line.TransformBy(document.Editor.CurrentUserCoordinateSystem);
                 var id = modelSpace.AppendEntity(line);
                 transaction.AddNewlyCreatedDBObject(line, true);
                 transaction.Commit();
@@ -323,6 +325,7 @@ namespace QS3D.BricsCAD.V25
                     polyline.AddVertexAt(index, new Point2d(x, y), 0d, 0d, 0d);
                 }
                 polyline.Closed = closed;
+                polyline.TransformBy(document.Editor.CurrentUserCoordinateSystem);
                 var id = modelSpace.AppendEntity(polyline);
                 transaction.AddNewlyCreatedDBObject(polyline, true);
                 transaction.Commit();
@@ -392,6 +395,23 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Direct Draw P1 hiện chỉ hỗ trợ Model Space. Chuyển sang tab Model trước khi vẽ.");
                 transaction.Commit();
             }
+            RequireSupportedUcs(document);
+        }
+
+        private static void RequireSupportedUcs(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var coordinateSystem = document.Editor.CurrentUserCoordinateSystem.CoordinateSystem3d;
+            var zAxis = coordinateSystem.Zaxis;
+            var length = zAxis.Length;
+            if (double.IsNaN(length) || double.IsInfinity(length) || !(length > 0d))
+                throw new InvalidOperationException("Current UCS có Z axis không hợp lệ.");
+
+            var x = zAxis.X / length;
+            var y = zAxis.Y / length;
+            var z = zAxis.Z / length;
+            if (Math.Abs(x) > UcsAxisTolerance || Math.Abs(y) > UcsAxisTolerance || Math.Abs(z - 1d) > UcsAxisTolerance)
+                throw new InvalidOperationException("Direct Draw P1 hiện chỉ hỗ trợ UCS có mặt phẳng XY song song WCS XY (có thể xoay/di chuyển trong mặt phẳng). UCS nghiêng/3D chưa được hỗ trợ.");
         }
 
         private static void EraseDirectDrawCad(Document document, ProjectState project, ProjectElement? createdElement, ObjectId sourceId, IEnumerable<string> generatedHandles)
