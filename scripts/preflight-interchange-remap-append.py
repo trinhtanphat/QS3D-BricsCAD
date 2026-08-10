@@ -60,10 +60,15 @@ if not errors:
         'k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
         'k.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)',
         'k.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0',
+        "source.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString()))",
+        "target.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString()))",
+        "NameKey(x.NameScope, x.Name)",
+        "NextName(sourceItem.Name, sourceItem.NameScope, occupiedNames)",
+        "public string NameScope { get; }",
     ]
     for needle in required_planner:
         if needle not in p:
-            errors.append("remap planner missing family/ownership preview parity contract: " + needle)
+            errors.append("remap planner missing family/ownership/name-scope preview contract: " + needle)
 
     # Planner preview and executor must recognize the exact same conservative ID/ref suffix set.
     reference_suffixes = ["Id", "Ids", "Ref", "Refs", "RefId", "RefIds"]
@@ -135,4 +140,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New re-plans immediately before semantic mutation, keeps Family/Element planner-executor opaque-reference policy aligned, rewrites only registered relations, strips incoming native ownership, preserves all existing target identities, and rolls back semantic state on failure.")
+print("Import As New re-plans immediately before semantic mutation, keeps Family/Element planner-executor opaque-reference policy aligned, scopes Family display-name collisions by category, strips incoming native ownership, preserves all existing target identities, and rolls back semantic state on failure.")
