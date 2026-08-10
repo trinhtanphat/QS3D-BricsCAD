@@ -4,8 +4,10 @@ using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
+using QS3D.Core.Persistence;
 using QS3D.Core.Services;
 
 namespace QS3D.BricsCAD.V25.Services
@@ -23,11 +25,22 @@ namespace QS3D.BricsCAD.V25.Services
 
         public static int Capture(Document document, ElementCategory category)
         {
+            if (document == null) throw new ArgumentNullException(nameof(document));
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
             if (snapshots.Count == 0) return 0;
-            var count = 0;
-            foreach (var snapshot in snapshots) if (CaptureSnapshot(document, snapshot, category)) count++;
-            return count;
+            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var rollback = ProjectStateSnapshot.Capture(project);
+            try
+            {
+                var count = 0;
+                foreach (var snapshot in snapshots) if (CaptureSnapshotCore(document, project, snapshot, category)) count++;
+                return count;
+            }
+            catch (Exception operationError)
+            {
+                RestoreOrThrow(project, rollback, operationError, "Semantic capture batch");
+                throw;
+            }
         }
 
         public static bool CaptureSnapshot(Document document, EntitySnapshot snapshot, ElementCategory category)
@@ -35,6 +48,23 @@ namespace QS3D.BricsCAD.V25.Services
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var project = ProjectContextCoordinator.GetOrCreate(document);
+            var rollback = ProjectStateSnapshot.Capture(project);
+            try
+            {
+                return CaptureSnapshotCore(document, project, snapshot, category);
+            }
+            catch (Exception operationError)
+            {
+                RestoreOrThrow(project, rollback, operationError, "Semantic capture");
+                throw;
+            }
+        }
+
+        private static bool CaptureSnapshotCore(Document document, ProjectState project, EntitySnapshot snapshot, ElementCategory category)
+        {
+            if (GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle, out var generatedOwner, out var generatedSlot))
+                throw new InvalidOperationException("CAD handle " + snapshot.Handle + " là output do QS3D sinh từ " + generatedOwner!.Id + " (" + generatedSlot + ") và không thể dùng làm semantic source. Hãy chọn CAD source gốc.");
+
             var collision = project.Elements.FirstOrDefault(x => x.Category != category && x.SourceHandles.Any(h => string.Equals(h, snapshot.Handle, StringComparison.OrdinalIgnoreCase)));
             if (collision != null) throw new InvalidOperationException("CAD handle " + snapshot.Handle + " đang được QS3D theo dõi dưới loại " + collision.Category + ". Bỏ theo dõi trước khi đổi loại cấu kiện.");
 
@@ -53,7 +83,9 @@ namespace QS3D.BricsCAD.V25.Services
                 if (string.IsNullOrWhiteSpace(element.FamilyId)) element.FamilyId = family.Id;
             }
             element.Category = category;
-            element.SourceHandles.Clear(); element.SourceHandles.Add(snapshot.Handle); element.DrawingFingerprint = project.DrawingFingerprint;
+            element.SourceHandles.Clear();
+            element.SourceHandles.Add(snapshot.Handle);
+            element.DrawingFingerprint = project.DrawingFingerprint;
             element.Properties["Layer"] = snapshot.Layer;
             foreach (var key in element.Properties.Keys.Where(x => x.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase)).ToList()) element.Properties.Remove(key);
             foreach (var item in snapshot.Metadata) element.Properties["CAD." + item.Key] = item.Value ?? string.Empty;
@@ -65,7 +97,23 @@ namespace QS3D.BricsCAD.V25.Services
             ReplaceSourceMetric(element, "LengthM", snapshot.LengthDrawingUnits.HasValue ? units.ToMeters(snapshot.LengthDrawingUnits.Value) : (double?)null);
             ReplaceSourceMetric(element, "AreaM2", snapshot.AreaDrawingUnitsSquared.HasValue ? units.AreaToSquareMeters(snapshot.AreaDrawingUnitsSquared.Value) : (double?)null);
             ReplaceSourceMetric(element, "VolumeM3", snapshot.VolumeDrawingUnitsCubed.HasValue ? units.VolumeToCubicMeters(snapshot.VolumeDrawingUnitsCubed.Value) : (double?)null);
-            ApplyFamilyDefaults(element, family); element.MarkDirty(ElementDirtyFlags.All); Regenerate(project, element); project.Touch(); return true;
+            ApplyFamilyDefaults(element, family);
+            element.MarkDirty(ElementDirtyFlags.All);
+            Regenerate(project, element);
+            project.Touch();
+            return true;
+        }
+
+        private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError, string operation)
+        {
+            try
+            {
+                rollback.Restore(project);
+            }
+            catch (Exception restoreError)
+            {
+                throw new InvalidOperationException(operation + " failed and project rollback also failed.", new AggregateException(operationError, restoreError));
+            }
         }
 
         private static void ReplaceSourceMetric(ProjectElement element, string key, double? value)
@@ -154,7 +202,11 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static ProjectFamily ResolveFamily(ProjectState project, ElementCategory category)
         {
-            if (project.Metadata.TryGetValue("ActiveFamilyId", out var activeId)) { var active = project.FindFamily(activeId); if (active != null && active.Category == category) return active; }
+            if (project.Metadata.TryGetValue("ActiveFamilyId", out var activeId))
+            {
+                var active = project.FindFamily(activeId);
+                if (active != null && active.Category == category) return active;
+            }
             return project.Families.FirstOrDefault(x => x.Category == category) ?? CreateFamily(project, category);
         }
 
@@ -167,7 +219,11 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 var structural = new StructuralRegenerator();
                 if (structural.CanRegenerate(element.Category)) regenerator = structural;
-                else { var takeoff = new GenericTakeoffRegenerator(); regenerator = takeoff.CanRegenerate(element.Category) ? (IElementRegenerator)takeoff : new RoomRegenerator(); }
+                else
+                {
+                    var takeoff = new GenericTakeoffRegenerator();
+                    regenerator = takeoff.CanRegenerate(element.Category) ? (IElementRegenerator)takeoff : new RoomRegenerator();
+                }
             }
             if (regenerator.CanRegenerate(element.Category)) regenerator.Regenerate(project, element);
             element.MarkClean(ElementGeometryPolicy.SemanticCleanFlags(element.Category));
@@ -210,7 +266,8 @@ namespace QS3D.BricsCAD.V25.Services
             }
             if (category == ElementCategory.Room || category == ElementCategory.WallFinish) family.Properties["HeightM"] = "3.6";
             if (category == ElementCategory.WallOpening || category == ElementCategory.Door) family.Properties["HeightM"] = "2.2";
-            project.Families.Add(family); return family;
+            project.Families.Add(family);
+            return family;
         }
 
         private static string DefaultName(ElementCategory category)
@@ -243,8 +300,10 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static void ApplyFamilyDefaults(ProjectElement element, ProjectFamily family)
         {
-            foreach (var property in family.Properties) if (!element.Properties.ContainsKey(property.Key)) element.Properties[property.Key] = property.Value;
-            if ((element.Category == ElementCategory.WallOpening || element.Category == ElementCategory.Door) && !element.Properties.ContainsKey("WidthM")) element.Properties["WidthM"] = element.Properties.TryGetValue("LengthM", out var length) ? length : "0.9";
+            foreach (var property in family.Properties)
+                if (!element.Properties.ContainsKey(property.Key)) element.Properties[property.Key] = property.Value;
+            if ((element.Category == ElementCategory.WallOpening || element.Category == ElementCategory.Door) && !element.Properties.ContainsKey("WidthM"))
+                element.Properties["WidthM"] = element.Properties.TryGetValue("LengthM", out var length) ? length : "0.9";
             if (element.Category == ElementCategory.Room && element.Properties.TryGetValue("LengthM", out var perimeter)) element.Properties["PerimeterM"] = perimeter;
             if ((element.Category == ElementCategory.Slab || element.Category == ElementCategory.Foundation || element.Category == ElementCategory.Stair || element.Category == ElementCategory.Earthwork) && element.Properties.TryGetValue("LengthM", out var outline) && !element.Properties.ContainsKey("PerimeterM")) element.Properties["PerimeterM"] = outline;
         }
