@@ -104,6 +104,18 @@ checks = {
         "Get-Process -Name bricscad",
         ".qs3d-stage-",
         ".backup-",
+        "Get-DemandLoadSnapshot",
+        "Get-RegistryValueSnapshot",
+        "Get-RegistryValuesSnapshot",
+        "Restore-DemandLoadSnapshot",
+        "$registrySnapshots",
+        "$payloadCommitted",
+        "$originalError",
+        "$rollbackFailures",
+        "for ($index = $registrySnapshots.Count - 1; $index -ge 0; $index--)",
+        "Remove-Item -LiteralPath $installFull -Recurse -Force",
+        "Move-Item -LiteralPath $backup -Destination $installFull",
+        "throw $originalError",
     ],
     "scripts/package-v25.ps1": [
         "update-v25.ps1",
@@ -188,10 +200,24 @@ if finalizer.is_file():
 
 installer = ROOT / "scripts/install-v25-autoload.ps1"
 if installer.is_file():
-    text = installer.read_text(encoding="utf-8").lower()
+    original = installer.read_text(encoding="utf-8")
+    lower = original.lower()
     for token in ("secureload 0", "setvar('secureload'", 'setvar("secureload"'):
-        if token in text:
+        if token in lower:
             errors.append("installer must not weaken SECURELOAD: " + token)
+    snapshot = original.find("$registrySnapshots = @($targets | ForEach-Object { Get-DemandLoadSnapshot")
+    payload_swap = original.find("Move-Item -LiteralPath $stage -Destination $installFull")
+    registry_write = original.find("New-ItemProperty -Path $target.AppKey -Name 'Loader'")
+    catch_block = original.find("$originalError = $_")
+    registry_rollback = original.find("Restore-DemandLoadSnapshot -Snapshot $registrySnapshots[$index]")
+    payload_rollback = original.find("Move-Item -LiteralPath $backup -Destination $installFull", catch_block)
+    rethrow = original.find("throw $originalError")
+    if min(snapshot, payload_swap, registry_write, catch_block, registry_rollback, payload_rollback, rethrow) < 0:
+        errors.append("installer must snapshot DemandLoad state and rollback registry/payload on any failure")
+    elif not (snapshot < payload_swap < registry_write < catch_block < registry_rollback < payload_rollback < rethrow):
+        errors.append("installer transactional ordering must snapshot before mutation and rollback before rethrow")
+    if "elseif ($payloadCommitted -and (Test-Path -LiteralPath $installFull))" not in original:
+        errors.append("fresh-install failure must remove the newly committed payload")
 
 if errors:
     for error in errors:
@@ -199,4 +225,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: secure V25 updates pin executable payload signatures and cryptographically bind manifest/package versions to the signed QS3D plugin assembly before install.")
+print("PASS: secure V25 updates bind versions to the signed plugin, and the installer snapshots/rolls back DemandLoad registry plus payload atomically on failure.")
