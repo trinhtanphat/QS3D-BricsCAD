@@ -41,6 +41,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 ReserveProperty(owners, element, "GeneratedBeamStirrupHandles");
                 ReserveProperty(owners, element, "GeneratedSlabMeshHandles");
                 ReserveProperty(owners, element, "GeneratedWallMeshHandles");
+                ReserveProperty(owners, element, "GeneratedFoundationMeshHandles");
             }
             foreach (var element in project.Elements) ReserveProperty(owners, element, HandlesKey);
             return new OwnershipIndex(owners);
