@@ -22,6 +22,8 @@ namespace QS3D.Core.Reporting
                 }
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
                 row.ElementIds.Add(element.Id);
+                foreach (var handle in element.SourceHandles)
+                    if (!string.IsNullOrWhiteSpace(handle) && !row.SourceHandles.Contains(handle, StringComparer.OrdinalIgnoreCase)) row.SourceHandles.Add(handle.Trim());
                 row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, element.GrossConcreteM3, element.Id + "/GrossConcreteM3");
                 row.DeductionM3 = QuantityReportMath.Add(row.DeductionM3, element.DeductionM3, element.Id + "/DeductionM3");
                 row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3, element.NetConcreteM3, element.Id + "/NetConcreteM3");

@@ -93,18 +93,19 @@ namespace QS3D.Core.Recognition
 
         public static IReadOnlyList<RecognitionRule> DefaultRules() => new[]
         {
-            new RecognitionRule("beam", ElementCategory.Beam, new[]{"beam","dam","d-beam","kc-dam"}, new[]{"beam","dam"}, new[]{"line","polyline"}),
-            new RecognitionRule("slab", ElementCategory.Slab, new[]{"slab","san","floor-struct"}, new[]{"slab","san"}, new[]{"polyline","hatch","region"}),
-            new RecognitionRule("column", ElementCategory.Column, new[]{"column","cot","kc-cot"}, new[]{"column","cot"}, new[]{"polyline","blockreference","region"}),
-            new RecognitionRule("struct-wall", ElementCategory.StructuralWall, new[]{"structwall","vach","kc-vach","shearwall"}, new[]{"structural wall","vach","shear wall"}, new[]{"line","polyline"}),
-            new RecognitionRule("arch-wall", ElementCategory.ArchitecturalWall, new[]{"wall","tuong","a-wall"}, new[]{"wall","tuong"}, new[]{"line","polyline"}),
-            new RecognitionRule("opening", ElementCategory.WallOpening, new[]{"opening","lo-mo","void"}, new[]{"opening","lo mo"}, new[]{"blockreference","polyline"}),
-            new RecognitionRule("door", ElementCategory.Door, new[]{"door","cua","a-door"}, new[]{"door","cua"}, new[]{"blockreference","polyline"}),
-            new RecognitionRule("room", ElementCategory.Room, new[]{"room","phong","a-room"}, new[]{"room","phong"}, new[]{"polyline","hatch","region"}),
-            new RecognitionRule("foundation", ElementCategory.Foundation, new[]{"foundation","mong","footing"}, new[]{"foundation","mong","footing"}, new[]{"polyline","region"}),
-            new RecognitionRule("stair", ElementCategory.Stair, new[]{"stair","cau-thang"}, new[]{"stair","cau thang"}, new[]{"polyline","blockreference"}),
-            new RecognitionRule("railing", ElementCategory.Railing, new[]{"railing","lan-can"}, new[]{"railing","lan can"}, new[]{"line","polyline"}),
-            new RecognitionRule("earthwork", ElementCategory.Earthwork, new[]{"earth","excav","dao-dat"}, new[]{"earthwork","excavation","dao dat"}, new[]{"polyline","hatch","region"})
+            new RecognitionRule("beam", ElementCategory.Beam, new[]{"blt beam","beam","dam","d-beam","kc-dam"}, new[]{"beam","dam"}, new[]{"line","polyline","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("slab", ElementCategory.Slab, new[]{"blt slab","slab","san","floor-struct"}, new[]{"slab","san"}, new[]{"polyline","hatch","region","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("column", ElementCategory.Column, new[]{"blt column","column","cot","kc-cot"}, new[]{"column","cot"}, new[]{"polyline","blockreference","region","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("struct-wall", ElementCategory.StructuralWall, new[]{"blt structural wall","structwall","vach","kc-vach","shearwall"}, new[]{"structural wall","vach","shear wall"}, new[]{"line","polyline","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("arch-wall", ElementCategory.ArchitecturalWall, new[]{"blt arc wall","blt wall","wall","tuong","a-wall"}, new[]{"wall","tuong"}, new[]{"line","polyline","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("wall-finish", ElementCategory.WallFinish, new[]{"blt wall finish","wallfinish","wall finish","hoan thien tuong"}, new[]{"wall finish","hoan thien tuong"}, new[]{"polyline","region","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("opening", ElementCategory.WallOpening, new[]{"blt opening","blt lo mo tuong","opening","lo-mo","void"}, new[]{"opening","lo mo"}, new[]{"blockreference","polyline","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("door", ElementCategory.Door, new[]{"blt door","door","cua","a-door"}, new[]{"door","cua"}, new[]{"blockreference","polyline","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("room", ElementCategory.Room, new[]{"blt room","room","phong","a-room"}, new[]{"room","phong"}, new[]{"polyline","hatch","region","proxyentity"}),
+            new RecognitionRule("foundation", ElementCategory.Foundation, new[]{"blt raft foundation","blt strip foundation","blt pile cap","foundation","mong","footing"}, new[]{"foundation","mong","footing"}, new[]{"polyline","region","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("stair", ElementCategory.Stair, new[]{"blt stair","stair","cau-thang"}, new[]{"stair","cau thang"}, new[]{"polyline","blockreference","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("railing", ElementCategory.Railing, new[]{"blt railing","railing","lan-can"}, new[]{"railing","lan can"}, new[]{"line","polyline","solid3d","3dsolid","proxyentity"}),
+            new RecognitionRule("earthwork", ElementCategory.Earthwork, new[]{"blt earthwork","earth","excav","dao-dat"}, new[]{"earthwork","excavation","dao dat"}, new[]{"polyline","hatch","region","solid3d","3dsolid","proxyentity"})
         };
 
         private static RecognitionCandidate Score(RecognitionRule rule, string layer, string text, string entityType)
@@ -113,7 +114,7 @@ namespace QS3D.Core.Recognition
             var layerMatch = BestTerm(rule.LayerTerms, layer);
             var textMatch = BestTerm(rule.TextTerms, text);
             var typeMatch = rule.EntityTypes.Count == 0 || rule.EntityTypes.Any(x => string.Equals(x, entityType, StringComparison.OrdinalIgnoreCase) || entityType.Contains(x));
-            if (!string.IsNullOrEmpty(layerMatch)) { result.Confidence += 0.62d; result.Evidence.Add("layer:" + layerMatch); }
+            if (!string.IsNullOrEmpty(layerMatch)) { result.Confidence += string.Equals(layer, layerMatch, StringComparison.OrdinalIgnoreCase) ? 0.90d : 0.62d; result.Evidence.Add("layer:" + layerMatch); }
             if (!string.IsNullOrEmpty(textMatch)) { result.Confidence += 0.28d; result.Evidence.Add("text:" + textMatch); }
             if (typeMatch && (!string.IsNullOrEmpty(layerMatch) || !string.IsNullOrEmpty(textMatch))) { result.Confidence += 0.10d; result.Evidence.Add("type:" + entityType); }
             result.Confidence = Math.Min(1d, result.Confidence);
