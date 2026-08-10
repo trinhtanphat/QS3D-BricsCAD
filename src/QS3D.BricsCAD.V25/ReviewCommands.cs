@@ -24,14 +24,40 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DBUILD3D", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc); var snapshots = EntitySnapshotReader.ReadImpliedSelection(doc);
-                var handles = snapshots.Select(x => x.Handle).ToArray();
-                var tracked = project.Elements.FirstOrDefault(x => x.SourceHandles.Any(h => handles.Contains(h, StringComparer.OrdinalIgnoreCase)));
-                ElementCategory? category = tracked?.Category;
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var snapshots = EntitySnapshotReader.ReadImpliedSelection(doc);
+                if (snapshots.Count == 0) { doc.Editor.WriteMessage("\nQS3D: chọn source CAD cần tạo/cập nhật 3D."); return; }
+
+                var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
+                var tracked = project.Elements
+                    .Where(x => x.SourceHandles.Any(handles.Contains))
+                    .ToList();
+                var trackedCategories = tracked
+                    .Select(x => x.Category)
+                    .Distinct()
+                    .ToList();
+                if (trackedCategories.Count > 1)
+                {
+                    var categories = string.Join(", ", trackedCategories.OrderBy(x => x.ToString()).Select(x => x.ToString()));
+                    throw new InvalidOperationException("Selection đang trộn nhiều semantic category (" + categories + "). Chọn một category mỗi lần trước khi Vẽ 3D.");
+                }
+
+                ElementCategory? category = trackedCategories.Count == 1 ? trackedCategories[0] : null;
                 if (!category.HasValue && project.Metadata.TryGetValue("ActiveFamilyId", out var familyId)) category = project.FindFamily(familyId)?.Category;
                 if (!category.HasValue) { doc.Editor.WriteMessage("\nQS3D: chọn source CAD hoặc Family trước khi Vẽ 3D."); return; }
-                if (snapshots.Count == 0) { doc.Editor.WriteMessage("\nQS3D: chọn source CAD cần tạo/cập nhật 3D."); return; }
-                if (tracked == null) SemanticCaptureService.Capture(doc, category.Value);
+
+                if (tracked.Count > 0)
+                {
+                    var trackedHandles = new HashSet<string>(tracked.SelectMany(x => x.SourceHandles), StringComparer.OrdinalIgnoreCase);
+                    var untracked = snapshots.Where(x => !trackedHandles.Contains(x.Handle)).Select(x => x.Handle).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                    if (untracked.Count > 0)
+                        throw new InvalidOperationException("Selection đang trộn source đã capture với " + untracked.Count + " source chưa capture. Capture/chọn cùng một semantic category trước khi Vẽ 3D để tránh xử lý một phần.");
+                }
+                else
+                {
+                    SemanticCaptureService.Capture(doc, category.Value);
+                }
+
                 int solids;
                 var detailSolids = 0;
                 if (IsTktWall(category.Value))
@@ -105,7 +131,19 @@ namespace QS3D.BricsCAD.V25
                     PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Nhận dạng → " + candidate.Category + " • " + result.Handle);
                 };
                 Action<RecognitionResult> locate = result => { var count = CadHandleService.Select(doc, new[] { result.Handle }); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
-                if (autoApply) foreach (var result in batch.AutoAccepted) try { apply(result); } catch { skipped++; }
+                if (autoApply)
+                {
+                    foreach (var result in batch.AutoAccepted)
+                    {
+                        try { apply(result); }
+                        catch (System.Exception ex)
+                        {
+                            skipped++;
+                            AuditTrail.ForProject(project).Record("recognition.skip", result.Handle, ex.Message);
+                            doc.Editor.WriteMessage("\nQS3D Recognition skip " + result.Handle + ": " + ex.Message);
+                        }
+                    }
+                }
                 Application.ShowModelessWindow(IntPtr.Zero, new RecognitionWindow(batch.Results, apply, locate), true);
                 doc.Editor.WriteMessage("\nQS3D " + (scanCurrentSpace ? "B4D" : "Recognition") + ": scanned=" + snapshots.Count + ", auto=" + applied + ", review=" + batch.ReviewRequired.Count + ", skipped=" + skipped + ".");
             });
