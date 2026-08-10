@@ -14,6 +14,7 @@ required = [
     "src/QS3D.Core/Rebar/LinearRebarLayoutPlanner.cs",
     "src/QS3D.Core/Rebar/RebarShapePath.cs",
     "src/QS3D.Core/Rebar/ProjectRebarShapePlanner.cs",
+    "src/QS3D.Core/Rebar/ShapeRebarDistributionPlanner.cs",
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
@@ -43,6 +44,7 @@ required = [
     "tests/QS3D.Core.SmokeTests/PolylineOpeningCutSmoke.cs",
     "tests/QS3D.Core.SmokeTests/RebarShapeGeometrySmoke.cs",
     "tests/QS3D.Core.SmokeTests/ProjectRebarShapeSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/ShapeRebarDistributionSmoke.cs",
 ]
 for relative in required:
     if not (ROOT / relative).is_file():
@@ -69,6 +71,9 @@ checks = {
     ],
     "src/QS3D.Core/Rebar/ProjectRebarShapePlanner.cs": [
         "ProjectRebarScheduleBuilder.Build(project)", "RebarShapePathBuilder.Build", "RebarShapeLegsM", "RebarShapeTurnsDeg", "ProjectRebarShapePlan"
+    ],
+    "src/QS3D.Core/Rebar/ShapeRebarDistributionPlanner.cs": [
+        "ShapeRebarDistributionInput", "CenterClearance", "RebarMath.Add(cover, radius", "Centered", "shape rebar usable span", "shape rebar single offset"
     ],
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": [
         "REBAR_GENERATED_OWNERSHIP_CONFLICT", "REBAR_GENERATED_SOLID_MISSING", "REBAR_GENERATED_COUNT_MISMATCH",
@@ -97,7 +102,8 @@ checks = {
     "src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs": [
         "RebarShapePathBuilder.Build", "GeneratedShapeRebarHandles", "GeneratedRebarOwnershipGuard.Build(project)", "ownership.EnsureOwned",
         "BooleanOperationType.BoolUnite", "MaxBarsPerBatch", "OpenSelectedSource", "selectedHandles",
-        "Multiple shape rebars require a positive usable distribution span", "Refusing destructive erase"
+        "ShapeRebarDistributionPlanner.Plan", "DistributionCentered", "OffsetAxisFromMinimum", "CenterClearance", "Hypot3", "OffsetPoint", "IsWallLike",
+        "ElementCategory.GlassWall", "ElementCategory.WallPier", "Refusing destructive erase"
     ],
     "src/QS3D.BricsCAD.V25/ShapeRebarGeometryCommands.cs": [
         'CommandMethod("QS3DREBAR3DSHAPE"', "ShapeRebarSolidBuilder.BuildSelected", "geometry.rebar3d.shape"
@@ -165,6 +171,9 @@ checks = {
     "tests/QS3D.Core.SmokeTests/ProjectRebarShapeSmoke.cs": [
         "BuildsLShapeFromElementProperties", "StraightShapeNeedsNoLegMetadata", "MismatchedLegTotalIsRejected"
     ],
+    "tests/QS3D.Core.SmokeTests/ShapeRebarDistributionSmoke.cs": [
+        "ModuleInitializer", "CenterlineDistributionIsSymmetric", "ExtentsDistributionRespectsClearCover", "SingleBarUsesHostCenter", "ImpossibleEnvelopeIsRejected"
+    ],
 }
 for relative, needles in checks.items():
     path = ROOT / relative
@@ -205,4 +214,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: TKT line/polyline wall variants, safe LINE + straight-POLYLINE opening cuts, far-origin-safe footprint/junction math, rectangular/linear/BBS-shape rebar ownership+health, typed Family editors, preserved instance overrides, semantic selection sync and BLT-style junction/Focus/Isolate workflows are present.")
+print("PASS: TKT line/polyline wall variants, safe LINE + straight-POLYLINE opening cuts, far-origin-safe footprint/junction math, rectangular/linear/BBS-shape rebar ownership+health+cover-safe distribution, typed Family editors, preserved instance overrides, semantic selection sync and BLT-style junction/Focus/Isolate workflows are present.")
