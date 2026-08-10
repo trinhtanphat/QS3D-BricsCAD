@@ -65,47 +65,105 @@ namespace QS3D.BricsCAD.V25
         {
             var result = document.Editor.SelectImplied();
             if (result.Status != PromptStatus.OK || result.Value == null) return false;
-            var selectedCount = result.Value.GetObjectIds().Length;
-            var hasExtents = false;
-            var min = new Point3d();
-            var max = new Point3d();
-            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
-            {
-                foreach (var id in result.Value.GetObjectIds())
-                {
-                    var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
-                    if (entity == null) continue;
-                    try
-                    {
-                        var extents = entity.GeometricExtents;
-                        if (!hasExtents) { min = extents.MinPoint; max = extents.MaxPoint; hasExtents = true; }
-                        else
-                        {
-                            min = new Point3d(Math.Min(min.X, extents.MinPoint.X), Math.Min(min.Y, extents.MinPoint.Y), Math.Min(min.Z, extents.MinPoint.Z));
-                            max = new Point3d(Math.Max(max.X, extents.MaxPoint.X), Math.Max(max.Y, extents.MaxPoint.Y), Math.Max(max.Z, extents.MaxPoint.Z));
-                        }
-                    }
-                    catch { }
-                }
-                transaction.Commit();
-            }
-            if (!hasExtents) return false;
+            var objectIds = result.Value.GetObjectIds();
+            if (objectIds.Length == 0) return false;
+
             using (var view = document.Editor.GetCurrentView())
             {
-                var width = Math.Max(max.X - min.X, 1e-3);
-                var height = Math.Max(max.Y - min.Y, 1e-3);
-                var ratio = view.Height > 1e-9 ? view.Width / view.Height : 1.0;
-                if (width / height > ratio) height = width / Math.Max(ratio, 1e-6);
-                else width = height * Math.Max(ratio, 1e-6);
-                view.CenterPoint = new Point2d((min.X + max.X) * 0.5, (min.Y + max.Y) * 0.5);
-                view.Width = width * 1.25;
-                view.Height = height * 1.25;
+                // Entity.GeometricExtents is expressed in WCS, while view CenterPoint/Width/Height
+                // are display-coordinate-system (DCS) framing values. Transform every entity bound
+                // into the current view's DCS before computing the zoom rectangle so rotated and
+                // isometric views keep their camera direction and frame the selected geometry.
+                var worldToDisplay = WorldToDisplay(view);
+                var hasExtents = false;
+                var min = new Point3d();
+                var max = new Point3d();
+
+                using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+                {
+                    foreach (var id in objectIds)
+                    {
+                        var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                        if (entity == null || entity.IsErased) continue;
+                        try
+                        {
+                            var extents = entity.GeometricExtents;
+                            extents.TransformBy(worldToDisplay);
+                            var extentMin = extents.MinPoint;
+                            var extentMax = extents.MaxPoint;
+                            if (!Finite(extentMin) || !Finite(extentMax)) continue;
+
+                            if (!hasExtents)
+                            {
+                                min = extentMin;
+                                max = extentMax;
+                                hasExtents = true;
+                            }
+                            else
+                            {
+                                min = new Point3d(
+                                    Math.Min(min.X, extentMin.X),
+                                    Math.Min(min.Y, extentMin.Y),
+                                    Math.Min(min.Z, extentMin.Z));
+                                max = new Point3d(
+                                    Math.Max(max.X, extentMax.X),
+                                    Math.Max(max.Y, extentMax.Y),
+                                    Math.Max(max.Z, extentMax.Z));
+                            }
+                        }
+                        catch { }
+                    }
+                    transaction.Commit();
+                }
+
+                if (!hasExtents) return false;
+
+                var minimumSpan = MinimumViewSpan(view);
+                var width = Math.Max(max.X - min.X, minimumSpan);
+                var height = Math.Max(max.Y - min.Y, minimumSpan);
+                var ratio = FinitePositive(view.Height) && FinitePositive(view.Width)
+                    ? view.Width / view.Height
+                    : 1.0d;
+                if (!FinitePositive(ratio)) ratio = 1.0d;
+
+                if (width / height > ratio) height = width / ratio;
+                else width = height * ratio;
+
+                var centerX = (min.X + max.X) * 0.5d;
+                var centerY = (min.Y + max.Y) * 0.5d;
+                if (!Finite(centerX) || !Finite(centerY) || !FinitePositive(width) || !FinitePositive(height)) return false;
+
+                view.CenterPoint = new Point2d(centerX, centerY);
+                view.Width = width * 1.25d;
+                view.Height = height * 1.25d;
                 document.Editor.SetCurrentView(view);
             }
+
             document.Editor.UpdateScreen();
-            PaletteCoordinator.SetStatus("Zoom tới " + selectedCount + " đối tượng.");
+            PaletteCoordinator.SetStatus("Zoom tới " + objectIds.Length + " đối tượng theo hướng nhìn hiện tại.");
             return true;
         }
+
+        private static Matrix3d WorldToDisplay(ViewTableRecord view)
+        {
+            if (view == null) throw new ArgumentNullException(nameof(view));
+            var matrix = Matrix3d.PlaneToWorld(view.ViewDirection);
+            matrix = Matrix3d.Displacement(view.Target - Point3d.Origin) * matrix;
+            matrix = Matrix3d.Rotation(-view.ViewTwist, view.ViewDirection, view.Target) * matrix;
+            return matrix.Inverse();
+        }
+
+        private static double MinimumViewSpan(ViewTableRecord view)
+        {
+            var scale = Math.Min(Math.Abs(view.Width), Math.Abs(view.Height));
+            if (!FinitePositive(scale)) scale = 1.0d;
+            var minimum = scale * 1e-6d;
+            return FinitePositive(minimum) ? minimum : 1e-6d;
+        }
+
+        private static bool Finite(Point3d point) => Finite(point.X) && Finite(point.Y) && Finite(point.Z);
+        private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+        private static bool FinitePositive(double value) => Finite(value) && value > 0d;
 
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
     }
