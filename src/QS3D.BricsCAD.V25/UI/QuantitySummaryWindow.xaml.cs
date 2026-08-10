@@ -129,9 +129,25 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnExportClick(object sender, RoutedEventArgs e)
         {
-            var dialog = new SaveFileDialog { Title = "Xuất bảng khối lượng QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = "QS3D-Khoi-Luong.xlsx", AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
-            if (dialog.ShowDialog(this) != true) return;
-            try { var visibleRows = (QuantityGrid.ItemsSource as IEnumerable<QuantityReportRow>)?.ToList() ?? _rows.ToList(); XlsxQuantityExporter.Export(dialog.FileName, visibleRows); MessageBox.Show(this, "Đã xuất Excel thành công.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Information); }
+            try
+            {
+                EnsureActive("xuất BQ XLSX");
+                if (_recalculate != null)
+                {
+                    var floor = FloorCombo.SelectedItem as string;
+                    var category = CategoryList.SelectedItem as string;
+                    _rows = _recalculate() ?? Array.Empty<QuantityReportRow>();
+                    ReloadFloors(floor);
+                    ReloadCategories(category);
+                    ApplyFilter();
+                }
+                var visibleRows = (QuantityGrid.ItemsSource as IEnumerable<QuantityReportRow>)?.ToList() ?? _rows.ToList();
+                if (visibleRows.Count == 0) throw new InvalidOperationException("BQ hiện không có dòng nào để xuất.");
+                var dialog = new SaveFileDialog { Title = "Xuất bảng khối lượng QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = "QS3D-Khoi-Luong.xlsx", AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
+                if (dialog.ShowDialog(this) != true) return;
+                XlsxQuantityExporter.Export(dialog.FileName, visibleRows);
+                MessageBox.Show(this, "Đã tính lại dữ liệu hiện hành và xuất Excel thành công.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
             catch (Exception ex) { MessageBox.Show(this, "Không thể xuất Excel: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
