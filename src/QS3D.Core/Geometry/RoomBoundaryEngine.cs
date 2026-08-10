@@ -54,6 +54,7 @@ namespace QS3D.Core.Geometry
             if (segments.Count < 3) return Array.Empty<RoomBoundary>();
 
             var cuts = new List<Cut>[segments.Count];
+            var bounds = new SegmentBounds[segments.Count];
             for (var i = 0; i < segments.Count; i++)
             {
                 cuts[i] = new List<Cut>
@@ -61,11 +62,15 @@ namespace QS3D.Core.Geometry
                     new Cut(0d, segments[i].Start),
                     new Cut(1d, segments[i].End)
                 };
+                bounds[i] = new SegmentBounds(segments[i], tolerance);
             }
 
             for (var i = 0; i < segments.Count; i++)
                 for (var j = i + 1; j < segments.Count; j++)
+                {
+                    if (!bounds[i].Overlaps(bounds[j])) continue;
                     CollectPairCuts(segments[i], segments[j], cuts[i], cuts[j], tolerance);
+                }
 
             var rawEdges = new List<RawEdge>();
             for (var i = 0; i < segments.Count; i++)
@@ -397,6 +402,37 @@ namespace QS3D.Core.Geometry
         private static bool FinitePositive(double value) => Finite(value) && value > 0d;
         private static bool FiniteNonNegative(double value) => Finite(value) && value >= 0d;
         private static int ComparePoints(Point2 a, Point2 b) { var x = a.X.CompareTo(b.X); return x != 0 ? x : a.Y.CompareTo(b.Y); }
+
+        private sealed class SegmentBounds
+        {
+            public SegmentBounds(BoundarySegment segment, double tolerance)
+            {
+                MinX = ExpandDown(Math.Min(segment.Start.X, segment.End.X), tolerance);
+                MaxX = ExpandUp(Math.Max(segment.Start.X, segment.End.X), tolerance);
+                MinY = ExpandDown(Math.Min(segment.Start.Y, segment.End.Y), tolerance);
+                MaxY = ExpandUp(Math.Max(segment.Start.Y, segment.End.Y), tolerance);
+            }
+
+            public double MinX { get; }
+            public double MaxX { get; }
+            public double MinY { get; }
+            public double MaxY { get; }
+
+            public bool Overlaps(SegmentBounds other) =>
+                other != null && MaxX >= other.MinX && other.MaxX >= MinX && MaxY >= other.MinY && other.MaxY >= MinY;
+
+            private static double ExpandDown(double value, double tolerance)
+            {
+                var result = value - tolerance;
+                return double.IsNegativeInfinity(result) ? double.MinValue : result;
+            }
+
+            private static double ExpandUp(double value, double tolerance)
+            {
+                var result = value + tolerance;
+                return double.IsPositiveInfinity(result) ? double.MaxValue : result;
+            }
+        }
 
         private sealed class PointSnapper
         {
