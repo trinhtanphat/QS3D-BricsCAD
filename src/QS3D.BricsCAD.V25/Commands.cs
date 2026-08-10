@@ -259,8 +259,9 @@ namespace QS3D.BricsCAD.V25
                 var window = new ModelHealthWindow(doc, issues, issue =>
                 {
                     var element = project.FindElement(issue.ElementId); if (element == null) return;
+                    var generatedTarget = ComprehensiveModelHealthService.TargetsGeneratedOutput(issue);
                     IEnumerable<string> locateHandles = SemanticReferenceHandles.Get(element);
-                    if (ComprehensiveModelHealthService.TargetsGeneratedOutput(issue))
+                    if (generatedTarget)
                     {
                         var generated = GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element)
                             .Select(x => x.Key)
@@ -269,7 +270,13 @@ namespace QS3D.BricsCAD.V25
                         if (generated.Length > 0) locateHandles = generated;
                     }
                     var count = Cad.CadHandleService.Select(doc, locateHandles);
-                    PaletteCoordinator.SetStatus("Health Định vị " + element.Id + " • " + count + " đối tượng CAD");
+                    var usedSourceFallback = false;
+                    if (count == 0 && generatedTarget)
+                    {
+                        count = Cad.CadHandleService.Select(doc, SourceHandleResolver.Resolve(project, new[] { element.Id }));
+                        usedSourceFallback = count > 0;
+                    }
+                    PaletteCoordinator.SetStatus("Health Định vị " + element.Id + " • " + count + " đối tượng CAD" + (usedSourceFallback ? " • nguồn semantic" : string.Empty));
                     if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
                 });
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
