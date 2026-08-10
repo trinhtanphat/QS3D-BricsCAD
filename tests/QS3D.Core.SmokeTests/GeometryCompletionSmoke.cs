@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            StableDistanceAndPolylineMetrics();
+            RoomBoundaryLargeCoordinates();
             StraightWallFootprint();
             PolylineWallCorner();
             WallFootprintRejectsSelfIntersection();
@@ -20,6 +22,47 @@ namespace QS3D.Core.SmokeTests
             RectangularRebarLayout();
             RectangularRebarRejectsImpossibleCover();
             GeneratedRebarHealth();
+        }
+
+        private static void StableDistanceAndPolylineMetrics()
+        {
+            var distance = new Point2(0d, 0d).DistanceTo(new Point2(3e200d, 4e200d));
+            NearRelative(5e200d, distance);
+            Throws<OverflowException>(() => new Point2(double.MaxValue, 0d).DistanceTo(new Point2(-double.MaxValue, 0d)));
+
+            const double origin = 1e12d;
+            var polygon = new[]
+            {
+                new Point2(origin, origin),
+                new Point2(origin + 10d, origin),
+                new Point2(origin + 10d, origin + 20d),
+                new Point2(origin, origin + 20d)
+            };
+            Near(200d, PolylineMetrics.Area(polygon));
+            Near(60d, PolylineMetrics.Length(polygon, true));
+
+            Throws<OverflowException>(() => PolylineMetrics.Area(new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e308d, 0d),
+                new Point2(0d, 1e308d)
+            }));
+        }
+
+        private static void RoomBoundaryLargeCoordinates()
+        {
+            const double origin = 1e12d;
+            var segments = new[]
+            {
+                new BoundarySegment(new Point2(origin, origin), new Point2(origin + 10d, origin), "A"),
+                new BoundarySegment(new Point2(origin + 10d, origin), new Point2(origin + 10d, origin + 20d), "B"),
+                new BoundarySegment(new Point2(origin + 10d, origin + 20d), new Point2(origin, origin + 20d), "C"),
+                new BoundarySegment(new Point2(origin, origin + 20d), new Point2(origin, origin), "D")
+            };
+            var rooms = new RoomBoundaryEngine().Discover(segments, 0.005d, 1d);
+            Equal(1, rooms.Count);
+            Near(200d, rooms[0].Area);
+            Near(60d, rooms[0].Perimeter);
         }
 
         private static void StraightWallFootprint()
@@ -149,6 +192,12 @@ namespace QS3D.Core.SmokeTests
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static void Near(double expected, double actual, double tolerance = 1e-9d) { if (Math.Abs(expected - actual) > tolerance) throw new Exception("Expected " + expected + ", got " + actual); }
+        private static void NearRelative(double expected, double actual, double relativeTolerance = 1e-12d)
+        {
+            var scale = Math.Max(Math.Abs(expected), Math.Abs(actual));
+            if (scale == 0d) return;
+            if (Math.Abs(expected - actual) / scale > relativeTolerance) throw new Exception("Expected " + expected + ", got " + actual);
+        }
         private static void Equal<T>(T expected, T actual) { if (!Equals(expected, actual)) throw new Exception("Expected " + expected + ", got " + actual); }
         private static void True(bool value) { if (!value) throw new Exception("Expected true."); }
         private static void Throws<T>(Action action) where T : Exception { try { action(); } catch (T) { return; } throw new Exception("Expected exception " + typeof(T).Name + "."); }
