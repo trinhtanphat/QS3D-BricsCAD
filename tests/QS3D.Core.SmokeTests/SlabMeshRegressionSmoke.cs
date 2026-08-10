@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             CountModeIsDeterministic();
             ThinSlabIsRejected();
             AmbiguousDistributionIsRejected();
+            OversizedAggregateMeshIsRejected();
         }
 
         private static void BottomMeshUsesTwoDirectionsAndCover()
@@ -121,6 +122,23 @@ namespace QS3D.Core.SmokeTests
                 XCount = 5,
                 YSpacingMm = 200d,
                 IncludeBottom = true
+            }));
+        }
+
+        private static void OversizedAggregateMeshIsRejected()
+        {
+            Throws<InvalidOperationException>(() => RectangularSlabMeshPlanner.Plan(new RectangularSlabMeshInput
+            {
+                SpanXM = 100d,
+                SpanYM = 100d,
+                ThicknessM = .3d,
+                CoverM = .02d,
+                XDiameterMm = 8d,
+                YDiameterMm = 8d,
+                XCount = 3000,
+                YCount = 2000,
+                IncludeBottom = true,
+                IncludeTop = true
             }));
         }
 
