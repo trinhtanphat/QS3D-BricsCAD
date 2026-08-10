@@ -50,10 +50,15 @@ checks = {
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.TryFindOwner(project, handle",
     ],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedSolidRuntimeHealthService.cs": [
+        "GeneratedGridAnnotationRuntimeHealthService.Inspect(document, project)",
+        "GeneratedSemanticTagRuntimeHealthService.Inspect(document, project)",
+    ],
     "src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs": [
         'CommandMethod("QS3DRELEASECHECK"',
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
         "ModelHealthService().Inspect",
+        "GeneratedSolidRuntimeHealthService.Inspect(document, project)",
         "DependencyHealthService().Inspect",
         "SafeGeneratedHandleOwnershipHealthService().Inspect",
         "GeneratedRebarHealthService().InspectAll",
@@ -131,4 +136,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DRELEASECHECK consumes shared ownership, dependency, HT_Phòng provenance, Foundation/mode, stale/live CAD and BOM health; runtime/private-DWG remains a separate V25 gate.")
+print("PASS: QS3DRELEASECHECK consumes shared ownership, dependency, HT_Phòng provenance, Foundation/mode, stale/live CAD (including Grid annotation + semantic tag runtime health) and BOM health; runtime/private-DWG remains a separate V25 gate.")
