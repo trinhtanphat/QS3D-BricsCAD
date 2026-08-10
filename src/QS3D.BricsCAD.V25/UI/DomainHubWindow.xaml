@@ -28,7 +28,7 @@
                     <Button Content="Lan can" Tag="QS3DRAILING" Click="OnCommandClick"/>
                     <Button Content="Đào đất" Tag="QS3DEARTHWORK" Click="OnCommandClick"/>
                     <Button Content="Tạo / cập nhật 3D từ đối tượng chọn" Tag="QS3DBUILD3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
-                    <TextBlock Text="Nguồn 3D: LINE cho Dầm/Vách/Lan can; closed POLYLINE cho Sàn/Cột/Móng/Cầu thang/Đào đất. Phòng Auto dùng LINE/POLYLINE thẳng và tự xử lý giao điểm/T-junction." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+                    <TextBlock Text="Nguồn 3D: LINE cho Dầm/Vách/Lan can; closed POLYLINE cho Sàn/Cột/Móng/Cầu thang/Đào đất. Phòng Auto dùng LINE/POLYLINE kể cả cung bulge, tự chia cung và xử lý giao điểm/T-junction." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
 
                     <TextBlock Text="DỰ ÁN &amp; TEMPLATE" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
                     <Button Content="Lưu project QS3D" Tag="QS3DSAVE" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>

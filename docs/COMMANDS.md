@@ -10,7 +10,8 @@
 ## Semantic capture
 
 - `QS3DROOM`, `QS3DWALL`, `QS3DOPENING`, `QS3DDOOR`.
-- `QS3DROOMAUTO` — discover bounded room faces from selected straight LINE/POLYLINE networks. The Core engine splits intersections/T-junctions, snaps endpoints by tolerance and removes dangling bridge edges before calculating room area/perimeter.
+- `QS3DROOMAUTO` — discover bounded room faces from selected LINE/POLYLINE networks. Straight segments and polyline bulges are converted to metric planar segments; bulges are tessellated deterministically before the Core engine splits intersections/T-junctions, snaps endpoints, removes dangling bridges and calculates room area/perimeter.
+- Room Auto project metadata: `RoomBoundaryToleranceM` (default `0.005`), `RoomBoundaryMinimumAreaM2` (default `0.5`), `RoomBoundaryArcSagittaM` (default `0.002`).
 - `QS3DBEAM`, `QS3DSLAB`, `QS3DCOLUMN`, `QS3DSTRUCTWALL`, `QS3DFOUNDATION`.
 - `QS3DSTAIR`, `QS3DRAILING`, `QS3DEARTHWORK`.
 - `QS3DFINISH` — generate room finish semantics.
@@ -39,6 +40,6 @@
 
 ## Packaging and autoload
 
-- `scripts/package-v25.ps1` creates the V25 release ZIP, excludes proprietary BricsCAD assemblies, generates `COMMANDS.txt` from current QS3D `CommandMethod` declarations and includes SHA-256 checksums.
-- The package contains `install-demandload.ps1`, a per-user BricsCAD V25 registry DemandLoad installer. It uses OnCommand loading and does not require HKLM writes.
+- `scripts/package-v25.ps1` creates the V25 release ZIP, excludes proprietary BricsCAD assemblies, generates `COMMANDS.txt` from current QS3D `CommandMethod` declarations, records package metadata and SHA-256 hashes.
+- The package includes `install-v25-autoload.ps1` and `uninstall-v25-autoload.ps1` for per-user BricsCAD V25 Registry DemandLoad installation/removal, with hash verification and optional Authenticode enforcement.
 - DemandLoad/NETLOAD remain part of the licensed V25 runtime gate; source presence is not treated as runtime verification.

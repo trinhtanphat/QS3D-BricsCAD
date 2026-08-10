@@ -15,27 +15,29 @@
 - persisted revision baseline/diff workflow using `.qsrev`;
 - deterministic recognition review + confident auto-apply, with project layer mappings overriding fallback heuristics;
 - `.qstemplate` company-standard import/export for Families, QuantityRules, layer mappings, BQ columns and generic material/classification properties;
-- deterministic planar room-boundary engine: intersection/T-junction subdivision, endpoint snapping, dangling-bridge removal, bounded-face traversal, stable boundary keys and Area/Perimeter calculation; `QS3DROOMAUTO` adapts selected straight LINE/POLYLINE networks into Room semantics without claiming wall source-handle ownership;
+- deterministic planar room-boundary engine: intersection/T-junction subdivision, endpoint snapping, dangling-bridge removal, bounded-face traversal, stable boundary keys and Area/Perimeter calculation;
+- `QS3DROOMAUTO` accepts selected LINE/POLYLINE networks, including polyline bulges. Bulged arcs are tessellated in metric Core geometry with configurable maximum sagitta before face discovery, while boundary source handles remain provenance instead of duplicate semantic ownership;
+- Room Auto is exposed through command line, Ribbon and Full Domain Hub;
 - V25 release package + per-user DemandLoad install/uninstall source with hashes/signature policy and proprietary-runtime exclusion;
 - manual-only GitHub Actions and V25 self-hosted NETLOAD/runtime/screenshot harness.
 
 ## Next validation gates
 
 1. Static/source preflight on the newest head.
-2. Core Release build + deterministic smoke suite for the newest room-boundary head when explicitly run; historical green runs do not automatically validate later commits.
+2. Core Release build + deterministic smoke suite for the newest room-boundary/bulge head when explicitly run; earlier green runs do not automatically validate later commits.
 3. Licensed Windows BricsCAD V25 compile on `[self-hosted, windows, x64, bricscad-v25]`.
 4. `NETLOAD`/DemandLoad and command/Ribbon/palette regression, including `QS3DROOMAUTO`, recognition/template/revision/BBS/domain/audit workflows.
-5. Private sample DWG regression: wall/room/auto-room/opening/finish/structural/takeoff/BQ/BBS/template/save/reopen.
+5. Private sample DWG regression: wall/room/auto-room/opening/finish/structural/takeoff/BQ/BBS/template/save/reopen, including curved polyline boundaries.
 6. Visual regression at 100/125/150/200% DPI with Vietnamese Unicode.
-7. Performance/multi-DWG open-activate-SaveAs-close corpus plus large boundary-network corpus.
+7. Performance/multi-DWG open-activate-SaveAs-close corpus plus large planar boundary-network corpus.
 8. Only after these gates are green, consider automatic PR CI/release-candidate automation.
 
 ## Runtime-dependent product completion
 
 - robust native 3D Beam/Slab/Column/StructuralWall/Foundation/Stair authoring beyond current guarded source paths;
-- polyline wall corners, joins/T-junctions and freeform profiles;
+- polyline wall corners, joins/T-junctions and freeform wall profiles;
 - physical opening/door boolean subtraction from host solids;
-- V25/private-DWG proof and performance tuning of automatic room-boundary discovery, including curved/bulged boundaries and very large networks;
+- V25/private-DWG proof and performance tuning of automatic room-boundary discovery; optional direct ARC/SPLINE source support beyond LINE/POLYLINE inputs;
 - geometric rebar placement/shape generation tied to BBS;
 - transient highlight/isolate/section-box UX proven against V25 editions;
 - Authenticode production signing and signed updater;

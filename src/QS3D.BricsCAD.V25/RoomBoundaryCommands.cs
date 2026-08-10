@@ -23,10 +23,11 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
-                var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document);
+                var arcSagitta = MetadataNumber(project, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d);
+                var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta);
                 if (segments.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chọn LINE hoặc POLYLINE thẳng tạo biên phòng.");
+                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chọn LINE hoặc POLYLINE tạo biên phòng.");
                     return;
                 }
 
@@ -69,6 +70,7 @@ namespace QS3D.BricsCAD.V25
                     element.Properties["BoundaryKey"] = boundary.Key;
                     element.Properties["BoundarySourceHandles"] = string.Join(";", boundary.SourceIds);
                     element.Properties["BoundaryVertexCount"] = boundary.Vertices.Count.ToString(CultureInfo.InvariantCulture);
+                    element.Properties["BoundaryArcSagittaM"] = arcSagitta.ToString("R", CultureInfo.InvariantCulture);
                     element.Properties["AreaM2"] = boundary.Area.ToString("R", CultureInfo.InvariantCulture);
                     element.Properties["PerimeterM"] = boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture);
                     foreach (var property in family.Properties)
@@ -77,7 +79,8 @@ namespace QS3D.BricsCAD.V25
                     audit.Record(isNew ? "RoomBoundaryCreate" : "RoomBoundaryUpdate", element.Id,
                         "area=" + boundary.Area.ToString("R", CultureInfo.InvariantCulture) +
                         ";perimeter=" + boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture) +
-                        ";sources=" + boundary.SourceIds.Count.ToString(CultureInfo.InvariantCulture));
+                        ";sources=" + boundary.SourceIds.Count.ToString(CultureInfo.InvariantCulture) +
+                        ";arcSagitta=" + arcSagitta.ToString("R", CultureInfo.InvariantCulture));
                 }
 
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);

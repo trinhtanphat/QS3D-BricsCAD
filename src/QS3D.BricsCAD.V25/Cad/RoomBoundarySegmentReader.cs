@@ -9,9 +9,10 @@ namespace QS3D.BricsCAD.V25.Cad
 {
     internal static class RoomBoundarySegmentReader
     {
-        public static IReadOnlyList<BoundarySegment> ReadCurrentSelection(Document document)
+        public static IReadOnlyList<BoundarySegment> ReadCurrentSelection(Document document, double arcSagittaM = 0.002d)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
+            if (double.IsNaN(arcSagittaM) || double.IsInfinity(arcSagittaM) || arcSagittaM <= 0d) throw new ArgumentOutOfRangeException(nameof(arcSagittaM));
             var editor = document.Editor;
             var selection = editor.SelectImplied();
             if (selection.Status != PromptStatus.OK || selection.Value == null)
@@ -46,14 +47,14 @@ namespace QS3D.BricsCAD.V25.Cad
                     for (var index = 0; index < segmentCount; index++)
                     {
                         var next = (index + 1) % count;
-                        if (Math.Abs(polyline.GetBulgeAt(index)) > 1e-12d)
-                            throw new NotSupportedException("QS3DROOMAUTO hiện chỉ nhận segment LINE/Polyline thẳng; polyline có cung (bulge) cần được chia segment trước.");
                         var a = polyline.GetPoint2dAt(index);
                         var b = polyline.GetPoint2dAt(next);
-                        result.Add(new BoundarySegment(
-                            new Point2(units.ToMeters(a.X), units.ToMeters(a.Y)),
-                            new Point2(units.ToMeters(b.X), units.ToMeters(b.Y)),
-                            handle));
+                        var start = new Point2(units.ToMeters(a.X), units.ToMeters(a.Y));
+                        var end = new Point2(units.ToMeters(b.X), units.ToMeters(b.Y));
+                        var bulge = polyline.GetBulgeAt(index);
+                        var points = BulgeArcTessellator.Tessellate(start, end, bulge, arcSagittaM);
+                        for (var pointIndex = 1; pointIndex < points.Count; pointIndex++)
+                            result.Add(new BoundarySegment(points[pointIndex - 1], points[pointIndex], handle));
                     }
                 }
                 transaction.Commit();
