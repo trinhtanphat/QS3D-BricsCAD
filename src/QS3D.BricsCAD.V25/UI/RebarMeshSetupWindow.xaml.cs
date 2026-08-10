@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 using System.Windows;
+using Bricscad.ApplicationServices;
+using Application = Bricscad.ApplicationServices.Application;
 using QS3D.Core.Domain;
 using QS3D.Core.Rebar;
 
@@ -8,6 +10,7 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class RebarMeshSetupWindow : Window
     {
+        private readonly Document _document;
         private readonly ProjectState _project;
         private readonly ProjectElement _element;
         private readonly Action _saved;
@@ -29,14 +32,16 @@ namespace QS3D.BricsCAD.V25.UI
             public string DefaultCover { get; set; } = string.Empty;
         }
 
-        public RebarMeshSetupWindow(ProjectState project, ProjectElement element, Action saved)
+        public RebarMeshSetupWindow(Document document, ProjectState project, ProjectElement element, Action saved)
         {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             _project = project ?? throw new ArgumentNullException(nameof(project));
             _element = element ?? throw new ArgumentNullException(nameof(element));
             _saved = saved ?? throw new ArgumentNullException(nameof(saved));
             _keys = KeysFor(element.Category) ?? throw new ArgumentException("Rebar Mesh Setup only supports Slab, StructuralWall or Foundation.", nameof(element));
             InitializeComponent();
             Configure();
+            Title = "QS3D • Rebar Mesh Setup • " + DrawingLabel(_document);
         }
 
         private void Configure()
@@ -71,6 +76,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("lưu Rebar Mesh Setup");
                 ParseSingleDistribution(Direction1Text.Text, _keys.Direction1Key);
                 ParseSingleDistribution(Direction2Text.Text, _keys.Direction2Key);
                 if (!double.TryParse((CoverText.Text ?? string.Empty).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var cover) || double.IsNaN(cover) || double.IsInfinity(cover) || cover < 0d)
@@ -80,12 +86,17 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!ClosestToFaceCheck.IsChecked.HasValue)
                     throw new InvalidOperationException("Chọn rõ phương nào nằm gần mặt bê tông hơn.");
 
-                _element.SetProperty(_keys.Direction1Key, Direction1Text.Text.Trim());
-                _element.SetProperty(_keys.Direction2Key, Direction2Text.Text.Trim());
-                _element.SetProperty(_keys.CoverKey, cover.ToString("R", CultureInfo.InvariantCulture));
-                _element.SetProperty(_keys.FacesKey, faces.Trim());
-                _element.SetProperty(_keys.ClosestKey, ClosestToFaceCheck.IsChecked.Value ? "true" : "false");
-                _project.Touch();
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var element = project.FindElement(_element.Id) ?? throw new InvalidOperationException("Semantic element " + _element.Id + " không còn tồn tại trong project hiện tại. Đóng và mở lại Rebar Mesh Setup.");
+                if (element.Category != _element.Category || KeysFor(element.Category) == null)
+                    throw new InvalidOperationException("Semantic element " + _element.Id + " đã đổi category. Đóng và mở lại Rebar Mesh Setup.");
+
+                element.SetProperty(_keys.Direction1Key, Direction1Text.Text.Trim());
+                element.SetProperty(_keys.Direction2Key, Direction2Text.Text.Trim());
+                element.SetProperty(_keys.CoverKey, cover.ToString("R", CultureInfo.InvariantCulture));
+                element.SetProperty(_keys.FacesKey, faces.Trim());
+                element.SetProperty(_keys.ClosestKey, ClosestToFaceCheck.IsChecked.Value ? "true" : "false");
+                project.Touch();
                 _saved();
                 ValidationText.Text = "Đã lưu thông số explicit. Hai phương có thể dùng diameter/count/spacing độc lập; generated mesh cũ (nếu có) đã stale và cần rebuild.";
                 Close();
@@ -115,6 +126,20 @@ namespace QS3D.BricsCAD.V25.UI
             var family = _project.FindFamily(_element.FamilyId);
             if (family != null && family.Properties.TryGetValue(key, out var inherited) && !string.IsNullOrWhiteSpace(inherited)) return inherited.Trim();
             return fallback;
+        }
+
+        private void EnsureActive(string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Rebar Mesh Setup trước khi " + operation + ".");
+        }
+
+        private static string DrawingLabel(Document document)
+        {
+            var name = document.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
+            try { return System.IO.Path.GetFileName(name); }
+            catch { return name; }
         }
 
         private static MeshKeys? KeysFor(ElementCategory category)
