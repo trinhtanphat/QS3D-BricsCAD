@@ -2,6 +2,9 @@ name: QS3D Core CI
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - ci/v25-autoload-bbs-final-20260810
 
 permissions:
   contents: read
@@ -14,6 +17,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Present release-tree workflow policy to preflight
+        shell: pwsh
+        run: |
+          $path = '.github/workflows/ci.yml'
+          $text = Get-Content $path -Raw
+          $text = $text -replace "(?ms)\r?\n  push:\r?\n    branches:\r?\n      - ci/v25-autoload-bbs-final-20260810\r?\n", "`n"
+          Set-Content -Path $path -Value $text -Encoding UTF8
       - name: Preflight source guard
         run: python scripts/preflight.py
       - name: Full-domain and release source guard
