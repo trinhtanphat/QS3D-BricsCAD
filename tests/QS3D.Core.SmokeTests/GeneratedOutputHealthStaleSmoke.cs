@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             BeamStirrupsUseSnapshotState();
             SlabMeshUsesSnapshotState();
             WallMeshUsesSnapshotState();
+            FoundationMeshUsesSnapshotState();
         }
 
         private static void CurtainFramesUseSnapshotState()
@@ -29,10 +30,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedCurtainFrameMode"] = "LineFrameOverlay";
             element.Properties["LengthM"] = "1";
             element.Properties["HeightM"] = "1";
-            AssertSnapshotBehavior(
-                element,
-                () => new GeneratedCurtainFrameHealthService().Inspect(project),
-                "CURTAIN_FRAME_GENERATED_STALE");
+            AssertSnapshotBehavior(element, () => new GeneratedCurtainFrameHealthService().Inspect(project), "CURTAIN_FRAME_GENERATED_STALE");
         }
 
         private static void ColumnTiesUseSnapshotState()
@@ -42,10 +40,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedTieRebarCount"] = "1";
             element.Properties["GeneratedTieRebarDiameterMm"] = "8";
             element.Properties["GeneratedTieRebarActualSpacingM"] = "0.15";
-            AssertSnapshotBehavior(
-                element,
-                () => new GeneratedTieRebarHealthService().Inspect(project),
-                "TIE_REBAR_GENERATED_STALE");
+            AssertSnapshotBehavior(element, () => new GeneratedTieRebarHealthService().Inspect(project), "TIE_REBAR_GENERATED_STALE");
         }
 
         private static void BeamStirrupsUseSnapshotState()
@@ -54,10 +49,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedBeamStirrupHandles"] = "C1";
             element.Properties["GeneratedBeamStirrupCount"] = "1";
             element.Properties["GeneratedBeamStirrupDiameterMm"] = "8";
-            AssertSnapshotBehavior(
-                element,
-                () => new GeneratedBeamStirrupHealthService().Inspect(project),
-                "BEAM_STIRRUP_GENERATED_STALE");
+            AssertSnapshotBehavior(element, () => new GeneratedBeamStirrupHealthService().Inspect(project), "BEAM_STIRRUP_GENERATED_STALE");
         }
 
         private static void SlabMeshUsesSnapshotState()
@@ -72,10 +64,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedSlabMeshCoverM"] = "0.025";
             element.Properties["GeneratedSlabMeshFaces"] = "Bottom";
             element.Properties["GeneratedSlabMeshMode"] = "SlabMeshXY";
-            AssertSnapshotBehavior(
-                element,
-                () => new GeneratedSlabMeshHealthService().Inspect(project),
-                "SLAB_MESH_GENERATED_STALE");
+            AssertSnapshotBehavior(element, () => new GeneratedSlabMeshHealthService().Inspect(project), "SLAB_MESH_GENERATED_STALE");
         }
 
         private static void WallMeshUsesSnapshotState()
@@ -90,17 +79,28 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedWallMeshCoverM"] = "0.025";
             element.Properties["GeneratedWallMeshFaces"] = "Near";
             element.Properties["GeneratedWallMeshMode"] = "StructuralWallMesh";
-            AssertSnapshotBehavior(
-                element,
-                () => new GeneratedWallMeshHealthService().Inspect(project),
-                "WALL_MESH_GENERATED_STALE");
+            AssertSnapshotBehavior(element, () => new GeneratedWallMeshHealthService().Inspect(project), "WALL_MESH_GENERATED_STALE");
+        }
+
+        private static void FoundationMeshUsesSnapshotState()
+        {
+            var project = Project(ElementCategory.Foundation, out var element);
+            element.Properties["GeneratedFoundationMeshHandles"] = "F1";
+            element.Properties["GeneratedFoundationMeshCount"] = "1";
+            element.Properties["GeneratedFoundationMeshXDiameterMm"] = "16";
+            element.Properties["GeneratedFoundationMeshYDiameterMm"] = "12";
+            element.Properties["GeneratedFoundationMeshXActualSpacingM"] = "0.2";
+            element.Properties["GeneratedFoundationMeshYActualSpacingM"] = "0.15";
+            element.Properties["GeneratedFoundationMeshCoverM"] = "0.05";
+            element.Properties["GeneratedFoundationMeshFaces"] = "Bottom";
+            element.Properties["GeneratedFoundationMeshMode"] = "FoundationMeshXY";
+            AssertSnapshotBehavior(element, () => new GeneratedFoundationMeshHealthService().Inspect(project), "FOUNDATION_MESH_GENERATED_STALE");
         }
 
         private static ProjectState Project(ElementCategory category, out ProjectElement element)
         {
             var project = new ProjectState("HEALTH-STALE", "Generated health stale smoke");
             element = new ProjectElement("E-" + category, category, string.Empty, string.Empty, string.Empty);
-            // New elements start Dirty=All. A fresh generated output must not be called stale solely for that reason.
             project.Elements.Add(element);
             return project;
         }
