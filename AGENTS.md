@@ -30,7 +30,10 @@ Before starting substantive work, read in this order:
 14. `docs/LOCAL-V25-QUALIFICATION.md` — **LOCAL_ONLY execution handoff for agents with interactive Windows + licensed BricsCAD V25; remote agents do not re-run/re-audit it**;
 15. `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` — **LOCAL_ONLY remaining Curtain-panel, physical wall-junction, standard-specific rebar and production-signing gates**;
 16. `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` — **LOCAL_ONLY/runtime/policy work including whole-command Curtain recovery, native DrawJig/repeated authoring, commercial-license policy/wiring, legal distribution and performance/UX gates**;
-17. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
+17. `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md` — **consolidated newest LOCAL_ONLY execution matrix for Interchange JSON, documentation, polygon mesh, Level Z-chain, Source Reconcile, Curtain, L/T/X, Direct Draw, signing/licensing and performance**;
+18. `docs/DOCUMENTATION-LAYER.md` — semantic-tag source contract plus native MText/MLeader/Table/Layout boundaries;
+19. `docs/INTERCHANGE-JSON.md` — read-only semantic interchange format and runtime qualification boundary;
+20. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
 
 The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the current handoff or current source, current `main` wins. For product-form/hosting ambiguity, `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes that requirement.
 
@@ -67,7 +70,7 @@ If an agent has permission and tooling to operate a real/local machine, that age
 - runner registration, environment variables, installed SDK/runtime inspection;
 - reproducing machine-specific crashes, DPI/layout issues, file-lock behavior, or native CAD behavior.
 
-Start local qualification from `docs/LOCAL-V25-QUALIFICATION.md`. Run `scripts/run-local-v25-qualification.ps1` against a **clean exact SHA** before manual scenario testing. For feature work that is intentionally deferred to a real V25/engineering/signing environment, also read `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` and `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`, then close only the gates for which the local agent can produce the required evidence or owner-supplied policy. Keep generated runtime evidence under `artifacts/` or another explicitly local folder; `artifacts/` is intentionally gitignored. Do not claim a customer-release qualification when the runner used `-SkipRuntime`.
+Start local qualification from `docs/LOCAL-V25-QUALIFICATION.md`. Run `scripts/run-local-v25-qualification.ps1` against a **clean exact SHA** before manual scenario testing. For feature work that is intentionally deferred to a real V25/engineering/signing environment, also read `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` and the consolidated `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`, then close only the gates for which the local agent can produce the required evidence or owner-supplied policy. Keep generated runtime evidence under `artifacts/` or another explicitly local folder; `artifacts/` is intentionally gitignored. Do not claim a customer-release qualification when the runner used `-SkipRuntime`.
 
 Do not spend scarce local-machine access on ordinary repository editing, documentation cleanup, broad source review, or other tasks that remote agents can perform equally well unless those tasks directly unblock local validation.
 
@@ -89,7 +92,7 @@ Remote agents may still implement or strengthen source contracts, static guards,
 
 ## Handoff rule
 
-When a remote agent reaches a new task that requires local-only access, leave the repository in a runnable/testable state and document the exact local validation needed. The canonical local execution handoff is `docs/LOCAL-V25-QUALIFICATION.md`; remaining implementation/engineering/signing gates are tracked in `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, with additional runtime/product-policy gaps tracked in `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`. Extend the appropriate handoff only when a new source change materially changes or introduces a local scenario. Do not repeatedly re-audit an already parked LOCAL_ONLY gate from a remote environment.
+When a remote agent reaches a new task that requires local-only access, leave the repository in a runnable/testable state and document the exact local validation needed. The canonical local execution handoff is `docs/LOCAL-V25-QUALIFICATION.md`; remaining implementation/engineering/signing gates are tracked in `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, with additional runtime/product-policy gaps tracked in `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` and the current consolidated delta in `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`. Extend the appropriate handoff only when a new source change materially changes or introduces a local scenario. Do not repeatedly re-audit an already parked LOCAL_ONLY gate from a remote environment.
 
 When a local agent finishes validation, commit only reusable source/scripts/docs and a sanitized text summary if useful; never commit proprietary BricsCAD DLLs, private fixtures, screenshots containing private drawings, signing secrets or raw machine evidence.
 
