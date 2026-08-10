@@ -49,6 +49,7 @@ namespace QS3D.BricsCAD.V25
 
                 var combined = new List<ModelHealthIssue>();
                 combined.AddRange(new ModelHealthService().Inspect(project, liveSources, liveMain));
+                combined.AddRange(GeneratedSolidRuntimeHealthService.Inspect(document, project));
                 combined.AddRange(new RoomFinishHealthService().Inspect(project));
                 combined.AddRange(new DependencyHealthService().Inspect(project));
                 combined.AddRange(new LevelReferenceHealthService().Inspect(project));

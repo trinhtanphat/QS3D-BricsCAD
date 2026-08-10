@@ -107,6 +107,19 @@ Repeat representative Wall/Beam/Column/Slab authoring in World UCS, translated U
 - modify the source and rebuild;
 - verify old owned output replacement is atomic and foreign/ambiguous output is never erased.
 
+#### C.1 Generated host ownership Health — **PENDING local V25 runtime proof**
+
+This scenario covers only the primary host `GeneratedSolidHandle`. Rebar, mesh and curtain-frame handles keep their own ownership/Health contracts and must not be judged by the host-solid XData marker.
+
+1. In a disposable test DWG, create/rebuild a supported host solid through Direct Draw or `QS3DBUILD3D` and verify both `QS3DHEALTH` and `QS3DHEALTHALL` do **not** report `GENERATED_SOLID_OWNERSHIP_MISMATCH` for a correctly owned generated `Solid3d`.
+2. Using a disposable test fixture/harness, make one semantic element's `GeneratedSolidHandle` resolve to a live `Solid3d` whose QS3D XData owner belongs to a different project, element, category or unsupported ownership version. Do not use customer DWGs for this corruption test.
+3. Run `QS3DHEALTH` and `QS3DHEALTHALL`. Both must report `GENERATED_SOLID_OWNERSHIP_MISMATCH` against the affected semantic element instead of accepting “live Solid3d” as sufficient ownership proof.
+4. Before and after each Health command, verify the foreign/mis-owned `Solid3d` still exists unchanged. Health is diagnostic-only: it must not erase, replace, write XData, upgrade the object for write or silently claim it.
+5. Save/close/reopen the disposable DWG and repeat the checks so marker parsing is proven against persisted V25 XData, not only the in-memory transaction state.
+6. Repeat one normal rebuild after repairing the semantic/ownership state and verify replacement succeeds only for the correctly owned host output.
+
+Record this scenario as **PASS / FAIL / NOT TESTED**. Never convert it to PASS from static source/preflight alone.
+
 ### D. Door / Opening
 
 - Direct Draw Door and WallOpening with one unique valid host;
@@ -245,6 +258,7 @@ Automated runner: PASS/FAIL
 NETLOAD: PASS/FAIL
 DemandLoad: PASS/FAIL
 Direct Draw: PASS/FAIL
+Build3D/generated host ownership Health: PASS/FAIL/NOT TESTED
 Opening booleans: PASS/FAIL
 Room/HT_PHÒNG: PASS/FAIL
 Curtain: PASS/FAIL
