@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
+using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Export;
 using QS3D.Core.Rebar;
 using QS3D.Core.Reporting;
@@ -27,6 +28,10 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\nQS3D BBS CSV: chưa có cấu kiện khai báo RebarNotation.");
                     return;
                 }
+
+                var totalWeight = 0d;
+                foreach (var row in rows) totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight");
+
                 var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
                 var dialog = new SaveFileDialog
                 {
@@ -39,16 +44,34 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
                 RebarCsvExporter.Export(dialog.FileName, rows);
-                var totalWeight = 0d;
-                foreach (var row in rows) totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight");
+
                 var status = "BBS CSV: " + rows.Count + " bar mark • " + totalWeight.ToString("0.###") + " kg • " + dialog.FileName;
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
+                FinalizeUi(document, status);
             }
             catch (System.Exception ex)
             {
                 document.Editor.WriteMessage("\nQS3DBBSCSV error: " + ex.Message);
                 PaletteCoordinator.SetStatus("QS3DBBSCSV lỗi: " + ex.Message);
+            }
+        }
+
+        private static void FinalizeUi(Document document, string status)
+        {
+            try
+            {
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\nQS3D " + status);
+            }
+            catch (System.Exception ex)
+            {
+                try
+                {
+                    document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export: " + ex.Message);
+                }
+                catch
+                {
+                    // Export has already committed; UI reporting is best effort only.
+                }
             }
         }
     }
