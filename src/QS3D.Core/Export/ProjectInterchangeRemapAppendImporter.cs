@@ -65,12 +65,10 @@ namespace QS3D.Core.Export
             var ownershipProperties = checked(
                 source.Families.Sum(x => x.Properties.Count(p => IsImportedOwnershipMetadata(p.Key))) +
                 source.Elements.Sum(x => x.Properties.Count(p => IsImportedOwnershipMetadata(p.Key))));
-            var plan = new ProjectInterchangeRemapAppendPlan(remap, ownershipProperties)
+            return new ProjectInterchangeRemapAppendPlan(remap, ownershipProperties)
             {
                 SourceHandleCount = CountSourceHandles(source)
             };
-            ValidateExecutionSafety(source, plan);
-            return plan;
         }
 
         public static ProjectInterchangeRemapAppendResult Import(ProjectState target, string json)
@@ -240,7 +238,7 @@ namespace QS3D.Core.Export
                 var first = plan.Remap.OpaqueReferenceWarnings.FirstOrDefault();
                 throw new InvalidOperationException(
                     "Import As New is blocked by unresolved property-carried reference policy" +
-                    (first == null ? "." : ": Element " + first.OwnerElementSourceId + " / " + first.PropertyKey + "."));
+                    (first == null ? "." : ": " + first.OwnerElementSourceId + " / " + first.PropertyKey + "."));
             }
 
             foreach (var family in source.Families)
