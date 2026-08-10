@@ -4,11 +4,21 @@ Updated: 2026-08-10 (UTC+7)
 
 ## Status
 
-This document records an explicit owner product requirement for future QS3D work.
+This document records the owner product requirement and the current implementation contract for QS3D authoring.
 
-QS3D must remain a **BricsCAD V25 x64 .NET plugin** running inside BricsCAD. The native BricsCAD viewport, editor and DWG database remain the CAD host. Direct Draw is not a request to create a standalone CAD engine or separate QS3D executable.
+QS3D remains a **BricsCAD V25 x64 .NET plugin** running inside BricsCAD. The native BricsCAD viewport, editor and DWG database remain the CAD host. Direct Draw is not a request to create a standalone CAD engine or separate QS3D executable.
 
-Existing capture workflows such as `LINE/POLYLINE -> QS3DWALL/QS3DBEAM/... -> QS3DBUILD3D` remain valid compatibility workflows. The requirement below adds a faster authoring layer and must not break existing semantic capture, ownership, health, regeneration or schedule behavior.
+Existing capture workflows such as `LINE/POLYLINE -> QS3DWALL/QS3DBEAM/... -> QS3DBUILD3D` remain valid compatibility workflows. Direct Draw adds a faster authoring layer and must not break existing semantic capture, ownership, health, regeneration or schedule behavior.
+
+Current implementation direction on `main`:
+
+- P0 Direct Draw: `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWCOLUMN`, `QS3DDRAWSLAB`.
+- P1 Direct Draw: `QS3DDRAWGLASSWALL`, `QS3DDRAWWALLPIER`, `QS3DDRAWSTRUCTWALL`, `QS3DDRAWFOUNDATION`.
+- Host-aware opening authoring: `QS3DDRAWDOOR`, `QS3DDRAWOPENING`; Auto Host is part of authoring, while physical boolean cutting remains explicit through the established cut commands.
+- BLT-style wall compatibility flow is deliberately **capture -> edit -> build**, not capture-and-build in one command.
+- Instance inspector exposes source-derived geometry such as `LengthM`, `AreaM2`, `VolumeM3`, `PerimeterM` and source `Layer` as read-only CAD provenance instead of pretending those measurements are independent editable Family dimensions.
+
+Exact-current-sha compile/NETLOAD/runtime validation still requires a licensed BricsCAD V25 environment. Static implementation status must not be described as runtime-certified.
 
 ---
 
@@ -25,7 +35,7 @@ QS3DDRAWWALL
 -> pick first point
 -> pick next point(s)
 -> choose/inherit Family
--> set or inherit width/height/offset
+-> set or inherit thickness/height/source-relative offset
 -> finish
 -> semantic wall + owned native 3D result exist immediately
 ```
@@ -40,22 +50,29 @@ LINE
 
 for a brand-new wall they are authoring from scratch.
 
+For **existing CAD references**, however, the BLT-style compatibility flow intentionally remains:
+
+```text
+LINE/open POLYLINE
+-> QS3DWALL              # capture semantic only
+-> review/edit Family or Instance properties
+-> QS3DBUILD3D           # explicit native 3D commit/rebuild
+```
+
+This separation is important: the user must have a chance to inspect/change thickness, height, material and supported offsets before the native solid is committed.
+
 ---
 
 ## Priority commands
 
-Implement the direct-authoring family incrementally, starting with the most demonstrable architecture/structure workflows.
-
-### P0
+### P0 — implemented authoring surface
 
 - `QS3DDRAWWALL` — direct ArchitecturalWall/Tường Gạch authoring.
 - `QS3DDRAWBEAM` — direct Beam authoring from a picked linear path.
-- `QS3DDRAWCOLUMN` — direct Column authoring from insertion point/profile parameters or a guarded footprint workflow.
+- `QS3DDRAWCOLUMN` — direct Column authoring from insertion point and guarded rectangular dimensions.
 - `QS3DDRAWSLAB` — direct Slab authoring from an interactively created closed boundary.
 
-### P1 candidates
-
-After the P0 architecture is stable and shared authoring infrastructure exists, consider:
+### P1 — implemented guarded authoring surface
 
 - `QS3DDRAWGLASSWALL`;
 - `QS3DDRAWWALLPIER`;
@@ -64,7 +81,7 @@ After the P0 architecture is stable and shared authoring infrastructure exists, 
 - `QS3DDRAWOPENING`;
 - `QS3DDRAWDOOR`.
 
-Do not create separate one-off command implementations if a shared Direct Draw authoring service/tooling can safely handle common point acquisition, Family defaults, preview, transaction, semantic capture and native generation.
+Future work should continue converging common point acquisition, Family defaults, preview, transaction, semantic capture and native generation instead of creating unnecessary independent geometry systems.
 
 ---
 
@@ -78,8 +95,10 @@ Direct Draw commands should feel native inside BricsCAD:
 4. Show or accept important parameters without forcing the user through a long modal sequence.
 5. Prefer live/transient preview when practical, but never persist preview geometry as project ownership.
 6. On commit, create/update the semantic element and the owned native/generated geometry as one user operation.
-7. Select/highlight the newly created semantic object and synchronize the QS3D Workspace.
-8. Make repeated drawing efficient: after one object finishes, allow continuing the same command/family when that matches normal CAD authoring expectations.
+7. Select/highlight the newly created semantic/generated object and synchronize the QS3D Workspace.
+8. Make repeated drawing efficient when that matches normal CAD authoring expectations.
+9. Reject malformed configured Family dimensions instead of silently replacing invalid values with defaults.
+10. Keep source-derived measurements read-only in Instance scope when CAD source is authoritative.
 
 UI should be Vietnamese-first and consistent with the current compact BLT-style QS3D Ribbon/WPF workflow.
 
@@ -89,46 +108,73 @@ UI should be Vietnamese-first and consistent with the current compact BLT-style 
 
 ### Wall
 
-Minimum desired P0 wall behavior:
+Minimum wall behavior:
 
 - pick start/end points directly in the viewport;
 - allow a multi-segment path only when it can reuse the current guarded wall-footprint semantics safely;
-- use Family/instance width, height and supported axis offsets;
+- use Family/instance thickness, height and supported source-relative bottom offset;
 - create source/semantic provenance compatible with existing wall health, opening host, quantity and regeneration paths;
-- generate/update native 3D without requiring the user to call `QS3DBUILD3D` separately.
+- generate/update native 3D without requiring the user to call `QS3DBUILD3D` separately when using Direct Draw;
+- preserve `LengthM` as a measurement derived from the real LINE/open POLYLINE source in the compatibility workflow.
+
+`AxisLeftOffsetM` / `AxisRightOffsetM` may exist in Family/UI data, but **do not claim BLT-equivalent native axis/face offset geometry until the exact semantic contract is defined and the builder applies it deterministically**. The reference screenshot shows these controls, but guessing their geometric meaning would be worse than an explicit guarded gap.
 
 Do not weaken current guards for bulges, self-intersections, invalid offsets, ownership or unsupported junction-solid reconciliation merely to make Direct Draw accept every shape.
 
 ### Beam
 
-Minimum desired P0 beam behavior:
+Minimum behavior:
 
 - pick start/end points;
-- use active/inherited beam section and elevation parameters;
+- use active/inherited beam section and elevation/source-relative offset parameters;
 - create semantic Beam plus native result through existing guarded Beam generation rules;
 - preserve compatibility with Beam rebar/stirrup workflows.
 
 ### Column
 
-Minimum desired P0 column behavior:
+Minimum behavior:
 
 - pick insertion point;
 - choose/inherit a supported rectangular profile and dimensions;
 - create a deterministic source representation/provenance suitable for the existing Column semantic/native/rebar workflow;
 - generate the native result immediately.
 
-Do not invent unsupported arbitrary column profiles in the first Direct Draw iteration.
+Do not invent unsupported arbitrary column profiles in the first Direct Draw iterations.
 
 ### Slab
 
-Minimum desired P0 slab behavior:
+Minimum behavior:
 
 - interactively acquire a closed planar boundary, similar to native polyline authoring;
-- use active/inherited slab thickness/elevation parameters;
+- use active/inherited slab thickness and supported source-relative offset;
 - create semantic Slab and native result immediately;
 - preserve compatibility with quantity and Slab rebar mesh workflows.
 
-The first implementation may deliberately support only the same guarded footprint family already proven by current semantic/native code; unsupported geometry should fail clearly rather than producing invalid solids.
+Unsupported geometry should fail clearly rather than producing invalid solids.
+
+### Door / Opening
+
+Current guarded behavior:
+
+- pick two plan points; their plan length is authoritative `WidthM`;
+- prompt/inherit positive `HeightM` and non-negative sill/boolean-clearance values;
+- reject malformed configured Family numerics instead of silently masking them;
+- create a real LINE source and exactly one semantic Door/WallOpening;
+- Auto Host only the newly-created opening and require a unique host;
+- rollback source + semantic authoring state when no unique host is found;
+- keep global/physical boolean cutting as a separate explicit operation until a targeted cut transaction is proven safe.
+
+---
+
+## Workspace property semantics
+
+The BLT-style property panel has two different kinds of data and QS3D must keep them distinct.
+
+**Editable Family / Instance design properties** include values such as thickness, width, height, material and supported offsets. Invalid positive geometry values (for example zero/negative thickness or height) should be rejected at edit time instead of waiting for a native builder to fail later.
+
+**Source-derived CAD measurements** include `LengthM`, `AreaM2`, `VolumeM3`, `PerimeterM` and source `Layer` when they come from the captured CAD reference. These are read-only provenance in Instance scope. To change a wall's measured length, edit its source LINE/open POLYLINE and recapture/rebuild; do not type an unrelated semantic length that disagrees with the DWG source.
+
+`BottomOffsetM` and `TopOffsetM` are currently **source-relative offsets**, not full BLT top/bottom level references. UI labels and documentation must not call them absolute elevations. Full level-reference behavior should be implemented as a separate explicit contract rather than inferred from a screenshot.
 
 ---
 
@@ -148,7 +194,7 @@ Editor point acquisition
 -> Workspace selection sync
 ```
 
-Where current capture APIs require an existing persistent source entity, agents may introduce a carefully designed source-creation step, but the resulting source must remain a real BricsCAD-owned DWG entity with stable Handle provenance. Do not create fake handles or semantic-only geometry that bypasses current source/live-CAD health contracts.
+Where current capture APIs require an existing persistent source entity, the resulting source must remain a real BricsCAD-owned DWG entity with stable Handle provenance. Do not create fake handles or semantic-only geometry that bypasses current source/live-CAD health contracts.
 
 Reuse existing:
 
@@ -174,10 +220,12 @@ Required behavior:
 - ESC before commit leaves no semantic object and no persistent generated output;
 - invalid geometry leaves no half-created semantic object;
 - if semantic capture succeeds but native generation fails, restore/rollback according to the existing project/CAD transaction boundaries rather than leaving an apparently finished object with inconsistent ownership;
-- if a persistent source entity must be created as part of the command, failure must remove/rollback that source when it belongs exclusively to the failed new Direct Draw operation;
-- never erase or replace foreign/ambiguous generated handles.
+- if a persistent source entity is created as part of the command, failure must remove/rollback that operation-owned source;
+- never erase or replace foreign/ambiguous generated handles;
+- nested authoring commands must re-check the active DWG before delegating to command surfaces that resolve `MdiActiveDocument` internally;
+- post-commit UI synchronization failures must not destructively undo an otherwise successful CAD/project commit.
 
-Add deterministic Core tests where logic is CAD-independent and focused static/runtime regression coverage for the adapter behavior.
+Add deterministic Core tests where logic is CAD-independent and focused static/runtime regression coverage for adapter behavior.
 
 ---
 
@@ -195,8 +243,8 @@ They are still needed for existing DWGs and conversion of already-drawn CAD geom
 Direct Draw is an additional creation workflow:
 
 ```text
-Existing drawing -> Capture commands
-New object       -> Direct Draw commands
+Existing drawing -> Capture -> review/edit -> QS3DBUILD3D
+New object       -> Direct Draw -> semantic/native commit in one authoring flow
 ```
 
 Both paths must converge on the same semantic/native model after creation.
@@ -205,26 +253,19 @@ Both paths must converge on the same semantic/native model after creation.
 
 ## Ribbon / discoverability
 
-When implemented, the primary Direct Draw actions should be visible from the main QS3D authoring UI and not require command memorization.
+Primary Direct Draw actions should be visible from the main QS3D authoring UI and not require command memorization.
 
-Suggested architecture/structure authoring group:
+Architecture/structure authoring group includes the current P0/P1 commands for Wall, Beam, Column, Slab, Glass Wall, Wall Pier, Structural Wall, Foundation, Door and Opening as they become available in the Ribbon/Hub.
 
-- Tường
-- Dầm
-- Cột
-- Sàn
-
-The Ribbon button may invoke `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWCOLUMN`, `QS3DDRAWSLAB` respectively.
-
-Existing Capture/Bóc chọn actions should remain available separately for converting source CAD.
+Existing Capture/Bóc chọn actions remain separately available for converting source CAD.
 
 ---
 
-## Acceptance criteria for P0
+## Acceptance criteria
 
 Do not call Direct Draw complete based only on command declarations or mocked dialogs.
 
-For each P0 command:
+For each supported command:
 
 1. command is registered uniquely and exposed through the intended UI;
 2. user can create the supported object starting from an ordinary BricsCAD drawing without pre-drawing its source geometry manually;
@@ -237,7 +278,7 @@ For each P0 command:
 9. deterministic tests/static preflights cover the shared architecture;
 10. exact-current-sha behavior still requires licensed BricsCAD V25 interactive runtime validation before being described as production-ready.
 
-Runtime validation should include at minimum Wall, Beam, Column and Slab creation, save/reopen, regenerate, selection sync, undo/cancel behavior and representative DWG screenshots.
+Runtime validation should include at minimum Wall, Beam, Column and Slab creation, save/reopen, regenerate, selection sync, undo/cancel behavior and representative DWG screenshots. Door/Opening runtime validation additionally needs unique-host, ambiguous-host, no-host and explicit physical-cut scenarios.
 
 ---
 
@@ -247,4 +288,4 @@ When an agent is asked to make QS3D more BLT-like, improve drawing UX, improve d
 
 **Product direction:** new geometry should increasingly be authorable directly through QS3D inside BricsCAD, while capture commands remain the path for converting pre-existing CAD geometry.
 
-Do not dispatch GitHub Actions merely because this document exists or because Direct Draw source is implemented. Follow `CI_POLICY.md`; build/runtime/release require separate explicit owner authorization.
+Do not dispatch GitHub Actions merely because source implementation or documentation changes. Follow `CI_POLICY.md`; build/runtime/release require separate explicit owner authorization.
