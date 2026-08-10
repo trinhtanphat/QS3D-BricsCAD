@@ -100,6 +100,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnView3DClick(object sender, RoutedEventArgs e) { var family = FamilyList.SelectedItem as ProjectFamily; _viewModel.SetActiveFamily(family); SetStatus("Vẽ/Cập nhật 3D: " + (family?.Name ?? "chưa chọn Family")); Send("QS3DBUILD3D"); }
         private void OnWallJunctionsClick(object sender, RoutedEventArgs e) { SetStatus("Phân tích giao tim tường L / T / X trong selection."); Send("QS3DWALLJUNCTIONS"); }
+        private void OnWallSnapPreviewClick(object sender, RoutedEventArgs e) { SetStatus("Xem trước kế hoạch snap đầu mút tường; chưa sửa CAD."); Send("QS3DWALLSNAPPREVIEW"); }
+        private void OnWallSnapApplyClick(object sender, RoutedEventArgs e) { SetStatus("Áp dụng wall snap từ preview còn hợp lệ."); Send("QS3DWALLSNAPAPPLY"); }
+        private void OnAutoHostClick(object sender, RoutedEventArgs e) { SetStatus("Tự ghép Cửa/Lỗ đang chọn với wall host an toàn; chưa khoét solid."); Send("QS3DAUTOLINKHOSTS"); }
         private void OnViewModel3DClick(object sender, RoutedEventArgs e) => Send("QS3DVIEW3D");
         private void OnOrbitClick(object sender, RoutedEventArgs e) => Send("QS3DORBIT");
         private void OnZoomSelectionClick(object sender, RoutedEventArgs e) => Send("QS3DZOOMSELECTED");
