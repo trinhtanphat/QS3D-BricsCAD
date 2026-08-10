@@ -157,17 +157,46 @@ namespace QS3D.Core.Export
             var targetFloors = UniqueIndex(targetProject.Floors, x => x.Id, "target Floor");
             var targetFamilies = UniqueIndex(targetProject.Families, x => x.Id, "target Family");
             var targetElements = UniqueIndex(targetProject.Elements, x => x.Id, "target element");
+            var targetZoneNames = UniqueOwnerIndex(targetProject.Zones, x => x.Name, x => x.Id, "target Zone name");
+            var targetFloorNames = UniqueOwnerIndex(targetProject.Floors, x => x.Name, x => x.Id, "target Floor name");
+            var targetFamilyNames = UniqueOwnerIndex(targetProject.Families, x => FamilyNameKey(x.Category, x.Name), x => x.Id, "target same-category Family name");
             var items = new List<InterchangeImportResolutionItem>();
 
             foreach (var zone in source.Zones)
-                AddSimple(items, InterchangeIdentityKind.Zone, zone.Id, targetZones.ContainsKey(zone.Id), policy.ZoneCollision);
+            {
+                var exists = targetZones.ContainsKey(zone.Id);
+                if (NameOwnedByDifferentIdentity(targetZoneNames, zone.Name, zone.Id) &&
+                    (!exists || policy.ZoneCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
+                {
+                    AddNameCollision(items, InterchangeIdentityKind.Zone, zone.Id, "Zone name", zone.Name);
+                    continue;
+                }
+                AddSimple(items, InterchangeIdentityKind.Zone, zone.Id, exists, policy.ZoneCollision);
+            }
+
             foreach (var floor in source.Floors)
-                AddSimple(items, InterchangeIdentityKind.Floor, floor.Id, targetFloors.ContainsKey(floor.Id), policy.FloorCollision);
+            {
+                var exists = targetFloors.ContainsKey(floor.Id);
+                if (NameOwnedByDifferentIdentity(targetFloorNames, floor.Name, floor.Id) &&
+                    (!exists || policy.FloorCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
+                {
+                    AddNameCollision(items, InterchangeIdentityKind.Floor, floor.Id, "Floor name", floor.Name);
+                    continue;
+                }
+                AddSimple(items, InterchangeIdentityKind.Floor, floor.Id, exists, policy.FloorCollision);
+            }
 
             foreach (var family in source.Families)
             {
                 if (!targetFamilies.TryGetValue(family.Id, out var existing))
                 {
+                    var nameKey = FamilyNameKey(family.Category, family.Name);
+                    if (NameOwnedByDifferentIdentity(targetFamilyNames, nameKey, family.Id))
+                    {
+                        AddNameCollision(items, InterchangeIdentityKind.Family, family.Id, family.Category + " Family name", family.Name);
+                        continue;
+                    }
+
                     Add(items, new InterchangeImportResolutionItem(
                         InterchangeIdentityKind.Family,
                         family.Id,
@@ -185,6 +214,13 @@ namespace QS3D.Core.Export
                         InterchangeImportResolutionAction.BlockedIncompatible,
                         "Source/target Family categories differ for the same semantic ID; rename/remap policy is not defined.",
                         false));
+                    continue;
+                }
+
+                if (policy.FamilyCollision == InterchangeExistingIdentityAction.UseSourceSemanticData &&
+                    NameOwnedByDifferentIdentity(targetFamilyNames, FamilyNameKey(family.Category, family.Name), family.Id))
+                {
+                    AddNameCollision(items, InterchangeIdentityKind.Family, family.Id, family.Category + " Family name", family.Name);
                     continue;
                 }
 
@@ -320,6 +356,21 @@ namespace QS3D.Core.Export
                 resetGeneratedOutputWhenUsingSource && action == InterchangeExistingIdentityAction.UseSourceSemanticData));
         }
 
+        private static void AddNameCollision(
+            ICollection<InterchangeImportResolutionItem> items,
+            InterchangeIdentityKind kind,
+            string id,
+            string label,
+            string name)
+        {
+            Add(items, new InterchangeImportResolutionItem(
+                kind,
+                id,
+                InterchangeImportResolutionAction.BlockedIncompatible,
+                "Source " + label + " '" + (name ?? string.Empty).Trim() + "' is already owned by a different target semantic ID; rename/remap policy is not defined.",
+                false));
+        }
+
         private static void Add(ICollection<InterchangeImportResolutionItem> items, InterchangeImportResolutionItem item)
         {
             if (items.Count >= MaxPlanItems)
@@ -335,6 +386,40 @@ namespace QS3D.Core.Export
             return string.Equals(left, right, StringComparison.Ordinal)
                 ? InterchangeDrawingFingerprintRelation.Match
                 : InterchangeDrawingFingerprintRelation.Different;
+        }
+
+        private static string FamilyNameKey(ElementCategory category, string name) =>
+            category + "\u001f" + (name ?? string.Empty).Trim();
+
+        private static bool NameOwnedByDifferentIdentity(
+            IReadOnlyDictionary<string, string> owners,
+            string key,
+            string sourceId)
+        {
+            var normalizedKey = (key ?? string.Empty).Trim();
+            if (!owners.TryGetValue(normalizedKey, out var ownerId)) return false;
+            return !string.Equals(ownerId, (sourceId ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static Dictionary<string, string> UniqueOwnerIndex<T>(
+            IEnumerable<T> source,
+            Func<T, string> keySelector,
+            Func<T, string> idSelector,
+            string label) where T : class
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in source)
+            {
+                if (item == null) throw new InvalidOperationException("Project contains a null " + label + " entry.");
+                var key = (keySelector(item) ?? string.Empty).Trim();
+                var id = (idSelector(item) ?? string.Empty).Trim();
+                if (key.Length == 0) throw new InvalidOperationException("Project contains an empty " + label + ".");
+                if (id.Length == 0) throw new InvalidOperationException("Project contains an empty semantic ID while indexing " + label + ".");
+                if (result.TryGetValue(key, out var existingId) && !string.Equals(existingId, id, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Project contains duplicate " + label + ": " + key + ". Import resolution refuses ambiguous target naming.");
+                result[key] = id;
+            }
+            return result;
         }
 
         private static Dictionary<string, T> UniqueIndex<T>(IEnumerable<T> source, Func<T, string> idSelector, string label) where T : class
