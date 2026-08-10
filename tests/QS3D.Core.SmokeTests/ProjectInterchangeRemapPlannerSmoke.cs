@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             SameCategoryFamilyNameCollisionIsRenamed();
             FamilyOpaqueReferenceBlocksPreview();
             ElementOpaqueReferenceBlocksPreviewEvenForExternalValue();
+            PortableLevelReferencesAreTypedAndRemapped();
+            RegisteredReferenceMissingFromSourceBlocksPreview();
         }
 
         private static void FamilyNameCollisionIsScopedByCategory()
@@ -64,6 +66,43 @@ namespace QS3D.Core.SmokeTests
             False(plan.CanAppendAsNew);
             var warning = plan.OpaqueReferenceWarnings.Single(x => x.PropertyKey == "ExternalRefIds");
             Equal("SOURCE-ELEM", warning.OwnerElementSourceId);
+        }
+
+        private static void PortableLevelReferencesAreTypedAndRemapped()
+        {
+            var target = NewProject("target", ElementCategory.Beam, "TARGET-FAM", "Target Family", "TARGET-ELEM");
+            target.Floors.Add(new FloorDefinition("L0", "Existing L0", 0d));
+            target.Floors.Add(new FloorDefinition("L1", "Existing L1", 3.6d));
+
+            var source = NewProject("source", ElementCategory.Beam, "SOURCE-FAM", "Source Family", "SOURCE-ELEM");
+            source.Floors.Add(new FloorDefinition("L0", "Source L0", 0d));
+            source.Floors.Add(new FloorDefinition("L1", "Source L1", 3.6d));
+            var element = source.Elements.Single();
+            element.Properties[ProjectFloorService.BottomLevelIdKey] = "L0";
+            element.Properties[ProjectFloorService.TopLevelIdKey] = "L1";
+
+            var plan = ProjectInterchangeRemapPlanner.Plan(target, ProjectInterchangeJsonExporter.Build(source));
+
+            True(plan.CanAppendAsNew);
+            var bottom = plan.ReferenceRewrites.Single(x => x.OwnerElementSourceId == "SOURCE-ELEM" && x.PropertyKey == ProjectFloorService.BottomLevelIdKey);
+            var top = plan.ReferenceRewrites.Single(x => x.OwnerElementSourceId == "SOURCE-ELEM" && x.PropertyKey == ProjectFloorService.TopLevelIdKey);
+            Equal("L0-import", bottom.TargetReferenceId);
+            Equal("L1-import", top.TargetReferenceId);
+            Equal("PropertyFloorId", bottom.ReferenceKind);
+            Equal("PropertyFloorId", top.ReferenceKind);
+        }
+
+        private static void RegisteredReferenceMissingFromSourceBlocksPreview()
+        {
+            var target = NewProject("target", ElementCategory.Beam, "TARGET-FAM", "Target Family", "TARGET-ELEM");
+            var source = NewProject("source", ElementCategory.Beam, "SOURCE-FAM", "Source Family", "SOURCE-ELEM");
+            source.Elements.Single().Properties[ProjectFloorService.BottomLevelIdKey] = "MISSING-LEVEL";
+
+            var plan = ProjectInterchangeRemapPlanner.Plan(target, ProjectInterchangeJsonExporter.Build(source));
+
+            False(plan.CanAppendAsNew);
+            var warning = plan.OpaqueReferenceWarnings.Single(x => x.PropertyKey == ProjectFloorService.BottomLevelIdKey);
+            True(warning.Reason.IndexOf("does not resolve inside the source snapshot", StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
         private static ProjectState NewProject(
