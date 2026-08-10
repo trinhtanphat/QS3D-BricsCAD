@@ -252,7 +252,8 @@ namespace QS3D.BricsCAD.V25
                 var generatedHandles = GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project);
                 var liveSources = Cad.CadHandleService.GetLiveHandles(doc, sourceHandles);
                 var liveGeneratedSolids = Cad.CadHandleService.GetLiveSolidHandles(doc, generatedHandles);
-                var issues = new ComprehensiveModelHealthService().Inspect(project, liveSources, liveGeneratedSolids);
+                var issues = new ComprehensiveModelHealthService().Inspect(project, liveSources, liveGeneratedSolids).ToList();
+                issues.AddRange(Cad.GeneratedSolidRuntimeHealthService.Inspect(doc, project));
                 var summary = new HealthSummary(issues);
                 var text = "Model Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(text); doc.Editor.WriteMessage("\nQS3D " + text);
