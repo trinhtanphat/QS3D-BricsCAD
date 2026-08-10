@@ -19,7 +19,7 @@ Before starting substantive work, read in this order:
 3. `CI_POLICY.md`;
 4. fetch the latest `main`;
 5. `docs/REMOTE-AGENT-SCOPE.md` — **canonical remote/local execution boundary; remote agents must filter LOCAL_ONLY work out of their backlog instead of rechecking it**;
-6. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-1824.md` — **newest short canonical current-state delta for fast-moving source**;
+6. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2037.md` — **newest short canonical current-state delta for fast-moving source**;
 7. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — broader current-source baseline/handoff retained for detail;
 8. `docs/IMPLEMENTATION-STATUS.md`;
 9. `docs/PLAN.md` and `docs/COMMANDS.md`;
@@ -31,9 +31,10 @@ Before starting substantive work, read in this order:
 15. `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` — **LOCAL_ONLY remaining Curtain-panel, physical wall-junction, standard-specific rebar and production-signing gates**;
 16. `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` — **LOCAL_ONLY/runtime/policy work including whole-command Curtain recovery, native DrawJig/repeated authoring, commercial-license policy/wiring, legal distribution and performance/UX gates**;
 17. `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md` — **consolidated newest LOCAL_ONLY execution matrix for Interchange JSON, documentation, polygon mesh, Level Z-chain, Source Reconcile, Curtain, L/T/X, Direct Draw, signing/licensing and performance**;
-18. `docs/DOCUMENTATION-LAYER.md` — semantic-tag source contract plus native MText/MLeader/Table/Layout boundaries;
+18. `docs/DOCUMENTATION-LAYER.md` — semantic-tag and native documentation-table source/runtime boundaries;
 19. `docs/INTERCHANGE-JSON.md` — read-only semantic interchange format and runtime qualification boundary;
-20. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
+20. `docs/INTERCHANGE-IMPORT-RESOLUTION-POLICY.md` — **explicit non-mutating collision/provenance/generated-output policy planning; never import authority**;
+21. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
 
 The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the current handoff or current source, current `main` wins. For product-form/hosting ambiguity, `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes that requirement.
 
@@ -55,6 +56,19 @@ Before every commit/push to `main`:
 For longer tasks, repeat this sync periodically instead of waiting until the end. Assume another agent can commit at any time.
 
 Never force-push over concurrent work, reset `main` backwards, or silently revert another agent's changes unless the repository owner explicitly requests that exact operation.
+
+## Request-scoped commit batching
+
+The repository owner explicitly prefers **coherent commits scoped to the owner request**, not a stream of tiny commits.
+
+- Treat one owner request or `continue all` batch as the default commit unit.
+- Accumulate related source implementation, regression/smoke/static guards, documentation and canonical handoff updates, review the combined diff, then commit the coherent batch.
+- **Do not commit merely because one file or one small fix is finished.** Avoid file-by-file, test-by-test and docs-after-code commit chains for one request.
+- Split a request into more than one commit only when the parts are genuinely independent and separately revertable/risky, when integrating an already-existing independent PR (prefer squash), or when concurrent movement of `main` makes separate conflict-safe integration necessary.
+- If another agent lands overlapping work while a batch is in progress, review and reuse the winning implementation instead of committing a duplicate.
+- Immediately before the final batch commit, sync `main` again. If it moved, reapply/rebase the whole intended batch onto the new head and never force-push stale history.
+
+Commit messages should describe the request-level capability or safety outcome, not the last individual file touched.
 
 ## Divide work by execution capability
 
@@ -96,7 +110,7 @@ When a remote agent reaches a new task that requires local-only access, leave th
 
 When a local agent finishes validation, commit only reusable source/scripts/docs and a sanitized text summary if useful; never commit proprietary BricsCAD DLLs, private fixtures, screenshots containing private drawings, signing secrets or raw machine evidence.
 
-When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10-1824.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
+When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2037.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
 
 ## GitHub Actions / release
 
