@@ -23,7 +23,11 @@ namespace QS3D.Core.Domain
             EnsureFinishCategory(category);
 
             var elements = ResolveProjectElements(project);
-            return FindExistingCore(project, elements, room, category);
+            if (!elements.TryGetValue(room.Id, out var ownedRoom))
+                throw new InvalidOperationException("Room does not belong to the project: " + room.Id);
+            if (!ReferenceEquals(ownedRoom, room))
+                throw new InvalidOperationException("Room instance does not belong to the project: " + room.Id);
+            return FindExistingCore(project, elements, ownedRoom, category);
         }
 
         public static void ValidateProject(ProjectState project)
