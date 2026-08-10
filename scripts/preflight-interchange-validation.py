@@ -40,6 +40,19 @@ if CORE.is_file():
         "MaxFileBytes",
         "MaxElements",
         "MaxIssues",
+        "new UTF8Encoding(false, true)",
+        '"JSON_UTF8"',
+        'RequireCollection(snapshot.Zones, "zones", issues)',
+        'RequireCollection(snapshot.Floors, "floors", issues)',
+        'RequireCollection(snapshot.Families, "families", issues)',
+        'RequireCollection(snapshot.Elements, "elements", issues)',
+        '"COLLECTION_MISSING"',
+        '"PROJECT_NAME_EMPTY"',
+        '"NAME_EMPTY"',
+        '"SOURCE_HANDLES_MISSING"',
+        '"DEPENDENCIES_MISSING"',
+        '"PROPERTIES_MISSING"',
+        '"QUANTITIES_MISSING"',
         "var indegree = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)",
         "var dependents = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)",
         "var ready = new SortedSet<string>",
@@ -107,9 +120,16 @@ if SMOKE.is_file():
         "GeneratedOwnershipSmugglingFailsClosed",
         "BrokenDependencyFailsClosed",
         "DependencyCycleFailsClosed",
+        "InvalidUtf8FileFailsClosed",
+        "MissingRequiredCollectionFailsClosed",
+        "EmptyRequiredNamesFailClosed",
         '"GENERATED_RUNTIME_PROPERTY"',
         '"DEPENDENCY_REF_MISSING"',
         '"DEPENDENCY_CYCLE"',
+        '"JSON_UTF8"',
+        '"COLLECTION_MISSING"',
+        '"PROJECT_NAME_EMPTY"',
+        '"NAME_EMPTY"',
     ):
         if token not in text:
             errors.append("ProjectInterchangeValidationSmoke.cs missing validator smoke: " + token)
@@ -137,4 +157,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DINTERCHANGEVALIDATE remains a bounded read-only semantic snapshot validator tied to the v1 exporter contract, uses iterative dependency-cycle validation, is exposed beside export in Project Tools and cannot be mistaken for project/DWG import or generated ownership reconstruction.")
+print("PASS: QS3DINTERCHANGEVALIDATE remains bounded/read-only, requires strict UTF-8 and the complete v1 structural containers/names, uses iterative dependency-cycle validation, is exposed beside export in Project Tools and cannot be mistaken for project/DWG import or generated ownership reconstruction.")

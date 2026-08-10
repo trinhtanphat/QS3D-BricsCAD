@@ -11,6 +11,8 @@ A caller supplies an explicit bounded list of `GridReferenceCurve` values with u
 - `Line(elementId, start, end)` — finite non-zero segment;
 - `Arc(elementId, center, radius, startAngleRad, sweepAngleRad)` — finite positive radius and positive counter-clockwise sweep in `(0, 2π]`.
 
+Semantic Grid IDs are trimmed before use, bounded to 128 characters and compared case-insensitively for duplicate detection. Whitespace variants such as `" G-A "` and `"G-A"` therefore cannot become separate intersection owners.
+
 The explicit CCW sweep avoids hiding BricsCAD/native angle conventions inside Core. A future V25 adapter must convert the native LINE/ARC geometry into this contract deliberately and prove that conversion on real V25.
 
 ## Supported intersections
@@ -23,18 +25,19 @@ Segments/arcs are finite references, not infinite construction lines. Endpoint/t
 
 Results are deterministic in input-pair order. A pair may return zero, one or two points depending on finite geometry.
 
-## Fail-closed ambiguity
+## Fail-closed ambiguity and numeric safety
 
 Core intentionally rejects geometry that cannot define one unambiguous pairwise intersection contract:
 
 - collinear LINE references with a non-zero overlap;
 - coincident ARC support circles, even when their stored sweeps appear disjoint;
-- duplicate semantic Grid IDs;
+- duplicate semantic Grid IDs after trim/case normalization;
 - non-finite/degenerate geometry;
+- derived coordinate/distance/cross-product/quadratic overflow that would otherwise create `NaN`/`Infinity` or a false no-intersection result;
 - invalid tolerance, radius or sweep;
 - curve/intersection counts beyond bounded limits.
 
-Coincident-circle rejection is conservative by design. Do not weaken it to guess which overlapping arc segment should own an intersection/constraint.
+Coincident-circle rejection is conservative by design. Numeric overflow is likewise fail-closed: the planner is not allowed to reinterpret an unrepresentable derived value as parallel, disjoint or a valid point. Do not weaken either guard to guess geometry.
 
 ## What remains local/native
 

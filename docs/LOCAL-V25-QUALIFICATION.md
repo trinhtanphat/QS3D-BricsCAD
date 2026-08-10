@@ -190,10 +190,10 @@ No agent may infer engineering reinforcement, hook, lap, anchorage or fabricatio
 
 Run this scenario only on licensed BricsCAD V25 against the same exact SHA/package. Source preflight verifies the ownership contract, but only the real V25 document-destroy event/dispatcher can prove runtime behavior.
 
-1. Open DWG **A** and open several source-DWG-bound modeless surfaces: BQ, BBS, Model Health, Door/Opening Schedule, HT_Phòng Schedule, Family Manager, Level Picker, Zone Manager, Material Catalog, Project Tools, Schedule Hub and Curtain Hub.
+1. Open DWG **A** and open several source-DWG-bound modeless surfaces: BQ, BBS, Model Health, Door/Opening Schedule, HT_Phòng Schedule, Family Manager, Level Picker, Zone Manager, Material Catalog, Project Tools, Schedule Hub, Curtain Hub and Audit Log.
 2. Also open **Domain Hub** and **Rebar 3D Hub**. These two are intentionally **active-document dynamic**, not bound to A.
 3. Open/switch to DWG **B** while A remains open.
-4. From the A-bound windows, attempt representative Locate/Refresh/Export/mutation actions. They must fail closed or tell the user to reactivate A; no B project/CAD state may change.
+4. From the A-bound windows, attempt representative Locate/Refresh/Export/mutation actions. They must fail closed or tell the user to reactivate A; no B project/CAD state may change. Audit Log must continue displaying A's audit state, never B's.
 5. From Domain Hub and Rebar 3D Hub, launch harmless representative commands while B is active. They must target B because those hubs resolve the active document at click time.
 6. Close DWG **A** while all A-bound windows remain open. Every A-bound window must unregister and close without blocking the DWG close or throwing an unhandled exception.
 7. Domain Hub and Rebar 3D Hub must remain usable after A closes and must continue targeting B.
@@ -201,6 +201,21 @@ Run this scenario only on licensed BricsCAD V25 against the same exact SHA/packa
 9. Exit BricsCAD with bound and dynamic hubs open. Shutdown must complete without an unhandled UI/document lifecycle exception.
 
 Record this scenario as **PASS / FAIL / NOT TESTED** in the sanitized local result. Never convert it to PASS from source review alone.
+
+#### H.2 Modeless project-editor rollback and post-commit isolation — **PENDING local V25 runtime proof**
+
+Use disposable projects/DWGs and a controlled test hook, debugger break/fault injection, or other local harness that can force an exception at a known boundary. Do not corrupt customer data merely to exercise failure handling.
+
+1. In **Material Catalog**, apply one material to several semantic elements and force failure after at least one target has been mutated but before the semantic batch completes. Verify material properties, dirty flags, `UpdatedUtc`, custom-catalog metadata and audit events all return to the exact pre-operation state; no partial material assignment may remain.
+2. Repeat an equivalent mid-batch failure for **Level Picker Assign**, **Zone Manager Assign**, and **Family Manager Assign**. Family testing must also cover `SetProperty` or `RemoveProperty` propagation across several inherited instances. Every operation must be all-or-nothing at project level, including its audit events.
+3. Exercise Family create/rename/duplicate/delete/activate plus Floor create/update/delete/activate and Zone create/update/delete/activate with a forced exception in the semantic/audit boundary. A failed operation must restore the prior project state instead of leaving a successful semantic mutation with a failed audit entry or vice versa.
+4. Separately force only a **Palette/UI refresh failure after semantic commit** for Material, Floor, Zone, Family, Curtain Family and Rebar Mesh Setup. The semantic edit must remain committed. The UI/editor must surface an `UI sync warning` or equivalent post-commit warning and must not report that the semantic mutation itself rolled back.
+5. For a newly created Floor, Zone and Family, force the post-commit refresh failure, then attempt Save again. Verify the editor targets/re-resolves the already committed ID or fails closed; it must not create an accidental duplicate solely because the first UI refresh failed.
+6. Keep **Audit Log** open for DWG A, perform a project reload/replacement for A through a supported local test flow, then reactivate Audit Log. It must re-resolve A's current `ProjectState` and display the new audit events rather than retaining the old in-memory project object.
+7. While the same windows are open for A, switch to DWG B and repeat mutation attempts. A-bound editors must fail closed before touching B. Then return to A and verify the intended operation still works against A's current project object.
+8. Save/close/reopen the disposable DWG after successful operations and verify committed material/floor/zone/family state and audit trail persist consistently.
+
+Record **Modeless editor rollback/post-commit isolation: PASS / FAIL / NOT TESTED**. Static preflight proves source structure only; only this local scenario can qualify real WPF dispatcher, BricsCAD document lifetime and failure timing behavior.
 
 ### I. Reporting
 
@@ -265,6 +280,7 @@ Curtain: PASS/FAIL
 Rebar: PASS/FAIL
 Project/save-reopen/multi-DWG: PASS/FAIL
 Modeless multi-DWG close lifecycle: PASS/FAIL/NOT TESTED
+Modeless editor rollback/post-commit isolation: PASS/FAIL/NOT TESTED
 BQ/BBS/Excel: PASS/FAIL
 Unicode/HiDPI: PASS/FAIL
 Clean install/upgrade/uninstall: PASS/FAIL

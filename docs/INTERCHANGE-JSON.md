@@ -72,15 +72,19 @@ Default export extension:
 The validator currently checks, fail-closed where applicable:
 
 - exact `QS3D.SemanticSnapshot` format name and supported `formatVersion = 1`;
+- strict UTF-8 decoding for file input; invalid byte sequences produce `JSON_UTF8` instead of replacement-character decoding;
 - exact SI unit declarations `m`, `m2`, `m3`, `kg`;
 - guarded file/object-graph/collection limits;
+- required top-level `zones`, `floors`, `families` and `elements` collections, even when legitimately empty;
+- required project/catalog names and stable IDs;
+- required Family `properties` and element `sourceHandles` / `dependencies` / `properties` / `quantities` containers, even when empty;
 - project identity/schema/timestamps;
 - case-insensitive uniqueness of Zone/Floor/Family/element IDs;
 - valid `ElementCategory` names;
 - Family references and Family/category consistency;
 - Floor/Zone references;
 - `sourceRefScope = drawing-local` and duplicate/oversized source-handle entries;
-- dependency existence, duplicate/self dependencies and dependency cycles;
+- dependency existence, duplicate/self dependencies and dependency cycles using an iterative graph check rather than recursive traversal;
 - bounded semantic property/quantity keys and values;
 - finite numeric quantities/elevations;
 - rejection of generated/native ownership runtime fields such as `Generated*`, `QS3D.Generated*` and `PhysicalOpeningCut*`.
@@ -98,7 +102,7 @@ python scripts/preflight-interchange-validation.py
 
 The export preflight explicitly rejects regressions where the command calls `RegenerateDirty(project)` or exports the live `project`, and it requires the Save dialog to occur before `ProjectContextCoordinator.GetOrCreate(document)`. Core smoke coverage also proves the detached copy does not share mutable project/element instances with the live project.
 
-The validation preflight guards that `QS3DINTERCHANGEVALIDATE` remains read-only, that the validator stays bound to the exporter format/version and SI/provenance/ownership rules, and that validator smoke coverage remains registered.
+The validation preflight guards that `QS3DINTERCHANGEVALIDATE` remains read-only, that the validator stays bound to the exporter format/version and SI/provenance/ownership rules, that strict UTF-8 and required v1 structure remain fail-closed, and that validator smoke coverage remains registered.
 
 Before commercial release, also run the normal Core build/preflight and exact-SHA V25 qualification. Export/validation logic is CAD-kernel-independent after file/project acquisition, but command registration, dialog behavior, Unicode paths and real customer snapshots still need the local V25 matrix.
 
