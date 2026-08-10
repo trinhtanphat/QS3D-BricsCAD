@@ -13,6 +13,9 @@ files = {
     "property_vm": ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/PropertyRowViewModel.cs",
     "ribbon": ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs",
     "hub": ROOT / "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml",
+    "beam_stirrup": ROOT / "src/QS3D.BricsCAD.V25/BeamStirrupCommands.cs",
+    "column_tie": ROOT / "src/QS3D.BricsCAD.V25/ColumnTieCommands.cs",
+    "column_tie_health": ROOT / "src/QS3D.BricsCAD.V25/ColumnTieHealthCommands.cs",
 }
 
 for name, path in files.items():
@@ -50,11 +53,24 @@ checks = {
     ],
     "ribbon": [
         '"QS3DWALLJUNCTIONS"', '"QS3DWALLSNAPPREVIEW"', '"QS3DWALLSNAPAPPLY"', '"QS3DAUTOLINKHOSTS"',
-        '"QS3DFOCUS"', '"QS3DISOLATE"', '"QS3DUNISOLATE"', '"QS3DREBAR3DSHAPE"',
+        '"QS3DFOCUS"', '"QS3DISOLATE"', '"QS3DUNISOLATE"', '"QS3DSECTIONBOX"',
+        '"QS3DREBAR3DSHAPE"', '"QS3DBEAMSTIRRUP3D"', '"QS3DBEAMSTIRRUPHEALTH"',
+        '"QS3DREBARTIES3D"', '"QS3DREBARTIEHEALTH"',
     ],
     "hub": [
         'Tag="QS3DWALLJUNCTIONS"', 'Tag="QS3DWALLSNAPPREVIEW"', 'Tag="QS3DWALLSNAPAPPLY"',
-        'Tag="QS3DAUTOLINKHOSTS"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DREBAR3DSHAPE"',
+        'Tag="QS3DAUTOLINKHOSTS"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DSECTIONBOX"',
+        'Tag="QS3DREBAR3DSHAPE"', 'Tag="QS3DBEAMSTIRRUP3D"', 'Tag="QS3DBEAMSTIRRUPHEALTH"',
+        'Tag="QS3DREBARTIES3D"', 'Tag="QS3DREBARTIEHEALTH"',
+    ],
+    "beam_stirrup": [
+        'CommandMethod("QS3DBEAMSTIRRUP3D"', 'CommandMethod("QS3DBEAMSTIRRUPHEALTH"',
+    ],
+    "column_tie": [
+        'CommandMethod("QS3DREBARTIES3D"', "ColumnTieSolidBuilder.BuildSelected",
+    ],
+    "column_tie_health": [
+        'CommandMethod("QS3DREBARTIEHEALTH"', "GeneratedTieRebarHealthService().Inspect",
     ],
 }
 
@@ -73,4 +89,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BLT-style Workspace/Ribbon/Hub property scopes, typed editors, review actions, wall junction/snap and Auto Host entry points are present and key XAML is well formed.")
+print("PASS: BLT-style Workspace/Ribbon/Hub property scopes, typed editors, review/section actions, wall junction/snap, Auto Host, beam stirrup and column tie entry points are present and key XAML is well formed.")
