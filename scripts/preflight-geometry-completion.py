@@ -22,9 +22,11 @@ required = [
     "src/QS3D.BricsCAD.V25/RebarHealthCommands.cs",
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
     "src/QS3D.BricsCAD.V25/Commands.cs",
+    "src/QS3D.BricsCAD.V25/ModelReviewCommands.cs",
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml",
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs",
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs",
+    "src/QS3D.BricsCAD.V25/UI/ViewModels/PropertyRowViewModel.cs",
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml",
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs",
     "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
@@ -78,14 +80,21 @@ checks = {
     "src/QS3D.BricsCAD.V25/Commands.cs": [
         "PolylineWallSolidBuilder.BuildSelected", "GeneratedRebarHealthService().Inspect", "ParseGeneratedRebarHandles"
     ],
+    "src/QS3D.BricsCAD.V25/ModelReviewCommands.cs": [
+        "QS3DHIGHLIGHT", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE"
+    ],
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml": [
-        "Bóc chọn", "OnCaptureSelectedClick", "Vẽ 3D"
+        "Bóc chọn", "OnCaptureSelectedClick", "Vẽ 3D", "PropertyBooleanEditor", "PropertyChoiceEditor", "OnFocusSelectedClick", "OnIsolateSelectedClick", "OnUnisolateClick"
     ],
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs": [
-        "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DFINISH", "CommandFor"
+        "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DFINISH", "CommandFor", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE", "SelectInspection"
+    ],
+    "src/QS3D.BricsCAD.V25/UI/ViewModels/PropertyRowViewModel.cs": [
+        "BooleanEditor", "ChoiceEditor", "BooleanValue", "Choices", "IsEditable"
     ],
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs": [
-        "DisplayNameFor", "GroupFor", "IsNumericProperty", "Bề dày", "CỐT THÉP"
+        "DisplayNameFor", "GroupFor", "IsNumericProperty", "Bề dày", "CỐT THÉP", "EditorKindFor", "ChoicesFor", "IsBooleanProperty",
+        "isInherited", "instance override", "element.MarkDirty(ElementDirtyFlags.All)"
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
         'Tag="QS3DGLASSWALL"', 'Tag="QS3DWALLPIER"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DREBAR3D"', 'Tag="QS3DREBARHEALTH"'
@@ -131,7 +140,7 @@ commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
     text = path.read_text(encoding="utf-8")
     commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', text)
-for required_command in ("QS3DCUTOPENINGS", "QS3DREBAR3D", "QS3DREBARHEALTH", "QS3DBUILD3D", "QS3DGLASSWALL", "QS3DWALLPIER"):
+for required_command in ("QS3DCUTOPENINGS", "QS3DREBAR3D", "QS3DREBARHEALTH", "QS3DBUILD3D", "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE"):
     if required_command not in commands:
         errors.append("missing command: " + required_command)
 if len(commands) != len(set(x.upper() for x in commands)):
@@ -143,4 +152,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: TKT line/polyline wall variants, safe LINE + straight-POLYLINE opening cuts, far-origin-safe footprint math, rectangular + linear rebar planning/health and BLT-style UI workflow guards are present.")
+print("PASS: TKT line/polyline wall variants, safe LINE + straight-POLYLINE opening cuts, far-origin-safe footprint math, rectangular + linear rebar planning/health, typed Family editors, instance-override preservation and BLT-style Focus/Isolate workflow guards are present.")
