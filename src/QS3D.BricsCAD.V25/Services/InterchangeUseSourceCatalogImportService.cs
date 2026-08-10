@@ -261,20 +261,12 @@ namespace QS3D.BricsCAD.V25.Services
                 var action = ResolutionAction(resolution, InterchangeIdentityKind.Family, snapshot.Id);
                 if (action == InterchangeImportResolutionAction.AddSourceSemanticData)
                 {
-                    var added = ProjectFamilyService.Create(project, snapshot.Id, snapshot.Name, snapshot.Category);
-                    foreach (var property in snapshot.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-                        added.Properties[property.Key] = property.Value ?? string.Empty;
+                    InterchangeFamilySemanticApplier.Add(project, snapshot.Id, snapshot.Name, snapshot.Category, snapshot.Properties);
                     continue;
                 }
                 if (action != InterchangeImportResolutionAction.UseSourceSemanticData)
                     throw new InvalidOperationException("Unexpected Family action " + action + " for " + snapshot.Id + ".");
-                var target = project.FindFamily(snapshot.Id) ?? throw new InvalidOperationException("Replacement Family disappeared during mutation: " + snapshot.Id + ".");
-                if (target.Category != snapshot.Category)
-                    throw new InvalidOperationException("Replacement Family category changed after planning for " + snapshot.Id + ".");
-                target.Name = snapshot.Name;
-                target.Properties.Clear();
-                foreach (var property in snapshot.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-                    target.Properties[property.Key] = property.Value ?? string.Empty;
+                InterchangeFamilySemanticApplier.Replace(project, snapshot.Id, snapshot.Name, snapshot.Category, snapshot.Properties);
             }
         }
 
