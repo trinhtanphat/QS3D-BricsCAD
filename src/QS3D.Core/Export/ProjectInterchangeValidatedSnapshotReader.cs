@@ -172,24 +172,24 @@ namespace QS3D.Core.Export
             var elements = contract.Elements.Select((x, i) =>
             {
                 if (x == null) throw new InvalidDataException("Validated element entry is null at index " + i + ".");
-                var rawTimestamp = (x.UpdatedUtc ?? string.Empty).Trim();
+                var rawTimestamp = CanonicalOptional(x.UpdatedUtc, "element updatedUtc");
                 return new InterchangeElementSnapshot(
                     Id(x.Id, "element"),
                     Category(x.Category, "element"),
-                    OptionalId(x.FamilyId),
-                    OptionalId(x.FloorId),
-                    OptionalId(x.ZoneId),
-                    (x.DrawingFingerprint ?? string.Empty).Trim(),
+                    CanonicalOptional(x.FamilyId, "element familyId"),
+                    CanonicalOptional(x.FloorId, "element floorId"),
+                    CanonicalOptional(x.ZoneId, "element zoneId"),
+                    CanonicalOptional(x.DrawingFingerprint, "element drawingFingerprint"),
                     rawTimestamp,
                     Timestamp(rawTimestamp),
-                    Required(x.SourceRefScope, "sourceRefScope"),
+                    CanonicalRequired(x.SourceRefScope, "sourceRefScope"),
                     Strings(x.SourceHandles, "sourceHandles"),
                     Strings(x.Dependencies, "dependencies"),
                     StringMap(x.Properties, "element properties"),
                     NumberMap(x.Quantities, "element quantities"));
             }).ToList().AsReadOnly();
 
-            var projectTimestamp = (contract.Project.UpdatedUtc ?? string.Empty).Trim();
+            var projectTimestamp = CanonicalOptional(contract.Project.UpdatedUtc, "project updatedUtc");
             return new ProjectInterchangeValidatedSnapshot(
                 validation,
                 Required(contract.Format, "format"),
@@ -203,7 +203,7 @@ namespace QS3D.Core.Export
                     Id(contract.Project.Id, "project"),
                     Required(contract.Project.Name, "project name"),
                     contract.Project.SchemaVersion,
-                    (contract.Project.DrawingFingerprint ?? string.Empty).Trim(),
+                    CanonicalOptional(contract.Project.DrawingFingerprint, "project drawingFingerprint"),
                     projectTimestamp,
                     Timestamp(projectTimestamp)),
                 zones,
@@ -233,8 +233,22 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static string Id(string? value, string label) => Required(value, label + " id").Trim();
-        private static string OptionalId(string? value) => (value ?? string.Empty).Trim();
+        private static string Id(string? value, string label) => CanonicalRequired(value, label + " id");
+        private static string CanonicalOptional(string? value, string label)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(raw)) throw new InvalidDataException("Validated semantic snapshot contains whitespace-only " + label + ".");
+            if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Validated semantic snapshot contains non-canonical padded " + label + ".");
+            return raw;
+        }
+        private static string CanonicalRequired(string? value, string label)
+        {
+            var raw = CanonicalOptional(value, label);
+            if (raw.Length == 0) throw new InvalidDataException("Validated semantic snapshot contains an empty " + label + ".");
+            return raw;
+        }
         private static string Required(string? value, string label)
         {
             var normalized = (value ?? string.Empty).Trim();
@@ -243,21 +257,30 @@ namespace QS3D.Core.Export
         }
         private static ElementCategory Category(string? value, string label)
         {
-            if (!Enum.TryParse<ElementCategory>((value ?? string.Empty).Trim(), false, out var category) || !Enum.IsDefined(typeof(ElementCategory), category))
+            var raw = CanonicalRequired(value, label + " category");
+            if (!Enum.TryParse<ElementCategory>(raw, false, out var category) || !Enum.IsDefined(typeof(ElementCategory), category))
                 throw new InvalidDataException("Validated semantic snapshot contains an unsupported " + label + " category.");
             return category;
         }
         private static DateTime? Timestamp(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return null;
-            if (!DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
-                throw new InvalidDataException("Validated semantic snapshot contains an unreadable timestamp.");
-            return parsed;
+            if (!HasExplicitUtcOffset(raw) || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                throw new InvalidDataException("Validated semantic snapshot contains a timestamp without an explicit timezone.");
+            return parsed.UtcDateTime;
+        }
+        private static bool HasExplicitUtcOffset(string value)
+        {
+            if (value.EndsWith("Z", StringComparison.OrdinalIgnoreCase)) return true;
+            var timeSeparator = value.IndexOf('T');
+            if (timeSeparator < 0) return false;
+            var offsetSeparator = Math.Max(value.LastIndexOf('+'), value.LastIndexOf('-'));
+            return offsetSeparator > timeSeparator;
         }
         private static IReadOnlyList<string> Strings(IEnumerable<string>? source, string label)
         {
             if (source == null) throw new InvalidDataException("Validated semantic snapshot is missing " + label + ".");
-            return source.Select(x => (x ?? string.Empty).Trim()).ToList().AsReadOnly();
+            return source.Select((x, i) => CanonicalRequired(x, label + "[" + i.ToString(CultureInfo.InvariantCulture) + "]")).ToList().AsReadOnly();
         }
         private static IReadOnlyDictionary<string, string> StringMap(IDictionary<string, string>? source, string label)
         {
@@ -265,9 +288,9 @@ namespace QS3D.Core.Export
             var copy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in source.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
-                var key = (pair.Key ?? string.Empty).Trim();
+                var key = CanonicalRequired(pair.Key, label + " key");
                 if (copy.ContainsKey(key))
-                    throw new InvalidDataException("Validated semantic snapshot contains ambiguous normalized key in " + label + ": " + key + ".");
+                    throw new InvalidDataException("Validated semantic snapshot contains ambiguous key in " + label + ": " + key + ".");
                 copy[key] = pair.Value ?? string.Empty;
             }
             return new ReadOnlyDictionary<string, string>(copy);
@@ -278,9 +301,9 @@ namespace QS3D.Core.Export
             var copy = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in source.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
-                var key = (pair.Key ?? string.Empty).Trim();
+                var key = CanonicalRequired(pair.Key, label + " key");
                 if (copy.ContainsKey(key))
-                    throw new InvalidDataException("Validated semantic snapshot contains ambiguous normalized key in " + label + ": " + key + ".");
+                    throw new InvalidDataException("Validated semantic snapshot contains ambiguous key in " + label + ": " + key + ".");
                 copy[key] = pair.Value;
             }
             return new ReadOnlyDictionary<string, double>(copy);
