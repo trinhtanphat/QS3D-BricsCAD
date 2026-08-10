@@ -17,7 +17,8 @@ checks = {
     "src/QS3D.Core/Diagnostics/SafeGeneratedHandleOwnershipHealthService.cs": [
         "SafeGeneratedHandleOwnershipHealthService",
         'AddClaims(claims, element, "SourceHandles"',
-        "GeneratedHandleOwnershipPolicy.IsOwnerSlot",
+        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
+        "GeneratedHandleOwnershipPolicy.AreSameLogicalOwnerSlots",
         "GENERATED_HANDLE_OWNERSHIP_CONFLICT",
     ],
     "tests/QS3D.Core.SmokeTests/SafeGeneratedHandleOwnershipHealthSmoke.cs": [

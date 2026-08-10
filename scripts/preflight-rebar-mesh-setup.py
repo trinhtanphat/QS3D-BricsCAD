@@ -24,8 +24,8 @@ if code.is_file():
     for needle in (
         "ElementCategory.Slab", "ElementCategory.StructuralWall", "RebarNotationParser.Parse",
         "RebarSlabXNotation", "RebarSlabYNotation", "RebarWallHorizontalNotation", "RebarWallVerticalNotation",
-        "RebarSlabCoverM", "RebarWallCoverM", "SetProperty", "_project.Touch()",
-        "không được đồng thời có count và spacing", "cùng đường kính",
+        "RebarSlabCoverM", "RebarWallCoverM", "SetProperty", "project.Touch()",
+        "không được đồng thời có count và spacing", "diameter/count/spacing",
     ):
         if needle not in text: errors.append("Rebar Mesh Setup validation missing: " + needle)
 

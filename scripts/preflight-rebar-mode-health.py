@@ -14,10 +14,11 @@ if service.is_file():
     text = service.read_text(encoding="utf-8")
     for needle in (
         "GeneratedRebarHandles", "GeneratedRebarMode", "COLUMNVERTICALBARS", "BEAMLONGITUDINALBARS",
-        "SLABMESHXY", "STRUCTURALWALLMESH", "GENERATED_REBAR_MODE_MISSING",
+        "GeneratedSlabMeshHandles", "GeneratedSlabMeshMode", "SlabMeshXY",
+        "GeneratedWallMeshHandles", "GeneratedWallMeshMode", "StructuralWallMesh", "GENERATED_REBAR_MODE_MISSING",
         "GENERATED_REBAR_MODE_UNKNOWN", "GENERATED_REBAR_MODE_CATEGORY_MISMATCH",
-        "GeneratedRebarSlabXActualSpacingM", "GeneratedRebarSlabYActualSpacingM",
-        "GeneratedRebarWallHorizontalActualSpacingM", "GeneratedRebarWallVerticalActualSpacingM",
+        "GeneratedSlabMeshXActualSpacingM", "GeneratedSlabMeshYActualSpacingM",
+        "GeneratedWallMeshHorizontalActualSpacingM", "GeneratedWallMeshVerticalActualSpacingM",
     ):
         if needle not in text: errors.append("generated rebar-mode health missing: " + needle)
 

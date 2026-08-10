@@ -64,7 +64,8 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedCurtainFrameOwnershipGuard.cs": [
         'HandlesKey = "GeneratedCurtainFrameHandles"', "EnsureOwned", "Refusing destructive erase",
-        'ReserveProperty(owners, element, "GeneratedSlabMeshHandles")', 'ReserveProperty(owners, element, "GeneratedWallMeshHandles")'
+        'CoreOwnershipPolicy.IsOwnerSlot(property.Key)',
+        'string.Equals(property.Key, HandlesKey, StringComparison.OrdinalIgnoreCase)'
     ],
     "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs": [
         "CurtainWallDetailPlanner.Plan",

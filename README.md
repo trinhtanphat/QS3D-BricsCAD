@@ -173,7 +173,7 @@ Until those gates are green, runtime-dependent paths are described as **implemen
 
 ## Manual CI/CD and release policy
 
-GitHub Actions are deliberately **idle by default**. Every workflow under `.github/workflows/` must remain `workflow_dispatch` only, and every executable job must hard-guard `github.event_name == 'workflow_dispatch'`.
+GitHub Actions are deliberately **manual-only** and idle by default. Every workflow under `.github/workflows/` must remain `workflow_dispatch` only, and every executable job must hard-guard `github.event_name == 'workflow_dispatch'`.
 
 A commit, push, PR, merge, review, documentation change, source fix or `continue all` request does **not** authorize Actions.
 

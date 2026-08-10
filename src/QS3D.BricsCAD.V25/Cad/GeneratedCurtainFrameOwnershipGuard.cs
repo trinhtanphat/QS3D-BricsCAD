@@ -49,7 +49,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
-                Reserve(owners, handle, element.Id + "/" + key);
+                Reserve(owners, handle, element.Id + "/" + CoreOwnershipPolicy.CanonicalOwnerSlot(key));
         }
 
         private static void Reserve(Dictionary<string, string> owners, string? handle, string token)

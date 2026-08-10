@@ -79,7 +79,7 @@ if tie_guard.is_file():
 invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
 if invalidator.is_file():
     text = invalidator.read_text(encoding="utf-8")
-    for needle in ("GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles", "GeneratedBeamStirrupCount", "GeneratedTieRebarCount"):
+    for needle in ("CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix"):
         if needle not in text: errors.append("generated-geometry invalidation missing: " + needle)
 
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/BeamStirrupLayoutSmoke.cs"

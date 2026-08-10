@@ -24,7 +24,7 @@ namespace QS3D.BricsCAD.V25.Cad
             foreach (var element in _elements)
             {
                 RemoveByPrefix(element, "GeneratedSolid");
-                RemoveByPrefix(element, "PhysicalOpeningCutSolid");
+                RemoveByPrefix(element, "PhysicalOpeningCut");
                 foreach (var key in CoreOwnershipPolicy.RebarHandleKeys)
                     RemoveByPrefix(element, MetadataPrefixForHandleKey(key));
                 RemoveByPrefix(element, "GeneratedCurtainFrame");

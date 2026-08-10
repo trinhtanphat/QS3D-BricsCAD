@@ -57,8 +57,10 @@ if ownership_guard.is_file():
         if needle not in text: errors.append("slab-mesh cross-set ownership guard missing shared policy contract: " + needle)
 
 invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
-if invalidator.is_file() and 'Remove(element, "GeneratedSlabMeshHandles")' not in invalidator.read_text(encoding="utf-8"):
-    errors.append("slab-mesh handles are not invalidated with dependent generated geometry")
+if invalidator.is_file():
+    text = invalidator.read_text(encoding="utf-8")
+    for needle in ("CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix"):
+        if needle not in text: errors.append("slab-mesh invalidation missing shared policy contract: " + needle)
 
 health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs"
 if health.is_file():

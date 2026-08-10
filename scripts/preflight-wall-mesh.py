@@ -70,13 +70,15 @@ if ownership_guard.is_file():
         if needle not in text: errors.append("wall-mesh cross-set generated ownership missing shared policy contract: " + needle)
 
 invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
-if invalidator.is_file() and 'Remove(element, "GeneratedWallMeshHandles")' not in invalidator.read_text(encoding="utf-8"):
-    errors.append("wall-mesh handles are not invalidated with dependent generated geometry")
+if invalidator.is_file():
+    text = invalidator.read_text(encoding="utf-8")
+    for needle in ("CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix"):
+        if needle not in text: errors.append("wall-mesh invalidation missing shared policy contract: " + needle)
 
 ownership_health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs"
 if ownership_health.is_file():
     text = ownership_health.read_text(encoding="utf-8")
-    for needle in ("GeneratedHandleOwnershipPolicy.RebarHandleKeys", "GeneratedWallMeshHandles"):
+    for needle in ("GeneratedHandleOwnershipPolicy.RebarHandleKeys",):
         if needle not in text: errors.append("wall-mesh cross-family ownership health missing: " + needle)
 
 command = ROOT / "src/QS3D.BricsCAD.V25/StructuralWallMeshCommands.cs"

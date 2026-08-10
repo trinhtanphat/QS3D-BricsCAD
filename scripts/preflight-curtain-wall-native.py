@@ -65,10 +65,9 @@ checks = {
         'string.Equals(property.Key, HandlesKey, StringComparison.OrdinalIgnoreCase)', 'Refusing destructive erase',
     ],
     "invalidator": [
-        'GeneratedCurtainFrameHandles', 'GeneratedCurtainFrameCount', 'GeneratedCurtainFrameBaseCount',
-        'GeneratedCurtainFrameOpeningCount', 'GeneratedCurtainFrameConfigFingerprint',
-        'GeneratedCurtainFrameMode', 'GeneratedCurtainFrameOwnershipGuard.Build', 'EraseCurtainFrames',
-        'PhysicalOpeningCutMode',
+        'GeneratedCurtainFrameHandles', 'CoreOwnershipPolicy.RebarHandleKeys', 'MetadataPrefixForHandleKey',
+        'RemoveByPrefix(element, "GeneratedCurtainFrame")', 'RemoveByPrefix(element, "PhysicalOpeningCut")',
+        'GeneratedCurtainFrameOwnershipGuard.Build', 'EraseCurtainFrames',
     ],
     "health": [
         'GeneratedCurtainFrameHandles', 'CURTAIN_FRAME_GENERATED_SOLID_MISSING',

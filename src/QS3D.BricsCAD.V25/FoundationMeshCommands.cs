@@ -23,7 +23,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DFOUNDATIONREBAR3D lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);

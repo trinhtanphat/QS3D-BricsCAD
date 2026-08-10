@@ -65,10 +65,8 @@ checks = {
         "Project contains duplicate semantic element id",
     ],
     "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs": [
-        "selected.Contains(handle)", '"GeneratedSolidHandle"', '"PhysicalOpeningCutSolidHandle"',
-        '"GeneratedRebarHandles"', '"GeneratedShapeRebarHandles"', '"GeneratedTieRebarHandles"',
-        '"GeneratedBeamStirrupHandles"', '"GeneratedSlabMeshHandles"', '"GeneratedWallMeshHandles"',
-        '"GeneratedCurtainFrameHandles"', "ambiguously owned by semantic elements",
+        "selected.Contains(handle)", "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
+        "ambiguously owned by semantic elements",
         "Resolve project ownership before bulk property edits",
     ],
     "src/QS3D.BricsCAD.V25/Cad/SemanticSelectionResolver.cs": [

@@ -44,7 +44,12 @@ for relative, contract in contracts.items():
         continue
     text = path.read_text(encoding="utf-8")
     guard = contract["guard"]
-    if "MdiActiveDocument" not in text:
+    guard_text = text
+    if relative.endswith("FamilyManagerWindow.Active.cs"):
+        companion = ROOT / "src/QS3D.BricsCAD.V25/UI/FamilyManagerWindow.xaml.cs"
+        if companion.is_file():
+            guard_text += "\n" + companion.read_text(encoding="utf-8")
+    if "MdiActiveDocument" not in guard_text:
         errors.append(relative + " must compare its bound document to MdiActiveDocument")
     if relative.endswith("CurtainWallWindow.xaml.cs"):
         if "private readonly Document _document" not in text or "CurtainWallWindow(Document document)" not in text:

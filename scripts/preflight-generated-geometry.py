@@ -58,8 +58,7 @@ invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvali
 if invalidator.is_file():
     text = invalidator.read_text(encoding="utf-8")
     for needle in (
-        "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles",
-        "GeneratedTieRebarCount", "GeneratedBeamStirrupCount", "GeneratedRebarBeamTopCount", "GeneratedRebarBeamBottomCount",
+        "CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix",
         "ClearGeneratedGeometryStale",
     ):
         if needle not in text: errors.append("dependent generated-geometry invalidation missing: " + needle)
@@ -68,8 +67,8 @@ ownership = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
 if ownership.is_file():
     text = ownership.read_text(encoding="utf-8")
     for needle in (
-        "SourceHandles", "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle",
-        "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles",
+        "CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot",
+        "CoreOwnershipPolicy.RebarHandleKeys", "SourceHandles", "Refusing destructive erase",
     ):
         if needle not in text: errors.append("cross-set generated ownership guard missing: " + needle)
 

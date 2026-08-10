@@ -84,6 +84,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 .Where(x => x.Length > 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase);
 
-        private static string OwnerToken(ProjectElement element, string propertyKey) => element.Id + "/" + propertyKey;
+        private static string OwnerToken(ProjectElement element, string propertyKey) =>
+            element.Id + "/" + CoreOwnershipPolicy.CanonicalOwnerSlot(propertyKey);
     }
 }

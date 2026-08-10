@@ -10,6 +10,7 @@ using Microsoft.Win32;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
+using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {

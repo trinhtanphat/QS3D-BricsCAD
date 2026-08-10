@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)][string]$PluginDll,
     [string]$Profile = "",
     [string]$ArtifactDir = "",
-    [ValidateRange(10, 900)][int]$StartupTimeoutSeconds = 120
+    [ValidateRange(10, 900)][int]$StartupTimeoutSeconds = 120,
+    [switch]$SkipScreenshot
 )
 
 $ErrorActionPreference = "Stop"
@@ -128,18 +129,19 @@ try {
         throw "Runtime marker came from a different plugin DLL. Expected '$PluginDll', loaded '$loadedAssembly'."
     }
 
-    $windowDeadline = (Get-Date).AddSeconds(30)
-    while ((Get-Date) -lt $windowDeadline) {
-        $process.Refresh()
-        if ($process.MainWindowHandle -ne [IntPtr]::Zero) { break }
-        Start-Sleep -Milliseconds 500
-    }
-    if ($process.MainWindowHandle -eq [IntPtr]::Zero) {
-        throw "BricsCAD runtime passed, but no interactive main window was available for the requested screenshot."
-    }
+    if (-not $SkipScreenshot) {
+        $windowDeadline = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $windowDeadline) {
+            $process.Refresh()
+            if ($process.MainWindowHandle -ne [IntPtr]::Zero) { break }
+            Start-Sleep -Milliseconds 500
+        }
+        if ($process.MainWindowHandle -eq [IntPtr]::Zero) {
+            throw "BricsCAD runtime passed, but no interactive main window was available for the requested screenshot."
+        }
 
-    Add-Type -AssemblyName System.Drawing
-    Add-Type @"
+        Add-Type -AssemblyName System.Drawing
+        Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 public static class QS3DWin32Capture {
@@ -151,33 +153,34 @@ public static class QS3DWin32Capture {
 }
 "@
 
-    [QS3DWin32Capture]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
-    [QS3DWin32Capture]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
-    Start-Sleep -Seconds 3
+        [QS3DWin32Capture]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
+        [QS3DWin32Capture]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
+        Start-Sleep -Seconds 3
 
-    $rect = New-Object QS3DWin32Capture+RECT
-    if (-not [QS3DWin32Capture]::GetWindowRect($process.MainWindowHandle, [ref]$rect)) {
-        throw "Unable to read BricsCAD window bounds for screenshot capture."
-    }
-    $width = $rect.Right - $rect.Left
-    $height = $rect.Bottom - $rect.Top
-    if ($width -lt 400 -or $height -lt 300) {
-        throw "BricsCAD window bounds are unexpectedly small: ${width}x${height}."
-    }
+        $rect = New-Object QS3DWin32Capture+RECT
+        if (-not [QS3DWin32Capture]::GetWindowRect($process.MainWindowHandle, [ref]$rect)) {
+            throw "Unable to read BricsCAD window bounds for screenshot capture."
+        }
+        $width = $rect.Right - $rect.Left
+        $height = $rect.Bottom - $rect.Top
+        if ($width -lt 400 -or $height -lt 300) {
+            throw "BricsCAD window bounds are unexpectedly small: ${width}x${height}."
+        }
 
-    $bitmap = New-Object System.Drawing.Bitmap $width, $height
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    try {
-        $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
-        $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
-    }
-    finally {
-        $graphics.Dispose()
-        $bitmap.Dispose()
-    }
+        $bitmap = New-Object System.Drawing.Bitmap $width, $height
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        try {
+            $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+            $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
+        }
+        finally {
+            $graphics.Dispose()
+            $bitmap.Dispose()
+        }
 
-    if (-not (Test-Path -LiteralPath $screenshotPath -PathType Leaf)) {
-        throw "Screenshot file was not created."
+        if (-not (Test-Path -LiteralPath $screenshotPath -PathType Leaf)) {
+            throw "Screenshot file was not created."
+        }
     }
 
     $metadata = [ordered]@{
@@ -189,7 +192,7 @@ public static class QS3DWin32Capture {
         plugin_dll = $PluginDll
         plugin_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $PluginDll).Hash
         runtime_marker = $resultPath
-        screenshot = $screenshotPath
+        screenshot = if ($SkipScreenshot) { $null } else { $screenshotPath }
         process_id = $process.Id
         profile = $Profile
         runner_user = [Environment]::UserName
@@ -201,7 +204,7 @@ public static class QS3DWin32Capture {
 
     Write-Host "QS3D BricsCAD V25 NETLOAD/runtime gate PASS"
     Write-Host "Marker: $resultPath"
-    Write-Host "Screenshot: $screenshotPath"
+    if (-not $SkipScreenshot) { Write-Host "Screenshot: $screenshotPath" }
 }
 finally {
     if ($null -ne $process) {

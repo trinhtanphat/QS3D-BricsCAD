@@ -84,11 +84,11 @@ checks = {
         "CodePrefix = \"REBAR\"", "CodePrefix = \"SHAPE_REBAR\"",
         "spec.CodePrefix + \"_GENERATED_OWNERSHIP_CONFLICT\"", "spec.CodePrefix + \"_GENERATED_SOLID_MISSING\"",
         "spec.CodePrefix + \"_GENERATED_COUNT_MISMATCH\"", "GeneratedShapeRebarHandles", "InspectShape", "InspectAll",
-        "BuildOwnershipIndex", "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "SourceHandles"
+        "BuildOwnershipIndex", "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)", "SourceHandles"
     ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": [
-        "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "EnsureOwned", "ownership conflict", "Refusing destructive erase",
-        "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "SourceHandles", "AddProtected"
+        "CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys",
+        "EnsureOwned", "ownership conflict", "Refusing destructive erase", "SourceHandles", "AddProtected"
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
         "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",

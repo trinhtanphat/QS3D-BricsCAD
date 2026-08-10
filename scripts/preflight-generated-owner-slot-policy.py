@@ -24,7 +24,18 @@ checks = {
         "CoreOwnershipPolicy.RebarHandleKeys",
         "CoreOwnershipPolicy.IsOwnerSlot",
         "CoreOwnershipPolicy.IsRebarOwnerSlot",
+        "CoreOwnershipPolicy.CanonicalOwnerSlot",
         "Refusing destructive erase",
+    ],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedTieRebarOwnershipGuard.cs": [
+        "CoreOwnershipPolicy.RebarHandleKeys",
+        "CoreOwnershipPolicy.IsOwnerSlot",
+        "CoreOwnershipPolicy.IsRebarOwnerSlot",
+        "CoreOwnershipPolicy.CanonicalOwnerSlot",
+    ],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedCurtainFrameOwnershipGuard.cs": [
+        "CoreOwnershipPolicy.IsOwnerSlot",
+        "CoreOwnershipPolicy.CanonicalOwnerSlot",
     ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs": [
         "CoreOwnershipPolicy.RebarHandleKeys",
