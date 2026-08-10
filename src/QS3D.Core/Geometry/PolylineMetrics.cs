@@ -48,7 +48,7 @@ namespace QS3D.Core.Geometry
             return area;
         }
 
-        public static double Area(IReadOnlyList<Point2> points)) => Math.Abs(SignedArea(points));
+        public static double Area(IReadOnlyList<Point2> points) => Math.Abs(SignedArea(points));
 
         private static void EnsureFinite(Point2 point)
         {
