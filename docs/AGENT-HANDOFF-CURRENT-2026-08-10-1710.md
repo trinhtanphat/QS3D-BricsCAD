@@ -117,16 +117,18 @@ Current Core already has:
 
 Future top/bottom level-reference semantics should extend this existing model with explicit migration/dependency behavior.
 
-## 7. UI integration still needing latest-blob/local/UI-agent work
+## 7. Diagnostics Hub integration — source resolved
 
 Keep these commands distinct:
 
 - `QS3DRUNTIMECHECK` — customer/runtime diagnostic;
 - `QS3DRUNTIMEPROBE` — automation probe used by the local runtime harness.
 
-A Full Domain Hub snapshot still used `QS3DRUNTIMEPROBE` behind a user-facing `Kiểm tra runtime V25` button. On the latest UI source, wire that user-facing action to `QS3DRUNTIMECHECK` while preserving the automation probe command. Also expose `QS3DSUPPORTBUNDLE` in the diagnostics/release section.
+The Full Domain Hub customer-facing `Kiểm tra runtime V25` action is now wired to `QS3DRUNTIMECHECK`, and the same `KIỂM TRA / RELEASE` section exposes `QS3DSUPPORTBUNDLE` as `Xuất Support Bundle`. The automation-only `QS3DRUNTIMEPROBE` command remains untouched for the local runtime harness.
 
-Do this only after fetching the latest large XAML/UI files; do not overwrite concurrent UI work with a stale whole-file blob.
+Preserve `scripts/preflight-domain-hub-diagnostics.py`: it parses the XAML, guards the two customer-facing command tags and fails if the runtime button is accidentally routed back to `QS3DRUNTIMEPROBE`.
+
+This is a **source/static integration result**. Real click behavior, host-theme rendering and support-bundle/runtime-command execution still belong to the exact-SHA local V25 matrix.
 
 ## 8. Remaining local / native / policy gates
 
@@ -142,13 +144,31 @@ Source-only agents must not fake completion of:
 - actual Authenticode certificate/timestamp/package trust evidence;
 - commercial-license enforcement until owner supplies real SKU/seat/trial/binding/offline/rotation policy;
 - standard-specific fabrication-grade rebar until governing standard/revision + engineering inputs exist;
-- legal/public/source distribution model until owner/legal policy is chosen.
+- legal/public/source distribution model until owner/legal policy is chosen;
+- broader documentation/interoperability work only after explicit supported semantics/formats are defined.
 
 Canonical details:
 
 - `docs/LOCAL-V25-QUALIFICATION.md`
 - `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`
 - `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`
+
+GitHub tracking created for continuation/local agents:
+
+- #72 exact V25 qualification;
+- #73 multi-owner wall solids / advanced geometry;
+- #74 Direct Draw transient preview / repeated authoring;
+- #75 production signing/install/update + optional licensing boundary;
+- #76 fabrication-grade rebar / structural depth;
+- #77 documentation layer;
+- #79 Grid/reference model + richer level constraints;
+- #80 native semantic modify/edit workflow;
+- #81 large-model performance;
+- #82 real V25 UI/DPI/context-menu/Ribbon polish;
+- #83 generalized polygonal Slab/Foundation mesh;
+- #84 broader interoperability/import-export.
+
+Before acting on any issue, inspect current `main` because concurrent source work may have partially or fully advanced it beyond the issue's original description. Do not close runtime/engineering/external issues from source inspection alone.
 
 ## 9. CI / release rule
 
