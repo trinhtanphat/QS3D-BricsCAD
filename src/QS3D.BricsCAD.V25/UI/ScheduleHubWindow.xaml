@@ -174,7 +174,11 @@
                                 <TextBlock Text="CỐT THÉP" Style="{StaticResource PanelTitle}"/>
                                 <Button Content="Rebar 3D Hub" Tag="QS3DREBARHUB" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="BBS" Tag="QS3DBBS" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
-                                <Button Content="BBS CSV" Tag="QS3DBBSCSV" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="BBS CSV" Tag="QS3DBBSCSV" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
+                                <Button Content="Tạo/Cập nhật BBS DWG Table" Tag="QS3DBBSTABLE" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
+                                <Button Content="Refresh BBS DWG Table" Tag="QS3DBBSTABLEREFRESH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Kiểm tra BBS DWG Table" Tag="QS3DBBSTABLEHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Xóa BBS DWG Table" Tag="QS3DBBSTABLEREMOVE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
