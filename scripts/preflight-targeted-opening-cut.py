@@ -31,6 +31,13 @@ required = {
         'CommandMethod("QS3DDRAWOPENING"',
         "new AutoHostLinkCommands().AutoLinkHosts()",
     ],
+    "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
+        'RibbonButtonSpec("Khoét Cửa/Lỗ chọn", "QS3DCUTSELECTEDOPENINGS")',
+    ],
+    "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
+        'Content="Khoét Cửa/Lỗ đang chọn" Tag="QS3DCUTSELECTEDOPENINGS"',
+        'Content="Khoét tất cả Cửa/Lỗ đã link" Tag="QS3DCUTOPENINGS"',
+    ],
     "docs/DIRECT-DRAW-OPENINGS.md": [
         "`QS3DCUTSELECTEDOPENINGS`",
         "only the selected semantic Door/WallOpening set is eligible for physical cut",
@@ -75,8 +82,11 @@ commands_file = ROOT / "src/QS3D.BricsCAD.V25/OpeningBooleanCommands.cs"
 if commands_file.is_file():
     text = commands_file.read_text(encoding="utf-8")
     selected = text.split('[CommandMethod("QS3DCUTSELECTEDOPENINGS"', 1)[-1]
-    if "OpeningBooleanService.CutLinkedOpenings(document, project)" in selected.split("private static void Execute", 1)[0]:
+    selected_entry = selected.split("private static void Execute", 1)[0]
+    if "OpeningBooleanService.CutLinkedOpenings(document, project)" in selected_entry:
         errors.append("Selected-opening command must not fall back to the global all-linked cut API")
+    if "Where(IsOpening)" not in selected_entry or ".Distinct(StringComparer.OrdinalIgnoreCase)" not in selected_entry:
+        errors.append("Selected-opening command must resolve a deduplicated semantic Door/WallOpening target set")
 
 opening_direct = ROOT / "src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs"
 if opening_direct.is_file():
@@ -96,4 +106,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: legacy all-linked cut remains available, selected Door/WallOpening ids are validated before mutation and cut through a targeted overload, host fingerprint idempotency remains fail-closed, and Direct Draw does not silently mutate host solids.")
+print("PASS: legacy all-linked cut remains available, selected Door/WallOpening ids are validated before mutation and cut through a targeted overload, UI exposes the safer subset path, host fingerprint idempotency remains fail-closed, and Direct Draw does not silently mutate host solids.")
