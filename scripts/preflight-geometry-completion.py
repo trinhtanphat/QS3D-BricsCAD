@@ -2,6 +2,7 @@
 from pathlib import Path
 import re
 import sys
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 errors = []
@@ -47,6 +48,14 @@ required = [
 for relative in required:
     if not (ROOT / relative).is_file():
         errors.append("missing geometry-completion file: " + relative)
+
+for xaml_relative in ("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml", "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml"):
+    xaml_path = ROOT / xaml_relative
+    if xaml_path.is_file():
+        try:
+            ET.parse(xaml_path)
+        except ET.ParseError as exc:
+            errors.append(xaml_relative + " is not well-formed XML/XAML: " + str(exc))
 
 checks = {
     "src/QS3D.Core/Geometry/WallFootprintEngine.cs": [
@@ -121,18 +130,21 @@ checks = {
         "MatchesSelection", "BoundarySourceHandlesKey", "GeneratedSolidHandle"
     ],
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml": [
-        "Bóc chọn", "OnCaptureSelectedClick", "Vẽ 3D", "OnWallJunctionsClick", "PropertyBooleanEditor", "PropertyChoiceEditor", "OnFocusSelectedClick", "OnIsolateSelectedClick", "OnUnisolateClick"
+        "Bóc chọn", "OnCaptureSelectedClick", "Vẽ 3D", "OnWallJunctionsClick", "PropertyBooleanEditor", "PropertyChoiceEditor",
+        "PropertyScopes", "SelectedPropertyScope", "OnResetPropertyClick", "CanReset", "OnFocusSelectedClick", "OnIsolateSelectedClick", "OnUnisolateClick"
     ],
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs": [
         "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DFINISH", "QS3DWALLJUNCTIONS", "CommandFor", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE", "SelectInspection",
-        "SemanticReferenceHandles.MatchesSelection"
+        "SemanticReferenceHandles.MatchesSelection", "SetSelectedElement(element)", "ShowFamilyProperties", "OnResetPropertyClick"
     ],
     "src/QS3D.BricsCAD.V25/UI/ViewModels/PropertyRowViewModel.cs": [
-        "BooleanEditor", "ChoiceEditor", "BooleanValue", "Choices", "IsEditable"
+        "BooleanEditor", "ChoiceEditor", "BooleanValue", "Choices", "IsEditable", "CanReset", "ResetValue", "Action? Reset"
     ],
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs": [
+        "FamilyScope", "InstanceScope", "PropertyScopes", "SelectedPropertyScope", "SetSelectedElement", "LoadInstanceProperties", "ApplyInstanceProperty",
         "DisplayNameFor", "GroupFor", "IsNumericProperty", "Bề dày", "CỐT THÉP", "EditorKindFor", "ChoicesFor", "IsBooleanProperty",
-        "isInherited", "instance override", "element.MarkDirty(ElementDirtyFlags.All)", "string.Equals(family.Name, next, StringComparison.Ordinal)"
+        "isInherited", "instance override", "row.CanReset", "Đã đưa", "element.MarkDirty(ElementDirtyFlags.All)",
+        "string.Equals(family.Name, next, StringComparison.Ordinal)", "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance"
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
         'Tag="QS3DGLASSWALL"', 'Tag="QS3DWALLPIER"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DWALLJUNCTIONS"',
@@ -205,4 +217,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: TKT line/polyline wall variants, safe LINE + straight-POLYLINE opening cuts, far-origin-safe footprint/junction math, rectangular/linear/BBS-shape rebar ownership+health, typed Family editors, preserved instance overrides, semantic selection sync and BLT-style junction/Focus/Isolate workflows are present.")
+print("PASS: TKT wall/opening geometry, far-origin-safe wall/junction math, rectangular/linear/BBS-shape rebar ownership+health, well-formed BLT-style XAML, typed Family/Instance editors with reset, semantic selection sync and junction/Focus/Isolate workflows are present.")
