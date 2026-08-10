@@ -169,9 +169,28 @@ namespace QS3D.BricsCAD.V25
                 var opening = selected.FirstOrDefault(x => x.Category == ElementCategory.WallOpening || x.Category == ElementCategory.Door);
                 var wall = selected.FirstOrDefault(x => x.Category == ElementCategory.ArchitecturalWall || x.Category == ElementCategory.GlassWall || x.Category == ElementCategory.WallPier || x.Category == ElementCategory.StructuralWall);
                 if (opening == null || wall == null) { doc.Editor.WriteMessage("\nChọn đồng thời 1 tường/vách và 1 Cửa/Lỗ Mở đã được QS3D capture, rồi chạy QS3DLINKHOST."); return; }
-                new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
-                RegenerateProject(project);
-                project.Touch(); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Đã link " + opening.Id + " → " + wall.Id);
+
+                var rollback = QS3D.Core.Persistence.ProjectStateSnapshot.Capture(project);
+                try
+                {
+                    new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
+                    RegenerateProject(project);
+                    project.Touch();
+                }
+                catch (System.Exception operationError)
+                {
+                    try { rollback.Restore(project); }
+                    catch (System.Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "QS3DLINKHOST failed and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                    throw;
+                }
+
+                PaletteCoordinator.RefreshProject();
+                PaletteCoordinator.SetStatus("Đã link " + opening.Id + " → " + wall.Id);
             });
         }
 
