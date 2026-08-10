@@ -10,6 +10,7 @@ required = [
     "src/QS3D.Core/Rebar/RectangularWallMeshPlanner.cs",
     "tests/QS3D.Core.SmokeTests/WallMeshRegressionSmoke.cs",
     "src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
     "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs",
@@ -56,17 +57,27 @@ if builder.is_file():
     for obsolete in ('HandlesKey = "GeneratedRebarHandles"', "EnsureWallMeshOwnsGenericRebarSlot", "cùng đường kính"):
         if obsolete in text: errors.append("native StructuralWall mesh still contains obsolete generic ownership contract: " + obsolete)
 
+policy = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
+if policy.is_file():
+    text = policy.read_text(encoding="utf-8")
+    for needle in ("RebarHandleKeys", "GeneratedWallMeshHandles", "IsOwnerSlot", "IsRebarOwnerSlot"):
+        if needle not in text: errors.append("wall-mesh generated ownership policy missing: " + needle)
+
 ownership_guard = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
-if ownership_guard.is_file() and 'Add(element, "GeneratedWallMeshHandles", owners)' not in ownership_guard.read_text(encoding="utf-8"):
-    errors.append("wall-mesh handles are missing from cross-set generated ownership")
+if ownership_guard.is_file():
+    text = ownership_guard.read_text(encoding="utf-8")
+    for needle in ("CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"):
+        if needle not in text: errors.append("wall-mesh cross-set generated ownership missing shared policy contract: " + needle)
 
 invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
 if invalidator.is_file() and 'Remove(element, "GeneratedWallMeshHandles")' not in invalidator.read_text(encoding="utf-8"):
     errors.append("wall-mesh handles are not invalidated with dependent generated geometry")
 
 ownership_health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs"
-if ownership_health.is_file() and '"GeneratedWallMeshHandles"' not in ownership_health.read_text(encoding="utf-8"):
-    errors.append("wall-mesh handles are missing from cross-family ownership health")
+if ownership_health.is_file():
+    text = ownership_health.read_text(encoding="utf-8")
+    for needle in ("GeneratedHandleOwnershipPolicy.RebarHandleKeys", "GeneratedWallMeshHandles"):
+        if needle not in text: errors.append("wall-mesh cross-family ownership health missing: " + needle)
 
 command = ROOT / "src/QS3D.BricsCAD.V25/StructuralWallMeshCommands.cs"
 if command.is_file():
@@ -80,15 +91,12 @@ if health_command.is_file():
     for needle in ('CommandMethod("QS3DWALLREBARHEALTH"', "GeneratedWallMeshHealthService", "GeneratedWallMeshHandles"):
         if needle not in text: errors.append("StructuralWall mesh health command missing: " + needle)
 
-for rel in ("src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs", "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"):
-    path = ROOT / rel
-    if path.is_file() and "GeneratedWallMeshHandles" not in path.read_text(encoding="utf-8"):
-        errors.append(rel + " missing GeneratedWallMeshHandles")
-
 health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedWallMeshHealthService.cs"
 if health.is_file():
     text = health.read_text(encoding="utf-8")
-    for needle in ("GeneratedWallMeshHorizontalDiameterMm", "GeneratedWallMeshVerticalDiameterMm", "GeneratedWallMeshFaces", "ElementCategory.StructuralWall"):
+    for needle in (
+        "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)", "GeneratedWallMeshHorizontalDiameterMm",
+        "GeneratedWallMeshVerticalDiameterMm", "GeneratedWallMeshFaces", "ElementCategory.StructuralWall"):
         if needle not in text: errors.append("StructuralWall mesh health missing: " + needle)
 
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/WallMeshRegressionSmoke.cs"
@@ -100,6 +108,6 @@ if smoke.is_file():
 print("QS3D StructuralWall mesh preflight")
 if errors:
     for error in errors: print("ERROR:", error)
-    print(f"FAILED with {len(errors)} error(s).")
+    print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: StructuralWall horizontal/vertical near/far mesh planning uses dedicated ownership, independent diameters, invalidation, health, pre-allocation limits, finite Solid3d transforms and command registration; runtime remains V25-gated.")
+print("PASS: StructuralWall horizontal/vertical near/far mesh planning uses dedicated ownership, policy-driven cross-family health/erase protection, independent diameters, invalidation, pre-allocation limits, finite Solid3d transforms and command registration; runtime remains V25-gated.")
