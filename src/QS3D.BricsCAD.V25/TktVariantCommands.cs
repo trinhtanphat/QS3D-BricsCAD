@@ -52,7 +52,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var status = label + " lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(status);
