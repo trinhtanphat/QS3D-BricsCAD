@@ -10,6 +10,7 @@ using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 using QS3D.Core.Templates;
+using BcadApplication = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -28,7 +29,7 @@ namespace QS3D.BricsCAD.V25.UI
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _locate = locate;
             _recalculate = recalculate;
-            _document = Application.DocumentManager.MdiActiveDocument ?? throw new InvalidOperationException("Không có DWG active khi mở bảng khối lượng.");
+            _document = BcadApplication.DocumentManager.MdiActiveDocument ?? throw new InvalidOperationException("Không có DWG active khi mở bảng khối lượng.");
             _project = ProjectContextCoordinator.GetOrCreate(_document);
             InitializeComponent();
             ReloadFloors();
@@ -136,7 +137,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureActive(string operation)
         {
-            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+            if (!ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, _document))
                 throw new InvalidOperationException("Bảng BQ này thuộc một DWG khác. Hãy kích hoạt lại đúng bản vẽ trước khi " + operation + ".");
         }
     }
