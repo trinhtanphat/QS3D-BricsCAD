@@ -7,6 +7,7 @@ namespace QS3D.Core.Diagnostics
 {
     public static class GeneratedHandleOwnershipPolicy
     {
+        private const string GeneratedSolidOwnerKey = "GeneratedSolidHandle";
         private const string OpeningCutOwnerKey = "PhysicalOpeningCutSolidHandle";
         private static readonly IReadOnlyList<string> RebarSlots = Array.AsReadOnly(new[]
         {
@@ -38,6 +39,14 @@ namespace QS3D.Core.Diagnostics
             foreach (var candidate in RebarSlots)
                 if (string.Equals(candidate, normalized, StringComparison.OrdinalIgnoreCase)) return true;
             return false;
+        }
+
+        public static bool AreSameLogicalOwnerSlots(string left, string right)
+        {
+            var leftNormalized = (left ?? string.Empty).Trim();
+            var rightNormalized = (right ?? string.Empty).Trim();
+            if (string.Equals(leftNormalized, rightNormalized, StringComparison.OrdinalIgnoreCase)) return true;
+            return IsHostSolidAlias(leftNormalized) && IsHostSolidAlias(rightNormalized);
         }
 
         public static IEnumerable<KeyValuePair<string, string>> EnumerateOwnerHandles(ProjectElement element)
@@ -79,8 +88,8 @@ namespace QS3D.Core.Diagnostics
                     if (owner != null)
                     {
                         var sameElement = string.Equals(owner.Id, element.Id, StringComparison.OrdinalIgnoreCase);
-                        var sameSlot = string.Equals(propertyKey, entry.Value, StringComparison.OrdinalIgnoreCase);
-                        if (!sameElement || !sameSlot)
+                        var sameLogicalSlot = AreSameLogicalOwnerSlots(propertyKey, entry.Value);
+                        if (!sameElement || !sameLogicalSlot)
                             throw new InvalidOperationException("Generated CAD handle " + normalized + " is ambiguously claimed by " + owner.Id + "/" + propertyKey + " and " + element.Id + "/" + entry.Value + ".");
                         continue;
                     }
@@ -90,6 +99,10 @@ namespace QS3D.Core.Diagnostics
             }
             return owner != null;
         }
+
+        private static bool IsHostSolidAlias(string key) =>
+            string.Equals(key, GeneratedSolidOwnerKey, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(key, OpeningCutOwnerKey, StringComparison.OrdinalIgnoreCase);
 
         private static IEnumerable<string> SplitHandles(string raw) =>
             (raw ?? string.Empty)
