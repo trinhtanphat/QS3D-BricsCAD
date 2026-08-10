@@ -43,6 +43,7 @@ namespace QS3D.BricsCAD.V25
                 issues.AddRange(new GeneratedWallMeshHealthService().Inspect(project, liveWallMesh));
                 issues.AddRange(new GeneratedFoundationMeshHealthService().Inspect(project, liveFoundationMesh));
                 issues.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
+                issues.AddRange(new RebarFabricationQualificationHealthService().Inspect(project));
                 var summary = new HealthSummary(issues);
                 var message = "Rebar Health All: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
@@ -72,22 +73,23 @@ namespace QS3D.BricsCAD.V25
 
         private static IEnumerable<string> HandlesForIssue(ProjectElement element, string code)
         {
+            if (code.IndexOf("REBAR_FAB", StringComparison.OrdinalIgnoreCase) >= 0) return AllRebarHandles(element);
             if (code.IndexOf("FOUNDATION_MESH", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, FoundationMeshSolidBuilder.HandlesKey);
             if (code.IndexOf("WALL_MESH", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedWallMeshHandles");
             if (code.IndexOf("SLAB_MESH", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedSlabMeshHandles");
             if (code.IndexOf("BEAM_STIRRUP", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedBeamStirrupHandles");
             if (code.IndexOf("TIE_REBAR", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedTieRebarHandles");
             if (code.IndexOf("SHAPE_REBAR", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedShapeRebarHandles");
-            if (code.IndexOf("CROSS_KEY", StringComparison.OrdinalIgnoreCase) >= 0)
-                return Parse(element, "GeneratedRebarHandles")
-                    .Concat(Parse(element, "GeneratedShapeRebarHandles"))
-                    .Concat(Parse(element, "GeneratedTieRebarHandles"))
-                    .Concat(Parse(element, "GeneratedBeamStirrupHandles"))
-                    .Concat(Parse(element, "GeneratedSlabMeshHandles"))
-                    .Concat(Parse(element, "GeneratedWallMeshHandles"))
-                    .Concat(Parse(element, FoundationMeshSolidBuilder.HandlesKey))
-                    .Distinct(StringComparer.OrdinalIgnoreCase);
+            if (code.IndexOf("CROSS_KEY", StringComparison.OrdinalIgnoreCase) >= 0) return AllRebarHandles(element);
             return Parse(element, "GeneratedRebarHandles");
+        }
+
+        private static IEnumerable<string> AllRebarHandles(ProjectElement element)
+        {
+            return GeneratedHandleOwnershipPolicy.RebarHandleKeys
+                .SelectMany(key => Parse(element, key))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
         private static IEnumerable<string> Parse(ProjectElement element, string key)
