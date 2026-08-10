@@ -37,6 +37,7 @@ This UI spec describes interfaces **hosted by the QS3D BricsCAD V25 plugin**. Br
 12. Generated rebar UI must expose dedicated slab/wall mesh workflows without reusing labels that suggest generic longitudinal bars; unified health should be the easiest route for a user who does not know which generated family is stale.
 13. Ribbon, Workspace, Full Domain Hub and focused hubs/extensions should expose the same **major** workflows while keeping the main Workspace compact rather than duplicating every expert command everywhere.
 14. Workspace keyboard/context actions must reuse the same guarded handlers as visible buttons. They must not create a second raw `SendStringToExecute` path with different selection or mutation semantics.
+15. Workspace/native-build compatibility must come from one shared category capability so UI messaging cannot drift from `QS3DBUILD3D` support.
 
 ## Workspace fast interaction contract
 
@@ -54,6 +55,8 @@ Right-click in selected-object review exposes the existing **Focus**, **Cô lậ
 
 These context/keyboard surfaces are workflow accelerators only. Existing validation, active-DWG state, Family/category selection, CAD selection restoration and command handlers remain authoritative.
 
+For **Vẽ / Cập nhật 3D**, Workspace reads `NativeBuildCapability` before command dispatch. An unsupported category is reported in the Workspace status bar and is not sent to `QS3DBUILD3D`; the command still keeps its deeper source-type, Model-Space and transaction guards.
+
 ## Visual language
 
 - compact Segoe UI CAD density;
@@ -67,6 +70,17 @@ These context/keyboard surfaces are workflow accelerators only. Existing validat
 - explicit empty/error/status states instead of fake sample data;
 - generated/runtime-gated actions should communicate unsupported source or stale/rebuild requirements instead of silently no-oping.
 
+## Per-user layout persistence
+
+Palette/splitter layout is a user preference, not BIM/project data.
+
+- QS3D stores the layout under the current user's `LocalApplicationData/QS3D/BricsCAD-V25/ui-layout-v1.txt` path; it does not write widths/heights into `.qsdb` or `ProjectState.Metadata`.
+- Workspace and right-palette dimensions use BricsCAD `DeviceIndependentSize` rather than the obsolete `PaletteSet.Size` property.
+- Workspace restores model-tree width, Family/property width, Family-list height and HT_Phòng top-panel height.
+- Splitter state is written only on `GridSplitter.DragCompleted`, not every layout/size event.
+- malformed/non-finite/out-of-range values are clamped/fallback safely; preference persistence is best-effort and cannot block plugin teardown.
+- writes use a same-directory temporary file and replacement/fallback path so a failed preference write does not corrupt project data.
+
 ## Implemented source state — 2026-08-10
 
 Implemented in source:
@@ -79,6 +93,8 @@ Implemented in source:
 - semantic-reference selection matching with ambiguous-instance protection;
 - live selected-CAD review with Locate/Zoom, Focus, Cô lập and Khôi phục;
 - Workspace Family/inspection right-click actions and `Ctrl+S`, `Ctrl+F`, `Ctrl+B`, `F5`, focus-scoped `Delete` shortcuts routed through existing handlers;
+- shared `NativeBuildCapability` used by Workspace and `QS3DBUILD3D`, with UI pre-check messaging for unsupported Vẽ 3D categories;
+- per-user palette and internal splitter layout persistence outside `.qsdb`;
 - workspace wall helper actions: Giao tường, Snap xem, Snap áp;
 - workspace Auto Host action for Door/Opening host matching without automatic physical cut;
 - HT_Phòng actions;
@@ -89,7 +105,7 @@ Implemented in source:
 - live right-palette Layer color/lock state from the actual DWG rather than decorative sample state;
 - premium dark theme source guards for focus, HiDPI layout rounding and recycling/row/column virtualization;
 - BQ, BBS, recognition, revision, template, audit, Model Health and Full Health windows/workflows;
-- static BLT workspace, Workspace-interaction and HiDPI preflights verify key source contracts, while dedicated curtain/mesh/health preflights protect focused workflows.
+- static BLT workspace, Workspace-interaction, native-build capability, per-user layout and HiDPI preflights verify key source contracts, while dedicated curtain/mesh/health preflights protect focused workflows.
 
 ## Remaining UI/product parity work
 
@@ -99,12 +115,11 @@ Source parity is not the same as visual/runtime parity. Remaining work after lic
 - specialized context menus for wall/door/curtain/rebar expert actions where they materially reduce clicks; do not duplicate the generic Workspace actions already implemented;
 - section-box and deeper transient review workflows proven against V25;
 - richer material/catalog/classification pickers and searchable project-level catalogs beyond the current semantic Floor/Level selector and editable choices;
-- disabled-state/compatibility messaging for Vẽ 3D, Curtain 3D, Snap áp and straight/curved Khoét Cửa/Lỗ before a user attempts an unsupported operation;
+- compatibility/disabled-state messaging for Curtain 3D, Snap áp and straight/curved Khoét Cửa/Lỗ when the UI has enough live source data to do so without guessing;
 - curtain opening-aware frame visualization so users do not mistake backing-host cuts for completed mullion/transom interruption;
-- persisted splitter/palette widths if V25 hosting allows it safely;
-- large-list performance proof on representative projects even though source virtualization is enabled;
+- large-list performance proof on representative projects even though selection sync is debounced and source virtualization is enabled;
 - accessibility/focus order and high-DPI clipping fixes from real screenshots.
 
 ## Visual acceptance gate
 
-A design render is only a target. Before release, screenshots must come from a compiled V25 **plugin** at 100%, 125%, 150% and 200% scaling and be compared against the approved layout for panel widths, wrapping/clipping, Family/Instance/Floor-Level scope, typed controls, context menus/shortcuts, Curtain Hub/Geometry Extensions, selected/hover/disabled/error state, Vietnamese Unicode, command discoverability and native viewport preservation.
+A design render is only a target. Before release, screenshots must come from a compiled V25 **plugin** at 100%, 125%, 150% and 200% scaling and be compared against the approved layout for panel widths, wrapping/clipping, Family/Instance/Floor-Level scope, typed controls, context menus/shortcuts, per-user splitter restoration, Curtain Hub/Geometry Extensions, selected/hover/disabled/error state, Vietnamese Unicode, command discoverability and native viewport preservation.

@@ -164,14 +164,69 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DLINKHOST", () =>
             {
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
-                var selectedHandles = new HashSet<string>(Cad.EntitySnapshotReader.ReadCurrentSelection(doc).Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-                var selected = project.Elements.Where(x => x.SourceHandles.Any(selectedHandles.Contains)).ToList();
-                var opening = selected.FirstOrDefault(x => x.Category == ElementCategory.WallOpening || x.Category == ElementCategory.Door);
-                var wall = selected.FirstOrDefault(x => x.Category == ElementCategory.ArchitecturalWall || x.Category == ElementCategory.GlassWall || x.Category == ElementCategory.WallPier || x.Category == ElementCategory.StructuralWall);
-                if (opening == null || wall == null) { doc.Editor.WriteMessage("\nChọn đồng thời 1 tường/vách và 1 Cửa/Lỗ Mở đã được QS3D capture, rồi chạy QS3DLINKHOST."); return; }
-                new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
-                RegenerateProject(project);
-                project.Touch(); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Đã link " + opening.Id + " → " + wall.Id);
+                var selectedHandles = new HashSet<string>(
+                    Cad.EntitySnapshotReader.ReadCurrentSelection(doc).Select(x => x.Handle),
+                    StringComparer.OrdinalIgnoreCase);
+                var selected = project.Elements
+                    .Where(x => SemanticReferenceHandles.MatchesSelection(x, selectedHandles))
+                    .ToList();
+                var openings = selected
+                    .Where(x => x.Category == ElementCategory.WallOpening || x.Category == ElementCategory.Door)
+                    .ToList();
+                var hosts = selected
+                    .Where(x => x.Category == ElementCategory.ArchitecturalWall ||
+                                x.Category == ElementCategory.GlassWall ||
+                                x.Category == ElementCategory.WallPier ||
+                                x.Category == ElementCategory.StructuralWall)
+                    .ToList();
+
+                if (openings.Count != 1 || hosts.Count != 1)
+                {
+                    var selectionStatus = "QS3DLINKHOST: cần đúng 1 Cửa/Lỗ Mở và đúng 1 tường/vách host; nhận " +
+                                          openings.Count + " opening, " + hosts.Count + " host.";
+                    PaletteCoordinator.SetStatus(selectionStatus);
+                    doc.Editor.WriteMessage("\nQS3D " + selectionStatus);
+                    return;
+                }
+
+                var opening = openings[0];
+                var wall = hosts[0];
+                var rollback = QS3D.Core.Persistence.ProjectStateSnapshot.Capture(project);
+                var regenerated = 0;
+                try
+                {
+                    new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
+                    regenerated = RegenerateProject(project);
+                    if (!opening.Properties.TryGetValue("HostWallId", out var persistedHostId) ||
+                        !string.Equals(persistedHostId, wall.Id, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("QS3DLINKHOST không lưu đúng HostWallId cho opening " + opening.Id + ".");
+                    project.Touch();
+                }
+                catch (System.Exception operationError)
+                {
+                    try { rollback.Restore(project); }
+                    catch (System.Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "QS3DLINKHOST thất bại và rollback project cũng không hoàn tất.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                    throw;
+                }
+
+                try
+                {
+                    PaletteCoordinator.RefreshProject();
+                    doc.Editor.Regen();
+                    var status = "Đã link " + opening.Id + " → " + wall.Id + " • regenerate " + regenerated + ".";
+                    PaletteCoordinator.SetStatus(status);
+                    doc.Editor.WriteMessage("\nQS3D " + status);
+                }
+                catch (System.Exception uiError)
+                {
+                    try { doc.Editor.WriteMessage("\nQS3D link host đã commit; UI sync warning: " + uiError.Message); }
+                    catch { }
+                }
             });
         }
 

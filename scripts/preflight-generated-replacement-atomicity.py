@@ -5,53 +5,83 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
-builders = {
-    "LINE wall": ROOT / "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
-    "POLYLINE wall": ROOT / "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs",
-    "WallPier profile": ROOT / "src/QS3D.BricsCAD.V25/Cad/WallPierProfileSolidBuilder.cs",
-    "structural": ROOT / "src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs",
+contracts = {
+    "LINE wall": {
+        "path": "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
+        "start": "public static int BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
+        "end": "private static SourceBatchKind ValidateSourceBatch",
+    },
+    "POLYLINE wall": {
+        "path": "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs",
+        "start": "public static int BuildSelected(Document document, ProjectState project, ElementCategory category)",
+        "end": "private static void CommitWallPierPathSnapshot",
+    },
+    "WallPier profile": {
+        "path": "src/QS3D.BricsCAD.V25/Cad/WallPierProfileSolidBuilder.cs",
+        "start": "public static int BuildSelectedLinePiers(Document document, ProjectState project)",
+        "end": "private static void ClearPathProfileSnapshot",
+    },
+    "structural": {
+        "path": "src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs",
+        "start": "public static int BuildSelected(Document document, ProjectState project, ElementCategory category)",
+        "end": "private static bool UsesLine",
+    },
 }
 
-for label, path in builders.items():
+commit_token = "transaction.Commit();\n                    cadCommitted = true;"
+
+for label, contract in contracts.items():
+    path = ROOT / contract["path"]
     if not path.is_file():
-        errors.append(label + ": missing builder " + str(path.relative_to(ROOT)))
+        errors.append(label + ": missing builder " + contract["path"])
         continue
 
     text = path.read_text(encoding="utf-8")
+    if "using QS3D.Core.Persistence;" not in text:
+        errors.append(label + ": missing explicit ProjectStateSnapshot namespace")
+
+    start = text.find(contract["start"])
+    end = text.find(contract["end"], start + 1) if start >= 0 else -1
+    if start < 0 or end < 0 or end <= start:
+        errors.append(label + ": cannot isolate canonical build method for atomicity review")
+        continue
+    body = text[start:end]
+
     required = (
-        "using QS3D.Core.Persistence;",
         "ProjectStateSnapshot.Capture(project)",
-        "cadCommitted = false",
+        "var cadCommitted = false;",
         "GeneratedGeometryService.PrepareReplacement",
         "GeneratedGeometryService.MarkGenerated",
         "GeneratedGeometryService.CommitReplacement",
-        "transaction.Commit();",
-        "cadCommitted = true",
+        commit_token,
         "catch (Exception operationError)",
         "if (!cadCommitted)",
         "rollback.Restore(project)",
         "AggregateException(operationError, restoreError)",
     )
     for token in required:
-        if token not in text:
+        if token not in body:
             errors.append(label + ": missing atomic replacement contract: " + token)
 
-    semantic_index = text.find("GeneratedGeometryService.CommitReplacement")
-    cad_commit_index = text.find("transaction.Commit();", semantic_index if semantic_index >= 0 else 0)
-    committed_flag_index = text.find("cadCommitted = true", cad_commit_index if cad_commit_index >= 0 else 0)
-    rollback_index = text.find("rollback.Restore(project)")
+    semantic_index = body.find("GeneratedGeometryService.CommitReplacement")
+    cad_commit_index = body.find(commit_token)
+    restore_index = body.find("rollback.Restore(project)")
+    if min(semantic_index, cad_commit_index, restore_index) < 0:
+        continue
+    if not semantic_index < cad_commit_index < restore_index:
+        errors.append(label + ": semantic replacement must occur before CAD commit; project restore belongs only to the pre-commit failure path")
 
-    if semantic_index < 0 or cad_commit_index < 0 or semantic_index > cad_commit_index:
-        errors.append(label + ": semantic generated-handle ownership must be applied while the CAD transaction is still rollback-capable")
-    if cad_commit_index < 0 or committed_flag_index < 0 or committed_flag_index < cad_commit_index:
-        errors.append(label + ": cadCommitted must become true only after transaction.Commit succeeds")
-    if rollback_index < 0:
-        errors.append(label + ": project snapshot rollback is missing")
+    if body.count("GeneratedGeometryService.CommitReplacement") != 1:
+        errors.append(label + ": expected exactly one semantic replacement phase inside the canonical build method")
+    if body.count(commit_token) != 1:
+        errors.append(label + ": expected exactly one CAD commit/flag boundary inside the canonical build method")
 
-    # A second semantic ownership update after the DB transaction would reintroduce the
-    # original split-brain window. Additional CommitReplacement calls are therefore forbidden.
-    if semantic_index >= 0 and text.find("GeneratedGeometryService.CommitReplacement", semantic_index + 1) >= 0:
-        errors.append(label + ": multiple CommitReplacement phases found; semantic ownership must have one in-transaction commit phase")
+    # Guard specifically against the original split-brain pattern. Searching only this
+    # build-method slice prevents a later helper transaction from being mistaken for the
+    # relevant CAD commit if someone moves CommitReplacement below the real commit again.
+    after_commit = body[cad_commit_index + len(commit_token):]
+    if "GeneratedGeometryService.CommitReplacement" in after_commit:
+        errors.append(label + ": semantic generated ownership is still mutated after CAD commit")
 
 snapshot = ROOT / "src/QS3D.Core/Persistence/ProjectStateSnapshot.cs"
 if not snapshot.is_file():
@@ -76,4 +106,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: LINE/POLYLINE wall, WallPier profile and structural generated-solid replacements apply semantic ownership before CAD commit and restore the full project snapshot if that cross-layer commit fails.")
+print("PASS: canonical LINE/POLYLINE wall, WallPier-profile and structural build methods commit generated semantic ownership while the CAD transaction is still rollback-capable; helper transactions cannot mask ordering regressions, and pre-commit failures restore a deep project snapshot.")

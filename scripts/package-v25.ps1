@@ -8,6 +8,29 @@ $required = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
 $forbidden = @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')
 $sampleSource = Join-Path $root 'samples/generated'
 
+function Read-ProjectProductVersion {
+    param([string]$ProjectPath)
+    if (-not (Test-Path -LiteralPath $ProjectPath -PathType Leaf)) { throw "Project file was not found: $ProjectPath" }
+    [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw
+    $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
+    return $versions[0].Trim()
+}
+
+$pluginProject = Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj'
+$coreProject = Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj'
+$productVersion = Read-ProjectProductVersion -ProjectPath $pluginProject
+$coreProductVersion = Read-ProjectProductVersion -ProjectPath $coreProject
+if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "QS3D plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion"
+}
+if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+    $expectedTag = 'v' + $productVersion
+    if (-not [string]::Equals($env:RELEASE_TAG.Trim(), $expectedTag, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "RELEASE_TAG must exactly match the source product version. Expected $expectedTag, got $env:RELEASE_TAG."
+    }
+}
+
 if (-not (Test-Path $source)) { throw "V25 Release output was not found: $source" }
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
 Remove-Item $dist -Recurse -Force -ErrorAction SilentlyContinue
@@ -52,6 +75,7 @@ if (-not $assemblyVersion) { throw 'Could not read QS3D plugin assembly version.
 $metadata = [ordered]@{
     product = 'QS3D'
     target = 'BricsCAD V25 x64'
+    productVersion = $productVersion
     version = $assemblyVersion.ToString()
     generatedUtc = [DateTime]::UtcNow.ToString('o')
     commandCount = $commands.Count
@@ -65,14 +89,16 @@ $metadata | ConvertTo-Json | Set-Content -Path (Join-Path $dist 'PACKAGE-METADAT
 
 @"
 QS3D for BricsCAD V25 x64
-Version: $($assemblyVersion.ToString())
+Product version: $productVersion
+Assembly version: $($assemblyVersion.ToString())
 
 Recommended install:
 1. Close BricsCAD.
 2. Run install-v25-autoload.ps1 from this extracted package.
 3. Default mode is OnCommand DemandLoad. Start BricsCAD and run QS3D or QS3DDOMAIN.
-4. For an intentional upgrade over an existing QS3D registration, rerun the installer with -Force.
-5. For production, require the expected Authenticode publisher with -RequireSigned -ExpectedSignerThumbprint <40-hex-thumbprint>.
+4. Run QS3DRUNTIMECHECK to confirm V25/x64/package consistency on the customer machine.
+5. For an intentional upgrade over an existing QS3D registration, rerun the installer with -Force.
+6. For production, require the expected Authenticode publisher with -RequireSigned -ExpectedSignerThumbprint <40-hex-thumbprint>.
 
 Secure update:
 - Run update-v25.ps1 with an HTTPS manifest and the expected publisher thumbprint.
@@ -109,7 +135,8 @@ Remove-Item $zip -Force -ErrorAction SilentlyContinue
 Compress-Archive -Path "$dist/*" -DestinationPath $zip -CompressionLevel Optimal
 $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash
 Write-Host "Package ready: $zip"
-Write-Host "Version: $($assemblyVersion.ToString())"
+Write-Host "Product version: $productVersion"
+Write-Host "Assembly version: $($assemblyVersion.ToString())"
 Write-Host "Commands: $($commands.Count)"
 Write-Host "Plugin signature: $($signature.Status)"
 Write-Host "SHA256: $zipHash"

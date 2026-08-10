@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using Bricscad.ApplicationServices;
 using Bricscad.Windows;
+using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Model;
 
@@ -23,6 +24,7 @@ namespace QS3D.BricsCAD.V25
         public static void EnsureCreated()
         {
             if (_workspace != null && _right != null) return;
+            var layout = UserUiLayoutStore.Get();
             _workspacePanel = new WorkspacePanel();
             _rightPanel = new RightPanel();
             _workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid)
@@ -33,7 +35,7 @@ namespace QS3D.BricsCAD.V25
                 KeepFocus = false,
                 MinimumSize = new Size(460, 420)
             };
-            _workspace.Size = new Size(540, 720);
+            _workspace.DeviceIndependentSize = new Size(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);
             _workspace.AddVisual("Mô hình", _workspacePanel, true);
 
             _right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid)
@@ -44,7 +46,7 @@ namespace QS3D.BricsCAD.V25
                 KeepFocus = false,
                 MinimumSize = new Size(255, 420)
             };
-            _right.Size = new Size(300, 720);
+            _right.DeviceIndependentSize = new Size(layout.RightPaletteWidth, layout.RightPaletteHeight);
             _right.AddVisual("Quản lý", _rightPanel, true);
         }
 
@@ -59,6 +61,7 @@ namespace QS3D.BricsCAD.V25
 
         public static void Hide()
         {
+            PersistPaletteLayout();
             if (_workspace != null) _workspace.Visible = false;
             if (_right != null) _right.Visible = false;
         }
@@ -80,10 +83,38 @@ namespace QS3D.BricsCAD.V25
 
         public static void Dispose()
         {
+            PersistPaletteLayout();
             if (_workspace != null) { _workspace.Dispose(); _workspace = null; }
             if (_right != null) { _right.Dispose(); _right = null; }
             _workspacePanel = null;
             _rightPanel = null;
+        }
+
+        private static void PersistPaletteLayout()
+        {
+            if (_workspace == null && _right == null) return;
+            try
+            {
+                var workspaceSize = _workspace?.DeviceIndependentSize;
+                var rightSize = _right?.DeviceIndependentSize;
+                UserUiLayoutStore.Update(layout =>
+                {
+                    if (workspaceSize.HasValue)
+                    {
+                        layout.WorkspacePaletteWidth = workspaceSize.Value.Width;
+                        layout.WorkspacePaletteHeight = workspaceSize.Value.Height;
+                    }
+                    if (rightSize.HasValue)
+                    {
+                        layout.RightPaletteWidth = rightSize.Value.Width;
+                        layout.RightPaletteHeight = rightSize.Value.Height;
+                    }
+                });
+            }
+            catch
+            {
+                // UI preference persistence is best-effort and must never block palette teardown.
+            }
         }
     }
 }

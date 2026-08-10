@@ -52,6 +52,7 @@ See `docs/PRODUCT-BOUNDARY.md`. Any future standalone product requires a separat
 - Direct Draw regenerates semantic state before native builder mutation so dependency/rule failures are surfaced before Solid3d commit whenever possible.
 - The outer authoring rollback snapshots project state and pre-existing generated ownership, discovers QS3D XData-tagged output for the just-created project/element/category, restores/cleans according to the guarded operation contract, and verifies requested cleanup handles are no longer live.
 - Successful Direct Draw selects the generated host when available. `QS3DBUILD3D`/Workspace rebuild paths resolve semantic/generated selections back to complete live source geometry where supported and reject mixed-category/mixed wall-source atomicity hazards before native commit.
+- Planar current-UCS authoring is source-implemented: translated/in-plane-rotated UCS is allowed, prompt points remain in the user's working UCS, and persisted LINE/POLYLINE source geometry is transformed by `Editor.CurrentUserCoordinateSystem` before Model Space append. Tilted/3D UCS is rejected before source creation and QS3D does not reset the user's UCS.
 
 #### Guarded P1 native subset
 
@@ -62,6 +63,7 @@ See `docs/PRODUCT-BOUNDARY.md`. Any future standalone product requires a separat
 - P1 writes user-confirmed geometry values through `ProjectElement.SetProperty()`, re-checks active-DWG affinity immediately before nested `QS3DBUILD3D`, requires a live `GeneratedSolidHandle` after the build, and keeps post-commit UI synchronization non-destructive.
 - P1 rollback is ownership/XData-scoped: operation-created source/generated CAD is erased and verified while ownership information is still available, then the project snapshot is restored. Foreign/ambiguous generated geometry must not be erased from a textual handle collision.
 - Persisted P1 paths finite-check drawing coordinates/elevation before entering the DWG database.
+- P1 now shares the P0 planar-UCS contract: GlassWall/WallPier/StructuralWall LINE source and applicable GlassWall/Foundation POLYLINE source are transformed from current planar UCS into database/WCS coordinates before append; tilted/3D UCS fails closed before source creation.
 
 #### Door / Opening Direct Draw
 
@@ -71,11 +73,14 @@ See `docs/PRODUCT-BOUNDARY.md`. Any future standalone product requires a separat
 - Instance writes use canonical `ProjectElement.SetProperty()`; deterministic semantic regeneration runs before host linking.
 - Only the newly created source is selected before the established `QS3DAUTOLINKHOSTS` path. Active-DWG affinity is rechecked around the nested command, and a valid authoring commit requires a non-empty `HostWallId` plus a second deterministic post-link regeneration.
 - Unmatched or ambiguous Auto Host placement rolls the new operation back instead of leaving an orphan Door/WallOpening. The exact source `ObjectId` is cleaned before project snapshot restore, and post-commit UI synchronization remains best-effort/non-destructive.
-- Door/Opening Direct Draw intentionally stops at **source + semantic + verified Auto Host**. It does not automatically invoke the broader `QS3DCUTOPENINGS` mutation, because that service can process other linked openings grouped by host. Physical boolean remains an explicit user action until a safe explicit-target subset transaction/fingerprint contract exists.
+- Door/Opening uses the same planar-UCS source contract as P0/P1: `WidthM` is derived from UCS-local prompt geometry, the persistent source LINE is transformed through the current UCS before database append, and downstream Auto Host sees database/WCS geometry. Tilted/3D UCS is rejected before source creation.
+- Door/Opening Direct Draw intentionally stops at **source + semantic + verified Auto Host**; physical host mutation remains explicit.
+- `QS3DCUTSELECTEDOPENINGS` is source-implemented as the explicit-target physical-cut path. It resolves the current CAD/semantic selection to a deduplicated Door/WallOpening ID set, prevalidates every selected target and generated host before native mutation, and calls the targeted `OpeningBooleanService` overload so unrelated linked openings are not included by this command. Same-fingerprint reruns are idempotent; a different cut state on the same already-cut generated host fails closed until the host is rebuilt.
+- Legacy `QS3DCUTOPENINGS` remains the broader all-linked physical-cut operation. Neither selected nor all-linked physical cut is silently auto-invoked by Direct Draw.
 
 Existing `QS3DWALL`, `QS3DGLASSWALL`, `QS3DWALLPIER`, `QS3DBEAM`, `QS3DCOLUMN`, `QS3DSLAB`, `QS3DSTRUCTWALL`, `QS3DFOUNDATION`, `QS3DDOOR`, `QS3DOPENING` and `QS3DBUILD3D` capture/rebuild workflows remain supported for pre-existing drawings.
 
-Detailed source/runtime boundaries are in `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md`, `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md` and `docs/DIRECT-DRAW-OPENINGS.md`.
+Detailed source/runtime boundaries are in `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md`, `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md`, `docs/DIRECT-DRAW-OPENINGS.md` and `docs/DIRECT-DRAW-UCS.md`.
 
 ### Room / finishes / schedules
 
@@ -93,6 +98,7 @@ Detailed source/runtime boundaries are in `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md
 - Fingerprinted `QS3DWALLSNAPPREVIEW` → `QS3DWALLSNAPAPPLY` for supported source-centerline endpoint cleanup.
 - Manual and automatic Door/Opening host linking with compatibility, surface-gap, Floor/Zone, ambiguity and elevation guards. Current Auto Host apply/regeneration is project-atomic while ambiguity/unmatched review remains non-mutating.
 - Straight physical opening cuts and dedicated curved/bulged open-POLYLINE cut planning; curved cutting fingerprints before mutation and identical reruns are idempotent.
+- Selection-scoped `QS3DCUTSELECTEDOPENINGS` keeps explicit physical mutation limited to requested Door/WallOpening semantics and rejects stale/non-owned/incompatible generated hosts before BoolSubtract.
 - Door/Opening schedule + XLSX with host provenance.
 
 Physical multi-owner wall-solid union/reconciliation is **not** implemented by guessing. Current safe workflow changes source centerlines and invalidates/rebuilds owned generated geometry.
@@ -183,7 +189,9 @@ Current source preflights cover, among other things:
 - command uniqueness and key XAML contracts;
 - Direct Draw P0 command uniqueness, BLT-style prompts, Model-Space/unit-aware planarity guards, semantic-regeneration-before-native-build ordering, generated-XData orphan discovery, verified rollback cleanup, Ribbon/Hub exposure and semantic/generated rebuild-source resolution;
 - Direct Draw native P1 command uniqueness, source-relative parameter writes through `SetProperty()`, active-DWG revalidation, live-generated verification, ownership/XData-aware cleanup-before-restore ordering, finite persisted paths, non-destructive UI synchronization and WallPier two-point LINE-only profile authoring;
-- Door/Opening Direct Draw command uniqueness, Model-Space/unit-aware source creation, fail-closed Family numerics, `SetProperty()` lifecycle, selection-scoped Auto Host, post-link semantic verification, exact source cleanup before project restore, Ribbon/Hub exposure and prohibition on implicit global physical cutting;
+- Door/Opening Direct Draw command uniqueness, Model-Space/unit-aware source creation, fail-closed Family numerics, `SetProperty()` lifecycle, selection-scoped Auto Host, post-link semantic verification, exact source cleanup before project restore, Ribbon/Hub exposure and prohibition on implicit physical cutting;
+- planar-UCS transform-before-append and tilted-UCS fail-closed behavior for P0, P1 and Door/Opening Direct Draw, with no user-UCS mutation;
+- targeted Door/Opening physical-cut selection, requested-ID validation, all-target readiness/stale-host prevalidation, ownership checks, transaction-scoped BoolSubtract and explicit-vs-auto-cut boundary;
 - Family/Type authoring discoverability and Direct Draw integration synchronization;
 - project-editor active-DWG affinity and project-owned mutation integrity;
 - semantic selection including dynamic future generated owner slots;
@@ -201,7 +209,7 @@ Current source preflights cover, among other things:
 - schedule/export hub wiring;
 - synthetic sample provenance/private-file policy.
 
-`scripts/preflight-all.py` auto-discovers feature preflights, including product-boundary, Direct Draw P0/P1, Door/Opening Direct Draw, Auto Host and Curtain path-frame gates.
+`scripts/preflight-all.py` auto-discovers feature preflights, including product-boundary, Direct Draw P0/P1, Door/Opening Direct Draw, P0/extended UCS, targeted opening cut/readiness, Auto Host and Curtain path-frame gates.
 
 ## Manual GitHub Actions policy
 
@@ -230,16 +238,18 @@ The current final SHA still requires an explicitly approved build/runtime valida
 ## Runtime/product work still remaining
 
 - compile the exact final SHA against the exact target BricsCAD V25 managed assemblies;
-- NETLOAD/DemandLoad command/Ribbon/palette regression in a licensed interactive session, including Family / Type activation and current Direct Draw buttons;
-- Direct Draw P0 runtime qualification for Wall/Beam/Column/Slab, including prompted parameters, Model/Paper Space behavior, millimeter/meter units, 5 mm planarity boundary, World/rotated UCS, source/semantic/generated ownership, rebuild, ESC/failure cleanup and a private copy of owner-provided `MB MONG.dwg` without committing it;
-- Direct Draw native P1 runtime qualification for GlassWall backing host, WallPier two-point LINE Rectangular/Chamfered behavior plus explicit multi-segment rejection, StructuralWall and Foundation, including forced native-build failure/rollback and post-commit UI-failure isolation;
-- Door/Opening Direct Draw runtime qualification for mm/m width, Family values, valid/no-host/ambiguous-host matching, Floor/Zone/elevation/gap gates, sill/bottom-offset/boolean-clearance persistence, save/reopen, schedule/export and explicit `QS3DCUTOPENINGS` after authoring;
+- NETLOAD/DemandLoad command/Ribbon/palette regression in a licensed interactive session, including Family / Type activation and current Direct Draw/selected-cut buttons;
+- Direct Draw P0 runtime qualification for Wall/Beam/Column/Slab, including prompted parameters, Model/Paper Space behavior, millimeter/meter units, 5 mm planarity boundary, World/translated/rotated planar UCS, source/semantic/generated ownership, rebuild, ESC/failure cleanup and a private copy of owner-provided `MB MONG.dwg` without committing it;
+- Direct Draw native P1 runtime qualification for GlassWall backing host, WallPier two-point LINE Rectangular/Chamfered behavior plus explicit multi-segment rejection, StructuralWall and Foundation, including World/translated/rotated planar UCS, forced native-build failure/rollback and post-commit UI-failure isolation;
+- Door/Opening Direct Draw runtime qualification for mm/m width, Family values, World/translated/rotated planar UCS, valid/no-host/ambiguous-host matching, Floor/Zone/elevation/gap gates, sill/bottom-offset/boolean-clearance persistence, save/reopen, schedule/export and explicit `QS3DCUTSELECTEDOPENINGS` after authoring;
+- selected-opening physical-cut regression with one/multiple targets, multiple hosts, mixed unrelated CAD selection, stale generated hosts, same-fingerprint rerun and different-fingerprint fail-closed behavior, plus legacy all-linked `QS3DCUTOPENINGS` compatibility;
 - representative private-DWG save/reopen/multi-DWG regression;
 - Room Auto mixed-curve regression;
 - wall snap, Auto Host and straight/curved opening-cut regression;
 - Curtain host + opening-aware frame regression for current LINE and guarded open/bulged WCS-XY path-frame source paths; panel-by-panel backing glass solids and unsupported broader/freeform path parity remain product work;
 - legacy captured WallPier open-POLYLINE specialized profile product work and any future deterministic multi-segment WallPier Direct Draw profile-around-corners contract;
 - physical multi-owner wall-solid L/T/X/Multi reconciliation product work;
+- transient thickness/profile DrawJig preview and repeated authoring mode only after exact V25 managed-API compile/runtime proof;
 - all generated rebar families including Foundation mesh and explicit-data Beam Stirrup paths on real drawings;
 - Schedule Hub/export/traceability and `QS3DRELEASECHECK` on representative data;
 - Unicode/HiDPI and large-model performance regression;
@@ -248,4 +258,4 @@ The current final SHA still requires an explicitly approved build/runtime valida
 
 A standalone QS3D CAD executable is **not** a remaining gap; it is outside the current product boundary.
 
-See `docs/PRODUCT-BOUNDARY.md`, `docs/DIRECT-DRAW-WORKFLOW.md`, `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md`, `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md`, `docs/DIRECT-DRAW-OPENINGS.md`, `docs/CURTAIN-PATH-FRAMES.md`, `docs/CONTINUE-ALL-DEEP-AUDIT-2026-08-10.md`, `docs/DEEP-AUDIT-2026-08-10.md`, `docs/FULL-REPO-AUDIT-2026-08-10.md` and `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the product boundary, Direct Draw/Curtain source status, deep passes and broader runtime/product boundary.
+See `docs/PRODUCT-BOUNDARY.md`, `docs/DIRECT-DRAW-WORKFLOW.md`, `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md`, `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md`, `docs/DIRECT-DRAW-OPENINGS.md`, `docs/DIRECT-DRAW-UCS.md`, `docs/CURTAIN-PATH-FRAMES.md`, `docs/CONTINUE-ALL-DEEP-AUDIT-2026-08-10.md`, `docs/DEEP-AUDIT-2026-08-10.md`, `docs/FULL-REPO-AUDIT-2026-08-10.md` and `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the product boundary, Direct Draw/Curtain source status, deep passes and broader runtime/product boundary.
