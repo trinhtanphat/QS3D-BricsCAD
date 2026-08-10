@@ -95,6 +95,7 @@ namespace QS3D.Core.Selection
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.Ordinal)
                 .ToArray();
+            ValidateSemanticReferences(project, selected);
 
             var categories = selected
                 .Select(x => x.Category)
@@ -119,11 +120,25 @@ namespace QS3D.Core.Selection
             {
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic element.");
                 if (string.IsNullOrWhiteSpace(element.Id)) throw new InvalidOperationException("Project contains an empty semantic element id.");
+                if (!Enum.IsDefined(typeof(ElementCategory), element.Category)) throw new InvalidOperationException("Project contains an undefined semantic element category: " + element.Id + ".");
                 var id = element.Id.Trim();
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + id + ".");
                 result.Add(id, element);
             }
             return result;
+        }
+
+        private static void ValidateSemanticReferences(ProjectState project, IEnumerable<ProjectElement> selected)
+        {
+            foreach (var element in selected)
+            {
+                if (!string.IsNullOrWhiteSpace(element.FamilyId) && project.FindFamily(element.FamilyId) == null)
+                    throw new InvalidOperationException("Selected element references missing family id: " + element.Id + "/" + element.FamilyId + ".");
+                if (!string.IsNullOrWhiteSpace(element.FloorId) && project.FindFloor(element.FloorId) == null)
+                    throw new InvalidOperationException("Selected element references missing floor id: " + element.Id + "/" + element.FloorId + ".");
+                if (!string.IsNullOrWhiteSpace(element.ZoneId) && project.FindZone(element.ZoneId) == null)
+                    throw new InvalidOperationException("Selected element references missing zone id: " + element.Id + "/" + element.ZoneId + ".");
+            }
         }
 
         private static SemanticSelectionTextValue InspectReference(string name, IReadOnlyList<string> values)
@@ -192,6 +207,8 @@ namespace QS3D.Core.Selection
                         mixed = true;
                         continue;
                     }
+                    if (double.IsNaN(value) || double.IsInfinity(value))
+                        throw new InvalidOperationException("Selected element contains a non-finite quantity: " + element.Id + "/" + key + ".");
                     present++;
                     if (!first.HasValue) first = value;
                     else if (first.Value != value) mixed = true;
