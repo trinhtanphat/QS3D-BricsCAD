@@ -19,18 +19,21 @@ namespace QS3D.BricsCAD.V25
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var hostSolids = WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall);
                 hostSolids += PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.GlassWall);
-                var frames = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
-                var stamped = frames.Elements > 0 ? CurtainWallFrameLiveStateService.StampSelected(document, project) : 0;
-                if (hostSolids == 0 && frames.Frames == 0)
+                var lineFrames = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
+                var pathFrames = CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project);
+                var frameElements = checked(lineFrames.Elements + pathFrames.Elements);
+                var frameSolids = checked(lineFrames.Frames + pathFrames.Frames);
+                var stamped = frameElements > 0 ? CurtainWallFrameLiveStateService.StampSelected(document, project) : 0;
+                if (hostSolids == 0 && frameSolids == 0)
                 {
-                    var message = "Curtain 3D: chọn GlassWall semantic LINE hoặc open POLYLINE. Frame overlay hiện chỉ hỗ trợ LINE nằm ngang.";
+                    var message = "Curtain 3D: chọn GlassWall semantic LINE hoặc open/bulged POLYLINE WCS-XY.";
                     PaletteCoordinator.SetStatus(message);
                     document.Editor.WriteMessage("\nQS3D " + message);
                     return;
                 }
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 PaletteCoordinator.RefreshProject();
-                var status = "Curtain 3D: " + hostSolids + " host solid • " + frames.Frames + " frame solid • live fingerprint " + stamped + " • regenerate " + regenerated + ".";
+                var status = "Curtain 3D: " + hostSolids + " host solid • " + frameSolids + " frame solid • live fingerprint " + stamped + " • regenerate " + regenerated + ".";
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
                 document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
