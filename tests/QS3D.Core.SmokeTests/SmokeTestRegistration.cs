@@ -32,6 +32,7 @@ namespace QS3D.Core.SmokeTests
             CurtainWallLayoutSmoke.Run();
             WallPierProfileSmoke.Run();
             CurtainWallDetailSmoke.Run();
+            GeneratedGeometryStaleSmoke.Run();
         }
     }
 }
