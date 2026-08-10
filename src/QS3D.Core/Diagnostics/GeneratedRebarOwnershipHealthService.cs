@@ -14,6 +14,7 @@ namespace QS3D.Core.Diagnostics
             var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 foreach (var key in GeneratedHandleOwnershipPolicy.RebarHandleKeys)
                 {
                     if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
@@ -32,7 +33,7 @@ namespace QS3D.Core.Diagnostics
                     }
                 }
             }
-            return issues;
+            return issues.AsReadOnly();
         }
     }
 }
