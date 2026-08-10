@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Export
@@ -101,6 +102,22 @@ namespace QS3D.Core.Export
             var opaque = new List<ProjectInterchangeOpaqueReferenceWarning>();
             var sourceElementIds = new HashSet<string>(source.Elements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
 
+            foreach (var family in source.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (IsImportedOwnershipMetadata(property.Key)) continue;
+                    if (!LooksLikeOpaqueIdentityProperty(property.Key, property.Value)) continue;
+                    opaque.Add(new ProjectInterchangeOpaqueReferenceWarning
+                    {
+                        OwnerElementSourceId = "Family " + family.Id,
+                        PropertyKey = property.Key,
+                        PropertyValue = property.Value ?? string.Empty,
+                        Reason = "Family property looks like a semantic identity/reference but no explicit rewrite policy is registered for this key."
+                    });
+                }
+            }
+
             foreach (var element in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 AddTypedRewrite(rewrites, element.Id, "FamilyId", string.Empty, element.FamilyId, familyMap);
@@ -111,6 +128,7 @@ namespace QS3D.Core.Export
 
                 foreach (var property in element.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
                 {
+                    if (IsImportedOwnershipMetadata(property.Key)) continue;
                     if (string.Equals(property.Key, HostWallIdKey, StringComparison.OrdinalIgnoreCase))
                     {
                         if (string.IsNullOrWhiteSpace(property.Value)) continue;
@@ -261,6 +279,16 @@ namespace QS3D.Core.Export
                    trimmedKey.EndsWith("Refs", StringComparison.OrdinalIgnoreCase) ||
                    trimmedKey.EndsWith("RefId", StringComparison.OrdinalIgnoreCase) ||
                    trimmedKey.EndsWith("RefIds", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsImportedOwnershipMetadata(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            var k = key.Trim();
+            if (GeneratedHandleOwnershipPolicy.IsOwnerSlot(k)) return true;
+            if (k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return true;
+            if (k.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
+            return k.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string NextId(string sourceId, ISet<string> occupied)
