@@ -53,7 +53,9 @@ Updated for the current source baseline on 2026-08-10. Commands that create nati
 ## Recognition, quantity and rebar
 
 - `QS3DRECOGNIZE`, `QS3DRECOGNIZEAUTO` — deterministic recognition + review/auto-accept.
-- `QS3DBQ` — quantity summary, grouping/filtering/Locate and XLSX workflow.
+- `QS3DB4D` — scan every entity in the active Current Space; read curve/closed-area/Region/Hatch/Solid3d metrics, auto-apply only high-confidence recognition and leave the rest in the review window.
+- `QS3DBQ`, `QS3DED2` — quantity summary and XLSX workflow. Exported rows include stable QS3D Element IDs and hexadecimal CAD handles.
+- `QS3DEXCELLOCATE` — choose an `.xlsx` file and row, resolve exported QS3D handles or legacy BLT hidden `$<decimal handle>` tokens, then select and zoom the live CAD entities.
 - `QS3DBBSVIEW` — BBS review/Locate window.
 - `QS3DBBS` — BBS XLSX export.
 - `QS3DBBSCSV` — UTF-8 CSV export with spreadsheet formula-injection guards.
@@ -62,6 +64,8 @@ Updated for the current source baseline on 2026-08-10. Commands that create nati
 ## Revision and viewport
 
 - `QS3DREVBASE`, `QS3DREVDIFF` — revision baseline/delta workflow.
+- `QS3DLOCATE` also follows semantic dependencies, so a generated room-finish element resolves back to its room geometry.
+- `QS3DUNTRACKFINISH` removes only finish semantics resolved from the selected room/source geometry and never erases CAD entities.
 - `QS3DVIEW3D`, `QS3DVIEWTOP`, `QS3DORBIT`, `QS3DZOOMSELECTED`, `QS3DZOOMALL` — viewport commands.
 - `QS3DLOCATE` — locate a semantic element by ID.
 - `QS3DUNTRACK`, `QS3DUNTRACKFINISH` — remove QS3D semantic tracking without deleting the source CAD object.

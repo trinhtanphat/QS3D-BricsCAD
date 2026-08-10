@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.Reporting
 {
@@ -31,6 +32,7 @@ namespace QS3D.Core.Reporting
 
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
                 row.ElementIds.Add(element.Id);
+                AddHandles(row.SourceHandles, SourceHandleResolver.Resolve(project, new[] { element.Id }));
                 var gross = Q(element, "GrossConcreteM3", Q(element, "GrossVolumeM3"));
                 var net = Q(element, "NetConcreteM3", Q(element, "NetVolumeM3", gross));
                 row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, gross, element.Id + "/GrossConcreteM3");
@@ -48,6 +50,12 @@ namespace QS3D.Core.Reporting
             }
 
             return order.Select(x => rows[x]).ToList();
+        }
+
+        private static void AddHandles(IList<string> destination, IEnumerable<string> source)
+        {
+            foreach (var handle in source.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()))
+                if (!destination.Contains(handle, StringComparer.OrdinalIgnoreCase)) destination.Add(handle);
         }
 
         private static double Q(ProjectElement element, string name, double fallback = 0d)
