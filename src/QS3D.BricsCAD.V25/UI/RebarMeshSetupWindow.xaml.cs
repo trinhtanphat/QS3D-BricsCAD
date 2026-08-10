@@ -71,10 +71,8 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                var first = ParseSingleDistribution(Direction1Text.Text, _keys.Direction1Key);
-                var second = ParseSingleDistribution(Direction2Text.Text, _keys.Direction2Key);
-                if (Math.Abs(first.DiameterMm - second.DiameterMm) > 1e-9d)
-                    throw new InvalidOperationException("Mesh Setup hiện yêu cầu hai phương cùng đường kính. Native builders vẫn validate notation độc lập và không tự đổi diameter.");
+                ParseSingleDistribution(Direction1Text.Text, _keys.Direction1Key);
+                ParseSingleDistribution(Direction2Text.Text, _keys.Direction2Key);
                 if (!double.TryParse((CoverText.Text ?? string.Empty).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var cover) || double.IsNaN(cover) || double.IsInfinity(cover) || cover < 0d)
                     throw new InvalidOperationException("Cover phải là số hữu hạn >= 0, dùng dấu chấm thập phân theo dữ liệu QS3D.");
                 if (!(FacesCombo.SelectedItem is string faces) || string.IsNullOrWhiteSpace(faces))
@@ -89,7 +87,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _element.SetProperty(_keys.ClosestKey, ClosestToFaceCheck.IsChecked.Value ? "true" : "false");
                 _project.Touch();
                 _saved();
-                ValidationText.Text = "Đã lưu thông số explicit. Generated mesh cũ (nếu có) đã được đánh dấu stale và cần rebuild.";
+                ValidationText.Text = "Đã lưu thông số explicit. Hai phương có thể dùng diameter/count/spacing độc lập; generated mesh cũ (nếu có) đã stale và cần rebuild.";
                 Close();
             }
             catch (Exception ex)
