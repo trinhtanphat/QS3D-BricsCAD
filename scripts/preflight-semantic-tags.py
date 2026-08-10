@@ -20,8 +20,14 @@ def require(text: str, token: str, label: str) -> None:
 
 
 renderer = read("src/QS3D.Core/Documentation/SemanticTagRenderer.cs")
-smoke = read("tests/QS3D.Core.SmokeTests/SemanticTagRendererSmoke.cs")
+renderer_smoke = read("tests/QS3D.Core.SmokeTests/SemanticTagRendererSmoke.cs")
+health = read("src/QS3D.Core/Diagnostics/GeneratedSemanticTagHealthService.cs")
+comprehensive = read("src/QS3D.Core/Diagnostics/ComprehensiveModelHealthService.cs")
+builder = read("src/QS3D.BricsCAD.V25/Cad/SemanticTagBuilder.cs")
+command = read("src/QS3D.BricsCAD.V25/SemanticTagCommands.cs")
+health_smoke = read("tests/QS3D.Core.SmokeTests/GeneratedSemanticTagHealthSmoke.cs")
 registration = read("tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs")
+doc = read("docs/SEMANTIC-TAGS.md")
 
 for token in [
     "MaxTemplateLength = 512",
@@ -49,7 +55,100 @@ for token in [
     "UnsupportedTokenFailsClosed",
     "MissingReferenceFailsClosed",
 ]:
-    require(smoke, token, "semantic tag smoke")
+    require(renderer_smoke, token, "semantic tag renderer smoke")
 
-require(registration, "SemanticTagRendererSmoke.Run();", "smoke registration")
-print("[PASS] semantic tag rendering is bounded, model-linked and blocks generated ownership leakage")
+for token in [
+    'public const string HandlesKey = "GeneratedSemanticTagHandles"',
+    'public const string DrawingLocalWcs = "DrawingLocalWcs"',
+    "SemanticTagRenderer.Render(project, element, template)",
+    '"SEMANTIC_TAG_TEXT_STALE"',
+    '"SEMANTIC_TAG_RENDER_INVALID"',
+    '"SEMANTIC_TAG_PROJECT_MISMATCH"',
+    '"SEMANTIC_TAG_POSITION_SCOPE_INVALID"',
+    '"SEMANTIC_TAG_POSITION_INVALID"',
+]:
+    require(health, token, "semantic tag health")
+
+for token in ['"SEMANTIC_TAG"', "new GeneratedSemanticTagHealthService().Inspect(project)"]:
+    require(comprehensive, token, "comprehensive semantic tag health")
+
+for token in [
+    'internal const string TemplatePropertyKey = "SemanticTagTemplate"',
+    'internal const string TextHeightPropertyKey = "SemanticTagTextHeightM"',
+    "SemanticTagRenderer.Render(project, element, template)",
+    "GeneratedHandleOwnershipIndex.Build(project)",
+    "ProjectStateSnapshot.Capture(project)",
+    "var cadCommitted = false;",
+    "if (!(entity is MText))",
+    "GeneratedGeometryService.RequireMatchingOwnership(entity, project, element",
+    "GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot(slot)",
+    "var tag = new MText",
+    "Contents = EncodePlainMText(rendered)",
+    "GeneratedGeometryService.MarkGenerated(document, transaction, tag, project.ProjectId, element.Id, element.Category)",
+    "element.Properties[GeneratedSemanticTagHealthService.TextKey] = rendered;",
+    "element.Properties[GeneratedSemanticTagHealthService.PositionScopeKey] = GeneratedSemanticTagHealthService.DrawingLocalWcs;",
+    '"documentation.semantic-tag.replace"',
+    "project.Touch();",
+    "transaction.Commit();",
+    "cadCommitted = true;",
+    "rollback.Restore(project)",
+    "EncodePlainMText",
+]:
+    require(builder, token, "native semantic tag builder")
+
+render = builder.find("SemanticTagRenderer.Render(project, element, template)")
+erase = builder.find("ErasePrevious(document, transaction, project, element, ownership)")
+metadata = builder.find("element.Properties[GeneratedSemanticTagHealthService.HandlesKey] = generatedHandle;")
+audit = builder.find('AuditTrail.ForProject(project).Record(')
+touch = builder.find("project.Touch();", audit)
+commit = builder.find("transaction.Commit();", touch)
+if min(render, erase, metadata, audit, touch, commit) < 0 or not render < erase < metadata < audit < touch < commit:
+    print("[FAIL] native semantic tag builder: render/validate must precede erase and semantic ownership/audit/revision must precede CAD commit")
+    sys.exit(1)
+if "Editor.Regen(" in builder or "PaletteCoordinator" in builder:
+    print("[FAIL] native semantic tag builder: UI work must remain command-level post-commit")
+    sys.exit(1)
+
+for token in [
+    '[CommandMethod("QS3DTAG", CommandFlags.Modal)]',
+    '[CommandMethod("QS3DTAGREFRESH", CommandFlags.Modal)]',
+    "GeneratedHandleOwnershipIndex.Build(project)",
+    "is QS3D-generated output owned by",
+    "SourceHandles.Any",
+    "RequireSupportedUcs(document)",
+    "result.Value.TransformBy(document.Editor.CurrentUserCoordinateSystem)",
+    "Math.Atan2",
+    "SemanticTagBuilder.StoredWorldPosition(element)",
+    "SemanticTagBuilder.StoredRotation(element)",
+    "SemanticTagBuilder.Build(document, project, element",
+    "document.Editor.Regen();",
+    "UI sync warning:",
+]:
+    require(command, token, "semantic tag commands")
+
+for token in [
+    "NoMetadataIsOptional",
+    "HealthyTagPasses",
+    "SemanticChangeMarksRenderedTextStale",
+    "GeneratedRuntimeTemplateFailsClosed",
+    "OwnerAndPositionCorruptionAreDetected",
+    '"SEMANTIC_TAG_TEXT_STALE"',
+    '"SEMANTIC_TAG_RENDER_INVALID"',
+]:
+    require(health_smoke, token, "semantic tag health smoke")
+
+require(registration, "SemanticTagRendererSmoke.Run();", "renderer smoke registration")
+require(registration, "GeneratedSemanticTagHealthSmoke.Run();", "health smoke registration")
+
+for token in [
+    "QS3DTAG",
+    "QS3DTAGREFRESH",
+    "GeneratedSemanticTagHandles",
+    "DrawingLocalWcs",
+    "MLeader",
+    "sheet/layout",
+    "exact-SHA licensed BricsCAD V25",
+]:
+    require(doc, token, "semantic tag lifecycle docs")
+
+print("[PASS] semantic tag rendering remains bounded/model-linked and native QS3DTAG/QS3DTAGREFRESH add a rollback-safe owned MText lifecycle with UCS-aware placement, persisted stale health and explicit MLeader/sheet/runtime gates")
