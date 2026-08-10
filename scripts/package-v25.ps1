@@ -18,8 +18,11 @@ foreach ($name in $required) {
     Copy-Item $path (Join-Path $dist $name)
 }
 
-Copy-Item (Join-Path $PSScriptRoot 'install-v25-autoload.ps1') (Join-Path $dist 'install-v25-autoload.ps1')
-Copy-Item (Join-Path $PSScriptRoot 'uninstall-v25-autoload.ps1') (Join-Path $dist 'uninstall-v25-autoload.ps1')
+foreach ($script in @('install-v25-autoload.ps1', 'uninstall-v25-autoload.ps1', 'update-v25.ps1')) {
+    $scriptPath = Join-Path $PSScriptRoot $script
+    if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw "Missing release script: $scriptPath" }
+    Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $dist $script)
+}
 
 $commands = @()
 Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs' | ForEach-Object {
@@ -32,27 +35,36 @@ $commands | Set-Content -Path (Join-Path $dist 'COMMANDS.txt') -Encoding ASCII
 
 $pluginPath = Join-Path $dist 'QS3D.BricsCAD.V25.dll'
 $signature = Get-AuthenticodeSignature -FilePath $pluginPath
+$assemblyVersion = [Reflection.AssemblyName]::GetAssemblyName($pluginPath).Version
+if (-not $assemblyVersion) { throw 'Could not read QS3D plugin assembly version.' }
 $metadata = [ordered]@{
     product = 'QS3D'
     target = 'BricsCAD V25 x64'
+    version = $assemblyVersion.ToString()
     generatedUtc = [DateTime]::UtcNow.ToString('o')
     commandCount = $commands.Count
     defaultLoadMode = 'OnCommand'
     autoloadMethod = 'BricsCAD Registry DemandLoad'
     pluginSignatureStatus = $signature.Status.ToString()
-    securityPolicy = 'Installer never weakens BricsCAD security settings.'
+    pluginSignerThumbprint = if ($signature.SignerCertificate) { $signature.SignerCertificate.Thumbprint } else { '' }
+    securityPolicy = 'Installer/updater never weaken BricsCAD security settings.'
 }
 $metadata | ConvertTo-Json | Set-Content -Path (Join-Path $dist 'PACKAGE-METADATA.json') -Encoding UTF8
 
 @"
 QS3D for BricsCAD V25 x64
+Version: $($assemblyVersion.ToString())
 
 Recommended install:
 1. Close BricsCAD.
 2. Run install-v25-autoload.ps1 from this extracted package.
 3. Default mode is OnCommand DemandLoad. Start BricsCAD and run QS3D or QS3DDOMAIN.
 4. For an intentional upgrade over an existing QS3D registration, rerun the installer with -Force.
-5. To require an Authenticode-signed plugin, use -RequireSigned.
+5. For production, require the expected Authenticode publisher with -RequireSigned -ExpectedSignerThumbprint <40-hex-thumbprint>.
+
+Secure update:
+- Run update-v25.ps1 with an HTTPS manifest and the expected publisher thumbprint.
+- The updater blocks downgrades, verifies the ZIP SHA-256, internal SHA256SUMS.txt and the Authenticode publisher before calling the atomic installer.
 
 Manual fallback:
 - Start BricsCAD V25, run NETLOAD, select QS3D.BricsCAD.V25.dll, then run QS3D.
@@ -82,6 +94,7 @@ Remove-Item $zip -Force -ErrorAction SilentlyContinue
 Compress-Archive -Path "$dist/*" -DestinationPath $zip -CompressionLevel Optimal
 $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash
 Write-Host "Package ready: $zip"
+Write-Host "Version: $($assemblyVersion.ToString())"
 Write-Host "Commands: $($commands.Count)"
 Write-Host "Plugin signature: $($signature.Status)"
 Write-Host "SHA256: $zipHash"

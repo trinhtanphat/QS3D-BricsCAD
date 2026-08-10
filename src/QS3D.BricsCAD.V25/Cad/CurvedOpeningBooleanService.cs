@@ -21,12 +21,12 @@ namespace QS3D.BricsCAD.V25.Cad
             public int OpeningCount { get; set; }
         }
 
-        private sealed class PlannedOpeningCut
+        private sealed class PreparedCut
         {
             public string OpeningId { get; set; } = string.Empty;
-            public IReadOnlyList<Point2> CutterPolygon { get; set; } = Array.Empty<Point2>();
-            public double CutterHeightM { get; set; }
-            public double BaseElevationM { get; set; }
+            public CurvedOpeningFootprintPlan Footprint { get; set; } = null!;
+            public OpeningCutPlan Vertical { get; set; } = null!;
+            public string FingerprintPart { get; set; } = string.Empty;
         }
 
         public static int CutLinkedOpenings(Document document, ProjectState project)
@@ -73,8 +73,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     var ambiguityM = ProjectNumber(project, "PhysicalOpeningAmbiguityM", 0.01d, 0d);
                     var miterLimit = ProjectNumber(project, "WallMiterLimit", 4d, 1d);
                     var centerline = ReadCenterline(document, hostSource, sagittaM, host.Id);
-                    var fingerprintParts = new List<string>();
-                    var plannedCuts = new List<PlannedOpeningCut>();
+                    var preparedCuts = new List<PreparedCut>();
 
                     foreach (var opening in group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                     {
@@ -119,22 +118,27 @@ namespace QS3D.BricsCAD.V25.Cad
                             CenterAlongHostM = footprint.CenterStationM,
                             ClearanceM = clearanceM
                         });
-
-                        plannedCuts.Add(new PlannedOpeningCut
+                        preparedCuts.Add(new PreparedCut
                         {
                             OpeningId = opening.Id,
-                            CutterPolygon = footprint.CutterPolygon,
-                            CutterHeightM = vertical.CutterHeightM,
-                            BaseElevationM = vertical.BaseElevationM
+                            Footprint = footprint,
+                            Vertical = vertical,
+                            FingerprintPart = opening.Id + ":" + openingSourceId.Handle + ":" +
+                                openingPoint.X.ToString("R", CultureInfo.InvariantCulture) + "," + openingPoint.Y.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                widthM.ToString("R", CultureInfo.InvariantCulture) + ":" + openingHeightM.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                sillM.ToString("R", CultureInfo.InvariantCulture) + ":" + clearanceM.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                footprint.CenterStationM.ToString("R", CultureInfo.InvariantCulture)
                         });
-                        fingerprintParts.Add(opening.Id + ":" + openingSourceId.Handle + ":" +
-                            openingPoint.X.ToString("R", CultureInfo.InvariantCulture) + "," + openingPoint.Y.ToString("R", CultureInfo.InvariantCulture) + ":" +
-                            widthM.ToString("R", CultureInfo.InvariantCulture) + ":" + openingHeightM.ToString("R", CultureInfo.InvariantCulture) + ":" +
-                            sillM.ToString("R", CultureInfo.InvariantCulture) + ":" + clearanceM.ToString("R", CultureInfo.InvariantCulture) + ":" +
-                            footprint.CenterStationM.ToString("R", CultureInfo.InvariantCulture));
                     }
 
-                    var fingerprint = CurvedFingerprint(hostSourceId.Handle.ToString(), centerline, thicknessM, heightM, bottomOffsetM, sagittaM, fingerprintParts);
+                    var fingerprint = CurvedFingerprint(
+                        hostSourceId.Handle.ToString(),
+                        centerline,
+                        thicknessM,
+                        heightM,
+                        bottomOffsetM,
+                        sagittaM,
+                        preparedCuts.Select(x => x.FingerprintPart).ToList());
                     var currentSolidHandle = solidId.Handle.ToString();
                     if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var previousSolid) &&
                         string.Equals(previousSolid, currentSolidHandle, StringComparison.OrdinalIgnoreCase) &&
@@ -143,13 +147,28 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal)) continue;
                         throw new InvalidOperationException("Host " + host.Id + " đã được khoét trên generated solid hiện tại nhưng geometry/fingerprint đã thay đổi. Build 3D lại host trước khi khoét curved openings.");
                     }
-                    foreach (var planned in plannedCuts)
+                    foreach (var prepared in preparedCuts)
                     {
-                        using (var cutter = BuildCutter(document, hostSource.Elevation, bottomOffsetM, planned.CutterPolygon, planned.CutterHeightM, planned.BaseElevationM, planned.OpeningId))
+                        using (var cutter = BuildCutter(
+                            document,
+                            hostSource.Elevation,
+                            bottomOffsetM,
+                            prepared.Footprint.CutterPolygon,
+                            prepared.Vertical.CutterHeightM,
+                            prepared.Vertical.BaseElevationM,
+                            prepared.OpeningId))
+                        {
                             hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
+                        }
                         cuts++;
                     }
-                    pending.Add(new PendingHostUpdate { Host = host, SolidHandle = currentSolidHandle, Fingerprint = fingerprint, OpeningCount = plannedCuts.Count });
+                    pending.Add(new PendingHostUpdate
+                    {
+                        Host = host,
+                        SolidHandle = currentSolidHandle,
+                        Fingerprint = fingerprint,
+                        OpeningCount = preparedCuts.Count
+                    });
                 }
                 transaction.Commit();
             }
@@ -193,7 +212,9 @@ namespace QS3D.BricsCAD.V25.Cad
                     {
                         solid.SetDatabaseDefaults(document.Database);
                         solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), new SweepOptions());
-                        var completed = solid; solid = null!; return completed;
+                        var completed = solid;
+                        solid = null!;
+                        return completed;
                     }
                     finally { solid?.Dispose(); }
                 }
@@ -210,11 +231,14 @@ namespace QS3D.BricsCAD.V25.Cad
             var points = new List<Point2>();
             for (var i = 0; i < polyline.NumberOfVertices - 1; i++)
             {
-                var a = polyline.GetPoint2dAt(i); var b = polyline.GetPoint2dAt(i + 1);
+                var a = polyline.GetPoint2dAt(i);
+                var b = polyline.GetPoint2dAt(i + 1);
                 var start = new Point2(units.ToMeters(a.X), units.ToMeters(a.Y));
                 var end = new Point2(units.ToMeters(b.X), units.ToMeters(b.Y));
                 var bulge = polyline.GetBulgeAt(i);
-                var segmentPoints = Math.Abs(bulge) <= 1e-12d ? (IReadOnlyList<Point2>)new[] { start, end } : BulgeArcTessellator.Tessellate(start, end, bulge, sagittaM);
+                var segmentPoints = Math.Abs(bulge) <= 1e-12d
+                    ? (IReadOnlyList<Point2>)new[] { start, end }
+                    : BulgeArcTessellator.Tessellate(start, end, bulge, sagittaM);
                 foreach (var point in segmentPoints)
                     if (points.Count == 0 || points[points.Count - 1].DistanceTo(point) > 1e-10d) points.Add(point);
             }
@@ -233,7 +257,8 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static bool HasBulge(Polyline polyline)
         {
-            for (var i = 0; i < polyline.NumberOfVertices - 1; i++) if (Math.Abs(polyline.GetBulgeAt(i)) > 1e-12d) return true;
+            for (var i = 0; i < polyline.NumberOfVertices - 1; i++)
+                if (Math.Abs(polyline.GetBulgeAt(i)) > 1e-12d) return true;
             return false;
         }
 
@@ -261,6 +286,10 @@ namespace QS3D.BricsCAD.V25.Cad
             return value;
         }
 
-        private static bool SupportedHost(ElementCategory category) => category == ElementCategory.ArchitecturalWall || category == ElementCategory.GlassWall || category == ElementCategory.WallPier || category == ElementCategory.StructuralWall;
+        private static bool SupportedHost(ElementCategory category) =>
+            category == ElementCategory.ArchitecturalWall ||
+            category == ElementCategory.GlassWall ||
+            category == ElementCategory.WallPier ||
+            category == ElementCategory.StructuralWall;
     }
 }
