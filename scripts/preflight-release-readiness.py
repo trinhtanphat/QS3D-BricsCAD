@@ -15,13 +15,16 @@ checks = {
         "BOM_GENERATED_HANDLE_MISSING",
         "BOM_ROW_MISSING",
         "ProjectQuantityReportBuilder.Group",
-        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
+        "GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element)",
     ],
     "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": [
         "public static class GeneratedHandleOwnershipPolicy",
         "RebarHandleKeys",
         "IsRebarOwnerSlot",
+        "CanonicalOwnerSlot",
+        "AreSameLogicalOwnerSlots",
         "EnumerateOwnerHandles",
+        "EnumerateLogicalOwnerHandles",
         "CollectOwnerHandles",
         "TryFindOwner",
         'PhysicalOpeningCutSolidHandle',
@@ -33,7 +36,9 @@ checks = {
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.RebarHandleKeys",
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.IsOwnerSlot(key)",
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.IsRebarOwnerSlot(key)",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot(key)",
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element)",
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.TryFindOwner(project, handle",
     ],
@@ -68,6 +73,7 @@ checks = {
         "BOM_QUANTITY_NONFINITE",
         "BOM_TRACEABILITY_MISSING",
         "BOM_GENERATED_HANDLE_MISSING",
+        "PhysicalOpeningCutSolidHandle",
         "GeneratedFuturePanelHandles",
     ],
     "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs": [
@@ -114,4 +120,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DRELEASECHECK consumes shared ownership, dependency, Foundation/mode, stale/live CAD and BOM health; runtime/private-DWG remains a separate V25 gate.")
+print("PASS: QS3DRELEASECHECK consumes shared logical ownership, dependency, Foundation/mode, stale/live CAD and BOM health; runtime/private-DWG remains a separate V25 gate.")
