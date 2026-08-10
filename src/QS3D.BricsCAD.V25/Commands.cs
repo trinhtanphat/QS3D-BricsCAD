@@ -131,6 +131,10 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3D Tường KT", () =>
             {
+                // BLT-style compatibility workflow is deliberately two-step:
+                // capture the reference first, let the user review/edit Family/Instance parameters,
+                // then commit/rebuild native Solid3d explicitly with QS3DBUILD3D.
+                // Direct Draw remains the one-shot source -> semantic -> native 3D authoring path.
                 var captured = SemanticCaptureService.Capture(doc, ElementCategory.ArchitecturalWall);
                 PaletteCoordinator.RefreshProject();
                 var status = captured > 0
