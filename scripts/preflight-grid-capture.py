@@ -24,11 +24,28 @@ if command.is_file():
         "double.IsNaN",
         "double.IsInfinity",
         "SemanticCaptureService.Capture(document, ElementCategory.Grid)",
+        "FinalizeUi(document, count);",
+        "private static void FinalizeUi",
         "PaletteCoordinator.RefreshProject()",
+        "UI sync warning: ",
+        "private static void ReportOperationFailure",
+        "private static void TryWriteMessage",
         "không sinh native 3D",
     ):
         if needle not in text:
-            errors.append("GridCommands.cs missing guarded capture token: " + needle)
+            errors.append("GridCommands.cs missing guarded capture/UI token: " + needle)
+
+    capture = text.find("count = SemanticCaptureService.Capture(document, ElementCategory.Grid);")
+    catch = text.find("catch (Exception ex)", capture)
+    finalize = text.find("FinalizeUi(document, count);", catch)
+    if min(capture, catch, finalize) < 0 or not capture < catch < finalize:
+        errors.append("QS3DGRID must finish transactional semantic capture before entering best-effort post-capture UI synchronization")
+
+    finalize_start = text.find("private static void FinalizeUi")
+    report_start = text.find("private static void ReportOperationFailure", finalize_start)
+    finalize_body = text[finalize_start:report_start] if finalize_start >= 0 and report_start > finalize_start else ""
+    if "try" not in finalize_body or "UI sync warning: " not in finalize_body:
+        errors.append("QS3DGRID post-capture UI synchronization must be best-effort and non-fatal")
 
 if regenerators.is_file():
     text = regenerators.read_text(encoding="utf-8")
@@ -48,4 +65,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DGRID captures only finite positive LINE/ARC reference geometry through transactional semantic capture, uses the existing Grid generic takeoff model, synchronizes the Workspace through the UI coordinator, and does not pretend to create native 3D Grid geometry.")
+print("PASS: QS3DGRID captures only finite positive LINE/ARC references through transactional semantic capture, uses the existing Grid generic takeoff model, keeps post-capture Workspace/status synchronization non-fatal, and does not pretend to create native 3D Grid geometry.")
