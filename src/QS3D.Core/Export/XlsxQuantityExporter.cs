@@ -48,11 +48,12 @@ namespace QS3D.Core.Export
             {
                 "Tầng", "Loại", "Tên cấu kiện", "SL", "BT gộp (m³)", "Trừ giao (m³)", "BT còn (m³)",
                 "Cốp pha (m²)", "Dài (m)", "Chu vi ngoài (m)", "Chu vi trong (m)", "DT cửa (m²)",
-                "Thành bên (m²)", "DT đáy (m²)", "DT đỉnh (m²)", "DT khác (m²)"
+                "Thành bên (m²)", "DT đáy (m²)", "DT đỉnh (m²)", "DT khác (m²)",
+                "QS3D Element ID", "CAD Handle (hex)"
             };
 
             var lastRow = Math.Max(1, rows.Count + 1);
-            var range = "A1:P" + lastRow.ToString(CultureInfo.InvariantCulture);
+            var range = "A1:R" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
@@ -84,6 +85,8 @@ namespace QS3D.Core.Export
                 AppendNumberCell(sb, CellRef(13, r), row.BottomAreaM2);
                 AppendNumberCell(sb, CellRef(14, r), row.TopAreaM2);
                 AppendNumberCell(sb, CellRef(15, r), row.OtherAreaM2);
+                AppendInlineStringCell(sb, CellRef(16, r), row.ElementIdText, 0);
+                AppendInlineStringCell(sb, CellRef(17, r), row.SourceHandleText, 0);
                 sb.Append("</row>");
             }
 
@@ -93,11 +96,7 @@ namespace QS3D.Core.Export
 
         private static void ValidatePackage(string path)
         {
-            using (var archive = ZipFile.OpenRead(path))
-            {
-                foreach (var name in new[] { "[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet1.xml" })
-                    if (archive.GetEntry(name) == null) throw new InvalidDataException("Generated XLSX package is missing " + name + ".");
-            }
+            XlsxPackageValidator.Validate(path, "[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet1.xml");
         }
 
         private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)

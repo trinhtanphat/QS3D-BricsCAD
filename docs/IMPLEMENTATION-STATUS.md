@@ -37,6 +37,9 @@
 - deterministic recognition core is wired to `QS3DRECOGNIZE` review UI and `QS3DRECOGNIZEAUTO`; auto mode only applies high-confidence/margin results, rejects ambiguous mappings/invalid confidence and refuses semantic category collisions.
 - project/company layer mappings can override recognition deterministically before fallback heuristics.
 - `.qstemplate` import/export is implemented for Families, QuantityRules, layer mappings and BQ column layout with rollback/confirmation safety for destructive apply.
+- BQ XLSX rows now include QS3D Element IDs and CAD handles; `QS3DED2` aliases the BQ/export workflow and `QS3DEXCELLOCATE` performs the reverse workbook-row → handle → live CAD selection path. The reader also supports the supplied BLT hidden `$<decimal handle>` convention.
+- derived finish semantics resolve source handles transitively through their room dependency, so BQ export, Locate and finish-only untrack operate on the actual room geometry without duplicating handle ownership.
+- `QS3DB4D` is a whole-Current-Space scan rather than a selection alias; the V25 adapter reads curve length, Polyline/Region/Hatch/Solid3d area and Solid3d volume before deterministic recognition.
 - generic Family properties can carry material/classification codes, so company classification data round-trips through templates without hard-coding a vendor classification schema.
 - V25 runtime probe source verifies actual palette visibility rather than treating command dispatch alone as UI success.
 - V25 release packaging generates a command manifest from `CommandMethod` declarations, package metadata, SHA-256 hashes for shipped payloads, installer/uninstaller helpers and a release ZIP while excluding BricsCAD-owned runtime assemblies.
@@ -44,6 +47,14 @@
 - expanded generic/full-domain/geometry-completion/room-curve preflight guards cover schema/persistence, command uniqueness, generated geometry, structural quantities, BBS CSV safety, all three Tường KT line/polyline 3D variants, all compatible LINE-wall physical-cut host categories, wall footprint/opening boolean/rebar geometry source paths, planar LINE/POLYLINE/ARC/SPLINE Room Auto sampling/planarity/lifecycle/rollback/UI wiring, DemandLoad wiring and PowerShell syntax.
 - Ribbon + Full Domain Hub now surface Tường Gạch, Vách Kính, Trụ Tường, Door/Opening host link + physical cut and column rebar 3D workflows instead of leaving them command-line-only.
 - `main` GitHub Actions workflows remain `workflow_dispatch` only.
+- save hardening now rejects empty mutable map keys/Zone/Floor names before replacement; revision temp files are deep-loaded before replacement; explicit zero-valued quantity additions/removals remain visible in revision reports; malformed compound rebar notation with empty `+` segments is rejected.
+
+## Locally verified on 2026-08-10
+
+- Core smoke suite: `ALL PASS`.
+- Exact installed BricsCAD V25.2.10 managed references: Release/x64 plugin build succeeded with 0 warnings and 0 errors.
+- Read-only check of the supplied `DGKL.xlsx`: Excel row 5 resolved decimal handles `12510,12512` to hexadecimal `30DE,30E0`; row 6 resolved to `30DF,30E1`.
+- Both repository preflight suites pass. No GitHub Action was dispatched.
 
 ## Verified in GitHub-hosted CI
 
