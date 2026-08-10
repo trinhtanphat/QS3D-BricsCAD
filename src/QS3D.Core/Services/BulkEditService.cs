@@ -7,6 +7,20 @@ namespace QS3D.Core.Services
 {
     public sealed class BulkEditService
     {
+        public int SetProperty(ProjectState project, IEnumerable<string> elementIds, string propertyName, string value)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+            var elements = new List<ProjectElement>();
+            foreach (var id in elementIds)
+            {
+                if (string.IsNullOrWhiteSpace(id)) continue;
+                var element = project.FindElement(id);
+                if (element != null) elements.Add(element);
+            }
+            return SetProperty(project, elements, propertyName, value).Count;
+        }
+
         public IReadOnlyList<string> SetProperty(ProjectState project, IEnumerable<ProjectElement> elements, string propertyName, string value)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
