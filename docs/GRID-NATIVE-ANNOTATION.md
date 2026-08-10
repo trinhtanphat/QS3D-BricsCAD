@@ -19,6 +19,14 @@ For each source endpoint the builder creates:
 
 LINE sources place bubble centers beyond each line endpoint. ARC sources offset each endpoint radially away from the arc center. Annotation is appended to the same owner space and attempts to inherit the source layer.
 
+The annotation plane is explicit rather than view-dependent:
+
+- a planar LINE whose endpoints share one WCS Z elevation uses WCS Z as the annotation normal;
+- **ARC uses its native plane normal** for both the bubble `Circle` and `DBText` normal;
+- a **3D-sloped LINE** is rejected fail-closed because one line alone does not define a stable annotation plane. The builder does not silently project it onto WCS-XY.
+
+This avoids the previous source-level failure mode where every bubble/text was forced onto `Vector3d.ZAxis` even when an ARC lived on another plane. Exact text orientation/readability on tilted ARC planes still requires licensed V25 visual qualification.
+
 Default semantic parameters are:
 
 - `GridBubbleRadiusM = 0.25`;
@@ -73,15 +81,17 @@ Source implementation is `REMOTE_DONE`; native validation remains `LOCAL_ONLY` u
 
 The V25 runtime matrix must include at least:
 
-1. LINE and ARC sources in a real DWG;
-2. first annotation and repeated replacement without duplicate bubbles/text;
-3. label change followed by replacement;
-4. bubble/text size overrides and drawing-unit conversion;
-5. ownership mismatch refusal after intentionally replacing one generated handle with a non-QS3D entity;
-6. Undo/Redo around a completed batch;
-7. cancel/exception before commit with no partial semantic or CAD mutation;
-8. save/reopen and rebuild from persisted `GeneratedGridAnnotationHandles`;
-9. multi-DWG isolation and source owner-space behavior;
-10. Unicode labels and HiDPI visual review.
+1. WCS-planar LINE plus ARC sources in a real DWG;
+2. tilted/non-WCS ARC and confirmation that Circle/DBText remain on the ARC native plane;
+3. 3D-sloped LINE refusal with zero CAD/semantic residue;
+4. first annotation and repeated replacement without duplicate bubbles/text;
+5. label change followed by replacement;
+6. bubble/text size overrides and drawing-unit conversion;
+7. ownership mismatch refusal after intentionally replacing one generated handle with a non-QS3D entity;
+8. Undo/Redo around a completed batch;
+9. cancel/exception before commit with no partial semantic or CAD mutation;
+10. save/reopen and rebuild from persisted `GeneratedGridAnnotationHandles`;
+11. multi-DWG isolation and source owner-space behavior;
+12. Unicode labels and HiDPI visual review.
 
 Do not describe native Grid annotation as BricsCAD V25 runtime-certified until that matrix is actually executed.
