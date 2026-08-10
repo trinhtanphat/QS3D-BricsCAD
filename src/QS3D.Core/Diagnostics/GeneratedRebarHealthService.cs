@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Diagnostics
@@ -36,7 +37,7 @@ namespace QS3D.Core.Diagnostics
                     if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, element.Id, StringComparison.OrdinalIgnoreCase))
                         issues.Add(new ModelHealthIssue("REBAR_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated rebar solid đang được nhiều element nhận sở hữu; element khác: " + owner, element.Id));
                     else owners[handle] = element.Id;
-                    if (element.SourceHandles.Exists(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                    if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("REBAR_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated rebar handle không được nằm trong SourceHandles.", element.Id));
                     if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
                         issues.Add(new ModelHealthIssue("REBAR_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated rebar Solid3d: " + handle, element.Id));
