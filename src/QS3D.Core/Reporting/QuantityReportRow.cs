@@ -1,10 +1,11 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace QS3D.Core.Reporting
 {
     public sealed class QuantityReportRow
     {
-        public QuantityReportRow() { ElementIds = new List<string>(); }
+        public QuantityReportRow() { ElementIds = new List<string>(); SourceHandles = new List<string>(); }
         public string Floor { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;
         public string FamilyName { get; set; } = string.Empty;
@@ -22,5 +23,8 @@ namespace QS3D.Core.Reporting
         public double TopAreaM2 { get; set; }
         public double OtherAreaM2 { get; set; }
         public IList<string> ElementIds { get; }
+        public IList<string> SourceHandles { get; }
+        public string ElementIdText => string.Join(";", ElementIds.Where(x => !string.IsNullOrWhiteSpace(x)));
+        public string SourceHandleText => string.Join(";", SourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)));
     }
 }

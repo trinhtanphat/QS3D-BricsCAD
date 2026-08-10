@@ -3,6 +3,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
+using Application = Bricscad.ApplicationServices.Application;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI.ViewModels;
 using Teigha.DatabaseServices;
@@ -45,7 +46,7 @@ namespace QS3D.BricsCAD.V25.UI
                         IsLocked = false,
                         IsXref = true
                     });
-                if (selectedDrawing != null)
+                if (selectedDrawing != null && DrawingList != null)
                     DrawingList.SelectedItem = _viewModel.Drawings.FirstOrDefault(x => x.IsXref == selectedDrawing.IsXref && string.Equals(x.Name, selectedDrawing.Name, StringComparison.OrdinalIgnoreCase));
                 RefreshLayers();
                 _viewModel.Status = _viewModel.Drawings.Count + " bản vẽ • " + _viewModel.Layers.Count + " layer";

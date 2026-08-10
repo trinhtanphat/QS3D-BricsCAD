@@ -18,7 +18,7 @@ namespace QS3D.Core.SmokeTests
         {
             LegacyMigrationMarksElementsDirty();
             FamilyAssignmentRefreshesInheritedDefaults();
-            QsdbRejectsNonFiniteStateBeforeReplace();
+            FloorRejectsNonFiniteStateBeforeSave();
             LegacyWallCalculatorRejectsNonFiniteValues();
             QuantityEngineRejectsInvalidSnapshotMetrics();
             ReportingRejectsNonFiniteState();
@@ -76,7 +76,7 @@ namespace QS3D.Core.SmokeTests
             Equal(0, new BulkEditService().AssignFamily(project, new[] { element.Id }, newFamily.Id));
         }
 
-        private static void QsdbRejectsNonFiniteStateBeforeReplace()
+        private static void FloorRejectsNonFiniteStateBeforeSave()
         {
             var path = Temp("finite-save", ".qsdb");
             try
@@ -84,7 +84,6 @@ namespace QS3D.Core.SmokeTests
                 var project = NewProject();
                 var store = new QsdbProjectStore();
                 store.Save(project, path);
-
                 Throws<ArgumentOutOfRangeException>(() => project.Floors[0].ElevationM = double.NaN);
                 Near(0d, project.Floors[0].ElevationM);
 
@@ -92,7 +91,6 @@ namespace QS3D.Core.SmokeTests
                 invalid.Quantities["Count"] = double.NaN;
                 project.Elements.Add(invalid);
                 Throws<InvalidDataException>(() => store.Save(project, path));
-
                 var restored = store.Load(path);
                 Near(0d, restored.Floors.Single().ElevationM);
                 True(restored.FindElement("BAD-NAN") == null);
