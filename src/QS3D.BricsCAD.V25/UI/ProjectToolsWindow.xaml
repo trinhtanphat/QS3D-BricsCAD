@@ -157,6 +157,7 @@
                         <UniformGrid Columns="2">
                             <Button Content="Regenerate dirty" Tag="QS3DREGEN" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Health All" Tag="QS3DHEALTHALL" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra runtime BricsCAD" Tag="QS3DRUNTIMECHECK" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Audit log" Tag="QS3DAUDIT" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Workspace" Tag="QS3D" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                         </UniformGrid>
