@@ -27,9 +27,10 @@
                 <ListView x:Name="DrawingList" ItemsSource="{Binding Drawings}" SelectionMode="Single" SelectionChanged="OnDrawingSelectionChanged">
                     <ListView.View>
                         <GridView>
-                            <GridViewColumn Header="Tên" Width="125" DisplayMemberBinding="{Binding Name}"/>
-                            <GridViewColumn Header="Khóa" Width="42"><GridViewColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding IsLocked}" IsEnabled="False" HorizontalAlignment="Center"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
-                            <GridViewColumn Header="Loại" Width="55" DisplayMemberBinding="{Binding Kind}"/>
+                            <GridViewColumn Header="Tên" Width="110" DisplayMemberBinding="{Binding Name}"/>
+                            <GridViewColumn Header="Khóa" Width="58" DisplayMemberBinding="{Binding LockState}"/>
+                            <GridViewColumn Header="SL" Width="28" DisplayMemberBinding="{Binding InstanceText}"/>
+                            <GridViewColumn Header="Loại" Width="48" DisplayMemberBinding="{Binding Kind}"/>
                         </GridView>
                     </ListView.View>
                 </ListView>
