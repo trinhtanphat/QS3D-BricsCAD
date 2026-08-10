@@ -77,13 +77,19 @@ if bulge.exists():
 room_reader = ROOT / "src/QS3D.BricsCAD.V25/Cad/RoomBoundarySegmentReader.cs"
 if room_reader.exists():
     text = room_reader.read_text(encoding="utf-8")
-    for needle in ("CadUnitService.GetPolicy", "GetBulgeAt", "BulgeArcTessellator.Tessellate", "arcSagittaM", "entity.IsErased"):
+    for needle in (
+        "CadUnitService.GetPolicy", "GetBulgeAt", "BulgeArcTessellator.Tessellate", "arcSagittaM", "entity.IsErased",
+        "planarityToleranceM", "entity is Arc arc", "ARC plan-view có normal +Z", "RequireElevation", "polyline.Normal"
+    ):
         if needle not in text: errors.append("room boundary CAD reader guard missing: " + needle)
 
 room_command = ROOT / "src/QS3D.BricsCAD.V25/RoomBoundaryCommands.cs"
 if room_command.exists():
     text = room_command.read_text(encoding="utf-8")
-    for needle in ('BoundaryMode"] = "AutoNetwork"', "BoundarySourceHandles", "BoundaryArcSagittaM", "RoomBoundaryArcSagittaM", "AuditTrail.ForProject", "RegeneratorCatalog.CreateDefault"):
+    for needle in (
+        'BoundaryMode"] = "AutoNetwork"', "BoundarySourceHandles", "BoundaryArcSagittaM", "RoomBoundaryArcSagittaM", "AuditTrail.ForProject", "RegeneratorCatalog.CreateDefault",
+        "ReadCurrentSelection(document, arcSagitta, tolerance)", "LINE, POLYLINE hoặc ARC plan-view"
+    ):
         if needle not in text: errors.append("QS3DROOMAUTO workflow missing: " + needle)
     if "SourceHandles.Add" in text: errors.append("auto-room discovery must not claim wall/source handles as Room semantic ownership")
     if "ProjectStateSnapshot.Capture(project)" not in text or "rollback.Restore(project)" not in text:
@@ -140,4 +146,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: full-domain files, unique commands, structural quantities/native mass adapters, BBS CSV safety, stable planar/curved room discovery performance/rollback/UI wiring, DemandLoad packaging/install guards and regression registration are present.")
+print("PASS: full-domain files, unique commands, structural quantities/native mass adapters, BBS CSV safety, planar LINE/POLYLINE/ARC room discovery performance/rollback/UI wiring, DemandLoad packaging/install guards and regression registration are present.")
