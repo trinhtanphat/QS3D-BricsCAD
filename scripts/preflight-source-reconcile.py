@@ -17,9 +17,9 @@ doc = ROOT / "docs/SOURCE-EDIT-WORKFLOW.md"
 checks = {
     service: [
         "EntitySnapshotReader.ReadCurrentSelection(document)",
-        "GeneratedHandleOwnershipPolicy.TryFindOwner",
-        "GeneratedHandleOwnershipLookupStatus.Ambiguous",
-        "GeneratedHandleOwnershipLookupStatus.Owned",
+        "GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle, out var generatedOwner, out var generatedSlot)",
+        "is QS3D-generated output owned by",
+        "Select the authoritative source CAD instead.",
         "Source reconcile P0 requires exactly one authoritative source handle per semantic element",
         "ExpandInvalidationTargets",
         "candidate.DependsOn.Any(result.ContainsKey)",
@@ -105,6 +105,8 @@ if service.is_file():
     restore = text.find("rollback.Restore(project)", flag)
     if min(prepare, refresh, regen, metadata, touch, commit, flag, restore) < 0 or not (prepare < refresh < regen < metadata < touch < commit < flag < restore):
         errors.append("Source reconcile must invalidate CAD -> refresh authoritative semantic state -> converge regeneration -> commit generated metadata/revision -> CAD commit, with project restore only on pre-commit failure")
+    if "GeneratedHandleOwnershipLookupStatus" in text:
+        errors.append("Source reconcile must use the canonical boolean GeneratedHandleOwnershipPolicy.TryFindOwner contract; GeneratedHandleOwnershipLookupStatus is not part of the current Core API")
     if "engine.RegenerateDirty(project)" in text:
         errors.append("Source reconcile must regenerate only the affected semantic closure, not unrelated dirty project elements")
     if "new Build3DCommands" in text or "QS3DBUILD3D" in text or "SendStringToExecute" in text:
@@ -125,4 +127,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE reconciles only tracked authoritative source CAD, rejects generated/ambiguous/untracked selection, expands linked-host/DependsOn invalidation closure, removes generated dependents ownership-safely, refreshes source-derived semantic state, regenerates only the affected semantic closure to stability, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
+print("PASS: QS3DSYNCSOURCE reconciles only tracked authoritative source CAD, rejects generated/ambiguous/untracked selection through the canonical boolean generated-owner lookup, expands linked-host/DependsOn invalidation closure, removes generated dependents ownership-safely, refreshes source-derived semantic state, regenerates only the affected semantic closure to stability, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
