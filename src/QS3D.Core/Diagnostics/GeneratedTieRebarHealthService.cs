@@ -51,8 +51,8 @@ namespace QS3D.Core.Diagnostics
                 CheckNonNegative(element, "GeneratedTieRebarActualSpacingM", "TIE_REBAR_GENERATED_SPACING_INVALID", "GeneratedTieRebarActualSpacingM thiếu hoặc không hợp lệ.", issues);
                 if (element.Category != ElementCategory.Column)
                     issues.Add(new ModelHealthIssue("TIE_REBAR_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated tie metadata chỉ hợp lệ trên Column element.", element.Id));
-                if (element.Dirty != ElementDirtyFlags.None)
-                    issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_STALE", HealthSeverity.Warning, "Column đang dirty nhưng vẫn còn generated ties; rebuild/health-check trước khi phát hành bản vẽ.", element.Id));
+                if (element.IsGeneratedTieRebarStale())
+                    issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_STALE", HealthSeverity.Warning, "Generated tie snapshot không còn khớp semantic/source hiện tại; rebuild ties trước khi phát hành bản vẽ.", element.Id));
             }
             return issues;
         }
