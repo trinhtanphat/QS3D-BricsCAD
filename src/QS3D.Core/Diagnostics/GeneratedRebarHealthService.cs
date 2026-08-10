@@ -17,6 +17,24 @@ namespace QS3D.Core.Diagnostics
             public bool RequiresSingleDiameter { get; set; }
         }
 
+        private sealed class OwnershipIndex
+        {
+            public Dictionary<string, string> Owners { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            public HashSet<string> Conflicts { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            public bool IsConflicted(string handle, string expectedOwner)
+            {
+                if (Conflicts.Contains(handle)) return true;
+                return Owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expectedOwner, StringComparison.OrdinalIgnoreCase);
+            }
+
+            public string Describe(string handle)
+            {
+                if (Conflicts.Contains(handle)) return "multiple owners";
+                return Owners.TryGetValue(handle, out var owner) ? owner : "unknown owner";
+            }
+        }
+
         private static readonly HandleSetSpec ColumnSpec = new HandleSetSpec
         {
             HandlesKey = "GeneratedRebarHandles",
@@ -39,68 +57,80 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = BuildOwnershipIndex(project);
+            var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                InspectSet(element, ColumnSpec, liveColumnSolidHandles, owners, issues);
-                InspectSet(element, ShapeSpec, null, owners, issues);
+                if (element == null) continue;
+                InspectSet(element, ColumnSpec, liveColumnSolidHandles, ownership, issues);
+                InspectSet(element, ShapeSpec, null, ownership, issues);
             }
-            return issues;
+            return issues.AsReadOnly();
         }
 
         public IReadOnlyList<ModelHealthIssue> InspectShape(ProjectState project, ISet<string>? liveShapeSolidHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = BuildOwnershipIndex(project);
+            var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
-                InspectSet(element, ShapeSpec, liveShapeSolidHandles, owners, issues);
-            return issues;
+            {
+                if (element == null) continue;
+                InspectSet(element, ShapeSpec, liveShapeSolidHandles, ownership, issues);
+            }
+            return issues.AsReadOnly();
         }
 
         public IReadOnlyList<ModelHealthIssue> InspectAll(ProjectState project, ISet<string>? liveColumnSolidHandles, ISet<string>? liveShapeSolidHandles)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = BuildOwnershipIndex(project);
+            var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                InspectSet(element, ColumnSpec, liveColumnSolidHandles, owners, issues);
-                InspectSet(element, ShapeSpec, liveShapeSolidHandles, owners, issues);
+                if (element == null) continue;
+                InspectSet(element, ColumnSpec, liveColumnSolidHandles, ownership, issues);
+                InspectSet(element, ShapeSpec, liveShapeSolidHandles, ownership, issues);
             }
-            return issues;
+            return issues.AsReadOnly();
         }
 
-        private static Dictionary<string, string> BuildOwnershipIndex(ProjectState project)
+        private static OwnershipIndex BuildOwnershipIndex(ProjectState project)
         {
-            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var index = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 foreach (var sourceHandle in element.SourceHandles)
-                    Reserve(owners, sourceHandle, element.Id + "/SourceHandles");
+                    Reserve(index, sourceHandle, element.Id + "/SourceHandles");
                 foreach (var property in element.Properties)
                 {
                     if (!GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)) continue;
-                    ReserveProperty(owners, element, property.Key);
+                    ReserveProperty(index, element, property.Key, property.Value);
                 }
             }
-            return owners;
+            return index;
         }
 
-        private static void ReserveProperty(Dictionary<string, string> owners, ProjectElement element, string propertyKey)
+        private static void ReserveProperty(OwnershipIndex index, ProjectElement element, string propertyKey, string raw)
         {
-            if (!element.Properties.TryGetValue(propertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
-            foreach (var handle in SplitHandles(raw)) Reserve(owners, handle, element.Id + "/" + propertyKey);
+            if (string.IsNullOrWhiteSpace(raw)) return;
+            foreach (var handle in SplitHandles(raw)) Reserve(index, handle, element.Id + "/" + propertyKey);
         }
 
-        private static void Reserve(Dictionary<string, string> owners, string? handle, string token)
+        private static void Reserve(OwnershipIndex index, string? handle, string token)
         {
             var normalized = (handle ?? string.Empty).Trim();
-            if (normalized.Length == 0 || owners.ContainsKey(normalized)) return;
-            owners[normalized] = token;
+            if (normalized.Length == 0) return;
+            if (!index.Owners.TryGetValue(normalized, out var existing))
+            {
+                index.Owners[normalized] = token;
+                return;
+            }
+            if (!string.Equals(existing, token, StringComparison.OrdinalIgnoreCase))
+                index.Conflicts.Add(normalized);
         }
 
-        private static void InspectSet(ProjectElement element, HandleSetSpec spec, ISet<string>? liveSolidHandles, Dictionary<string, string> owners, List<ModelHealthIssue> issues)
+        private static void InspectSet(ProjectElement element, HandleSetSpec spec, ISet<string>? liveSolidHandles, OwnershipIndex ownership, List<ModelHealthIssue> issues)
         {
             if (!element.Properties.TryGetValue(spec.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             var handles = raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
@@ -121,8 +151,8 @@ namespace QS3D.Core.Diagnostics
                 }
                 validCount++;
                 var ownerToken = element.Id + "/" + spec.HandlesKey;
-                if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, ownerToken, StringComparison.OrdinalIgnoreCase))
-                    issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated rebar solid đang xung đột với owner/project handle khác: " + owner, element.Id));
+                if (ownership.IsConflicted(handle, ownerToken))
+                    issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated rebar solid đang xung đột với owner/project handle khác: " + ownership.Describe(handle), element.Id));
                 if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                     issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated rebar handle không được nằm trong SourceHandles.", element.Id));
                 if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
