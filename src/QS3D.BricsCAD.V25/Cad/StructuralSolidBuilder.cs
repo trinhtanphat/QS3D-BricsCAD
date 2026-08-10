@@ -71,9 +71,10 @@ namespace QS3D.BricsCAD.V25.Cad
                     try
                     {
                         solid.Layer = entity.Layer;
-                        var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, element);
+                        var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
                         modelSpace.AppendEntity(solid);
                         transaction.AddNewlyCreatedDBObject(solid, true);
+                        GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category);
                         pending.Add(new PendingUpdate
                         {
                             Element = element,
@@ -93,7 +94,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
             foreach (var update in pending)
             {
-                GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, update.Category);
+                GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, update.Category);
                 update.Element.Properties["GeneratedSolidMode"] = GeometryMode(update.Category);
             }
 

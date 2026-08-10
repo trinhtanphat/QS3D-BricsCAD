@@ -24,7 +24,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message); document.Editor.WriteMessage("\nQS3D " + message);
                 if (result.Bars > 0) document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DREBAR3DSHAPE lỗi: " + ex.Message; PaletteCoordinator.SetStatus(message); document.Editor.WriteMessage("\n" + message);
             }

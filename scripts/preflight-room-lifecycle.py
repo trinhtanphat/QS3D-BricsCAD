@@ -53,7 +53,7 @@ if reader.exists():
     text = reader.read_text(encoding="utf-8")
     for needle in (
         "planarityToleranceM", "referenceElevationM", "entity is Arc", "arc.EndAngle - arc.StartAngle",
-        "entity is Spline", "MaxSplineSegments", "splineChordM",
+        "entity is Spline", "MaxSplineSegments", "splineChordM", "GetPointAtDist",
         "BulgeArcTessellator.Tessellate", "normal +Z", "toàn bộ boundary đồng phẳng",
     ):
         if needle not in text: errors.append("room boundary LINE/POLYLINE/ARC/SPLINE planarity guard missing: " + needle)
@@ -76,6 +76,12 @@ if references.exists():
     for needle in ("BoundarySourceHandlesKey", "MatchesSelection", "boundary.All(handles.Contains)", "GeneratedSolidHandle"):
         if needle not in text: errors.append("semantic reference-handle resolver missing: " + needle)
 
+source_resolver = ROOT / "src/QS3D.Core/Services/SourceHandleResolver.cs"
+if source_resolver.exists():
+    text = source_resolver.read_text(encoding="utf-8")
+    for needle in ("AutoRoomLifecycle.BoundarySourceHandlesKey", "GeneratedSolidHandle", "element.DependsOn"):
+        if needle not in text: errors.append("dependency-aware source Handle resolver missing: " + needle)
+
 capture = ROOT / "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs"
 if capture.exists():
     text = capture.read_text(encoding="utf-8")
@@ -89,12 +95,14 @@ if report.exists() and "AutoRoomLifecycle.IsExcludedFromQuantity(project, elemen
 commands = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
 if commands.exists():
     text = commands.read_text(encoding="utf-8")
-    if text.count("SemanticReferenceHandles.Get(element)") < 3:
-        errors.append("BQ/Health/QS3DLOCATE must resolve semantic reference handles")
+    if text.count("SemanticReferenceHandles.Get(element)") + text.count("SourceHandleResolver.Resolve") < 3:
+        errors.append("BQ/Health/QS3DLOCATE must resolve semantic/dependency reference handles")
 
 review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
-if review.exists() and review.read_text(encoding="utf-8").count("SemanticReferenceHandles.Get(element)") < 2:
-    errors.append("BBS/revision locate must resolve semantic reference handles")
+if review.exists():
+    text = review.read_text(encoding="utf-8")
+    if text.count("SemanticReferenceHandles.Get(element)") + text.count("SourceHandleResolver.Resolve") < 2:
+        errors.append("BBS/revision locate must resolve semantic/dependency reference handles")
 
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/AutoRoomLifecycleSmoke.cs"
 if smoke.exists():
