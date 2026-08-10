@@ -147,8 +147,9 @@ namespace QS3D.Core.Services
                 var projectElementId = (projectElement.Id ?? string.Empty).Trim();
                 if (projectElementId.Length == 0)
                     throw new InvalidOperationException("Project contains a semantic element with a blank id.");
-                if (!projectElements.TryAdd(projectElementId, projectElement))
+                if (projectElements.ContainsKey(projectElementId))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElementId);
+                projectElements.Add(projectElementId, projectElement);
             }
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
