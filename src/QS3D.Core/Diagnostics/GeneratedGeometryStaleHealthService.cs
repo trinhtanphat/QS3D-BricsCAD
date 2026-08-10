@@ -22,13 +22,25 @@ namespace QS3D.Core.Diagnostics
                     issues.Add(new ModelHealthIssue(
                         "REBAR_GENERATED_STALE",
                         HealthSeverity.Warning,
-                        Message(element, "Generated column rebar 3D không còn khớp thông số hiện tại; rebuild cốt thép cột 3D."),
+                        Message(element, "Generated longitudinal rebar 3D không còn khớp thông số hiện tại; rebuild cốt thép 3D cho cấu kiện."),
                         element.Id));
                 if (element.IsGeneratedShapeRebarStale())
                     issues.Add(new ModelHealthIssue(
                         "SHAPE_REBAR_GENERATED_STALE",
                         HealthSeverity.Warning,
                         Message(element, "Generated shape rebar 3D không còn khớp BBS/thông số hiện tại; rebuild shape rebar 3D."),
+                        element.Id));
+                if (element.IsGeneratedTieRebarStale())
+                    issues.Add(new ModelHealthIssue(
+                        "TIE_REBAR_GENERATED_STALE",
+                        HealthSeverity.Warning,
+                        Message(element, "Generated column ties không còn khớp thông số/cấu kiện hiện tại; rebuild đai cột 3D."),
+                        element.Id));
+                if (element.IsGeneratedBeamStirrupStale())
+                    issues.Add(new ModelHealthIssue(
+                        "BEAM_STIRRUP_GENERATED_STALE",
+                        HealthSeverity.Warning,
+                        Message(element, "Generated beam stirrups không còn khớp thông số/cấu kiện hiện tại; rebuild đai dầm 3D."),
                         element.Id));
             }
             return issues.AsReadOnly();
