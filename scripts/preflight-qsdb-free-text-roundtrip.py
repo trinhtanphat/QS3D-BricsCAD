@@ -20,7 +20,9 @@ if SOURCE.is_file():
         'Detail = RawValue(item, "detail")',
         'Actor = RawValue(item, "actor")',
         'CorrelationId = RawValue(item, "correlationId")',
-        'FamilyId =',
+        'Value(item, "familyId")',
+        'Value(item, "floorId")',
+        'Value(item, "zoneId")',
         'private static string Value(XElement element, string attribute) => element.Attribute(attribute)?.Value?.Trim() ?? string.Empty;',
     ):
         if token not in text:
@@ -47,4 +49,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QSDB keeps structural attributes canonical while preserving free-text map and audit payload values byte-for-byte through Save/Load.")
+print("PASS: QSDB keeps structural identity attributes canonical while preserving free-text map and audit payload values byte-for-byte through Save/Load.")

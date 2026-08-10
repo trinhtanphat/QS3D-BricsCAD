@@ -16,7 +16,8 @@ def read(relative: str) -> str:
 
 
 service = read("src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs")
-state = read("src/QS3D.BricsCAD.V25/Cad/PhysicalOpeningCutTargetState.cs")
+wrapper = read("src/QS3D.BricsCAD.V25/Cad/PhysicalOpeningCutTargetState.cs")
+codec = read("src/QS3D.Core/Services/PhysicalOpeningCutTargetStateCodec.cs")
 live = read("src/QS3D.BricsCAD.V25/Cad/PhysicalOpeningCutLiveStateService.cs")
 invalidator = read("src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs")
 doc = read("docs/LOCAL-V25-INCREMENTAL-OPENING-CUT.md")
@@ -39,6 +40,16 @@ for token in required_service:
         errors.append("OpeningBooleanService missing incremental contract: " + token)
 
 for token in [
+    'public const string OpeningIdsKey = PhysicalOpeningCutTargetStateCodec.OpeningIdsKey',
+    'PhysicalOpeningCutTargetStateCodec.TryRead',
+    'PhysicalOpeningCutTargetStateCodec.Resolve',
+    'PhysicalOpeningCutTargetStateCodec.Write',
+    'PhysicalOpeningCutTargetStateCodec.Normalize',
+]:
+    if token not in wrapper:
+        errors.append("PhysicalOpeningCutTargetState wrapper missing Core codec delegation: " + token)
+
+for token in [
     'public const string OpeningIdsKey = "PhysicalOpeningCutOpeningIdsV1"',
     'private const int MaxOpeningIds = 4096',
     'private const int MaxElementIdLength = 128',
@@ -53,11 +64,11 @@ for token in [
     'Convert.ToBase64String',
     'Convert.FromBase64String',
     'StringComparer.OrdinalIgnoreCase',
-    'Physical opening target không còn tồn tại',
-    'không còn linked tới host',
+    'Physical opening target no longer exists',
+    'is no longer linked to host',
 ]:
-    if token not in state:
-        errors.append("PhysicalOpeningCutTargetState missing bounded/fail-closed contract: " + token)
+    if token not in codec:
+        errors.append("PhysicalOpeningCutTargetStateCodec missing bounded/fail-closed contract: " + token)
 
 for token in [
     'PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds)',
@@ -99,4 +110,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: straight-host selected opening cuts preserve a bounded explicit accumulated cut set, validate prior state before mutation, subtract only newly selected openings, keep live-health aligned with the actual cut set, and invalidate all physical-cut metadata on host rebuild.")
+print("PASS: straight-host selected opening cuts preserve a bounded explicit accumulated cut set through the shared Core codec, validate prior state before mutation, subtract only newly selected openings, keep live-health aligned with the actual cut set, and invalidate all physical-cut metadata on host rebuild.")

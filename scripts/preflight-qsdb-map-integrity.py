@@ -16,12 +16,16 @@ if store.is_file():
     for needle in (
         "if (target.ContainsKey(key))",
         "Duplicate QSDB map key",
-        "target[key] = Value(item, \"value\")",
+        "target[key] = RawValue(item, \"value\")",
     ):
         if needle not in text:
-            errors.append("QsdbProjectStore missing duplicate-map guard: " + needle)
-    if 'target[Required(item, "name")] = Value(item, "value")' in text:
-        errors.append("QsdbProjectStore reintroduced silent last-wins map loading")
+            errors.append("QsdbProjectStore missing duplicate-map/free-text guard: " + needle)
+    for legacy in (
+        'target[Required(item, "name")] = Value(item, "value")',
+        'target[Required(item, "name")] = RawValue(item, "value")',
+    ):
+        if legacy in text:
+            errors.append("QsdbProjectStore reintroduced silent last-wins map loading")
 
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
@@ -41,4 +45,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QSDB metadata/family/element maps fail closed on duplicate case-insensitive keys.")
+print("PASS: QSDB metadata/family/element maps preserve free-text values while failing closed on duplicate case-insensitive keys.")

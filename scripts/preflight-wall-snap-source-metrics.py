@@ -25,10 +25,10 @@ else:
 
     metric_plan = text.find("var updatedLengthsM = BuildUpdatedSourceLengths")
     transaction = text.find("using (document.LockDocument())")
-    commit = text.find("transaction.Commit();")
     assign = text.find('element.Properties["LengthM"] = updatedLengthsM')
-    if min(metric_plan, transaction, commit, assign) >= 0 and not (metric_plan < transaction < commit < assign):
-        errors.append("Wall Snap must validate/precompute source lengths before CAD mutation and persist LengthM only after transaction commit")
+    commit = text.find("transaction.Commit();")
+    if min(metric_plan, transaction, assign, commit) >= 0 and not (metric_plan < transaction < assign < commit):
+        errors.append("Wall Snap must precompute source lengths before CAD mutation and persist LengthM inside the shared rollback boundary before transaction commit")
 
 if not regen.is_file():
     errors.append("missing SemanticRegenerators.cs")
@@ -44,4 +44,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: reviewed Wall Snap plans precompute authoritative post-snap source length and synchronize semantic LengthM before later regeneration/BQ.")
+print("PASS: reviewed Wall Snap plans precompute authoritative post-snap source length and synchronize semantic LengthM inside the CAD/project rollback boundary before commit, so later regeneration/BQ sees consistent state.")
