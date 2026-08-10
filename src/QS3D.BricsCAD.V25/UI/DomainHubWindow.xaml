@@ -18,7 +18,8 @@
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="TẠO MỚI / DIRECT DRAW" Style="{StaticResource SectionLabel}"/>
-                    <Button Content="Vẽ Tường trực tiếp" Tag="QS3DDRAWWALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Family / Type — chọn bộ thông số" Tag="QS3DFAMILIES" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Vẽ Tường trực tiếp" Tag="QS3DDRAWWALL" Click="OnCommandClick"/>
                     <Button Content="Vẽ Vách Kính trực tiếp" Tag="QS3DDRAWGLASSWALL" Click="OnCommandClick"/>
                     <Button Content="Vẽ Trụ Tường trực tiếp" Tag="QS3DDRAWWALLPIER" Click="OnCommandClick"/>
                     <Button Content="Vẽ Dầm trực tiếp" Tag="QS3DDRAWBEAM" Click="OnCommandClick"/>
@@ -28,7 +29,7 @@
                     <Button Content="Vẽ Móng trực tiếp" Tag="QS3DDRAWFOUNDATION" Click="OnCommandClick"/>
                     <Button Content="Vẽ Cửa + Auto Host" Tag="QS3DDRAWDOOR" Click="OnCommandClick"/>
                     <Button Content="Vẽ Lỗ Mở + Auto Host" Tag="QS3DDRAWOPENING" Click="OnCommandClick"/>
-                    <TextBlock Text="Direct Draw tạo CAD source thật → semantic QS3D → native 3D trong cùng workflow cho cấu kiện có native builder. Cửa/Lỗ mở Direct Draw tạo source + semantic và Auto Host đúng đối tượng mới; physical boolean vẫn là thao tác riêng Khoét Cửa/Lỗ để tránh mutation ngoài ý muốn. Capture/Bóc chọn bên dưới vẫn dùng cho CAD đã vẽ sẵn." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+                    <TextBlock Text="Chọn Family / Type trước khi vẽ để kích hoạt bộ thông số phù hợp. Direct Draw tạo CAD source thật → semantic QS3D → native 3D trong cùng workflow cho cấu kiện có native builder. Cửa/Lỗ mở Direct Draw tạo source + semantic và Auto Host đúng đối tượng mới; physical boolean vẫn là thao tác riêng Khoét Cửa/Lỗ để tránh mutation ngoài ý muốn. Capture/Bóc chọn bên dưới vẫn dùng cho CAD đã vẽ sẵn." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
 
                     <TextBlock Text="TƯỜNG KT / CỬA / HT_PHÒNG" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
                     <Button Content="Tường Gạch" Tag="QS3DWALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
@@ -61,7 +62,7 @@
                     <Button Content="Lan can" Tag="QS3DRAILING" Click="OnCommandClick"/>
                     <Button Content="Đào đất" Tag="QS3DEARTHWORK" Click="OnCommandClick"/>
                     <Button Content="Tạo / cập nhật 3D từ đối tượng chọn" Tag="QS3DBUILD3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
-                    <TextBlock Text="Tường KT hỗ trợ LINE hoặc open POLYLINE tim tường (kể cả bulge). LINE wall/Beam/StructuralWall/Railing native prism hiện fail closed nếu lệch cao độ quá 5 mm, tránh flatten sai geometry. Vách Kính có backing host và khung Curtain theo các path đã được source hỗ trợ. Wall Snap chỉ apply source đã capture và bắt buộc Preview trước. Kết cấu dùng LINE/closed POLYLINE theo loại. Phòng Auto nhận LINE/POLYLINE/ARC/SPLINE plan-view." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+                    <TextBlock Text="Tường KT hỗ trợ LINE hoặc open POLYLINE tim tường (kể cả bulge). LINE wall/Beam/StructuralWall/Railing native prism hiện fail closed nếu lệch cao độ quá 5 mm, tránh flatten sai geometry. Vách Kính có backing host và khung Curtain theo LINE hoặc open POLYLINE plan-view đã được source hỗ trợ, gồm bulge theo tessellation có budget. Wall Snap chỉ apply source đã capture và bắt buộc Preview trước. Kết cấu dùng LINE/closed POLYLINE theo loại. Phòng Auto nhận LINE/POLYLINE/ARC/SPLINE plan-view." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
 
                     <TextBlock Text="DỰ ÁN &amp; TEMPLATE" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
                     <Button Content="Schedule / Bóc khối lượng Hub" Tag="QS3DSCHEDULES" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
