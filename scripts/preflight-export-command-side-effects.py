@@ -32,13 +32,6 @@ CASES = (
         "RoomFinishXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
     ),
-    (
-        "BBS CSV",
-        ROOT / "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs",
-        "totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, \"BBS CSV total weight\");",
-        "RebarCsvExporter.Export(dialog.FileName, rows);",
-        "FinalizeUi(document, status);",
-    ),
 )
 
 errors = []
@@ -60,13 +53,45 @@ for label, path, aggregate, export, finalize in CASES:
 
     if min(aggregate_pos, dialog_pos, export_pos, finalize_pos) >= 0:
         if not aggregate_pos < dialog_pos < export_pos < finalize_pos:
-            errors.append(label + " must validate aggregates before dialog/export and finalize UI only after export")
+            errors.append(label + " must validate read-only aggregates before dialog/export and finalize UI only after export")
         between_export_and_finalize = text[export_pos + len(export):finalize_pos]
         if "PaletteCoordinator." in between_export_and_finalize or "Editor.WriteMessage" in between_export_and_finalize:
             errors.append(label + " must not perform fallible UI work between persistent export and FinalizeUi")
 
     if "Cảnh báo UI sau export" not in text:
         errors.append(label + " missing best-effort post-export UI warning boundary")
+
+bbs_path = ROOT / "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs"
+if not bbs_path.is_file():
+    errors.append("missing " + str(bbs_path.relative_to(ROOT)))
+else:
+    text = bbs_path.read_text(encoding="utf-8")
+    dialog = "if (dialog.ShowDialog() != true) return;"
+    regenerate = "new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);"
+    aggregate = "totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, \"BBS CSV total weight\");"
+    export = "RebarCsvExporter.Export(dialog.FileName, rows);"
+    finalize = "FinalizeUi(document, status);"
+    positions = {
+        dialog: text.find(dialog),
+        regenerate: text.find(regenerate),
+        aggregate: text.find(aggregate),
+        export: text.find(export),
+        finalize: text.find(finalize),
+    }
+    for token, pos in positions.items():
+        if pos < 0:
+            errors.append("BBS CSV missing export-boundary token: " + token)
+    if min(positions.values()) >= 0:
+        if not positions[dialog] < positions[regenerate] < positions[aggregate] < positions[export] < positions[finalize]:
+            errors.append("BBS CSV must confirm export first, then regenerate/validate, export, and finalize UI")
+        before_dialog = text[:positions[dialog]]
+        if "RegenerateDirty(project)" in before_dialog:
+            errors.append("BBS CSV Cancel path must not regenerate semantic state before the save dialog is confirmed")
+        between_export_and_finalize = text[positions[export] + len(export):positions[finalize]]
+        if "PaletteCoordinator." in between_export_and_finalize or "Editor.WriteMessage" in between_export_and_finalize:
+            errors.append("BBS CSV must not perform fallible UI work between persistent export and FinalizeUi")
+    if "Cảnh báo UI sau export" not in text:
+        errors.append("BBS CSV missing best-effort post-export UI warning boundary")
 
 if errors:
     print("QS3D export command side-effect preflight")
@@ -75,4 +100,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: checked aggregates precede export side effects and post-export UI is best effort for Curtain, Door/Opening, Material, Room Finish, and BBS CSV commands.")
+print("PASS: read-only exporters validate aggregates before prompting; BBS CSV confirms export before semantic regeneration; all exporters finalize UI only after persistent export.")
