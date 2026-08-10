@@ -39,7 +39,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var owners = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
                 InspectSet(element, ColumnSpec, liveColumnSolidHandles, owners, issues);
@@ -52,7 +52,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var owners = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
                 InspectSet(element, ShapeSpec, liveShapeSolidHandles, owners, issues);
             return issues;
@@ -62,13 +62,44 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var owners = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
                 InspectSet(element, ColumnSpec, liveColumnSolidHandles, owners, issues);
                 InspectSet(element, ShapeSpec, liveShapeSolidHandles, owners, issues);
             }
             return issues;
+        }
+
+        private static Dictionary<string, string> BuildOwnershipIndex(ProjectState project)
+        {
+            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                foreach (var sourceHandle in element.SourceHandles)
+                    Reserve(owners, sourceHandle, element.Id + "/SourceHandles");
+                ReserveProperty(owners, element, "GeneratedSolidHandle");
+                ReserveProperty(owners, element, "PhysicalOpeningCutSolidHandle");
+            }
+            foreach (var element in project.Elements)
+            {
+                ReserveProperty(owners, element, ColumnSpec.HandlesKey);
+                ReserveProperty(owners, element, ShapeSpec.HandlesKey);
+            }
+            return owners;
+        }
+
+        private static void ReserveProperty(Dictionary<string, string> owners, ProjectElement element, string propertyKey)
+        {
+            if (!element.Properties.TryGetValue(propertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            foreach (var handle in SplitHandles(raw)) Reserve(owners, handle, element.Id + "/" + propertyKey);
+        }
+
+        private static void Reserve(Dictionary<string, string> owners, string? handle, string token)
+        {
+            var normalized = (handle ?? string.Empty).Trim();
+            if (normalized.Length == 0 || owners.ContainsKey(normalized)) return;
+            owners[normalized] = token;
         }
 
         private static void InspectSet(ProjectElement element, HandleSetSpec spec, ISet<string>? liveSolidHandles, Dictionary<string, string> owners, List<ModelHealthIssue> issues)
@@ -93,8 +124,7 @@ namespace QS3D.Core.Diagnostics
                 validCount++;
                 var ownerToken = element.Id + "/" + spec.HandlesKey;
                 if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, ownerToken, StringComparison.OrdinalIgnoreCase))
-                    issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated rebar solid đang được nhiều owner nhận sở hữu; owner khác: " + owner, element.Id));
-                else owners[handle] = ownerToken;
+                    issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated rebar solid đang xung đột với owner/project handle khác: " + owner, element.Id));
                 if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                     issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated rebar handle không được nằm trong SourceHandles.", element.Id));
                 if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
@@ -114,5 +144,12 @@ namespace QS3D.Core.Diagnostics
                  double.IsNaN(diameter) || double.IsInfinity(diameter) || diameter <= 0d))
                 issues.Add(new ModelHealthIssue("REBAR_GENERATED_DIAMETER_INVALID", HealthSeverity.Warning, "GeneratedRebarDiameterMm thiếu hoặc không hợp lệ.", element.Id));
         }
+
+        private static IEnumerable<string> SplitHandles(string raw) =>
+            (raw ?? string.Empty)
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .Where(x => x.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 }
