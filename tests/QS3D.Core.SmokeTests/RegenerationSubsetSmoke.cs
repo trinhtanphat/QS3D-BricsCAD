@@ -10,7 +10,9 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RegeneratesOnlyRequestedElements();
+            DeduplicatesRequestedIdsCaseInsensitively();
             RejectsUnknownTarget();
+            RejectsDuplicateProjectIds();
         }
 
         private static void RegeneratesOnlyRequestedElements()
@@ -38,11 +40,41 @@ namespace QS3D.Core.SmokeTests
             Near(1d, selected.Quantities["Count"]);
         }
 
+        private static void DeduplicatesRequestedIdsCaseInsensitively()
+        {
+            var project = new ProjectState("regen-dedupe", "Deduplicated targets");
+            var selected = new ProjectElement("Selected", ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
+            selected.SetProperty("LengthM", "4");
+            project.Elements.Add(selected);
+
+            var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
+            var count = engine.RegenerateDirtySubset(project, new[] { " Selected ", "selected", "SELECTED" });
+
+            Equal(1, count);
+            Equal(ElementDirtyFlags.None, selected.Dirty);
+            Near(4d, selected.Quantities["LengthM"]);
+            Near(1d, selected.Quantities["Count"]);
+        }
+
         private static void RejectsUnknownTarget()
         {
             var project = new ProjectState("regen-unknown", "Unknown target");
             var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
             Throws<KeyNotFoundException>(() => engine.RegenerateDirtySubset(project, new[] { "missing" }));
+        }
+
+        private static void RejectsDuplicateProjectIds()
+        {
+            var project = new ProjectState("regen-duplicate", "Duplicate target ownership");
+            var first = new ProjectElement("DUP", ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
+            first.SetProperty("LengthM", "1");
+            var second = new ProjectElement("dup", ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
+            second.SetProperty("LengthM", "2");
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+
+            var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
+            Throws<InvalidOperationException>(() => engine.RegenerateDirtySubset(project, new[] { "dup" }));
         }
 
         private static void Equal(int expected, int actual)
