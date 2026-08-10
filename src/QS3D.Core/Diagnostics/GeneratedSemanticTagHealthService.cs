@@ -1,0 +1,121 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using QS3D.Core.Documentation;
+using QS3D.Core.Domain;
+
+namespace QS3D.Core.Diagnostics
+{
+    public sealed class GeneratedSemanticTagHealthService
+    {
+        public const string HandlesKey = "GeneratedSemanticTagHandles";
+        public const string TemplateKey = "GeneratedSemanticTagTemplate";
+        public const string TextKey = "GeneratedSemanticTagText";
+        public const string OwnerProjectKey = "GeneratedSemanticTagOwnerProjectId";
+        public const string OwnerElementKey = "GeneratedSemanticTagOwnerElementId";
+        public const string OwnershipVersionKey = "GeneratedSemanticTagOwnershipVersion";
+        public const string TextHeightKey = "GeneratedSemanticTagTextHeightM";
+        public const string PositionScopeKey = "GeneratedSemanticTagPositionScope";
+        public const string PositionXKey = "GeneratedSemanticTagPositionX";
+        public const string PositionYKey = "GeneratedSemanticTagPositionY";
+        public const string PositionZKey = "GeneratedSemanticTagPositionZ";
+        public const string OwnershipVersion = "1";
+        public const string DrawingLocalWcs = "DrawingLocalWcs";
+
+        public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var issues = new List<ModelHealthIssue>();
+
+            foreach (var element in project.Elements)
+            {
+                if (!element.Properties.TryGetValue(HandlesKey, out var rawHandles) || string.IsNullOrWhiteSpace(rawHandles)) continue;
+                var handles = ParseHandles(element, rawHandles, issues);
+                if (handles.Count == 0)
+                    issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_INVALID", HealthSeverity.Error, "Semantic tag không còn generated handle hợp lệ.", element.Id));
+
+                if (element.SourceHandles.Any(source => handles.Contains((source ?? string.Empty).Trim())))
+                    issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated semantic tag handle không được nằm trong SourceHandles.", element.Id));
+
+                RequireOwner(element, OwnerProjectKey, project.ProjectId, "SEMANTIC_TAG_PROJECT_MISMATCH", issues);
+                RequireOwner(element, OwnerElementKey, element.Id, "SEMANTIC_TAG_ELEMENT_MISMATCH", issues);
+                RequireOwner(element, OwnershipVersionKey, OwnershipVersion, "SEMANTIC_TAG_OWNERSHIP_VERSION_INVALID", issues);
+
+                var template = Property(element, TemplateKey);
+                if (template.Length == 0)
+                {
+                    issues.Add(new ModelHealthIssue("SEMANTIC_TAG_TEMPLATE_MISSING", HealthSeverity.Error, "Generated semantic tag thiếu template đã dùng để render.", element.Id));
+                }
+                else
+                {
+                    try
+                    {
+                        var current = SemanticTagRenderer.Render(project, element, template);
+                        var built = Property(element, TextKey);
+                        if (!string.Equals(current, built, StringComparison.Ordinal))
+                            issues.Add(new ModelHealthIssue("SEMANTIC_TAG_TEXT_STALE", HealthSeverity.Warning, "Semantic tag text không còn khớp semantic state hiện tại; chạy QS3DTAGREFRESH.", element.Id));
+                    }
+                    catch (Exception ex)
+                    {
+                        issues.Add(new ModelHealthIssue("SEMANTIC_TAG_RENDER_INVALID", HealthSeverity.Error, "Không thể render lại semantic tag: " + ex.Message, element.Id));
+                    }
+                }
+
+                ValidatePositive(element, TextHeightKey, "SEMANTIC_TAG_TEXT_HEIGHT_INVALID", issues);
+                if (!string.Equals(Property(element, PositionScopeKey), DrawingLocalWcs, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("SEMANTIC_TAG_POSITION_SCOPE_INVALID", HealthSeverity.Error, "Semantic tag position scope phải là DrawingLocalWcs.", element.Id));
+                ValidateFinite(element, PositionXKey, "SEMANTIC_TAG_POSITION_INVALID", issues);
+                ValidateFinite(element, PositionYKey, "SEMANTIC_TAG_POSITION_INVALID", issues);
+                ValidateFinite(element, PositionZKey, "SEMANTIC_TAG_POSITION_INVALID", issues);
+            }
+
+            return issues.AsReadOnly();
+        }
+
+        private static HashSet<string> ParseHandles(ProjectElement element, string raw, ICollection<ModelHealthIssue> issues)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var handle = token.Trim();
+                if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                {
+                    issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_INVALID", HealthSeverity.Error, "Semantic tag chứa generated handle không hợp lệ: " + handle, element.Id));
+                    continue;
+                }
+                if (!result.Add(handle))
+                    issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_DUPLICATE", HealthSeverity.Error, "Semantic tag generated handle bị lặp: " + handle, element.Id));
+            }
+            return result;
+        }
+
+        private static void RequireOwner(ProjectElement element, string key, string expected, string code, ICollection<ModelHealthIssue> issues)
+        {
+            if (!string.Equals(Property(element, key), expected, StringComparison.OrdinalIgnoreCase))
+                issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " không khớp semantic owner hiện tại.", element.Id));
+        }
+
+        private static void ValidatePositive(ProjectElement element, string key, string code, ICollection<ModelHealthIssue> issues)
+        {
+            if (!TryFinite(element, key, out var value) || value <= 0d)
+                issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " phải là số hữu hạn > 0.", element.Id));
+        }
+
+        private static void ValidateFinite(ProjectElement element, string key, string code, ICollection<ModelHealthIssue> issues)
+        {
+            if (!TryFinite(element, key, out _))
+                issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " phải là số hữu hạn theo drawing-local WCS.", element.Id));
+        }
+
+        private static bool TryFinite(ProjectElement element, string key, out double value)
+        {
+            value = 0d;
+            var text = Property(element, key);
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static string Property(ProjectElement element, string key) =>
+            element.Properties.TryGetValue(key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
+    }
+}
