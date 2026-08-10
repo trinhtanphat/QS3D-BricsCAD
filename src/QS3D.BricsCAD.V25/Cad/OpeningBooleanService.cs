@@ -19,7 +19,9 @@ namespace QS3D.BricsCAD.V25.Cad
             public ProjectElement Host { get; set; } = null!;
             public string SolidHandle { get; set; } = string.Empty;
             public string Fingerprint { get; set; } = string.Empty;
+            public IReadOnlyList<string> OpeningIds { get; set; } = Array.Empty<string>();
             public int OpeningCount { get; set; }
+            public int NewOpeningCount { get; set; }
         }
 
         private sealed class PreparedCut
@@ -100,34 +102,71 @@ namespace QS3D.BricsCAD.V25.Cad
                         var hostThicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "ThicknessM", 0.2d), host.Id + "/ThicknessM");
                         var hostHeightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "HeightM", 3.6d), host.Id + "/HeightM");
                         var hostBottomOffsetM = CadGeometryGuard.Number(host, family, "BottomOffsetM", 0d);
-                        var openings = group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                        var requestedElements = group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList();
+                        var requestedOpenings = requestedElements
                             .Select(x => ReadOpening(document, transaction, project, x))
                             .ToList();
+                        var requestedPrepared = PrepareHost(document, host, hostSource, hostThicknessM, hostHeightM, hostBottomOffsetM, requestedOpenings);
+                        var requestedFingerprint = Fingerprint(requestedPrepared);
 
-                        PreparedHost prepared;
-                        if (hostSource is Line hostLine)
+                        var hasCutSolid = host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolidHandle) && !string.IsNullOrWhiteSpace(cutSolidHandle);
+                        var hasCutFingerprint = host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) && !string.IsNullOrWhiteSpace(cutFingerprint);
+                        if (hasCutSolid != hasCutFingerprint)
+                            throw new InvalidOperationException("Host " + host.Id + " có physical opening metadata không đầy đủ. Hãy Build 3D lại host trước khi khoét tiếp.");
+
+                        var cutsToApply = requestedPrepared.Cuts.ToList();
+                        var finalElements = requestedElements;
+                        var finalPrepared = requestedPrepared;
+                        var finalFingerprint = requestedFingerprint;
+                        var sameCutSolid = hasCutSolid && string.Equals(cutSolidHandle!.Trim(), currentSolidHandle, StringComparison.OrdinalIgnoreCase);
+
+                        if (sameCutSolid)
                         {
-                            prepared = PrepareLineHost(document, host, hostLine, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
-                        }
-                        else if (hostSource is Polyline hostPolyline && IsPolylineHost(host.Category))
-                        {
-                            prepared = PreparePolylineHost(document, host, hostPolyline, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
-                        }
-                        else
-                        {
-                            continue;
+                            if (PhysicalOpeningCutTargetState.TryRead(host, out var previousIds))
+                            {
+                                var previousElements = PhysicalOpeningCutTargetState.Resolve(project, host, previousIds)
+                                    .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                                    .ToList();
+                                var previousOpenings = previousElements
+                                    .Select(x => ReadOpening(document, transaction, project, x))
+                                    .ToList();
+                                var previousPrepared = PrepareHost(document, host, hostSource, hostThicknessM, hostHeightM, hostBottomOffsetM, previousOpenings);
+                                var previousFingerprint = Fingerprint(previousPrepared);
+                                if (!string.Equals(cutFingerprint, previousFingerprint, StringComparison.Ordinal))
+                                    throw new InvalidOperationException("Host " + host.Id + " physical opening state đã stale so với geometry/thông số hiện tại. Hãy Build 3D lại host trước khi khoét tiếp.");
+
+                                var previousSet = new HashSet<string>(previousIds, StringComparer.OrdinalIgnoreCase);
+                                var finalById = previousElements
+                                    .Concat(requestedElements)
+                                    .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                                    .Select(x => x.First())
+                                    .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                                    .ToList();
+                                var finalOpenings = finalById
+                                    .Select(x => ReadOpening(document, transaction, project, x))
+                                    .ToList();
+                                finalElements = finalById;
+                                finalPrepared = PrepareHost(document, host, hostSource, hostThicknessM, hostHeightM, hostBottomOffsetM, finalOpenings);
+                                finalFingerprint = Fingerprint(finalPrepared);
+                                cutsToApply = finalPrepared.Cuts
+                                    .Where(x => !previousSet.Contains(x.Opening.Id))
+                                    .ToList();
+                                if (cutsToApply.Count == 0)
+                                {
+                                    if (!string.Equals(cutFingerprint, finalFingerprint, StringComparison.Ordinal))
+                                        throw new InvalidOperationException("Host " + host.Id + " physical opening state không nhất quán. Hãy Build 3D lại host trước khi khoét tiếp.");
+                                    continue;
+                                }
+                            }
+                            else
+                            {
+                                if (!string.Equals(cutFingerprint, requestedFingerprint, StringComparison.Ordinal))
+                                    throw new InvalidOperationException("Host " + host.Id + " có legacy physical opening state không xác định được tập opening đã khoét. Hãy Build 3D lại host trước khi khoét thêm.");
+                                cutsToApply.Clear();
+                            }
                         }
 
-                        var fingerprint = prepared.FingerprintPrefix + "|" + string.Join("|", prepared.Cuts.Select(x => x.FingerprintPart));
-                        if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolidHandle) &&
-                            host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) &&
-                            string.Equals(cutSolidHandle, currentSolidHandle, StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (string.Equals(cutFingerprint, fingerprint, StringComparison.Ordinal)) continue;
-                            throw new InvalidOperationException("Host " + host.Id + " đã được khoét nhưng host/opening geometry hoặc thông số đã thay đổi trên cùng generated solid. Hãy Build 3D lại host trước khi khoét lại.");
-                        }
-
-                        foreach (var item in prepared.Cuts)
+                        foreach (var item in cutsToApply)
                         {
                             var cutterWidth = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterWidthM, item.Opening.Id + "/cutter width");
                             var cutterDepth = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterDepthM, item.Opening.Id + "/cutter depth");
@@ -144,7 +183,15 @@ namespace QS3D.BricsCAD.V25.Cad
                             totalCuts++;
                         }
 
-                        pending.Add(new PendingHostUpdate { Host = host, SolidHandle = currentSolidHandle, Fingerprint = fingerprint, OpeningCount = prepared.Cuts.Count });
+                        pending.Add(new PendingHostUpdate
+                        {
+                            Host = host,
+                            SolidHandle = currentSolidHandle,
+                            Fingerprint = finalFingerprint,
+                            OpeningIds = finalElements.Select(x => x.Id).ToList().AsReadOnly(),
+                            OpeningCount = finalPrepared.Cuts.Count,
+                            NewOpeningCount = cutsToApply.Count
+                        });
                     }
 
                     foreach (var update in pending) CommitSemanticUpdate(project, update);
@@ -177,7 +224,12 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Host.Properties["PhysicalOpeningCutSolidHandle"] = update.SolidHandle;
             update.Host.Properties["PhysicalOpeningCutFingerprint"] = update.Fingerprint;
             update.Host.Properties["PhysicalOpeningCutCount"] = update.OpeningCount.ToString(CultureInfo.InvariantCulture);
-            AuditTrail.ForProject(project).Record("geometry.opening.boolean", update.Host.Id, update.OpeningCount.ToString(CultureInfo.InvariantCulture) + " opening(s) • solid " + update.SolidHandle);
+            PhysicalOpeningCutTargetState.Write(update.Host, update.OpeningIds);
+            AuditTrail.ForProject(project).Record(
+                "geometry.opening.boolean",
+                update.Host.Id,
+                update.NewOpeningCount.ToString(CultureInfo.InvariantCulture) + " new / " +
+                update.OpeningCount.ToString(CultureInfo.InvariantCulture) + " total opening(s) • solid " + update.SolidHandle);
         }
 
         private static void TryRegen(Document document)
@@ -204,6 +256,25 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static bool IsOpening(ProjectElement element) =>
             element.Category == ElementCategory.WallOpening || element.Category == ElementCategory.Door;
+
+        private static PreparedHost PrepareHost(
+            Document document,
+            ProjectElement host,
+            Entity hostSource,
+            double hostThicknessM,
+            double hostHeightM,
+            double hostBottomOffsetM,
+            IReadOnlyList<OpeningGeometry> openings)
+        {
+            if (hostSource is Line hostLine)
+                return PrepareLineHost(document, host, hostLine, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
+            if (hostSource is Polyline hostPolyline && IsPolylineHost(host.Category))
+                return PreparePolylineHost(document, host, hostPolyline, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
+            throw new InvalidOperationException("Host source type chưa hỗ trợ physical opening cut: " + host.Id + " / " + hostSource.GetType().Name);
+        }
+
+        private static string Fingerprint(PreparedHost prepared) =>
+            prepared.FingerprintPrefix + "|" + string.Join("|", prepared.Cuts.Select(x => x.FingerprintPart));
 
         private static PreparedHost PrepareLineHost(
             Document document,

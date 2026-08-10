@@ -75,19 +75,37 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (source == null || source.IsErased || (!(source is Line) && !(source is Polyline)))
                             throw new InvalidOperationException("Host source không còn là LINE/POLYLINE hợp lệ.");
 
-                        var linked = LinkedOpenings(project, host.Id).ToList();
-                        var current = PhysicalOpeningCutLiveFingerprint.Compute(document, transaction, project, host, source, linked);
+                        var sourceIsCurved = source is Polyline polyline && PhysicalOpeningCutLiveFingerprint.HasBulge(polyline);
+                        IReadOnlyList<ProjectElement> fingerprintOpenings;
+                        if (sourceIsCurved)
+                        {
+                            fingerprintOpenings = LinkedOpenings(project, host.Id).ToList().AsReadOnly();
+                        }
+                        else
+                        {
+                            if (!PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds))
+                            {
+                                issues.Add(new ModelHealthIssue(
+                                    "PHYSICAL_OPENING_CUT_TARGET_STATE_MISSING",
+                                    HealthSeverity.Warning,
+                                    "Host straight-cut thiếu tập opening đã thực sự được khoét; Build 3D + Cut lại để nâng metadata trước khi phát hành.",
+                                    host.Id));
+                                continue;
+                            }
+                            fingerprintOpenings = PhysicalOpeningCutTargetState.Resolve(project, host, cutOpeningIds);
+                        }
+
+                        var current = PhysicalOpeningCutLiveFingerprint.Compute(document, transaction, project, host, source, fingerprintOpenings);
                         if (!string.Equals(current, stored.Trim(), StringComparison.OrdinalIgnoreCase))
                         {
                             issues.Add(new ModelHealthIssue(
                                 "PHYSICAL_OPENING_CUT_LIVE_STALE",
                                 HealthSeverity.Warning,
-                                "Host/opening CAD geometry, linked opening set hoặc thông số physical cut đã thay đổi sau lần khoét; Build 3D + Cut lại trước khi phát hành.",
+                                "Host/opening CAD geometry hoặc thông số của tập physical cut đã thay đổi sau lần khoét; Build 3D + Cut lại trước khi phát hành.",
                                 host.Id));
                             continue;
                         }
 
-                        var sourceIsCurved = source is Polyline polyline && PhysicalOpeningCutLiveFingerprint.HasBulge(polyline);
                         var expectedMode = sourceIsCurved ? "CurvedInputV1" : "StraightInputV1";
                         if (!host.Properties.TryGetValue(LiveModeKey, out var liveMode) || !string.Equals(liveMode?.Trim(), expectedMode, StringComparison.OrdinalIgnoreCase))
                         {
@@ -157,7 +175,18 @@ namespace QS3D.BricsCAD.V25.Cad
                         continue;
                     }
 
-                    var fingerprint = PhysicalOpeningCutLiveFingerprint.Compute(document, transaction, project, host, source, group.ToList());
+                    IReadOnlyList<ProjectElement> fingerprintOpenings;
+                    if (curved)
+                    {
+                        fingerprintOpenings = group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+                    }
+                    else
+                    {
+                        if (!PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds)) continue;
+                        fingerprintOpenings = PhysicalOpeningCutTargetState.Resolve(project, host, cutOpeningIds);
+                    }
+
+                    var fingerprint = PhysicalOpeningCutLiveFingerprint.Compute(document, transaction, project, host, source, fingerprintOpenings);
                     pending.Add(new PendingStamp
                     {
                         Host = host,
