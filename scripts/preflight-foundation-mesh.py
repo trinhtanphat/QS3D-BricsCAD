@@ -22,15 +22,17 @@ for relative in required:
 checks = {
     "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs": [
         "using QS3D.Core.Persistence;", "ProjectStateSnapshot.Capture(project)", "var cadCommitted = false;",
-        "foreach (var update in pending) CommitSemanticUpdate(project, update);", "rollback.Restore(project)",
-        "AggregateException(operationError, restoreError)", "try { document.Editor.Regen(); } catch { }",
+        "foreach (var update in pending) CommitSemanticUpdate(project, update);", "if (pending.Count > 0) project.Touch();",
+        "rollback.Restore(project)", "AggregateException(operationError, restoreError)",
         "RectangularSlabMeshPlanner.Plan", "ElementCategory.Foundation", "GeneratedFoundationMeshHandles",
         "GeneratedRebarOwnershipGuard.Build", "ownership.EnsureOwned", "RebarFoundationXNotation", "RebarFoundationYNotation",
         "RebarFoundationFaces", "MaxBarsPerBatch", "FoundationMeshXY", "duplicateSelectedSource", "checked(batchBars + layout.Count)",
         "CadGeometryGuard.Multiply", "CadGeometryGuard.Subtract", "ClearGeneratedFoundationMeshStale",
         'AuditTrail.ForProject(project).Record("geometry.rebar.foundation.mesh"'
     ],
-    "src/QS3D.BricsCAD.V25/FoundationMeshCommands.cs": ["QS3DFOUNDATIONREBAR3D"],
+    "src/QS3D.BricsCAD.V25/FoundationMeshCommands.cs": [
+        "QS3DFOUNDATIONREBAR3D", "FinalizeUi", "document.Editor.Regen()", "UI sync warning: ", "TryWriteMessage"
+    ],
     "src/QS3D.Core/Diagnostics/GeneratedFoundationMeshHealthService.cs": [
         "FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT", "FOUNDATION_MESH_GENERATED_SOLID_MISSING",
         "FOUNDATION_MESH_CATEGORY_MISMATCH", "FOUNDATION_MESH_GENERATED_STALE", "IsGeneratedFoundationMeshStale",
@@ -94,18 +96,22 @@ if foundation_builder.is_file():
     else:
         body = text[start:end]
         semantic_token = "foreach (var update in pending) CommitSemanticUpdate(project, update);"
+        touch_token = "if (pending.Count > 0) project.Touch();"
         commit_token = "transaction.Commit();\n                    cadCommitted = true;"
         semantic = body.find(semantic_token)
+        touch = body.find(touch_token, semantic if semantic >= 0 else 0)
         commit = body.find(commit_token)
         restore = body.find("rollback.Restore(project)")
-        if min(semantic, commit, restore) < 0:
+        if min(semantic, touch, commit, restore) < 0:
             errors.append("foundation mesh atomicity ordering tokens are incomplete")
-        elif not semantic < commit < restore:
-            errors.append("Foundation mesh must commit semantic handles/metadata before CAD commit and restore project state only on the pre-commit failure path")
+        elif not semantic < touch < commit < restore:
+            errors.append("Foundation mesh must commit handles/metadata/revision before CAD commit and restore project state only on the pre-commit failure path")
         if commit >= 0 and semantic_token in body[commit + len(commit_token):]:
             errors.append("Foundation mesh still mutates generated semantic ownership after CAD commit")
         if body.count(semantic_token) != 1 or body.count(commit_token) != 1:
             errors.append("Foundation mesh requires exactly one semantic replacement phase and one CAD commit/flag boundary")
+        if "Editor.Regen(" in body:
+            errors.append("Foundation native mesh builder must remain UI-free; viewport regen belongs to FoundationMeshCommands post-commit FinalizeUi")
 
     helper_start = text.find("private static void CommitSemanticUpdate")
     helper_end = text.find("private sealed class RectangleFrame", helper_start + 1) if helper_start >= 0 else -1
@@ -157,4 +163,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Foundation mesh uses dedicated stale/health metadata and canonical policy-driven ownership across destructive guards, dynamic semantic selection, B4D exclusion, unified health/release-readiness and UI contracts; generated handles/count/spacing/faces/audit commit while CAD is rollback-capable, pre-commit failures restore the deep project snapshot, and post-commit viewport sync is non-fatal.")
+print("PASS: Foundation mesh uses dedicated stale/health metadata and canonical policy-driven ownership across destructive guards, dynamic semantic selection, B4D exclusion, unified health/release-readiness and UI contracts; generated handles/count/spacing/faces/audit/revision advance while CAD is rollback-capable, pre-commit failures restore the deep project snapshot, the native builder stays UI-free, and command-level UI synchronization is non-fatal.")
