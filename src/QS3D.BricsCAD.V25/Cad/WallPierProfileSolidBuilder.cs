@@ -6,6 +6,7 @@ using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 
@@ -37,128 +38,150 @@ namespace QS3D.BricsCAD.V25.Cad
 
             var pending = new List<PendingUpdate>();
             var processed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var cadCommitted = false;
+            try
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                foreach (var id in ids)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var line = transaction.GetObject(id, OpenMode.ForRead, false) as Line;
-                    if (line == null || line.IsErased) continue;
-                    var handle = line.Handle.ToString();
-                    var matches = project.Elements
-                        .Where(x => x.Category == ElementCategory.WallPier && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
-                        .Take(2)
-                        .ToList();
-                    if (matches.Count == 0) continue;
-                    if (matches.Count > 1) throw new InvalidOperationException("WallPier source " + handle + " đang thuộc nhiều semantic element.");
-                    var element = matches[0];
-                    if (!processed.Add(element.Id)) throw new InvalidOperationException("WallPier " + element.Id + " có nhiều source LINE đang được chọn. Tách/capture mỗi source thành element riêng trước khi Vẽ 3D.");
-
-                    var family = project.FindFamily(element.FamilyId);
-                    var dx = CadGeometryGuard.Finite(line.EndPoint.X - line.StartPoint.X, element.Id + "/axis dx");
-                    var dy = CadGeometryGuard.Finite(line.EndPoint.Y - line.StartPoint.Y, element.Id + "/axis dy");
-                    var lengthDrawing = CadGeometryGuard.Hypot(dx, dy, element.Id + "/axis length");
-                    if (lengthDrawing <= 1e-8d) throw new InvalidOperationException("WallPier source LINE quá ngắn: " + element.Id);
-                    var zDeltaM = Math.Abs(CadGeometryGuard.ToMeters(document, CadGeometryGuard.Finite(line.EndPoint.Z - line.StartPoint.Z, element.Id + "/axis dz"), element.Id + "/axis dz"));
-                    if (zDeltaM > 1e-6d) throw new InvalidOperationException("WallPier source LINE phải nằm trên mặt phẳng ngang: " + element.Id);
-
-                    var lengthM = CadGeometryGuard.Positive(CadGeometryGuard.ToMeters(document, lengthDrawing, element.Id + "/LengthM"), element.Id + "/LengthM");
-                    var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.2d), element.Id + "/ThicknessM");
-                    var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
-                    var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                    var mode = ResolveMode(element, family);
-                    var chamferM = mode == WallPierProfileMode.Chamfered ? CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WallPierChamferM", 0.02d), element.Id + "/WallPierChamferM") : 0d;
-                    var profilePlan = WallPierProfilePlanner.Plan(new WallPierProfileInput
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    foreach (var id in ids)
                     {
-                        Mode = mode,
-                        WidthM = lengthM,
-                        DepthM = thicknessM,
-                        HeightM = heightM,
-                        ChamferM = chamferM
-                    });
+                        var line = transaction.GetObject(id, OpenMode.ForRead, false) as Line;
+                        if (line == null || line.IsErased) continue;
+                        var handle = line.Handle.ToString();
+                        var matches = project.Elements
+                            .Where(x => x.Category == ElementCategory.WallPier && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
+                            .Take(2)
+                            .ToList();
+                        if (matches.Count == 0) continue;
+                        if (matches.Count > 1) throw new InvalidOperationException("WallPier source " + handle + " đang thuộc nhiều semantic element.");
+                        var element = matches[0];
+                        if (!processed.Add(element.Id)) throw new InvalidOperationException("WallPier " + element.Id + " có nhiều source LINE đang được chọn. Tách/capture mỗi source thành element riêng trước khi Vẽ 3D.");
 
-                    var thicknessDrawing = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, thicknessM, element.Id + "/ThicknessM"), element.Id + "/thickness drawing units");
-                    var chamferDrawing = mode == WallPierProfileMode.Chamfered
-                        ? CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, chamferM, element.Id + "/WallPierChamferM"), element.Id + "/chamfer drawing units")
-                        : 0d;
-                    var heightDrawing = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/HeightM"), element.Id + "/height drawing units");
-                    var bottomDrawing = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
-                    var ux = dx / lengthDrawing;
-                    var uy = dy / lengthDrawing;
-                    var vx = -uy;
-                    var vy = ux;
-                    var centerX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/center X");
-                    var centerY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/center Y");
-                    var local = LocalProfile(lengthDrawing, thicknessDrawing, chamferDrawing, mode);
+                        var family = project.FindFamily(element.FamilyId);
+                        var dx = CadGeometryGuard.Finite(line.EndPoint.X - line.StartPoint.X, element.Id + "/axis dx");
+                        var dy = CadGeometryGuard.Finite(line.EndPoint.Y - line.StartPoint.Y, element.Id + "/axis dy");
+                        var lengthDrawing = CadGeometryGuard.Hypot(dx, dy, element.Id + "/axis length");
+                        if (lengthDrawing <= 1e-8d) throw new InvalidOperationException("WallPier source LINE quá ngắn: " + element.Id);
+                        var zDeltaM = Math.Abs(CadGeometryGuard.ToMeters(document, CadGeometryGuard.Finite(line.EndPoint.Z - line.StartPoint.Z, element.Id + "/axis dz"), element.Id + "/axis dz"));
+                        if (zDeltaM > 1e-6d) throw new InvalidOperationException("WallPier source LINE phải nằm trên mặt phẳng ngang: " + element.Id);
 
-                    var polyline = new Polyline();
-                    Region? region = null;
-                    var solid = new Solid3d();
-                    try
-                    {
-                        for (var index = 0; index < local.Count; index++)
+                        var lengthM = CadGeometryGuard.Positive(CadGeometryGuard.ToMeters(document, lengthDrawing, element.Id + "/LengthM"), element.Id + "/LengthM");
+                        var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.2d), element.Id + "/ThicknessM");
+                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
+                        var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var mode = ResolveMode(element, family);
+                        var chamferM = mode == WallPierProfileMode.Chamfered ? CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WallPierChamferM", 0.02d), element.Id + "/WallPierChamferM") : 0d;
+                        var profilePlan = WallPierProfilePlanner.Plan(new WallPierProfileInput
                         {
-                            var point = local[index];
-                            var x = CadGeometryGuard.Add(centerX, ux * point.X + vx * point.Y, element.Id + "/profile X");
-                            var y = CadGeometryGuard.Add(centerY, uy * point.X + vy * point.Y, element.Id + "/profile Y");
-                            polyline.AddVertexAt(index, new Point2d(x, y), 0d, 0d, 0d);
-                        }
-                        polyline.Closed = true;
-                        polyline.Elevation = CadGeometryGuard.Add(line.StartPoint.Z, bottomDrawing, element.Id + "/profile elevation");
-                        var regions = Region.CreateFromCurves(new DBObjectCollection { polyline });
-                        if (regions == null || regions.Count != 1 || !(regions[0] is Region generatedRegion))
-                            throw new InvalidOperationException("Không thể tạo Region hợp lệ cho WallPier profile " + element.Id + ".");
-                        region = generatedRegion;
-
-                        solid.SetDatabaseDefaults(document.Database);
-                        solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, heightDrawing), new SweepOptions());
-                        solid.Layer = line.Layer;
-                        var previous = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
-                        modelSpace.AppendEntity(solid);
-                        transaction.AddNewlyCreatedDBObject(solid, true);
-                        GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, ElementCategory.WallPier);
-                        pending.Add(new PendingUpdate
-                        {
-                            Element = element,
-                            PreviousHandle = previous,
-                            GeneratedHandle = solid.Handle.ToString(),
-                            LengthM = lengthM,
-                            ThicknessM = thicknessM,
-                            HeightM = heightM,
-                            FootprintAreaM2 = profilePlan.CrossSectionAreaM2,
                             Mode = mode,
+                            WidthM = lengthM,
+                            DepthM = thicknessM,
+                            HeightM = heightM,
                             ChamferM = chamferM
                         });
+
+                        var thicknessDrawing = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, thicknessM, element.Id + "/ThicknessM"), element.Id + "/thickness drawing units");
+                        var chamferDrawing = mode == WallPierProfileMode.Chamfered
+                            ? CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, chamferM, element.Id + "/WallPierChamferM"), element.Id + "/chamfer drawing units")
+                            : 0d;
+                        var heightDrawing = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/HeightM"), element.Id + "/height drawing units");
+                        var bottomDrawing = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
+                        var ux = dx / lengthDrawing;
+                        var uy = dy / lengthDrawing;
+                        var vx = -uy;
+                        var vy = ux;
+                        var centerX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/center X");
+                        var centerY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/center Y");
+                        var local = LocalProfile(lengthDrawing, thicknessDrawing, chamferDrawing, mode);
+
+                        var polyline = new Polyline();
+                        Region? region = null;
+                        var solid = new Solid3d();
+                        try
+                        {
+                            for (var index = 0; index < local.Count; index++)
+                            {
+                                var point = local[index];
+                                var x = CadGeometryGuard.Add(centerX, ux * point.X + vx * point.Y, element.Id + "/profile X");
+                                var y = CadGeometryGuard.Add(centerY, uy * point.X + vy * point.Y, element.Id + "/profile Y");
+                                polyline.AddVertexAt(index, new Point2d(x, y), 0d, 0d, 0d);
+                            }
+                            polyline.Closed = true;
+                            polyline.Elevation = CadGeometryGuard.Add(line.StartPoint.Z, bottomDrawing, element.Id + "/profile elevation");
+                            var regions = Region.CreateFromCurves(new DBObjectCollection { polyline });
+                            if (regions == null || regions.Count != 1 || !(regions[0] is Region generatedRegion))
+                                throw new InvalidOperationException("Không thể tạo Region hợp lệ cho WallPier profile " + element.Id + ".");
+                            region = generatedRegion;
+
+                            solid.SetDatabaseDefaults(document.Database);
+                            solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, heightDrawing), new SweepOptions());
+                            solid.Layer = line.Layer;
+                            var previous = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
+                            modelSpace.AppendEntity(solid);
+                            transaction.AddNewlyCreatedDBObject(solid, true);
+                            GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, ElementCategory.WallPier);
+                            pending.Add(new PendingUpdate
+                            {
+                                Element = element,
+                                PreviousHandle = previous,
+                                GeneratedHandle = solid.Handle.ToString(),
+                                LengthM = lengthM,
+                                ThicknessM = thicknessM,
+                                HeightM = heightM,
+                                FootprintAreaM2 = profilePlan.CrossSectionAreaM2,
+                                Mode = mode,
+                                ChamferM = chamferM
+                            });
+                        }
+                        catch
+                        {
+                            solid.Dispose();
+                            throw;
+                        }
+                        finally
+                        {
+                            region?.Dispose();
+                            polyline.Dispose();
+                        }
                     }
-                    catch
+
+                    foreach (var update in pending)
                     {
-                        solid.Dispose();
-                        throw;
+                        GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, ElementCategory.WallPier);
+                        ClearPathProfileSnapshot(update.Element);
+                        update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.Properties["HeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.Properties["FootprintAreaM2"] = update.FootprintAreaM2.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.Properties["WallPierProfileMode"] = update.Mode.ToString();
+                        if (update.Mode == WallPierProfileMode.Chamfered)
+                            update.Element.Properties["WallPierChamferM"] = update.ChamferM.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.MarkDirty(ElementDirtyFlags.Quantity);
                     }
-                    finally
+
+                    transaction.Commit();
+                    cadCommitted = true;
+                }
+            }
+            catch (Exception operationError)
+            {
+                if (!cadCommitted)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
                     {
-                        region?.Dispose();
-                        polyline.Dispose();
+                        throw new InvalidOperationException(
+                            "WallPier profile replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
                     }
                 }
-                transaction.Commit();
+                throw;
             }
 
-            foreach (var update in pending)
-            {
-                GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, ElementCategory.WallPier);
-                ClearPathProfileSnapshot(update.Element);
-                update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["HeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["FootprintAreaM2"] = update.FootprintAreaM2.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["WallPierProfileMode"] = update.Mode.ToString();
-                if (update.Mode == WallPierProfileMode.Chamfered)
-                    update.Element.Properties["WallPierChamferM"] = update.ChamferM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.MarkDirty(ElementDirtyFlags.Quantity);
-            }
             if (pending.Count > 0)
             {
                 document.Editor.Regen();
