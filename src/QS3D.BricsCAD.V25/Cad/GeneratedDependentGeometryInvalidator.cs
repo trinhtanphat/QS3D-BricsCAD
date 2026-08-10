@@ -76,6 +76,16 @@ namespace QS3D.BricsCAD.V25.Cad
                 Remove(element, "GeneratedWallMeshVerticalActualSpacingM");
                 Remove(element, "GeneratedWallMeshFaces");
 
+                Remove(element, "GeneratedFoundationMeshHandles");
+                Remove(element, "GeneratedFoundationMeshCount");
+                Remove(element, "GeneratedFoundationMeshXDiameterMm");
+                Remove(element, "GeneratedFoundationMeshYDiameterMm");
+                Remove(element, "GeneratedFoundationMeshCoverM");
+                Remove(element, "GeneratedFoundationMeshMode");
+                Remove(element, "GeneratedFoundationMeshXActualSpacingM");
+                Remove(element, "GeneratedFoundationMeshYActualSpacingM");
+                Remove(element, "GeneratedFoundationMeshFaces");
+
                 Remove(element, "GeneratedCurtainFrameHandles");
                 Remove(element, "GeneratedCurtainFrameCount");
                 Remove(element, "GeneratedCurtainFrameBaseCount");
@@ -106,7 +116,8 @@ namespace QS3D.BricsCAD.V25.Cad
             "GeneratedTieRebarHandles",
             "GeneratedBeamStirrupHandles",
             "GeneratedSlabMeshHandles",
-            "GeneratedWallMeshHandles"
+            "GeneratedWallMeshHandles",
+            "GeneratedFoundationMeshHandles"
         };
 
         public static GeneratedGeometryInvalidation Prepare(
