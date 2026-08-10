@@ -141,6 +141,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["GeneratedCurtainFrameSourceLengthM"] = update.SourceLengthM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedCurtainFrameHeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedCurtainFrameMode"] = Mode;
+                update.Element.ClearGeneratedCurtainFrameStale();
                 AuditTrail.ForProject(project).Record("geometry.curtain.frames", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " frame solids");
             }
             if (pending.Count > 0)
