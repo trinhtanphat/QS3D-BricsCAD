@@ -49,16 +49,21 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
-            var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
+            var handles = snapshots.Select(x => x.Handle).ToArray();
             var project = ProjectContextCoordinator.GetOrCreate(doc);
-            var matched = project.Elements.Where(x =>
-                (predicate == null ? x.SourceHandles.Any(handles.Contains) : SourceHandleResolver.Resolve(project, new[] { x.Id }).Any(handles.Contains)) &&
-                (predicate == null || predicate(x))).ToList();
-            foreach (var element in matched) project.Elements.Remove(element);
-            if (matched.Count > 0) project.Touch();
-            PaletteCoordinator.RefreshProject();
-            PaletteCoordinator.SetStatus("Đã bỏ theo dõi " + matched.Count + " " + label + "; hình học CAD được giữ nguyên.");
-            doc.Editor.WriteMessage("\nQS3D: untracked " + matched.Count + " " + label + "; CAD geometry was not erased.");
+            try
+            {
+                var result = SemanticUntrackService.Untrack(project, handles, predicate);
+                PaletteCoordinator.RefreshProject();
+                PaletteCoordinator.SetStatus("Đã bỏ theo dõi " + result.Count + " " + label + "; hình học CAD được giữ nguyên.");
+                doc.Editor.WriteMessage("\nQS3D: untracked " + result.Count + " " + label + "; CAD geometry was not erased.");
+            }
+            catch (Exception ex)
+            {
+                var message = "Không thể bỏ theo dõi " + label + ": " + ex.Message;
+                PaletteCoordinator.SetStatus(message);
+                doc.Editor.WriteMessage("\nQS3D: " + message);
+            }
         }
 
         private static bool TryZoomSelection(Document document)
