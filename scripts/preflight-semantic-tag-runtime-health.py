@@ -66,19 +66,20 @@ if COMMAND.is_file():
         "new GeneratedSemanticTagHealthService().Inspect(project)",
         "GeneratedSemanticTagRuntimeHealthService.Inspect(document, project)",
         "issues.Take(100)",
-        "CadHandleService.Resolve(document, handles)",
-        "SetImpliedSelection",
+        "CadHandleService.SelectIfAny(document, handles)",
     ):
         if token not in text:
-            errors.append("SemanticTagHealthCommands.cs missing combined persisted/live health command contract: " + token)
+            errors.append("SemanticTagHealthCommands.cs missing combined persisted/live/PICKFIRST-safe health command contract: " + token)
     for forbidden in (
         "SemanticTagBuilder.Build",
         "SemanticTagRemovalService.Remove",
         ".Erase()",
         "ProjectStateSnapshot",
+        "SetImpliedSelection",
+        "CadHandleService.Resolve(document, handles)",
     ):
         if forbidden in text:
-            errors.append("QS3DTAGHEALTH must not mutate tag/project state; forbidden token: " + forbidden)
+            errors.append("QS3DTAGHEALTH must remain read-only and use the shared PICKFIRST-safe selector; forbidden token: " + forbidden)
 
 if BUILDER.is_file() and RUNTIME.is_file():
     builder = BUILDER.read_text(encoding="utf-8")
@@ -99,4 +100,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: live semantic-tag health is read-only, validates native MText/XData/content/placement state, preserves builder/runtime MText encoding parity, is aggregated with existing Grid/generated-solid runtime health and remains directly runnable through QS3DTAGHEALTH.")
+print("PASS: live semantic-tag health is read-only, validates native MText/XData/content/placement state, preserves builder/runtime MText encoding parity, uses PICKFIRST-safe locate, is aggregated with existing Grid/generated-solid runtime health and remains directly runnable through QS3DTAGHEALTH.")
