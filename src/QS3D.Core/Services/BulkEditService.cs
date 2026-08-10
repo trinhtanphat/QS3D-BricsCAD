@@ -7,6 +7,12 @@ namespace QS3D.Core.Services
 {
     public sealed class BulkEditService
     {
+        private sealed class PendingPropertyUpdate
+        {
+            public ProjectElement Element { get; set; } = null!;
+            public string Value { get; set; } = string.Empty;
+        }
+
         public IReadOnlyList<string> SetProperty(ProjectState project, IEnumerable<ProjectElement> elements, string propertyName, string value)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -32,7 +38,8 @@ namespace QS3D.Core.Services
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             if (string.IsNullOrWhiteSpace(propertyName)) throw new ArgumentException("Property name is required.", nameof(propertyName));
             if (double.IsNaN(factor) || double.IsInfinity(factor)) throw new ArgumentOutOfRangeException(nameof(factor));
-            var changed = new List<string>();
+
+            var updates = new List<PendingPropertyUpdate>();
             foreach (var element in OwnedDistinct(project, elements))
             {
                 if (!element.Properties.TryGetValue(propertyName, out var text)) continue;
@@ -42,11 +49,18 @@ namespace QS3D.Core.Services
                 if (double.IsNaN(next) || double.IsInfinity(next)) throw new OverflowException("Bulk property multiplication overflow for " + element.Id + "/" + propertyName);
                 var formatted = next.ToString("R", CultureInfo.InvariantCulture);
                 if (string.Equals(text, formatted, StringComparison.Ordinal)) continue;
-                element.Properties[propertyName] = formatted;
-                element.MarkDirty(DirtyFlags(element, propertyName));
-                changed.Add(element.Id);
+                updates.Add(new PendingPropertyUpdate { Element = element, Value = formatted });
             }
-            if (changed.Count > 0) project.Touch();
+
+            if (updates.Count == 0) return Array.Empty<string>();
+            var changed = new List<string>(updates.Count);
+            foreach (var update in updates)
+            {
+                update.Element.Properties[propertyName] = update.Value;
+                update.Element.MarkDirty(DirtyFlags(update.Element, propertyName));
+                changed.Add(update.Element.Id);
+            }
+            project.Touch();
             return changed.AsReadOnly();
         }
 
