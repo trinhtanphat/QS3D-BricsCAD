@@ -18,7 +18,7 @@ Before starting substantive work, read in this order:
 2. `docs/PRODUCT-BOUNDARY.md` — **canonical product/hosting boundary**;
 3. `CI_POLICY.md`;
 4. fetch the latest `main`;
-5. `docs/AGENT-HANDOFF-CURRENT-2026-08-10.md` — **short canonical current-state delta for fast-moving source**;
+5. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-1710.md` — **newest short canonical current-state delta for fast-moving source**;
 6. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — broader current-source baseline/handoff retained for detail;
 7. `docs/IMPLEMENTATION-STATUS.md`;
 8. `docs/PLAN.md` and `docs/COMMANDS.md`;
@@ -88,7 +88,7 @@ Remote agents must not claim local BricsCAD runtime verification merely because 
 
 When a remote agent reaches a task that requires local-only access, leave the repository in a runnable/testable state and document the exact local validation needed. The canonical local execution handoff is `docs/LOCAL-V25-QUALIFICATION.md`; remaining implementation/engineering/signing gates are tracked in `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, with additional runtime/product-policy gaps tracked in `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`. Extend the appropriate handoff when a new runtime-only feature or unresolved local gate is discovered. When a local agent finishes that validation, commit only reusable source/scripts/docs and a sanitized text summary if useful; never commit proprietary BricsCAD DLLs, private fixtures, screenshots containing private drawings, signing secrets or raw machine evidence.
 
-When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
+When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10-1710.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
 
 ## GitHub Actions / release
 
