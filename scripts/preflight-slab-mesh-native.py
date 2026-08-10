@@ -10,6 +10,7 @@ required = [
     "src/QS3D.Core/Rebar/RectangularSlabMeshPlanner.cs",
     "tests/QS3D.Core.SmokeTests/SlabMeshRegressionSmoke.cs",
     "src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
     "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs",
@@ -31,38 +32,29 @@ builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs"
 if builder.is_file():
     text = builder.read_text(encoding="utf-8")
     for needle in (
-        "ElementCategory.Slab",
-        "RectangularSlabMeshPlanner.Plan",
-        'HandlesKey = "GeneratedSlabMeshHandles"',
-        'Mode = "SlabMeshXY"',
-        "GeneratedRebarOwnershipGuard.Build(project)",
-        "ownership.EnsureOwned(handle, element, HandlesKey)",
-        "duplicateSelectedSource",
-        "MaxBarsPerBatch = 12000",
-        "RebarSlabXNotation",
-        "RebarSlabYNotation",
-        "RebarSlabCoverM",
-        "RebarSlabFaces",
-        "RebarSlabXClosestToFace",
-        "closed 4-vertex rectangular POLYLINE",
-        "GeneratedSlabMeshXDiameterMm",
-        "GeneratedSlabMeshYDiameterMm",
-        "GeneratedSlabMeshXActualSpacingM",
-        "GeneratedSlabMeshYActualSpacingM",
-        '"GeneratedSlabMeshMode"] = Mode',
-        "CadGeometryGuard.Midpoint",
-        "CadGeometryGuard.Subtract",
-        "CadGeometryGuard.Multiply",
-        "CadGeometryGuard.Hypot3",
-        "CreateFrustum",
+        "ElementCategory.Slab", "RectangularSlabMeshPlanner.Plan", 'HandlesKey = "GeneratedSlabMeshHandles"',
+        'Mode = "SlabMeshXY"', "GeneratedRebarOwnershipGuard.Build(project)",
+        "ownership.EnsureOwned(handle, element, HandlesKey)", "duplicateSelectedSource", "MaxBarsPerBatch = 12000",
+        "RebarSlabXNotation", "RebarSlabYNotation", "RebarSlabCoverM", "RebarSlabFaces", "RebarSlabXClosestToFace",
+        "closed 4-vertex rectangular POLYLINE", "GeneratedSlabMeshXDiameterMm", "GeneratedSlabMeshYDiameterMm",
+        "GeneratedSlabMeshXActualSpacingM", "GeneratedSlabMeshYActualSpacingM", '"GeneratedSlabMeshMode"] = Mode',
+        "CadGeometryGuard.Midpoint", "CadGeometryGuard.Subtract", "CadGeometryGuard.Multiply", "CadGeometryGuard.Hypot3", "CreateFrustum",
     ):
         if needle not in text: errors.append("native slab-mesh builder guard missing: " + needle)
     for obsolete in ('HandlesKey = "GeneratedRebarHandles"', "EnsureSlabMeshOwnsGenericRebarSlot", "cùng đường kính"):
         if obsolete in text: errors.append("native slab-mesh builder still contains obsolete generic ownership contract: " + obsolete)
 
+policy = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
+if policy.is_file():
+    text = policy.read_text(encoding="utf-8")
+    for needle in ("RebarHandleKeys", "GeneratedSlabMeshHandles", "IsOwnerSlot", "IsRebarOwnerSlot"):
+        if needle not in text: errors.append("slab-mesh generated ownership policy missing: " + needle)
+
 ownership_guard = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
-if ownership_guard.is_file() and 'Add(element, "GeneratedSlabMeshHandles", owners)' not in ownership_guard.read_text(encoding="utf-8"):
-    errors.append("slab-mesh handles are missing from cross-set generated ownership")
+if ownership_guard.is_file():
+    text = ownership_guard.read_text(encoding="utf-8")
+    for needle in ("CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"):
+        if needle not in text: errors.append("slab-mesh cross-set ownership guard missing shared policy contract: " + needle)
 
 invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
 if invalidator.is_file() and 'Remove(element, "GeneratedSlabMeshHandles")' not in invalidator.read_text(encoding="utf-8"):
@@ -71,33 +63,20 @@ if invalidator.is_file() and 'Remove(element, "GeneratedSlabMeshHandles")' not i
 health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs"
 if health.is_file():
     text = health.read_text(encoding="utf-8")
-    for needle in ('HandlesKey = "GeneratedSlabMeshHandles"', "BuildOwnershipIndex(project)", "SLAB_MESH_MODE_INVALID"):
+    for needle in (
+        'HandlesKey = "GeneratedSlabMeshHandles"', "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)",
+        "SLAB_MESH_MODE_INVALID", "GeneratedSlabMeshXDiameterMm", "GeneratedSlabMeshYDiameterMm", "GeneratedSlabMeshFaces", "ElementCategory.Slab"
+    ):
         if needle not in text: errors.append("slab-mesh health guard missing: " + needle)
 
 command = ROOT / "src/QS3D.BricsCAD.V25/SlabMeshCommands.cs"
 if command.is_file():
     text = command.read_text(encoding="utf-8")
     for needle in (
-        'CommandMethod("QS3DSLABREBAR3D"',
-        "SlabMeshSolidBuilder.BuildSelected",
-        "RebarSlabXNotation/RebarSlabYNotation",
-        'CommandMethod("QS3DSLABREBARHEALTH"',
-        "GeneratedSlabMeshHealthService",
-        "GeneratedSlabMeshHandles",
+        'CommandMethod("QS3DSLABREBAR3D"', "SlabMeshSolidBuilder.BuildSelected", "RebarSlabXNotation/RebarSlabYNotation",
+        'CommandMethod("QS3DSLABREBARHEALTH"', "GeneratedSlabMeshHealthService", "GeneratedSlabMeshHandles",
     ):
         if needle not in text: errors.append("native slab-mesh command missing: " + needle)
-
-ownership = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
-invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
-for path in (ownership, invalidator):
-    if path.is_file() and "GeneratedSlabMeshHandles" not in path.read_text(encoding="utf-8"):
-        errors.append(str(path.relative_to(ROOT)) + " missing GeneratedSlabMeshHandles")
-
-health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs"
-if health.is_file():
-    text = health.read_text(encoding="utf-8")
-    for needle in ("GeneratedSlabMeshXDiameterMm", "GeneratedSlabMeshYDiameterMm", "GeneratedSlabMeshFaces", "ElementCategory.Slab"):
-        if needle not in text: errors.append("slab mesh health missing: " + needle)
 
 planner = ROOT / "src/QS3D.Core/Rebar/RectangularSlabMeshPlanner.cs"
 if planner.is_file():
@@ -114,4 +93,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: rectangular Slab X/Y mesh planner-to-Solid3d wiring uses dedicated ownership, independent X/Y diameters, invalidation, health, finite CAD transforms and pre-allocation limits; runtime remains V25-gated.")
+print("PASS: rectangular Slab X/Y mesh planner-to-Solid3d wiring uses dedicated ownership, policy-driven cross-family health/erase protection, independent X/Y diameters, invalidation, finite CAD transforms and pre-allocation limits; runtime remains V25-gated.")
