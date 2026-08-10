@@ -15,6 +15,8 @@ required_files = [
     "src/QS3D.Core/Diagnostics/GeneratedRebarMatHealthService.cs",
     "src/QS3D.BricsCAD.V25/RebarMatCommands.cs",
     "src/QS3D.BricsCAD.V25/RebarMatHealthCommands.cs",
+    "tests/QS3D.Core.SmokeTests/RebarMatHealthSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/RebarMatHealthSmokeRegistration.cs",
     "scripts/preflight-rebar-mat.py",
     "docs/REBAR-MAT3D.md",
 ]
@@ -26,14 +28,18 @@ checks = {
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": ["GeneratedRebarMatHandles"],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedTieRebarOwnershipGuard.cs": ["GeneratedRebarMatHandles"],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs": ["GeneratedRebarMatHandles", "GeneratedRebarMatMode"],
+    "src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs": ["0.005d", "beam horizontal tolerance"],
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": ["longitudinal rebar", "BeamLongitudinalBars", "ColumnVerticalBars", "REBAR_GENERATED_STALE", "GeneratedRebarMatHandles"],
+    "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs": ["GeneratedBeamStirrupHandles", "GeneratedRebarMatHandles"],
     "src/QS3D.BricsCAD.V25/RebarHealthAllCommands.cs": ["GeneratedBeamStirrupHealthService", "GeneratedRebarMatHealthService", "GeneratedBeamStirrupHandles", "GeneratedRebarMatHandles"],
-    "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": ["QS3DBEAMREBAR3D", "QS3DREBARSTIRRUP3D", "QS3DREBARTIES3D", "QS3DREBARMAT3D", "QS3DREBARMATHEALTH", "QS3DREBARHEALTHALL"],
+    "src/QS3D.BricsCAD.V25/HealthAllCommands.cs": ["GeneratedRebarMatHealthService", "GeneratedRebarOwnershipHealthService", "GeneratedRebarMatHandles"],
+    "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": ["QS3DBEAMREBAR3D", "QS3DREBARSTIRRUP3D", "QS3DREBARTIES3D", "QS3DREBARMAT3D", "QS3DREBARMATHEALTH", "QS3DREBARHEALTHALL", "QS3DHEALTHALL"],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": ["QS3DBEAMREBAR3D", "QS3DREBARSTIRRUP3D", "QS3DREBARTIES3D", "QS3DREBARMAT3D", "QS3DREBARMATHEALTH", "QS3DREBARHEALTHALL"],
     "src/QS3D.Core/Rebar/RectangularRebarLayoutPlanner.cs": ["MaxBars", "requestedBars", "interpolation delta overflowed"],
     "tests/QS3D.Core.SmokeTests/BeamRebarSmokeRegistration.cs": ["BeamRebarRegressionSmoke.Run();"],
     "tests/QS3D.Core.SmokeTests/OrthogonalRebarMatSmokeRegistration.cs": ["OrthogonalRebarMatSmoke.Run();"],
-    "docs/COMMANDS.md": ["QS3DBEAMREBAR3D", "QS3DREBARMAT3D", "QS3DREBARHEALTHALL", "REBAR-MAT3D.md"],
+    "tests/QS3D.Core.SmokeTests/RebarMatHealthSmokeRegistration.cs": ["RebarMatHealthSmoke.Run();"],
+    "docs/COMMANDS.md": ["QS3DBEAMREBAR3D", "QS3DREBARMAT3D", "QS3DREBARHEALTHALL", "QS3DHEALTHALL", "QS3DCUTOPENINGSCURVED", "REBAR-MAT3D.md"],
 }
 for relative, needles in checks.items():
     path = ROOT / relative
@@ -61,7 +67,7 @@ upper = [x.upper() for x in commands]
 if len(upper) != len(set(upper)):
     duplicates = sorted({x for x in upper if upper.count(x) > 1})
     errors.append("duplicate CommandMethod names: " + ", ".join(duplicates))
-for required_command in ("QS3DBEAMREBAR3D", "QS3DREBARSTIRRUP3D", "QS3DREBARTIES3D", "QS3DREBARMAT3D", "QS3DREBARMATHEALTH", "QS3DREBARHEALTHALL"):
+for required_command in ("QS3DBEAMREBAR3D", "QS3DREBARSTIRRUP3D", "QS3DREBARTIES3D", "QS3DREBARMAT3D", "QS3DREBARMATHEALTH", "QS3DREBARHEALTHALL", "QS3DHEALTHALL", "QS3DCUTOPENINGSCURVED"):
     if required_command not in upper:
         errors.append("missing command: " + required_command)
 
@@ -80,4 +86,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: session-audit Beam/Mat rebar, ownership, Health-All, UI command parity, smoke registration and manual-only workflow contracts are present.")
+print("PASS: session-audit Beam/Mat rebar, ownership, Health-All, curved-opening reconciliation, UI command parity, smoke registration and manual-only workflow contracts are present.")
