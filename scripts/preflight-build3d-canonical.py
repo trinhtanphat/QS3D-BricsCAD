@@ -11,7 +11,7 @@ owners = []
 for path in SRC.rglob("*.cs"):
     text = path.read_text(encoding="utf-8")
     if re.search(r'\[CommandMethod\("QS3DBUILD3D"', text, re.IGNORECASE):
-        owners.append(str(path.relative_to(ROOT)))
+        owners.append(path.relative_to(ROOT).as_posix())
 
 expected = "src/QS3D.BricsCAD.V25/Build3DCommands.cs"
 if owners != [expected]:
@@ -47,8 +47,8 @@ else:
         "RegenerateDirty(project)",
         "BuildCategory(document, project, category, sourceType)",
         "if (sourceTypes.Count == 0)",
-        "FinalizeUi(document, selectedElements, sourceHandles, built, regenerated, category)",
-        '"UI sync warning: " + ex.Message',
+        "FinalizeUi(document, elementIds, sourceHandles, built, regenerated, category, project)",
+        '" UI sync warning: " + ex.Message',
         "Report(document, \"QS3DBUILD3D lỗi: \" + ex.Message)",
         'string.Equals(sourceType, "Line", StringComparison.OrdinalIgnoreCase)',
         "category == ElementCategory.WallPier",

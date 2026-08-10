@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,7 +75,7 @@ for token in [
     "A -> B on the same host",
     "reselect A",
     "all-linked after selected-cut",
-    "Partial/malformed metadata",
+    "Partial/malformed/oversized metadata",
     "save, close, reopen",
     "PASS / FAIL / NOT TESTED",
 ]:
@@ -88,7 +89,7 @@ if previous_index < 0 or boolean_index < 0 or previous_index > boolean_index:
     errors.append("previous physical cut state must be validated before BoolSubtract")
 
 # Guard against the old subset-only fingerprint write path.
-if 'Fingerprint = requestedFingerprint' in service:
+if re.search(r"(?<![A-Za-z0-9_])Fingerprint\s*=\s*requestedFingerprint\b", service):
     errors.append("service must not stamp only the current request fingerprint after an incremental cut")
 
 print("QS3D incremental selected opening cut preflight")
