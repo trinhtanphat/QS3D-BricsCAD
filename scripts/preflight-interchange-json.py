@@ -46,7 +46,13 @@ for token in [
     'Property(json, 3, "floorId", element.FloorId',
     'Property(json, 3, "zoneId", element.ZoneId',
     '"sourceRefScope", "drawing-local"',
-    'AppendStringArray(json, element.DependsOn)',
+    'AppendStringArray(json, element.SourceHandles, "sourceHandles")',
+    'AppendStringArray(json, element.DependsOn, "dependencies")',
+    'new HashSet<string>(StringComparer.OrdinalIgnoreCase)',
+    'if (string.IsNullOrWhiteSpace(raw))',
+    'if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))',
+    'if (!seen.Add(raw))',
+    'items.Sort(StringComparer.OrdinalIgnoreCase);',
     'AppendNumberMap(json, element.Quantities)',
     "GeneratedHandleOwnershipPolicy.IsOwnerSlot(normalized)",
     'normalized.StartsWith("Generated"',
@@ -59,6 +65,14 @@ for token in [
     "AtomicFileCommit.TryDelete(tempPath);",
 ]:
     require(core, token, "interchange core contract")
+
+for forbidden in [
+    ".Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim())",
+    ".Distinct(StringComparer.OrdinalIgnoreCase).OrderBy",
+]:
+    if forbidden in core:
+        print(f"[FAIL] interchange exporter must fail closed rather than normalize/drop source references: {forbidden}")
+        sys.exit(1)
 
 for token in [
     "public static ProjectState CreateDetachedCopy(ProjectState project)",
@@ -101,10 +115,16 @@ for token in [
     "SnapshotIsDeterministicAndUsesStableIds",
     "GeneratedOwnershipIsExcluded",
     "NumericContractFailsClosed",
+    "SourceReferencesFailClosedWithoutNormalization",
+    "Padded source handles must not be silently trimmed during export",
+    "Case-insensitive duplicate source handles must not be silently deduplicated during export",
+    "Blank dependencies must not be silently dropped during export",
+    "Padded dependencies must not be silently trimmed during export",
+    "Case-insensitive duplicate dependencies must not be silently deduplicated during export",
     "DetachedCopyDoesNotMutateLiveProject",
     "ProjectStateSnapshot.CreateDetachedCopy(live)",
 ]:
     require(smoke, token, "interchange smoke")
 require(registration, "ProjectInterchangeJsonSmoke.Run();", "smoke registration")
 
-print("[PASS] semantic JSON interchange is stable-ID/SI/read-only, detached from live state, atomically published through the shared file commit path, smoke-covered and excludes generated CAD ownership handles")
+print("[PASS] semantic JSON interchange is stable-ID/SI/read-only, detached from live state, atomically published through the shared file commit path, rejects malformed source refs instead of normalizing them, is smoke-covered and excludes generated CAD ownership handles")
