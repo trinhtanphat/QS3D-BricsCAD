@@ -13,6 +13,12 @@ TestResults/
 *.sv$
 *.xlsx
 *.xls
+*.pfx
+*.p12
+*.pvk
+*.snk
+*.key
+*.pem
 BrxMgd.dll
 TD_Mgd.dll
 TD_MgdBrep.dll
