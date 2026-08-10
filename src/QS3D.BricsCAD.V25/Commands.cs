@@ -135,7 +135,7 @@ namespace QS3D.BricsCAD.V25
                 foreach (var wall in project.Elements.Where(x => x.Category == ElementCategory.ArchitecturalWall && x.Dirty != ElementDirtyFlags.None))
                 {
                     new WallRegenerator().Regenerate(project, wall);
-                    wall.MarkClean(ElementDirtyFlags.All);
+                    wall.MarkClean(ElementGeometryPolicy.SemanticCleanFlags(wall.Category));
                 }
                 PaletteCoordinator.RefreshProject();
                 PaletteCoordinator.SetStatus("Tường KT: " + captured + " semantic • " + solids + " solid 3D từ LINE.");
