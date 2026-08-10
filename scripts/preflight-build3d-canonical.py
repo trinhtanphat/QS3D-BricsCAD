@@ -27,6 +27,10 @@ else:
         "ValidateWallSourceBatch(selectedElements, sourceSnapshots, category",
         "RegenerateDirty(project)",
         "BuildCategory(document, project, category, sourceType)",
+        "if (sourceTypes.Count == 0)",
+        "FinalizeUi(document, selectedElements, sourceHandles, built, regenerated, category)",
+        '"UI sync warning: " + ex.Message',
+        "Report(document, \"QS3DBUILD3D lỗi: \" + ex.Message)",
         'string.Equals(sourceType, "Line", StringComparison.OrdinalIgnoreCase)',
         "category == ElementCategory.WallPier",
         "WallPierProfileSolidBuilder.BuildSelectedLinePiers(document, project)",
@@ -37,9 +41,13 @@ else:
         if token not in text:
             errors.append("canonical Build3D missing contract: " + token)
 
-    body = text[text.find("private static int BuildCategory"):text.find("private static bool IsWallCategory")]
+    body = text[text.find("private static int BuildCategory"):text.find("private static void FinalizeUi")]
     if "CurtainWallFrameSolidBuilder" in body or "CurtainWallPathFrameSolidBuilder" in body:
         errors.append("canonical host Build3D must not append curtain detail transactions without a shared rollback contract; use QS3DCURTAIN3D for frame overlays")
+
+    finalize = text[text.find("private static void FinalizeUi"):text.find("private static bool IsWallCategory")]
+    if "catch (Exception ex)" not in finalize or "TryWriteMessage" not in finalize:
+        errors.append("post-commit Build3D UI synchronization must be non-fatal and best-effort")
 
 review = SRC / "ReviewCommands.cs"
 if review.is_file() and 'CommandMethod("QS3DBUILD3D"' in review.read_text(encoding="utf-8"):
@@ -52,4 +60,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DBUILD3D has one canonical command owner and dispatches WallPier LINE/profile vs POLYLINE host geometry deterministically.")
+print("PASS: QS3DBUILD3D has one canonical owner, validates one wall source type, dispatches WallPier deterministically and keeps post-commit UI failures non-fatal.")
