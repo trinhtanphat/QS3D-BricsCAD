@@ -37,7 +37,8 @@ if not errors:
         "HostWallId",
         "target.Name = snapshot.Name;",
         "target.ElevationM = snapshot.ElevationM;",
-        "target.Properties.Clear();",
+        "InterchangeFamilySemanticApplier.Add(project, snapshot.Id, snapshot.Name, snapshot.Category, snapshot.Properties)",
+        "InterchangeFamilySemanticApplier.Replace(project, snapshot.Id, snapshot.Name, snapshot.Category, snapshot.Properties)",
         "ApplyNewElementsOnly",
         "if (action == InterchangeImportResolutionAction.KeepTarget) continue;",
         "ProjectInterchangeKeepTargetImporter.Plan(project, json)",
@@ -50,6 +51,12 @@ if not errors:
         errors.append("catalog native invalidation must be prepared before CAD commit")
     if s.index("invalidation.CommitMetadata();") > s.index("transaction.Commit();"):
         errors.append("catalog generated ownership metadata must clear before CAD commit")
+
+    catalog_section = re.search(r"private static void ApplyCatalogState\(.*?\n        private static void ApplyNewElementsOnly", s, re.S)
+    if not catalog_section:
+        errors.append("catalog ApplyCatalogState section not found")
+    elif "target.Properties.Clear();" in catalog_section.group(0):
+        errors.append("catalog Family replacement must not clear Family.Properties directly; use inheritance-aware applier")
 
     forbidden_service = [
         "QS3DBUILD3D",
@@ -102,4 +109,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-use-source-catalog: PASS")
-print("UseSource catalog replacement invalidates referencing target elements/dependents inside the CAD transaction, keeps existing Element collisions target-authoritative, discards incoming handles, and leaves rebuild explicit.")
+print("UseSource catalog replacement invalidates referencing target elements/dependents inside the CAD transaction, preserves Family inheritance/overrides, keeps existing Element collisions target-authoritative, discards incoming handles, and leaves rebuild explicit.")
