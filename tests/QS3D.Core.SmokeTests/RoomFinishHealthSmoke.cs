@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -16,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             ConflictingProvenanceIsError();
             StaleRoomFinishIsWarning();
             CrossScopeFinishIsErrorAndExcluded();
+            PropertyOnlyRoomProvenanceResolvesBoundaryHandles();
         }
 
         private static void HealthyLinkedFinishHasNoIssue()
@@ -85,6 +87,19 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(finish);
             Has(project, "ROOM_FINISH_SCOPE_MISMATCH", HealthSeverity.Error, finish.Id);
             if (!AutoRoomLifecycle.IsExcludedFromQuantity(project, finish)) throw new Exception("Cross-scope finish must be excluded from quantity.");
+        }
+
+        private static void PropertyOnlyRoomProvenanceResolvesBoundaryHandles()
+        {
+            var project = BaseProject();
+            var room = project.FindElement("ROOM") ?? throw new Exception("Missing room.");
+            room.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = "A1; b2;A1";
+            var finish = Finish("F-TRACE", room.Id, "f1", "z1");
+            project.Elements.Add(finish);
+
+            var handles = SourceHandleResolver.Resolve(project, new[] { finish.Id });
+            if (handles.Count != 2 || !handles.Contains("A1", StringComparer.OrdinalIgnoreCase) || !handles.Contains("b2", StringComparer.OrdinalIgnoreCase))
+                throw new Exception("Property-only room provenance must trace back to Room boundary handles.");
         }
 
         private static ProjectState BaseProject()
