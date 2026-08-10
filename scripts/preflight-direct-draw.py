@@ -38,6 +38,7 @@ required = {
         'string.Equals(x, "Polyline"',
         "sourceTypes.Count > 1",
         "không build chung LINE và open POLYLINE",
+        "RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
         "BuildCategory(document, project, category)",
     ],
     "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs": [
@@ -150,9 +151,10 @@ if build3d.is_file():
     text = build3d.read_text(encoding="utf-8")
     guard_category = text.find("if (categories.Count > 1)")
     guard_wall_type = text.find("if (sourceTypes.Count > 1)")
+    regenerate = text.find("var regenerated = new RegenerationEngine")
     build = text.find("var built = BuildCategory(document, project, category);")
-    if min(guard_category, guard_wall_type, build) < 0 or not (guard_category < guard_wall_type < build):
-        errors.append("QS3DBUILD3D must reject mixed category and mixed wall source-type batches before the first native builder commit")
+    if min(guard_category, guard_wall_type, regenerate, build) < 0 or not (guard_category < guard_wall_type < regenerate < build):
+        errors.append("QS3DBUILD3D must reject mixed batches and regenerate semantic state before the first native builder commit")
     if "foreach (var category in categories)" in text:
         errors.append("QS3DBUILD3D must not commit independent category builders sequentially in one logical operation")
 
@@ -162,4 +164,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw preserves legacy capture and rollback contracts; QS3DBUILD3D rejects mixed atomicity hazards; native LINE builders reject sloped flattening; P0 authoring is exposed in Ribbon/Domain Hub.")
+print("PASS: Direct Draw preserves legacy capture/rollback; QS3DBUILD3D rejects mixed atomicity hazards and validates semantic regeneration before CAD mutation; native LINE builders reject sloped flattening; P0 authoring is discoverable.")
