@@ -17,10 +17,14 @@ namespace QS3D.Core.Services
 
             var previousHost = opening.Properties.TryGetValue("HostWallId", out var previous) ? (previous ?? string.Empty).Trim() : string.Empty;
             var relationshipChanged = !string.Equals(previousHost, wall.Id, StringComparison.OrdinalIgnoreCase);
+            ProjectElement? previousHostElement = null;
+            if (previousHost.Length > 0 && relationshipChanged)
+                previousHostElement = project.FindElement(previousHost);
+
             if (previousHost.Length > 0 && relationshipChanged)
             {
                 RemoveDependencies(opening, previousHost);
-                MarkHostOpeningRelationChanged(project.FindElement(previousHost), opening.Id, "unlinked/re-hosted");
+                MarkHostOpeningRelationChanged(previousHostElement, opening.Id, "unlinked/re-hosted");
             }
 
             opening.Properties["HostWallId"] = wall.Id;
@@ -42,19 +46,17 @@ namespace QS3D.Core.Services
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             EnsureOpening(opening, openingId);
             var hostId = opening.Properties.TryGetValue("HostWallId", out var value) ? (value ?? string.Empty).Trim() : string.Empty;
+            var host = hostId.Length > 0 ? project.FindElement(hostId) : null;
+
             opening.Properties.Remove("HostWallId");
             var dependencyRemoved = RemoveDependencies(opening, hostId) > 0;
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-            if (hostId.Length > 0)
+            if (host != null)
             {
-                var host = project.FindElement(hostId);
-                if (host != null)
-                {
-                    if (dependencyRemoved || !opening.Properties.ContainsKey("HostWallId"))
-                        MarkHostOpeningRelationChanged(host, opening.Id, "unlinked");
-                    else
-                        host.MarkDirty(ElementDirtyFlags.Quantity);
-                }
+                if (dependencyRemoved || !opening.Properties.ContainsKey("HostWallId"))
+                    MarkHostOpeningRelationChanged(host, opening.Id, "unlinked");
+                else
+                    host.MarkDirty(ElementDirtyFlags.Quantity);
             }
             project.Touch();
             AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
