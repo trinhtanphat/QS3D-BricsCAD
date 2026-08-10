@@ -6,6 +6,7 @@
 - Clean-room WPF UI design system, left workspace, right Drawing/Layer manager, Full Domain Hub and audit-log review UI.
 - Native Ribbon bootstrapper with QS3D workflow tabs; it fails closed and leaves palettes available if V25 ribbon runtime differs.
 - Multi-document lifecycle refresh with project cache keyed by live `Document` identity instead of mutable drawing names; Save As synchronizes the sidecar drawing identity and unsaved drawing filenames are sanitized.
+- DWG identity now uses the BricsCAD database `FingerprintGuid`. Same-path legacy sidecars migrate once, while a copied/mismatched `.qsdb` fails closed before Handle-based work instead of silently overwriting its identity.
 - Project / Zone / Floor / Family / semantic Element model with finite floor elevation validation.
 - Data-driven Family property editor with active Zone/Floor/Family context; edits to a Family property are propagated to existing member elements and mark derived quantities dirty.
 - QSDB schema v3 with deterministic v1 → v2 → v3 migration. Project `QuantityRule` definitions and audit provenance persist inside `.qsdb`.
@@ -13,6 +14,7 @@
 - corrupted or missing primary QSDB fallback to a valid backup; unrecoverable existing project data enters protected recovery state and is not silently overwritten.
 - element dirty flags and UTC update timestamps persist across `.qsdb` save/reopen; invalid persisted numeric/timestamp/dirty-state data is rejected.
 - dependency graph + bounded fixed-point regeneration. Matching project quantity rules run after semantic regeneration using deterministic dependency ordering and numeric Family/instance/quantity variables.
+- semantic quantity regeneration no longer clears `Geometry` for native-solid categories; dimension/family edits keep geometry dirty until a committed BricsCAD builder replacement marks it clean.
 - semantic regeneration arithmetic is guarded against non-finite values/overflow before derived quantities are committed.
 - `QS3DREGEN` is available explicitly; BQ, BBS and Refresh regenerate dirty deterministic semantic quantities before consuming them.
 - semantic capture for Room, Tường KT, Opening, Door, structural categories and custom takeoff.
@@ -23,6 +25,7 @@
 - deterministic structural quantity regeneration for Beam, Slab, Column, StructuralWall, Foundation, Stair, Railing and Earthwork.
 - BricsCAD semantic capture commands and Ribbon/Domain Hub actions for Dầm/Sàn/Cột/Vách BTCT/Móng/Cầu thang/Lan can/Đào đất.
 - source-level native 3D adapters cover Tường KT, Beam, Slab, Column, StructuralWall, Foundation plus Stair footprint mass, Railing line-prism and downward Earthwork footprint mass, using guarded two-phase generated-geometry replacement and CAD geometry validation.
+- generated solids carry versioned QS3D XData ownership (`ProjectId`, `ElementId`, category). Replacement and physical opening boolean operations fail closed unless the live marker matches; Model Health reports missing or mismatched ownership metadata.
 - host linking supports Door/Opening deduction, safe re-host dirty propagation and persisted audit events for link/unlink operations.
 - HT_Phòng semantic generation for floor finish, waterproofing, skirting, wall finish and ceiling finish.
 - live Xref/Layer listing, controls, selection inspection and handle-based Locate/select.

@@ -54,6 +54,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     var openings = group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList();
                     var fingerprint = BuildFingerprint(openings);
                     var currentSolidHandle = solidId.Handle.ToString();
+                    GeneratedGeometryService.RequireMatchingOwnership(hostSolid, project, host, "boolean-cut generated host solid " + currentSolidHandle);
                     if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolidHandle) &&
                         host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) &&
                         string.Equals(cutSolidHandle, currentSolidHandle, StringComparison.OrdinalIgnoreCase))

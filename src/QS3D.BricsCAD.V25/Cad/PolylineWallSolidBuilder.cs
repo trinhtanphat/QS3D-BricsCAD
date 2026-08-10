@@ -93,9 +93,10 @@ namespace QS3D.BricsCAD.V25.Cad
                         solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), new SweepOptions());
                         solid.Layer = polyline.Layer;
 
-                        var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, element);
+                        var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
                         modelSpace.AppendEntity(solid);
                         transaction.AddNewlyCreatedDBObject(solid, true);
+                        GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, ElementCategory.ArchitecturalWall);
                         pending.Add(new PendingUpdate
                         {
                             Element = element,
@@ -124,7 +125,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
             foreach (var update in pending)
             {
-                GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, ElementCategory.ArchitecturalWall);
+                GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, ElementCategory.ArchitecturalWall);
                 update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["FootprintAreaM2"] = update.FootprintAreaM2.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);

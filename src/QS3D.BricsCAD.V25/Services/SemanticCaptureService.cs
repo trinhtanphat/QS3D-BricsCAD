@@ -100,7 +100,7 @@ namespace QS3D.BricsCAD.V25.Services
                 else { var takeoff = new GenericTakeoffRegenerator(); regenerator = takeoff.CanRegenerate(element.Category) ? (IElementRegenerator)takeoff : new RoomRegenerator(); }
             }
             if (regenerator.CanRegenerate(element.Category)) regenerator.Regenerate(project, element);
-            element.MarkClean(ElementDirtyFlags.All);
+            element.MarkClean(ElementGeometryPolicy.SemanticCleanFlags(element.Category));
         }
 
         private static ProjectFamily CreateFamily(ProjectState project, ElementCategory category)
