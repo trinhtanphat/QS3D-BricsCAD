@@ -16,6 +16,26 @@ namespace QS3D.Core.Domain
 
     public sealed class ProjectElement
     {
+        public const string GeneratedGeometryStateKey = "QS3D.GeneratedGeometry.State";
+        public const string GeneratedGeometryStaleReasonKey = "QS3D.GeneratedGeometry.StaleReason";
+        public const string GeneratedSolidStateKey = "QS3D.GeneratedSolid.State";
+        public const string GeneratedRebarStateKey = "QS3D.GeneratedRebar.State";
+        public const string GeneratedShapeRebarStateKey = "QS3D.GeneratedShapeRebar.State";
+        public const string GeneratedTieRebarStateKey = "QS3D.GeneratedTieRebar.State";
+        public const string GeneratedBeamStirrupStateKey = "QS3D.GeneratedBeamStirrup.State";
+        public const string GeneratedSolidStaleSnapshotKey = "QS3D.GeneratedSolid.StaleSnapshot";
+        public const string GeneratedRebarStaleSnapshotKey = "QS3D.GeneratedRebar.StaleSnapshot";
+        public const string GeneratedShapeRebarStaleSnapshotKey = "QS3D.GeneratedShapeRebar.StaleSnapshot";
+        public const string GeneratedTieRebarStaleSnapshotKey = "QS3D.GeneratedTieRebar.StaleSnapshot";
+        public const string GeneratedBeamStirrupStaleSnapshotKey = "QS3D.GeneratedBeamStirrup.StaleSnapshot";
+
+        private const string StaleValue = "stale";
+        private const string GeneratedSolidHandleKey = "GeneratedSolidHandle";
+        private const string GeneratedRebarHandlesKey = "GeneratedRebarHandles";
+        private const string GeneratedShapeRebarHandlesKey = "GeneratedShapeRebarHandles";
+        private const string GeneratedTieRebarHandlesKey = "GeneratedTieRebarHandles";
+        private const string GeneratedBeamStirrupHandlesKey = "GeneratedBeamStirrupHandles";
+
         public ProjectElement(string id, ElementCategory category, string familyId, string floorId, string zoneId)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Element id is required.", nameof(id));
@@ -46,12 +66,16 @@ namespace QS3D.Core.Domain
 
         public void MarkDirty(ElementDirtyFlags flags)
         {
+            if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
+            if ((flags & (ElementDirtyFlags.Geometry | ElementDirtyFlags.Properties | ElementDirtyFlags.Relations)) != 0)
+                MarkGeneratedGeometryStale("Semantic/source state changed.");
             Dirty |= flags;
             UpdatedUtc = DateTime.UtcNow;
         }
 
         public void MarkClean(ElementDirtyFlags flags)
         {
+            if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
             Dirty &= ~flags;
             UpdatedUtc = DateTime.UtcNow;
         }
@@ -59,7 +83,10 @@ namespace QS3D.Core.Domain
         public void SetProperty(string name, string value)
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Property name is required.", nameof(name));
-            Properties[name.Trim()] = value ?? string.Empty;
+            var key = name.Trim();
+            var normalized = value ?? string.Empty;
+            if (Properties.TryGetValue(key, out var existing) && string.Equals(existing, normalized, StringComparison.Ordinal)) return;
+            Properties[key] = normalized;
             MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
         }
 
@@ -71,11 +98,94 @@ namespace QS3D.Core.Domain
             UpdatedUtc = DateTime.UtcNow;
         }
 
+        public void MarkGeneratedGeometryStale(string reason)
+        {
+            var marked = false;
+            marked |= MarkGeneratedOutputStale(GeneratedSolidHandleKey, GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
+            marked |= MarkGeneratedOutputStale(GeneratedRebarHandlesKey, GeneratedRebarStateKey, GeneratedRebarStaleSnapshotKey);
+            marked |= MarkGeneratedOutputStale(GeneratedShapeRebarHandlesKey, GeneratedShapeRebarStateKey, GeneratedShapeRebarStaleSnapshotKey);
+            marked |= MarkGeneratedOutputStale(GeneratedTieRebarHandlesKey, GeneratedTieRebarStateKey, GeneratedTieRebarStaleSnapshotKey);
+            marked |= MarkGeneratedOutputStale(GeneratedBeamStirrupHandlesKey, GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey);
+            if (!marked) return;
+            Properties[GeneratedGeometryStateKey] = StaleValue;
+            Properties[GeneratedGeometryStaleReasonKey] = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
+        }
+
+        public bool IsGeneratedGeometryStale() =>
+            IsGeneratedSolidStale() ||
+            IsGeneratedRebarStale() ||
+            IsGeneratedShapeRebarStale() ||
+            IsGeneratedTieRebarStale() ||
+            IsGeneratedBeamStirrupStale();
+
+        public bool IsGeneratedSolidStale() => IsGeneratedOutputStale(GeneratedSolidHandleKey, GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
+        public bool IsGeneratedRebarStale() => IsGeneratedOutputStale(GeneratedRebarHandlesKey, GeneratedRebarStateKey, GeneratedRebarStaleSnapshotKey);
+        public bool IsGeneratedShapeRebarStale() => IsGeneratedOutputStale(GeneratedShapeRebarHandlesKey, GeneratedShapeRebarStateKey, GeneratedShapeRebarStaleSnapshotKey);
+        public bool IsGeneratedTieRebarStale() => IsGeneratedOutputStale(GeneratedTieRebarHandlesKey, GeneratedTieRebarStateKey, GeneratedTieRebarStaleSnapshotKey);
+        public bool IsGeneratedBeamStirrupStale() => IsGeneratedOutputStale(GeneratedBeamStirrupHandlesKey, GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey);
+
+        public void ClearGeneratedSolidStale() => ClearGeneratedOutputStale(GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
+        public void ClearGeneratedRebarStale() => ClearGeneratedOutputStale(GeneratedRebarStateKey, GeneratedRebarStaleSnapshotKey);
+        public void ClearGeneratedShapeRebarStale() => ClearGeneratedOutputStale(GeneratedShapeRebarStateKey, GeneratedShapeRebarStaleSnapshotKey);
+        public void ClearGeneratedTieRebarStale() => ClearGeneratedOutputStale(GeneratedTieRebarStateKey, GeneratedTieRebarStaleSnapshotKey);
+        public void ClearGeneratedBeamStirrupStale() => ClearGeneratedOutputStale(GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey);
+
+        public void ClearGeneratedGeometryStale()
+        {
+            Remove(GeneratedSolidStateKey);
+            Remove(GeneratedSolidStaleSnapshotKey);
+            Remove(GeneratedRebarStateKey);
+            Remove(GeneratedRebarStaleSnapshotKey);
+            Remove(GeneratedShapeRebarStateKey);
+            Remove(GeneratedShapeRebarStaleSnapshotKey);
+            Remove(GeneratedTieRebarStateKey);
+            Remove(GeneratedTieRebarStaleSnapshotKey);
+            Remove(GeneratedBeamStirrupStateKey);
+            Remove(GeneratedBeamStirrupStaleSnapshotKey);
+            Remove(GeneratedGeometryStateKey);
+            Remove(GeneratedGeometryStaleReasonKey);
+        }
+
         internal void RestorePersistenceState(ElementDirtyFlags dirty, DateTime updatedUtc)
         {
             if ((dirty & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(dirty));
             Dirty = dirty;
             UpdatedUtc = updatedUtc.Kind == DateTimeKind.Utc ? updatedUtc : updatedUtc.ToUniversalTime();
+        }
+
+        private bool MarkGeneratedOutputStale(string outputKey, string stateKey, string snapshotKey)
+        {
+            if (!Properties.TryGetValue(outputKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return false;
+            Properties[stateKey] = StaleValue;
+            Properties[snapshotKey] = raw.Trim();
+            return true;
+        }
+
+        private bool IsGeneratedOutputStale(string outputKey, string stateKey, string snapshotKey)
+        {
+            if (!Properties.TryGetValue(stateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!Properties.TryGetValue(snapshotKey, out var snapshot) || string.IsNullOrWhiteSpace(snapshot)) return false;
+            if (!Properties.TryGetValue(outputKey, out var current) || string.IsNullOrWhiteSpace(current)) return false;
+            return string.Equals(snapshot.Trim(), current.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ClearGeneratedOutputStale(string stateKey, string snapshotKey)
+        {
+            Remove(stateKey);
+            Remove(snapshotKey);
+            ClearAggregateStaleIfResolved();
+        }
+
+        private void ClearAggregateStaleIfResolved()
+        {
+            if (IsGeneratedGeometryStale()) return;
+            Remove(GeneratedGeometryStateKey);
+            Remove(GeneratedGeometryStaleReasonKey);
+        }
+
+        private void Remove(string key)
+        {
+            if (Properties.ContainsKey(key)) Properties.Remove(key);
         }
     }
 }
