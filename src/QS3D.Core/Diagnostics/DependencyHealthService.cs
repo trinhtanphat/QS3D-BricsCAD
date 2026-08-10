@@ -11,12 +11,13 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
 
-            var byId = project.Elements.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+            var byId = new HashSet<string>(project.Elements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             var graph = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
             var selfReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var element in project.Elements)
             {
+                if (graph.ContainsKey(element.Id)) continue;
                 var dependencies = new List<string>();
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var raw in element.DependsOn)
@@ -28,7 +29,7 @@ namespace QS3D.Core.Diagnostics
                         selfReferences.Add(element.Id);
                         continue;
                     }
-                    if (byId.ContainsKey(dependencyId)) dependencies.Add(dependencyId);
+                    if (byId.Contains(dependencyId)) dependencies.Add(dependencyId);
                 }
                 graph[element.Id] = dependencies.ToArray();
             }
