@@ -58,6 +58,8 @@ checks = {
     ],
     required[9]: ["DoorOpeningXlsxSmoke.Run();"],
 }
+checks[required[1]].append("XlsxPackageValidator.Validate")
+checks[required[8]].extend(("Invalid\\u0001Family", "ORIGINAL"))
 for relative, needles in checks.items():
     path = ROOT / relative
     if not path.is_file(): continue

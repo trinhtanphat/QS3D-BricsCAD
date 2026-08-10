@@ -65,6 +65,7 @@ require("policy", (
     'element.SetQuantity("GrossVolumeM3", volume)',
     'element.SetQuantity("NetVolumeM3", volume)',
     'element.SetQuantity("MeasuredSurfaceAreaM2", surfaceArea)',
+    "case ElementCategory.WallFinish:",
 ))
 require("regen", ("MeasuredSolidQuantityPolicy.Apply(element)",))
 require("review", (
@@ -78,6 +79,7 @@ require("logic_smoke", (
 ))
 require("quantity_smoke", (
     "MeasuredSolidMassOverridesDefaultPrismVolume",
+    "MeasuredWallFinishSolidPreservesVolumeAndSurface",
     "MeasuredSolidQuantityPolicy.VolumeProperty",
     "MeasuredSolidQuantityPolicy.SurfaceAreaProperty",
     'slab.Quantities["NetVolumeM3"] - 1.75d',
