@@ -25,7 +25,7 @@
 - Quick Takeoff deterministic Length/Area/Volume/Count path and drawing-unit conversion from BricsCAD `INSUNITS` rather than a hard-coded millimeter fallback.
 - deterministic structural quantity regeneration for Beam, Slab, Column, StructuralWall, Foundation, Stair, Railing and Earthwork.
 - BricsCAD semantic capture commands and Ribbon/Domain Hub actions for Tường KT/Cửa plus Dầm/Sàn/Cột/Vách BTCT/Móng/Cầu thang/Lan can/Đào đất.
-- source-level native 3D adapters cover ArchitecturalWall/Tường Gạch from LINE and open POLYLINE centerlines, plus Beam, Slab, Column, StructuralWall, Foundation, Stair footprint mass, Railing line-prism and downward Earthwork footprint mass. Polyline wall bulges are tessellated into the deterministic `WallFootprintEngine`; generated geometry uses guarded two-phase replacement and CAD geometry validation.
+- source-level native 3D adapters cover Tường Gạch/ArchitecturalWall, Vách Kính/GlassWall and Trụ Tường/WallPier from LINE and open POLYLINE centerlines, plus Beam, Slab, Column, StructuralWall, Foundation, Stair footprint mass, Railing line-prism and downward Earthwork footprint mass. All three Tường KT variants share the guarded centerline extrusion path; polyline bulges are tessellated into the deterministic `WallFootprintEngine`; generated geometry uses guarded two-phase replacement and CAD geometry validation.
 - host linking supports Door/Opening deduction, safe re-host dirty propagation and persisted audit events for link/unlink operations.
 - physical Door/Opening boolean subtraction source is exposed as `QS3DCUTOPENINGS` for supported generated LINE-host solids. The service prepares cuts before mutation and fingerprints live host + opening placement/dimensions, preventing a moved opening from being silently mistaken for an already-applied cut; changed geometry on the same cut solid requires rebuilding the host first.
 - HT_Phòng semantic generation for floor finish, waterproofing, skirting, wall finish and ceiling finish.
@@ -41,7 +41,7 @@
 - V25 runtime probe source verifies actual palette visibility rather than treating command dispatch alone as UI success.
 - V25 release packaging generates a command manifest from `CommandMethod` declarations, package metadata, SHA-256 hashes for shipped payloads, installer/uninstaller helpers and a release ZIP while excluding BricsCAD-owned runtime assemblies.
 - per-user BricsCAD V25 DemandLoad installer source is implemented with OnCommand default / optional OnStartup, command registration, payload hash verification, optional Authenticode enforcement, staged file replacement, `-WhatIf`/confirmation semantics and safe uninstall. It intentionally does not weaken BricsCAD security settings.
-- expanded generic/full-domain/geometry-completion preflight guards cover schema/persistence, command uniqueness, generated geometry, structural quantities, BBS CSV safety, wall footprint/opening boolean/rebar geometry source paths, stable planar/curved Room Auto discovery/lifecycle/rollback/UI wiring, DemandLoad wiring and PowerShell syntax.
+- expanded generic/full-domain/geometry-completion preflight guards cover schema/persistence, command uniqueness, generated geometry, structural quantities, BBS CSV safety, all three Tường KT line/polyline 3D variants, wall footprint/opening boolean/rebar geometry source paths, stable planar/curved Room Auto discovery/lifecycle/rollback/UI wiring, DemandLoad wiring and PowerShell syntax.
 - Ribbon + Full Domain Hub now surface Tường Gạch, Vách Kính, Trụ Tường, Door/Opening host link + physical cut and column rebar 3D workflows instead of leaving them command-line-only.
 - `main` GitHub Actions workflows remain `workflow_dispatch` only.
 
@@ -50,7 +50,7 @@
 - Full-domain integration gates were run repeatedly while earlier hardening was merged; the final PR #1 integration gate passed generic preflight, full-domain preflight, Core Release build and the complete deterministic smoke suite before merge.
 - Release-candidate run `31346731964` passed generic preflight, full-domain/release preflight, PowerShell AST parsing for package/install/uninstall scripts, Core Release build and the complete deterministic smoke suite.
 - Integrated release-tree run `31346906413` repeated those checks after merging the Audit/Template UI work and also passed generic preflight, full-domain/release preflight, PowerShell parsing, Core Release build and the complete deterministic smoke suite.
-- Those runs predate the newest Room Auto, wall footprint/polyline, physical opening, rebar-geometry and BLT UI completion batches. These newest heads must not be called CI-verified until a later explicitly approved run covers them.
+- Those runs predate the newest Room Auto, wall footprint/polyline, physical opening, rebar-geometry and BLT UI/Tường KT completion batches. These newest heads must not be called CI-verified until a later explicitly approved run covers them.
 - GitHub-hosted checks validate repository/Core/release-script logic only; they are not substitutes for BricsCAD V25 plugin/runtime execution.
 
 ## Gate C blocker
@@ -62,9 +62,9 @@ Historical BricsCAD V25 integration probe run `31341184031` remained queued beca
 These still require the actual BricsCAD V25 environment or external release infrastructure:
 
 - full plugin compile against the exact installed V25 `BrxMgd.dll` / `TD_Mgd.dll` after the newest source changes;
-- real DemandLoad install/uninstall and `NETLOAD`, Ribbon/palette plus recognition/template/revision/BBS/domain/audit/`QS3DROOMAUTO`/physical-cut/rebar-3D commands on V25.1/V25.2;
+- real DemandLoad install/uninstall and `NETLOAD`, Ribbon/palette plus recognition/template/revision/BBS/domain/audit/`QS3DROOMAUTO`/physical-cut/rebar-3D/Tường KT variant commands on V25.1/V25.2;
 - private sample-DWG regression and Unicode/HiDPI visual comparison;
-- production proof/performance for polyline wall corners and curved centerlines; wall-to-wall joins/T-junction cleanup and freeform wall profiles remain product work;
+- production proof/performance for Tường Gạch/Vách Kính/Trụ Tường LINE/open-POLYLINE/curved centerlines; dedicated curtain-wall framing/panels, specialized pier profiles, wall-to-wall joins/T-junction cleanup and freeform wall profiles remain product work;
 - production proof of physical opening/door boolean subtraction plus generalized support beyond the current compatible LINE-host path;
 - V25/private-DWG proof and large-network performance tuning for automatic room-boundary discovery; optional direct ARC/SPLINE source support beyond LINE/POLYLINE inputs;
 - general geometric rebar authoring beyond the current guarded rectangular-column longitudinal-bar path (beam/slab/wall bars, stirrups, hooks/bends, shapes and editing);
