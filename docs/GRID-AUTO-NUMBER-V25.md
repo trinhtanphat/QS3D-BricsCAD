@@ -28,6 +28,8 @@ Use manual `QS3DGRIDNUMBER` whenever the intended order is not a simple reviewed
 10. review the planned first/last Grid and explicitly confirm;
 11. only then does `GridNamingService.Renumber` mutate semantic labels.
 
+Confirmation is fail-closed: type explicit `Yes` to apply; Enter/default means No and exits without semantic mutation.
+
 The direction of the explicit ordering axis controls the increasing label direction. Reversing the picked axis reverses the projected order; the command does not silently infer a preferred left/right or bottom/top convention.
 
 ## Fail-closed spatial policy
