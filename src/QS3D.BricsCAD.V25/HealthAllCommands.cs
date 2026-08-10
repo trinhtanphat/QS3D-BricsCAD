@@ -48,6 +48,7 @@ namespace QS3D.BricsCAD.V25
 
                 var combined = new List<ModelHealthIssue>();
                 combined.AddRange(new ModelHealthService().Inspect(project, liveSources, liveMain));
+                combined.AddRange(new DependencyHealthService().Inspect(project));
                 combined.AddRange(new GeneratedGeometryStaleHealthService().Inspect(project));
                 combined.AddRange(new GeneratedRebarHealthService().InspectAll(project, liveLongitudinal, liveShape));
                 combined.AddRange(new GeneratedTieRebarHealthService().Inspect(project, liveTies));
