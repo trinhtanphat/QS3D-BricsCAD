@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             BulgeSemicircleTessellation();
             BulgeDirectionMirrors();
             CurvedRoomBoundary();
+            LargeRadiusTinySagittaHonorsLimit();
             InvalidCoordinatesRejected();
             InvalidBulgeToleranceRejected();
         }
@@ -127,6 +128,12 @@ namespace QS3D.Core.SmokeTests
             Near(Math.PI / 2d, boundaries[0].Area, 0.01d);
             Near(Math.PI + 2d, boundaries[0].Perimeter, 0.01d);
             Equal(2, boundaries[0].SourceIds.Count);
+        }
+
+        private static void LargeRadiusTinySagittaHonorsLimit()
+        {
+            Throws<InvalidOperationException>(() => BulgeArcTessellator.Tessellate(
+                new Point2(-1e12, 0), new Point2(1e12, 0), 1d, 1e-6d));
         }
 
         private static void InvalidCoordinatesRejected()

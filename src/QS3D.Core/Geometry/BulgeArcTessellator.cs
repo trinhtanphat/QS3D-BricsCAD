@@ -36,20 +36,25 @@ namespace QS3D.Core.Geometry
             var centerOffset = chord * (1d - bulge * bulge) / (4d * bulge);
             if (double.IsNaN(centerOffset) || double.IsInfinity(centerOffset)) throw new OverflowException("Arc center offset is not finite.");
             var center = new Point2(midpoint.X + nx * centerOffset, midpoint.Y + ny * centerOffset);
+            ValidatePoint(center, "arcCenter");
 
             var sagittaAngle = MaximumSegmentAngle;
-            if (maximumSagitta < radius * 2d)
+            var sagittaRatio = maximumSagitta / radius;
+            if (sagittaRatio < 2d)
             {
-                var cosine = 1d - maximumSagitta / radius;
-                cosine = Math.Max(-1d, Math.Min(1d, cosine));
-                var bySagitta = 2d * Math.Acos(cosine);
-                if (bySagitta > 1e-12d) sagittaAngle = Math.Min(sagittaAngle, bySagitta);
+                var quarterSineSquared = sagittaRatio * 0.5d;
+                if (!(quarterSineSquared > 0d)) throw new InvalidOperationException("Arc sagitta tolerance is below numeric resolution for this radius.");
+                var quarterSine = Math.Sqrt(Math.Min(1d, quarterSineSquared));
+                var bySagitta = 4d * Math.Asin(quarterSine);
+                if (!(bySagitta > 0d) || double.IsNaN(bySagitta) || double.IsInfinity(bySagitta)) throw new InvalidOperationException("Arc sagitta angle is invalid.");
+                sagittaAngle = Math.Min(sagittaAngle, bySagitta);
             }
             if (!(sagittaAngle > 0d) || double.IsNaN(sagittaAngle) || double.IsInfinity(sagittaAngle)) throw new InvalidOperationException("Arc tessellation angle is invalid.");
 
-            var segmentCount = checked((int)Math.Ceiling(absTheta / sagittaAngle));
-            segmentCount = Math.Max(1, segmentCount);
-            if (segmentCount > MaxSegments) throw new InvalidOperationException("Arc tessellation exceeds the supported segment limit.");
+            var requiredSegments = Math.Ceiling(absTheta / sagittaAngle);
+            if (double.IsNaN(requiredSegments) || double.IsInfinity(requiredSegments) || requiredSegments > MaxSegments)
+                throw new InvalidOperationException("Arc tessellation exceeds the supported segment limit.");
+            var segmentCount = Math.Max(1, (int)requiredSegments);
 
             var startAngle = Math.Atan2(start.Y - center.Y, start.X - center.X);
             var points = new List<Point2>(segmentCount + 1) { start };
