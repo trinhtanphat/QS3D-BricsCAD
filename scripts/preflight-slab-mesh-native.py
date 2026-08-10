@@ -11,6 +11,7 @@ required = [
     "tests/QS3D.Core.SmokeTests/SlabMeshRegressionSmoke.cs",
     "src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
     "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs",
     "src/QS3D.BricsCAD.V25/SlabMeshCommands.cs",
 ]
@@ -18,12 +19,13 @@ for rel in required:
     if not (ROOT / rel).is_file(): errors.append("missing native slab-mesh file: " + rel)
 
 owners = []
+health_owners = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
     text = path.read_text(encoding="utf-8")
-    if re.search(r'\[CommandMethod\("QS3DSLABREBAR3D"', text, re.IGNORECASE):
-        owners.append(str(path.relative_to(ROOT)))
-if len(owners) != 1:
-    errors.append("QS3DSLABREBAR3D must have exactly one CommandMethod owner; found: " + ", ".join(owners))
+    if re.search(r'\[CommandMethod\("QS3DSLABREBAR3D"', text, re.IGNORECASE): owners.append(str(path.relative_to(ROOT)))
+    if re.search(r'\[CommandMethod\("QS3DSLABREBARHEALTH"', text, re.IGNORECASE): health_owners.append(str(path.relative_to(ROOT)))
+if len(owners) != 1: errors.append("QS3DSLABREBAR3D must have exactly one CommandMethod owner; found: " + ", ".join(owners))
+if len(health_owners) != 1: errors.append("QS3DSLABREBARHEALTH must have exactly one CommandMethod owner; found: " + ", ".join(health_owners))
 
 builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs"
 if builder.is_file():
@@ -43,6 +45,8 @@ if builder.is_file():
         "RebarSlabFaces",
         "RebarSlabXClosestToFace",
         "closed 4-vertex rectangular POLYLINE",
+        "GeneratedSlabMeshXDiameterMm",
+        "GeneratedSlabMeshYDiameterMm",
         "GeneratedSlabMeshXActualSpacingM",
         "GeneratedSlabMeshYActualSpacingM",
         '"GeneratedSlabMeshMode"] = Mode',
@@ -53,26 +57,47 @@ if builder.is_file():
         "CreateFrustum",
     ):
         if needle not in text: errors.append("native slab-mesh builder guard missing: " + needle)
-
-ownership = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
-if ownership.is_file() and 'Add(element, "GeneratedSlabMeshHandles", owners)' not in ownership.read_text(encoding="utf-8"):
-    errors.append("GeneratedRebarOwnershipGuard does not index GeneratedSlabMeshHandles")
+    for obsolete in ('HandlesKey = "GeneratedRebarHandles"', "EnsureSlabMeshOwnsGenericRebarSlot", "cùng đường kính"):
+        if obsolete in text: errors.append("native slab-mesh builder still contains obsolete generic ownership contract: " + obsolete)
 
 command = ROOT / "src/QS3D.BricsCAD.V25/SlabMeshCommands.cs"
 if command.is_file():
     text = command.read_text(encoding="utf-8")
     for needle in (
         'CommandMethod("QS3DSLABREBAR3D"',
-        'CommandMethod("QS3DSLABREBARHEALTH"',
         "SlabMeshSolidBuilder.BuildSelected",
-        "GeneratedSlabMeshHealthService().Inspect",
         "RebarSlabXNotation/RebarSlabYNotation",
+        'CommandMethod("QS3DSLABREBARHEALTH"',
+        "GeneratedSlabMeshHealthService",
+        "GeneratedSlabMeshHandles",
     ):
         if needle not in text: errors.append("native slab-mesh command missing: " + needle)
+
+ownership = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
+invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
+for path in (ownership, invalidator):
+    if path.is_file() and "GeneratedSlabMeshHandles" not in path.read_text(encoding="utf-8"):
+        errors.append(str(path.relative_to(ROOT)) + " missing GeneratedSlabMeshHandles")
+
+health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs"
+if health.is_file():
+    text = health.read_text(encoding="utf-8")
+    for needle in ("GeneratedSlabMeshXDiameterMm", "GeneratedSlabMeshYDiameterMm", "GeneratedSlabMeshFaces", "ElementCategory.Slab"):
+        if needle not in text: errors.append("slab mesh health missing: " + needle)
+
+planner = ROOT / "src/QS3D.Core/Rebar/RectangularSlabMeshPlanner.cs"
+if planner.is_file():
+    text = planner.read_text(encoding="utf-8")
+    for needle in ("MaxBars = 8192", "projectedBars", "new List<SlabMeshBarPlacement>((int)projectedBars)"):
+        if needle not in text: errors.append("slab mesh planner allocation guard missing: " + needle)
+
+smoke = ROOT / "tests/QS3D.Core.SmokeTests/SlabMeshRegressionSmoke.cs"
+if smoke.is_file() and "OversizedAggregateMeshIsRejected();" not in smoke.read_text(encoding="utf-8"):
+    errors.append("slab mesh aggregate allocation regression is missing")
 
 print("QS3D native slab-mesh preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: rectangular Slab X/Y mesh planner-to-Solid3d wiring, separate ownership/health metadata, finite CAD transforms, limits and command registration are present.")
+print("PASS: rectangular Slab X/Y mesh planner-to-Solid3d wiring uses dedicated ownership, independent X/Y diameters, invalidation, health, finite CAD transforms and pre-allocation limits; runtime remains V25-gated.")
