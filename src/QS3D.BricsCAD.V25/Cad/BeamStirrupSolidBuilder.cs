@@ -134,9 +134,11 @@ namespace QS3D.BricsCAD.V25.Cad
                     foreach (var stationM in layout.StationOffsetsM)
                     {
                         var station = CadGeometryGuard.ToDrawingUnits(document, stationM, element.Id + "/stirrup station");
+                        var deltaX = CadGeometryGuard.Finite(axis.X * station, element.Id + "/stirrup station X");
+                        var deltaY = CadGeometryGuard.Finite(axis.Y * station, element.Id + "/stirrup station Y");
                         var center = new Point3d(
-                            CadGeometryGuard.Add(midX, ux * station, element.Id + "/stirrup center X"),
-                            CadGeometryGuard.Add(midY, uy * station, element.Id + "/stirrup center Y"),
+                            CadGeometryGuard.Add(midX, deltaX, element.Id + "/stirrup center X"),
+                            CadGeometryGuard.Add(midY, deltaY, element.Id + "/stirrup center Y"),
                             centerZ);
                         var stirrup = BuildLoop(document, center, perpendicular, layout.SectionLoop, radius, element.Id + "/stirrup");
                         try
@@ -205,9 +207,11 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             var horizontalOffset = CadGeometryGuard.ToDrawingUnits(document, sectionPoint.X, label + "/horizontal");
             var verticalOffset = CadGeometryGuard.ToDrawingUnits(document, sectionPoint.Y, label + "/vertical");
+            var deltaX = CadGeometryGuard.Finite(horizontal.X * horizontalOffset, label + "/horizontal X");
+            var deltaY = CadGeometryGuard.Finite(horizontal.Y * horizontalOffset, label + "/horizontal Y");
             return new Point3d(
-                CadGeometryGuard.Add(center.X, horizontal.X * horizontalOffset, label + "/X"),
-                CadGeometryGuard.Add(center.Y, horizontal.Y * horizontalOffset, label + "/Y"),
+                CadGeometryGuard.Add(center.X, deltaX, label + "/X"),
+                CadGeometryGuard.Add(center.Y, deltaY, label + "/Y"),
                 CadGeometryGuard.Add(center.Z, verticalOffset, label + "/Z"));
         }
 
