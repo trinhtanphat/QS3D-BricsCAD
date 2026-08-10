@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILDER = ROOT / "src/QS3D.BricsCAD.V25/Cad/BbsNativeTableBuilder.cs"
 COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/BbsNativeTableCommands.cs"
 BBS = ROOT / "src/QS3D.Core/Rebar/RebarSchedule.cs"
+BBS_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/BbsRegressionSmoke.cs"
 CSV_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs"
 SHARED = ROOT / "src/QS3D.BricsCAD.V25/Cad/ProjectOwnedNativeTableArtifactService.cs"
 AGGREGATOR = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedSolidRuntimeHealthService.cs"
@@ -14,7 +15,7 @@ HUB = ROOT / "src/QS3D.BricsCAD.V25/UI/ScheduleHubWindow.xaml"
 DOC = ROOT / "docs/NATIVE-BBS-TABLE-P0.md"
 errors = []
 
-for path in (BUILDER, COMMANDS, BBS, CSV_COMMANDS, SHARED, AGGREGATOR, RELEASE, HUB, DOC):
+for path in (BUILDER, COMMANDS, BBS, BBS_SMOKE, CSV_COMMANDS, SHARED, AGGREGATOR, RELEASE, HUB, DOC):
     if not path.is_file(): errors.append("missing BBS native Table file: " + str(path.relative_to(ROOT)))
 
 row_tokens = (
@@ -64,12 +65,29 @@ if BBS.is_file():
     text = BBS.read_text(encoding="utf-8")
     for token in (
         'public static class ProjectRebarScheduleBuilder',
+        'foreach (var element in ValidateProjectElements(project))',
+        'private static IReadOnlyList<ProjectElement> ValidateProjectElements(ProjectState project)',
+        'Project contains a null semantic element entry.',
+        'Project contains a semantic element with a blank id.',
+        'Project contains duplicate semantic element id:',
+        'new HashSet<string>(StringComparer.OrdinalIgnoreCase)',
         'RebarScheduleBuilder.Build(inputs)',
         'RebarFabricationQualificationHealthService.StatusPropertyKey',
         'RebarFabricationQualificationHealthService.StandardCodePropertyKey',
         'RebarFabricationQualificationHealthService.DetailingRevisionPropertyKey',
     ):
-        if token not in text: errors.append("RebarSchedule.cs lost authoritative BBS/provenance token: " + token)
+        if token not in text: errors.append("RebarSchedule.cs lost authoritative BBS/identity/provenance token: " + token)
+
+if BBS_SMOKE.is_file():
+    text = BBS_SMOKE.read_text(encoding="utf-8")
+    for token in (
+        'ProjectScheduleRejectsNullSemanticEntry();',
+        'ProjectScheduleRejectsDuplicateSemanticIdentity();',
+        'project.Elements.Add(null!);',
+        'new ProjectElement("b1", ElementCategory.Room',
+        'ProjectRebarScheduleBuilder.Build(project)',
+    ):
+        if token not in text: errors.append("BbsRegressionSmoke.cs missing project identity fail-closed regression: " + token)
 
 if CSV_COMMANDS.is_file() and 'ProjectRebarScheduleBuilder.Build(project)' not in CSV_COMMANDS.read_text(encoding="utf-8"):
     errors.append("BBS CSV command no longer shares ProjectRebarScheduleBuilder authority")
@@ -112,4 +130,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BBS native Table consumes authoritative ProjectRebarScheduleBuilder rows across all 15 schedule/provenance fields, forbids native rebar calculation/parsing duplication, regenerates semantic state before build/refresh, uses shared project-level QS3DDOC ownership/rollback/live drift health, remains read-only in health, is fail-isolated in Release Check runtime health and is discoverable from Schedule Hub without claiming licensed V25 qualification.")
+print("PASS: BBS native Table consumes authoritative ProjectRebarScheduleBuilder rows across all 15 schedule/provenance fields, rejects corrupt project semantic identities before extraction, forbids native rebar calculation/parsing duplication, regenerates semantic state before build/refresh, uses shared project-level QS3DDOC ownership/rollback/live drift health, remains read-only in health, is fail-isolated in Release Check runtime health and is discoverable from Schedule Hub without claiming licensed V25 qualification.")
