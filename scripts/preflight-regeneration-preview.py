@@ -18,6 +18,10 @@ if SOURCE.is_file():
     text = SOURCE.read_text(encoding="utf-8")
     for token in (
         "public RegenerationPreview Preview(ProjectState project)",
+        "public long SourceChangeVersion",
+        "var sourceChangeVersion = project.ChangeVersion;",
+        "preview.SourceChangeVersion != project.ChangeVersion",
+        "project changed after preview",
         "ProjectStateSnapshot.CreateDetachedCopy(project)",
         'revisions.Capture(detached, "regen-preview-before")',
         "NewEngine().RegenerateDirty(detached)",
@@ -32,7 +36,7 @@ if SOURCE.is_file():
         "if (diff.NewErrorCount > 0)",
     ):
         if token not in text:
-            errors.append("RegenerationPreviewService missing detached/stale/health guard token: " + token)
+            errors.append("RegenerationPreviewService missing detached/version/stale/health guard token: " + token)
 
 if ENGINE.is_file():
     text = ENGINE.read_text(encoding="utf-8")
@@ -48,6 +52,9 @@ if SMOKE.is_file():
     for token in (
         "PreviewRunsOnDetachedState();",
         "StalePreviewFailsBeforeLiveMutation();",
+        "ChangeVersionInvalidatesEquivalentPreview();",
+        "project.Touch();",
+        "preview.SourceChangeVersion",
         "FreshPreviewCanApplyWithoutNewHealthErrors();",
         "Quantity:NetVolumeM3",
         "!beam.Quantities.ContainsKey(\"NetVolumeM3\")",
@@ -64,4 +71,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: semantic regeneration supports detached dry-run revision/health diff, stale-preview rejection and rollback if guarded live apply creates new Model Health errors.")
+print("PASS: semantic regeneration supports detached dry-run bound to ProjectState.ChangeVersion, revision/health diff, stale-preview rejection and rollback if guarded live apply creates new Model Health errors.")
