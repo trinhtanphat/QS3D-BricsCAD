@@ -16,10 +16,11 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var result = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
+                var stamped = result.Elements > 0 ? CurtainWallFrameLiveStateService.StampSelected(document, project) : 0;
                 PaletteCoordinator.RefreshProject();
                 var message = result.Frames == 0
                     ? "Curtain Frames 3D: chọn GlassWall semantic LINE. Open/curved POLYLINE hiện giữ generic host và chưa dựng frame overlay."
-                    : "Curtain Frames 3D: đã tạo/cập nhật " + result.Frames + " frame solid trên " + result.Elements + " vách kính.";
+                    : "Curtain Frames 3D: đã tạo/cập nhật " + result.Frames + " frame solid trên " + result.Elements + " vách kính • live fingerprint " + stamped + ".";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
