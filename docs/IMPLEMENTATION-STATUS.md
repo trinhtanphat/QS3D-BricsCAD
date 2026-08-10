@@ -10,10 +10,12 @@ This file distinguishes **implemented source paths** from behavior that still re
 - Project / Zone / Floor / Family / semantic Element model with `.qsdb` schema migration, dirty flags, deterministic regeneration, audit, revision and template persistence.
 - Multi-document project cache bound to live Document/DWG identity with fingerprint and Save As guards.
 - Floor/Zone/Family assignment and object-based Bulk Edit require the actual `ProjectElement` instance owned by the project; same-ID foreign objects fail closed.
-- Project Tools, Floor, Zone, Family and Material editors are drawing-bound; every project mutation/activation/selection-assignment/export action now requires the window's bound DWG to still be the active BricsCAD document.
+- Project Tools, Floor, Zone, Family and Material editors are drawing-bound; project mutation/activation/selection-assignment/export actions require the window's bound DWG to still be the active BricsCAD document.
 - Stored custom Material Catalog metadata fails closed when a legacy/tampered record attempts to shadow a built-in material ID or name.
-- `.qsdb` continues to allow dangling semantic Family/Floor/Zone/Active/DependsOn references to load for recovery; Model Health reports those references instead of making older repairable projects unreadable.
-- Semantic dependency self-references and true dependency cycles are detected before regeneration. `QS3DHEALTHALL` reports them and `QS3DRELEASECHECK` treats them as release blockers.
+- `.qsdb` intentionally continues to load dangling semantic Family/Floor/Zone/Active/DependsOn references for repair; Model Health reports these references instead of making older recoverable projects unreadable.
+- Semantic dependency self-references and true dependency cycles are detected before regeneration; `QS3DHEALTHALL` reports them and `QS3DRELEASECHECK` treats them as release blockers.
+- Semantic capture is transactional at project-state level: single recognition/manual capture and multi-selection capture snapshot the complete `ProjectState` before mutation, reject QS3D-generated output handles as semantic input, and restore Families/Elements/Rules/Audit/Metadata/timestamps when conversion or regeneration fails. If rollback itself fails, the original and rollback errors are preserved together instead of hiding the first failure.
+- HT_Phòng generation and synchronization use the same full-project snapshot/rollback pattern so a failed finish regenerator cannot leave a partially-created five-family finish batch in memory.
 
 ### BLT-style UI / semantic selection
 
@@ -21,15 +23,13 @@ This file distinguishes **implemented source paths** from behavior that still re
 - Active Family is explicit and category-safe; GlassWall/WallPier capture respects the selected active Family when categories match.
 - Locate/Zoom, Highlight, Focus, Isolate/Restore, Section Box, Section Plane and clip-display review flows.
 - Full Domain Hub, Project Tools, Schedule Hub, Rebar 3D Hub, Curtain Hub and Geometry Extensions provide discoverable workflow entry points.
-- Semantic handle ownership resolution includes source handles and generated owner slots, including Slab mesh, StructuralWall mesh, Foundation mesh, Curtain frame overlays and future `Generated*Handle(s)` slots through the shared ownership policy.
-- Semantic capture rejects QS3D-generated output as new source input and uses project-state rollback for single/multi-selection failure paths.
+- Semantic handle ownership resolution includes current generated channels, including Slab mesh, StructuralWall mesh, Foundation mesh and Curtain frame overlays, and consumes shared generated-owner enumeration instead of a hard-coded family list so future `Generated*Handle(s)` slots resolve automatically.
 
 ### Room / finishes / schedules
 
 - Deterministic `RoomBoundaryEngine` and bounded LINE/POLYLINE/ARC/SPLINE Room Auto sampling/topology.
 - Non-destructive stale-room lifecycle with provenance and audit retention.
-- HT_Phòng generation/synchronization for floor finish, waterproofing, skirting, wall finish and ceiling finish.
-- Room-finish generation/synchronization is project-transactional: a failed batch restores the pre-operation project state.
+- HT_Phòng generation/synchronization for floor finish, waterproofing, skirting, wall finish and ceiling finish, with batch rollback on failure.
 - Room Finish schedule and XLSX workflow.
 
 ### Tường KT / wall geometry / Door-Opening
@@ -62,13 +62,13 @@ Remaining Curtain product/runtime work: curved/open-POLYLINE frame overlay and p
 - Quick Takeoff uses drawing unit conversion.
 - BQ grouping/filtering/Locate/XLSX and ED2 Excel/Handle round-trip with DWG fingerprint safety.
 - Deterministic recognition/review/auto-apply.
-- `QS3DB4D` bounded Current Space scan excludes **all generated owner-slot handles through the shared ownership policy**, preventing QS3D-generated geometry from feeding back into source recognition when new generated families are introduced.
+- `QS3DB4D` bounded Current Space scan excludes **all generated owner-slot handles through the shared ownership policy**, preventing QS3D-generated geometry from feeding back into source recognition when new generated families are introduced. Recognition/B4D apply still flows through guarded transactional semantic capture, so an output handle cannot be recaptured if a future scanner regression reaches that stage.
 
 ### Schedules / exports
 
 - Document-bound `QS3DSCHEDULES` Schedule Hub.
 - BQ, Room Finish, Material, Curtain, Door/Opening and rebar schedule/export entry points.
-- Material usage/catalog + XLSX with lazy primary/fallback quantity evaluation; invalid unused fallback quantities no longer break an otherwise valid export.
+- Material usage/catalog + XLSX with lazy primary/fallback quantity evaluation; an invalid unused fallback no longer breaks a valid primary quantity export.
 - Door/Opening schedule + XLSX.
 - Curtain XLSX.
 - BBS review/XLSX/UTF-8 CSV.
@@ -90,6 +90,7 @@ Implemented generated families:
 - `QS3DREBARMESHSETUP` edits semantic mesh setup and stale-marks existing generated output.
 - Foundation has dedicated handles, stale state, invalidation, health and mode semantics.
 - Foundation dedicated ownership health is order-independent and uses the shared owner-slot policy, including future generated families.
+- Beam Stirrup now has explicit-data bend/hook planning, endpoint-safe V25 path joining, exact generated metadata/health invariants and dedicated smoke coverage; absent detailing data is not invented.
 - `QS3DREBARHEALTHALL` includes current generated rebar families including Foundation mesh and cross-family ownership diagnostics.
 - `QS3DHEALTHALL` and `QS3DRELEASECHECK` add semantic/source/generated/live/stale/mode/BOM/dependency checks.
 - Rebar, Tie and Curtain destructive ownership guards protect foreign/future generated owner slots through the shared policy and refuse ambiguous/unowned destructive erase.
@@ -99,20 +100,22 @@ Fabrication-grade hook/bend-radius/anchorage/code-specific detailing is not infe
 ### Generated ownership / stale / health hardening
 
 - One canonical `GeneratedHandleOwnershipHealthService` facade is compiled directly; obsolete duplicate shim/type and compile exclusion were removed.
-- Shared `GeneratedHandleOwnershipPolicy` defines owner slots, normalized owner enumeration, project-wide owner collection and fail-closed ambiguous owner lookup.
-- Semantic selection resolves generated ownership back to semantic elements.
-- B4D source scanning excludes generated owner slots through the same policy.
-- Rebar, Tie and Curtain destructive guards use policy-driven foreign-owner protection rather than stale manual foreign-family lists.
+- Shared `GeneratedHandleOwnershipPolicy` is the single classification contract for `PhysicalOpeningCutSolidHandle` and `Generated*Handle` / `Generated*Handles`, while provenance/reference metadata such as `HostHandle` remains non-owner state.
+- The Core policy exposes `RebarHandleKeys` / `IsRebarOwnerSlot` for destructive rebar families plus normalized `EnumerateOwnerHandles`, project-wide `CollectOwnerHandles` and fail-closed `TryFindOwner` for cross-feature consumers. A handle claimed by different owner slots is ambiguous even when the semantic element ID is the same.
+- The BricsCAD adapter policy is a delegation facade only; it no longer duplicates generated-slot classification semantics.
+- Semantic selection, B4D exclusion, safe ownership health, BOM release liveness, semantic capture and Release Readiness consume the shared owner contract.
+- Rebar, Tie and Curtain destructive guards use policy-driven ownership instead of stale manual foreign-family lists.
 - Curtain and Foundation dedicated ownership health use shared policy-driven generated-slot discovery.
 - Generated dependent invalidation clears dedicated metadata for mass, opening cuts, rebar families and opening-aware Curtain frames.
-- Synthetic sample DWG/DXF fixtures are allowed only at explicitly reviewed `samples/generated` paths; other committed DWG/DXF and DOCX/private-reference artifacts remain blocked by preflight.
+- Synthetic sample DWG/DXF fixtures are allowed only at the explicitly reviewed `samples/generated` paths; all other committed DWG/DXF and DOCX/private-reference artifacts remain blocked by preflight.
 
 ### Release readiness / packaging / secure update
 
-- `QS3DRELEASECHECK` includes Model Health, dependency-cycle health, safe generated ownership, longitudinal/shape/tie/stirrup/slab/wall/Foundation mesh health, Curtain health/live state, stale state, generated-rebar mode semantics and BOM/live-solid release guards.
-- `scripts/package-v25.ps1` packages the x64 Release/net48 adapter output, requires QS3D adapter/Core DLLs, excludes BricsCAD-owned assemblies, includes installer/updater/sample assets, generates hashes and creates `COMMANDS.txt` directly from `[CommandMethod]` declarations.
-- Secure update source path is HTTPS-only, package-host bounded, archive traversal/size/entry guarded, SHA-256 verified and Authenticode signer-pinned for executable payloads.
-- Update manifest/package metadata version is bound to the Authenticode-verified `QS3D.BricsCAD.V25.dll` assembly version before install, closing the old signed-payload replay/relabel gap.
+- `QS3DRELEASECHECK` includes Model Health, Dependency Health, safe generated ownership, longitudinal/shape/tie/stirrup/slab/wall/Foundation mesh health, Curtain health/live state, stale state, generated-rebar mode semantics and BOM/live-solid release guards.
+- Release generated-handle collection and Locate use the shared owner enumeration instead of a separate property parser, so future generated owner families participate in live-solid validation without another release-code list update.
+- `scripts/package-v25.ps1` packages the x64 Release/net48 adapter output, requires QS3D adapter/Core DLLs, excludes BricsCAD-owned assemblies, includes installer/updater/sample assets, generates hashes and creates `COMMANDS.txt` directly from `[CommandMethod]` source declarations.
+- Secure update source is HTTPS-only, package-host bounded, archive traversal/size/entry guarded, SHA-256 verified and Authenticode signer-pinned for executable payloads.
+- Update manifest/package metadata version is bound to the Authenticode-verified `QS3D.BricsCAD.V25.dll` assembly version before install, closing the signed-payload replay/relabel gap.
 - V25 installer snapshots targeted DemandLoad registration and rolls back registry plus payload atomically if an install/upgrade step fails; fresh-install failures remove the newly committed payload.
 - Installer/updater do not weaken BricsCAD `SECURELOAD`.
 - Manual V25 release workflow can run source gates, Core build/smoke, V25 x64 compile, optional real runtime validation, packaging/checksum and GitHub Release publication after explicit owner approval.
@@ -124,14 +127,17 @@ Current source preflights cover, among other things:
 - manual-only GitHub Actions policy and per-job manual guards;
 - command uniqueness and key XAML contracts;
 - project-editor active-DWG affinity and project-owned mutation integrity;
-- semantic selection and generated-source exclusion through canonical owner enumeration;
-- canonical generated-ownership compile wiring;
+- semantic selection including dynamic future generated owner slots;
+- B4D future-proof generated-source exclusion through the Core owner policy;
+- transactional semantic capture, generated-input rejection and HT_Phòng batch rollback;
+- canonical generated owner-slot compilation/enumeration and future-family BOM liveness;
 - persisted Material Catalog built-in-shadow rejection;
 - dependency self/cycle health and release blocking;
+- Beam Stirrup explicit bend/hook metadata plus repo-wide smoke registration protection;
 - wall junction/snap/Auto Host/opening cuts;
 - Curtain opening-aware lifecycle and policy-driven ownership;
 - Slab/Wall/Foundation mesh lifecycle/health/ownership;
-- unified Release Readiness;
+- unified Release Readiness including Dependency/Foundation/mode/BOM contracts;
 - signed updater version binding and transactional installer rollback;
 - schedule/export hub wiring;
 - synthetic sample provenance/private-file policy.
@@ -156,11 +162,11 @@ No GitHub Action was dispatched as part of the current continue-all review/sourc
 
 ## Validation history — do not confuse with current head
 
-An **earlier** integrated snapshot based on `b00d03f` was compiled against BricsCAD V25.2.10 managed assemblies in Release/x64 and the then-current Core/preflight suite passed. That proof predates many current Curtain/rebar/Foundation/Schedule/ownership/project-editor/update hardening changes.
+An **earlier** integrated snapshot based on `b00d03f` was compiled against BricsCAD V25.2.10 managed assemblies in Release/x64 and the then-current Core/preflight suite passed. That proof predates many current Curtain/rebar/Foundation/Schedule/ownership/project-editor/updater/Beam-Stirrup changes.
 
 Earlier GitHub-hosted runs also predate the newest batches. They are historical evidence only and **must not** be described as validation of the current `main` head.
 
-The current final SHA still requires an explicitly approved build/runtime validation before it can be called current V25-verified.
+The current final SHA still requires an explicitly approved build/runtime validation before it can be called current V25-verified. During the full-repository hardening audit, the execution container could not resolve `github.com`, so this batch does **not** claim a local `dotnet build`, Core smoke execution or aggregate Python preflight pass.
 
 ## Runtime/product work still remaining
 
@@ -172,10 +178,10 @@ The current final SHA still requires an explicitly approved build/runtime valida
 - Curtain host + opening-aware frame overlay regression and curved/open-POLYLINE frame product work;
 - WallPier open-POLYLINE specialized profile product work;
 - physical multi-owner wall-solid L/T/X/Multi reconciliation product work;
-- all generated rebar families including Foundation mesh on real drawings;
+- all generated rebar families including Foundation mesh and explicit-data Beam Stirrup paths on real drawings;
 - Schedule Hub/export/traceability and `QS3DRELEASECHECK` on representative data;
 - Unicode/HiDPI and large-model performance regression;
 - production code-signing certificate/key custody, timestamp/publication infrastructure and a real signed package/install/update/rollback exercise;
 - optional commercial licensing/backend work if that product requirement is pursued.
 
-See `docs/CONTINUE-ALL-DEEP-AUDIT-2026-08-10.md` for this deep pass, `docs/FULL-REPO-AUDIT-2026-08-10.md` for the shared ownership/capture audit, and `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the broader runtime/product review boundary.
+See `docs/CONTINUE-ALL-DEEP-AUDIT-2026-08-10.md` for this deep pass, `docs/DEEP-AUDIT-2026-08-10.md` for the Beam/rebar review, `docs/FULL-REPO-AUDIT-2026-08-10.md` for shared ownership/capture hardening, and `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the broader runtime/product boundary.
