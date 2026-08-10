@@ -25,10 +25,11 @@ namespace QS3D.BricsCAD.V25
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var tolerance = MetadataNumber(project, "WallJunctionToleranceM", 0.005d, 0d);
                 var sagitta = MetadataNumber(project, "WallArcSagittaM", 0.002d, 0d);
-                var segments = ReadSelection(document, sagitta);
+                var planarityTolerance = MetadataNumber(project, "WallJunctionPlanarityToleranceM", tolerance, 0d);
+                var segments = ReadSelection(document, sagitta, planarityTolerance);
                 if (segments.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3DWALLJUNCTIONS: chọn LINE/open POLYLINE tim tường.");
+                    document.Editor.WriteMessage("\nQS3DWALLJUNCTIONS: chọn LINE/open POLYLINE tim tường plan-view đồng phẳng.");
                     return;
                 }
 
@@ -48,7 +49,9 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\n  " + node.Kind + " @ (" + node.Point.X.ToString("0.###", CultureInfo.InvariantCulture) + ", " + node.Point.Y.ToString("0.###", CultureInfo.InvariantCulture) + ") • " + string.Join(",", node.SegmentIds));
                 }
                 if (nodes.Count > 100) document.Editor.WriteMessage("\n  … output truncated; total nodes=" + nodes.Count.ToString(CultureInfo.InvariantCulture));
-                AuditTrail.ForProject(project).Record("wall.junction.analyze", string.Empty, summary + " • sourceSegments=" + segments.Count.ToString(CultureInfo.InvariantCulture));
+                AuditTrail.ForProject(project).Record("wall.junction.analyze", string.Empty,
+                    summary + " • sourceSegments=" + segments.Count.ToString(CultureInfo.InvariantCulture) +
+                    " • planarityToleranceM=" + planarityTolerance.ToString("R", CultureInfo.InvariantCulture));
             }
             catch (Exception ex)
             {
@@ -58,7 +61,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static IReadOnlyList<WallAxisSegment> ReadSelection(Document document, double sagittaM)
+        private static IReadOnlyList<WallAxisSegment> ReadSelection(Document document, double sagittaM, double planarityToleranceM)
         {
             var editor = document.Editor;
             var selection = editor.SelectImplied();
@@ -71,6 +74,7 @@ namespace QS3D.BricsCAD.V25
 
             var units = CadUnitService.GetPolicy(document);
             var result = new List<WallAxisSegment>();
+            double? referenceElevationM = null;
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 foreach (var id in selection.Value.GetObjectIds())
@@ -80,6 +84,10 @@ namespace QS3D.BricsCAD.V25
                     var handle = entity.Handle.ToString();
                     if (entity is Line line)
                     {
+                        var startElevationM = units.ToMeters(line.StartPoint.Z);
+                        var endElevationM = units.ToMeters(line.EndPoint.Z);
+                        EnsureElevation(ref referenceElevationM, startElevationM, planarityToleranceM, handle + "/start");
+                        EnsureElevation(ref referenceElevationM, endElevationM, planarityToleranceM, handle + "/end");
                         result.Add(new WallAxisSegment(handle,
                             new Point2(units.ToMeters(line.StartPoint.X), units.ToMeters(line.StartPoint.Y)),
                             new Point2(units.ToMeters(line.EndPoint.X), units.ToMeters(line.EndPoint.Y))));
@@ -91,6 +99,7 @@ namespace QS3D.BricsCAD.V25
                     var normal = polyline.Normal;
                     if (Math.Abs(normal.X) > 1e-9d || Math.Abs(normal.Y) > 1e-9d || normal.Z < 1d - 1e-9d)
                         throw new InvalidOperationException("Wall centerline POLYLINE phải plan-view +Z: " + handle);
+                    EnsureElevation(ref referenceElevationM, units.ToMeters(polyline.Elevation), planarityToleranceM, handle);
                     for (var index = 0; index < polyline.NumberOfVertices - 1; index++)
                     {
                         var a = polyline.GetPoint2dAt(index);
@@ -108,6 +117,20 @@ namespace QS3D.BricsCAD.V25
                 transaction.Commit();
             }
             return result.AsReadOnly();
+        }
+
+        private static void EnsureElevation(ref double? referenceElevationM, double elevationM, double toleranceM, string label)
+        {
+            if (double.IsNaN(elevationM) || double.IsInfinity(elevationM))
+                throw new InvalidOperationException("Wall centerline elevation không hữu hạn: " + label);
+            if (!referenceElevationM.HasValue)
+            {
+                referenceElevationM = elevationM;
+                return;
+            }
+            var delta = elevationM - referenceElevationM.Value;
+            if (double.IsNaN(delta) || double.IsInfinity(delta) || Math.Abs(delta) > toleranceM)
+                throw new InvalidOperationException("Wall centerline selection phải đồng phẳng theo Z trong tolerance " + toleranceM.ToString("R", CultureInfo.InvariantCulture) + " m: " + label);
         }
 
         private static double MetadataNumber(QS3D.Core.Domain.ProjectState project, string key, double fallback, double minimumExclusive)
