@@ -4,12 +4,15 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 HEALTH = ROOT / "src/QS3D.Core/Diagnostics/ModelHealthService.cs"
+COMPREHENSIVE = ROOT / "src/QS3D.Core/Diagnostics/ComprehensiveModelHealthService.cs"
+DEPENDENCY = ROOT / "src/QS3D.Core/Diagnostics/DependencyHealthService.cs"
 LEVEL = ROOT / "src/QS3D.Core/Diagnostics/LevelReferenceHealthService.cs"
+ROOM = ROOT / "src/QS3D.Core/Diagnostics/RoomFinishHealthService.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ModelHealthIdentityAmbiguitySmoke.cs"
 REG = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 errors = []
 
-for path in (HEALTH, LEVEL, SMOKE, REG):
+for path in (HEALTH, COMPREHENSIVE, DEPENDENCY, LEVEL, ROOM, SMOKE, REG):
     if not path.is_file():
         errors.append("missing diagnostic identity contract file: " + str(path.relative_to(ROOT)))
 
@@ -43,6 +46,28 @@ if HEALTH.is_file():
         if forbidden in text:
             errors.append("ModelHealthService.cs uses throwing unique lookup while diagnosing ambiguous state: " + forbidden)
 
+if COMPREHENSIVE.is_file():
+    text = COMPREHENSIVE.read_text(encoding="utf-8")
+    for token in (
+        "AddSafely(issues, seen, \"ModelHealthService\"",
+        "AddSafely(issues, seen, \"RoomFinishHealthService\"",
+        "AddSafely(issues, seen, \"DependencyHealthService\"",
+        '"HEALTH_PROVIDER_FAILED"',
+        "IsDiagnosticDataFailure",
+    ):
+        if token not in text:
+            errors.append("ComprehensiveModelHealthService.cs missing provider-isolation token: " + token)
+
+if DEPENDENCY.is_file():
+    text = DEPENDENCY.read_text(encoding="utf-8")
+    for token in (
+        "var duplicateIds = new HashSet<string>",
+        '"DEPENDENCY_TARGET_AMBIGUOUS"',
+        "if (duplicateIds.Contains(element.Id)",
+    ):
+        if token not in text:
+            errors.append("DependencyHealthService.cs missing ambiguous graph token: " + token)
+
 if LEVEL.is_file():
     text = LEVEL.read_text(encoding="utf-8")
     for token in (
@@ -54,13 +79,25 @@ if LEVEL.is_file():
         if token not in text:
             errors.append("LevelReferenceHealthService.cs missing ambiguity token: " + token)
 
+if ROOM.is_file():
+    text = ROOM.read_text(encoding="utf-8")
+    for token in (
+        "var duplicateIds = new HashSet<string>",
+        '"AMBIGUOUS_ROOM_FINISH_PARENT"',
+        "project.Elements.Where(x => x != null)",
+    ):
+        if token not in text:
+            errors.append("RoomFinishHealthService.cs missing diagnostic-safe identity token: " + token)
+
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
-        "ComprehensiveHealthReportsAmbiguityWithoutThrowing",
+        "ModelHealthReportsAmbiguityWithoutThrowing",
+        "ComprehensiveHealthPreservesReportAcrossProviderFailures",
+        "DependencyHealthRejectsAmbiguousTargets",
         "LevelHealthReportsDuplicateLevelReferencesWithoutPendingQualification",
         'HasFor(issues, "AMBIGUOUS_HOST", "D")',
-        'HasFor(issues, "AMBIGUOUS_DEPENDENCY", "D")',
+        'HasFor(issues, "DEPENDENCY_TARGET_AMBIGUOUS", "D")',
         'HasFor(issues, "BOTTOM_LEVEL_REFERENCE_AMBIGUOUS", "D")',
     ):
         if token not in text:
@@ -75,4 +112,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Core health uses diagnostic indexes for ambiguous identities, reports duplicate Family/Floor/Zone/Element references, and does not depend on throwing business lookups. No V25 files are inspected.")
+print("PASS: Core health reports ambiguous semantic identities without throwing, isolates provider data failures, and avoids arbitrary duplicate graph/Room/Level resolution. No V25 files are inspected.")
