@@ -63,6 +63,7 @@ namespace QS3D.Core.SmokeTests
             ProjectInterchangeSnapshotDiffSmoke.Run();
             ProjectInterchangeImportResolutionPlannerSmoke.Run();
             ProjectInterchangeAppendOnlyImporterSmoke.Run();
+            ProjectInterchangeRemapCopySmoke.Run();
             RegenerationSubsetSmoke.Run();
             GeneratedHandleOwnershipIndexSmoke.Run();
             DependencyGraphDirectDependentsSmoke.Run();
