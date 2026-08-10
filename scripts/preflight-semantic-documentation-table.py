@@ -22,7 +22,7 @@ if BUILDER.is_file():
         "ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count",
         "var headers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)",
         "Documentation table semantic element id is ambiguous",
-        "SemanticTagRenderer.Render(project, element, column.Template)",
+        "SemanticTagRenderer.Render(project, element, column.Template, allowEmpty: true)",
         "return new SemanticDocumentationTable(",
     ):
         if token not in text:
@@ -31,17 +31,20 @@ if BUILDER.is_file():
 if RENDERER.is_file():
     text = RENDERER.read_text(encoding="utf-8")
     for token in (
+        "return Render(project, element, template, allowEmpty: false)",
+        "if (output.Length == 0 && !allowEmpty)",
         "GeneratedHandleOwnershipPolicy.IsOwnerSlot(key)",
         'key.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
         'key.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)',
     ):
         if token not in text:
-            errors.append("SemanticTagRenderer.cs lost native/generated property guard: " + token)
+            errors.append("SemanticTagRenderer.cs lost label/table rendering boundary: " + token)
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
         "ExplicitOrderAndTemplatesArePreserved",
+        "BlankOptionalCellsAreAllowedWithoutWeakeningTagLabels",
         "DuplicateElementIdsFailClosed",
         "DuplicateHeadersFailClosed",
         "GeneratedOwnershipPropertiesRemainBlocked",
@@ -71,4 +74,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: generic semantic documentation tables are bounded, explicitly ordered, generated-handle-safe and read-only while native DWG table ownership remains a V25 gate.")
+print("PASS: generic semantic documentation tables are bounded, explicitly ordered, blank-cell capable, generated-handle-safe and read-only while normal tag labels remain non-empty and native DWG table ownership remains a V25 gate.")
