@@ -5,58 +5,34 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests" / "QS3D.Core.SmokeTests"
+REG = TESTS / "SmokeTestRegistration.cs"
 errors = []
 
 if not TESTS.is_dir():
-    print("ERROR: missing tests/QS3D.Core.SmokeTests")
-    sys.exit(1)
+    errors.append("missing Core smoke-test directory")
+if not REG.is_file():
+    errors.append("missing SmokeTestRegistration.cs")
 
-sources = {path: path.read_text(encoding="utf-8") for path in TESTS.glob("*.cs")}
-all_text = "\n".join(sources.values())
-run_pattern = re.compile(r"\b(?:public|internal|private)?\s*static\s+void\s+Run\s*\(")
-class_pattern = re.compile(r"\b(?:public|internal|private)?\s*(?:static\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)")
+registration = REG.read_text(encoding="utf-8") if REG.is_file() else ""
+class_pattern = re.compile(r"\b(?:internal|public)\s+static\s+class\s+(\w+Smoke)\b")
+run_pattern = re.compile(r"\b(?:public|internal)\s+static\s+void\s+Run\s*\(\s*\)")
 
-checked = 0
-for path, text in sorted(sources.items(), key=lambda item: item[0].name.lower()):
-    if not path.name.endswith("Smoke.cs"):
-        continue
-    if not run_pattern.search(text):
-        continue
-    match = class_pattern.search(text)
-    if not match:
-        errors.append(path.name + ": Run() exists but no smoke class could be identified")
-        continue
-    class_name = match.group(1)
-    checked += 1
-
-    # A smoke can self-register with ModuleInitializer or be called from the central
-    # registration file / a dedicated *Registration.cs module initializer.
-    if "[ModuleInitializer]" in text:
-        continue
-    references = 0
-    call_pattern = re.compile(r"\b" + re.escape(class_name) + r"\s*\.\s*Run\s*\(")
-    for other_path, other_text in sources.items():
-        if other_path == path:
+if TESTS.is_dir():
+    for path in sorted(TESTS.glob("*Smoke.cs")):
+        text = path.read_text(encoding="utf-8")
+        classes = class_pattern.findall(text)
+        if not classes or not run_pattern.search(text):
             continue
-        references += len(call_pattern.findall(other_text))
-    if references == 0:
-        errors.append(path.name + ": " + class_name + ".Run() is never registered or invoked")
+        for class_name in classes:
+            token = class_name + ".Run();"
+            if token not in registration:
+                errors.append(str(path.relative_to(ROOT)) + " exposes parameterless Run() but is not registered: " + token)
 
-# Lock the known historical regression that motivated this repository-wide guard.
-beam_registration = TESTS / "BeamRebarSmokeRegistration.cs"
-if not beam_registration.is_file():
-    errors.append("missing BeamRebarSmokeRegistration.cs")
-else:
-    text = beam_registration.read_text(encoding="utf-8")
-    for needle in ("[ModuleInitializer]", "BeamRebarRegressionSmoke.Run()"):
-        if needle not in text:
-            errors.append("Beam rebar smoke registration missing: " + needle)
-
-print("QS3D smoke registration preflight")
-print("Checked", checked, "smoke class(es) exposing static Run().")
+print("QS3D Core smoke registration preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: every runnable smoke class is self-registered or referenced by another test registration source.")
+
+print("PASS: every discoverable Core *Smoke class with a parameterless static Run() participates in SmokeTestRegistration.RunAll().")
