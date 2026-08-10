@@ -84,10 +84,18 @@ namespace QS3D.Core.SmokeTests
                 var project = NewProject();
                 var store = new QsdbProjectStore();
                 store.Save(project, path);
-                project.Floors[0].ElevationM = double.NaN;
+
+                Throws<ArgumentOutOfRangeException>(() => project.Floors[0].ElevationM = double.NaN);
+                Near(0d, project.Floors[0].ElevationM);
+
+                var invalid = new ProjectElement("BAD-NAN", ElementCategory.CustomQuantity, string.Empty, "f", "z");
+                invalid.Quantities["Count"] = double.NaN;
+                project.Elements.Add(invalid);
                 Throws<InvalidDataException>(() => store.Save(project, path));
+
                 var restored = store.Load(path);
                 Near(0d, restored.Floors.Single().ElevationM);
+                True(restored.FindElement("BAD-NAN") == null);
             }
             finally { Delete(path); Delete(path + ".bak"); }
         }

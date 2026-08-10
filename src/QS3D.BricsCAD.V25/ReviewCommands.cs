@@ -34,7 +34,14 @@ namespace QS3D.BricsCAD.V25
                 int solids;
                 if (category == ElementCategory.ArchitecturalWall) solids = WallSolidBuilder.BuildSelectedLineWalls(doc, project);
                 else if (StructuralSolidBuilder.Supports(category.Value)) solids = StructuralSolidBuilder.BuildSelected(doc, project, category.Value);
-                else { PaletteCoordinator.SetStatus("Vẽ 3D native hiện hỗ trợ Tường KT, Dầm, Sàn, Cột, Vách BTCT và Móng."); return; }
+                else { PaletteCoordinator.SetStatus("Vẽ 3D native hiện hỗ trợ Tường KT, Dầm, Sàn, Cột, Vách BTCT, Móng, Cầu thang, Lan can và Đào đất."); return; }
+                if (solids == 0)
+                {
+                    var hint = GeometryHint(category.Value);
+                    PaletteCoordinator.SetStatus("Không tạo được solid cho " + category + ". " + hint);
+                    doc.Editor.WriteMessage("\nQS3D 3D: không có source tương thích. " + hint);
+                    return;
+                }
                 var regenerated = Regenerate(project); PaletteCoordinator.RefreshProject();
                 PaletteCoordinator.SetStatus("3D " + category + ": " + solids + " solid • regenerate " + regenerated + " lượt.");
                 doc.Editor.WriteMessage("\nQS3D 3D " + category + ": " + solids + " solid(s)."); doc.SendStringToExecute("QS3DVIEW3D ", true, false, false);
@@ -106,6 +113,27 @@ namespace QS3D.BricsCAD.V25
                 AuditTrail.ForProject(project).Record("revision.compare", string.Empty, before.Id + " → " + after.Id + " • " + rows.Count + " quantity changes");
                 PaletteCoordinator.SetStatus("Revision diff: " + rows.Count + " thay đổi quantity.");
             });
+        }
+
+        private static string GeometryHint(ElementCategory category)
+        {
+            switch (category)
+            {
+                case ElementCategory.Beam:
+                case ElementCategory.StructuralWall:
+                case ElementCategory.Railing:
+                    return "Dùng LINE làm tim cấu kiện.";
+                case ElementCategory.Slab:
+                case ElementCategory.Column:
+                case ElementCategory.Foundation:
+                case ElementCategory.Stair:
+                case ElementCategory.Earthwork:
+                    return "Dùng closed POLYLINE làm footprint.";
+                case ElementCategory.ArchitecturalWall:
+                    return "Dùng LINE plan-view cho Tường KT.";
+                default:
+                    return "Source CAD hiện chưa có native solid adapter.";
+            }
         }
 
         private static int Regenerate(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
