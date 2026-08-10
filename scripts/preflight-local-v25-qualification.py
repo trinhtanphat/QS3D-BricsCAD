@@ -7,12 +7,13 @@ errors = []
 
 runner = ROOT / "scripts/run-local-v25-qualification.ps1"
 runbook = ROOT / "docs/LOCAL-V25-QUALIFICATION.md"
+remaining = ROOT / "docs/LOCAL-AND-REMAINING-TODO-2026-08-10.md"
 agents = ROOT / "AGENTS.md"
 gitignore = ROOT / ".gitignore"
 
-for path in (runner, runbook, agents, gitignore):
+for path in (runner, runbook, remaining, agents, gitignore):
     if not path.is_file():
-        errors.append("missing local V25 qualification contract file: " + str(path.relative_to(ROOT)))
+        errors.append("missing local V25 qualification/handoff contract file: " + str(path.relative_to(ROOT)))
 
 if runner.is_file():
     text = runner.read_text(encoding="utf-8")
@@ -61,10 +62,35 @@ if runbook.is_file():
         if needle not in text:
             errors.append("local V25 runbook missing scenario/evidence token: " + needle)
 
+if remaining.is_file():
+    text = remaining.read_text(encoding="utf-8")
+    required = (
+        "#72",
+        "#73",
+        "#74",
+        "#75",
+        "#76",
+        "#77",
+        "#79",
+        "#80",
+        "#81",
+        "#82",
+        "#83",
+        "#84",
+        "source-implemented / statically guarded",
+        "CI_POLICY.md",
+        "LOCAL-V25-QUALIFICATION.md",
+    )
+    for needle in required:
+        if needle not in text:
+            errors.append("remaining-work handoff missing tracking/boundary token: " + needle)
+
 if agents.is_file():
     text = agents.read_text(encoding="utf-8")
     if "docs/LOCAL-V25-QUALIFICATION.md" not in text:
         errors.append("AGENTS.md must route local-capable agents to LOCAL-V25-QUALIFICATION.md")
+    if "docs/LOCAL-AND-REMAINING-TODO-2026-08-10.md" not in text:
+        errors.append("AGENTS.md must route unresolved work through the remaining-work handoff")
     if "scripts/run-local-v25-qualification.ps1" not in text:
         errors.append("AGENTS.md must name the canonical local V25 runner")
 
@@ -80,4 +106,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: local V25 work is exact-SHA/clean-tree gated, runs source/Core/adapter/WPF/runtime checks, records local evidence outside Git, and hands interactive/private-DWG scenarios to local-capable agents without weakening manual-only CI policy.")
+print("PASS: local V25 work is exact-SHA/clean-tree gated, runs source/Core/adapter/WPF/runtime checks, records local evidence outside Git, and keeps unresolved product/runtime work explicitly routed without weakening manual-only CI policy.")
