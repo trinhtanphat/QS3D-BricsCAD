@@ -24,6 +24,7 @@ namespace QS3D.Core.SmokeTests
             GeometryCompletionSmoke.Run();
             AutoRoomLifecycleSmoke.Run();
             LinearRebarLayoutSmoke.Run();
+            WallJunctionRegressionSmoke.Run();
         }
     }
 }
