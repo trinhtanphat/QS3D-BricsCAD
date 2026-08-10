@@ -112,7 +112,7 @@ checks = {
         "MaxFramesPerBatch = 8192",
         "GeneratedCurtainFrameOwnershipGuard.Build(project)",
         "ownership.EnsureOwned(handle, element)",
-        'GeneratedCurtainFrameMode"] = Mode',
+        'GeneratedCurtainFrameMode"] = update.OpeningCount > 0 ? OpeningAwareMode : Mode',
         "ClearGeneratedCurtainFrameStale",
         "CreateBox",
         "GetObject(ids[0], OpenMode.ForWrite",

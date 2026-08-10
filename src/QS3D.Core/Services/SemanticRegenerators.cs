@@ -178,7 +178,16 @@ namespace QS3D.Core.Services
 
             element.SetQuantity("OpeningAreaM2", area);
             element.SetQuantity("Count", 1d);
-            if (element.Properties.TryGetValue("HostWallId", out var hostId) && !string.IsNullOrWhiteSpace(hostId)) project.FindElement(hostId)?.MarkDirty(ElementDirtyFlags.Quantity);
+            if (element.Properties.TryGetValue("HostWallId", out var hostId) && !string.IsNullOrWhiteSpace(hostId))
+            {
+                var host = project.FindElement(hostId);
+                if (host != null)
+                {
+                    host.MarkDirty(ElementDirtyFlags.Quantity);
+                    if (host.Category == ElementCategory.GlassWall)
+                        host.MarkGeneratedCurtainFrameStale("Linked opening " + element.Id + " changed.");
+                }
+            }
         }
     }
 }
