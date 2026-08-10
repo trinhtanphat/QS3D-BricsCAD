@@ -7,12 +7,15 @@ errors = []
 
 required = [
     "src/QS3D.Core/Geometry/WallPierProfilePlanner.cs",
+    "src/QS3D.Core/Geometry/WallPierPathProfilePlanner.cs",
     "src/QS3D.Core/Services/SemanticRegenerators.cs",
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
     "src/QS3D.BricsCAD.V25/Cad/WallPierProfileSolidBuilder.cs",
+    "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
     "tests/QS3D.Core.SmokeTests/WallPierProfileSmoke.cs",
     "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs",
+    "docs/WALL-PIER-POLYLINE.md",
 ]
 for relative in required:
     if not (ROOT / relative).is_file():
@@ -31,18 +34,36 @@ checks = {
         "Four right-triangle corners are removed",
         "smaller than half the minimum profile dimension",
     ],
+    "src/QS3D.Core/Geometry/WallPierPathProfilePlanner.cs": [
+        "WallPierPathProfileInput",
+        "WallPierPathProfilePlanner",
+        "new WallFootprintEngine().Build",
+        "ChamferTerminalCorners",
+        "WallPierProfileMode.Rectangular",
+        "WallPierProfileMode.Chamfered",
+        "terminal footprint corners",
+        "2d * chamfer + tolerance",
+        "FootprintAreaM2",
+        "FootprintPerimeterM",
+        "UsedBevelJoin",
+    ],
     "src/QS3D.Core/Services/SemanticRegenerators.cs": [
         "element.Category == ElementCategory.WallPier",
-        "ResolveWallPierProfileMode",
+        "ResolveWallPierProfileMode(project, element)",
+        "ResolveWallPierNumber(project, element",
+        "TryReadCurrentWallPierPathProfile",
+        '"GeneratedSolidHandle"',
+        "element.IsGeneratedSolidStale()",
+        '"WallPierPathProfileKind"',
+        '"OpenPolyline"',
+        '"WallPierPathProfileAreaM2"',
+        '"WallPierPathProfilePerimeterM"',
+        '"WallPierPathProfileGrossVolumeM3"',
+        '"WallPierPathProfileLateralAreaM2"',
+        "NearlyEqual(grossVolumeM3, areaM2 * heightM)",
         "WallPierProfilePlanner.Plan",
-        '"WallPierChamferM"',
         '"WallPierProfileCrossSectionAreaM2"',
-        '"WallPierProfilePerimeterM"',
-        '"WallPierProfileLateralAreaM2"',
-        '"WallPierProfileGrossVolumeM3"',
         '"WallPierProfileNetVolumeM3"',
-        'element.SetQuantity("GrossVolumeM3", profile.VolumeM3)',
-        'element.SetQuantity("NetVolumeM3", profileNetVolumeM3)',
     ],
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs": [
         'CommandMethod("QS3DWALLPIER"',
@@ -61,20 +82,55 @@ checks = {
         "source LINE phải nằm trên mặt phẳng ngang",
         "matches.Count > 1",
         "processed.Add(element.Id)",
+        "ClearPathProfileSnapshot(update.Element)",
+        'StartsWith("WallPierPathProfile"',
+    ],
+    "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs": [
+        "category == ElementCategory.WallPier",
+        "ResolveWallPierMode(element, family)",
+        "WallPierPathProfilePlanner.Plan",
+        "WallArcSagittaM",
+        "BulgeArcTessellator.Tessellate",
+        'properties["WallPierPathProfileKind"] = "OpenPolyline"',
+        'properties["WallPierPathProfileMode"]',
+        'properties["WallPierPathProfileChamferM"]',
+        'properties["WallPierPathProfileCenterlineLengthM"]',
+        'properties["WallPierPathProfileThicknessM"]',
+        'properties["WallPierPathProfileHeightM"]',
+        'properties["WallPierPathProfileAreaM2"]',
+        'properties["WallPierPathProfilePerimeterM"]',
+        'properties["WallPierPathProfileGrossVolumeM3"]',
+        'properties["WallPierPathProfileLateralAreaM2"]',
+        "GeneratedGeometryService.PrepareReplacement",
+        "GeneratedGeometryService.CommitReplacement",
     ],
     "src/QS3D.BricsCAD.V25/ReviewCommands.cs": [
         "category.Value == ElementCategory.WallPier",
         "WallPierProfileSolidBuilder.BuildSelectedLinePiers",
         "PolylineWallSolidBuilder.BuildSelected",
         "profile Rectangular/Chamfered",
+        "open POLYLINE",
     ],
     "tests/QS3D.Core.SmokeTests/WallPierProfileSmoke.cs": [
         "RectangularProfileMatchesWallVolume",
         "ChamferedProfileReducesAreaAndVolume",
+        "StraightRectangularPathMatchesLegacyPlanner",
+        "StraightChamferedPathMatchesLegacyPlanner",
+        "BentPathUsesSharedFootprintAndTerminalChamfers",
+        "RejectsOversizedTerminalChamfer",
+        "RejectsSelfIntersectingPath",
         "RejectsImpossibleAndNonFiniteProfiles",
+        "rectangular.FootprintAreaM2 - 2d * chamfer * chamfer",
     ],
     "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs": [
         "WallPierProfileSmoke.Run();",
+    ],
+    "docs/WALL-PIER-POLYLINE.md": [
+        "source-implemented",
+        "WallFootprintEngine",
+        "four terminal footprint corners",
+        "WallPierPathProfileKind = OpenPolyline",
+        "runtime-verified",
     ],
 }
 
@@ -87,10 +143,14 @@ for relative, needles in checks.items():
         if needle not in text:
             errors.append(relative + " missing wall-pier guard/token: " + needle)
 
+review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+if review.is_file() and "open POLYLINE vẫn dùng footprint Tường KT" in review.read_text(encoding="utf-8"):
+    errors.append("ReviewCommands still describes WallPier open POLYLINE as generic Tường KT fallback")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: WallPier rectangular/chamfered profile planning, profile-aware quantities, family defaults and guarded LINE-source native Solid3d dispatch are present.")
+print("PASS: WallPier LINE and open-POLYLINE Rectangular/Chamfered planning, shared footprint joins, exact current-snapshot quantities, guarded native Solid3d wiring, stale cleanup, smoke and docs are present.")
