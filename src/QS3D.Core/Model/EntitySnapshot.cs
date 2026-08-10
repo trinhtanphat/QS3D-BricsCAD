@@ -17,6 +17,7 @@ namespace QS3D.Core.Model
         public string Layer { get; set; }
         public double? LengthDrawingUnits { get; set; }
         public double? AreaDrawingUnitsSquared { get; set; }
+        public double? SurfaceAreaDrawingUnitsSquared { get; set; }
         public double? VolumeDrawingUnitsCubed { get; set; }
         public IDictionary<string, string> Metadata { get; }
     }

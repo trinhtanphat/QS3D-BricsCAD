@@ -31,6 +31,8 @@ for label, contract in contracts.items():
     text = path.read_text(encoding="utf-8")
     if "using QS3D.Core.Persistence;" not in text:
         errors.append(label + ": missing ProjectStateSnapshot namespace")
+    if 'private const string HandlesKey = "GeneratedCurtainFrameHandles";' not in text:
+        errors.append(label + ": generated frame ownership key is missing or renamed")
 
     start = text.find(contract["start"])
     end = text.find(contract["end"], start + 1) if start >= 0 else -1
@@ -63,7 +65,7 @@ for label, contract in contracts.items():
 
     helper = text[end:]
     for token in (
-        "GeneratedCurtainFrameHandles",
+        "update.Element.Properties[HandlesKey]",
         "GeneratedCurtainFrameCount",
         "GeneratedCurtainFrameConfigFingerprint",
         "ClearGeneratedCurtainFrameStale()",

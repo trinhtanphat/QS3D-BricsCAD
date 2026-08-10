@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ClosingVertexMayBeRepeated();
             SelfIntersectionFailsClosed();
             BoundaryVertexRuleIsDeterministic();
+            InvalidAxisFailsClosed();
         }
 
         private static void RectangleClipsBothAxes()
@@ -86,6 +87,15 @@ namespace QS3D.Core.SmokeTests
             Near(4d, baseLine.End.X);
             if (PolygonScanlineClipper.Clip(triangle, PolygonScanAxis.Horizontal, 2d).Count != 0)
                 throw new Exception("Top boundary scanline should not create a zero-length phantom segment.");
+        }
+
+        private static void InvalidAxisFailsClosed()
+        {
+            var polygon = new[] { new Point2(0d, 0d), new Point2(2d, 0d), new Point2(0d, 2d) };
+            var failed = false;
+            try { PolygonScanlineClipper.Clip(polygon, (PolygonScanAxis)123, 0.5d); }
+            catch (ArgumentOutOfRangeException) { failed = true; }
+            if (!failed) throw new Exception("Undefined polygon scan axis must fail closed.");
         }
 
         private static void Near(double expected, double actual, double tolerance = 1e-10d)

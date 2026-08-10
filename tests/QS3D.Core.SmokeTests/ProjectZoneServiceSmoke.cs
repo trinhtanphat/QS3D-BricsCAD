@@ -81,7 +81,7 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("p-corrupt", "Zone atomicity");
             var z1 = ProjectZoneService.Create(project, "z1", "Khu A");
             var z2 = ProjectZoneService.Create(project, "z2", "Khu B");
-            project.Elements.Add(null);
+            project.Elements.Add(null!);
 
             Throws<InvalidOperationException>(() => ProjectZoneService.Update(project, z2.Id, "Khu B mới"));
             if (z2.Name != "Khu B") throw new Exception("Rejected zone update must not partially mutate the zone name.");

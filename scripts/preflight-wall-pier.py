@@ -13,7 +13,7 @@ required = [
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
     "src/QS3D.BricsCAD.V25/Cad/WallPierProfileSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs",
-    "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
+    "src/QS3D.BricsCAD.V25/Build3DCommands.cs",
     "tests/QS3D.Core.SmokeTests/WallPierProfileSmoke.cs",
     "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs",
     "docs/WALL-PIER-POLYLINE.md",
@@ -116,12 +116,11 @@ checks = {
         "GeneratedGeometryService.PrepareReplacement",
         "GeneratedGeometryService.CommitReplacement",
     ],
-    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": [
-        "category.Value == ElementCategory.WallPier",
+    "src/QS3D.BricsCAD.V25/Build3DCommands.cs": [
+        "category == ElementCategory.WallPier",
         "WallPierProfileSolidBuilder.BuildSelectedLinePiers",
+        'string.Equals(sourceType, "Polyline", StringComparison.OrdinalIgnoreCase)',
         "PolylineWallSolidBuilder.BuildSelected",
-        "profile Rectangular/Chamfered",
-        "open POLYLINE",
     ],
     "tests/QS3D.Core.SmokeTests/WallPierProfileSmoke.cs": [
         "RectangularProfileMatchesWallVolume",
@@ -162,10 +161,6 @@ for relative, needles in checks.items():
     for needle in needles:
         if needle not in text:
             errors.append(relative + " missing wall-pier guard/token: " + needle)
-
-review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
-if review.is_file() and "open POLYLINE vẫn dùng footprint Tường KT" in review.read_text(encoding="utf-8"):
-    errors.append("ReviewCommands still describes WallPier open POLYLINE as generic Tường KT fallback")
 
 if errors:
     for error in errors:

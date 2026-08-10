@@ -9,6 +9,8 @@ files = {
     "capture": ROOT / "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs",
     "snapshot": ROOT / "src/QS3D.Core/Persistence/ProjectStateSnapshot.cs",
     "policy": ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs",
+    "source_owner": ROOT / "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs",
+    "ownership_smoke": ROOT / "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipSmoke.cs",
     "variants": ROOT / "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
 }
 for path in files.values():
@@ -19,6 +21,7 @@ checks = {
         "ProjectStateSnapshot.Capture(project)",
         "RestoreOrThrow(project, rollback",
         "GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle",
+        "SemanticHandleOwnershipResolver.ResolveCaptureTarget(project, snapshot.Handle, category, id)",
         "CaptureSnapshotCore",
         'family.Properties["AxisLeftOffsetM"] = "0"',
         'family.Properties["AxisRightOffsetM"] = "0"',
@@ -32,6 +35,17 @@ checks = {
         "target.Metadata.Clear()", "RestorePersistenceState", "target.UpdatedUtc = source.UpdatedUtc",
     ],
     "policy": ["TryFindOwner", "EnumerateOwnerHandles", "CollectOwnerHandles"],
+    "source_owner": [
+        "ResolveUniqueSourceOwner",
+        "ResolveCaptureTarget",
+        "is claimed by multiple semantic elements",
+        "is already bound to another CAD source handle",
+    ],
+    "ownership_smoke": [
+        "StableIdSourceOwnerIsReused",
+        "DuplicateSourceOwnerIsRejected",
+        "CanonicalSourceRebindIsRejected",
+    ],
     "variants": [
         'EnsureDefault(family, "AxisLeftOffsetM", "0")', 'EnsureDefault(family, "AxisRightOffsetM", "0")',
         'EnsureDefault(family, "CurtainFrameDepthM", "0.05")',
@@ -62,4 +76,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: semantic capture rejects generated outputs, rolls back project state on failure, and generic wall starter Families match specialized GlassWall/WallPier defaults.")
+print("PASS: semantic capture rejects generated outputs, reuses one stable-ID source owner without canonical rebinding, rolls back project state on failure, and generic wall starter Families match specialized GlassWall/WallPier defaults.")

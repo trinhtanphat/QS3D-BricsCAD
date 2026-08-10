@@ -17,7 +17,8 @@ required = [
     "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/CurtainWallFrameCommands.cs",
     "src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs",
-    "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
+    "src/QS3D.BricsCAD.V25/Cad/NativeBuildCapability.cs",
+    "src/QS3D.BricsCAD.V25/Build3DCommands.cs",
     "tests/QS3D.Core.SmokeTests/CurtainWallLayoutSmoke.cs",
     "tests/QS3D.Core.SmokeTests/CurtainWallDetailSmoke.cs",
     "tests/QS3D.Core.SmokeTests/CurtainFrameOpeningSmoke.cs",
@@ -94,9 +95,12 @@ checks = {
         'CommandMethod("QS3DCURTAIN3D"', "WallSolidBuilder.BuildSelectedLineWalls",
         "PolylineWallSolidBuilder.BuildSelected", "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls"
     ],
-    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": [
-        'CommandMethod("QS3DBUILD3D"', "category.Value == ElementCategory.GlassWall",
-        "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "detailSolids = curtain.Frames"
+    "src/QS3D.BricsCAD.V25/Cad/NativeBuildCapability.cs": [
+        "NativeBuildCapability", "ElementCategory.GlassWall", "IsWallCategory(ElementCategory category)"
+    ],
+    "src/QS3D.BricsCAD.V25/Build3DCommands.cs": [
+        'CommandMethod("QS3DBUILD3D"', "NativeBuildCapability.IsWallCategory(category)",
+        "WallSolidBuilder.BuildSelectedLineWalls", "PolylineWallSolidBuilder.BuildSelected"
     ],
     "tests/QS3D.Core.SmokeTests/CurtainFrameOpeningSmoke.cs": [
         "DoorInterruptsVerticalAndHorizontalFrames", "NonIntersectingOpeningLeavesFrameIntact",
@@ -127,4 +131,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: curtain layout/detail, opening interruption, linked-opening stale lifecycle, opening-aware native frame fragments, ownership/health and dedicated/common Build3D wiring are present.")
+print("PASS: curtain layout/detail, opening interruption, linked-opening stale lifecycle, opening-aware native frame fragments, ownership/health, canonical host Build3D wiring and dedicated curtain-frame orchestration are present.")

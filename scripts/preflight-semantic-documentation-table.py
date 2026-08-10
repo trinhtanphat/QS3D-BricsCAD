@@ -99,7 +99,7 @@ if DOC.is_file():
         "caller supplies an explicit ordered semantic element-ID list",
         "never creates CAD entities",
         "defensively copied",
-        "not a second BQ/BBS/schedule calculation engine",
+        "**not** a second BQ/BBS/schedule calculation engine",
         "Native V25 work that remains",
     ):
         if token not in text:

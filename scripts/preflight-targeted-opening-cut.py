@@ -23,7 +23,7 @@ required = {
         "EntitySnapshotReader.ReadCurrentSelection(document)",
         "SemanticReferenceHandles.MatchesSelection(x, handles)",
         "OpeningBooleanService.CutLinkedOpenings(document, project, openingIds)",
-        "FinalizeUi(document, message)",
+        "private static void FinalizeUi(Document document, string message)",
         "TryWriteMessage(document",
     ],
     "src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs": [
@@ -92,11 +92,11 @@ opening_direct = ROOT / "src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs"
 if opening_direct.is_file():
     text = opening_direct.read_text(encoding="utf-8")
     for forbidden in (
-        "QS3DCUTSELECTEDOPENINGS",
-        "QS3DCUTOPENINGS",
-        "OpeningBooleanService.CutLinkedOpenings",
+        r"OpeningBooleanService\s*\.\s*CutLinkedOpenings\s*\(",
+        r"OpeningBooleanCommands\s*\(\s*\)\s*\.\s*(?:CutSelectedOpenings|CutOpenings)\s*\(",
+        r"SendStringToExecute\s*\(\s*\"QS3DCUT(?:SELECTED)?OPENINGS\b",
     ):
-        if forbidden in text:
+        if re.search(forbidden, text):
             errors.append("Direct Draw Door/Opening must keep physical boolean explicit until runtime/journal proof: " + forbidden)
 
 print("QS3D targeted opening cut preflight")

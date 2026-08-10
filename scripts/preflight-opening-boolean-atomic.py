@@ -8,7 +8,7 @@ errors = []
 contracts = {
     "straight/non-bulged": {
         "path": "src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs",
-        "audit": 'AuditTrail.ForProject(project).Record("geometry.opening.boolean"',
+        "audit": '"geometry.opening.boolean",',
         "extra": (),
     },
     "curved/bulged": {

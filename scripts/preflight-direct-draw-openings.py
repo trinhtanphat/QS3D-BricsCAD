@@ -41,7 +41,7 @@ else:
         "default phải là số hữu hạn >= 0",
         "FinalizeUi(document, sourceId, label, widthM, hostId, regenerated)",
         "UI sync warning",
-        "QS3DCUTOPENINGS khi muốn khoét physical host",
+        "QS3DCUTSELECTEDOPENINGS khi muốn khoét đúng Cửa/Lỗ đang chọn",
     )
     for needle in required:
         if needle not in text:

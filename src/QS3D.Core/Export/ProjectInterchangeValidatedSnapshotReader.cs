@@ -237,8 +237,9 @@ namespace QS3D.Core.Export
         private static string OptionalId(string? value) => (value ?? string.Empty).Trim();
         private static string Required(string? value, string label)
         {
-            if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("Validated semantic snapshot contains an empty " + label + ".");
-            return value.Trim();
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0) throw new InvalidDataException("Validated semantic snapshot contains an empty " + label + ".");
+            return normalized;
         }
         private static ElementCategory Category(string? value, string label)
         {

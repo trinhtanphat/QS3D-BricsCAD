@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             SelfReferenceIsReported();
             MultiElementCycleReportsOnlyCycleMembers();
             MissingDependencyIsNotMisclassifiedAsCycle();
+            DuplicateDependencyTargetIsReportedAsAmbiguous();
         }
 
         private static void AcyclicChainPasses()
@@ -75,6 +76,22 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(a);
             var issues = new DependencyHealthService().Inspect(project);
             Require(!issues.Any(), "missing dependency remains ModelHealthService responsibility and must not be misclassified as a cycle");
+        }
+
+        private static void DuplicateDependencyTargetIsReportedAsAmbiguous()
+        {
+            var project = Project("ambiguous");
+            var owner = Element("OWNER");
+            owner.DependsOn.Add("DUP");
+            project.Elements.Add(owner);
+            project.Elements.Add(Element("DUP"));
+            project.Elements.Add(Element("dup"));
+
+            var issues = new DependencyHealthService().Inspect(project);
+            Require(issues.Count(x => x.Code == "DEPENDENCY_TARGET_AMBIGUOUS" && x.ElementId == owner.Id) == 1,
+                "dependency targeting a duplicate semantic ID must fail closed as one ambiguous-target issue");
+            Require(!issues.Any(x => x.Code == "DEPENDENCY_CYCLE"),
+                "an ambiguous dependency target must not be traversed or misclassified as a cycle");
         }
 
         private static ProjectState Project(string id) => new ProjectState(id, id);

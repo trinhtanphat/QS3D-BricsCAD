@@ -49,8 +49,8 @@ if capture.is_file():
 
     sync_method = text.find("public static int SyncExistingRoomFinishes(ProjectState project, ProjectElement room)")
     sync_rollback = text.find("var rollback = ProjectStateSnapshot.Capture(project);", sync_method)
-    sync_loop = text.find("foreach (var category in RoomFinishCategories)", sync_method)
-    if sync_method < 0 or sync_rollback < 0 or sync_loop < 0 or sync_rollback > sync_loop:
+    sync_mutation = text.find("RoomFinishSynchronizationService.SynchronizeExisting(project, room)", sync_method)
+    if sync_method < 0 or sync_rollback < 0 or sync_mutation < 0 or sync_rollback > sync_mutation:
         errors.append("SyncExistingRoomFinishes must snapshot project before mutating existing finishes")
 
 if policy.is_file():

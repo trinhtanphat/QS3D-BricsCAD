@@ -16,7 +16,7 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class QuantitySummaryWindow : Window
     {
-        private static readonly string[] ColumnKeys = { "Floor", "Category", "FamilyName", "Count", "GrossConcreteM3", "DeductionM3", "NetConcreteM3", "FormworkM2", "LengthM", "OuterPerimeterM", "InnerPerimeterM", "DoorAreaM2", "SideAreaM2", "BottomAreaM2", "TopAreaM2", "OtherAreaM2", "SourceHandleText" };
+        private static readonly string[] ColumnKeys = { "Floor", "Zone", "Category", "FamilyName", "Count", "GrossConcreteM3", "DeductionM3", "NetConcreteM3", "FormworkM2", "LengthM", "OuterPerimeterM", "InnerPerimeterM", "DoorAreaM2", "SideAreaM2", "BottomAreaM2", "TopAreaM2", "OtherAreaM2", "SourceHandleText" };
         private IReadOnlyList<QuantityReportRow> _rows;
         private readonly Action<QuantityReportRow>? _locate;
         private readonly Func<IReadOnlyList<QuantityReportRow>>? _recalculate;
@@ -48,7 +48,7 @@ namespace QS3D.BricsCAD.V25.UI
             var filtered = _rows.Where(x =>
                 (floor == "Tất cả" || string.Equals(x.Floor, floor, StringComparison.OrdinalIgnoreCase)) &&
                 (category == "Tất cả" || string.Equals(x.Category, category, StringComparison.OrdinalIgnoreCase)) &&
-                (query.Length == 0 || x.FamilyName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.Category.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.Floor.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.SourceHandleText.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
+                (query.Length == 0 || x.FamilyName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.Category.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.Floor.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.Zone.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.SourceHandleText.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
             QuantityGrid.ItemsSource = filtered;
             var totals = QuantityReportTotals.FromRows(filtered);
             TotalsText.Text = $"TỔNG: {totals.Count:N0} cấu kiện  •  Bê tông {totals.NetConcreteM3:N3} m³  •  Cốp pha {totals.FormworkM2:N3} m²  •  Dài {totals.LengthM:N3} m  •  DT cửa {totals.DoorAreaM2:N3} m²";
@@ -142,6 +142,26 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnLocateClick(object sender, RoutedEventArgs e) => LocateCurrent();
         private void OnQuantityGridDoubleClick(object sender, MouseButtonEventArgs e) => LocateCurrent();
+        private void OnEd2ExportClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                EnsureActive("mở ED2 Excel");
+                _document.SendStringToExecute("QS3DED2 ", true, false, false);
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        }
+
+        private void OnExcelLocateClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                EnsureActive("định vị từ Excel");
+                _document.SendStringToExecute("QS3DEXCELLOCATE ", true, false, false);
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        }
+
         private void LocateCurrent()
         {
             if (_locate == null || !(QuantityGrid.SelectedItem is QuantityReportRow row)) return;

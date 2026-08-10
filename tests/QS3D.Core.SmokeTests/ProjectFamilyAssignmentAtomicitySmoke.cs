@@ -34,7 +34,7 @@ namespace QS3D.Core.SmokeTests
         private static void CorruptProjectElementListBlocksPropertyPropagationBeforeMutation()
         {
             var project = new ProjectState("family-property-atomic", "Family property atomicity");
-            var family = new ProjectFamily("F1", "Family", ElementCategory.Wall);
+            var family = new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall);
             family.Properties["WidthM"] = "0.2";
             project.Families.Add(family);
             project.Elements.Add(null!);
@@ -46,18 +46,18 @@ namespace QS3D.Core.SmokeTests
         private static Setup CreateDuplicatePreviousFamilyProject(string id)
         {
             var project = new ProjectState(id, "Family atomicity");
-            var target = new ProjectFamily("TARGET", "Target", ElementCategory.Wall);
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
             target.Properties["ThicknessM"] = "0.3";
-            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.Wall);
+            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.ArchitecturalWall);
             previous.Properties["ThicknessM"] = "0.2";
             project.Families.Add(target);
             project.Families.Add(previous);
-            project.Families.Add(new ProjectFamily("DUP", "Duplicate A", ElementCategory.Wall));
-            project.Families.Add(new ProjectFamily("dup", "Duplicate B", ElementCategory.Wall));
+            project.Families.Add(new ProjectFamily("DUP", "Duplicate A", ElementCategory.ArchitecturalWall));
+            project.Families.Add(new ProjectFamily("dup", "Duplicate B", ElementCategory.ArchitecturalWall));
 
-            var first = new ProjectElement("E1", ElementCategory.Wall, previous.Id, string.Empty, string.Empty);
+            var first = new ProjectElement("E1", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
             first.Properties["ThicknessM"] = "0.2";
-            var second = new ProjectElement("E2", ElementCategory.Wall, "DUP", string.Empty, string.Empty);
+            var second = new ProjectElement("E2", ElementCategory.ArchitecturalWall, "DUP", string.Empty, string.Empty);
             project.Elements.Add(first);
             project.Elements.Add(second);
             return new Setup(project, target, previous, first, second);

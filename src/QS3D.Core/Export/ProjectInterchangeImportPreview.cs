@@ -189,7 +189,7 @@ namespace QS3D.Core.Export
         private static string Required(string? value, string label)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("Required identity value is empty: " + label + ".");
-            return value.Trim();
+            return value!.Trim();
         }
 
         private static ManifestContract ParseValidatedManifest(string json)

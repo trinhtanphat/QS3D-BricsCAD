@@ -19,7 +19,7 @@ checks = {
     required[0]: [
         'x:Class="QS3D.BricsCAD.V25.UI.ScheduleHubWindow"', 'x:Name="ElementCountText"', 'x:Name="FinishCountText"',
         'x:Name="DoorCountText"', 'x:Name="CurtainCountText"', 'x:Name="MaterialCountText"',
-        'Text="SCHEDULE-SAFE SNAPSHOT"', 'Text="Cấu kiện BQ"', 'Text="Vật liệu dùng"',
+        'Text="SCHEDULE-SAFE SNAPSHOT"', 'Text="CẤU KIỆN BQ"', 'Text="VẬT LIỆU"',
         'Tag="QS3DBQ"', 'Tag="QS3DREGEN"', 'Tag="QS3DFINISHSCHEDULE"', 'Tag="QS3DFINISHXLSX"',
         'Tag="QS3DROOMFINISHHEALTH"', 'Tag="QS3DMATERIALS"', 'Tag="QS3DMATERIALXLSX"',
         'Tag="QS3DCURTAIN"', 'Tag="QS3DCURTAINXLSX"', 'Tag="QS3DDOORSCHEDULE"', 'Tag="QS3DDOORXLSX"',

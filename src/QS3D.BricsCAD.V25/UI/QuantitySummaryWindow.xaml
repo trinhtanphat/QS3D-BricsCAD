@@ -32,14 +32,18 @@
                                        FontWeight="SemiBold" FontSize="9"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock Text="Floor • Category • Family • concrete • formwork • length • area • CAD source"
+                    <TextBlock Text="Floor • Zone • Category • Family • concrete • formwork • length • area • CAD source"
                                Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="Định vị" Click="OnLocateClick" Style="{StaticResource DenseButton}"/>
                     <Button Content="Tính lại" Click="OnRecalculateClick" Style="{StaticResource DenseButton}"
                             Margin="6,0,0,0" ToolTip="Regenerate model và nạp lại số liệu"/>
-                    <Button Content="Xuất Excel" Style="{StaticResource AccentButton}"
+                    <Button Content="ED2 • Excel" Click="OnEd2ExportClick" Style="{StaticResource DenseButton}"
+                            Margin="6,0,0,0" ToolTip="Chọn scope Selection/Floor/Zone/All và xuất CHI_TIET/TONG_HOP"/>
+                    <Button Content="Excel → CAD" Click="OnExcelLocateClick" Style="{StaticResource DenseButton}"
+                            Margin="6,0,0,0" ToolTip="Định vị ngược từ dòng CHI_TIET theo Handle/fingerprint"/>
+                    <Button Content="BQ • 1 sheet" Style="{StaticResource AccentButton}"
                             Click="OnExportClick" Margin="6,0,0,0"/>
                 </StackPanel>
             </DockPanel>
@@ -60,12 +64,12 @@
                 <ComboBox Grid.Column="1" x:Name="FloorCombo" SelectionChanged="OnFloorChanged"/>
                 <TextBlock Grid.Column="3" Text="Tìm" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <TextBox Grid.Column="4" x:Name="SearchBox"
-                         ToolTip="Tìm theo tầng, loại, tên cấu kiện hoặc Handle"
+                         ToolTip="Tìm theo tầng, Zone, loại, tên cấu kiện hoặc Handle"
                          TextChanged="OnSearchChanged"/>
                 <CheckBox Grid.Column="6" x:Name="GroupCheck" Content="Gộp theo Family"
                           IsChecked="True" IsEnabled="False" Margin="14,0,0,0"
                           VerticalAlignment="Center"
-                          ToolTip="Bảng đang được tổng hợp theo Floor/Category/Family"/>
+                          ToolTip="Bảng đang được tổng hợp theo Floor/Zone/Category/Family"/>
             </Grid>
         </Border>
 
@@ -96,6 +100,7 @@
                           MouseDoubleClick="OnQuantityGridDoubleClick" BorderThickness="0">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Tầng" Binding="{Binding Floor}" Width="85"/>
+                        <DataGridTextColumn Header="Zone" Binding="{Binding Zone}" Width="85"/>
                         <DataGridTextColumn Header="Loại" Binding="{Binding Category}" Width="110"/>
                         <DataGridTextColumn Header="Tên cấu kiện" Binding="{Binding FamilyName}" Width="150"/>
                         <DataGridTextColumn Header="SL" Binding="{Binding Count}" Width="55"/>
@@ -127,22 +132,23 @@
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <CheckBox Content="Tầng" Tag="0" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="Loại" Tag="1" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="Tên cấu kiện" Tag="2" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="SL" Tag="3" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="BT gộp (m³)" Tag="4" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="Trừ giao (m³)" Tag="5" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="BT còn (m³)" Tag="6" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="Cốp pha (m²)" Tag="7" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="Dài (m)" Tag="8" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="Chu vi ngoài (m)" Tag="9" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="Chu vi trong (m)" Tag="10" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="DT cửa (m²)" Tag="11" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="Thành bên (m²)" Tag="12" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="DT đáy (m²)" Tag="13" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="DT đỉnh (m²)" Tag="14" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="DT khác (m²)" Tag="15" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
-                            <CheckBox Content="Handle CAD" Tag="16" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="Zone" Tag="1" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="Loại" Tag="2" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="Tên cấu kiện" Tag="3" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="SL" Tag="4" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="BT gộp (m³)" Tag="5" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="Trừ giao (m³)" Tag="6" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="BT còn (m³)" Tag="7" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="Cốp pha (m²)" Tag="8" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="Dài (m)" Tag="9" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="Chu vi ngoài (m)" Tag="10" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="Chu vi trong (m)" Tag="11" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="DT cửa (m²)" Tag="12" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="Thành bên (m²)" Tag="13" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="DT đáy (m²)" Tag="14" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="DT đỉnh (m²)" Tag="15" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="DT khác (m²)" Tag="16" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            <CheckBox Content="Handle CAD" Tag="17" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>

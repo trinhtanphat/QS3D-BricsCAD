@@ -95,6 +95,7 @@ namespace QS3D.Core.Recognition
     public sealed class RecognitionEngine
     {
         private readonly IReadOnlyList<RecognitionRule> _rules;
+        private static readonly IReadOnlyDictionary<ElementCategory, ISet<string>> DefaultEntityTypes = BuildDefaultEntityTypes();
 
         public RecognitionEngine(IEnumerable<RecognitionRule>? rules = null)
         {
@@ -122,6 +123,20 @@ namespace QS3D.Core.Recognition
 
         public RecognitionBatch SuggestBatch(IEnumerable<EntitySnapshot> snapshots, double autoAcceptConfidence = 0.92d, double minimumMargin = 0.15d) => new RecognitionBatch((snapshots ?? throw new ArgumentNullException(nameof(snapshots))).Select(Suggest), autoAcceptConfidence, minimumMargin);
 
+        public static bool IsEntityTypeCompatible(ElementCategory category, string entityType)
+        {
+            var normalized = RecognitionText.Normalize(entityType);
+            if (normalized.Length == 0) return false;
+            if (category == ElementCategory.GlassWall || category == ElementCategory.WallPier) category = ElementCategory.ArchitecturalWall;
+            if (category == ElementCategory.FloorFinish || category == ElementCategory.Waterproofing || category == ElementCategory.Skirting || category == ElementCategory.CeilingFinish)
+                category = ElementCategory.Room;
+            if (DefaultEntityTypes.TryGetValue(category, out var allowed)) return allowed.Contains(normalized);
+            if (category == ElementCategory.Grid) return normalized == "line" || normalized == "arc" || normalized == "polyline";
+            if (category == ElementCategory.CustomQuantity)
+                return normalized == "line" || normalized == "arc" || normalized == "circle" || normalized == "polyline" || normalized == "region" || normalized == "hatch" || normalized == "solid3d" || normalized == "3dsolid" || normalized == "blockreference" || normalized == "proxyentity";
+            return false;
+        }
+
         public static IReadOnlyList<RecognitionRule> DefaultRules() => new[]
         {
             new RecognitionRule("beam", ElementCategory.Beam, new[]{"blt beam","beam","dam","d-beam","kc-dam"}, new[]{"beam","dam"}, new[]{"line","polyline","solid3d","3dsolid","proxyentity"}),
@@ -142,14 +157,24 @@ namespace QS3D.Core.Recognition
         private static RecognitionCandidate Score(RecognitionRule rule, string layer, string text, string entityType)
         {
             var result = new RecognitionCandidate { RuleId = rule.Id, Category = rule.Category };
+            var typeMatch = rule.EntityTypes.Count == 0 || rule.EntityTypes.Any(x => string.Equals(x, entityType, StringComparison.OrdinalIgnoreCase));
+            if (!typeMatch) return result;
             var layerMatch = BestTerm(rule.LayerTerms, layer);
             var textMatch = BestTerm(rule.TextTerms, text);
-            var typeMatch = rule.EntityTypes.Count == 0 || rule.EntityTypes.Any(x => string.Equals(x, entityType, StringComparison.OrdinalIgnoreCase) || entityType.Contains(x));
             if (!string.IsNullOrEmpty(layerMatch)) { result.Confidence += string.Equals(layer, layerMatch, StringComparison.OrdinalIgnoreCase) ? 0.90d : 0.62d; result.Evidence.Add("layer:" + layerMatch); }
             if (!string.IsNullOrEmpty(textMatch)) { result.Confidence += 0.28d; result.Evidence.Add("text:" + textMatch); }
             if (typeMatch && (!string.IsNullOrEmpty(layerMatch) || !string.IsNullOrEmpty(textMatch))) { result.Confidence += 0.10d; result.Evidence.Add("type:" + entityType); }
             result.Confidence = Math.Min(1d, result.Confidence);
             return result;
+        }
+
+        private static IReadOnlyDictionary<ElementCategory, ISet<string>> BuildDefaultEntityTypes()
+        {
+            return DefaultRules()
+                .GroupBy(x => x.Category)
+                .ToDictionary(
+                    x => x.Key,
+                    x => (ISet<string>)new HashSet<string>(x.SelectMany(rule => rule.EntityTypes), StringComparer.OrdinalIgnoreCase));
         }
 
         private static string BestTerm(IEnumerable<string> terms, string haystack) => terms.Where(x => ContainsTerm(haystack, x)).OrderByDescending(x => x.Length).FirstOrDefault() ?? string.Empty;

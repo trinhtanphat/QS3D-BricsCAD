@@ -22,6 +22,28 @@ namespace QS3D.BricsCAD.V25.Services
             return result.AsReadOnly();
         }
 
+        public static IReadOnlyList<string> GetSelectionAliases(ProjectElement element)
+        {
+            if (element == null) throw new ArgumentNullException(nameof(element));
+
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var handle in element.SourceHandles) Add(handle, result, seen);
+
+            // Auto Room boundary provenance only represents the semantic source when the Room
+            // does not own an explicit source handle. MatchesSelection still requires the whole
+            // boundary set, while this method returns every allowed handle for final validation.
+            if (result.Count == 0 && element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var boundaryHandles))
+                foreach (var handle in (boundaryHandles ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                    Add(handle, result, seen);
+
+            // Generated host aliases are valid rebuild entry points even when stable sources exist.
+            // Deliberately exclude generated rebar/mesh/detail handles: QS3DBUILD3D owns host solids.
+            if (element.Properties.TryGetValue("GeneratedSolidHandle", out var generated)) Add(generated, result, seen);
+            if (element.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolid)) Add(cutSolid, result, seen);
+            return result.AsReadOnly();
+        }
+
         public static bool Intersects(ProjectElement element, ISet<string> handles) => MatchesSelection(element, handles);
 
         public static bool MatchesSelection(ProjectElement element, ISet<string> handles)

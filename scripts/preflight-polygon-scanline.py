@@ -36,6 +36,7 @@ for token in [
     "odd intersection count",
     "PolygonScanAxis.Horizontal",
     "PolygonScanAxis.Vertical",
+    "axis != PolygonScanAxis.Horizontal && axis != PolygonScanAxis.Vertical",
 ]:
     require(planner, token, "polygon scanline planner")
 
@@ -45,20 +46,21 @@ for token in [
     "ClosingVertexMayBeRepeated",
     "SelfIntersectionFailsClosed",
     "BoundaryVertexRuleIsDeterministic",
+    "InvalidAxisFailsClosed",
 ]:
     require(smoke, token, "polygon scanline smoke")
 
 for token in [
     "PolygonalSlabMeshPlanner",
-    "PolygonScanlineClipper.NormalizeAndValidate",
+    "PolygonRegionScanlineClipper.NormalizeAndValidate",
     "SubtractBoundaryClearance",
     "AppendCapsuleIntersection",
     "RebarMath.Add(cover, xRadius",
     "RebarMath.Add(cover, yRadius",
     "MaxBars = 8192",
     "MaxForbiddenIntervalsPerScanline = 16384",
-    "Polygonal slab footprint leaves no cover-compliant X rebar segments",
-    "Polygonal slab footprint leaves no cover-compliant Y rebar segments",
+    "Polygonal slab region leaves no cover-compliant X rebar segments",
+    "Polygonal slab region leaves no cover-compliant Y rebar segments",
 ]:
     require(mesh, token, "polygon mesh planner")
 

@@ -50,9 +50,9 @@ if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
     for token in (
         "one simple outer loop plus zero or more simple holes",
-        "hole-aware mesh must extend that same clearance contract",
+        "applies its existing cover + bar-radius boundary-clearance contract to every outer/hole edge",
         "Multiple disconnected outer loops are not represented",
-        "REMOTE_DONE for one-outer-loop + holes topology/scanline Core only",
+        "REMOTE_DONE for one-outer-loop + holes topology and Core mesh planning",
         "LOCAL_ONLY",
     ):
         if token not in text: errors.append("POLYGON-REGION-HOLES.md missing topology/runtime boundary: " + token)

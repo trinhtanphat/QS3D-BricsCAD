@@ -47,8 +47,8 @@ if DOC.is_file():
     for token in (
         "GridNamingService",
         "caller supplies an explicit ordered list",
-        "native Grid bubble/label drawing",
-        "Core/source functionality only",
+        "source-implemented native endpoint annotation",
+        "source implementation, not V25 runtime certification",
     ):
         if token not in text:
             errors.append("GRID-WORKFLOW.md missing naming/runtime boundary: " + token)
@@ -60,4 +60,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Grid semantic naming is deterministic, batch-prevalidated and uniqueness-guarded while native ordering/bubbles remain an explicit V25 runtime/UI gate.")
+print("PASS: Grid semantic naming is deterministic, batch-prevalidated and uniqueness-guarded; native endpoint annotation is source-implemented while exact-SHA V25 runtime/UI certification remains an explicit gate.")

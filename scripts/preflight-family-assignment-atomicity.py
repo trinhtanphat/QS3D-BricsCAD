@@ -50,7 +50,7 @@ if SMOKE.is_file():
         "DuplicatePreviousFamilyBlocksWholeAssignmentBatch",
         "DuplicatePreviousFamilyBlocksBulkEditBatch",
         "CorruptProjectElementListBlocksPropertyPropagationBeforeMutation",
-        "project.UpdatedUtc != beforeUpdated",
+        "setup.Project.UpdatedUtc != beforeUpdated",
     ):
         if token not in text:
             errors.append("ProjectFamilyAssignmentAtomicitySmoke.cs missing regression scenario: " + token)

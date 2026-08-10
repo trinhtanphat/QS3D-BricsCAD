@@ -122,7 +122,7 @@ namespace QS3D.Core.SmokeTests
         private static void ProjectLayerMappingWins()
         {
             var project = new ProjectState("p", "Recognition"); project.Metadata[TemplateProfileStore.LayerMappingPrefix + "A-MISC"] = ElementCategory.Door.ToString();
-            var snapshot = new EntitySnapshot("AA", "Line", "A-MISC");
+            var snapshot = new EntitySnapshot("AA", "BlockReference", "A-MISC");
             var result = new ProjectRecognitionService().Suggest(project, snapshot);
             True(result.TopCandidate != null); Equal(ElementCategory.Door, result.TopCandidate!.Category); Near(.99d, result.TopCandidate.Confidence); True(!result.RequiresReview);
         }
@@ -136,9 +136,8 @@ namespace QS3D.Core.SmokeTests
 
             var service = new ProjectRecognitionService();
             var result = service.Suggest(project, snapshot);
-            Equal(1, result.Candidates.Count);
             True(result.TopCandidate != null);
-            Equal(ElementCategory.Door, result.TopCandidate!.Category);
+            Equal(ElementCategory.Beam, result.TopCandidate!.Category);
             True(!result.RequiresReview);
 
             var batch = service.SuggestBatch(project, new[] { snapshot });

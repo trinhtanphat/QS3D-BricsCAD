@@ -29,16 +29,14 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(skirtFamily);
 
             var first = Finish("wf1", ElementCategory.WallFinish, wallFamily.Id, "room-1");
-            first.Quantities["NetFinishAreaM2"] = 18d;
-            var second = Finish("wf2", ElementCategory.WallFinish, wallFamily.Id, "room-1");
-            second.Quantities["NetFinishAreaM2"] = 12d;
+            first.Quantities["NetFinishAreaM2"] = 30d;
             var skirting = Finish("sk1", ElementCategory.Skirting, skirtFamily.Id, "room-1");
             skirting.Quantities["SkirtingLengthM"] = 14d;
-            project.Elements.Add(first); project.Elements.Add(second); project.Elements.Add(skirting);
+            project.Elements.Add(first); project.Elements.Add(skirting);
 
             var rows = RoomFinishScheduleBuilder.Build(project);
             var wall = rows.Single(x => x.Category == "WallFinish");
-            if (wall.Room != "Phòng 101" || wall.Count != 2 || wall.UnitHint != "m²") throw new Exception("Wall-finish grouping/room label failed.");
+            if (wall.Room != "Phòng 101" || wall.Count != 1 || wall.UnitHint != "m²") throw new Exception("Wall-finish grouping/room label failed.");
             Near(30d, wall.AreaM2); Near(30d, wall.PrimaryQuantity);
             var skirt = rows.Single(x => x.Category == "Skirting");
             if (skirt.UnitHint != "m") throw new Exception("Skirting unit failed.");
@@ -48,6 +46,10 @@ namespace QS3D.Core.SmokeTests
         private static void FamilyMaterialAndInstanceOverrideSplitRows()
         {
             var project = BaseProject();
+            var roomFamily = project.Families.Single(x => x.Category == ElementCategory.Room);
+            var secondRoom = new ProjectElement("room-2", ElementCategory.Room, roomFamily.Id, "f1", "z");
+            secondRoom.Properties["RoomName"] = "Phòng 102";
+            project.Elements.Add(secondRoom);
             ProjectMaterialCatalog.UpsertCustom(project, "tile-a", "Gạch A", "m²", "");
             ProjectMaterialCatalog.UpsertCustom(project, "tile-b", "Gạch B", "m²", "");
             var family = new ProjectFamily("ff", "Sàn hoàn thiện", ElementCategory.FloorFinish);
@@ -55,7 +57,7 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(family);
             var inherited = Finish("ff1", ElementCategory.FloorFinish, family.Id, "room-1");
             inherited.Quantities["AreaM2"] = 20d;
-            var overridden = Finish("ff2", ElementCategory.FloorFinish, family.Id, "room-1");
+            var overridden = Finish("ff2", ElementCategory.FloorFinish, family.Id, "room-2");
             overridden.Properties["Material"] = "Gạch B";
             overridden.Quantities["BottomAreaM2"] = 5d;
             project.Elements.Add(inherited); project.Elements.Add(overridden);

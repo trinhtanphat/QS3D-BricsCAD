@@ -31,7 +31,7 @@ checks = {
         "SynchronizeCore", "ProjectStateSnapshot.Capture(project)", "RestoreOrThrow",
         "Room finish batch synchronization", "Room finish synchronization",
         "RoomFinishIdentityService.FindExisting", "AutoRoomLifecycle.ResolveRoomReferenceId",
-        "AutoRoomLifecycle.RoomSourceIdKey", "finish.DependsOn.Add(room.Id)",
+        "AutoRoomLifecycle.RoomSourceIdKey", "EnsureSingleRoomDependency(finish, room.Id)", "finish.DependsOn.Add(roomId)",
         "finish.FloorId = room.FloorId", "finish.ZoneId = room.ZoneId", "finish.DrawingFingerprint = room.DrawingFingerprint",
         '"AreaM2"', '"PerimeterM"', '"HeightM"', '"OpeningAreaM2"', '"DoorWidthM"',
         "finish.Properties.Remove(key)", "must be a finite non-negative invariant number",

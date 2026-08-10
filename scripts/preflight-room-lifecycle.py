@@ -43,7 +43,7 @@ if sync.exists():
     for needle in (
         "RoomFinishSynchronizationService", "SynchronizeExisting", "RoomFinishIdentityService.FindExisting",
         "AutoRoomLifecycle.ResolveRoomReferenceId", "AutoRoomLifecycle.RoomSourceIdKey",
-        "finish.DependsOn.Add(room.Id)", "finish.DrawingFingerprint = room.DrawingFingerprint",
+        "EnsureSingleRoomDependency(finish, room.Id)", "finish.DependsOn.Add(roomId)", "finish.DrawingFingerprint = room.DrawingFingerprint",
         '"OpeningAreaM2"', '"DoorWidthM"', "finish.Properties.Remove(key)",
         "AutoRoomLifecycle.IsStaleAutoRoom(room)", "ReferenceEquals(owned, element)",
     ):
@@ -98,7 +98,7 @@ source_resolver = ROOT / "src/QS3D.Core/Services/SourceHandleResolver.cs"
 if source_resolver.exists():
     text = source_resolver.read_text(encoding="utf-8")
     for needle in (
-        "AutoRoomLifecycle.BoundarySourceHandlesKey", "GeneratedSolidHandle", "element.DependsOn",
+        "AutoRoomLifecycle.BoundarySourceHandlesKey", "AddGeneratedOwnerHandles", "GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles", "element.DependsOn",
         "AutoRoomLifecycle.IsRoomFinishCategory(element.Category)", "AutoRoomLifecycle.ResolveRoomReferenceId(project, element)",
     ):
         if needle not in text: errors.append("dependency/provenance-aware source Handle resolver missing: " + needle)

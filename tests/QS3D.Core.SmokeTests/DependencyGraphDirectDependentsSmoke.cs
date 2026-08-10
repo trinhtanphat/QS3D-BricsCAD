@@ -120,7 +120,7 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectElement Element(string id, params string[] dependsOn)
         {
-            var element = new ProjectElement(id, ElementCategory.Wall, null, null, null);
+            var element = new ProjectElement(id, ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
             foreach (var dependency in dependsOn) element.DependsOn.Add(dependency);
             return element;
         }

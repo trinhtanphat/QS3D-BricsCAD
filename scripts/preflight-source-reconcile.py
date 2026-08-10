@@ -56,7 +56,10 @@ checks = {
         'element.SetProperty("LengthM"',
         'element.SetProperty("AreaM2"',
         'element.SetProperty("PerimeterM"',
-        'element.SetProperty("VolumeM3"',
+        "element.SetProperty(MeasuredSolidQuantityPolicy.SurfaceAreaProperty",
+        "element.SetProperty(MeasuredSolidQuantityPolicy.VolumeProperty",
+        'element.SetProperty("CAD.SolidMetricSource", "Solid3d.MassProperties")',
+        'element.Properties.Remove("VolumeM3")',
         "element.MarkDirty(ElementDirtyFlags.All)",
         'AuditTrail.ForProject(project).Record("source.reconcile"',
         "Opening " + '" + element.Id + " references missing host "',
@@ -186,7 +189,7 @@ if service.is_file():
     queue_loop = closure.find("while (queue.Count > 0)")
     if min(graph_build, queue_loop) < 0 or graph_build > queue_loop:
         errors.append("Source reconcile must build the reverse dependency/element index once before queue-based invalidation closure traversal")
-    if "new Dictionary<string, ProjectElement>" in closure or "foreach (var element in project.Elements)" in closure:
+    if re.search(r"\b(?:byId|elementsById)\s*=\s*new\s+Dictionary<string,\s*ProjectElement>", closure) or "foreach (var element in project.Elements)" in closure:
         errors.append("Source reconcile closure must reuse DependencyGraph's retained element index instead of rescanning project elements into byId")
     if "while (expanded)" in closure or "candidate.DependsOn.Any(result.ContainsKey)" in closure:
         errors.append("Source reconcile invalidation closure must not repeatedly rescan all project elements")

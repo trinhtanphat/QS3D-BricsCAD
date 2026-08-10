@@ -32,7 +32,7 @@ required = {
     ],
     "docs/DIRECT-DRAW-OPENINGS.md": [
         "`QS3DDRAWDOOR` and `QS3DDRAWOPENING` are implemented in source",
-        "Direct Draw **does not automatically call** `QS3DCUTOPENINGS`",
+        "**does not automatically call** `QS3DCUTOPENINGS`",
     ],
     "docs/CURTAIN-PATH-FRAMES.md": [
         "Status: implemented in source",

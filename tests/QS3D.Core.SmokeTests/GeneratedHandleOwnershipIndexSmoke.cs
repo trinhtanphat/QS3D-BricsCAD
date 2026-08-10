@@ -88,7 +88,7 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectState NewProject() => new ProjectState("P-OWN-INDEX", "Ownership Index Smoke");
 
-        private static ProjectElement NewElement(string id) => new ProjectElement(id, ElementCategory.Wall, null, null, null);
+        private static ProjectElement NewElement(string id) => new ProjectElement(id, ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
 
         private static void ExpectInvalid(Action action, string scenario)
         {

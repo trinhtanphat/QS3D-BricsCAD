@@ -22,7 +22,7 @@ checks = {
         "private readonly Document _document", "RoomFinishScheduleWindow(Document document)", "RoomFinishScheduleBuilder.Build(project)",
         "RoomFinishXlsxExporter.Export", "RegenerationEngine", "SearchText.Contains(query)", "DrawingLabel(_document)",
         "EnsureActive", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
-        'EnsureActive("làm mới HT_Phòng Schedule")', 'EnsureActive("xuất HT_Phòng XLSX")',
+        'EnsureActive("đọc HT_Phòng Schedule hiện hành")', 'EnsureActive("xuất HT_Phòng XLSX")',
     ],
     required[2]: ['CommandMethod("QS3DFINISHSCHEDULE"', "new RoomFinishScheduleWindow(document)", "ShowModelessWindow"],
 }

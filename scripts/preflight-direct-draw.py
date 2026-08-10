@@ -84,8 +84,8 @@ required = {
         "sourceTypes.Count > 1",
         "không build chung LINE và open POLYLINE",
         "RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
-        "BuildCategory(document, project, category)",
-        'x.Properties.TryGetValue("GeneratedSolidHandle"',
+        "BuildCategory(document, project, category, sourceType)",
+        'return element.Properties.TryGetValue("GeneratedSolidHandle"',
     ],
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs": [
         "SelectInspectionSemanticSourcesForBuild()",
@@ -148,7 +148,8 @@ required = {
         'Tag="QS3DDRAWBEAM"',
         'Tag="QS3DDRAWCOLUMN"',
         'Tag="QS3DDRAWSLAB"',
-        "Capture/Bóc chọn",
+        'Tag="QS3DWALL"',
+        'Tag="QS3DBUILD3D"',
     ],
     "docs/DIRECT-DRAW-WORKFLOW.md": [
         "QS3DDRAWWALL",
@@ -261,8 +262,8 @@ if build3d.is_file():
     select_sources = text.find("document.Editor.SetImpliedSelection(sourceIds.ToArray())")
     source_snapshots = text.find("var sourceSnapshots = EntitySnapshotReader.ReadImpliedSelection(document);")
     validate_call = text.find("if (!ValidateWallSourceBatch(selectedElements, sourceSnapshots, category, out var wallSourceError))")
-    regenerate = text.find("var regenerated = new RegenerationEngine")
-    build = text.find("var built = BuildCategory(document, project, category);")
+    regenerate = text.find("regenerated = new RegenerationEngine")
+    build = text.find("built = BuildCategory(document, project, category, sourceType);")
     if min(guard_category, resolve_sources, source_space, select_sources, source_snapshots, validate_call, regenerate, build) < 0 or not (
         guard_category < resolve_sources < source_space < select_sources < source_snapshots < validate_call < regenerate < build
     ):

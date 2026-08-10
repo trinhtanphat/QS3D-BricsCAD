@@ -15,7 +15,7 @@ namespace QS3D.Core.Recognition
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
-            var mapped = ExactLayerMapping(project, snapshot.Layer);
+            var mapped = ExactLayerMapping(project, snapshot);
             if (mapped != null) return new RecognitionResult(snapshot, new[] { mapped });
             return _fallback.Suggest(snapshot);
         }
@@ -44,7 +44,7 @@ namespace QS3D.Core.Recognition
             }
         }
 
-        private static RecognitionCandidate? ExactLayerMapping(ProjectState project, string layer)
+        private static RecognitionCandidate? ExactLayerMapping(ProjectState project, EntitySnapshot snapshot)
         {
             var mappings = project.Metadata
                 .Where(x => x.Key.StartsWith(TemplateProfileStore.LayerMappingPrefix, StringComparison.OrdinalIgnoreCase))
@@ -52,12 +52,13 @@ namespace QS3D.Core.Recognition
                 .ToList();
             ValidateLayerMappings(mappings, "Project recognition mappings");
 
-            var normalizedLayer = RecognitionText.Normalize(layer);
+            var normalizedLayer = RecognitionText.Normalize(snapshot.Layer);
             foreach (var item in mappings)
             {
                 var pattern = item.Key.Trim();
                 if (!string.Equals(RecognitionText.Normalize(pattern), normalizedLayer, StringComparison.OrdinalIgnoreCase)) continue;
                 if (!Enum.TryParse(item.Value, true, out ElementCategory category)) throw new InvalidOperationException("Invalid project layer mapping category: " + item.Value);
+                if (!RecognitionEngine.IsEntityTypeCompatible(category, snapshot.EntityType)) return null;
                 var candidate = new RecognitionCandidate { RuleId = "project-layer:" + pattern, Category = category, Confidence = 0.99d };
                 candidate.Evidence.Add("project-layer:" + pattern);
                 return candidate;

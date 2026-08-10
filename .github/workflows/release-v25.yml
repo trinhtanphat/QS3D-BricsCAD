@@ -67,6 +67,9 @@ jobs:
       - name: Validate manual release request
         shell: powershell
         run: |
+          if ($env:GITHUB_REF -ne 'refs/heads/main') {
+            throw "V25 releases must be dispatched from refs/heads/main. Current ref: $env:GITHUB_REF"
+          }
           if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') {
             throw "release_tag must look like v1.2.3, v1.2.3-rc.1 or v1.2.3-rc.1+build.4"
           }
@@ -235,7 +238,7 @@ jobs:
             target_commitish = $env:GITHUB_SHA
             name = "QS3D for BricsCAD V25 $env:RELEASE_TAG"
             body = "Owner-approved manual build/release. Source checks, Core build/smoke tests and V25 adapter build completed. Runtime: $runtimeState. Package: $signingState. The release tag is bound to the package assembly version before publication."
-            draft = $false
+            draft = $true
             prerelease = $isPrerelease
             generate_release_notes = $true
           } | ConvertTo-Json
@@ -257,5 +260,24 @@ jobs:
               -Uri ($uploadBase + '?name=' + $encodedName) `
               -Headers $headers `
               -ContentType $contentType `
-              -InFile $asset | Out-Null
+               -InFile $asset | Out-Null
+          }
+
+          $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"
+          $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+          foreach ($expectedAsset in @('QS3D-BricsCAD-V25.zip', 'QS3D-BricsCAD-V25.zip.sha256')) {
+            if ($expectedAsset -notin @($draftRelease.assets | ForEach-Object { $_.name })) {
+              throw "Expected release asset was not uploaded: $expectedAsset. Release remains a draft."
+            }
+          }
+
+          $publishBody = @{ draft = $false } | ConvertTo-Json
+          $publishedRelease = Invoke-RestMethod `
+            -Method Patch `
+            -Uri $releaseUri `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $publishBody
+          if ($publishedRelease.draft -ne $false) {
+            throw "GitHub release remained a draft after publish request."
           }

@@ -120,9 +120,9 @@ Remaining Curtain product/runtime work includes panel-by-panel backing glass sol
 
 - Semantic quantities and guarded native paths for Beam, Slab, Column, StructuralWall, Foundation, Stair, Railing and Earthwork.
 - Quick Takeoff uses drawing unit conversion.
-- BQ grouping/filtering/Locate/XLSX and ED2 Excel/Handle round-trip with DWG fingerprint safety.
-- Deterministic recognition/review/auto-apply.
-- `QS3DB4D` bounded Current Space scan excludes **all generated owner-slot handles through the shared ownership policy**, preventing QS3D-generated geometry from feeding back into source recognition when new generated families are introduced. Recognition/B4D apply still flows through guarded transactional semantic capture, so an output handle cannot be recaptured if a future scanner regression reaches that stage.
+- BQ grouping/filtering/Locate and one-sheet XLSX review. ED2 now scopes before aggregation (`Selection/Floor/Zone/All`), exports one-element-per-row `CHI_TIET` plus Zone-aware `TONG_HOP`, and requires matching Element ID ↔ Handle ↔ DWG fingerprint plus complete live-Handle resolution before Excel-driven CAD selection.
+- Deterministic recognition/review/auto-apply with mandatory entity-type compatibility for fallback rules and exact project layer mappings; DBText/MText cannot be auto-captured as structural geometry merely because its layer/text matches.
+- `QS3DB4D` bounded Current Space scan excludes **all generated owner-slot handles through the shared ownership policy**, preventing QS3D-generated geometry from feeding back into source recognition when new generated families are introduced. Recognition/B4D apply still flows through guarded transactional semantic capture, so an output handle cannot be recaptured if a future scanner regression reaches that stage. `Solid3d` total surface area and mass-properties volume are stored with explicit provenance; native volume overrides default `Area × Thickness` quantity estimates without being misused as plan area.
 
 ### Schedules / exports
 
@@ -209,7 +209,7 @@ Current source preflights cover, among other things:
 - schedule/export hub wiring;
 - synthetic sample provenance/private-file policy.
 
-`scripts/preflight-all.py` auto-discovers feature preflights, including product-boundary, Direct Draw P0/P1, Door/Opening Direct Draw, P0/extended UCS, targeted opening cut/readiness, Auto Host and Curtain path-frame gates.
+`scripts/preflight-all.py` auto-discovers feature preflights, including product-boundary, Direct Draw P0/P1, Door/Opening Direct Draw, P0/extended UCS (`scripts/preflight-direct-draw-ucs-extended.py`), targeted opening cut/readiness (`scripts/preflight-opening-cut-readiness.py`), Auto Host and Curtain path-frame gates.
 
 ## Manual GitHub Actions policy
 

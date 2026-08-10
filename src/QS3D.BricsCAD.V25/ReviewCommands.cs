@@ -53,11 +53,15 @@ namespace QS3D.BricsCAD.V25
                 Action<RecognitionResult> apply = result =>
                 {
                     var candidate = result.TopCandidate; if (candidate == null) return;
-                    var collision = project.Elements.FirstOrDefault(x => x.Category != candidate.Category && x.SourceHandles.Any(h => string.Equals(h, result.Handle, StringComparison.OrdinalIgnoreCase)));
+                    var collision = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, result.Handle);
+                    if (collision != null && collision.Category == candidate.Category) collision = null;
                     if (collision != null) throw new InvalidOperationException("CAD handle " + result.Handle + " đã thuộc " + collision.Category + ".");
                     if (!SemanticCaptureService.CaptureSnapshot(doc, result.Snapshot, candidate.Category)) return;
+                    var captured = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, result.Handle);
+                    if (captured == null || captured.Category != candidate.Category)
+                        throw new InvalidOperationException("Recognition capture did not produce one matching semantic owner for CAD handle " + result.Handle + ".");
                     applied++;
-                    AuditTrail.ForProject(project).Record("recognition.apply", candidate.Category.ToString().ToUpperInvariant() + "-" + result.Handle, candidate.RuleId + " • confidence " + candidate.Confidence.ToString("0.000") + " • " + candidate.EvidenceText);
+                    AuditTrail.ForProject(project).Record("recognition.apply", captured.Id, candidate.RuleId + " • confidence " + candidate.Confidence.ToString("0.000") + " • " + candidate.EvidenceText);
                     PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Nhận dạng → " + candidate.Category + " • " + result.Handle);
                 };
                 Action<RecognitionResult> locate = result => { var count = CadHandleService.Select(doc, new[] { result.Handle }); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };

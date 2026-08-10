@@ -31,7 +31,8 @@ checks = {
         "distance < best.DistanceM - Tolerance", "station < best.StationM",
     ],
     "reader": [
-        "ReadOpenWcsXy", "polyline.Closed", "polyline.Normal.X", "polyline.Normal.Z - 1d",
+        "ReadOpenWcsXy", "polyline.Closed", "var normal = polyline.Normal",
+        "Math.Abs(normal.X)", "Math.Abs(normal.Z - 1d)",
         "BulgeArcTessellator.Tessellate", "maximumSagittaM",
     ],
     "line_builder": [
@@ -63,12 +64,12 @@ checks = {
     ],
     "frame_command": [
         "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines",
-        "open/bulged POLYLINE WCS-XY", "FinalizeUi(document, message)", '"UI sync warning: " + ex.Message',
+        "open/bulged POLYLINE WCS-XY", "FinalizeUi(document, message, stampWarning)", '" UI sync warning: " + ex.Message',
     ],
     "build_command": [
         "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines",
         "PolylineWallSolidBuilder.BuildSelected", "open/bulged POLYLINE WCS-XY", "RegenerateDirty(project)",
-        "FinalizeUi(document, hostSolids, frameSolids, stamped, regenerated)", '"UI sync warning: " + ex.Message',
+        "FinalizeUi(document, hostSolids, frameSolids, stamped, regenerated, stampWarning)", '" UI sync warning: " + ex.Message',
     ],
     "planner_smoke": [
         "ModuleInitializer", "BentPathSplitsFrameAtCorner", "ProjectionUsesNearestPathStation",

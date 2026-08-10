@@ -82,7 +82,7 @@ checks = {
     "tests/QS3D.Core.SmokeTests/GeneratedOutputHealthStaleSmoke.cs": ["FoundationMeshUsesSnapshotState"],
     "docs/FOUNDATION-REBAR3D.md": [
         "RectangleLocalXY", "PolygonGlobalXY", "PolygonalSlabMeshPlanner", "GeneratedFoundationMeshFootprintMode",
-        "curved/bulged boundaries", "holes/islands/multiple outer loops", "exact-SHA licensed BricsCAD V25 qualification"
+        "Curved/bulged boundaries", "holes/islands/multiple outer loops", "exact-SHA licensed BricsCAD V25 qualification"
     ],
 }
 for relative, needles in checks.items():
@@ -132,7 +132,7 @@ if foundation_builder.is_file():
     helper_end = text.find("private sealed class RectangleFrame", helper_start + 1) if helper_start >= 0 else -1
     helper = text[helper_start:helper_end] if helper_start >= 0 and helper_end > helper_start else ""
     for token in (
-        "GeneratedFoundationMeshHandles", "GeneratedFoundationMeshCount", "GeneratedFoundationMeshXDiameterMm",
+        "Properties[HandlesKey]", "GeneratedFoundationMeshCount", "GeneratedFoundationMeshXDiameterMm",
         "GeneratedFoundationMeshYDiameterMm", "GeneratedFoundationMeshCoverM", "GeneratedFoundationMeshMode",
         "GeneratedFoundationMeshFootprintMode", "GeneratedFoundationMeshXActualSpacingM", "GeneratedFoundationMeshYActualSpacingM", "GeneratedFoundationMeshFaces",
         "ClearGeneratedFoundationMeshStale()", 'AuditTrail.ForProject(project).Record(', "update.FootprintMode",

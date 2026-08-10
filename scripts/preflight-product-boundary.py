@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,7 +15,6 @@ required = {
         "Locked product form: BricsCAD plugin",
         "docs/PRODUCT-BOUNDARY.md",
         "Do not reinterpret",
-        "docs/AGENT-HANDOFF-CURRENT-2026-08-10.md",
     ],
     "docs/PRODUCT-BOUNDARY.md": [
         "QS3D is intentionally a **BricsCAD V25 x64 .NET plugin**",
@@ -47,7 +47,7 @@ required = {
         "workflow/UX only",
     ],
     "docs/DIRECT-DRAW-WORKFLOW.md": [
-        "QS3D must remain a **BricsCAD V25 x64 .NET plugin**",
+        "QS3D remains a **BricsCAD V25 x64 .NET plugin**",
         "not a request to create a standalone",
     ],
     "docs/DIRECT-DRAW-P0-IMPLEMENTATION.md": [
@@ -75,6 +75,15 @@ for relative, needles in required.items():
     for needle in needles:
         if needle not in text:
             errors.append(relative + " missing product-boundary marker: " + needle)
+
+agents = ROOT / "AGENTS.md"
+if agents.is_file():
+    agents_text = agents.read_text(encoding="utf-8")
+    match = re.search(r"docs/(AGENT-HANDOFF-CURRENT-\d{4}-\d{2}-\d{2}-\d{4}\.md)", agents_text)
+    if not match:
+        errors.append("AGENTS.md missing timestamped canonical current-handoff pointer")
+    elif not (ROOT / "docs" / match.group(1)).is_file():
+        errors.append("AGENTS.md canonical current-handoff pointer does not exist: docs/" + match.group(1))
 
 csproj = ROOT / "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"
 if not csproj.is_file():

@@ -84,7 +84,7 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectElement AddElement(ProjectState project)
         {
-            var element = new ProjectElement("E1", ElementCategory.Wall, string.Empty, string.Empty, string.Empty);
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
             project.Elements.Add(element);
             return element;
         }

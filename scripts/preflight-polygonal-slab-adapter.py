@@ -51,7 +51,7 @@ if builder.index("RectangularSlabMeshPlanner.Plan") > builder.index("PolygonalSl
     sys.exit(1)
 
 for token in [
-    "PolygonScanlineClipper.NormalizeAndValidate",
+    "PolygonRegionScanlineClipper.NormalizeAndValidate",
     "MaxBars = 8192",
     "SubtractBoundaryClearance",
 ]:

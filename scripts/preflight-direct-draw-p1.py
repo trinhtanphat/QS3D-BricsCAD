@@ -48,9 +48,14 @@ required = {
     "src/QS3D.BricsCAD.V25/Build3DCommands.cs": [
         'CommandMethod("QS3DBUILD3D"',
         "StructuralSolidBuilder.Supports(category)",
-        "category == ElementCategory.GlassWall",
+        "NativeBuildCapability.IsWallCategory(category)",
         "category == ElementCategory.WallPier",
         "AreAllModelSpaceEntities(document, sourceIds)",
+    ],
+    "src/QS3D.BricsCAD.V25/Cad/NativeBuildCapability.cs": [
+        "IsWallCategory(ElementCategory category)",
+        "ElementCategory.GlassWall",
+        "ElementCategory.WallPier",
     ],
     "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs": [
         "case ElementCategory.GlassWall",

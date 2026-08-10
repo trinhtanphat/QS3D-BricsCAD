@@ -28,6 +28,8 @@ required = [
     "src/QS3D.BricsCAD.V25/RebarHealthCommands.cs",
     "src/QS3D.BricsCAD.V25/ShapeRebarHealthCommands.cs",
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
+    "src/QS3D.BricsCAD.V25/Build3DCommands.cs",
+    "src/QS3D.BricsCAD.V25/Cad/NativeBuildCapability.cs",
     "src/QS3D.BricsCAD.V25/Commands.cs",
     "src/QS3D.BricsCAD.V25/ModelReviewCommands.cs",
     "src/QS3D.BricsCAD.V25/WallJunctionCommands.cs",
@@ -123,7 +125,7 @@ checks = {
         "DistributionCentered", "AxisStartsAtBoundary", "edgeInset", "ElementCategory.GlassWall", "ElementCategory.WallPier"
     ],
     "src/QS3D.BricsCAD.V25/ShapeRebarGeometryCommands.cs": [
-        'CommandMethod("QS3DREBAR3DSHAPE"', "ShapeRebarSolidBuilder.BuildSelected", "geometry.rebar3d.shape"
+        'CommandMethod("QS3DREBAR3DSHAPE"', "ShapeRebarSolidBuilder.BuildSelected"
     ],
     "src/QS3D.BricsCAD.V25/ShapeRebarHealthCommands.cs": [
         'CommandMethod("QS3DREBARSHAPEHEALTH"', "GeneratedRebarHealthService().InspectShape", "ParseShapeHandles"
@@ -132,7 +134,20 @@ checks = {
         "QS3DGLASSWALL", "QS3DWALLPIER", "AxisLeftOffsetM", "AxisRightOffsetM", "ThicknessM"
     ],
     "src/QS3D.BricsCAD.V25/Commands.cs": [
-        "PolylineWallSolidBuilder.BuildSelected", "GeneratedRebarHealthService().Inspect", "ParseGeneratedRebarHandles"
+        "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
+        "new ComprehensiveModelHealthService().Inspect(project, liveSources, liveGeneratedSolids)"
+    ],
+    "src/QS3D.BricsCAD.V25/Build3DCommands.cs": [
+        'CommandMethod("QS3DBUILD3D"',
+        "NativeBuildCapability.Supports(x.Category)", "NativeBuildCapability.IsWallCategory(category)",
+        "category == ElementCategory.WallPier", "WallPierProfileSolidBuilder.BuildSelectedLinePiers(document, project)",
+        "WallSolidBuilder.BuildSelectedLineWalls(document, project, category)",
+        "PolylineWallSolidBuilder.BuildSelected(document, project, category)",
+        "StructuralSolidBuilder.BuildSelected(document, project, category)"
+    ],
+    "src/QS3D.BricsCAD.V25/Cad/NativeBuildCapability.cs": [
+        "ElementCategory.ArchitecturalWall", "ElementCategory.GlassWall", "ElementCategory.WallPier",
+        "StructuralSolidBuilder.Supports(category)"
     ],
     "src/QS3D.BricsCAD.V25/ModelReviewCommands.cs": [
         "QS3DHIGHLIGHT", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE"
@@ -157,8 +172,8 @@ checks = {
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs": [
         "FamilyScope", "InstanceScope", "PropertyScopes", "SelectedPropertyScope", "SetSelectedElement", "LoadInstanceProperties", "ApplyInstanceProperty",
         "DisplayNameFor", "GroupFor", "IsNumericProperty", "Bề dày", "CỐT THÉP", "EditorKindFor", "ChoicesFor", "IsBooleanProperty",
-        "isInherited", "instance override", "row.CanReset", "Đã đưa", "element.MarkDirty(ElementDirtyFlags.All)",
-        "string.Equals(family.Name, next, StringComparison.Ordinal)", "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance"
+        "ProjectFamilyService.SetProperty", "InheritedInstancesUpdated", "OverridesPreserved", "instance override", "row.CanReset", "Đã đưa", "element.MarkDirty(ElementDirtyFlags.All)",
+        "string.Equals(previous, next, StringComparison.Ordinal)", "ProjectFamilyService.Rename", "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance"
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
         'Tag="QS3DGLASSWALL"', 'Tag="QS3DWALLPIER"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DWALLJUNCTIONS"',
@@ -170,10 +185,6 @@ checks = {
         'new RibbonButtonSpec("Focus", "QS3DFOCUS")', 'new RibbonButtonSpec("Cô lập", "QS3DISOLATE")', 'new RibbonButtonSpec("Khôi phục", "QS3DUNISOLATE")',
         'new RibbonButtonSpec("Cốt thép cột 3D", "QS3DREBAR3D")', 'new RibbonButtonSpec("Cốt thép shape 3D", "QS3DREBAR3DSHAPE")',
         'new RibbonButtonSpec("Health shape", "QS3DREBARSHAPEHEALTH")'
-    ],
-    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": [
-        "IsTktWall(category.Value)", "ElementCategory.GlassWall", "ElementCategory.WallPier",
-        "WallSolidBuilder.BuildSelectedLineWalls(doc, project, category.Value)", "PolylineWallSolidBuilder.BuildSelected(doc, project, category.Value)"
     ],
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs": [
         "StraightWallFootprint", "PolylineWallCorner", "FarOriginWallFootprint", "OpeningCutPlan", "RectangularRebarLayout", "GeneratedRebarHealth",
