@@ -23,18 +23,14 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var result = BeamStirrupSolidBuilder.BuildSelected(document, project);
-                PaletteCoordinator.RefreshProject();
                 var message = result.Stirrups == 0
                     ? "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8)."
                     : "Beam Stirrup 3D: đã tạo/cập nhật " + result.Stirrups + " đai trên " + result.Elements + " dầm.";
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                FinalizeUi(document, message);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                var message = "QS3DREBARSTIRRUP3D lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                Report(document, "QS3DREBARSTIRRUP3D lỗi: " + ex.Message);
             }
         }
 
@@ -65,12 +61,38 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
                 if (issues.Count > 50) document.Editor.WriteMessage("\n  … health output truncated.");
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                var message = "QS3DREBARSTIRRUPHEALTH lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                Report(document, "QS3DREBARSTIRRUPHEALTH lỗi: " + ex.Message);
             }
+        }
+
+        private static void FinalizeUi(Document document, string message)
+        {
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                document.Editor.Regen();
+                PaletteCoordinator.SetStatus(message);
+                document.Editor.WriteMessage("\nQS3D " + message);
+            }
+            catch (Exception ex)
+            {
+                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
+            }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); }
+            catch { }
+            TryWriteMessage(document, "\nQS3D " + message);
+        }
+
+        private static void TryWriteMessage(Document document, string message)
+        {
+            try { document.Editor.WriteMessage(message); }
+            catch { }
         }
     }
 }

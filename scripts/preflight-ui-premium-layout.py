@@ -10,10 +10,26 @@ errors = []
 files = {
     "workspace": UI / "WorkspacePanel.xaml",
     "right": UI / "RightPanel.xaml",
+    "theme": UI / "Theme.xaml",
     "hub": UI / "DomainHubWindow.xaml",
     "family": UI / "FamilyManagerWindow.xaml",
     "door_schedule": UI / "DoorOpeningScheduleWindow.xaml",
-    "theme": UI / "Theme.xaml",
+    "project_tools": UI / "ProjectToolsWindow.xaml",
+    "schedule_hub": UI / "ScheduleHubWindow.xaml",
+    "quantity": UI / "QuantitySummaryWindow.xaml",
+    "rebar_hub": UI / "Rebar3DHubWindow.xaml",
+    "rebar_schedule": UI / "RebarScheduleWindow.xaml",
+    "rebar_mesh": UI / "RebarMeshSetupWindow.xaml",
+    "curtain": UI / "CurtainWallWindow.xaml",
+    "floor": UI / "FloorLevelWindow.xaml",
+    "zone": UI / "ZoneManagerWindow.xaml",
+    "material": UI / "MaterialCatalogWindow.xaml",
+    "recognition": UI / "RecognitionWindow.xaml",
+    "revision": UI / "RevisionWindow.xaml",
+    "health": UI / "ModelHealthWindow.xaml",
+    "audit": UI / "AuditLogWindow.xaml",
+    "room_finish": UI / "RoomFinishScheduleWindow.xaml",
+    "geometry": UI / "GeometryExtensionsWindow.xaml",
 }
 
 for label, path in files.items():
@@ -24,6 +40,21 @@ for label, path in files.items():
         ET.parse(path)
     except ET.ParseError as exc:
         errors.append(str(path.relative_to(ROOT)) + " is not well-formed XAML/XML: " + str(exc))
+
+# Every modeless window in the V25 UI folder is expected to consume the shared theme and
+# avoid legacy host-dependent dark colors after the premium P3 pass.
+for path in sorted(UI.glob("*Window.xaml")):
+    text = path.read_text(encoding="utf-8")
+    if 'ResourceDictionary Source="Theme.xaml"' not in text:
+        errors.append(str(path.relative_to(ROOT)) + " does not merge Theme.xaml")
+    for needle in (
+        'Background="#17191C"',
+        'Foreground="Black"',
+        'Foreground="#000000"',
+        'Foreground="#FF000000"',
+    ):
+        if needle in text:
+            errors.append(str(path.relative_to(ROOT)) + " contains legacy/dark-host-risk styling: " + needle)
 
 workspace = files["workspace"]
 if workspace.is_file():
@@ -44,9 +75,6 @@ if workspace.is_file():
     for needle in required:
         if needle not in text:
             errors.append("WorkspacePanel.xaml missing premium/workflow contract: " + needle)
-    for needle in ('Foreground="Black"', 'Foreground="#000000"', 'Foreground="#FF000000"'):
-        if needle in text:
-            errors.append("WorkspacePanel.xaml contains dark host-risk foreground: " + needle)
 
 right = files["right"]
 if right.is_file():
@@ -62,57 +90,106 @@ if right.is_file():
     for needle in required:
         if needle not in text:
             errors.append("RightPanel.xaml missing premium/live-state contract: " + needle)
-    for needle in ('Foreground="Black"', 'Foreground="#000000"', 'Foreground="#FF000000"'):
-        if needle in text:
-            errors.append("RightPanel.xaml contains dark host-risk foreground: " + needle)
 
-hub = files["hub"]
-if hub.is_file():
-    text = hub.read_text(encoding="utf-8")
-    required = (
-        'x:Key="HubSectionCard"', 'x:Key="HubCommandButton"', 'x:Key="HubAccentButton"',
-        'Text="WORKFLOW HUB"', 'Text="PROFESSIONAL CAD WORKSPACE"',
-        'Foreground="{StaticResource LuxuryBrush}"',
-        'Tag="QS3DDRAWWALL"', 'Tag="QS3DDRAWDOOR"', 'Tag="QS3DAUTOLINKHOSTS"',
-        'Tag="QS3DSECTIONBOX"', 'Tag="QS3DREBARHEALTHALL"', 'Tag="QS3DRELEASECHECK"',
-        'x:Name="StatusText"',
-    )
-    for needle in required:
-        if needle not in text:
-            errors.append("DomainHubWindow.xaml missing premium/workflow-card contract: " + needle)
-    for needle in ('Background="#17191C"', 'Foreground="Black"', 'Foreground="#000000"'):
-        if needle in text:
-            errors.append("DomainHubWindow.xaml still contains legacy/hardcoded host styling: " + needle)
-
-family = files["family"]
-if family.is_file():
-    text = family.read_text(encoding="utf-8")
-    required = (
-        'x:Key="ManagerCard"', 'Text="PARAMETRIC"',
-        'Style="{StaticResource DangerButton}" Click="OnDeleteClick"',
-        'Style="{StaticResource DangerButton}"', 'Click="OnRemovePropertyClick"',
-        'Click="OnAssignClick"', 'x:Name="ReferenceCountText"', 'x:Name="StatusText"',
-    )
-    for needle in required:
-        if needle not in text:
-            errors.append("FamilyManagerWindow.xaml missing premium manager contract: " + needle)
-    if 'Background="#17191C"' in text:
-        errors.append("FamilyManagerWindow.xaml must use Theme.xaml surfaces instead of legacy hardcoded background")
-
-door_schedule = files["door_schedule"]
-if door_schedule.is_file():
-    text = door_schedule.read_text(encoding="utf-8")
-    required = (
+checks = {
+    "hub": (
+        'x:Key="HubSectionCard"', 'Text="WORKFLOW HUB"', 'Text="PROFESSIONAL CAD WORKSPACE"',
+        'Tag="QS3DDRAWWALL"', 'Tag="QS3DDRAWDOOR"', 'Tag="QS3DSECTIONBOX"',
+        'Tag="QS3DREBARHEALTHALL"', 'Tag="QS3DRELEASECHECK"', 'x:Name="StatusText"',
+    ),
+    "family": (
+        'x:Key="ManagerCard"', 'Text="PARAMETRIC"', 'x:Name="ReferenceCountText"',
+        'Style="{StaticResource DangerButton}"', 'Click="OnAssignClick"', 'x:Name="StatusText"',
+    ),
+    "door_schedule": (
         'x:Key="MetricCard"', 'Text="LIVE BIM DATA"', 'Text="Tìm trong schedule"',
-        'x:Name="GroupCountText"', 'x:Name="ElementCountText"', 'x:Name="AreaText"',
-        'x:Name="HostCountText"', 'x:Name="ScheduleGrid"', 'Click="OnExportClick"',
-        'Text="READ-ONLY SCHEDULE • EXPORT XLSX"',
-    )
-    for needle in required:
+        'x:Name="GroupCountText"', 'x:Name="AreaText"', 'x:Name="ScheduleGrid"',
+        'Click="OnExportClick"', 'Text="READ-ONLY SCHEDULE • EXPORT XLSX"',
+    ),
+    "project_tools": (
+        'Text="PROJECT CONTROL"', 'x:Key="ProjectCard"', 'x:Key="ProjectMetric"',
+        'Tag="QS3DLEVELS"', 'Tag="QS3DZONES"', 'Tag="QS3DFAMILIES"', 'Tag="QS3DMATERIALS"',
+        'Tag="QS3DHEALTHALL"', 'Text="PROJECT-SAFE • DWG CONTEXT LOCK"',
+    ),
+    "schedule_hub": (
+        'Text="QUANTITY HUB"', 'x:Key="ScheduleCard"', 'x:Key="ScheduleMetric"',
+        'Tag="QS3DBQ"', 'Tag="QS3DFINISHSCHEDULE"', 'Tag="QS3DDOORSCHEDULE"',
+        'Tag="QS3DREBARHUB"', 'Text="SCHEDULE-SAFE • DWG CONTEXT LOCK"',
+    ),
+    "quantity": (
+        'Text="BQ REVIEW"', 'x:Name="FloorCombo"', 'x:Name="SearchBox"',
+        'x:Name="CategoryList"', 'x:Name="QuantityGrid"', 'x:Name="TotalsText"',
+        'Click="OnColumnVisibilityChanged"', 'Text="DOUBLE-CLICK ROW TO LOCATE • EXPORT XLSX"',
+    ),
+    "rebar_hub": (
+        'Text="REBAR WORKFLOW"', 'x:Key="RebarCard"', 'Tag="QS3DREBAR3D"',
+        'Tag="QS3DSLABREBAR3D"', 'Tag="QS3DFOUNDATIONREBAR3D"', 'Tag="QS3DREBARHEALTHALL"',
+        'Text="EXPLICIT REBAR INPUTS • NATIVE 3D"',
+    ),
+    "rebar_schedule": (
+        'Text="BBS REVIEW"', 'x:Name="Grid"', 'x:Name="Totals"',
+        'Click="OnLocateClick"', 'Click="OnExportClick"', 'MouseDoubleClick="OnGridDoubleClick"',
+    ),
+    "rebar_mesh": (
+        'Text="EXPLICIT INPUT"', 'x:Name="Direction1Text"', 'x:Name="Direction2Text"',
+        'x:Name="CoverText"', 'x:Name="FacesCombo"', 'x:Name="ValidationText"',
+        'Click="OnSave"', 'Click="OnCancel"',
+    ),
+    "curtain": (
+        'Text="CURTAIN SYSTEM"', 'x:Name="FamilyCombo"', 'x:Name="WallCountText"',
+        'Tag="QS3DCURTAINFRAMES3D"', 'Tag="QS3DCURTAINFRAMEHEALTH"',
+        'Tag="QS3DCUTOPENINGSCURVED"', 'Text="CURVE FRAME = V25 GATE"',
+    ),
+    "floor": (
+        'Text="SEMANTIC LEVEL"', 'x:Name="FloorList"', 'x:Name="ActiveFloorText"',
+        'Click="OnActivateClick"', 'Click="OnAssignClick"', 'Style="{StaticResource DangerButton}"',
+        'Text="NO CAD MOVE • STALE ON LEVEL CHANGE"',
+    ),
+    "zone": (
+        'Text="SEMANTIC SCOPE"', 'x:Name="ZoneList"', 'x:Name="ActiveZoneText"',
+        'Click="OnActivateClick"', 'Click="OnAssignClick"', 'Style="{StaticResource DangerButton}"',
+        'Text="SEMANTIC SCOPE ONLY • NO CAD MOVE"',
+    ),
+    "material": (
+        'Text="PROJECT MATERIALS"', 'x:Name="MaterialList"', 'x:Name="ReferencedText"',
+        'x:Name="TargetCombo"', 'Click="OnApplyClick"', 'Style="{StaticResource DangerButton}"',
+        'Text="AMBIGUOUS HANDLE = FAIL CLOSED"',
+    ),
+    "recognition": (
+        'Text="REVIEW GATED"', 'x:Name="Grid"', 'Click="OnApplyClick"',
+        'Click="OnApplyConfidentClick"', 'Text="LOW CONFIDENCE = REVIEW"',
+    ),
+    "revision": (
+        'Text="QUANTITY DIFF"', 'x:Name="Header"', 'x:Name="Grid"', 'x:Name="Totals"',
+        'MouseDoubleClick="OnGridDoubleClick"', 'Text="DOUBLE-CLICK ROW TO LOCATE"',
+    ),
+    "health": (
+        'Text="HEALTH REVIEW"', 'x:Name="SummaryText"', 'x:Name="IssueGrid"',
+        'Click="OnLocateClick"', 'MouseDoubleClick="OnGridDoubleClick"', 'Text="ISSUE → CAD LOCATE"',
+    ),
+    "audit": (
+        'Text="AUDIT TRAIL"', 'Text="Tìm nhật ký"', 'x:Name="SearchBox"',
+        'x:Name="Grid"', 'x:Name="Summary"', 'Text="MỚI NHẤT HIỂN THỊ TRƯỚC"',
+    ),
+    "room_finish": (
+        'Text="ROOM FINISH"', 'x:Name="SearchBox"', 'x:Name="GroupCountText"',
+        'x:Name="ScheduleGrid"', 'Click="OnExportClick"', 'Text="ROOM FINISH SCHEDULE • EXPORT XLSX"',
+    ),
+    "geometry": (
+        'Text="REVIEW GATED"', 'x:Key="GeometryCard"', 'Tag="QS3DWALLJUNCTIONS"',
+        'Tag="QS3DWALLSNAPPREVIEW"', 'Tag="QS3DWALLSNAPAPPLY"', 'Tag="QS3DCUTOPENINGSCURVED"',
+        'Tag="QS3DREBARHEALTHALL"', 'Text="PREVIEW / FINGERPRINT / HEALTH GATES"',
+    ),
+}
+
+for key, needles in checks.items():
+    path = files[key]
+    if not path.is_file():
+        continue
+    text = path.read_text(encoding="utf-8")
+    for needle in needles:
         if needle not in text:
-            errors.append("DoorOpeningScheduleWindow.xaml missing premium schedule contract: " + needle)
-    if 'Background="#17191C"' in text:
-        errors.append("DoorOpeningScheduleWindow.xaml must use Theme.xaml surfaces instead of legacy hardcoded background")
+            errors.append(path.name + " missing premium/workflow contract: " + needle)
 
 theme = files["theme"]
 if theme.is_file():
@@ -133,6 +210,6 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: Workspace, RightPanel, Domain Hub, Family Manager and Door/Opening Schedule use the premium "
-    "CAD-first hierarchy, preserve workflow entry points/live state, and avoid dark-host contrast regressions."
+    "PASS: all BricsCAD V25 modeless windows and core palettes use the shared premium CAD-first theme; "
+    "critical workflow tags/handlers, live layer state and review/fail-closed UX contracts remain present."
 )

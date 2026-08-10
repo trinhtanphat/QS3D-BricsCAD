@@ -6,6 +6,7 @@ using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
@@ -40,94 +41,117 @@ namespace QS3D.BricsCAD.V25.Cad
             var pending = new List<PendingUpdate>();
             var processed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var totalTies = 0;
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var cadCommitted = false;
 
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            try
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                foreach (var id in ids)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var polyline = transaction.GetObject(id, OpenMode.ForRead, false) as Polyline;
-                    if (polyline == null || polyline.IsErased) continue;
-                    ValidateRectangle(polyline);
-                    var handle = polyline.Handle.ToString();
-                    var matches = project.Elements
-                        .Where(x => x.Category == ElementCategory.Column && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
-                        .Take(2).ToList();
-                    if (matches.Count == 0) continue;
-                    if (matches.Count > 1) throw new InvalidOperationException("Column source " + handle + " đang thuộc nhiều QS3D element.");
-                    var element = matches[0];
-                    if (!processed.Add(element.Id)) throw new InvalidOperationException("Column element " + element.Id + " có nhiều selected source. Tách semantic ownership trước khi tạo tie 3D.");
-                    var family = project.FindFamily(element.FamilyId);
-
-                    var geometry = RectangleGeometry(polyline, element.Id);
-                    var widthM = CadGeometryGuard.ToMeters(document, geometry.Width, element.Id + "/tie width");
-                    var depthM = CadGeometryGuard.ToMeters(document, geometry.Depth, element.Id + "/tie depth");
-                    var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
-                    var coverM = CadGeometryGuard.Number(element, family, "RebarCoverM", 0.04d);
-                    if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarCoverM phải >= 0.");
-                    var diameterMm = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "RebarTieDiameterMm", 8d), element.Id + "/RebarTieDiameterMm");
-                    var spacingMm = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "RebarTieSpacingMm", 150d), element.Id + "/RebarTieSpacingMm");
-                    var bottomClearanceM = CadGeometryGuard.Number(element, family, "RebarTieBottomClearanceM", 0d);
-                    var topClearanceM = CadGeometryGuard.Number(element, family, "RebarTieTopClearanceM", 0d);
-                    if (bottomClearanceM < 0d) throw new InvalidOperationException(element.Id + "/RebarTieBottomClearanceM phải >= 0.");
-                    if (topClearanceM < 0d) throw new InvalidOperationException(element.Id + "/RebarTieTopClearanceM phải >= 0.");
-                    var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-
-                    var layout = ColumnTieLayoutPlanner.Plan(new ColumnTieLayoutInput
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    foreach (var id in ids)
                     {
-                        WidthM = widthM,
-                        DepthM = depthM,
-                        HeightM = heightM,
-                        CoverM = coverM,
-                        DiameterMm = diameterMm,
-                        SpacingMm = spacingMm,
-                        BottomClearanceM = bottomClearanceM,
-                        TopClearanceM = topClearanceM
-                    });
-                    if (layout.ElevationsM.Count > MaxTiesPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxTiesPerElement + " tie 3D/element.");
-                    if (totalTies > MaxTiesPerBatch - layout.ElevationsM.Count) throw new InvalidOperationException("Tie 3D batch vượt giới hạn " + MaxTiesPerBatch + " solid.");
+                        var polyline = transaction.GetObject(id, OpenMode.ForRead, false) as Polyline;
+                        if (polyline == null || polyline.IsErased) continue;
+                        ValidateRectangle(polyline);
+                        var handle = polyline.Handle.ToString();
+                        var matches = project.Elements
+                            .Where(x => x.Category == ElementCategory.Column && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
+                            .Take(2).ToList();
+                        if (matches.Count == 0) continue;
+                        if (matches.Count > 1) throw new InvalidOperationException("Column source " + handle + " đang thuộc nhiều QS3D element.");
+                        var element = matches[0];
+                        if (!processed.Add(element.Id)) throw new InvalidOperationException("Column element " + element.Id + " có nhiều selected source. Tách semantic ownership trước khi tạo tie 3D.");
+                        var family = project.FindFamily(element.FamilyId);
 
-                    ErasePrevious(document, transaction, element, ownership);
-                    var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, ActualSpacingM = layout.ActualSpacingM, CoverM = coverM };
-                    var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, diameterMm / 2000d, element.Id + "/tie radius"), element.Id + "/tie radius drawing units");
-                    var bottomOffset = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
-                    foreach (var elevationM in layout.ElevationsM)
-                    {
-                        var elevation = CadGeometryGuard.ToDrawingUnits(document, elevationM, element.Id + "/tie elevation");
-                        var localZ = CadGeometryGuard.Add(bottomOffset, elevation, element.Id + "/tie local Z");
-                        var z = CadGeometryGuard.Add(polyline.Elevation, localZ, element.Id + "/tie Z");
-                        var tie = BuildTie(document, geometry, layout, z, radius, element.Id);
-                        try
+                        var geometry = RectangleGeometry(polyline, element.Id);
+                        var widthM = CadGeometryGuard.ToMeters(document, geometry.Width, element.Id + "/tie width");
+                        var depthM = CadGeometryGuard.ToMeters(document, geometry.Depth, element.Id + "/tie depth");
+                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
+                        var coverM = CadGeometryGuard.Number(element, family, "RebarCoverM", 0.04d);
+                        if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarCoverM phải >= 0.");
+                        var diameterMm = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "RebarTieDiameterMm", 8d), element.Id + "/RebarTieDiameterMm");
+                        var spacingMm = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "RebarTieSpacingMm", 150d), element.Id + "/RebarTieSpacingMm");
+                        var bottomClearanceM = CadGeometryGuard.Number(element, family, "RebarTieBottomClearanceM", 0d);
+                        var topClearanceM = CadGeometryGuard.Number(element, family, "RebarTieTopClearanceM", 0d);
+                        if (bottomClearanceM < 0d) throw new InvalidOperationException(element.Id + "/RebarTieBottomClearanceM phải >= 0.");
+                        if (topClearanceM < 0d) throw new InvalidOperationException(element.Id + "/RebarTieTopClearanceM phải >= 0.");
+                        var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+
+                        var layout = ColumnTieLayoutPlanner.Plan(new ColumnTieLayoutInput
                         {
-                            tie.Layer = polyline.Layer;
-                            modelSpace.AppendEntity(tie);
-                            transaction.AddNewlyCreatedDBObject(tie, true);
-                            update.Handles.Add(tie.Handle.ToString());
-                            tie = null!;
+                            WidthM = widthM,
+                            DepthM = depthM,
+                            HeightM = heightM,
+                            CoverM = coverM,
+                            DiameterMm = diameterMm,
+                            SpacingMm = spacingMm,
+                            BottomClearanceM = bottomClearanceM,
+                            TopClearanceM = topClearanceM
+                        });
+                        if (layout.ElevationsM.Count > MaxTiesPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxTiesPerElement + " tie 3D/element.");
+                        if (totalTies > MaxTiesPerBatch - layout.ElevationsM.Count) throw new InvalidOperationException("Tie 3D batch vượt giới hạn " + MaxTiesPerBatch + " solid.");
+
+                        ErasePrevious(document, transaction, element, ownership);
+                        var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, ActualSpacingM = layout.ActualSpacingM, CoverM = coverM };
+                        var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, diameterMm / 2000d, element.Id + "/tie radius"), element.Id + "/tie radius drawing units");
+                        var bottomOffset = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
+                        foreach (var elevationM in layout.ElevationsM)
+                        {
+                            var elevation = CadGeometryGuard.ToDrawingUnits(document, elevationM, element.Id + "/tie elevation");
+                            var localZ = CadGeometryGuard.Add(bottomOffset, elevation, element.Id + "/tie local Z");
+                            var z = CadGeometryGuard.Add(polyline.Elevation, localZ, element.Id + "/tie Z");
+                            var tie = BuildTie(document, geometry, layout, z, radius, element.Id);
+                            try
+                            {
+                                tie.Layer = polyline.Layer;
+                                modelSpace.AppendEntity(tie);
+                                transaction.AddNewlyCreatedDBObject(tie, true);
+                                update.Handles.Add(tie.Handle.ToString());
+                                tie = null!;
+                            }
+                            finally { tie?.Dispose(); }
                         }
-                        finally { tie?.Dispose(); }
+                        pending.Add(update);
+                        totalTies = checked(totalTies + update.Handles.Count);
                     }
-                    pending.Add(update);
-                    totalTies = checked(totalTies + update.Handles.Count);
+
+                    foreach (var update in pending) CommitSemanticUpdate(project, update);
+                    if (pending.Count > 0) project.Touch();
+                    transaction.Commit();
+                    cadCommitted = true;
                 }
-                transaction.Commit();
+            }
+            catch (Exception operationError)
+            {
+                if (!cadCommitted)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Column tie replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                }
+                throw;
             }
 
-            foreach (var update in pending)
-            {
-                update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
-                update.Element.Properties["GeneratedTieRebarCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedTieRebarDiameterMm"] = update.DiameterMm.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedTieRebarActualSpacingM"] = update.ActualSpacingM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedTieRebarCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedTieRebarMode"] = "ColumnRectangularTies";
-                update.Element.ClearGeneratedTieRebarStale();
-                AuditTrail.ForProject(project).Record("geometry.rebar.column.tie", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " ties");
-            }
-            if (pending.Count > 0) { project.Touch(); document.Editor.Regen(); }
             return totalTies;
+        }
+
+        private static void CommitSemanticUpdate(ProjectState project, PendingUpdate update)
+        {
+            update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
+            update.Element.Properties["GeneratedTieRebarCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedTieRebarDiameterMm"] = update.DiameterMm.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedTieRebarActualSpacingM"] = update.ActualSpacingM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedTieRebarCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedTieRebarMode"] = "ColumnRectangularTies";
+            update.Element.ClearGeneratedTieRebarStale();
+            AuditTrail.ForProject(project).Record("geometry.rebar.column.tie", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " ties");
         }
 
         private sealed class RectGeometry

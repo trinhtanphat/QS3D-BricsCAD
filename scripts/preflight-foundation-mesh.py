@@ -21,10 +21,14 @@ for relative in required:
 
 checks = {
     "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs": [
+        "using QS3D.Core.Persistence;", "ProjectStateSnapshot.Capture(project)", "var cadCommitted = false;",
+        "foreach (var update in pending) CommitSemanticUpdate(project, update);", "rollback.Restore(project)",
+        "AggregateException(operationError, restoreError)", "try { document.Editor.Regen(); } catch { }",
         "RectangularSlabMeshPlanner.Plan", "ElementCategory.Foundation", "GeneratedFoundationMeshHandles",
         "GeneratedRebarOwnershipGuard.Build", "ownership.EnsureOwned", "RebarFoundationXNotation", "RebarFoundationYNotation",
         "RebarFoundationFaces", "MaxBarsPerBatch", "FoundationMeshXY", "duplicateSelectedSource", "checked(batchBars + layout.Count)",
-        "CadGeometryGuard.Multiply", "CadGeometryGuard.Subtract", "ClearGeneratedFoundationMeshStale"
+        "CadGeometryGuard.Multiply", "CadGeometryGuard.Subtract", "ClearGeneratedFoundationMeshStale",
+        'AuditTrail.ForProject(project).Record("geometry.rebar.foundation.mesh"'
     ],
     "src/QS3D.BricsCAD.V25/FoundationMeshCommands.cs": ["QS3DFOUNDATIONREBAR3D"],
     "src/QS3D.Core/Diagnostics/GeneratedFoundationMeshHealthService.cs": [
@@ -80,6 +84,41 @@ for relative, needles in checks.items():
         if needle not in text:
             errors.append(relative + " missing guard/token: " + needle)
 
+foundation_builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs"
+if foundation_builder.is_file():
+    text = foundation_builder.read_text(encoding="utf-8")
+    start = text.find("public static FoundationMeshBuildResult BuildSelected(Document document, ProjectState project)")
+    end = text.find("private static void CommitSemanticUpdate", start + 1) if start >= 0 else -1
+    if start < 0 or end < 0:
+        errors.append("foundation mesh atomicity guard cannot isolate BuildSelected method")
+    else:
+        body = text[start:end]
+        semantic_token = "foreach (var update in pending) CommitSemanticUpdate(project, update);"
+        commit_token = "transaction.Commit();\n                    cadCommitted = true;"
+        semantic = body.find(semantic_token)
+        commit = body.find(commit_token)
+        restore = body.find("rollback.Restore(project)")
+        if min(semantic, commit, restore) < 0:
+            errors.append("foundation mesh atomicity ordering tokens are incomplete")
+        elif not semantic < commit < restore:
+            errors.append("Foundation mesh must commit semantic handles/metadata before CAD commit and restore project state only on the pre-commit failure path")
+        if commit >= 0 and semantic_token in body[commit + len(commit_token):]:
+            errors.append("Foundation mesh still mutates generated semantic ownership after CAD commit")
+        if body.count(semantic_token) != 1 or body.count(commit_token) != 1:
+            errors.append("Foundation mesh requires exactly one semantic replacement phase and one CAD commit/flag boundary")
+
+    helper_start = text.find("private static void CommitSemanticUpdate")
+    helper_end = text.find("private sealed class RectangleFrame", helper_start + 1) if helper_start >= 0 else -1
+    helper = text[helper_start:helper_end] if helper_start >= 0 and helper_end > helper_start else ""
+    for token in (
+        "GeneratedFoundationMeshHandles", "GeneratedFoundationMeshCount", "GeneratedFoundationMeshXDiameterMm",
+        "GeneratedFoundationMeshYDiameterMm", "GeneratedFoundationMeshCoverM", "GeneratedFoundationMeshMode",
+        "GeneratedFoundationMeshXActualSpacingM", "GeneratedFoundationMeshYActualSpacingM", "GeneratedFoundationMeshFaces",
+        "ClearGeneratedFoundationMeshStale()", 'AuditTrail.ForProject(project).Record("geometry.rebar.foundation.mesh"',
+    ):
+        if token not in helper:
+            errors.append("Foundation mesh semantic commit helper missing metadata/audit contract: " + token)
+
 resolver = ROOT / "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs"
 if resolver.is_file():
     resolver_text = resolver.read_text(encoding="utf-8")
@@ -118,4 +157,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Foundation mesh uses dedicated stale/health metadata and canonical policy-driven ownership across destructive guards, dynamic semantic selection, B4D exclusion, unified health/release-readiness and UI contracts.")
+print("PASS: Foundation mesh uses dedicated stale/health metadata and canonical policy-driven ownership across destructive guards, dynamic semantic selection, B4D exclusion, unified health/release-readiness and UI contracts; generated handles/count/spacing/faces/audit commit while CAD is rollback-capable, pre-commit failures restore the deep project snapshot, and post-commit viewport sync is non-fatal.")

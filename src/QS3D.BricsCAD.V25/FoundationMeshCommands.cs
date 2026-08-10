@@ -16,19 +16,43 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var result = FoundationMeshSolidBuilder.BuildSelected(document, project);
-                PaletteCoordinator.RefreshProject();
                 var message = result.Bars == 0
                     ? "Foundation Rebar 3D: chọn Foundation semantic có closed rectangle POLYLINE + RebarFoundationXNotation/RebarFoundationYNotation."
                     : "Foundation Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh cho " + result.Elements + " móng.";
+                FinalizeUi(document, message);
+            }
+            catch (Exception ex)
+            {
+                Report(document, "QS3DFOUNDATIONREBAR3D lỗi: " + ex.Message);
+            }
+        }
+
+        private static void FinalizeUi(Document document, string message)
+        {
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                document.Editor.Regen();
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                var message = "QS3DFOUNDATIONREBAR3D lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
             }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); }
+            catch { }
+            TryWriteMessage(document, "\nQS3D " + message);
+        }
+
+        private static void TryWriteMessage(Document document, string message)
+        {
+            try { document.Editor.WriteMessage(message); }
+            catch { }
         }
     }
 }

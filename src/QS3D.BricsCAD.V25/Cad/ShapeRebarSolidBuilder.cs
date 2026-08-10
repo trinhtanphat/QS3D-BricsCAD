@@ -5,6 +5,7 @@ using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
@@ -62,64 +63,92 @@ namespace QS3D.BricsCAD.V25.Cad
             var ownership = GeneratedRebarOwnershipGuard.Build(project);
 
             var pending = new List<PendingElement>();
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var cadCommitted = false;
+            try
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                foreach (var element in elements)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    if (!rows.TryGetValue(element.Id, out var elementRows) || elementRows.Count == 0) continue;
-                    var requested = elementRows.Sum(x => (long)x.Quantity);
-                    if (requested > MaxBarsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxBarsPerElement + " thanh shape 3D.");
-                    var source = OpenSelectedSource(document, transaction, element, selectedHandles) ?? throw new InvalidOperationException("Không tìm thấy selected live source CAD cho " + element.Id);
-                    var placement = ResolvePlacement(document, project, element, source);
-                    ErasePrevious(document, transaction, element, ownership);
-                    var item = new PendingElement { Element = element };
-                    foreach (var row in elementRows)
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    foreach (var element in elements)
                     {
-                        var path = RebarShapePathBuilder.Build(row.ShapeCode, row.CuttingLengthM, Text(element, "RebarShapeLegsM"), Text(element, "RebarShapeTurnsDeg"));
-                        var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, row.DiameterMm / 2000d, element.Id + "/bar radius"), element.Id + "/bar radius drawing units");
-                        var distributionPlan = ShapeRebarDistributionPlanner.Plan(new ShapeRebarDistributionInput
+                        if (!rows.TryGetValue(element.Id, out var elementRows) || elementRows.Count == 0) continue;
+                        var requested = elementRows.Sum(x => (long)x.Quantity);
+                        if (requested > MaxBarsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxBarsPerElement + " thanh shape 3D.");
+                        var source = OpenSelectedSource(document, transaction, element, selectedHandles) ?? throw new InvalidOperationException("Không tìm thấy selected live source CAD cho " + element.Id);
+                        var placement = ResolvePlacement(document, project, element, source);
+                        ErasePrevious(document, transaction, element, ownership);
+                        var item = new PendingElement { Element = element };
+                        foreach (var row in elementRows)
                         {
-                            Span = placement.Span,
-                            Cover = placement.Cover,
-                            Radius = radius,
-                            Count = row.Quantity,
-                            Centered = placement.DistributionCentered
-                        });
-                        var edgeInset = distributionPlan.CenterClearance;
-                        for (var index = 0; index < row.Quantity; index++)
-                        {
-                            var offset = distributionPlan.Offsets[index];
-                            var axisInset = placement.AxisStartsAtBoundary ? edgeInset : 0d;
-                            var origin = OffsetPoint(placement.Origin, placement.Axis, axisInset, placement.Distribution, offset, edgeInset, element.Id + "/shape rebar origin");
-                            var solid = BuildShape(document, origin, placement.Axis, placement.Distribution, path, radius, element.Id + "/" + row.BarMark);
-                            try
+                            var path = RebarShapePathBuilder.Build(row.ShapeCode, row.CuttingLengthM, Text(element, "RebarShapeLegsM"), Text(element, "RebarShapeTurnsDeg"));
+                            var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, row.DiameterMm / 2000d, element.Id + "/bar radius"), element.Id + "/bar radius drawing units");
+                            var distributionPlan = ShapeRebarDistributionPlanner.Plan(new ShapeRebarDistributionInput
                             {
-                                solid.Layer = source.Layer;
-                                modelSpace.AppendEntity(solid);
-                                transaction.AddNewlyCreatedDBObject(solid, true);
-                                item.Handles.Add(solid.Handle.ToString());
-                                solid = null!;
+                                Span = placement.Span,
+                                Cover = placement.Cover,
+                                Radius = radius,
+                                Count = row.Quantity,
+                                Centered = placement.DistributionCentered
+                            });
+                            var edgeInset = distributionPlan.CenterClearance;
+                            for (var index = 0; index < row.Quantity; index++)
+                            {
+                                var offset = distributionPlan.Offsets[index];
+                                var axisInset = placement.AxisStartsAtBoundary ? edgeInset : 0d;
+                                var origin = OffsetPoint(placement.Origin, placement.Axis, axisInset, placement.Distribution, offset, edgeInset, element.Id + "/shape rebar origin");
+                                var solid = BuildShape(document, origin, placement.Axis, placement.Distribution, path, radius, element.Id + "/" + row.BarMark);
+                                try
+                                {
+                                    solid.Layer = source.Layer;
+                                    modelSpace.AppendEntity(solid);
+                                    transaction.AddNewlyCreatedDBObject(solid, true);
+                                    item.Handles.Add(solid.Handle.ToString());
+                                    solid = null!;
+                                }
+                                finally { solid?.Dispose(); }
                             }
-                            finally { solid?.Dispose(); }
                         }
+                        pending.Add(item);
                     }
-                    pending.Add(item);
+
+                    foreach (var item in pending) CommitSemanticUpdate(item);
+                    transaction.Commit();
+                    cadCommitted = true;
                 }
-                transaction.Commit();
             }
-            foreach (var item in pending)
+            catch (Exception operationError)
             {
-                item.Element.Properties[HandlesKey] = string.Join(";", item.Handles);
-                item.Element.Properties["GeneratedShapeRebarCount"] = item.Handles.Count.ToString(CultureInfo.InvariantCulture);
-                item.Element.Properties["GeneratedShapeRebarMode"] = "BBS.ShapePath.SegmentedCylinder";
-                item.Element.ClearGeneratedShapeRebarStale();
+                if (!cadCommitted)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Shape rebar replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                }
+                throw;
             }
+
             var bars = pending.Sum(x => x.Handles.Count);
-            if (bars > 0) { project.Touch(); document.Editor.Regen(); }
+            if (bars > 0)
+            {
+                project.Touch();
+                try { document.Editor.Regen(); } catch { }
+            }
             return new ShapeRebarBuildResult { Elements = pending.Count, Bars = bars };
+        }
+
+        private static void CommitSemanticUpdate(PendingElement item)
+        {
+            item.Element.Properties[HandlesKey] = string.Join(";", item.Handles);
+            item.Element.Properties["GeneratedShapeRebarCount"] = item.Handles.Count.ToString(CultureInfo.InvariantCulture);
+            item.Element.Properties["GeneratedShapeRebarMode"] = "BBS.ShapePath.SegmentedCylinder";
+            item.Element.ClearGeneratedShapeRebarStale();
         }
 
         private static Placement ResolvePlacement(Document document, ProjectState project, ProjectElement element, Entity source)
