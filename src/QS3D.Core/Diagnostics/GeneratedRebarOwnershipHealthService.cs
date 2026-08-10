@@ -11,7 +11,9 @@ namespace QS3D.Core.Diagnostics
         {
             "GeneratedRebarHandles",
             "GeneratedShapeRebarHandles",
-            "GeneratedTieRebarHandles"
+            "GeneratedTieRebarHandles",
+            "GeneratedBeamStirrupHandles",
+            "GeneratedRebarMatHandles"
         };
 
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
