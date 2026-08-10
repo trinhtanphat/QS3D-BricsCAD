@@ -5,19 +5,29 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "src/QS3D.BricsCAD.V25/UI"
 FILES = [
-    "MaterialCatalogWindow.xaml.cs",
-    "FloorLevelWindow.xaml.cs",
-    "ZoneManagerWindow.xaml.cs",
-    "FamilyManagerWindow.xaml.cs",
+    "AuditLogWindow.xaml.cs",
     "CurtainWallWindow.xaml.cs",
+    "DoorOpeningScheduleWindow.xaml.cs",
+    "FamilyManagerWindow.xaml.cs",
+    "FloorLevelWindow.xaml.cs",
+    "MaterialCatalogWindow.xaml.cs",
+    "ModelHealthWindow.xaml.cs",
+    "ProjectToolsWindow.xaml.cs",
+    "QuantitySummaryWindow.xaml.cs",
     "RebarMeshSetupWindow.xaml.cs",
+    "RebarScheduleWindow.xaml.cs",
+    "RecognitionWindow.xaml.cs",
+    "RevisionWindow.xaml.cs",
+    "RoomFinishScheduleWindow.xaml.cs",
+    "ScheduleHubWindow.xaml.cs",
+    "ZoneManagerWindow.xaml.cs",
 ]
 errors = []
 
 for name in FILES:
     path = UI / name
     if not path.is_file():
-        errors.append("missing modeless editor source: " + str(path.relative_to(ROOT)))
+        errors.append("missing document-bound modeless source: " + str(path.relative_to(ROOT)))
         continue
     text = path.read_text(encoding="utf-8")
     if "DocumentBoundWindowLifetime.Attach(this, _document);" not in text:
@@ -51,4 +61,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: document-bound modeless editors close with their source DWG; Curtain re-resolves the selected Family and Rebar Mesh rejects a replaced project instance before mutation.")
+print("PASS: every source-DWG-bound modeless window closes with its source drawing; Curtain re-resolves the selected Family and Rebar Mesh rejects a replaced project instance before mutation.")
