@@ -49,6 +49,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("xuất HT_Phòng XLSX");
                 if (_rows.Count == 0) throw new InvalidOperationException("Schedule hiện chưa có dòng để xuất.");
                 var drawingName = string.IsNullOrWhiteSpace(_document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(_document.Name);
                 var dialog = new SaveFileDialog
@@ -71,6 +72,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("làm mới HT_Phòng Schedule");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 _rows = RoomFinishScheduleBuilder.Build(project);
@@ -97,6 +99,12 @@ namespace QS3D.BricsCAD.V25.UI
             ElementCountText.Text = visible.Sum(x => x.Count).ToString(CultureInfo.InvariantCulture);
             LengthText.Text = visible.Sum(x => x.LengthM).ToString("0.###", CultureInfo.InvariantCulture) + " m";
             AreaText.Text = visible.Sum(x => x.AreaM2).ToString("0.###", CultureInfo.InvariantCulture) + " m²";
+        }
+
+        private void EnsureActive(string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở HT_Phòng Schedule trước khi " + operation + ".");
         }
 
         private static string DrawingLabel(Document document)
