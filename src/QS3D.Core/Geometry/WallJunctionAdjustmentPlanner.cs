@@ -53,6 +53,14 @@ namespace QS3D.Core.Geometry
             if (!Finite(movementEpsilon) || movementEpsilon < 0d || movementEpsilon >= junctionTolerance) throw new ArgumentOutOfRangeException(nameof(movementEpsilon));
 
             var segments = source.ToList();
+            foreach (var segment in segments)
+            {
+                if (segment == null) throw new ArgumentException("Wall segment collection contains null.", nameof(source));
+                var length = segment.Start.DistanceTo(segment.End);
+                if (!Finite(length) || length <= junctionTolerance)
+                    throw new InvalidOperationException("Wall segment " + segment.Id + " is too short for safe endpoint adjustment at the current junction tolerance.");
+            }
+
             var junctions = new WallJunctionPlanner().Plan(segments, junctionTolerance);
             var bySegment = new Dictionary<string, List<WallJunction>>(StringComparer.OrdinalIgnoreCase);
             foreach (var junction in junctions.Where(x => x.SegmentIds.Count > 1 && x.Kind != WallJunctionKind.End))
