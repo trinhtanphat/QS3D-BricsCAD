@@ -1,0 +1,1 @@
+rerun safe auto-room promote gate after concurrent main changes
