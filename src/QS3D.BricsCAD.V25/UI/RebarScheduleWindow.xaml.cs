@@ -18,13 +18,14 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly string _defaultFileName;
         private readonly Document _document;
 
-        public RebarScheduleWindow(IReadOnlyList<RebarScheduleRow> rows, Action<RebarScheduleRow>? locate = null, string defaultFileName = "QS3D-BBS.xlsx")
+        public RebarScheduleWindow(Document document, IReadOnlyList<RebarScheduleRow> rows, Action<RebarScheduleRow>? locate = null, string defaultFileName = "QS3D-BBS.xlsx")
         {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _locate = locate;
             _defaultFileName = defaultFileName;
-            _document = BcadApplication.DocumentManager.MdiActiveDocument ?? throw new InvalidOperationException("Không có DWG active khi mở BBS.");
             InitializeComponent();
+            DocumentBoundWindowLifetime.Attach(this, _document);
             Grid.ItemsSource = _rows;
 
             var quantity = 0;

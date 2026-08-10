@@ -68,7 +68,7 @@ namespace QS3D.BricsCAD.V25
                 };
 
                 var rows = recalculate();
-                Application.ShowModelessWindow(IntPtr.Zero, new QuantitySummaryWindow(rows, locate, recalculate), true);
+                Application.ShowModelessWindow(IntPtr.Zero, new QuantitySummaryWindow(doc, rows, locate, recalculate), true);
             });
         }
 

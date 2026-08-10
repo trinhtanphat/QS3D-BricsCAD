@@ -23,6 +23,7 @@ namespace QS3D.BricsCAD.V25.UI
             _apply = apply;
             _locate = locate;
             InitializeComponent();
+            DocumentBoundWindowLifetime.Attach(this, _document);
             Grid.ItemsSource = _rows;
             RefreshStatus(0, 0, null);
         }
