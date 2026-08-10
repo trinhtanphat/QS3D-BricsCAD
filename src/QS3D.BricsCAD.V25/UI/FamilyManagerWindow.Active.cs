@@ -11,6 +11,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("đặt Family active");
                 var family = FamilyList.SelectedItem as ProjectFamily ?? throw new InvalidOperationException("Chọn Family trước khi đặt active.");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var previous = ProjectFamilyActivationService.GetActive(project);
