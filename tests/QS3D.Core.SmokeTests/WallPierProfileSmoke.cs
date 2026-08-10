@@ -16,6 +16,8 @@ namespace QS3D.Core.SmokeTests
             BentPathUsesSharedFootprintAndTerminalChamfers();
             CurrentPathSnapshotDrivesWallPierQuantity();
             StalePathSnapshotFallsBackToSemanticProfile();
+            LargeFiniteStraightFootprintAvoidsSquaredLengthOverflow();
+            LargeGeoreferencedChamferedPathRemainsResolvable();
             RejectsOversizedTerminalChamfer();
             RejectsSelfIntersectingPath();
             RejectsImpossibleAndNonFiniteProfiles();
@@ -181,6 +183,37 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Stale WallPier path snapshot must not drive quantity regeneration.");
         }
 
+        private static void LargeFiniteStraightFootprintAvoidsSquaredLengthOverflow()
+        {
+            var footprint = new WallFootprintEngine().Build(
+                new[] { new Point2(0d, 0d), new Point2(1e200d, 0d) },
+                0.2d,
+                4d,
+                1e-9d);
+            RelativeNear(1e200d, footprint.CenterlineLength);
+            RelativeNear(2e199d, footprint.Area);
+            RelativeNear(2e200d, footprint.Perimeter);
+            if (footprint.Polygon.Count != 4) throw new Exception("Large finite straight footprint must remain a four-corner rectangle.");
+        }
+
+        private static void LargeGeoreferencedChamferedPathRemainsResolvable()
+        {
+            const double origin = 1e12d;
+            var profile = WallPierPathProfilePlanner.Plan(new WallPierPathProfileInput
+            {
+                Centerline = new[] { new Point2(origin, origin), new Point2(origin + 0.6d, origin) },
+                ThicknessM = 0.2d,
+                HeightM = 3d,
+                Mode = WallPierProfileMode.Chamfered,
+                ChamferM = 0.02d
+            });
+            if (profile.Polygon.Count != 8) throw new Exception("Large georeferenced chamfered WallPier must retain four distinct terminal corners before chamfer expansion.");
+            if (double.IsNaN(profile.FootprintAreaM2) || double.IsInfinity(profile.FootprintAreaM2) || !(profile.FootprintAreaM2 > 0d))
+                throw new Exception("Large georeferenced WallPier area must remain finite and positive.");
+            if (Math.Abs(profile.CenterlineLengthM - 0.6d) > 5e-4d)
+                throw new Exception("Large georeferenced WallPier centerline length lost excessive precision.");
+        }
+
         private static ProjectElement PathSnapshotElement(string familyId)
         {
             var element = new ProjectElement("PIER-1", ElementCategory.WallPier, familyId, string.Empty, string.Empty);
@@ -257,6 +290,13 @@ namespace QS3D.Core.SmokeTests
         private static void Near(double expected, double actual, double tolerance = 1e-10d)
         {
             if (Math.Abs(expected - actual) > tolerance) throw new Exception("Expected " + expected + ", got " + actual + ".");
+        }
+
+        private static void RelativeNear(double expected, double actual, double tolerance = 1e-12d)
+        {
+            if (double.IsNaN(actual) || double.IsInfinity(actual)) throw new Exception("Expected finite value near " + expected + ", got " + actual + ".");
+            var scale = Math.Max(1d, Math.Abs(expected));
+            if (Math.Abs(expected - actual) > scale * tolerance) throw new Exception("Expected " + expected + ", got " + actual + ".");
         }
 
         private static void Throws<T>(Action action) where T : Exception
