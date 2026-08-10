@@ -116,10 +116,14 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
+                var touchedHandles = new HashSet<string>(plan.Edits.Select(x => x.SourceHandle), StringComparer.OrdinalIgnoreCase);
+                var touchedOwners = ResolveUniqueWallOwners(project, touchedHandles);
                 var units = CadUnitService.GetPolicy(document);
+                GeneratedGeometryInvalidation invalidation;
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
+                    invalidation = GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, touchedOwners);
                     foreach (var edit in plan.Edits)
                     {
                         var entity = transaction.GetObject(edit.ObjectId, OpenMode.ForWrite, false) as Entity;
@@ -144,20 +148,17 @@ namespace QS3D.BricsCAD.V25
                     transaction.Commit();
                 }
 
-                var touchedHandles = new HashSet<string>(plan.Edits.Select(x => x.SourceHandle), StringComparer.OrdinalIgnoreCase);
-                var owners = 0;
-                foreach (var element in project.Elements.Where(x => x.SourceHandles.Any(touchedHandles.Contains)))
-                {
+                invalidation.CommitMetadata();
+                foreach (var element in touchedOwners)
                     element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Quantity);
-                    owners++;
-                }
+                var owners = touchedOwners.Count;
                 ClearPreview(project);
                 project.Touch();
                 AuditTrail.ForProject(project).Record("wall.junction.snap.apply", string.Empty,
-                    plan.Edits.Count.ToString(CultureInfo.InvariantCulture) + " endpoint edit(s) • owners=" + owners.ToString(CultureInfo.InvariantCulture));
+                    plan.Edits.Count.ToString(CultureInfo.InvariantCulture) + " endpoint edit(s) • owners=" + owners.ToString(CultureInfo.InvariantCulture) + " • invalidated3d=" + invalidation.ElementCount.ToString(CultureInfo.InvariantCulture));
                 document.Editor.Regen();
                 PaletteCoordinator.RefreshProject();
-                var summary = "Wall Snap applied: " + plan.Edits.Count + " endpoint(s) • " + owners + " semantic owner(s) marked dirty. Rebuild 3D/Regenerate trước khi xuất BQ.";
+                var summary = "Wall Snap applied: " + plan.Edits.Count + " endpoint(s) • " + owners + " semantic owner(s) • generated 3D/rebar invalidated. Rebuild 3D/Regenerate trước khi xuất BQ.";
                 PaletteCoordinator.SetStatus(summary);
                 document.Editor.WriteMessage("\nQS3D " + summary);
             });
@@ -276,6 +277,25 @@ namespace QS3D.BricsCAD.V25
                 else edits[key] = candidate;
             }
             return edits.Values.OrderBy(x => x.SourceHandle, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static IReadOnlyList<ProjectElement> ResolveUniqueWallOwners(ProjectState project, ISet<string> touchedHandles)
+        {
+            var owners = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var handle in touchedHandles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+            {
+                var matches = project.Elements
+                    .Where(x => x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
+                    .Take(3)
+                    .ToList();
+                if (matches.Count != 1)
+                    throw new InvalidOperationException("Wall source " + handle + " phải có đúng một semantic owner trước khi snap; hiện có " + matches.Count + ".");
+                var owner = matches[0];
+                if (!IsWall(owner.Category))
+                    throw new InvalidOperationException("Wall source " + handle + " đang thuộc semantic category không phải wall: " + owner.Category + ".");
+                owners[owner.Id] = owner;
+            }
+            return owners.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
         private static string BuildSignature(IReadOnlyList<EditableSegment> segments, IReadOnlyList<VertexEdit> edits, double tolerance, double epsilon)
