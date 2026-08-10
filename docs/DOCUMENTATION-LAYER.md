@@ -44,6 +44,7 @@ Current contract:
 - duplicate element IDs and duplicate headers are rejected case-insensitively;
 - every element ID must resolve uniquely in the supplied project before rows are rendered;
 - generated/native ownership properties remain blocked because cell rendering passes through `SemanticTagRenderer`;
+- output rows/cells/headers are **defensively copied** into read-only collections; mutating a caller-owned source list after construction cannot rewrite a previously built documentation snapshot, and casting the exposed `IReadOnlyList` back to `IList` does not make it writable;
 - the builder is read-only: it returns `SemanticDocumentationTable` / row/cell data and never creates CAD entities or changes semantic state.
 
 This is intended as a reusable input to a future native BricsCAD Table adapter or to other documentation exporters. It is **not** a second BQ/BBS/schedule calculation engine and must not be used to bypass the existing schedule models where a specialized schedule already exists.
@@ -55,7 +56,7 @@ python scripts/preflight-semantic-tags.py
 python scripts/preflight-semantic-documentation-table.py
 ```
 
-The Core smoke suite includes `SemanticTagRendererSmoke` and `SemanticDocumentationTableSmoke`.
+The Core smoke suite includes `SemanticTagRendererSmoke` and `SemanticDocumentationTableSmoke`. The table smoke also verifies that the returned snapshot is not externally mutable through retained source lists or collection casts.
 
 ## Native V25 work that remains
 
