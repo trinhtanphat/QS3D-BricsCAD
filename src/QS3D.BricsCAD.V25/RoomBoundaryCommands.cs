@@ -28,10 +28,11 @@ namespace QS3D.BricsCAD.V25
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var tolerance = MetadataNumber(project, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d);
                 var arcSagitta = MetadataNumber(project, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d);
-                var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance);
+                var splineChord = MetadataNumber(project, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d);
+                var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance, splineChord);
                 if (segments.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chọn LINE, POLYLINE hoặc ARC plan-view tạo biên phòng.");
+                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chọn LINE, POLYLINE, ARC hoặc SPLINE plan-view tạo biên phòng.");
                     return;
                 }
 
@@ -84,6 +85,7 @@ namespace QS3D.BricsCAD.V25
                         element.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = sourceSignature;
                         element.Properties["BoundaryVertexCount"] = boundary.Vertices.Count.ToString(CultureInfo.InvariantCulture);
                         element.Properties["BoundaryArcSagittaM"] = arcSagitta.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BoundarySplineChordM"] = splineChord.ToString("R", CultureInfo.InvariantCulture);
                         element.Properties["AreaM2"] = boundary.Area.ToString("R", CultureInfo.InvariantCulture);
                         element.Properties["PerimeterM"] = boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture);
                         foreach (var property in family.Properties)
@@ -95,7 +97,8 @@ namespace QS3D.BricsCAD.V25
                             "area=" + boundary.Area.ToString("R", CultureInfo.InvariantCulture) +
                             ";perimeter=" + boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture) +
                             ";sources=" + boundary.SourceIds.Count.ToString(CultureInfo.InvariantCulture) +
-                            ";arcSagitta=" + arcSagitta.ToString("R", CultureInfo.InvariantCulture));
+                            ";arcSagitta=" + arcSagitta.ToString("R", CultureInfo.InvariantCulture) +
+                            ";splineChord=" + splineChord.ToString("R", CultureInfo.InvariantCulture));
                     }
 
                     var staleRooms = AutoRoomLifecycle.MarkStaleForSelection(project, activeRoomIds, selectedSourceHandles, project.ActiveFloorId, project.ActiveZoneId, DateTime.UtcNow);
