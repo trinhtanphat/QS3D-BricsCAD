@@ -35,7 +35,14 @@ namespace QS3D.BricsCAD.V25
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var plan = ProjectInterchangeRemapAppendImporter.Plan(project, json);
                 if (!plan.CanImport)
-                    throw new InvalidOperationException("Import As New plan is not executable. Run QS3DINTERCHANGEREMAPPLAN and resolve every blocked reference first.");
+                {
+                    var first = plan.Remap.OpaqueReferenceWarnings.Count > 0 ? plan.Remap.OpaqueReferenceWarnings[0] : null;
+                    var blocked = "Interchange Import As New BLOCKED: còn property-reference chưa có explicit rewrite policy" +
+                                  (first == null ? "." : " — " + first.OwnerElementSourceId + " / " + first.PropertyKey + ": " + first.Reason);
+                    try { PaletteCoordinator.SetStatus(blocked); } catch { }
+                    document.Editor.WriteMessage("\nQS3D " + blocked + " Chưa mutate project/DWG.");
+                    return;
+                }
 
                 if (plan.IdRemapCount == 0 && plan.NameRemapCount == 0)
                 {
