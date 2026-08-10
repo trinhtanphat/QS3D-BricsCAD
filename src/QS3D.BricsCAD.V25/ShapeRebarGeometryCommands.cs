@@ -2,8 +2,6 @@ using System;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI;
-using QS3D.Core.Audit;
-using QS3D.Core.Domain;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -22,7 +20,7 @@ namespace QS3D.BricsCAD.V25
                 var message = result.Bars == 0
                     ? "Shape Rebar 3D: chọn cấu kiện semantic có BBS/RebarNotation hợp lệ."
                     : "Shape Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh cho " + result.Elements + " cấu kiện.";
-                FinalizeUi(document, project, result, message);
+                FinalizeUi(document, result, message);
             }
             catch (Exception ex)
             {
@@ -30,12 +28,10 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void FinalizeUi(Document document, ProjectState project, ShapeRebarBuildResult result, string message)
+        private static void FinalizeUi(Document document, ShapeRebarBuildResult result, string message)
         {
             try
             {
-                if (result.Bars > 0)
-                    AuditTrail.ForProject(project).Record("geometry.rebar3d.shape", string.Empty, result.Bars + " bars • " + result.Elements + " elements");
                 PaletteCoordinator.RefreshProject();
                 document.Editor.Regen();
                 PaletteCoordinator.SetStatus(message);
