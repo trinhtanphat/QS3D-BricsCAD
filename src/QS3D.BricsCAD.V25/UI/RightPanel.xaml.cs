@@ -129,8 +129,20 @@ namespace QS3D.BricsCAD.V25.UI
         {
             DrawingList.UnselectAll();
             var doc = Application.DocumentManager.MdiActiveDocument;
-            if (doc != null) doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
-            _viewModel.Status = "Đã bỏ chọn bản vẽ/Xref.";
+            if (doc == null)
+            {
+                _viewModel.Status = "Không có bản vẽ BricsCAD đang active.";
+                return;
+            }
+            try
+            {
+                doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
+                _viewModel.Status = "Đã bỏ chọn bản vẽ/Xref.";
+            }
+            catch (Exception ex)
+            {
+                _viewModel.Status = "Không thể bỏ chọn CAD: " + ex.Message;
+            }
         }
 
         private void OnDrawingSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -253,8 +265,8 @@ namespace QS3D.BricsCAD.V25.UI
                     _viewModel.Status = "Không tìm thấy instance Xref trong space hiện tại.";
                     return;
                 }
-                _viewModel.Status = "Di chuyển " + count + " instance của " + item.Name + ".";
-                Send("_MOVE");
+                if (TrySend(doc, "_MOVE"))
+                    _viewModel.Status = "Di chuyển " + count + " instance của " + item.Name + ".";
             }
             catch (Exception ex)
             {
@@ -298,6 +310,44 @@ namespace QS3D.BricsCAD.V25.UI
             return item;
         }
 
-        private static void Send(string command) => Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + " ", true, false, false);
+        private void Send(string command)
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+            {
+                _viewModel.Status = "Không có bản vẽ BricsCAD đang active.";
+                return;
+            }
+            if (TrySend(doc, command))
+                _viewModel.Status = "Đã gửi lệnh " + command.Trim() + " sang " + DrawingLabel(doc) + ".";
+        }
+
+        private bool TrySend(Document document, string command)
+        {
+            var normalized = (command ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                _viewModel.Status = "Command rỗng; không gửi sang BricsCAD.";
+                return false;
+            }
+            try
+            {
+                document.SendStringToExecute(normalized + " ", true, false, false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _viewModel.Status = "Không thể gửi lệnh " + normalized + ": " + ex.Message;
+                return false;
+            }
+        }
+
+        private static string DrawingLabel(Document document)
+        {
+            var name = document.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) return "bản vẽ chưa lưu";
+            try { return System.IO.Path.GetFileName(name); }
+            catch { return name; }
+        }
     }
 }
