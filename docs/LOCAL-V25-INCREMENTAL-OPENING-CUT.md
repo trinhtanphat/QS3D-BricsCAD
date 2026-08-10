@@ -44,9 +44,10 @@ Scope: straight supported hosts using `QS3DCUTSELECTEDOPENINGS` / `QS3DCUTOPENIN
    - Further incremental cutting on the original host must fail closed and require host rebuild.
    - No foreign host or unrelated solid may be erased or modified.
 
-6. **Partial/malformed metadata**
+6. **Partial/malformed/oversized metadata**
    - In a disposable fixture, create a host where only one of `PhysicalOpeningCutSolidHandle` / `PhysicalOpeningCutFingerprint` is present, or corrupt the accumulated target-state payload.
-   - The next cut must fail before native boolean mutation.
+   - Also test target-state data exceeding at least one guarded bound: more than 4096 opening IDs, an element ID longer than 128 characters, an encoded token longer than 1024 characters, or a serialized target-state larger than 4 MiB.
+   - The next cut must fail before native boolean mutation; oversized metadata must not be partially normalized into a trusted cut set.
    - Rebuild must clear the stale `PhysicalOpeningCut*` state and allow a clean cut afterwards.
 
 7. **Legacy metadata upgrade**
