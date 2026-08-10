@@ -24,7 +24,7 @@ checks = {
         'Tag="QS3DROOMFINISHHEALTH"', 'Tag="QS3DMATERIALS"', 'Tag="QS3DMATERIALXLSX"',
         'Tag="QS3DCURTAIN"', 'Tag="QS3DCURTAINXLSX"', 'Tag="QS3DDOORSCHEDULE"', 'Tag="QS3DDOORXLSX"',
         'Tag="QS3DREBARHUB"', 'Tag="QS3DBBS"', 'Tag="QS3DBBSCSV"', 'Click="OnCommandClick"',
-        "Các badge dùng cùng builder/validation với schedule",
+        'Text="SAME VALIDATION AS EXPORT"',
     ],
     required[1]: [
         "private readonly Document _document", "ScheduleHubWindow(Document document)", "ProjectContextCoordinator.GetOrCreate(_document)",

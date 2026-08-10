@@ -39,7 +39,7 @@ checks = {
     required[4]: [
         "combined.AddRange(new RoomFinishHealthService().Inspect(project));", "SourceHandleResolver.Resolve(project, new[] { element.Id })",
     ],
-    required[5]: ['Tag="QS3DROOMFINISHHEALTH"', "Kiểm tra HT_Phòng Health"],
+    required[5]: ['Tag="QS3DROOMFINISHHEALTH"', "Kiểm tra HT_Phòng Semantic Health"],
     required[6]: [
         "HealthyLinkedFinishHasNoIssue", "UnlinkedFinishIsVisibleForRepair", "OrphanFinishIsError",
         "InvalidParentIsError", "ConflictingProvenanceIsError", "StaleRoomFinishIsWarning", "CrossScopeFinishIsErrorAndExcluded",
