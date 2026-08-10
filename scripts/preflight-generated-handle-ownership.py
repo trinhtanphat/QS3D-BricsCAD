@@ -9,19 +9,29 @@ errors = []
 checks = {
     "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipHealthService.cs": [
         "GeneratedHandleOwnershipHealthService",
+        "SafeGeneratedHandleOwnershipHealthService().Inspect(project)",
+    ],
+    "src/QS3D.Core/Diagnostics/SafeGeneratedHandleOwnershipHealthService.cs": [
         "SourceHandles",
-        'EndsWith("Handle"',
-        'EndsWith("Handles"',
+        "GeneratedHandleOwnershipPolicy.IsOwnerSlot",
         "GENERATED_HANDLE_OWNERSHIP_CONFLICT",
         "GroupBy(x => x.Token",
         "StringComparer.OrdinalIgnoreCase",
+    ],
+    "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": [
+        'StartsWith("Generated"',
+        'EndsWith("Handle"',
+        'EndsWith("Handles"',
+        'PhysicalOpeningCutSolidHandle',
     ],
     "tests/QS3D.Core.SmokeTests/GeneratedHandleOwnershipHealthSmoke.cs": [
         "SourceAndGeneratedCollisionIsReported",
         "RebarAndCurtainCrossTypeCollisionIsReported",
         "DuplicateWithinSameSlotIsNotCrossOwnerConflict",
+        "NonOwnerHandleMetadataIsIgnored",
         "GeneratedTieRebarHandles",
         "GeneratedCurtainFrameHandles",
+        "PreviewHandle",
     ],
     "tests/QS3D.Core.SmokeTests/GeneratedHandleOwnershipHealthRegistration.cs": [
         "ModuleInitializer",
@@ -45,6 +55,10 @@ for relative, needles in checks.items():
         if needle not in text:
             errors.append(relative + " missing generated-handle ownership token: " + needle)
 
+legacy_duplicate = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipHealthService.Safe.cs"
+if legacy_duplicate.exists():
+    errors.append("duplicate GeneratedHandleOwnershipHealthService.Safe.cs must not exist; SDK compile glob would declare the public service twice")
+
 commands = []
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
 if adapter.is_dir():
@@ -59,4 +73,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: future-proof SourceHandles + *Handle/*Handles ownership scan, cross-type regression and dedicated QS3DHANDLEHEALTH review are present.")
+print("PASS: one generated ownership facade, explicit owner-slot policy, cross-type regression and dedicated QS3DHANDLEHEALTH review are present.")
