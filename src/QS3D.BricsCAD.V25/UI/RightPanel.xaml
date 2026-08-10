@@ -79,19 +79,13 @@
                           SelectionChanged="OnDrawingSelectionChanged">
                     <ListView.View>
                         <GridView>
-                            <GridViewColumn Header="Tên" Width="132"
+                            <GridViewColumn Header="Tên" Width="112"
                                             DisplayMemberBinding="{Binding Name}"/>
-                            <GridViewColumn Header="Khóa" Width="45">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <CheckBox IsChecked="{Binding IsLocked}"
-                                                  IsEnabled="False"
-                                                  HorizontalAlignment="Center"
-                                                  ToolTip="Trạng thái khóa native"/>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                            <GridViewColumn Header="Loại" Width="58"
+                            <GridViewColumn Header="Khóa" Width="58"
+                                            DisplayMemberBinding="{Binding LockState}"/>
+                            <GridViewColumn Header="SL" Width="30"
+                                            DisplayMemberBinding="{Binding InstanceText}"/>
+                            <GridViewColumn Header="Loại" Width="48"
                                             DisplayMemberBinding="{Binding Kind}"/>
                         </GridView>
                     </ListView.View>
