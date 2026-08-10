@@ -7,6 +7,24 @@ namespace QS3D.Core.Units
         Meter,
         Inch,
         Foot,
-        Yard
+        Yard,
+        Mile,
+        Kilometer,
+        Microinch,
+        Mil,
+        Angstrom,
+        Nanometer,
+        Micrometer,
+        Decimeter,
+        Decameter,
+        Hectometer,
+        Gigameter,
+        AstronomicalUnit,
+        LightYear,
+        Parsec,
+        USSurveyFoot,
+        USSurveyInch,
+        USSurveyYard,
+        USSurveyMile
     }
 }

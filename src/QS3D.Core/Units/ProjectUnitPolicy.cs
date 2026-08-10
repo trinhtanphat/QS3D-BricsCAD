@@ -2,7 +2,33 @@ using System;
 
 namespace QS3D.Core.Units
 {
-    public enum LengthUnit { Millimeter, Centimeter, Meter, Inch, Foot, Yard }
+    public enum LengthUnit
+    {
+        Millimeter,
+        Centimeter,
+        Meter,
+        Inch,
+        Foot,
+        Yard,
+        Mile,
+        Kilometer,
+        Microinch,
+        Mil,
+        Angstrom,
+        Nanometer,
+        Micrometer,
+        Decimeter,
+        Decameter,
+        Hectometer,
+        Gigameter,
+        AstronomicalUnit,
+        LightYear,
+        Parsec,
+        USSurveyFoot,
+        USSurveyInch,
+        USSurveyYard,
+        USSurveyMile
+    }
 
     public sealed class ProjectUnitPolicy
     {
@@ -12,26 +38,23 @@ namespace QS3D.Core.Units
             DrawingUnit = drawingUnit;
             DisplayDecimals = displayDecimals;
         }
+
         public LengthUnit DrawingUnit { get; }
         public int DisplayDecimals { get; }
-        public double ToMeters(double drawingLength) => drawingLength * LinearToMeters(DrawingUnit);
-        public double FromMeters(double meters) => meters / LinearToMeters(DrawingUnit);
-        public double AreaToSquareMeters(double drawingArea) { var scale = LinearToMeters(DrawingUnit); return drawingArea * scale * scale; }
-        public double VolumeToCubicMeters(double drawingVolume) { var scale = LinearToMeters(DrawingUnit); return drawingVolume * scale * scale * scale; }
-        public double RoundForDisplay(double value) => Math.Round(value, DisplayDecimals, MidpointRounding.AwayFromZero);
-
-        private static double LinearToMeters(LengthUnit unit)
+        public double ToMeters(double drawingLength) => UnitScale.ToMeters(drawingLength, ToDrawingUnit(DrawingUnit));
+        public double FromMeters(double meters) => UnitScale.FromMeters(meters, ToDrawingUnit(DrawingUnit));
+        public double AreaToSquareMeters(double drawingArea) => UnitScale.ToSquareMeters(drawingArea, ToDrawingUnit(DrawingUnit));
+        public double VolumeToCubicMeters(double drawingVolume) => UnitScale.ToCubicMeters(drawingVolume, ToDrawingUnit(DrawingUnit));
+        public double RoundForDisplay(double value)
         {
-            switch (unit)
-            {
-                case LengthUnit.Millimeter: return 0.001d;
-                case LengthUnit.Centimeter: return 0.01d;
-                case LengthUnit.Meter: return 1d;
-                case LengthUnit.Inch: return 0.0254d;
-                case LengthUnit.Foot: return 0.3048d;
-                case LengthUnit.Yard: return 0.9144d;
-                default: throw new ArgumentOutOfRangeException(nameof(unit));
-            }
+            if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Display value must be finite.");
+            return Math.Round(value, DisplayDecimals, MidpointRounding.AwayFromZero);
+        }
+
+        public static DrawingUnit ToDrawingUnit(LengthUnit unit)
+        {
+            if (!Enum.IsDefined(typeof(LengthUnit), unit)) throw new ArgumentOutOfRangeException(nameof(unit));
+            return (DrawingUnit)(int)unit;
         }
     }
 }

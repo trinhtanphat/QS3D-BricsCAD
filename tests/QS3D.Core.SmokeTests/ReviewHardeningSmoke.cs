@@ -28,7 +28,13 @@ namespace QS3D.Core.SmokeTests
             Near(0.0254d, UnitScale.ToMeters(1d, DrawingUnit.Inch));
             Near(0.3048d, UnitScale.ToMeters(1d, DrawingUnit.Foot));
             Near(1000d, UnitScale.FromMeters(1d, DrawingUnit.Millimeter));
+            Near(1609.344d, UnitScale.ToMeters(1d, DrawingUnit.Mile));
+            Near(1000d, UnitScale.ToMeters(1d, DrawingUnit.Kilometer));
+            Near(1e-6d, UnitScale.ToMeters(1d, DrawingUnit.Micrometer));
+            Near(1200d / 3937d, UnitScale.ToMeters(1d, DrawingUnit.USSurveyFoot));
             var policy = new ProjectUnitPolicy(LengthUnit.Centimeter); Near(2.5d, policy.ToMeters(250d)); Near(250d, policy.FromMeters(2.5d));
+            Equal(DrawingUnit.USSurveyMile, ProjectUnitPolicy.ToDrawingUnit(LengthUnit.USSurveyMile));
+            Throws<ArgumentOutOfRangeException>(() => UnitScale.ToMeters(double.NaN, DrawingUnit.Meter));
         }
 
         private static void RecognitionRules()
