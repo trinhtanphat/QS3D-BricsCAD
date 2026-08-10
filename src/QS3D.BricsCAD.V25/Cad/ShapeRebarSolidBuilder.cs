@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
+using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
@@ -114,7 +115,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         pending.Add(item);
                     }
 
-                    foreach (var item in pending) CommitSemanticUpdate(item);
+                    foreach (var item in pending) CommitSemanticUpdate(project, item);
                     if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
@@ -139,12 +140,13 @@ namespace QS3D.BricsCAD.V25.Cad
             return new ShapeRebarBuildResult { Elements = pending.Count, Bars = bars };
         }
 
-        private static void CommitSemanticUpdate(PendingElement item)
+        private static void CommitSemanticUpdate(ProjectState project, PendingElement item)
         {
             item.Element.Properties[HandlesKey] = string.Join(";", item.Handles);
             item.Element.Properties["GeneratedShapeRebarCount"] = item.Handles.Count.ToString(CultureInfo.InvariantCulture);
             item.Element.Properties["GeneratedShapeRebarMode"] = "BBS.ShapePath.SegmentedCylinder";
             item.Element.ClearGeneratedShapeRebarStale();
+            AuditTrail.ForProject(project).Record("geometry.rebar.shape", item.Element.Id, item.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
         }
 
         private static Placement ResolvePlacement(Document document, ProjectState project, ProjectElement element, Entity source)
