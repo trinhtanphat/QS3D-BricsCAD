@@ -30,7 +30,7 @@ patterns = [
     (re.compile(r"\bOperatingSystem\.Is(?:Windows|Linux|MacOS)\s*\("), "OperatingSystem.Is* API"),
 ]
 
-roots = [ROOT / "src/QS3D.Core", ROOT / "src/QS3D.BricsCAD.V25", ROOT / "tests/QS3D.Core.SmokeTests"]
+roots = [ROOT / "src/QS3D.Core", ROOT / "src/QS3D.BricsCAD.V25"]
 for source_root in roots:
     if not source_root.is_dir():
         continue

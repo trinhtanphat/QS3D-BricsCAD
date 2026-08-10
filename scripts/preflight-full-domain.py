@@ -142,7 +142,7 @@ for needle in ("Applications\\QS3D", "Get-Process -Name bricscad", "SupportsShou
 
 for workflow_name in ("ci.yml", "bricscad-v25.yml"):
     workflow = (ROOT / ".github/workflows" / workflow_name).read_text(encoding="utf-8")
-    if "python scripts/preflight-full-domain.py" not in workflow:
+    if "python scripts/preflight-full-domain.py" not in workflow and "python scripts/preflight-all.py" not in workflow:
         errors.append(workflow_name + ": full-domain/release preflight is not wired")
 
 print("QS3D full-domain/release preflight")
