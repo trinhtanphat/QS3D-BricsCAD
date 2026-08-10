@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Rebar;
@@ -17,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             SpacingRejectsArithmeticOverflow();
             AggregateRejectsOverflow();
             CuttingLengthFallbackIsLazy();
+            FabricationProvenanceFlowsToExports();
             CsvRejectsInvalidRowsBeforeReplace();
         }
 
@@ -79,6 +82,54 @@ namespace QS3D.Core.SmokeTests
             Near(2d, rows.Single().CuttingLengthM);
         }
 
+        private static void FabricationProvenanceFlowsToExports()
+        {
+            const string standard = "STD-X";
+            const string revision = "REV-A";
+            var project = new ProjectState("bbs-fab", "BBS Fabrication");
+            var element = new ProjectElement("B-FAB", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
+            element.Properties["RebarNotation"] = "1D16";
+            element.Properties["RebarCuttingLengthM"] = "2";
+            element.Properties[RebarFabricationQualificationHealthService.StatusPropertyKey] = "Approved";
+            element.Properties[RebarFabricationQualificationHealthService.StandardCodePropertyKey] = standard;
+            element.Properties[RebarFabricationQualificationHealthService.DetailingRevisionPropertyKey] = revision;
+            project.Elements.Add(element);
+
+            var rows = ProjectRebarScheduleBuilder.Build(project);
+            var row = rows.Single();
+            Equal("Approved", row.FabricationStatus);
+            Equal(standard, row.FabricationStandardCode);
+            Equal(revision, row.FabricationDetailingRevision);
+
+            var csv = RebarCsvExporter.ToCsv(rows);
+            Require(csv, "FabricationStatus,FabricationStandardCode,FabricationDetailingRevision");
+            Require(csv, "\"Approved\",\"" + standard + "\",\"" + revision + "\"");
+
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-fab-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "bbs.xlsx");
+            try
+            {
+                XlsxRebarScheduleExporter.Export(path, rows);
+                using (var stream = File.OpenRead(path))
+                using (var archive = new ZipArchive(stream, ZipArchiveMode.Read, false))
+                using (var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open()))
+                {
+                    var sheet = reader.ReadToEnd();
+                    Require(sheet, "Fabrication Status");
+                    Require(sheet, "Standard Code");
+                    Require(sheet, "Detailing Revision");
+                    Require(sheet, "Approved");
+                    Require(sheet, standard);
+                    Require(sheet, revision);
+                }
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
         private static void CsvRejectsInvalidRowsBeforeReplace()
         {
             var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-csv-" + Guid.NewGuid().ToString("N"));
@@ -100,6 +151,11 @@ namespace QS3D.Core.SmokeTests
             {
                 try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
             }
+        }
+
+        private static void Require(string text, string token)
+        {
+            if (!text.Contains(token)) throw new Exception("Expected BBS export token: " + token);
         }
 
         private static void Near(double expected, double actual)

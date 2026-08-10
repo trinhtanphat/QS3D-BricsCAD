@@ -16,8 +16,7 @@ namespace QS3D.Core.Documentation
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
-            if (project.FindElement(element.Id) == null)
-                throw new InvalidOperationException("Semantic tag element is not part of the supplied project: " + element.Id + ".");
+            EnsureUniqueProjectElement(project, element);
             var source = (template ?? string.Empty).Trim();
             if (source.Length == 0) throw new ArgumentException("Semantic tag template is required.", nameof(template));
             if (source.Length > MaxTemplateLength) throw new ArgumentException("Semantic tag template exceeds " + MaxTemplateLength + " characters.", nameof(template));
@@ -81,28 +80,64 @@ namespace QS3D.Core.Documentation
             throw new FormatException("Unsupported semantic tag token: {" + token + "}.");
         }
 
+        private static void EnsureUniqueProjectElement(ProjectState project, ProjectElement element)
+        {
+            ProjectElement? match = null;
+            foreach (var candidate in project.Elements)
+            {
+                if (!string.Equals(candidate.Id, element.Id, StringComparison.OrdinalIgnoreCase)) continue;
+                if (match != null)
+                    throw new InvalidOperationException("Semantic tag element id is ambiguous in project: " + element.Id + ".");
+                match = candidate;
+            }
+
+            if (match == null || !ReferenceEquals(match, element))
+                throw new InvalidOperationException("Semantic tag element is not part of the supplied project: " + element.Id + ".");
+        }
+
         private static string ResolveFamily(ProjectState project, ProjectElement element)
         {
             if (string.IsNullOrWhiteSpace(element.FamilyId)) return string.Empty;
-            var family = project.FindFamily(element.FamilyId);
-            if (family == null) throw new InvalidOperationException("Semantic tag references missing Family " + element.FamilyId + " on element " + element.Id + ".");
-            return family.Name;
+            ProjectFamily? match = null;
+            foreach (var family in project.Families)
+            {
+                if (!string.Equals(family.Id, element.FamilyId, StringComparison.OrdinalIgnoreCase)) continue;
+                if (match != null)
+                    throw new InvalidOperationException("Semantic tag references ambiguous Family " + element.FamilyId + " on element " + element.Id + ".");
+                match = family;
+            }
+            if (match == null) throw new InvalidOperationException("Semantic tag references missing Family " + element.FamilyId + " on element " + element.Id + ".");
+            return match.Name;
         }
 
         private static string ResolveFloor(ProjectState project, ProjectElement element)
         {
             if (string.IsNullOrWhiteSpace(element.FloorId)) return string.Empty;
+            FloorDefinition? match = null;
             foreach (var floor in project.Floors)
-                if (string.Equals(floor.Id, element.FloorId, StringComparison.OrdinalIgnoreCase)) return floor.Name;
-            throw new InvalidOperationException("Semantic tag references missing Floor " + element.FloorId + " on element " + element.Id + ".");
+            {
+                if (!string.Equals(floor.Id, element.FloorId, StringComparison.OrdinalIgnoreCase)) continue;
+                if (match != null)
+                    throw new InvalidOperationException("Semantic tag references ambiguous Floor " + element.FloorId + " on element " + element.Id + ".");
+                match = floor;
+            }
+            if (match == null) throw new InvalidOperationException("Semantic tag references missing Floor " + element.FloorId + " on element " + element.Id + ".");
+            return match.Name;
         }
 
         private static string ResolveZone(ProjectState project, ProjectElement element)
         {
             if (string.IsNullOrWhiteSpace(element.ZoneId)) return string.Empty;
+            ZoneDefinition? match = null;
             foreach (var zone in project.Zones)
-                if (string.Equals(zone.Id, element.ZoneId, StringComparison.OrdinalIgnoreCase)) return zone.Name;
-            throw new InvalidOperationException("Semantic tag references missing Zone " + element.ZoneId + " on element " + element.Id + ".");
+            {
+                if (!string.Equals(zone.Id, element.ZoneId, StringComparison.OrdinalIgnoreCase)) continue;
+                if (match != null)
+                    throw new InvalidOperationException("Semantic tag references ambiguous Zone " + element.ZoneId + " on element " + element.Id + ".");
+                match = zone;
+            }
+            if (match == null) throw new InvalidOperationException("Semantic tag references missing Zone " + element.ZoneId + " on element " + element.Id + ".");
+            return match.Name;
         }
 
         private static bool IsDocumentableProperty(string key)
