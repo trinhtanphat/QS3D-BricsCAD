@@ -8,14 +8,16 @@ namespace QS3D.Core.Diagnostics
 {
     public sealed class GeneratedTieRebarHealthService
     {
+        private const string HandlesKey = "GeneratedTieRebarHandles";
+
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveSolidHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var owners = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                if (!element.Properties.TryGetValue("GeneratedTieRebarHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                 var handles = raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var valid = 0;
@@ -23,7 +25,7 @@ namespace QS3D.Core.Diagnostics
                 {
                     if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                     {
-                        issues.Add(new ModelHealthIssue("INVALID_TIE_REBAR_GENERATED_HANDLE", HealthSeverity.Error, "GeneratedTieRebarHandles chứa handle không hợp lệ.", element.Id));
+                        issues.Add(new ModelHealthIssue("INVALID_TIE_REBAR_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
                         continue;
                     }
                     if (!local.Add(handle))
@@ -32,9 +34,9 @@ namespace QS3D.Core.Diagnostics
                         continue;
                     }
                     valid++;
-                    if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, element.Id, StringComparison.OrdinalIgnoreCase))
-                        issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated tie solid đang được nhiều element nhận sở hữu; element khác: " + owner, element.Id));
-                    else owners[handle] = element.Id;
+                    var expectedOwner = element.Id + "/" + HandlesKey;
+                    if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expectedOwner, StringComparison.OrdinalIgnoreCase))
+                        issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated tie solid xung đột owner/project handle khác: " + owner, element.Id));
                     if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated tie handle không được nằm trong SourceHandles.", element.Id));
                     if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
@@ -47,8 +49,45 @@ namespace QS3D.Core.Diagnostics
 
                 CheckPositive(element, "GeneratedTieRebarDiameterMm", "TIE_REBAR_GENERATED_DIAMETER_INVALID", "GeneratedTieRebarDiameterMm thiếu hoặc không hợp lệ.", issues);
                 CheckNonNegative(element, "GeneratedTieRebarActualSpacingM", "TIE_REBAR_GENERATED_SPACING_INVALID", "GeneratedTieRebarActualSpacingM thiếu hoặc không hợp lệ.", issues);
+                if (element.Category != ElementCategory.Column)
+                    issues.Add(new ModelHealthIssue("TIE_REBAR_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated tie metadata chỉ hợp lệ trên Column element.", element.Id));
+                if (element.Dirty != ElementDirtyFlags.None)
+                    issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_STALE", HealthSeverity.Warning, "Column đang dirty nhưng vẫn còn generated ties; rebuild/health-check trước khi phát hành bản vẽ.", element.Id));
             }
             return issues;
+        }
+
+        private static Dictionary<string, string> BuildOwnershipIndex(ProjectState project)
+        {
+            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                foreach (var handle in element.SourceHandles) Reserve(owners, handle, element.Id + "/SourceHandles");
+                ReserveProperty(owners, element, "GeneratedSolidHandle");
+                ReserveProperty(owners, element, "PhysicalOpeningCutSolidHandle");
+            }
+            foreach (var element in project.Elements)
+            {
+                ReserveProperty(owners, element, "GeneratedRebarHandles");
+                ReserveProperty(owners, element, "GeneratedShapeRebarHandles");
+                ReserveProperty(owners, element, HandlesKey);
+                ReserveProperty(owners, element, "GeneratedBeamStirrupHandles");
+            }
+            return owners;
+        }
+
+        private static void ReserveProperty(Dictionary<string, string> owners, ProjectElement element, string key)
+        {
+            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
+                Reserve(owners, handle, element.Id + "/" + key);
+        }
+
+        private static void Reserve(Dictionary<string, string> owners, string? handle, string token)
+        {
+            var normalized = (handle ?? string.Empty).Trim();
+            if (normalized.Length == 0 || owners.ContainsKey(normalized)) return;
+            owners[normalized] = token;
         }
 
         private static void CheckPositive(ProjectElement element, string key, string code, string message, List<ModelHealthIssue> issues)
