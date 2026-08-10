@@ -138,6 +138,15 @@ try {
             $env:BRICSCAD_V25_DIR = $oldBricsCadDir
         }
 
+        Invoke-QualificationStep "WPF theme resource smoke" {
+            & (Join-Path $PSScriptRoot "test-wpf-theme-runtime.ps1")
+        }
+        Invoke-QualificationStep "WPF Workspace / RightPanel layout smoke" {
+            & (Join-Path $PSScriptRoot "test-wpf-palettes-runtime.ps1") `
+                -PluginPath $pluginDll `
+                -BricscadDirectory $BricsCadDir
+        }
+
         if (-not $SkipRuntime) {
             Invoke-QualificationStep "Licensed V25 NETLOAD / Ribbon / Palette runtime probe" {
                 $runtimeArgs = @{
