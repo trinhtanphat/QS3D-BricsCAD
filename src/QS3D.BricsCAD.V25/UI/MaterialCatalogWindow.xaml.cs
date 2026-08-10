@@ -56,7 +56,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnSaveClick(object sender, RoutedEventArgs e)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
+            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
             try
             {
@@ -73,7 +73,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnDeleteClick(object sender, RoutedEventArgs e)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
+            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (document == null || !(MaterialList.SelectedItem is ProjectMaterial material)) return;
             try
             {
@@ -93,7 +93,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnApplyClick(object sender, RoutedEventArgs e)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
+            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
             try
             {
@@ -128,7 +128,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshAll(string selectedId = "")
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
+            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
             try
             {
