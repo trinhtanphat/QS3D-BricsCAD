@@ -33,9 +33,11 @@ checks = {
         "GeneratedBeamStirrupHealthService().Inspect",
         "GeneratedSlabMeshHealthService().Inspect",
         "GeneratedWallMeshHealthService().Inspect",
+        "GeneratedFoundationMeshHealthService().Inspect",
         "GeneratedCurtainFrameHealthService().Inspect",
         "CurtainWallFrameLiveStateService.Inspect",
         "GeneratedGeometryStaleHealthService().Inspect",
+        "GeneratedRebarModeHealthService().Inspect",
         "BomReleaseGuardService.Inspect",
         "summary.Errors == 0 && summary.Warnings == 0",
         "V25 runtime/private-DWG gate vẫn là bước riêng",
@@ -91,4 +93,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: unified QS3DRELEASECHECK uses provenance-safe ownership, generated/live CAD health and BOM guards; runtime/private-DWG remains a separate V25 gate.")
+print("PASS: unified QS3DRELEASECHECK uses provenance-safe ownership, all dedicated generated mesh/mode/live CAD health and BOM guards; runtime/private-DWG remains a separate V25 gate.")
