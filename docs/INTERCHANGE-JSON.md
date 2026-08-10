@@ -38,7 +38,15 @@ Generated native CAD output is implementation/runtime state, not interchange ide
 
 This prevents a downstream system from persisting a native BricsCAD handle and later presenting it as portable QS3D ownership.
 
-The exporter never mutates the project. The BricsCAD command regenerates dirty semantic quantities first, asks for an output path and writes through a temporary-file replacement boundary.
+The exporter never mutates the project. The BricsCAD command now preserves that read-only guarantee end-to-end:
+
+1. the Save dialog is shown before the active project is obtained, so Cancel performs no semantic work;
+2. the live `ProjectState` is deep-copied with `ProjectStateSnapshot.CreateDetachedCopy`;
+3. dirty semantic quantities are regenerated only on that detached copy;
+4. JSON is built from the detached copy and committed through the existing temporary-file/replace boundary;
+5. the live project is never restored or replaced, so modeless UI references remain attached to the original live state.
+
+A failed or cancelled export therefore does not clear dirty flags, change quantities/properties, advance semantic timestamps, or replace live project object references.
 
 ## Command
 
@@ -59,6 +67,8 @@ Source/static contract:
 ```text
 python scripts/preflight-interchange-json.py
 ```
+
+The preflight explicitly rejects regressions where the command calls `RegenerateDirty(project)` or exports the live `project`, and it requires the Save dialog to occur before `ProjectContextCoordinator.GetOrCreate(document)`. Core smoke coverage also proves the detached copy does not share mutable project/element instances with the live project.
 
 Before commercial release, also run the normal Core build/preflight and exact-SHA V25 qualification. Export itself is CAD-kernel-independent after the active project is obtained, but command registration, dialog behavior, Unicode paths and real customer project contents still need the local V25 matrix.
 
