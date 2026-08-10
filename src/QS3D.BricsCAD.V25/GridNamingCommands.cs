@@ -123,8 +123,9 @@ namespace QS3D.BricsCAD.V25
             foreach (var element in project.Elements)
             {
                 if (element == null || element.Category != ElementCategory.Grid) continue;
-                if (!result.TryAdd(element.Id, element))
+                if (result.ContainsKey(element.Id))
                     throw new InvalidOperationException("Project chứa semantic Grid trùng Id: " + element.Id + ".");
+                result.Add(element.Id, element);
             }
             return result;
         }
