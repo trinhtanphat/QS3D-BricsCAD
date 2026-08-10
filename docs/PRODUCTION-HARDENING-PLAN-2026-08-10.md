@@ -66,6 +66,20 @@ The canonical generated host builders no longer commit CAD first and semantic ge
 
 This specifically closes the old split-brain window where a new `Solid3d` could survive a successful DB transaction while `GeneratedSolidHandle`/semantic ownership failed to advance. It deliberately does **not** claim whole-command atomicity for multi-transaction orchestrators such as Curtain host + frame generation.
 
+### P0 — Curtain frame replacement atomicity
+
+The separate LINE and open/bulged-path Curtain frame builders now use the same cross-layer principle internally:
+
+- capture a deep `ProjectStateSnapshot` before replacement;
+- erase previous owned frame solids and create replacements inside one BricsCAD transaction;
+- publish `GeneratedCurtainFrameHandles`, counts, configuration/path metadata, stale-state clearing and audit while that CAD transaction can still abort;
+- restore the project snapshot when the native transaction does not commit;
+- keep `project.Touch()` and live-geometry fingerprint stamping post-commit, because timestamp/UI/live-stamp failure must not misreport an otherwise-valid geometry commit as failed.
+
+`CurtainWallFrameLiveStateService.TryStampSelected(...)` intentionally treats post-commit live fingerprint stamping as best-effort. A missing/pending live fingerprint remains visible to health/readiness instead of turning committed frame geometry into a false command failure.
+
+This closes the per-frame-builder CAD/semantic split-brain window for both LINE and guarded open/bulged path overlays. It still does **not** make the higher-level `QS3DCURTAIN3D` host+frame sequence one native transaction.
+
 ### P0 — physical opening prevalidation
 
 Selected physical opening cuts now prevalidate their selected hosts/readiness and fail closed before starting destructive cut work when the selected set is not safe to process as a unit. This reduces partial physical-cut risk without pretending separate host transactions are one global transaction.
@@ -81,7 +95,7 @@ Selected physical opening cuts now prevalidate their selected hosts/readiness an
 - no Curtain detail transaction piggybacking into canonical Build3D;
 - post-commit UI synchronization remaining non-fatal.
 
-Generated replacement atomicity is additionally guarded across the four canonical host builder families by dedicated `preflight-generated-replacement-atomic*.py` gates. `preflight-all.py` discovers feature gates by filename, so these checks participate automatically when aggregate preflight is explicitly run.
+Generated replacement atomicity is guarded across the four canonical host builder families by dedicated `preflight-generated-replacement-atomic*.py` gates. `scripts/preflight-curtain-frame-atomicity.py` separately locks LINE/path frame replacement ordering, snapshot rollback and non-fatal post-commit live fingerprint stamping. `preflight-all.py` discovers feature gates by filename, so these checks participate automatically when aggregate preflight is explicitly run.
 
 ## P0 — remaining sell-ready blockers
 
@@ -101,17 +115,20 @@ Must be completed on the exact release SHA in licensed interactive BricsCAD V25 
 
 This is a runtime gate, not a source-code TODO that should be faked by mocks.
 
-### 2. Curtain orchestration transaction boundary
+### 2. Curtain whole-command orchestration transaction boundary
 
-`QS3DCURTAIN3D` intentionally composes host generation and frame-overlay generation, and LINE/path builders have separate native transaction families. Each host replacement family is now cross-layer atomic on its own, but the overall Curtain command still needs an explicit orchestration journal/shared native transaction design before claiming whole-command atomicity.
+`QS3DCURTAIN3D` intentionally composes host generation and frame-overlay generation, and those operations still use separate native transaction families. **Each canonical host replacement family and each LINE/path frame replacement builder is now cross-layer atomic on its own.** The remaining gap is only the orchestration boundary between those individually-safe stages.
+
+Before claiming the whole command is all-or-nothing, define and prove an explicit orchestration journal/compensation contract or a shared native transaction design that can safely restore both the prior backing host and prior frame family if a later stage fails.
 
 Until then:
 
 - source/builders must continue fail-closed on foreign ownership;
 - semantic/rule validation must happen before the first native mutation;
-- Release Readiness must surface stale/inconsistent frame state;
+- Release Readiness must surface stale/inconsistent frame or host state;
+- post-commit live fingerprint stamping stays best-effort/non-fatal and missing state remains health-visible;
 - canonical `QS3DBUILD3D` must not absorb Curtain frame transactions;
-- documentation must not describe host+frame generation as all-or-nothing.
+- documentation must not describe the **combined** host+frame command as all-or-nothing even though each underlying replacement builder is internally cross-layer atomic.
 
 ### 3. Commercial license enforcement wiring
 
@@ -148,7 +165,7 @@ Future Direct Draw candidates should be driven by real customer workflow, not co
 
 ### Curtain Wall
 
-Current source already supports deterministic frame overlays for LINE and open/bulged WCS-XY POLYLINE GlassWall paths, including linked-opening interruption and live fingerprints. Documentation that still says open-polyline native frame overlays are entirely missing is stale.
+Current source already supports deterministic frame overlays for LINE and open/bulged WCS-XY POLYLINE GlassWall paths, including linked-opening interruption and live fingerprints. Both frame-replacement builders are internally cross-layer atomic as described above. Documentation that still says open-polyline native frame overlays are entirely missing, or that the frame builders still commit CAD before semantic ownership, is stale.
 
 Still not claimed complete:
 
