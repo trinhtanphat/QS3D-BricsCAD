@@ -90,12 +90,12 @@ namespace QS3D.BricsCAD.V25.Cad
                         var required = Math.Ceiling(totalM / splineChordM);
                         if (double.IsNaN(required) || double.IsInfinity(required) || required > MaxSplineSegments)
                             throw new InvalidOperationException("SPLINE " + handle + " cần quá " + MaxSplineSegments + " segment; tăng RoomBoundarySplineChordM hoặc simplify spline.");
-                        var segmentCount = Math.Max(1, (int)required);
+                        var splineSegmentCount = Math.Max(1, (int)required);
                         Point2? previous = null;
-                        for (var sample = 0; sample <= segmentCount; sample++)
+                        for (var sample = 0; sample <= splineSegmentCount; sample++)
                         {
-                            var distance = totalDrawing * (sample / (double)segmentCount);
-                            var point = sample == segmentCount ? spline.EndPoint : spline.GetPointAtDist(distance);
+                            var distance = totalDrawing * (sample / (double)splineSegmentCount);
+                            var point = sample == splineSegmentCount ? spline.EndPoint : spline.GetPointAtDist(distance);
                             RequireElevation(point.Z, "SPLINE " + handle + " sample " + sample);
                             var current = new Point2(units.ToMeters(point.X), units.ToMeters(point.Y));
                             if (previous.HasValue && previous.Value.DistanceTo(current) > 1e-12d)

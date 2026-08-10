@@ -54,8 +54,10 @@ namespace QS3D.Core.Geometry
             if (!Finite(miterLimit) || miterLimit < 1d) throw new ArgumentOutOfRangeException(nameof(miterLimit));
             if (!Finite(tolerance) || tolerance <= 0d) throw new ArgumentOutOfRangeException(nameof(tolerance));
 
-            var points = Clean(centerline, tolerance);
-            if (points.Count < 2) throw new ArgumentException("Wall centerline requires at least two distinct points.", nameof(centerline));
+            var sourcePoints = Clean(centerline, tolerance);
+            if (sourcePoints.Count < 2) throw new ArgumentException("Wall centerline requires at least two distinct points.", nameof(centerline));
+            var worldOrigin = sourcePoints[0];
+            var points = TranslateToLocal(sourcePoints, worldOrigin);
             if (HasSelfIntersection(points, tolerance)) throw new InvalidOperationException("Wall centerline self-intersects; split it into non-self-intersecting wall elements first.");
 
             var segments = new List<SegmentInfo>(points.Count - 1);
@@ -81,7 +83,32 @@ namespace QS3D.Core.Geometry
             var area = Math.Abs(SignedAreaRelative(polygon));
             if (!Finite(area) || area <= tolerance * tolerance) throw new InvalidOperationException("Wall footprint area is degenerate.");
             var perimeter = ClosedPerimeter(polygon);
-            return new WallFootprintResult(polygon.AsReadOnly(), centerlineLength, area, perimeter, leftBevel || rightBevel);
+            var worldPolygon = TranslateFromLocal(polygon, worldOrigin);
+            return new WallFootprintResult(worldPolygon.AsReadOnly(), centerlineLength, area, perimeter, leftBevel || rightBevel);
+        }
+
+        private static List<Point2> TranslateToLocal(IReadOnlyList<Point2> source, Point2 origin)
+        {
+            var result = new List<Point2>(source.Count);
+            foreach (var point in source)
+            {
+                var local = new Point2(point.X - origin.X, point.Y - origin.Y);
+                Validate(local, "local wall centerline point");
+                result.Add(local);
+            }
+            return result;
+        }
+
+        private static List<Point2> TranslateFromLocal(IReadOnlyList<Point2> source, Point2 origin)
+        {
+            var result = new List<Point2>(source.Count);
+            foreach (var point in source)
+            {
+                var world = new Point2(point.X + origin.X, point.Y + origin.Y);
+                Validate(world, "world wall footprint point");
+                result.Add(world);
+            }
+            return result;
         }
 
         private static List<Point2> BuildSide(IReadOnlyList<Point2> points, IReadOnlyList<SegmentInfo> segments, double half, double side, double miterLimit, double tolerance, out bool usedBevel)
