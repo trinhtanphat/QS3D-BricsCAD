@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -14,6 +15,9 @@ namespace QS3D.Core.SmokeTests
             GeneratedOwnershipSmugglingFailsClosed();
             BrokenDependencyFailsClosed();
             DependencyCycleFailsClosed();
+            InvalidUtf8FileFailsClosed();
+            MissingRequiredCollectionFailsClosed();
+            EmptyRequiredNamesFailClosed();
         }
 
         private static void ExportedValidSnapshotPasses()
@@ -55,6 +59,36 @@ namespace QS3D.Core.SmokeTests
             var project = BuildFixture();
             project.FindElement("E-ROOT")!.DependsOn.Add("E-001");
             RequireError(ProjectInterchangeJsonValidator.Validate(ProjectInterchangeJsonExporter.Build(project)), "DEPENDENCY_CYCLE");
+        }
+
+        private static void InvalidUtf8FileFailsClosed()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-interchange-invalid-" + Guid.NewGuid().ToString("N") + ".qs3d.json");
+            try
+            {
+                File.WriteAllBytes(path, new byte[] { (byte)'{', 0xff, (byte)'}' });
+                RequireError(ProjectInterchangeJsonValidator.ValidateFile(path), "JSON_UTF8");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
+        }
+
+        private static void MissingRequiredCollectionFailsClosed()
+        {
+            const string json = "{\"format\":\"QS3D.SemanticSnapshot\",\"formatVersion\":1,\"units\":{\"length\":\"m\",\"area\":\"m2\",\"volume\":\"m3\",\"mass\":\"kg\"},\"project\":{\"id\":\"P\",\"name\":\"N\",\"schemaVersion\":1,\"drawingFingerprint\":\"\",\"updatedUtc\":\"2026-08-10T11:00:00.0000000Z\"},\"floors\":[],\"families\":[],\"elements\":[]}";
+            RequireError(ProjectInterchangeJsonValidator.Validate(json), "COLLECTION_MISSING");
+        }
+
+        private static void EmptyRequiredNamesFailClosed()
+        {
+            var json = ProjectInterchangeJsonExporter.Build(BuildFixture())
+                .Replace("\"name\":\"Interchange Validate Smoke\"", "\"name\":\"\"")
+                .Replace("\"name\":\"Zone 1\"", "\"name\":\"\"");
+            var result = ProjectInterchangeJsonValidator.Validate(json);
+            RequireError(result, "PROJECT_NAME_EMPTY");
+            RequireError(result, "NAME_EMPTY");
         }
 
         private static ProjectState BuildFixture()
