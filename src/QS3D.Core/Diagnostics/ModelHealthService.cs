@@ -42,6 +42,8 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
+            var normalizedLiveHandles = NormalizeHandleSet(liveHandles);
+            var normalizedLiveGeneratedSolidHandles = NormalizeHandleSet(liveGeneratedSolidHandles);
 
             if (project.Metadata.TryGetValue("QS3D.ReadOnlyRecoveryRequired", out var recoveryRequired) && string.Equals(recoveryRequired, "true", StringComparison.OrdinalIgnoreCase))
             {
@@ -72,21 +74,33 @@ namespace QS3D.Core.Diagnostics
                 ValidateHost(identity, element, issues);
                 ValidateDependencies(identity, element, issues);
                 ValidateDimensions(element, issues);
-                ValidateGeneratedGeometry(project, element, liveGeneratedSolidHandles, generatedHandles, issues);
+                ValidateGeneratedGeometry(project, element, normalizedLiveGeneratedSolidHandles, generatedHandles, issues);
                 if (RequiresMaterial(element.Category) && !HasMaterial(identity, element)) issues.Add(new ModelHealthIssue("MISSING_MATERIAL", HealthSeverity.Warning, "Cấu kiện chưa có vật liệu.", element.Id));
                 ValidateRebar(element, issues);
 
-                foreach (var handle in element.SourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)))
+                var normalizedSourceHandles = element.SourceHandles
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                foreach (var normalized in normalizedSourceHandles)
                 {
-                    var normalized = handle.Trim();
                     if (handles.TryGetValue(normalized, out var owner) && !string.Equals(owner, element.Id, StringComparison.OrdinalIgnoreCase)) issues.Add(new ModelHealthIssue("DUPLICATE_HANDLE", HealthSeverity.Warning, "CAD Handle đang được nhiều QS3D element sử dụng; element khác: " + owner, element.Id));
                     else handles[normalized] = element.Id;
                 }
 
-                if (liveHandles != null && element.SourceHandles.Count > 0 && element.SourceHandles.All(x => !string.IsNullOrWhiteSpace(x) && !liveHandles.Contains(x.Trim())))
+                if (normalizedLiveHandles != null && normalizedSourceHandles.Count > 0 && normalizedSourceHandles.All(x => !normalizedLiveHandles.Contains(x)))
                     issues.Add(new ModelHealthIssue("ORPHAN_HANDLE", HealthSeverity.Error, "Không còn tìm thấy đối tượng CAD nguồn.", element.Id));
             }
             return issues.AsReadOnly();
+        }
+
+        private static ISet<string>? NormalizeHandleSet(ISet<string>? handles)
+        {
+            if (handles == null) return null;
+            return new HashSet<string>(
+                handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
         }
 
         private static DiagnosticIdentityIndex BuildIdentityIndex(ProjectState project, ICollection<ModelHealthIssue> issues)
