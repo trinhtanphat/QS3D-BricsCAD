@@ -50,6 +50,21 @@ if not errors:
         if needle not in i:
             errors.append("remap append importer missing atomic/ownership/rewrite contract: " + needle)
 
+    required_planner = [
+        "foreach (var family in source.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))",
+        "foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))",
+        'OwnerElementSourceId = "Family " + family.Id',
+        "Family property looks like a semantic identity/reference",
+        "if (IsImportedOwnershipMetadata(property.Key)) continue;",
+        "GeneratedHandleOwnershipPolicy.IsOwnerSlot(k)",
+        'k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
+        'k.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)',
+        'k.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0',
+    ]
+    for needle in required_planner:
+        if needle not in p:
+            errors.append("remap planner missing family/ownership preview parity contract: " + needle)
+
     # Planner preview and executor must recognize the exact same conservative ID/ref suffix set.
     reference_suffixes = ["Id", "Ids", "Ref", "Refs", "RefId", "RefIds"]
     for suffix in reference_suffixes:
@@ -120,4 +135,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New re-plans immediately before semantic mutation, keeps planner/executor opaque-reference policy aligned, rewrites only registered relations, strips incoming native ownership, preserves all existing target identities, and rolls back semantic state on failure.")
+print("Import As New re-plans immediately before semantic mutation, keeps Family/Element planner-executor opaque-reference policy aligned, rewrites only registered relations, strips incoming native ownership, preserves all existing target identities, and rolls back semantic state on failure.")
