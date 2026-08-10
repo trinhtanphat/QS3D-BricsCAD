@@ -55,6 +55,7 @@ namespace QS3D.Core.SmokeTests
             RegenerationAtomicitySmoke.Run();
             HostLinkCanonicalizationSmoke.Run();
             ProjectSessionAuditSmoke.Run();
+            ProjectInterchangeValidationSmoke.Run();
         }
     }
 }
