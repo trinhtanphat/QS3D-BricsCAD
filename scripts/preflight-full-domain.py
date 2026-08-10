@@ -16,10 +16,13 @@ required = [
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml.cs",
     "tests/QS3D.Core.SmokeTests/CompletionRegressionSmoke.cs",
     "scripts/package-v25.ps1",
+    "scripts/install-v25-autoload.ps1",
+    "scripts/uninstall-v25-autoload.ps1",
     "docs/COMMANDS.md",
+    "docs/V25-INSTALL.md",
 ]
 for rel in required:
-    if not (ROOT / rel).exists(): errors.append("missing full-domain file: " + rel)
+    if not (ROOT / rel).exists(): errors.append("missing full-domain/release file: " + rel)
 
 command_owners = {}
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
@@ -57,9 +60,28 @@ registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 if registration.exists() and "CompletionRegressionSmoke.Run();" not in registration.read_text(encoding="utf-8"):
     errors.append("CompletionRegressionSmoke is not registered")
 
-print("QS3D full-domain preflight")
+package = (ROOT / "scripts/package-v25.ps1").read_text(encoding="utf-8")
+for needle in ("COMMANDS.txt", "SHA256SUMS.txt", "Get-AuthenticodeSignature", "install-v25-autoload.ps1", "uninstall-v25-autoload.ps1"):
+    if needle not in package: errors.append("V25 package safety/wiring missing: " + needle)
+
+installer = (ROOT / "scripts/install-v25-autoload.ps1").read_text(encoding="utf-8")
+for needle in ("HKCU:\\Software\\Bricsys\\BricsCAD", "Applications\\QS3D", "LoadCtrls", "Loader", "Get-FileHash", "Get-AuthenticodeSignature", "RequireSigned", "Get-Process -Name bricscad", "SupportsShouldProcess"):
+    if needle not in installer: errors.append("V25 DemandLoad installer guard missing: " + needle)
+if re.search(r'(?i)SECURELOAD\s*[=:]|setvar[^\n]*SECURELOAD', installer):
+    errors.append("V25 installer must not lower SECURELOAD")
+
+uninstaller = (ROOT / "scripts/uninstall-v25-autoload.ps1").read_text(encoding="utf-8")
+for needle in ("Applications\\QS3D", "Get-Process -Name bricscad", "SupportsShouldProcess", "LOCALAPPDATA"):
+    if needle not in uninstaller: errors.append("V25 DemandLoad uninstaller guard missing: " + needle)
+
+for workflow_name in ("ci.yml", "bricscad-v25.yml"):
+    workflow = (ROOT / ".github/workflows" / workflow_name).read_text(encoding="utf-8")
+    if "python scripts/preflight-full-domain.py" not in workflow:
+        errors.append(workflow_name + ": full-domain/release preflight is not wired")
+
+print("QS3D full-domain/release preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: full-domain files, unique commands, Stair/Railing/Earthwork quantities/native mass adapters, BBS CSV safety and completion regression registration are present.")
+print("PASS: full-domain files, unique commands, Stair/Railing/Earthwork quantities/native mass adapters, BBS CSV safety, DemandLoad packaging/install guards and completion regression registration are present.")
