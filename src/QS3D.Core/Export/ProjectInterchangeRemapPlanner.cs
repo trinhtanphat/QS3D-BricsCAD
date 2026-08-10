@@ -130,14 +130,14 @@ namespace QS3D.Core.Export
                         continue;
                     }
 
-                    if (LooksLikeOpaqueIdentityProperty(property.Key, property.Value, sourceElementIds))
+                    if (LooksLikeOpaqueIdentityProperty(property.Key, property.Value))
                     {
                         opaque.Add(new ProjectInterchangeOpaqueReferenceWarning
                         {
                             OwnerElementSourceId = element.Id,
                             PropertyKey = property.Key,
                             PropertyValue = property.Value ?? string.Empty,
-                            Reason = "Property looks like an Element identity/reference but no explicit rewrite policy is registered for this key."
+                            Reason = "Property looks like a semantic identity/reference but no explicit rewrite policy is registered for this key."
                         });
                     }
                 }
@@ -251,15 +251,16 @@ namespace QS3D.Core.Export
             });
         }
 
-        private static bool LooksLikeOpaqueIdentityProperty(string key, string value, ISet<string> sourceElementIds)
+        private static bool LooksLikeOpaqueIdentityProperty(string key, string value)
         {
             if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) return false;
             var trimmedKey = key.Trim();
-            var looksLikeIdKey = trimmedKey.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
-                                 trimmedKey.EndsWith("Ref", StringComparison.OrdinalIgnoreCase) ||
-                                 trimmedKey.EndsWith("RefId", StringComparison.OrdinalIgnoreCase);
-            if (!looksLikeIdKey) return false;
-            return sourceElementIds.Contains(value.Trim());
+            return trimmedKey.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
+                   trimmedKey.EndsWith("Ids", StringComparison.OrdinalIgnoreCase) ||
+                   trimmedKey.EndsWith("Ref", StringComparison.OrdinalIgnoreCase) ||
+                   trimmedKey.EndsWith("Refs", StringComparison.OrdinalIgnoreCase) ||
+                   trimmedKey.EndsWith("RefId", StringComparison.OrdinalIgnoreCase) ||
+                   trimmedKey.EndsWith("RefIds", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string NextId(string sourceId, ISet<string> occupied)
