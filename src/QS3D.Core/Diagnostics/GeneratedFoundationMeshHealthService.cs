@@ -15,7 +15,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = BuildOwnershipIndex(project);
+            var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
@@ -36,8 +36,8 @@ namespace QS3D.Core.Diagnostics
                     }
                     validCount++;
                     var expectedOwner = element.Id + "/" + HandlesKey;
-                    if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expectedOwner, StringComparison.OrdinalIgnoreCase))
-                        issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated foundation mesh solid xung đột owner/project handle khác: " + owner, element.Id));
+                    if (ownership.IsConflicted(handle, expectedOwner))
+                        issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated foundation mesh solid xung đột owner/project handle khác: " + ownership.Describe(handle), element.Id));
                     if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated foundation mesh handle không được nằm trong SourceHandles.", element.Id));
                     if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
@@ -88,41 +88,59 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " thiếu hoặc không hợp lệ.", element.Id));
         }
 
-        private static Dictionary<string, string> BuildOwnershipIndex(ProjectState project)
+        private sealed class OwnershipIndex
         {
-            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in project.Elements)
+            public Dictionary<string, string> Owners { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            public HashSet<string> Conflicts { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            public bool IsConflicted(string handle, string expectedOwner)
             {
-                foreach (var handle in element.SourceHandles) Reserve(owners, handle, element.Id + "/SourceHandles");
-                ReserveProperty(owners, element, "GeneratedSolidHandle");
-                ReserveProperty(owners, element, "PhysicalOpeningCutSolidHandle");
-                ReserveProperty(owners, element, "GeneratedCurtainFrameHandles");
+                if (Conflicts.Contains(handle)) return true;
+                return Owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expectedOwner, StringComparison.OrdinalIgnoreCase);
             }
-            foreach (var element in project.Elements)
+
+            public string Describe(string handle)
             {
-                ReserveProperty(owners, element, "GeneratedRebarHandles");
-                ReserveProperty(owners, element, "GeneratedShapeRebarHandles");
-                ReserveProperty(owners, element, "GeneratedTieRebarHandles");
-                ReserveProperty(owners, element, "GeneratedBeamStirrupHandles");
-                ReserveProperty(owners, element, "GeneratedSlabMeshHandles");
-                ReserveProperty(owners, element, "GeneratedWallMeshHandles");
-                ReserveProperty(owners, element, HandlesKey);
+                if (Conflicts.Contains(handle)) return "multiple owners";
+                return Owners.TryGetValue(handle, out var owner) ? owner : "unknown owner";
             }
-            return owners;
         }
 
-        private static void ReserveProperty(Dictionary<string, string> owners, ProjectElement element, string key)
+        private static OwnershipIndex BuildOwnershipIndex(ProjectState project)
         {
-            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            var index = new OwnershipIndex();
+            foreach (var element in project.Elements)
+            {
+                foreach (var handle in element.SourceHandles)
+                    Reserve(index, handle, element.Id + "/SourceHandles");
+
+                foreach (var property in element.Properties)
+                {
+                    if (!GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)) continue;
+                    ReserveProperty(index, element, property.Key, property.Value);
+                }
+            }
+            return index;
+        }
+
+        private static void ReserveProperty(OwnershipIndex index, ProjectElement element, string key, string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
-                Reserve(owners, handle, element.Id + "/" + key);
+                Reserve(index, handle, element.Id + "/" + key);
         }
 
-        private static void Reserve(Dictionary<string, string> owners, string? handle, string token)
+        private static void Reserve(OwnershipIndex index, string? handle, string token)
         {
             var normalized = (handle ?? string.Empty).Trim();
-            if (normalized.Length == 0 || owners.ContainsKey(normalized)) return;
-            owners[normalized] = token;
+            if (normalized.Length == 0) return;
+            if (!index.Owners.TryGetValue(normalized, out var existing))
+            {
+                index.Owners[normalized] = token;
+                return;
+            }
+            if (!string.Equals(existing, token, StringComparison.OrdinalIgnoreCase))
+                index.Conflicts.Add(normalized);
         }
     }
 }
