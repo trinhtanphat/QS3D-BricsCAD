@@ -18,12 +18,12 @@ namespace QS3D.BricsCAD.V25
     /// <summary>
     /// Host-aware Direct Draw for Door / WallOpening. The picked LINE is the real DWG source
     /// and its plan length is authoritative WidthM. The command auto-links only the newly
-    /// created semantic opening; physical boolean cutting remains an explicit QS3DCUTOPENINGS
-    /// operation until a targeted-cut transaction is available.
+    /// created semantic opening; physical boolean cutting remains an explicit user action.
     /// </summary>
     public sealed class DirectDrawOpeningCommands
     {
         private const double PlanarityToleranceM = 0.005d;
+        private const double UcsAxisTolerance = 1e-9d;
 
         [CommandMethod("QS3DDRAWDOOR", CommandFlags.Modal)]
         public void DrawDoor() => DrawOpening(ElementCategory.Door, "Cửa Đi", defaultSillM: 0d);
@@ -196,6 +196,7 @@ namespace QS3D.BricsCAD.V25
                 var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
                 var line = new Line(safeStart, safeEnd);
                 line.SetDatabaseDefaults(document.Database);
+                line.TransformBy(document.Editor.CurrentUserCoordinateSystem);
                 var id = modelSpace.AppendEntity(line);
                 transaction.AddNewlyCreatedDBObject(line, true);
                 transaction.Commit();
@@ -308,13 +309,30 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Direct Draw Cửa/Lỗ mở hiện chỉ hỗ trợ Model Space; chuyển sang Model rồi chạy lại.");
                 transaction.Commit();
             }
+            RequireSupportedUcs(document);
+        }
+
+        private static void RequireSupportedUcs(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var coordinateSystem = document.Editor.CurrentUserCoordinateSystem.CoordinateSystem3d;
+            var zAxis = coordinateSystem.Zaxis;
+            var length = zAxis.Length;
+            if (double.IsNaN(length) || double.IsInfinity(length) || !(length > 0d))
+                throw new InvalidOperationException("Current UCS có Z axis không hợp lệ.");
+
+            var x = zAxis.X / length;
+            var y = zAxis.Y / length;
+            var z = zAxis.Z / length;
+            if (Math.Abs(x) > UcsAxisTolerance || Math.Abs(y) > UcsAxisTolerance || Math.Abs(z - 1d) > UcsAxisTolerance)
+                throw new InvalidOperationException("Direct Draw Cửa/Lỗ mở hiện chỉ hỗ trợ UCS có mặt phẳng XY song song WCS XY (có thể xoay/di chuyển trong mặt phẳng). UCS nghiêng/3D chưa được hỗ trợ.");
         }
 
         private static void FinalizeUi(Document document, ObjectId sourceId, string label, double widthM, string hostId, int regenerated)
         {
             var status = label + ": width=" + widthM.ToString("0.###", CultureInfo.InvariantCulture) +
                 " m • host=" + hostId + " • regen=" + regenerated +
-                ". Semantic + Auto Host hoàn tất; dùng QS3DCUTOPENINGS khi muốn khoét physical host.";
+                ". Semantic + Auto Host hoàn tất; dùng QS3DCUTSELECTEDOPENINGS khi muốn khoét đúng Cửa/Lỗ đang chọn.";
             try
             {
                 EnsureActive(document, "Direct Draw " + label + " / UI sync");

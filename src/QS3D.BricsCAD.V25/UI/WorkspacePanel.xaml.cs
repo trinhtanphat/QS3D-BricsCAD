@@ -4,6 +4,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
+using System.Windows.Media;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Services;
 using Application = Bricscad.ApplicationServices.Application;
@@ -22,10 +24,121 @@ namespace QS3D.BricsCAD.V25.UI
 
         public WorkspacePanel()
         {
-            InitializeComponent(); DataContext = _viewModel;
+            InitializeComponent();
+            DataContext = _viewModel;
             var propertyView = CollectionViewSource.GetDefaultView(_viewModel.Properties);
             if (propertyView != null && propertyView.CanGroup) propertyView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(PropertyRowViewModel.Group)));
+            ConfigureWorkspaceInteractions();
             Loaded += (_, __) => RefreshProject();
+        }
+
+        private void ConfigureWorkspaceInteractions()
+        {
+            PreviewKeyDown += OnWorkspacePreviewKeyDown;
+            FamilyList.PreviewMouseRightButtonDown += OnFamilyListPreviewMouseRightButtonDown;
+            InspectionList.PreviewMouseRightButtonDown += OnInspectionListPreviewMouseRightButtonDown;
+
+            var familyMenu = CreateContextMenu();
+            familyMenu.Items.Add(CreateMenuItem("Nhân bản Family", OnAddClick));
+            familyMenu.Items.Add(CreateMenuItem("Xóa Family", OnDeleteClick));
+            familyMenu.Items.Add(new Separator());
+            familyMenu.Items.Add(CreateMenuItem("Bóc đối tượng CAD đang chọn", OnCaptureSelectedClick));
+            familyMenu.Items.Add(CreateMenuItem("Vẽ / Cập nhật 3D", OnView3DClick));
+            FamilyList.ContextMenu = familyMenu;
+
+            var inspectionMenu = CreateContextMenu();
+            inspectionMenu.Items.Add(CreateMenuItem("Focus", OnFocusSelectedClick));
+            inspectionMenu.Items.Add(CreateMenuItem("Cô lập", OnIsolateSelectedClick));
+            inspectionMenu.Items.Add(CreateMenuItem("Khôi phục cô lập", OnUnisolateClick));
+            inspectionMenu.Items.Add(new Separator());
+            inspectionMenu.Items.Add(CreateMenuItem("Định vị / Zoom chọn", OnLocateSelectedClick));
+            inspectionMenu.Items.Add(CreateMenuItem("Mặt bằng", OnTopViewClick));
+            InspectionList.ContextMenu = inspectionMenu;
+        }
+
+        private ContextMenu CreateContextMenu()
+        {
+            var menu = new ContextMenu
+            {
+                Background = TryFindResource("Bg2Brush") as Brush,
+                Foreground = TryFindResource("TextBrush") as Brush,
+                BorderBrush = TryFindResource("BorderStrongBrush") as Brush,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(2)
+            };
+            return menu;
+        }
+
+        private MenuItem CreateMenuItem(string header, RoutedEventHandler handler)
+        {
+            var item = new MenuItem
+            {
+                Header = header,
+                Foreground = TryFindResource("TextBrush") as Brush,
+                Background = Brushes.Transparent,
+                Padding = new Thickness(8, 4, 12, 4)
+            };
+            item.Click += handler;
+            return item;
+        }
+
+        private void OnWorkspacePreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            var modifiers = Keyboard.Modifiers;
+            if (modifiers == ModifierKeys.Control && e.Key == Key.S)
+            {
+                OnSaveClick(this, new RoutedEventArgs());
+                e.Handled = true;
+                return;
+            }
+            if (modifiers == ModifierKeys.Control && e.Key == Key.F)
+            {
+                FamilySearch.Focus();
+                FamilySearch.SelectAll();
+                e.Handled = true;
+                return;
+            }
+            if (modifiers == ModifierKeys.Control && e.Key == Key.B)
+            {
+                OnQuantityClick(this, new RoutedEventArgs());
+                e.Handled = true;
+                return;
+            }
+            if (modifiers == ModifierKeys.None && e.Key == Key.F5)
+            {
+                OnRefreshClick(this, new RoutedEventArgs());
+                e.Handled = true;
+                return;
+            }
+            if (modifiers == ModifierKeys.None && e.Key == Key.Delete && FamilyList.IsKeyboardFocusWithin)
+            {
+                OnDeleteClick(this, new RoutedEventArgs());
+                e.Handled = true;
+            }
+        }
+
+        private void OnFamilyListPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var item = FindContainer<ListBoxItem>(FamilyList, e.OriginalSource as DependencyObject);
+            if (item != null) item.IsSelected = true;
+        }
+
+        private void OnInspectionListPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var item = FindContainer<ListViewItem>(InspectionList, e.OriginalSource as DependencyObject);
+            if (item != null) item.IsSelected = true;
+        }
+
+        private static T? FindContainer<T>(ItemsControl owner, DependencyObject? source) where T : DependencyObject
+        {
+            if (owner == null || source == null) return null;
+            var current = source;
+            while (current != null && !ReferenceEquals(current, owner))
+            {
+                if (current is T typed) return typed;
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
         }
 
         public void RefreshProject()
