@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using Bricscad.ApplicationServices;
 using Application = Bricscad.ApplicationServices.Application;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
 
@@ -24,6 +25,7 @@ namespace QS3D.BricsCAD.V25.UI
             Loaded += (_, __) => RefreshAll();
         }
 
+        private void InitializeAndRefresh() => RefreshAll();
         private void OnRefreshClick(object sender, RoutedEventArgs e) => RefreshAll();
 
         private void OnFamilyChanged(object sender, SelectionChangedEventArgs e)
@@ -59,16 +61,30 @@ namespace QS3D.BricsCAD.V25.UI
                 };
 
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var rollback = ProjectStateSnapshot.Capture(project);
                 var inherited = 0;
                 var overrides = 0;
-                foreach (var pair in values)
-                    ApplyFamilyValue(project, family, pair.Key, pair.Value, ref inherited, ref overrides);
+                var regenerated = 0;
+                try
+                {
+                    foreach (var pair in values)
+                        ApplyFamilyValue(project, family, pair.Key, pair.Value, ref inherited, ref overrides);
 
-                project.Touch();
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                PaletteCoordinator.RefreshProject();
-                RefreshSummary();
-                SetStatus("Đã lưu Family • kế thừa " + inherited + " giá trị instance • giữ " + overrides + " override • regen " + regenerated + " cấu kiện.");
+                    project.Touch();
+                    regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                }
+                catch (Exception operationError)
+                {
+                    RestoreOrThrow(project, rollback, operationError, "Lưu Family Vách Kính");
+                    throw;
+                }
+
+                TrySyncCommittedUi("Family Vách Kính", () =>
+                {
+                    PaletteCoordinator.RefreshProject();
+                    RefreshSummary();
+                    SetStatus("Đã lưu Family • kế thừa " + inherited + " giá trị instance • giữ " + overrides + " override • regen " + regenerated + " cấu kiện.");
+                });
             }
             catch (Exception ex) { SetStatus("Lưu Vách Kính lỗi: " + ex.Message); }
         }
@@ -79,12 +95,26 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 EnsureActive("tính lại Vách Kính");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
-                foreach (var element in project.Elements.Where(x => x.Category == ElementCategory.GlassWall))
-                    element.MarkDirty(ElementDirtyFlags.Quantity);
-                var count = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                PaletteCoordinator.RefreshProject();
-                RefreshSummary();
-                SetStatus("Đã tính lại " + count + " cấu kiện dirty.");
+                var rollback = ProjectStateSnapshot.Capture(project);
+                var count = 0;
+                try
+                {
+                    foreach (var element in project.Elements.Where(x => x.Category == ElementCategory.GlassWall))
+                        element.MarkDirty(ElementDirtyFlags.Quantity);
+                    count = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                }
+                catch (Exception operationError)
+                {
+                    RestoreOrThrow(project, rollback, operationError, "Tính lại Vách Kính");
+                    throw;
+                }
+
+                TrySyncCommittedUi("Tính lại Vách Kính", () =>
+                {
+                    PaletteCoordinator.RefreshProject();
+                    RefreshSummary();
+                    SetStatus("Đã tính lại " + count + " cấu kiện dirty.");
+                });
             }
             catch (Exception ex) { SetStatus("Tính lại Vách Kính lỗi: " + ex.Message); }
         }
@@ -183,6 +213,30 @@ namespace QS3D.BricsCAD.V25.UI
                     element.MarkDirty(ElementDirtyFlags.All);
                     overrides++;
                 }
+            }
+        }
+
+        private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError, string operation)
+        {
+            try
+            {
+                rollback.Restore(project);
+            }
+            catch (Exception restoreError)
+            {
+                throw new InvalidOperationException(
+                    operation + " thất bại và rollback project cũng không hoàn tất.",
+                    new AggregateException(operationError, restoreError));
+            }
+        }
+
+        private void TrySyncCommittedUi(string operation, Action sync)
+        {
+            try { sync(); }
+            catch (Exception uiError)
+            {
+                try { _document.Editor.WriteMessage("\nQS3D " + operation + " đã commit; UI sync warning: " + uiError.Message); }
+                catch { }
             }
         }
 
