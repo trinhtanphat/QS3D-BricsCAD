@@ -1,0 +1,22 @@
+name: QS3D Stirrup Core Gate
+
+on:
+  push:
+    branches:
+      - ci/stirrup-core5-20260810
+
+jobs:
+  core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - shell: pwsh
+        run: Remove-Item .github/workflows/stirrup-ci.yml -Force
+      - run: python scripts/preflight.py
+      - run: python scripts/preflight-full-domain.py
+      - run: python scripts/preflight-stirrup.py
+      - run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
