@@ -1,0 +1,38 @@
+name: QS3D Stirrup Core Gate
+
+on:
+  push:
+    branches:
+      - ci/stirrup-core-20260810
+
+jobs:
+  core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Remove temporary trigger before release-policy preflight
+        shell: pwsh
+        run: Remove-Item .github/workflows/stirrup-ci.yml -Force
+      - name: Generic preflight
+        run: python scripts/preflight.py
+      - name: Full-domain preflight
+        run: python scripts/preflight-full-domain.py
+      - name: Advanced geometry preflight
+        run: python scripts/preflight-advanced-geometry.py
+      - name: Geometry completion preflight
+        run: python scripts/preflight-geometry-completion.py
+      - name: Room curve preflight
+        run: python scripts/preflight-room-curve-sources.py
+      - name: Room lifecycle preflight
+        run: python scripts/preflight-room-lifecycle.py
+      - name: Wall junction preflight
+        run: python scripts/preflight-wall-junctions.py
+      - name: Stirrup preflight
+        run: python scripts/preflight-stirrup.py
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic smoke suite
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
