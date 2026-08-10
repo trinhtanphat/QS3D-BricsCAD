@@ -107,7 +107,7 @@ namespace QS3D.Core.Documentation
             {
                 var cells = new List<string>(normalizedColumns.Count);
                 foreach (var column in normalizedColumns)
-                    cells.Add(SemanticTagRenderer.Render(project, element, column.Template));
+                    cells.Add(SemanticTagRenderer.Render(project, element, column.Template, allowEmpty: true));
                 rows.Add(new SemanticDocumentationRow(element.Id, cells));
             }
 
