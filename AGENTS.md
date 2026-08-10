@@ -27,7 +27,8 @@ Before starting substantive work, read in this order:
 11. `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md` — guarded GlassWall/WallPier/StructuralWall/Foundation plus current Direct Draw extension summary;
 12. `docs/DIRECT-DRAW-OPENINGS.md` — **current Door/WallOpening source + Auto Host + explicit physical-cut boundary and V25 runtime checklist**;
 13. `docs/LOCAL-V25-QUALIFICATION.md` — **mandatory execution handoff for agents with interactive Windows + licensed BricsCAD V25**;
-14. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
+14. `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` — **remaining Curtain-panel, physical wall-junction, standard-specific rebar and production-signing gates that must not be marked complete from source review alone**;
+15. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
 
 The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the current handoff or current source, current `main` wins. For product-form/hosting ambiguity, `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes that requirement.
 
@@ -64,7 +65,7 @@ If an agent has permission and tooling to operate a real/local machine, that age
 - runner registration, environment variables, installed SDK/runtime inspection;
 - reproducing machine-specific crashes, DPI/layout issues, file-lock behavior, or native CAD behavior.
 
-Start local qualification from `docs/LOCAL-V25-QUALIFICATION.md`. Run `scripts/run-local-v25-qualification.ps1` against a **clean exact SHA** before manual scenario testing. Keep generated runtime evidence under `artifacts/` or another explicitly local folder; `artifacts/` is intentionally gitignored. Do not claim a customer-release qualification when the runner used `-SkipRuntime`.
+Start local qualification from `docs/LOCAL-V25-QUALIFICATION.md`. Run `scripts/run-local-v25-qualification.ps1` against a **clean exact SHA** before manual scenario testing. For feature work that is intentionally deferred to a real V25/engineering/signing environment, also read `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` and close only the gates for which the local agent can produce the required evidence. Keep generated runtime evidence under `artifacts/` or another explicitly local folder; `artifacts/` is intentionally gitignored. Do not claim a customer-release qualification when the runner used `-SkipRuntime`.
 
 Do not spend scarce local-machine access on ordinary repository editing, documentation cleanup, broad source review, or other tasks that remote agents can perform equally well unless those tasks directly unblock local validation.
 
@@ -84,7 +85,7 @@ Remote agents must not claim local BricsCAD runtime verification merely because 
 
 ## Handoff rule
 
-When a remote agent reaches a task that requires local-only access, leave the repository in a runnable/testable state and document the exact local validation needed. The canonical local execution handoff is `docs/LOCAL-V25-QUALIFICATION.md`; extend it when a new runtime-only feature needs a new scenario. When a local agent finishes that validation, commit only reusable source/scripts/docs and a sanitized text summary if useful; never commit proprietary BricsCAD DLLs, private fixtures, screenshots containing private drawings, signing secrets or raw machine evidence.
+When a remote agent reaches a task that requires local-only access, leave the repository in a runnable/testable state and document the exact local validation needed. The canonical local execution handoff is `docs/LOCAL-V25-QUALIFICATION.md`; remaining implementation/engineering/signing gates are tracked in `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`. Extend the appropriate handoff when a new runtime-only feature or unresolved local gate is discovered. When a local agent finishes that validation, commit only reusable source/scripts/docs and a sanitized text summary if useful; never commit proprietary BricsCAD DLLs, private fixtures, screenshots containing private drawings, signing secrets or raw machine evidence.
 
 When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
 
