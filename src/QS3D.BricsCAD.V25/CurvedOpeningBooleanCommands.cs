@@ -17,12 +17,22 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var count = CurvedOpeningBooleanService.CutLinkedOpenings(document, project);
+                var liveNote = string.Empty;
+                try
+                {
+                    var stamped = PhysicalOpeningCutLiveStateService.StampCurved(document, project);
+                    if (stamped > 0) liveNote = " • live-fingerprint=" + stamped;
+                }
+                catch (System.Exception stampError)
+                {
+                    liveNote = " • cảnh báo live-health metadata: " + stampError.Message;
+                }
                 PaletteCoordinator.RefreshProject();
                 var message = count == 0
                     ? "Curved Opening Cut: chưa có linked Opening/Door trên generated host open POLYLINE có bulge cần khoét."
                     : "Curved Opening Cut: đã khoét " + count + " Opening/Door trên host cong.";
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                PaletteCoordinator.SetStatus(message + liveNote);
+                document.Editor.WriteMessage("\nQS3D " + message + liveNote);
             }
             catch (System.Exception ex)
             {
