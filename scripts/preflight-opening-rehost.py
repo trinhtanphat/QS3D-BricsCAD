@@ -78,7 +78,7 @@ if CURVED.is_file():
             errors.append("curved physical-cut exact target-state missing: " + token)
 
     boolean_pos = text.find("hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);")
-    write_pos = text.find("PhysicalOpeningCutTargetState.Write(update.Host, update.OpeningIds);")
+    write_pos = text.find("CommitSemanticUpdate(project, update);")
     commit_pos = text.find("transaction.Commit();")
     if min(boolean_pos, write_pos, commit_pos) < 0 or not (boolean_pos < write_pos < commit_pos):
         errors.append("curved cut target-state must be persisted before the CAD transaction commit")

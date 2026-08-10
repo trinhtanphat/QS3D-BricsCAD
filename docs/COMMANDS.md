@@ -14,6 +14,7 @@ Updated for the integrated source baseline on 2026-08-10. These names are **Bric
 - `QS3DFAMILIES` — Family Manager: create/duplicate/rename/delete/properties/assignment while preserving true instance overrides. The **TẠO MỚI** Ribbon and Full Domain Hub expose it as the canonical Family / Type launcher before Direct Draw.
 - `QS3DMATERIALS` — Material Catalog.
 - `QS3DSAVE`, `QS3DRELOAD`, `QS3DREFRESH`, `QS3DREGEN` — persistence and deterministic regeneration.
+- `QS3DUNITS` — for drawings whose `INSUNITS` is undefined/unsupported, explicitly choose the real drawing unit and persist it atomically in `.qsdb`. A known native `INSUNITS` remains authoritative. Existing quantities are bound to their capture unit; a later mismatch is blocked until source geometry is remeasured.
 - `QS3DINSPECT` — inspect current/prompted CAD selection and synchronize the Workspace.
 - `QS3DHEALTH` — basic Model Health.
 - `QS3DHEALTHALL` — aggregate semantic/source/generated/live-solid/stale/rebar/curtain health.
@@ -133,9 +134,9 @@ Native source conventions include LINE for supported linear structure and closed
 
 - `QS3DRECOGNIZE` — deterministic recognition + review.
 - `QS3DRECOGNIZEAUTO` — auto-apply only sufficiently confident recognition.
-- `QS3DB4D` — bounded Current Space scan. It rejects layer/text matches whose CAD entity type is incompatible, excludes every generated owner-slot handle through the shared ownership policy, and keeps planar area separate from `Solid3d` total surface area. For recognized material solids, native mass-properties volume is authoritative over default prism estimates.
+- `QS3DB4D` — bounded Current Space scan. It resolves/validates drawing units before scanning, rejects layer/text matches whose CAD entity type is incompatible, excludes every generated owner-slot handle through the shared ownership policy, and keeps planar area separate from `Solid3d` total surface area. Metricless `ProxyEntity`/BRC candidates remain visible for review but cannot be auto-applied or captured until a supported measurement adapter supplies a finite positive primary metric. For recognized material solids, native mass-properties volume is authoritative over default prism estimates.
 - `QS3DBQ` — quantity summary/filter/group/Locate/XLSX.
-- `QS3DED2` — choose `Selection`, active `Floor`, active `Zone` or `All`; regenerate that semantic scope, then export `CHI_TIET` (one element per row) and Zone-aware `TONG_HOP` in one workbook.
+- `QS3DED2` — first validates the drawing-unit binding, then lets you choose `Selection`, active `Floor`, active `Zone` or `All`; regenerate that semantic scope, then export `CHI_TIET` (one element per row) and Zone-aware `TONG_HOP` in one workbook.
 - `QS3DEXCELLOCATE` — locate a `CHI_TIET`/QS3D workbook row only when Element ID, CAD Handle and DWG fingerprint provenance agree with the active project and every Handle still resolves. Legacy BLT `$decimal` Handle rows are the only no-fingerprint path and require explicit `YES`; failures preserve the current CAD selection.
 
 ## Material schedules
