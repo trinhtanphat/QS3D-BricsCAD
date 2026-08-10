@@ -8,6 +8,8 @@ errors = []
 required = [
     "src/QS3D.Core/Domain/AutoRoomLifecycle.cs",
     "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs",
+    "src/QS3D.BricsCAD.V25/Commands.cs",
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
     "src/QS3D.BricsCAD.V25/RoomBoundaryCommands.cs",
     "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs",
     "src/QS3D.BricsCAD.V25/Services/SemanticReferenceHandles.cs",
@@ -53,6 +55,16 @@ report = ROOT / "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs"
 if report.exists() and "AutoRoomLifecycle.IsExcludedFromQuantity(project, element)" not in report.read_text(encoding="utf-8"):
     errors.append("BQ must exclude stale auto rooms and direct dependents")
 
+commands = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
+if commands.exists():
+    text = commands.read_text(encoding="utf-8")
+    if text.count("SemanticReferenceHandles.Get(element)") < 3:
+        errors.append("BQ/Health/QS3DLOCATE must resolve semantic reference handles")
+
+review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+if review.exists() and review.read_text(encoding="utf-8").count("SemanticReferenceHandles.Get(element)") < 2:
+    errors.append("BBS/revision locate must resolve semantic reference handles")
+
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/AutoRoomLifecycleSmoke.cs"
 if smoke.exists():
     text = smoke.read_text(encoding="utf-8")
@@ -72,4 +84,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: auto-room provenance reuse, stale reconciliation, rollback, quantity exclusion, finish sync and regression guards are present.")
+print("PASS: auto-room provenance reuse, stale reconciliation, rollback, quantity exclusion, finish sync, semantic locate and regression guards are present.")

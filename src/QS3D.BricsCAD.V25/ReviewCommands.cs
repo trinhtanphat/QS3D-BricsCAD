@@ -60,7 +60,7 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(doc); Regenerate(project); var rows = ProjectRebarScheduleBuilder.Build(project);
                 if (rows.Count == 0) { doc.Editor.WriteMessage("\nQS3D BBS: chưa có cấu kiện khai báo RebarNotation."); return; }
-                Action<RebarScheduleRow> locate = row => { var element = project.FindElement(row.ElementId); if (element == null) return; var count = CadHandleService.Select(doc, element.SourceHandles); PaletteCoordinator.SetStatus("BBS Locate " + row.BarMark + " • " + count + " CAD object"); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
+                Action<RebarScheduleRow> locate = row => { var element = project.FindElement(row.ElementId); if (element == null) return; var count = CadHandleService.Select(doc, SemanticReferenceHandles.Get(element)); PaletteCoordinator.SetStatus("BBS Locate " + row.BarMark + " • " + count + " CAD object"); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
                 var fileName = (string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name)) + "-BBS.xlsx";
                 Application.ShowModelessWindow(IntPtr.Zero, new RebarScheduleWindow(rows, locate, fileName), true);
             });
@@ -112,7 +112,7 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DREVDIFF", () =>
             {
                 var project = ProjectContextCoordinator.GetOrCreate(doc); Regenerate(project); var before = RevisionCoordinator.LoadBaseline(doc); var after = RevisionCoordinator.CaptureCurrent(doc); var rows = new QuantityRevisionReport().Build(before, after);
-                Action<QuantityRevisionRow> locate = row => { var element = project.FindElement(row.ElementId); if (element == null) return; var count = CadHandleService.Select(doc, element.SourceHandles); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
+                Action<QuantityRevisionRow> locate = row => { var element = project.FindElement(row.ElementId); if (element == null) return; var count = CadHandleService.Select(doc, SemanticReferenceHandles.Get(element)); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
                 Application.ShowModelessWindow(IntPtr.Zero, new RevisionWindow(before, after, rows, locate), true);
                 AuditTrail.ForProject(project).Record("revision.compare", string.Empty, before.Id + " → " + after.Id + " • " + rows.Count + " quantity changes");
                 PaletteCoordinator.SetStatus("Revision diff: " + rows.Count + " thay đổi quantity.");
