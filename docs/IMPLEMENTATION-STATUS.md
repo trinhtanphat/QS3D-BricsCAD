@@ -22,6 +22,7 @@ See `docs/PRODUCT-BOUNDARY.md`. Any future standalone product requires a separat
 - BricsCAD V25 `net48/x64` plugin adapter with external `BrxMgd.dll` / `TD_Mgd.dll` references and `Private=false`.
 - Project / Zone / Floor / Family / semantic Element model with `.qsdb` schema migration, dirty flags, deterministic regeneration, audit, revision and template persistence.
 - Multi-document project cache bound to live Document/DWG identity with fingerprint and Save As guards.
+- Native `Database.SaveComplete` persists only pending semantic changes to the matching `.qsdb`; a monotonic in-memory change version avoids timestamp-resolution/clock ambiguity. Document close prompts Save/Discard/Cancel, vetoes close when persistence fails, and writes a detached LocalAppData recovery copy without treating it as the canonical sidecar.
 - Floor/Zone/Family assignment and object-based Bulk Edit require the actual `ProjectElement` instance owned by the project; same-ID foreign objects fail closed.
 - Project Tools, Floor, Zone, Family and Material editors are drawing-bound; project mutation/activation/selection-assignment/export actions require the window's bound DWG to still be the active BricsCAD document.
 - Stored custom Material Catalog metadata fails closed when a legacy/tampered record attempts to shadow a built-in material ID or name.

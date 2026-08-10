@@ -124,7 +124,7 @@ Before commercial release, also run the normal Core build/preflight and exact-SH
 
 ## Intentionally not claimed yet
 
-Version 1 still does **not** claim a generic JSON round-trip importer. The only mutating snapshot path currently documented here is the conservative `QS3DINTERCHANGEAPPEND` all-new append contract.
+Version 1 still does **not** claim a generic JSON round-trip importer. The supported mutating Core paths are deliberately narrow: the `QS3DINTERCHANGEAPPEND` all-new append contract and the source-only [`KeepTarget` collision policy](INTERCHANGE-KEEP-TARGET-IMPORT.md), which preserves every colliding target identity and discards source CAD handles. KeepTarget does not yet have a production adapter command or licensed V25 runtime qualification.
 
 Still not claimed:
 

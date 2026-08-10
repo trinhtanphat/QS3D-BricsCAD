@@ -100,7 +100,7 @@ namespace QS3D.Core.Persistence
 
             target.Metadata.Clear();
             foreach (var item in source.Metadata) target.Metadata[item.Key] = item.Value ?? string.Empty;
-            target.UpdatedUtc = source.UpdatedUtc;
+            target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);
         }
     }
 }

@@ -12,6 +12,7 @@ namespace QS3D.BricsCAD.V25
     {
         private const string RecoveryRequiredKey = "QS3D.ReadOnlyRecoveryRequired";
         private static readonly Dictionary<Document, ProjectState> Projects = new Dictionary<Document, ProjectState>();
+        private static readonly Dictionary<Document, ProjectPersistenceStamp> PersistenceStamps = new Dictionary<Document, ProjectPersistenceStamp>();
         private static readonly Dictionary<Document, string> UnsavedProjectKeys = new Dictionary<Document, string>();
         private static readonly QsdbProjectStore Store = new QsdbProjectStore();
 
@@ -39,8 +40,10 @@ namespace QS3D.BricsCAD.V25
             }
             else project = CreateDefault(document);
 
+            var persistenceStamp = new ProjectPersistenceStamp(project);
             SyncDrawingIdentity(project, document);
             Projects[document] = project;
+            PersistenceStamps[document] = persistenceStamp;
             return project;
         }
 
@@ -79,6 +82,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 using (ProjectFileLock.Acquire(path)) Store.Save(project, path);
+                GetPersistenceStamp(document, project).MarkSaved(project);
                 return path;
             }
             catch
@@ -94,15 +98,58 @@ namespace QS3D.BricsCAD.V25
             var path = GetProjectPath(document);
             if (!File.Exists(path) && !File.Exists(path + ".bak")) throw new FileNotFoundException("QS3D project file was not found.", path);
             var project = LoadProject(path);
+            var persistenceStamp = new ProjectPersistenceStamp(project);
             SyncDrawingIdentity(project, document);
             Projects[document] = project;
+            PersistenceStamps[document] = persistenceStamp;
             return project;
+        }
+
+        public static bool HasPendingChanges(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (!Projects.TryGetValue(document, out var project)) return false;
+            SyncDrawingIdentity(project, document);
+            return GetPersistenceStamp(document, project).RequiresSave(project);
+        }
+
+        public static bool TrySavePending(Document document, out string path)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            path = string.Empty;
+            if (!Projects.TryGetValue(document, out var project)) return false;
+            SyncDrawingIdentity(project, document);
+            if (!GetPersistenceStamp(document, project).RequiresSave(project)) return false;
+            path = Save(document);
+            return true;
+        }
+
+        public static string SaveRecoveryCopy(Document document, Exception saveFailure)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (saveFailure == null) throw new ArgumentNullException(nameof(saveFailure));
+            if (!Projects.TryGetValue(document, out var project))
+                throw new InvalidOperationException("No in-memory QS3D project is available for recovery.");
+
+            var recovery = ProjectStateSnapshot.CreateDetachedCopy(project);
+            recovery.Metadata["QS3D.RecoveryReason"] = SafeRecoveryText(saveFailure.GetType().Name + ": " + saveFailure.Message, 2048);
+            recovery.Metadata["QS3D.RecoveryCanonicalPath"] = GetProjectPath(document);
+            recovery.Metadata["QS3D.RecoveryCreatedUtc"] = DateTime.UtcNow.ToString("O");
+            recovery.Touch();
+
+            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QS3D", "Recovery");
+            var drawingStem = LimitFileStem(SafeFileStem(Path.GetFileNameWithoutExtension(document.Name)), 80);
+            var projectStem = LimitFileStem(SafeFileStem(project.ProjectId), 80);
+            var recoveryPath = Path.Combine(directory, drawingStem + "-" + projectStem + ".recovery.qsdb");
+            using (ProjectFileLock.Acquire(recoveryPath)) Store.Save(recovery, recoveryPath);
+            return recoveryPath;
         }
 
         public static void Forget(Document document)
         {
             if (document == null) return;
             Projects.Remove(document);
+            PersistenceStamps.Remove(document);
             UnsavedProjectKeys.Remove(document);
         }
 
@@ -112,6 +159,7 @@ namespace QS3D.BricsCAD.V25
             foreach (var document in Projects.Keys.Where(x => SameDrawingName(x.Name, drawingName)).ToArray())
             {
                 Projects.Remove(document);
+                PersistenceStamps.Remove(document);
                 UnsavedProjectKeys.Remove(document);
             }
         }
@@ -271,6 +319,31 @@ namespace QS3D.BricsCAD.V25
             return string.IsNullOrWhiteSpace(stem) ? "Untitled" : stem;
         }
 
+        private static string LimitFileStem(string value, int maxLength) =>
+            value.Length <= maxLength ? value : value.Substring(0, maxLength);
+
+        private static string SafeRecoveryText(string? value, int maxLength)
+        {
+            var source = value ?? string.Empty;
+            var limit = Math.Min(source.Length, maxLength);
+            var chars = new char[limit];
+            var count = 0;
+            for (var index = 0; index < limit; index++)
+            {
+                var current = source[index];
+                if (char.IsHighSurrogate(current) && index + 1 < limit && char.IsLowSurrogate(source[index + 1]))
+                {
+                    chars[count++] = current;
+                    chars[count++] = source[++index];
+                    continue;
+                }
+                if (char.IsSurrogate(current) || (current < ' ' && current != '\t' && current != '\n' && current != '\r'))
+                    current = '\uFFFD';
+                chars[count++] = current;
+            }
+            return new string(chars, 0, count);
+        }
+
         private static Dictionary<string, string> CaptureRecoveryMetadata(ProjectState project)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -289,6 +362,14 @@ namespace QS3D.BricsCAD.V25
         private static void RestoreMetadata(ProjectState project, IDictionary<string, string> metadata)
         {
             foreach (var item in metadata) project.Metadata[item.Key] = item.Value;
+        }
+
+        private static ProjectPersistenceStamp GetPersistenceStamp(Document document, ProjectState project)
+        {
+            if (PersistenceStamps.TryGetValue(document, out var stamp)) return stamp;
+            stamp = new ProjectPersistenceStamp(project);
+            PersistenceStamps[document] = stamp;
+            return stamp;
         }
 
         private static ProjectState CreateDefault(Document document)

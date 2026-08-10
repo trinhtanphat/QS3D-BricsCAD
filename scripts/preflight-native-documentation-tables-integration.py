@@ -128,7 +128,7 @@ if HUB.is_file():
         if ('Tag="' + command + '"') not in text: errors.append("Schedule Hub missing native Table launcher: " + command)
 if HUB_CODE.is_file():
     text = HUB_CODE.read_text(encoding="utf-8")
-    for token in ("OnCommandClick", 'SendStringToExecute(command + " ", true, false, false)'):
+    for token in ("OnCommandClick", "var normalizedCommand = command.Trim();", 'EnsureActive("chạy " + normalizedCommand)', '_document.SendStringToExecute(normalizedCommand + " ", true, false, false)'):
         if token not in text: errors.append("Schedule Hub lost generic command dispatch token: " + token)
 
 if QSDB.is_file():
