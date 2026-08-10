@@ -37,7 +37,8 @@ namespace QS3D.BricsCAD.V25
                 var x64Runtime = Environment.Is64BitProcess;
                 var packageVersionMatches = string.IsNullOrWhiteSpace(metadata.AssemblyVersion) ||
                     string.Equals(NormalizeVersion(metadata.AssemblyVersion), NormalizeVersion(pluginVersion), StringComparison.OrdinalIgnoreCase);
-                var packageSigned = string.Equals(metadata.SignatureStatus, "Valid", StringComparison.OrdinalIgnoreCase) ||
+                var signatureMetadataRecorded =
+                    string.Equals(metadata.SignatureStatus, "Valid", StringComparison.OrdinalIgnoreCase) ||
                     !string.IsNullOrWhiteSpace(metadata.SignerThumbprint);
 
                 document.Editor.WriteMessage("\nQS3D Runtime Check");
@@ -50,9 +51,10 @@ namespace QS3D.BricsCAD.V25
                 if (File.Exists(metadataPath))
                 {
                     document.Editor.WriteMessage("\n  Package metadata: " + (packageVersionMatches ? "assembly version OK" : "ASSEMBLY VERSION MISMATCH") +
-                        " • signature=" + (packageSigned ? "signed" : "unsigned/not recorded"));
+                        " • signature metadata=" + (signatureMetadataRecorded ? "recorded" : "not recorded"));
                     if (!string.IsNullOrWhiteSpace(metadata.SignerThumbprint))
-                        document.Editor.WriteMessage("\n  Signer thumbprint: " + metadata.SignerThumbprint);
+                        document.Editor.WriteMessage("\n  Recorded signer thumbprint: " + metadata.SignerThumbprint);
+                    document.Editor.WriteMessage("\n  Authenticode: metadata only here; cryptographic publisher/timestamp verification belongs to the signed installer/release gate.");
                 }
                 else
                 {
@@ -61,7 +63,7 @@ namespace QS3D.BricsCAD.V25
 
                 var ok = v25Runtime && x64Runtime && packageVersionMatches;
                 var summary = ok
-                    ? "QS3DRUNTIMECHECK PASS: adapter/runtime architecture is consistent. Run QS3DRELEASECHECK plus the licensed V25 scenario suite for release qualification."
+                    ? "QS3DRUNTIMECHECK PASS: adapter/runtime architecture is consistent. Run QS3DRELEASECHECK plus the licensed V25 scenario suite; use the signed installer/release gate for Authenticode verification."
                     : "QS3DRUNTIMECHECK FAIL: runtime/package mismatch detected; do not qualify this installation for release.";
                 document.Editor.WriteMessage("\n" + summary);
             }
