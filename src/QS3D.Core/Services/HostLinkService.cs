@@ -19,18 +19,14 @@ namespace QS3D.Core.Services
             var relationshipChanged = !string.Equals(previousHost, wall.Id, StringComparison.OrdinalIgnoreCase);
             if (previousHost.Length > 0 && relationshipChanged)
             {
-                for (var i = opening.DependsOn.Count - 1; i >= 0; i--)
-                    if (DependencyMatches(opening.DependsOn[i], previousHost)) opening.DependsOn.RemoveAt(i);
+                RemoveDependencies(opening, previousHost);
                 MarkHostOpeningRelationChanged(project.FindElement(previousHost), opening.Id, "unlinked/re-hosted");
             }
 
             opening.Properties["HostWallId"] = wall.Id;
-            var dependencyAdded = false;
-            if (!opening.DependsOn.Any(x => DependencyMatches(x, wall.Id)))
-            {
-                opening.DependsOn.Add(wall.Id);
-                dependencyAdded = true;
-            }
+            var dependencyAdded = !opening.DependsOn.Any(x => DependencyMatches(x, wall.Id));
+            RemoveDependencies(opening, wall.Id);
+            opening.DependsOn.Add(wall.Id);
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             if (relationshipChanged || dependencyAdded)
                 MarkHostOpeningRelationChanged(wall, opening.Id, "linked/re-hosted");
@@ -47,13 +43,7 @@ namespace QS3D.Core.Services
             EnsureOpening(opening, openingId);
             var hostId = opening.Properties.TryGetValue("HostWallId", out var value) ? (value ?? string.Empty).Trim() : string.Empty;
             opening.Properties.Remove("HostWallId");
-            var dependencyRemoved = false;
-            for (var i = opening.DependsOn.Count - 1; i >= 0; i--)
-            {
-                if (!DependencyMatches(opening.DependsOn[i], hostId)) continue;
-                opening.DependsOn.RemoveAt(i);
-                dependencyRemoved = true;
-            }
+            var dependencyRemoved = RemoveDependencies(opening, hostId) > 0;
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             if (hostId.Length > 0)
             {
@@ -68,6 +58,19 @@ namespace QS3D.Core.Services
             }
             project.Touch();
             AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
+        }
+
+        private static int RemoveDependencies(ProjectElement opening, string hostId)
+        {
+            if (string.IsNullOrWhiteSpace(hostId)) return 0;
+            var removed = 0;
+            for (var i = opening.DependsOn.Count - 1; i >= 0; i--)
+            {
+                if (!DependencyMatches(opening.DependsOn[i], hostId)) continue;
+                opening.DependsOn.RemoveAt(i);
+                removed++;
+            }
+            return removed;
         }
 
         private static bool DependencyMatches(string candidate, string expected)
