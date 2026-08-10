@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Xml;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 
@@ -41,6 +42,11 @@ namespace QS3D.Core.SmokeTests
                         if (xml.IndexOf(">30<", StringComparison.Ordinal) < 0) throw new Exception("Room-finish XLSX quantity is missing.");
                     }
                 }
+                File.WriteAllText(path, "ORIGINAL");
+                var invalidRow = new RoomFinishScheduleRow { FamilyName = "Invalid\u0001Family" };
+                try { RoomFinishXlsxExporter.Export(path, new List<RoomFinishScheduleRow> { invalidRow }); throw new Exception("Invalid XML text must reject room-finish XLSX export."); }
+                catch (XmlException) { }
+                if (File.ReadAllText(path) != "ORIGINAL") throw new Exception("Rejected room-finish XLSX export replaced the existing destination.");
             }
             finally { try { if (File.Exists(path)) File.Delete(path); } catch { } }
         }
