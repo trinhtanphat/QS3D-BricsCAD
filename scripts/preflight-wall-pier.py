@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 required = [
+    "src/QS3D.Core/Geometry/WallFootprintEngine.cs",
     "src/QS3D.Core/Geometry/WallPierProfilePlanner.cs",
     "src/QS3D.Core/Geometry/WallPierPathProfilePlanner.cs",
     "src/QS3D.Core/Services/SemanticRegenerators.cs",
@@ -22,6 +23,11 @@ for relative in required:
         errors.append("missing wall-pier profile file: " + relative)
 
 checks = {
+    "src/QS3D.Core/Geometry/WallFootprintEngine.cs": [
+        "Length = start.DistanceTo(end);",
+        "TranslateToLocal",
+        "HasPolygonSelfIntersection",
+    ],
     "src/QS3D.Core/Geometry/WallPierProfilePlanner.cs": [
         "WallPierProfileMode",
         "Rectangular",
@@ -39,6 +45,10 @@ checks = {
         "WallPierPathProfilePlanner",
         "new WallFootprintEngine().Build",
         "ChamferTerminalCorners",
+        "TerminalMatchTolerance",
+        "MachineEpsilon",
+        "32d * MachineEpsilon",
+        "var length = start.DistanceTo(end);",
         "WallPierProfileMode.Rectangular",
         "WallPierProfileMode.Chamfered",
         "terminal footprint corners",
@@ -121,6 +131,10 @@ checks = {
         "BentPathUsesSharedFootprintAndTerminalChamfers",
         "CurrentPathSnapshotDrivesWallPierQuantity",
         "StalePathSnapshotFallsBackToSemanticProfile",
+        "LargeFiniteStraightFootprintAvoidsSquaredLengthOverflow",
+        "new Point2(1e200d, 0d)",
+        "LargeGeoreferencedChamferedPathRemainsResolvable",
+        "const double origin = 1e12d",
         "GeneratedSolidHandle",
         "Generated WallPier host should be stale",
         "RejectsOversizedTerminalChamfer",
@@ -159,4 +173,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: WallPier LINE and open-POLYLINE Rectangular/Chamfered planning, shared footprint joins, exact current-snapshot quantities, quantity refresh, guarded native Solid3d wiring, stale cleanup, smoke and docs are present.")
+print("PASS: WallPier LINE/open-POLYLINE planning uses stable segment length, precision-aware georeferenced terminal matching, shared footprint joins, exact current-snapshot quantities, guarded native Solid3d wiring, stale cleanup, smoke and docs.")
