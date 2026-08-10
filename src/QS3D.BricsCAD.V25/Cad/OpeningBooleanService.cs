@@ -209,6 +209,9 @@ namespace QS3D.BricsCAD.V25.Cad
         }
 
         private static bool IsSupportedHost(ElementCategory category) =>
-            category == ElementCategory.ArchitecturalWall || category == ElementCategory.StructuralWall;
+            category == ElementCategory.ArchitecturalWall ||
+            category == ElementCategory.GlassWall ||
+            category == ElementCategory.WallPier ||
+            category == ElementCategory.StructuralWall;
     }
 }
