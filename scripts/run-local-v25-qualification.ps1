@@ -29,6 +29,8 @@ $pluginDll = Join-Path $repoRoot "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS
 $runtimeArtifacts = Join-Path $ArtifactDir "runtime"
 $reportPath = Join-Path $ArtifactDir "qualification.json"
 $startedAt = [DateTime]::UtcNow
+$sourceBuildCompleted = $false
+$runtimeSmokeCompleted = $false
 
 function Invoke-ExternalChecked {
     param(
@@ -133,6 +135,7 @@ try {
                     throw "Expected V25 plugin output is missing: $pluginDll"
                 }
             }
+            $sourceBuildCompleted = $true
         }
         finally {
             $env:BRICSCAD_V25_DIR = $oldBricsCadDir
@@ -149,6 +152,7 @@ try {
                 }
                 & (Join-Path $PSScriptRoot "test-bricscad-v25-runtime.ps1") @runtimeArgs
             }
+            $runtimeSmokeCompleted = $true
         }
         else {
             $steps.Add([pscustomobject]@{
@@ -195,13 +199,14 @@ finally {
     }
     $runtimeMetadata = Join-Path $runtimeArtifacts "runtime-metadata.json"
     $automatedGateStatus = if ($null -eq $fatal) { "PASS" } else { "FAIL" }
-    $runtimeSmokeStatus = if ($SkipRuntime) { "NOT_RUN" } elseif ($null -eq $fatal) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
-    $qualificationScope = if ($SkipRuntime) { "source-build" } else { "source-build+runtime-smoke" }
+    $sourceBuildStatus = if ($sourceBuildCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
+    $runtimeSmokeStatus = if ($SkipRuntime) { "NOT_RUN" } elseif ($runtimeSmokeCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
+    $qualificationScope = if ($runtimeSmokeCompleted) { "source-build+runtime-smoke" } elseif ($sourceBuildCompleted) { "source-build" } else { "incomplete" }
     $report = [ordered]@{
         schema = 2
         status = $automatedGateStatus
         automatedGateStatus = $automatedGateStatus
-        sourceBuildStatus = $automatedGateStatus
+        sourceBuildStatus = $sourceBuildStatus
         runtimeSmokeStatus = $runtimeSmokeStatus
         fullInteractiveMatrixStatus = "NOT_RUN"
         customerReleaseQualified = $false
