@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 required = [
-    "Directory.Build.props", "README.md", "AGENTS.md", "docs/CI_POLICY.md",
+    "Directory.Build.props", "README.md", "AGENTS.md", "CI_POLICY.md",
     "src/QS3D.Core/QS3D.Core.csproj", "src/QS3D.Core/Persistence/QsdbProjectStore.cs",
     "src/QS3D.Core/Services/RegenerationEngine.cs", "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs",
     "src/QS3D.Core/Export/RebarCsvExporter.cs", "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
