@@ -26,9 +26,9 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 foreach (var id in selection.Value.GetObjectIds())
                 {
-                    var line = transaction.GetObject(id, OpenMode.ForRead, false) as Line;
-                    if (line == null || line.IsErased) continue;
-                    var handle = line.Handle.ToString();
+                    var source = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                    if (source == null || source.IsErased || (!(source is Line) && !(source is Polyline))) continue;
+                    var handle = source.Handle.ToString();
                     var matches = project.Elements
                         .Where(x => x.Category == ElementCategory.GlassWall &&
                                     x.Properties.TryGetValue(HandlesKey, out var raw) && !string.IsNullOrWhiteSpace(raw) &&
@@ -38,7 +38,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (matches.Count == 0) continue;
                     if (matches.Count > 1) throw new InvalidOperationException("GlassWall source " + handle + " has ambiguous curtain-frame ownership.");
                     var element = matches[0];
-                    stamped.Add(Tuple.Create(element, CurtainWallFrameLiveFingerprint.Compute(document, transaction, project, element, line)));
+                    stamped.Add(Tuple.Create(element, CurtainWallFrameLiveFingerprint.Compute(document, transaction, project, element, source)));
                 }
                 transaction.Commit();
             }
@@ -66,18 +66,18 @@ namespace QS3D.BricsCAD.V25.Cad
                     var ids = CadHandleService.Resolve(document, element.SourceHandles);
                     if (ids.Count != 1)
                     {
-                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_LIVE_SOURCE_INVALID", HealthSeverity.Error, "Curtain frame live check cần đúng một live GlassWall LINE source.", element.Id));
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_LIVE_SOURCE_INVALID", HealthSeverity.Error, "Curtain frame live check cần đúng một live GlassWall LINE hoặc POLYLINE source.", element.Id));
                         continue;
                     }
-                    var line = transaction.GetObject(ids[0], OpenMode.ForRead, false) as Line;
-                    if (line == null || line.IsErased)
+                    var source = transaction.GetObject(ids[0], OpenMode.ForRead, false) as Entity;
+                    if (source == null || source.IsErased || (!(source is Line) && !(source is Polyline)))
                     {
-                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_LIVE_SOURCE_INVALID", HealthSeverity.Error, "Curtain frame live source không còn là LINE hợp lệ.", element.Id));
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_LIVE_SOURCE_INVALID", HealthSeverity.Error, "Curtain frame live source không còn là LINE/POLYLINE hợp lệ.", element.Id));
                         continue;
                     }
                     try
                     {
-                        var current = CurtainWallFrameLiveFingerprint.Compute(document, transaction, project, element, line);
+                        var current = CurtainWallFrameLiveFingerprint.Compute(document, transaction, project, element, source);
                         if (!string.Equals(current, stored.Trim(), StringComparison.OrdinalIgnoreCase))
                             issues.Add(new ModelHealthIssue("CURTAIN_FRAME_LIVE_GEOMETRY_STALE", HealthSeverity.Warning, "GlassWall/opening CAD geometry đã thay đổi trực tiếp sau lần dựng curtain frames; rebuild curtain frames trước khi phát hành bản vẽ.", element.Id));
                     }
