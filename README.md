@@ -20,14 +20,17 @@ QS3D is beyond prototype stage. The current source contains the following integr
 - Typed Vietnamese property editors for text/numeric, boolean and editable choices.
 - Explicit **Family / Type** and **Đối tượng / Instance** scopes; instance overrides can be reset to Family values and true overrides survive later Family changes/reassignment.
 - Category-aware **Bóc chọn** capture flow and semantic selection synchronization from source or generated CAD handles.
+- **Transactional semantic capture**: QS3D-generated handles are rejected before capture mutation; single/batch capture and room-finish generation/synchronization restore a complete `ProjectStateSnapshot` if regeneration or validation fails.
+- Generic starter Families for wall categories are aligned with specialized capture defaults, including wall-axis offsets, Curtain frame depth and WallPier profile/chamfer defaults.
 - Project/Zone/Floor/Family/Element model, `.qsdb` schema migration, audit trail, deterministic regeneration, revision baseline/diff and template import/export.
+- Dependency cycles are reported as explicit Model Health errors and block Release Readiness instead of leaving regeneration as an unexplained stall.
 - Drawing-bound Project Tools with Zone Manager, Floor/Level, Family Manager, Material Catalog and **Schedule Hub (`QS3DSCHEDULES`)**. Modeless project editors are tied to the drawing that opened them so switching DWGs does not silently mutate another project.
 - Project mutation APIs require the actual project-owned element instance rather than trusting a same-ID caller object.
 
 ### Review and viewport workflow
 
 - Locate/Zoom, Highlight, Focus, Isolate/Restore, Section Box, Section Plane and clip-display review actions.
-- Full Domain Hub, Project Tools, Schedule Hub, Rebar 3D Hub, Curtain Hub and Geometry Extensions expose the major workflows without requiring command memorization.
+- Full Domain Hub, Project Tools, Schedule Hub, Rebar 3D Hub, Curtain Hub and Geometry Extensions expose major workflows without requiring command memorization.
 
 ### Tường KT, rooms and openings
 
@@ -45,10 +48,10 @@ QS3D is beyond prototype stage. The current source contains the following integr
 
 - Deterministic panel grid, quantities, schedule and XLSX.
 - `QS3DCURTAIN3D` keeps one backing GlassWall host solid for opening booleans and adds separate ownership-protected perimeter/mullion/transom `Solid3d` overlays.
-- Supported LINE curtain frames are opening-aware: linked Door/Opening rectangles interrupt frame runs deterministically.
-- Frame state carries dedicated handles, counts, grid data, opening-aware metadata, configuration fingerprint and live-geometry validation.
+- Supported LINE Curtain frames are opening-aware: linked Door/Opening rectangles interrupt frame runs deterministically.
+- Frame state carries dedicated handles, counts, grid/opening metadata, configuration fingerprint and live-geometry validation.
 - Opening property changes and link/re-host/unlink relations stale only the dependent frame overlay when appropriate.
-- Curtain destructive ownership and dedicated ownership health use the shared generated-handle policy so newly added generated families cannot be silently erased/ignored because of a forgotten hard-coded slot.
+- Curtain destructive ownership and dedicated ownership health use the shared generated-handle policy so new generated families cannot be silently erased/ignored because of a forgotten hard-coded slot.
 - Curved/open-POLYLINE native frame overlays and panel-by-panel backing glass solids remain product/runtime work.
 
 ### Structure and rebar 3D
@@ -66,16 +69,16 @@ Generated rebar families include:
 - StructuralWall horizontal/vertical mesh — `QS3DWALLREBAR3D`;
 - **Foundation X/Y mesh — `QS3DFOUNDATIONREBAR3D`**.
 
-Slab/Foundation X/Y directions and StructuralWall horizontal/vertical directions can use independent diameters/distribution. Generated ownership, stale state, invalidation, live-solid health, mode semantics and cross-family conflict checks are integrated. `QS3DREBARHEALTHALL` includes the current generated rebar families; `QS3DHEALTHALL` and `QS3DRELEASECHECK` add model/source/generated/live-CAD/BOM checks.
+Slab/Foundation X/Y directions and StructuralWall horizontal/vertical directions can use independent diameters/distribution. Generated ownership, stale state, invalidation, live-solid health, mode semantics and cross-family conflict checks are integrated. `QS3DREBARHEALTHALL` includes the current generated rebar families; `QS3DHEALTHALL` and `QS3DRELEASECHECK` add model/source/generated/live-CAD/dependency/BOM checks.
 
-Fabrication hooks, bend radii, anchorage and code-specific detailing are not inferred without explicit configuration.
+Beam stirrups can use explicitly configured bend-radius/hook-tail parameters. Fabrication-grade code-specific hooks, laps, anchorage and detailing are **not inferred** when those rules/dimensions are absent.
 
 ### Quantity, schedules and exports
 
 - BQ grouping/filtering/Locate/XLSX and ED2 Excel/Handle round-trip.
 - Quick Takeoff with drawing-unit conversion.
 - `QS3DB4D` bounded Current Space scan with high-confidence recognition/review.
-- B4D excludes **all generated owner-slot handles through the shared ownership policy**, preventing QS3D-generated geometry from being re-ingested as source CAD when new generated families are added.
+- B4D excludes generated output via canonical Core `CollectOwnerHandles(project)`, so owner classification, parsing and dedupe remain one source of truth as generated families evolve.
 - BBS review/XLSX/UTF-8 CSV.
 - Document-bound Schedule Hub for BQ, Room Finish, Material, Curtain, Door/Opening and rebar schedule/export workflows.
 - Door/Opening schedule and XLSX with host provenance.
@@ -85,11 +88,14 @@ Fabrication hooks, bend radii, anchorage and code-specific detailing are not inf
 
 Generated ownership is treated as a product invariant rather than a UI convention:
 
+- Core `GeneratedHandleOwnershipPolicy` owns classification, parsing, enumeration, project-wide collection and owner lookup;
 - source handles and generated owner slots must not conflict;
 - destructive rebuild/erase operations fail closed on foreign or ambiguous ownership;
-- rebar, tie and curtain destructive guards use shared ownership policies;
-- semantic selection can resolve generated slab/wall/**foundation** mesh and curtain-frame handles back to their semantic owner;
-- `QS3DRELEASECHECK` includes Foundation mesh health, generated-rebar mode health, stale state, safe ownership and BOM/live-solid release guards.
+- rebar, tie and curtain destructive guards consume shared ownership policy;
+- semantic selection resolves generated slab/wall/Foundation mesh and Curtain-frame handles back to semantic owners;
+- semantic capture rejects generated output as source before project mutation;
+- host-solid ownership aliases are covered by ownership health so a generated host/cut alias cannot silently become a second owner;
+- `QS3DRELEASECHECK` includes dependency-cycle health, Foundation mesh health, generated-rebar mode health, stale state, safe ownership and BOM/live-solid release guards.
 
 See [`docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`](docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md) for the current deep audit, decisions and remaining runtime gates.
 
@@ -133,9 +139,9 @@ See [`docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`](docs/REVIEW-2026-08-10-CONT
 - `QS3DRECOGNIZE`, `QS3DRECOGNIZEAUTO`
 - `QS3DREVBASE`, `QS3DREVDIFF`
 
-The release package generates `COMMANDS.txt` directly from source `[CommandMethod]` declarations, so the package command manifest is not maintained as a stale hand-written list.
+The release package generates `COMMANDS.txt` directly from source `[CommandMethod]` declarations, so package command inventory is not a stale hand-written list.
 
-See [`docs/COMMANDS.md`](docs/COMMANDS.md) for detailed command/workflow notes.
+See [`docs/COMMANDS.md`](docs/COMMANDS.md) for detailed workflow notes.
 
 ## Architecture
 
@@ -150,16 +156,18 @@ See [`docs/COMMANDS.md`](docs/COMMANDS.md) for detailed command/workflow notes.
 
 Source presence is **not** BricsCAD V25 runtime proof. Before calling a release production-ready, the exact release SHA still needs a licensed interactive Windows x64 BricsCAD V25 environment for:
 
-1. adapter compile against the exact V25 managed assemblies;
+1. adapter compile against exact V25 managed assemblies;
 2. NETLOAD/DemandLoad and command/Ribbon/palette smoke;
 3. save/reopen and multi-DWG lifecycle on representative private drawings;
-4. wall, WallPier, opening, curtain host/frame, slab/wall/foundation mesh and other rebar native Solid3d regression;
-5. Auto Host ambiguity/elevation regression;
-6. Room Auto mixed LINE/POLYLINE/ARC/SPLINE topology regression;
-7. Schedule Hub/export/traceability regression;
-8. `QS3DRELEASECHECK` on representative project data;
-9. Unicode/HiDPI visual regression;
-10. large-model performance tests.
+4. wall, WallPier, opening, Curtain host/frame, slab/wall/Foundation mesh and other rebar native Solid3d regression;
+5. transactional capture/finish rollback and generated-source rejection regression;
+6. Auto Host ambiguity/elevation regression;
+7. Room Auto mixed LINE/POLYLINE/ARC/SPLINE topology regression;
+8. Schedule Hub/export/traceability and dependency-cycle health regression;
+9. `QS3DRELEASECHECK` on representative project data;
+10. install/update rollback + signed-manifest version-binding qualification;
+11. Unicode/HiDPI visual regression;
+12. large-model performance tests.
 
 Until those gates are green, runtime-dependent paths are described as **implemented source paths**, not verified production behavior.
 
@@ -180,6 +188,8 @@ Current manual workflows:
 - `release-v25.yml` — owner-approved build/package/GitHub Release workflow.
 
 `release-v25.yml` additionally requires `confirm_release=RELEASE`. It runs source gates, Core build/smoke, V25 x64 build, optional real V25 runtime validation, packaging, SHA-256 generation and GitHub Release publication only after an explicit owner request.
+
+Per-user autoload installation/replacement is transactional and rolls back prior files/registry state on failure. Updater version decisions are bound to a cryptographically verified signed manifest so unsigned version substitution/replay mismatches are rejected before installation. Production certificate/signing operations remain external release work.
 
 No push/tag automatically publishes a release.
 
