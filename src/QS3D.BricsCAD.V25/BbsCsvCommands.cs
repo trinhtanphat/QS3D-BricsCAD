@@ -50,8 +50,8 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
-                document.Editor.WriteMessage("\nQS3DBBSCSV error: " + ex.Message);
-                PaletteCoordinator.SetStatus("QS3DBBSCSV lỗi: " + ex.Message);
+                try { document.Editor.WriteMessage("\nQS3DBBSCSV error: " + ex.Message); } catch { }
+                TrySetStatus("QS3DBBSCSV lỗi: " + ex.Message);
             }
         }
 
@@ -73,6 +73,12 @@ namespace QS3D.BricsCAD.V25
                     // Export has already committed; UI reporting is best effort only.
                 }
             }
+        }
+
+        private static void TrySetStatus(string status)
+        {
+            try { PaletteCoordinator.SetStatus(status); }
+            catch { }
         }
     }
 }
