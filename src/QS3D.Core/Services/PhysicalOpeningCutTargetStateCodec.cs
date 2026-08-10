@@ -105,7 +105,8 @@ namespace QS3D.Core.Services
                 if (id.Length == 0) continue;
                 if (id.Length > MaxElementIdLength)
                     throw new InvalidOperationException("Physical opening target id exceeds " + MaxElementIdLength + " characters.");
-                result.Add(id);
+                if (!result.Add(id))
+                    throw new InvalidOperationException("Physical opening target-state contains duplicate opening id: " + id + ".");
                 if (result.Count > MaxOpeningIds)
                     throw new InvalidOperationException("Physical opening target-state exceeds the " + MaxOpeningIds + " opening id limit.");
             }
