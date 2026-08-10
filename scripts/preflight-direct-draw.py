@@ -15,6 +15,8 @@ required = {
         "SemanticCaptureService.Capture(document, category)",
         "ProjectStateSnapshot.Capture(project)",
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
+        "GeneratedGeometryService.FindMatchingOwnedHandles(document, project.ProjectId, elementId, category)",
+        "ownershipDiscoveryError",
         "rollback.Restore(project)",
         "EraseHandles(document, cleanupHandles)",
         "RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
@@ -27,9 +29,19 @@ required = {
         "PromptPositiveMeters",
         "FamilyNumber",
         "AllowNone = points.Count >= minimumPoints",
+        "PlanarityToleranceM = 0.005d",
+        "CadGeometryGuard.ToMeters(document, deltaDrawingUnits",
+        "RequireModelSpace(document)",
+        "document.Database.CurrentSpaceId.Equals(modelSpaceId)",
         "CadHandleService.GetLiveHandles(document, normalized)",
         "Direct Draw rollback còn CAD handle chưa xóa",
         "QS3DVIEW3D",
+    ],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs": [
+        "FindMatchingOwnedHandles",
+        "GetXDataForApplication(RegAppName)",
+        "BlockTableRecord.ModelSpace",
+        "HasMatchingOwnership(entity, normalizedProjectId, normalizedElementId, category)",
     ],
     "src/QS3D.BricsCAD.V25/Build3DCommands.cs": [
         'CommandMethod("QS3DBUILD3D"',
@@ -141,14 +153,19 @@ if source.is_file():
     capture = text.find("SemanticCaptureService.Capture(document, category)")
     regenerate = text.find("var regenerated = new RegenerationEngine")
     build = text.find("BuildSelected(document, project, category)")
+    discover = text.find("GeneratedGeometryService.FindMatchingOwnedHandles")
     restore = text.find("rollback.Restore(project)")
     erase = text.find("EraseHandles(document, cleanupHandles)")
-    if min(create, capture, regenerate, build, restore, erase) < 0:
+    if min(create, capture, regenerate, build, discover, restore, erase) < 0:
         errors.append("Direct Draw transaction/rollback ordering tokens are incomplete")
-    elif not (create < capture < regenerate < build < restore < erase):
-        errors.append("Direct Draw must create source -> capture -> semantic regen -> build, then restore semantic state before CAD cleanup")
+    elif not (create < capture < regenerate < build < discover < restore < erase):
+        errors.append("Direct Draw must create source -> capture -> semantic regen -> build; failure discovers tagged output before semantic restore and CAD cleanup")
     if "priorGenerated.Contains(handle)" not in text:
         errors.append("Direct Draw rollback must preserve generated handles that existed before the operation")
+    if text.count("RequireModelSpace(document);") < 4:
+        errors.append("Every P0 Direct Draw command must fail closed outside Model Space")
+    if "Math.Abs(points[index].Z - z) > 1e-6d" in text:
+        errors.append("Direct Draw planarity must be unit-aware rather than using raw drawing-unit tolerance")
     erase_body = text.split("private static void EraseHandles", 1)[-1].split("private static Document? Active", 1)[0]
     if "catch { }" in erase_body or "catch{}" in erase_body.replace(" ", ""):
         errors.append("Direct Draw CAD rollback must not swallow per-entity erase failures")
@@ -169,8 +186,7 @@ if build3d.is_file():
 
 print("QS3D Direct Draw P0 preflight")
 if errors:
-    for error in errors:
-        print("ERROR:", error)
+    for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw and QS3DBUILD3D validate semantic state before CAD mutation, reject mixed atomicity hazards, verify rollback cleanup, reuse guarded builders and expose P0 authoring UI.")
+print("PASS: Direct Draw validates semantic state before CAD mutation, is Model-Space/unit aware, discovers tagged orphan output for rollback, verifies cleanup, reuses guarded builders and exposes P0 authoring UI.")
