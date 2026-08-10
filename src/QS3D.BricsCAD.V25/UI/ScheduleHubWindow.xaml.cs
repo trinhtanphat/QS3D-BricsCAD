@@ -41,6 +41,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 ElementCountText.Text = project.Elements.Count.ToString(CultureInfo.InvariantCulture);
+                FinishCountText.Text = project.Elements.Count(x => IsRoomFinish(x.Category)).ToString(CultureInfo.InvariantCulture);
                 DoorCountText.Text = project.Elements.Count(x => x.Category == ElementCategory.Door || x.Category == ElementCategory.WallOpening).ToString(CultureInfo.InvariantCulture);
                 CurtainCountText.Text = project.Elements.Count(x => x.Category == ElementCategory.GlassWall).ToString(CultureInfo.InvariantCulture);
                 MaterialCountText.Text = ProjectMaterialCatalog.ReferencedMaterialNames(project).Count.ToString(CultureInfo.InvariantCulture);
@@ -55,6 +56,15 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
                 throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Schedule Hub trước khi " + operation + ".");
+        }
+
+        private static bool IsRoomFinish(ElementCategory category)
+        {
+            return category == ElementCategory.FloorFinish ||
+                   category == ElementCategory.Waterproofing ||
+                   category == ElementCategory.Skirting ||
+                   category == ElementCategory.WallFinish ||
+                   category == ElementCategory.CeilingFinish;
         }
 
         private static string DrawingLabel(Document document)
