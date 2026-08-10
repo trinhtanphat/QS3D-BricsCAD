@@ -136,28 +136,37 @@ namespace QS3D.Core.Domain
 
         private static void RenameReferences(ProjectState project, string previousName, string nextName)
         {
+            var inheritedMaterialFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var inheritedFrameFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var family in project.Families)
             {
-                RenameReference(family.Properties, "Material", previousName, nextName);
-                RenameReference(family.Properties, "CurtainFrameMaterial", previousName, nextName);
+                if (RenameReference(family.Properties, "Material", previousName, nextName)) inheritedMaterialFamilies.Add(family.Id);
+                if (RenameReference(family.Properties, "CurtainFrameMaterial", previousName, nextName)) inheritedFrameFamilies.Add(family.Id);
             }
             foreach (var element in project.Elements)
             {
-                RenameElementReference(element, "Material", previousName, nextName);
-                RenameElementReference(element, "CurtainFrameMaterial", previousName, nextName);
+                RenameElementReference(element, "Material", previousName, nextName, inheritedMaterialFamilies.Contains(element.FamilyId));
+                RenameElementReference(element, "CurtainFrameMaterial", previousName, nextName, inheritedFrameFamilies.Contains(element.FamilyId));
             }
         }
 
-        private static void RenameReference(IDictionary<string, string> properties, string key, string previousName, string nextName)
+        private static bool RenameReference(IDictionary<string, string> properties, string key, string previousName, string nextName)
         {
-            if (properties.TryGetValue(key, out var value) && string.Equals((value ?? string.Empty).Trim(), previousName, StringComparison.OrdinalIgnoreCase))
-                properties[key] = nextName;
+            if (!properties.TryGetValue(key, out var value) || !string.Equals((value ?? string.Empty).Trim(), previousName, StringComparison.OrdinalIgnoreCase)) return false;
+            properties[key] = nextName;
+            return true;
         }
 
-        private static void RenameElementReference(ProjectElement element, string key, string previousName, string nextName)
+        private static void RenameElementReference(ProjectElement element, string key, string previousName, string nextName, bool inheritedFamilyChanged)
         {
-            if (element.Properties.TryGetValue(key, out var value) && string.Equals((value ?? string.Empty).Trim(), previousName, StringComparison.OrdinalIgnoreCase))
-                element.SetProperty(key, nextName);
+            if (element.Properties.TryGetValue(key, out var value))
+            {
+                if (string.Equals((value ?? string.Empty).Trim(), previousName, StringComparison.OrdinalIgnoreCase))
+                    element.SetProperty(key, nextName);
+                return;
+            }
+            if (inheritedFamilyChanged)
+                element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
         }
 
         private static void AddMaterial(IDictionary<string, string> properties, ISet<string> names)
