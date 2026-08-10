@@ -41,7 +41,12 @@ namespace QS3D.BricsCAD.V25.Cad
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             var selection = document.Editor.SelectImplied();
-            if (selection.Status != PromptStatus.OK || selection.Value == null) return new CurtainFrameBuildResult();
+            if (selection.Status != PromptStatus.OK || selection.Value == null)
+            {
+                selection = document.Editor.GetSelection();
+                if (selection.Status != PromptStatus.OK || selection.Value == null) return new CurtainFrameBuildResult();
+                document.Editor.SetImpliedSelection(selection.Value.GetObjectIds());
+            }
             var ids = selection.Value.GetObjectIds();
             if (ids.Length == 0) return new CurtainFrameBuildResult();
 
@@ -70,9 +75,9 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (!processed.Add(element.Id)) throw new InvalidOperationException("GlassWall " + element.Id + " có nhiều source LINE đang được chọn. Tách/capture từng source trước khi dựng curtain frame 3D.");
 
                     var family = project.FindFamily(element.FamilyId);
-                    var dx = CadGeometryGuard.Finite(line.EndPoint.X - line.StartPoint.X, element.Id + "/curtain dx");
-                    var dy = CadGeometryGuard.Finite(line.EndPoint.Y - line.StartPoint.Y, element.Id + "/curtain dy");
-                    var dz = CadGeometryGuard.Finite(line.EndPoint.Z - line.StartPoint.Z, element.Id + "/curtain dz");
+                    var dx = CadGeometryGuard.Subtract(line.EndPoint.X, line.StartPoint.X, element.Id + "/curtain dx");
+                    var dy = CadGeometryGuard.Subtract(line.EndPoint.Y, line.StartPoint.Y, element.Id + "/curtain dy");
+                    var dz = CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z, element.Id + "/curtain dz");
                     var lengthDrawing = CadGeometryGuard.Hypot(dx, dy, element.Id + "/curtain length");
                     if (lengthDrawing <= 1e-8d) throw new InvalidOperationException("GlassWall source LINE quá ngắn: " + element.Id);
                     var dzM = Math.Abs(CadGeometryGuard.ToMeters(document, dz, element.Id + "/curtain dz"));
@@ -157,10 +162,12 @@ namespace QS3D.BricsCAD.V25.Cad
             var width = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, frame.WidthM, label + "/frame width"), label + "/frame width drawing");
             var depth = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, depthM, label + "/frame depth"), label + "/frame depth drawing");
             var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, frame.HeightM, label + "/frame height"), label + "/frame height drawing");
-            var centerStation = CadGeometryGuard.ToDrawingUnits(document, frame.X_M + frame.WidthM / 2d, label + "/frame station");
-            var centerZOffset = CadGeometryGuard.ToDrawingUnits(document, frame.Z_M + frame.HeightM / 2d, label + "/frame Z offset");
-            var centerX = CadGeometryGuard.Add(line.StartPoint.X, CadGeometryGuard.Finite(ux * centerStation, label + "/frame center dx"), label + "/frame center X");
-            var centerY = CadGeometryGuard.Add(line.StartPoint.Y, CadGeometryGuard.Finite(uy * centerStation, label + "/frame center dy"), label + "/frame center Y");
+            var stationM = CadGeometryGuard.Add(frame.X_M, frame.WidthM / 2d, label + "/frame station meters");
+            var zOffsetM = CadGeometryGuard.Add(frame.Z_M, frame.HeightM / 2d, label + "/frame Z offset meters");
+            var centerStation = CadGeometryGuard.ToDrawingUnits(document, stationM, label + "/frame station");
+            var centerZOffset = CadGeometryGuard.ToDrawingUnits(document, zOffsetM, label + "/frame Z offset");
+            var centerX = CadGeometryGuard.Add(line.StartPoint.X, CadGeometryGuard.Multiply(ux, centerStation, label + "/frame center dx"), label + "/frame center X");
+            var centerY = CadGeometryGuard.Add(line.StartPoint.Y, CadGeometryGuard.Multiply(uy, centerStation, label + "/frame center dy"), label + "/frame center Y");
             var centerZ = CadGeometryGuard.Add(baseZ, centerZOffset, label + "/frame center Z");
             var solid = new Solid3d();
             try
