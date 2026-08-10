@@ -18,6 +18,10 @@ if SOURCE.is_file():
     for token in (
         "public QuantityRuleElementPreview PreviewElement",
         "public QuantityRuleProjectPreview PreviewProject",
+        "public long SourceChangeVersion",
+        "var sourceChangeVersion = project.ChangeVersion;",
+        "preview.SourceChangeVersion != project.ChangeVersion",
+        "project changed after preview",
         "ProjectStateSnapshot.CreateDetachedCopy(project)",
         "public int ApplyElement",
         "public int ApplyProject",
@@ -60,6 +64,9 @@ if SMOKE.is_file():
         "PreviewIsReadOnlyAndClassifiesChanges();",
         "ProvenanceOnlyStaleOutputIsRemoved();",
         "StaleElementPreviewFailsBeforeMutation();",
+        "ChangeVersionInvalidatesEquivalentPreview();",
+        "project.Touch();",
+        "preview.SourceChangeVersion",
         "ProjectPreviewAppliesAtomicallyFromFreshState();",
         "HealthGuardedProjectApplyReturnsRegressionDiff();",
         "ForeignElementInstanceFailsClosed();",
@@ -80,4 +87,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: quantity rules support detached element/project previews, add/change/remove deltas with provenance, stale-preview rejection, exact project ownership, atomic batch apply, and rollback when a guarded apply introduces new Model Health errors.")
+print("PASS: quantity rules support detached previews bound to ProjectState.ChangeVersion, add/change/remove provenance deltas, stale-preview rejection, exact ownership, atomic batch apply and rollback on new Model Health errors.")
