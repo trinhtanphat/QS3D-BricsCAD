@@ -6,6 +6,7 @@ using Bricscad.ApplicationServices;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 
@@ -41,148 +42,178 @@ namespace QS3D.BricsCAD.V25.Cad
 
             var pending = new List<PendingHostUpdate>();
             var cuts = 0;
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var cadCommitted = false;
+            try
             {
-                foreach (var group in linked)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var host = project.FindElement(group.Key) ?? throw new InvalidOperationException("Opening host not found: " + group.Key);
-                    if (!SupportedHost(host.Category)) continue;
-                    if (!host.Properties.TryGetValue("GeneratedSolidHandle", out var solidHandle) || string.IsNullOrWhiteSpace(solidHandle)) continue;
-                    var hostSourceId = ResolveSingle(document, host.SourceHandles, "curved host source " + host.Id);
-                    if (hostSourceId.IsNull) continue;
-                    var hostSource = transaction.GetObject(hostSourceId, OpenMode.ForRead, false) as Polyline;
-                    if (hostSource == null || hostSource.IsErased) continue;
-                    ValidateHostPolyline(hostSource, host.Id);
-                    if (!HasBulge(hostSource)) continue;
-
-                    var solidId = ResolveSingle(document, new[] { solidHandle }, "curved generated host solid " + host.Id);
-                    if (solidId.IsNull) continue;
-                    var hostSolid = transaction.GetObject(solidId, OpenMode.ForWrite, false) as Solid3d;
-                    if (hostSolid == null || hostSolid.IsErased) continue;
-                    if (host.IsGeneratedSolidStale())
-                        throw new InvalidOperationException("Host " + host.Id + " has stale generated geometry. Rebuild 3D before cutting curved openings.");
-                    GeneratedGeometryService.RequireMatchingOwnership(hostSolid, project, host, "cut curved openings in Solid3d " + solidHandle.Trim());
-
-                    var family = project.FindFamily(host.FamilyId);
-                    var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "ThicknessM", 0.2d), host.Id + "/ThicknessM");
-                    var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "HeightM", 3.6d), host.Id + "/HeightM");
-                    var bottomOffsetM = CadGeometryGuard.Number(host, family, "BottomOffsetM", 0d);
-                    var sagittaM = ProjectNumber(project, "WallArcSagittaM", 0.002d, 1e-6d);
-                    var maximumOffsetM = ProjectNumber(project, "PhysicalOpeningMaximumOffsetM", 0.35d, 1e-6d);
-                    var ambiguityM = ProjectNumber(project, "PhysicalOpeningAmbiguityM", 0.01d, 0d);
-                    var miterLimit = ProjectNumber(project, "WallMiterLimit", 4d, 1d);
-                    var centerline = ReadCenterline(document, hostSource, sagittaM, host.Id);
-                    var preparedCuts = new List<PreparedCut>();
-
-                    foreach (var opening in group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+                    foreach (var group in linked)
                     {
-                        var openingFamily = project.FindFamily(opening.FamilyId);
-                        var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "WidthM", 0.9d), opening.Id + "/WidthM");
-                        var openingHeightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "HeightM", 2.2d), opening.Id + "/HeightM");
-                        var sillM = CadGeometryGuard.Number(opening, openingFamily, "SillHeightM", CadGeometryGuard.Number(opening, openingFamily, "BottomOffsetM", 0d));
-                        if (sillM < 0d) throw new InvalidOperationException(opening.Id + "/SillHeightM phải >= 0.");
-                        var clearanceM = CadGeometryGuard.Number(opening, openingFamily, "BooleanClearanceM", 0.01d);
-                        if (clearanceM < 0d) throw new InvalidOperationException(opening.Id + "/BooleanClearanceM phải >= 0.");
-                        var openingSourceId = ResolveSingle(document, opening.SourceHandles, "curved opening source " + opening.Id);
-                        if (openingSourceId.IsNull) throw new InvalidOperationException("Opening " + opening.Id + " chưa có live CAD source để xác định vị trí khoét cong.");
-                        var openingEntity = transaction.GetObject(openingSourceId, OpenMode.ForRead, false) as Entity;
-                        if (openingEntity == null || openingEntity.IsErased) throw new InvalidOperationException("Opening source không còn live: " + opening.Id);
-                        var extents = openingEntity.GeometricExtents;
-                        var centerX = CadGeometryGuard.Midpoint(extents.MinPoint.X, extents.MaxPoint.X, opening.Id + "/center X");
-                        var centerY = CadGeometryGuard.Midpoint(extents.MinPoint.Y, extents.MaxPoint.Y, opening.Id + "/center Y");
-                        var openingPoint = new Point2(
-                            CadGeometryGuard.ToMeters(document, centerX, opening.Id + "/center X"),
-                            CadGeometryGuard.ToMeters(document, centerY, opening.Id + "/center Y"));
+                        var host = project.FindElement(group.Key) ?? throw new InvalidOperationException("Opening host not found: " + group.Key);
+                        if (!SupportedHost(host.Category)) continue;
+                        if (!host.Properties.TryGetValue("GeneratedSolidHandle", out var solidHandle) || string.IsNullOrWhiteSpace(solidHandle)) continue;
+                        var hostSourceId = ResolveSingle(document, host.SourceHandles, "curved host source " + host.Id);
+                        if (hostSourceId.IsNull) continue;
+                        var hostSource = transaction.GetObject(hostSourceId, OpenMode.ForRead, false) as Polyline;
+                        if (hostSource == null || hostSource.IsErased) continue;
+                        ValidateHostPolyline(hostSource, host.Id);
+                        if (!HasBulge(hostSource)) continue;
 
-                        var footprint = CurvedOpeningFootprintPlanner.Plan(new CurvedOpeningFootprintInput
-                        {
-                            Centerline = centerline,
-                            OpeningPoint = openingPoint,
-                            OpeningWidthM = widthM,
-                            HostThicknessM = thicknessM,
-                            ClearanceM = clearanceM,
-                            MaximumCenterlineOffsetM = maximumOffsetM,
-                            AmbiguityMarginM = ambiguityM,
-                            MiterLimit = miterLimit,
-                            ToleranceM = 1e-9d
-                        });
-                        var vertical = OpeningCutPlanner.Plan(new OpeningCutInput
-                        {
-                            HostLengthM = footprint.HostCenterlineLengthM,
-                            HostThicknessM = thicknessM,
-                            HostHeightM = heightM,
-                            OpeningWidthM = widthM,
-                            OpeningHeightM = openingHeightM,
-                            SillHeightM = sillM,
-                            CenterAlongHostM = footprint.CenterStationM,
-                            ClearanceM = clearanceM
-                        });
-                        preparedCuts.Add(new PreparedCut
-                        {
-                            OpeningId = opening.Id,
-                            Footprint = footprint,
-                            Vertical = vertical,
-                            FingerprintPart = opening.Id + ":" + openingSourceId.Handle + ":" +
-                                openingPoint.X.ToString("R", CultureInfo.InvariantCulture) + "," + openingPoint.Y.ToString("R", CultureInfo.InvariantCulture) + ":" +
-                                widthM.ToString("R", CultureInfo.InvariantCulture) + ":" + openingHeightM.ToString("R", CultureInfo.InvariantCulture) + ":" +
-                                sillM.ToString("R", CultureInfo.InvariantCulture) + ":" + clearanceM.ToString("R", CultureInfo.InvariantCulture) + ":" +
-                                footprint.CenterStationM.ToString("R", CultureInfo.InvariantCulture)
-                        });
-                    }
+                        var solidId = ResolveSingle(document, new[] { solidHandle }, "curved generated host solid " + host.Id);
+                        if (solidId.IsNull) continue;
+                        var hostSolid = transaction.GetObject(solidId, OpenMode.ForWrite, false) as Solid3d;
+                        if (hostSolid == null || hostSolid.IsErased) continue;
+                        if (host.IsGeneratedSolidStale())
+                            throw new InvalidOperationException("Host " + host.Id + " has stale generated geometry. Rebuild 3D before cutting curved openings.");
+                        GeneratedGeometryService.RequireMatchingOwnership(hostSolid, project, host, "cut curved openings in Solid3d " + solidHandle.Trim());
 
-                    var fingerprint = CurvedFingerprint(
-                        hostSourceId.Handle.ToString(),
-                        centerline,
-                        thicknessM,
-                        heightM,
-                        bottomOffsetM,
-                        sagittaM,
-                        preparedCuts.Select(x => x.FingerprintPart).ToList());
-                    var currentSolidHandle = solidId.Handle.ToString();
-                    if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var previousSolid) &&
-                        string.Equals(previousSolid, currentSolidHandle, StringComparison.OrdinalIgnoreCase) &&
-                        host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var previousFingerprint))
-                    {
-                        if (string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal)) continue;
-                        throw new InvalidOperationException("Host " + host.Id + " đã được khoét trên generated solid hiện tại nhưng geometry/fingerprint đã thay đổi. Build 3D lại host trước khi khoét curved openings.");
-                    }
-                    foreach (var prepared in preparedCuts)
-                    {
-                        using (var cutter = BuildCutter(
-                            document,
-                            hostSource.Elevation,
-                            bottomOffsetM,
-                            prepared.Footprint.CutterPolygon,
-                            prepared.Vertical.CutterHeightM,
-                            prepared.Vertical.BaseElevationM,
-                            prepared.OpeningId))
+                        var family = project.FindFamily(host.FamilyId);
+                        var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "ThicknessM", 0.2d), host.Id + "/ThicknessM");
+                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "HeightM", 3.6d), host.Id + "/HeightM");
+                        var bottomOffsetM = CadGeometryGuard.Number(host, family, "BottomOffsetM", 0d);
+                        var sagittaM = ProjectNumber(project, "WallArcSagittaM", 0.002d, 1e-6d);
+                        var maximumOffsetM = ProjectNumber(project, "PhysicalOpeningMaximumOffsetM", 0.35d, 1e-6d);
+                        var ambiguityM = ProjectNumber(project, "PhysicalOpeningAmbiguityM", 0.01d, 0d);
+                        var miterLimit = ProjectNumber(project, "WallMiterLimit", 4d, 1d);
+                        var centerline = ReadCenterline(document, hostSource, sagittaM, host.Id);
+                        var preparedCuts = new List<PreparedCut>();
+
+                        foreach (var opening in group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                         {
-                            hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
+                            var openingFamily = project.FindFamily(opening.FamilyId);
+                            var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "WidthM", 0.9d), opening.Id + "/WidthM");
+                            var openingHeightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "HeightM", 2.2d), opening.Id + "/HeightM");
+                            var sillM = CadGeometryGuard.Number(opening, openingFamily, "SillHeightM", CadGeometryGuard.Number(opening, openingFamily, "BottomOffsetM", 0d));
+                            if (sillM < 0d) throw new InvalidOperationException(opening.Id + "/SillHeightM phải >= 0.");
+                            var clearanceM = CadGeometryGuard.Number(opening, openingFamily, "BooleanClearanceM", 0.01d);
+                            if (clearanceM < 0d) throw new InvalidOperationException(opening.Id + "/BooleanClearanceM phải >= 0.");
+                            var openingSourceId = ResolveSingle(document, opening.SourceHandles, "curved opening source " + opening.Id);
+                            if (openingSourceId.IsNull) throw new InvalidOperationException("Opening " + opening.Id + " chưa có live CAD source để xác định vị trí khoét cong.");
+                            var openingEntity = transaction.GetObject(openingSourceId, OpenMode.ForRead, false) as Entity;
+                            if (openingEntity == null || openingEntity.IsErased) throw new InvalidOperationException("Opening source không còn live: " + opening.Id);
+                            var extents = openingEntity.GeometricExtents;
+                            var centerX = CadGeometryGuard.Midpoint(extents.MinPoint.X, extents.MaxPoint.X, opening.Id + "/center X");
+                            var centerY = CadGeometryGuard.Midpoint(extents.MinPoint.Y, extents.MaxPoint.Y, opening.Id + "/center Y");
+                            var openingPoint = new Point2(
+                                CadGeometryGuard.ToMeters(document, centerX, opening.Id + "/center X"),
+                                CadGeometryGuard.ToMeters(document, centerY, opening.Id + "/center Y"));
+
+                            var footprint = CurvedOpeningFootprintPlanner.Plan(new CurvedOpeningFootprintInput
+                            {
+                                Centerline = centerline,
+                                OpeningPoint = openingPoint,
+                                OpeningWidthM = widthM,
+                                HostThicknessM = thicknessM,
+                                ClearanceM = clearanceM,
+                                MaximumCenterlineOffsetM = maximumOffsetM,
+                                AmbiguityMarginM = ambiguityM,
+                                MiterLimit = miterLimit,
+                                ToleranceM = 1e-9d
+                            });
+                            var vertical = OpeningCutPlanner.Plan(new OpeningCutInput
+                            {
+                                HostLengthM = footprint.HostCenterlineLengthM,
+                                HostThicknessM = thicknessM,
+                                HostHeightM = heightM,
+                                OpeningWidthM = widthM,
+                                OpeningHeightM = openingHeightM,
+                                SillHeightM = sillM,
+                                CenterAlongHostM = footprint.CenterStationM,
+                                ClearanceM = clearanceM
+                            });
+                            preparedCuts.Add(new PreparedCut
+                            {
+                                OpeningId = opening.Id,
+                                Footprint = footprint,
+                                Vertical = vertical,
+                                FingerprintPart = opening.Id + ":" + openingSourceId.Handle + ":" +
+                                    openingPoint.X.ToString("R", CultureInfo.InvariantCulture) + "," + openingPoint.Y.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                    widthM.ToString("R", CultureInfo.InvariantCulture) + ":" + openingHeightM.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                    sillM.ToString("R", CultureInfo.InvariantCulture) + ":" + clearanceM.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                    footprint.CenterStationM.ToString("R", CultureInfo.InvariantCulture)
+                            });
                         }
-                        cuts++;
+
+                        var fingerprint = CurvedFingerprint(
+                            hostSourceId.Handle.ToString(),
+                            centerline,
+                            thicknessM,
+                            heightM,
+                            bottomOffsetM,
+                            sagittaM,
+                            preparedCuts.Select(x => x.FingerprintPart).ToList());
+                        var currentSolidHandle = solidId.Handle.ToString();
+                        if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var previousSolid) &&
+                            string.Equals(previousSolid, currentSolidHandle, StringComparison.OrdinalIgnoreCase) &&
+                            host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var previousFingerprint))
+                        {
+                            if (string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal)) continue;
+                            throw new InvalidOperationException("Host " + host.Id + " đã được khoét trên generated solid hiện tại nhưng geometry/fingerprint đã thay đổi. Build 3D lại host trước khi khoét curved openings.");
+                        }
+                        foreach (var prepared in preparedCuts)
+                        {
+                            using (var cutter = BuildCutter(
+                                document,
+                                hostSource.Elevation,
+                                bottomOffsetM,
+                                prepared.Footprint.CutterPolygon,
+                                prepared.Vertical.CutterHeightM,
+                                prepared.Vertical.BaseElevationM,
+                                prepared.OpeningId))
+                            {
+                                hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
+                            }
+                            cuts++;
+                        }
+                        pending.Add(new PendingHostUpdate
+                        {
+                            Host = host,
+                            SolidHandle = currentSolidHandle,
+                            Fingerprint = fingerprint,
+                            OpeningCount = preparedCuts.Count
+                        });
                     }
-                    pending.Add(new PendingHostUpdate
-                    {
-                        Host = host,
-                        SolidHandle = currentSolidHandle,
-                        Fingerprint = fingerprint,
-                        OpeningCount = preparedCuts.Count
-                    });
+
+                    foreach (var update in pending) CommitSemanticUpdate(project, update);
+                    if (pending.Count > 0) project.Touch();
+                    transaction.Commit();
+                    cadCommitted = true;
                 }
-                transaction.Commit();
+            }
+            catch (Exception operationError)
+            {
+                if (!cadCommitted)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Curved physical opening boolean failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                }
+                throw;
             }
 
-            foreach (var update in pending)
-            {
-                update.Host.Properties["PhysicalOpeningCutSolidHandle"] = update.SolidHandle;
-                update.Host.Properties["PhysicalOpeningCutFingerprint"] = update.Fingerprint;
-                update.Host.Properties["PhysicalOpeningCutCount"] = update.OpeningCount.ToString(CultureInfo.InvariantCulture);
-                update.Host.Properties["PhysicalOpeningCutMode"] = "CurvedCenterlineFootprint";
-                AuditTrail.ForProject(project).Record("geometry.opening.boolean.curved", update.Host.Id, update.OpeningCount.ToString(CultureInfo.InvariantCulture) + " opening(s) • solid " + update.SolidHandle);
-            }
-            if (pending.Count > 0) { project.Touch(); document.Editor.Regen(); }
+            if (pending.Count > 0) TryRegen(document);
             return cuts;
+        }
+
+        private static void CommitSemanticUpdate(ProjectState project, PendingHostUpdate update)
+        {
+            update.Host.Properties["PhysicalOpeningCutSolidHandle"] = update.SolidHandle;
+            update.Host.Properties["PhysicalOpeningCutFingerprint"] = update.Fingerprint;
+            update.Host.Properties["PhysicalOpeningCutCount"] = update.OpeningCount.ToString(CultureInfo.InvariantCulture);
+            update.Host.Properties["PhysicalOpeningCutMode"] = "CurvedCenterlineFootprint";
+            AuditTrail.ForProject(project).Record("geometry.opening.boolean.curved", update.Host.Id, update.OpeningCount.ToString(CultureInfo.InvariantCulture) + " opening(s) • solid " + update.SolidHandle);
+        }
+
+        private static void TryRegen(Document document)
+        {
+            try { document.Editor.Regen(); }
+            catch { }
         }
 
         private static Solid3d BuildCutter(Document document, double hostElevationDrawing, double hostBottomOffsetM, IReadOnlyList<Point2> polygonM, double heightM, double baseElevationM, string label)
