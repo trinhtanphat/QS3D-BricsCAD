@@ -15,18 +15,20 @@ namespace QS3D.Core.Services
         }
 
         private readonly Dictionary<string, HashSet<string>> _dependents = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, ProjectElement> _elementsById = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
 
         public void Rebuild(IEnumerable<ProjectElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
 
             var next = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-            var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var nextElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
                 if (element == null) throw new InvalidOperationException("Dependency graph cannot contain a null semantic element.");
-                if (!elementIds.Add(element.Id))
+                if (nextElements.ContainsKey(element.Id))
                     throw new InvalidOperationException("Dependency graph contains duplicate semantic element id: " + element.Id);
+                nextElements.Add(element.Id, element);
 
                 foreach (var source in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)))
                 {
@@ -43,6 +45,20 @@ namespace QS3D.Core.Services
             _dependents.Clear();
             foreach (var entry in next)
                 _dependents[entry.Key] = entry.Value;
+            _elementsById.Clear();
+            foreach (var entry in nextElements)
+                _elementsById[entry.Key] = entry.Value;
+        }
+
+        public bool TryGetElement(string elementId, out ProjectElement? element)
+        {
+            var normalized = (elementId ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                element = null;
+                return false;
+            }
+            return _elementsById.TryGetValue(normalized, out element);
         }
 
         public IReadOnlyList<string> GetDirectDependents(string sourceId)

@@ -242,8 +242,7 @@ namespace QS3D.Core.Domain
         private static FloorDefinition FindRequired(ProjectState project, string id)
         {
             var normalized = Required(id, nameof(id), 64);
-            return project.Floors.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Floor not found: " + normalized);
+            return project.FindFloor(normalized) ?? throw new InvalidOperationException("Floor not found: " + normalized);
         }
 
         private static void EnsureUniqueName(ProjectState project, string name, string exceptId)

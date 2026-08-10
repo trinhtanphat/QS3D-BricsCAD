@@ -9,12 +9,12 @@ Read `AGENTS.md`, `docs/PRODUCT-BOUNDARY.md`, `docs/REMOTE-AGENT-SCOPE.md` and `
 
 ## 1. Semantic interchange — read-only export + strict read-only validation
 
-`QS3DINTERCHANGEJSON` is now genuinely read-only end-to-end:
+`QS3DINTERCHANGEJSON` is genuinely read-only end-to-end:
 
 - Save dialog occurs before project acquisition;
 - `ProjectStateSnapshot.CreateDetachedCopy(...)` deep-copies the live state;
 - dirty semantic regeneration runs only on the detached copy;
-- the existing exporter temporary-file/replace boundary writes only the detached snapshot;
+- the exporter temporary-file/replace boundary writes only the detached snapshot;
 - live project object references, dirty flags, quantities and timestamps are not replaced/restored/mutated by export.
 
 `QS3DINTERCHANGEVALIDATE` validates an external `QS3D.SemanticSnapshot` v1 without constructing/replacing a live `ProjectState` and without touching DWG entities. Current fail-closed contract includes:
@@ -47,9 +47,12 @@ Core/reference support includes:
 
 - `GridNamingService` / `GridNamingHealthService`;
 - bounded `GridIntersectionPlanner` for finite LINE×LINE, LINE×ARC and ARC×ARC geometry;
+- `GridSpatialOrderingPlanner` for a bounded **parallel LINE Grid family** using an explicit 2D ordering axis, with fail-closed non-parallel/ambiguous/ARC cases;
 - comprehensive health integration.
 
-Native annotation source now includes:
+`GridSpatialOrderingPlanner` is only a CAD-independent planning primitive. It does not choose the axis, extract V25 geometry, group systems, or silently replace the explicit-review workflow. Mixed LINE+ARC/radial ordering still requires a separate reviewed policy.
+
+Native annotation source includes:
 
 - extension + Circle bubble + DBText at each endpoint;
 - QS3D XData ownership and `GeneratedGridAnnotationHandles`;
@@ -58,11 +61,13 @@ Native annotation source now includes:
 - persisted generated-annotation health;
 - source-plane-aware geometry: ARC uses its native normal; a 3D-sloped LINE fails closed instead of being projected silently.
 
-Do **not** call native Grid annotation V25-certified yet. Exact-SHA local proof is still required for actual geometry/text alignment, Undo/Redo, save/reopen, multi-DWG, Unicode/HiDPI and ownership mismatch behavior.
+Live V25-side Grid annotation health is also source-implemented through `GeneratedGridAnnotationRuntimeHealthService` and is aggregated into the existing runtime health path. It read-only checks persisted annotation handles against live CAD entity existence, deterministic `Line/Circle/DBText` slot type, matching QS3D XData ownership and current semantic `GridLabel` text. It never repairs/erases mismatched CAD.
 
-Still open: automatic spatial ordering, native extraction into the Core intersection planner, rectangular/radial system authoring, associative constraints/dimensions/intersection markers, Direct Draw Grid/repeat UX, automatic structure hosting/snapping and paper-space annotation lifecycle.
+Do **not** call native Grid annotation V25-certified yet. Exact-SHA local proof is still required for actual geometry/text alignment, live-health behavior, Undo/Redo, save/reopen, multi-DWG, Unicode/HiDPI and ownership mismatch behavior.
 
-Read `docs/GRID-WORKFLOW.md`, `docs/GRID-INTERSECTIONS.md` and `docs/GRID-NATIVE-ANNOTATION.md`.
+Still open: native V25 geometry extraction/review UI around Core spatial ordering/intersections, mixed/radial/general ordering policy, rectangular/radial system authoring, associative constraints/dimensions/intersection markers, Direct Draw Grid/repeat UX, automatic structure hosting/snapping and paper-space annotation lifecycle.
+
+Read `docs/GRID-WORKFLOW.md`, `docs/GRID-INTERSECTIONS.md`, `docs/GRID-SPATIAL-ORDERING.md` and `docs/GRID-NATIVE-ANNOTATION.md`.
 
 ## 3. Level/reference boundary
 
@@ -96,7 +101,13 @@ Standard-specific fabrication-grade rebar remains blocked on an explicitly selec
 
 ## 6. Documentation layer
 
-Core semantic documentation foundations exist (`SemanticTagRenderer` and table-building support), but native BricsCAD MText/MLeader/Table/Layout/Viewport lifecycle is not complete. Keep issue #77 open until native ownership/replacement and runtime workflows exist.
+Core semantic documentation foundations exist:
+
+- `SemanticTagRenderer` provides bounded semantic-ID/property/quantity-driven labels while blocking generated/native ownership fields;
+- `SemanticDocumentationTableBuilder` provides explicit-order bounded generic semantic table snapshots and reuses the tag renderer rather than becoming a second BQ/BBS calculation engine;
+- public table `Rows`, `Headers` and row `Cells` are defensively copied into read-only collections, so caller-owned mutable lists or collection casts cannot rewrite a previously built snapshot.
+
+Native BricsCAD MText/MLeader/Table/Layout/Viewport lifecycle is not complete. Keep issue #77 open until native ownership/replacement/stale/update and runtime workflows exist.
 
 ## 7. Local-only / policy gates — do not re-audit remotely
 
@@ -118,9 +129,9 @@ Use `docs/LOCAL-V25-QUALIFICATION.md` and the current local handoffs. Never manu
 
 ## 8. Open issue truth
 
-- #79 Grid/reference: substantially advanced by capture, numbering/naming health, finite intersections and owned native annotation; runtime/spatial/constraint/hosting/Level-native work remains.
+- #79 Grid/reference: substantially advanced by capture, numbering/naming health, finite intersections, guarded parallel-LINE spatial-order planning, owned native annotation and read-only live annotation health; native extraction/review UI, mixed/radial/general ordering, constraints/hosting and Level-native work remain.
 - #84 Interchange: substantially advanced by detached read-only export + strict read-only validator; mutation/import/round-trip and broader formats remain.
-- #77 Documentation: Core foundation only; native annotation/table/sheet workflows remain.
+- #77 Documentation: Core renderer/table foundation is bounded and immutable; native annotation/table/sheet workflows remain.
 - #72/#73/#74/#75/#76/#81/#82/#83 retain their runtime/advanced-geometry/signing/engineering/performance scopes unless current source proves a smaller source-safe subtask is still open.
 
 ## 9. CI / release

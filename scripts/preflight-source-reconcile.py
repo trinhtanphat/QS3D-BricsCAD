@@ -76,9 +76,14 @@ checks = {
     ],
     engine: [
         "RegenerateDirtySubset(ProjectState project, IEnumerable<string> elementIds)",
+        "var unresolved = new HashSet<string>(",
+        "var targets = new List<ProjectElement>(unresolved.Count);",
+        "var seenProjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);",
+        "if (!seenProjectIds.Add(element.Id))",
+        "if (unresolved.Remove(element.Id)) targets.Add(element);",
         "Unknown regeneration target: ",
-        "var targets = project.Elements.Where(x => ids.Contains(x.Id)).ToList();",
-        "return Regenerate(project, targets, targets.Count);",
+        "return RegenerateTransactional(project, targets, targets.Count);",
+        "var dirty = _graph.TopologicalDirtyOrder(candidateList);",
     ],
     dependency_graph: [
         "public IReadOnlyList<string> GetDirectDependents(string sourceId)",
@@ -96,11 +101,15 @@ checks = {
     ],
     regen_smoke: [
         "RegeneratesOnlyRequestedElements",
+        "DeduplicatesRequestedIdsCaseInsensitively",
         "RejectsUnknownTarget",
+        "RejectsDuplicateProjectIds",
         "engine.RegenerateDirtySubset(project, new[] { selected.Id })",
+        "new[] { \" Selected \", \"selected\", \"SELECTED\" }",
         "True(unrelated.Dirty != ElementDirtyFlags.None)",
         'True(!unrelated.Quantities.ContainsKey("Count"))',
         "Throws<KeyNotFoundException>",
+        "Throws<InvalidOperationException>",
     ],
     ownership_smoke: [
         "ResolvesCaseInsensitiveTrimmedHandle",
@@ -180,6 +189,23 @@ if service.is_file():
     if "new Build3DCommands" in text or "QS3DBUILD3D" in text or "SendStringToExecute" in text:
         errors.append("Source reconcile service must not auto-rebuild native/generated geometry")
 
+if engine.is_file():
+    text = engine.read_text(encoding="utf-8")
+    subset_start = text.find("public int RegenerateDirtySubset")
+    subset_end = text.find("private int RegenerateTransactional", subset_start)
+    subset = text[subset_start:subset_end] if subset_start >= 0 and subset_end > subset_start else ""
+    if "new Dictionary<string, ProjectElement>" in subset:
+        errors.append("Targeted regeneration must not build a full by-id dictionary and then scan the project again")
+    if "project.Elements.Where" in subset:
+        errors.append("Targeted regeneration must not perform a second full project scan to recover requested targets")
+    if subset.count("foreach (var element in project.Elements)") != 1:
+        errors.append("Targeted regeneration must resolve/validate requested IDs in exactly one project-order scan")
+
+    regen_start = text.find("private int Regenerate(ProjectState project")
+    regen_body = text[regen_start:] if regen_start >= 0 else ""
+    if "_graph.Rebuild(project.Elements)" in regen_body:
+        errors.append("Regeneration pass loop must not rebuild the reverse dependency index; TopologicalDirtyOrder reads candidate DependsOn directly")
+
 commands = []
 source_root = ROOT / "src/QS3D.BricsCAD.V25"
 if source_root.is_dir():
@@ -195,4 +221,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE builds generated/source ownership and reverse dependency indexes once per operation, preserves ambiguous/untracked fail-closed behavior, traverses linked-host/DependsOn invalidation through a bounded queue, removes generated dependents ownership-safely, refreshes source-derived semantic state, regenerates only the affected semantic closure to stability, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
+print("PASS: QS3DSYNCSOURCE builds generated/source ownership and reverse dependency indexes once per operation, preserves ambiguous/untracked fail-closed behavior, traverses linked-host/DependsOn invalidation through a bounded queue, removes generated dependents ownership-safely, refreshes source-derived semantic state, regenerates only the affected semantic closure to stability, resolves each targeted regeneration subset with one project-order scan, avoids redundant reverse-graph rebuilds during regeneration passes, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")

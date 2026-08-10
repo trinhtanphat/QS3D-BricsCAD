@@ -108,8 +108,7 @@ namespace QS3D.Core.Domain
         private static ZoneDefinition FindRequired(ProjectState project, string id)
         {
             var normalized = Required(id, nameof(id), 64);
-            return project.Zones.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Zone not found: " + normalized);
+            return project.FindZone(normalized) ?? throw new InvalidOperationException("Zone not found: " + normalized);
         }
 
         private static void EnsureUniqueName(ProjectState project, string name, string exceptId)
