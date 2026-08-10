@@ -48,6 +48,8 @@ namespace QS3D.BricsCAD.V25
                 {
                     EnsureDefault(family, "ThicknessM", "0.2");
                     EnsureDefault(family, "Material", "Gạch");
+                    EnsureDefault(family, "WallPierProfileMode", "Rectangular");
+                    EnsureDefault(family, "WallPierChamferM", "0.02");
                 }
 
                 project.Metadata["ActiveFamilyId"] = family.Id;
