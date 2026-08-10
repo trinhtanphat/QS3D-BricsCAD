@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             ArcArcProducesTwoPointsWhenBothSweepsContainThem();
             CoincidentArcSupportFailsClosed();
             DuplicateElementIdsFailClosed();
+            ElementIdsAreCanonicalizedBeforeDuplicateCheck();
+            OverflowingDerivedGeometryFailsClosed();
         }
 
         private static void CrossingLinesProduceOneDeterministicPoint()
@@ -87,6 +89,31 @@ namespace QS3D.Core.SmokeTests
             {
                 GridReferenceCurve.Line("G-A", new Point2(0, 0), new Point2(5, 0)),
                 GridReferenceCurve.Line("g-a", new Point2(0, 1), new Point2(5, 1))
+            }));
+        }
+
+        private static void ElementIdsAreCanonicalizedBeforeDuplicateCheck()
+        {
+            Throws<InvalidOperationException>(() => GridIntersectionPlanner.FindIntersections(new[]
+            {
+                GridReferenceCurve.Line(" G-A ", new Point2(0, 0), new Point2(5, 0)),
+                GridReferenceCurve.Line("g-a", new Point2(0, 1), new Point2(5, 1))
+            }));
+
+            var result = GridIntersectionPlanner.FindIntersections(new[]
+            {
+                GridReferenceCurve.Line(" G-X ", new Point2(-1, 0), new Point2(1, 0)),
+                GridReferenceCurve.Line("G-Y", new Point2(0, -1), new Point2(0, 1))
+            });
+            Equal("G-X", result.Single().FirstElementId);
+        }
+
+        private static void OverflowingDerivedGeometryFailsClosed()
+        {
+            Throws<OverflowException>(() => GridIntersectionPlanner.FindIntersections(new[]
+            {
+                GridReferenceCurve.Line("G-HUGE", new Point2(double.MaxValue, 0), new Point2(-double.MaxValue, 0)),
+                GridReferenceCurve.Line("G-Y", new Point2(0, -1), new Point2(0, 1))
             }));
         }
 
