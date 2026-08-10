@@ -11,6 +11,7 @@ namespace QS3D.Core.Reporting
         public static IReadOnlyList<QuantityReportRow> Group(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            RoomFinishIdentityService.ValidateProject(project);
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
