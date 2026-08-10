@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             ImportAppendsPortableStateAndDiscardsCadOwnership();
+            AppendPlanIsReadOnlyAndRejectsNameCollision();
             CollisionFailsBeforeMutation();
             InvalidSnapshotFailsBeforeMutation();
             ApplyFailureRollsBackPartialMutation();
@@ -75,6 +76,45 @@ namespace QS3D.Core.SmokeTests
             Equal(source.DrawingFingerprint, target.Metadata[ProjectInterchangeAppendOnlyImporter.LastSourceDrawingFingerprintKey]);
             Equal("2", target.Metadata[ProjectInterchangeAppendOnlyImporter.LastSourceHandlesDiscardedKey]);
             Equal("ImportInterchangeAppendOnly", target.AuditEvents.Last().Action);
+        }
+
+        private static void AppendPlanIsReadOnlyAndRejectsNameCollision()
+        {
+            var target = TargetProject();
+            var sourceJson = ProjectInterchangeJsonExporter.Build(SourceProject());
+            var updated = new DateTime(2026, 8, 10, 11, 30, 0, DateTimeKind.Utc);
+            target.UpdatedUtc = updated;
+            var zones = target.Zones.Count;
+            var floors = target.Floors.Count;
+            var families = target.Families.Count;
+            var elements = target.Elements.Count;
+            var audits = target.AuditEvents.Count;
+            var metadata = target.Metadata.Count;
+
+            var plan = ProjectInterchangeAppendOnlyImporter.Plan(target, sourceJson);
+
+            Equal("SOURCE-P", plan.SourceProjectId);
+            Equal(1, plan.ZonesToAdd);
+            Equal(1, plan.FloorsToAdd);
+            Equal(1, plan.FamiliesToAdd);
+            Equal(2, plan.ElementsToAdd);
+            Equal(5, plan.TotalSemanticIdentitiesToAdd);
+            Equal(2, plan.SourceHandlesToDiscard);
+            Equal(zones, target.Zones.Count);
+            Equal(floors, target.Floors.Count);
+            Equal(families, target.Families.Count);
+            Equal(elements, target.Elements.Count);
+            Equal(audits, target.AuditEvents.Count);
+            Equal(metadata, target.Metadata.Count);
+            Equal(updated, target.UpdatedUtc);
+
+            target.Families.Add(new ProjectFamily("TGT-COLLISION", "Source Beam", ElementCategory.Beam));
+            families = target.Families.Count;
+            Throws<InvalidOperationException>(() => ProjectInterchangeAppendOnlyImporter.Plan(target, sourceJson));
+            Equal(families, target.Families.Count);
+            Equal(elements, target.Elements.Count);
+            Equal(audits, target.AuditEvents.Count);
+            True(!target.Metadata.ContainsKey(ProjectInterchangeAppendOnlyImporter.LastModeKey));
         }
 
         private static void CollisionFailsBeforeMutation()
