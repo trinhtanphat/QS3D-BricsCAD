@@ -13,12 +13,16 @@ checks = {
     ],
     "src/QS3D.Core/Diagnostics/SafeGeneratedHandleOwnershipHealthService.cs": [
         "SourceHandles",
-        "GeneratedHandleOwnershipPolicy.IsOwnerSlot",
+        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
         "GENERATED_HANDLE_OWNERSHIP_CONFLICT",
         "GroupBy(x => x.Token",
         "StringComparer.OrdinalIgnoreCase",
     ],
     "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": [
+        "public static class GeneratedHandleOwnershipPolicy",
+        "EnumerateOwnerHandles",
+        "CollectOwnerHandles",
+        "TryFindOwner",
         'StartsWith("Generated"',
         'EndsWith("Handle"',
         'EndsWith("Handles"',
@@ -73,4 +77,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: one generated ownership facade, explicit owner-slot policy, cross-type regression and dedicated QS3DHANDLEHEALTH review are present.")
+print("PASS: generated ownership health, selection and future generated families share one Core owner-slot enumeration contract.")

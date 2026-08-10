@@ -15,18 +15,33 @@ checks = {
         "BOM_GENERATED_HANDLE_MISSING",
         "BOM_ROW_MISSING",
         "ProjectQuantityReportBuilder.Group",
-        "GeneratedHandleOwnershipPolicy.IsOwnerSlot",
+        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
     ],
-    "src/QS3D.BricsCAD.V25/GeneratedHandleOwnershipPolicy.cs": [
-        "GeneratedHandleOwnershipPolicy",
+    "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": [
+        "public static class GeneratedHandleOwnershipPolicy",
+        "RebarHandleKeys",
+        "IsRebarOwnerSlot",
+        "EnumerateOwnerHandles",
+        "CollectOwnerHandles",
+        "TryFindOwner",
         'PhysicalOpeningCutSolidHandle',
         'StartsWith("Generated"',
         'EndsWith("Handle"',
         'EndsWith("Handles"',
     ],
+    "src/QS3D.BricsCAD.V25/GeneratedHandleOwnershipPolicy.cs": [
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.RebarHandleKeys",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.IsOwnerSlot(key)",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.IsRebarOwnerSlot(key)",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.TryFindOwner(project, handle",
+    ],
     "src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs": [
         'CommandMethod("QS3DRELEASECHECK"',
+        "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
         "ModelHealthService().Inspect",
+        "DependencyHealthService().Inspect",
         "SafeGeneratedHandleOwnershipHealthService().Inspect",
         "GeneratedRebarHealthService().InspectAll",
         "GeneratedTieRebarHealthService().Inspect",
@@ -41,7 +56,7 @@ checks = {
         "BomReleaseGuardService.Inspect",
         "summary.Errors == 0 && summary.Warnings == 0",
         "V25 runtime/private-DWG gate vẫn là bước riêng",
-        "GeneratedHandleOwnershipPolicy.IsOwnerSlot",
+        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
     ],
     "src/QS3D.BricsCAD.V25/SafeGeneratedHandleOwnershipHealthCommands.cs": [
         'CommandMethod("QS3DOWNERSHIPHEALTH"',
@@ -53,6 +68,7 @@ checks = {
         "BOM_QUANTITY_NONFINITE",
         "BOM_TRACEABILITY_MISSING",
         "BOM_GENERATED_HANDLE_MISSING",
+        "GeneratedFuturePanelHandles",
     ],
     "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs": [
         "BomReleaseGuardSmoke.Run();",
@@ -69,6 +85,12 @@ for relative, needles in checks.items():
         if needle not in text:
             errors.append(relative + " missing release-readiness token: " + needle)
 
+adapter_policy = ROOT / "src/QS3D.BricsCAD.V25/GeneratedHandleOwnershipPolicy.cs"
+if adapter_policy.is_file():
+    text = adapter_policy.read_text(encoding="utf-8")
+    if 'StartsWith("Generated"' in text or 'PhysicalOpeningCutSolidHandle' in text:
+        errors.append("adapter generated ownership policy duplicated Core classification logic")
+
 commands = []
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
 if adapter.is_dir():
@@ -78,7 +100,6 @@ for command in ("QS3DRELEASECHECK", "QS3DOWNERSHIPHEALTH"):
     if commands.count(command) != 1:
         errors.append(command + " must be declared exactly once")
 
-# The transitional broad scanner command must stay out of primary Ribbon/Hub entry points.
 for relative in (
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs",
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml",
@@ -93,4 +114,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: unified QS3DRELEASECHECK uses provenance-safe ownership, all dedicated generated mesh/mode/live CAD health and BOM guards; runtime/private-DWG remains a separate V25 gate.")
+print("PASS: QS3DRELEASECHECK consumes shared ownership, dependency, Foundation/mode, stale/live CAD and BOM health; runtime/private-DWG remains a separate V25 gate.")

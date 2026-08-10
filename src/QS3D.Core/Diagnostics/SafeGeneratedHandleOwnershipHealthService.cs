@@ -21,11 +21,8 @@ namespace QS3D.Core.Diagnostics
             foreach (var element in project.Elements)
             {
                 AddClaims(claims, element, "SourceHandles", element.SourceHandles);
-                foreach (var property in element.Properties)
-                {
-                    if (!GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key) || string.IsNullOrWhiteSpace(property.Value)) continue;
-                    AddClaims(claims, element, property.Key, Split(property.Value));
-                }
+                foreach (var group in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element).GroupBy(x => x.Value, StringComparer.OrdinalIgnoreCase))
+                    AddClaims(claims, element, group.Key, group.Select(x => x.Key));
             }
 
             var issues = new List<ModelHealthIssue>();
@@ -52,12 +49,6 @@ namespace QS3D.Core.Diagnostics
             }
             return issues.AsReadOnly();
         }
-
-        private static IEnumerable<string> Split(string raw) =>
-            (raw ?? string.Empty)
-                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => x.Trim())
-                .Where(x => x.Length > 0);
 
         private static void AddClaims(Dictionary<string, List<Claim>> claims, ProjectElement element, string slot, IEnumerable<string> handles)
         {

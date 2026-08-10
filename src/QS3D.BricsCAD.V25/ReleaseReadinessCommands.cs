@@ -26,10 +26,7 @@ namespace QS3D.BricsCAD.V25
                     .Select(x => x.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
-                var generatedHandles = project.Elements
-                    .SelectMany(ParseGeneratedHandles)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
+                var generatedHandles = GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project).ToArray();
                 var liveSources = new HashSet<string>(CadHandleService.GetLiveHandles(document, sourceHandles), StringComparer.OrdinalIgnoreCase);
                 var liveGenerated = new HashSet<string>(CadHandleService.GetLiveSolidHandles(document, generatedHandles), StringComparer.OrdinalIgnoreCase);
 
@@ -79,7 +76,7 @@ namespace QS3D.BricsCAD.V25
             var element = project.FindElement(issue.ElementId);
             if (element == null) return;
             var handles = SemanticReferenceHandles.Get(element)
-                .Concat(ParseGeneratedHandles(element))
+                .Concat(GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element).Select(x => x.Key))
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Select(x => x.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -87,19 +84,6 @@ namespace QS3D.BricsCAD.V25
             var count = CadHandleService.Select(document, handles);
             PaletteCoordinator.SetStatus("Release Check Định vị " + element.Id + " • " + count + " CAD object(s)");
             if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
-        }
-
-        private static IEnumerable<string> ParseGeneratedHandles(QS3D.Core.Domain.ProjectElement element)
-        {
-            foreach (var property in element.Properties)
-            {
-                if (!GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key) || string.IsNullOrWhiteSpace(property.Value)) continue;
-                foreach (var handle in property.Value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
-                {
-                    var normalized = handle.Trim();
-                    if (normalized.Length > 0) yield return normalized;
-                }
-            }
         }
     }
 }

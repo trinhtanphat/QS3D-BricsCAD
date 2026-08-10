@@ -34,12 +34,12 @@ if facade.is_file():
 
 if safe.is_file():
     text = safe.read_text(encoding="utf-8")
-    if "GeneratedHandleOwnershipPolicy.IsOwnerSlot" not in text:
-        errors.append("safe ownership scanner must use GeneratedHandleOwnershipPolicy")
+    if "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)" not in text:
+        errors.append("safe ownership scanner must consume GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles")
 
 if policy.is_file():
     text = policy.read_text(encoding="utf-8")
-    for token in ('StartsWith("Generated"', 'PhysicalOpeningCutSolidHandle'):
+    for token in ('StartsWith("Generated"', 'PhysicalOpeningCutSolidHandle', "EnumerateOwnerHandles", "CollectOwnerHandles", "TryFindOwner"):
         if token not in text:
             errors.append("ownership policy missing token: " + token)
 
@@ -49,4 +49,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: canonical generated ownership facade is compiled directly; no duplicate shim or compile exclusion remains, and owner-slot policy stays provenance-safe.")
+print("PASS: canonical generated ownership facade compiles directly and safe health consumes the single Core ownership enumeration contract.")
