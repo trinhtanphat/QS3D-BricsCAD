@@ -18,6 +18,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
             InitializeComponent();
+            DocumentBoundWindowLifetime.Attach(this, _document);
             Loaded += (_, __) => RefreshSnapshot();
             Activated += (_, __) => RefreshSnapshot();
         }
@@ -27,11 +28,12 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnCommandClick(object sender, RoutedEventArgs e)
         {
             if (!(sender is Button button) || !(button.Tag is string command) || string.IsNullOrWhiteSpace(command)) return;
+            var normalizedCommand = command.Trim();
             try
             {
-                EnsureActive("chạy " + command);
-                SetStatus("Chạy " + command + "…");
-                _document.SendStringToExecute(command + " ", true, false, false);
+                EnsureActive("chạy " + normalizedCommand);
+                _document.SendStringToExecute(normalizedCommand + " ", true, false, false);
+                SetStatus("Đã gửi lệnh " + normalizedCommand + " sang “" + DrawingLabel(_document) + "”.");
             }
             catch (Exception ex) { SetStatus("Schedule Hub: " + ex.Message); }
         }
@@ -112,7 +114,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void SetStatus(string text)
         {
             StatusText.Text = text ?? string.Empty;
-            PaletteCoordinator.SetStatus(StatusText.Text);
+            try { PaletteCoordinator.SetStatus(StatusText.Text); } catch { }
         }
     }
 }
