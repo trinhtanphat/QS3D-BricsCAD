@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ImportAppendsPortableStateAndDiscardsCadOwnership();
             CollisionFailsBeforeMutation();
             InvalidSnapshotFailsBeforeMutation();
+            ApplyFailureRollsBackPartialMutation();
         }
 
         private static void ImportAppendsPortableStateAndDiscardsCadOwnership()
@@ -111,6 +112,38 @@ namespace QS3D.Core.SmokeTests
 
             Equal(elements, target.Elements.Count);
             Equal(updated, target.UpdatedUtc);
+            True(!target.Metadata.ContainsKey(ProjectInterchangeAppendOnlyImporter.LastModeKey));
+        }
+
+        private static void ApplyFailureRollsBackPartialMutation()
+        {
+            var target = TargetProject();
+            for (var index = 0; index < 1998; index++)
+                target.Zones.Add(new ZoneDefinition("TGT-Z-" + index.ToString("D4"), "Target Zone " + index.ToString("D4")));
+
+            var source = SourceProject();
+            source.Zones.Add(new ZoneDefinition("SRC-ZONE-2", "Source Zone 2"));
+            var json = ProjectInterchangeJsonExporter.Build(source);
+            var zones = target.Zones.Count;
+            var floors = target.Floors.Count;
+            var families = target.Families.Count;
+            var elements = target.Elements.Count;
+            var audits = target.AuditEvents.Count;
+            var metadata = target.Metadata.Count;
+            var updated = new DateTime(2026, 8, 10, 13, 0, 0, DateTimeKind.Utc);
+            target.UpdatedUtc = updated;
+
+            Throws<InvalidOperationException>(() => ProjectInterchangeAppendOnlyImporter.Import(target, json));
+
+            Equal(zones, target.Zones.Count);
+            Equal(floors, target.Floors.Count);
+            Equal(families, target.Families.Count);
+            Equal(elements, target.Elements.Count);
+            Equal(audits, target.AuditEvents.Count);
+            Equal(metadata, target.Metadata.Count);
+            Equal(updated, target.UpdatedUtc);
+            True(target.FindZone("SRC-ZONE") == null);
+            True(target.FindZone("SRC-ZONE-2") == null);
             True(!target.Metadata.ContainsKey(ProjectInterchangeAppendOnlyImporter.LastModeKey));
         }
 
