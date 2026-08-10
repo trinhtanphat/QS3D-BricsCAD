@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using Bricscad.ApplicationServices;
 using Application = Bricscad.ApplicationServices.Application;
 using QS3D.BricsCAD.V25.Cad;
@@ -13,6 +14,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class RightPanel : UserControl
     {
         private readonly RightPanelViewModel _viewModel = new RightPanelViewModel();
+        private bool _refreshingLayers;
 
         public RightPanel()
         {
@@ -64,12 +66,29 @@ namespace QS3D.BricsCAD.V25.UI
             var selectedNames = LayerList?.SelectedItems.Cast<LayerItemViewModel>().Select(x => x.Name) ?? Enumerable.Empty<string>();
             var selected = new System.Collections.Generic.HashSet<string>(selectedNames, StringComparer.OrdinalIgnoreCase);
             var search = LayerSearchBox?.Text?.Trim() ?? string.Empty;
-            _viewModel.Layers.Clear();
-            foreach (var item in DrawingCatalogReader.ReadLayers(doc).Where(x => search.Length == 0 || x.Name.IndexOf(search, StringComparison.CurrentCultureIgnoreCase) >= 0))
+            _refreshingLayers = true;
+            try
             {
-                var vm = new LayerItemViewModel { Name = item.Name, IsVisible = item.IsVisible, ColorIndex = item.ColorIndex };
-                _viewModel.Layers.Add(vm);
-                if (selected.Contains(vm.Name)) LayerList?.SelectedItems.Add(vm);
+                _viewModel.Layers.Clear();
+                foreach (var item in DrawingCatalogReader.ReadLayers(doc).Where(x => search.Length == 0 || x.Name.IndexOf(search, StringComparison.CurrentCultureIgnoreCase) >= 0))
+                {
+                    var brush = new SolidColorBrush(Color.FromRgb(item.Red, item.Green, item.Blue));
+                    brush.Freeze();
+                    var vm = new LayerItemViewModel
+                    {
+                        Name = item.Name,
+                        IsVisible = item.IsVisible,
+                        IsLocked = item.IsLocked,
+                        ColorIndex = item.ColorIndex,
+                        ColorBrush = brush
+                    };
+                    _viewModel.Layers.Add(vm);
+                    if (selected.Contains(vm.Name)) LayerList?.SelectedItems.Add(vm);
+                }
+            }
+            finally
+            {
+                _refreshingLayers = false;
             }
         }
 
@@ -77,6 +96,8 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnLayerSearchChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) RefreshLayers(); }
         private void OnShowLayersClick(object sender, RoutedEventArgs e) => SetSelectedLayers(true);
         private void OnHideLayersClick(object sender, RoutedEventArgs e) => SetSelectedLayers(false);
+        private void OnLockLayersClick(object sender, RoutedEventArgs e) => SetSelectedLayerLocks(true);
+        private void OnUnlockLayersClick(object sender, RoutedEventArgs e) => SetSelectedLayerLocks(false);
         private void OnInvertSelectionClick(object sender, RoutedEventArgs e)
         {
             var selected = LayerList.SelectedItems.Cast<LayerItemViewModel>().ToList();
@@ -116,6 +137,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void SetLayerFromCheckBox(object sender, bool visible)
         {
+            if (_refreshingLayers) return;
             if (!(sender is CheckBox box) || !(box.DataContext is LayerItemViewModel item)) return;
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
@@ -127,6 +149,7 @@ namespace QS3D.BricsCAD.V25.UI
             catch (Exception ex)
             {
                 _viewModel.Status = ex.Message;
+                RefreshLayers();
             }
         }
 
@@ -149,6 +172,30 @@ namespace QS3D.BricsCAD.V25.UI
             catch (Exception ex)
             {
                 _viewModel.Status = ex.Message;
+                RefreshLayers();
+            }
+        }
+
+        private void SetSelectedLayerLocks(bool locked)
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            var names = LayerList.SelectedItems.Cast<LayerItemViewModel>().Select(x => x.Name).ToArray();
+            if (names.Length == 0)
+            {
+                _viewModel.Status = "Chọn ít nhất một layer.";
+                return;
+            }
+            try
+            {
+                var count = LayerVisibilityService.SetLocked(doc, names, locked);
+                _viewModel.Status = (locked ? "Đã khóa " : "Đã mở khóa ") + count + " layer";
+                RefreshLayers();
+            }
+            catch (Exception ex)
+            {
+                _viewModel.Status = ex.Message;
+                RefreshLayers();
             }
         }
 
