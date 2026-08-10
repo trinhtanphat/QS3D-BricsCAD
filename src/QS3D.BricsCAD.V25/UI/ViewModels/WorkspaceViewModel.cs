@@ -489,14 +489,8 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             return (value * 1000d).ToString("0.###############", CultureInfo.InvariantCulture);
         }
 
-        private static bool UsesMillimeterPresentation(string key)
-        {
-            if (string.IsNullOrWhiteSpace(key)) return false;
-            if (key.EndsWith("Mm", StringComparison.OrdinalIgnoreCase) ||
-                key.EndsWith("M2", StringComparison.OrdinalIgnoreCase) ||
-                key.EndsWith("M3", StringComparison.OrdinalIgnoreCase)) return false;
-            return key.EndsWith("M", StringComparison.OrdinalIgnoreCase);
-        }
+        private static bool UsesMillimeterPresentation(string key) =>
+            SemanticPropertyUnitClassifier.IsLinearMeterProperty(key);
 
         private static bool TryBoolean(string value, out bool boolean)
         {
@@ -536,7 +530,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         private static bool IsNumericProperty(string key)
         {
             if (string.IsNullOrWhiteSpace(key)) return false;
-            if (key.EndsWith("M", StringComparison.OrdinalIgnoreCase) || key.EndsWith("M2", StringComparison.OrdinalIgnoreCase) || key.EndsWith("M3", StringComparison.OrdinalIgnoreCase) ||
+            if (SemanticPropertyUnitClassifier.IsLinearMeterProperty(key) || key.EndsWith("M2", StringComparison.OrdinalIgnoreCase) || key.EndsWith("M3", StringComparison.OrdinalIgnoreCase) ||
                 key.EndsWith("Mm", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Deg", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Count", StringComparison.OrdinalIgnoreCase) ||
                 key.EndsWith("Ratio", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Factor", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Percent", StringComparison.OrdinalIgnoreCase)) return true;
             return key.IndexOf("BarsAlong", StringComparison.OrdinalIgnoreCase) >= 0 ||
