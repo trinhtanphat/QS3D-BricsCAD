@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Domain;
@@ -73,13 +72,22 @@ namespace QS3D.BricsCAD.V25.Cad
                 .ToList();
             if (targets.Count == 0) return new GeneratedGeometryInvalidation(targets);
 
-            var ownership = GeneratedRebarOwnershipGuard.Build(project);
+            var needsRebarOwnership = targets.Any(HasGeneratedRebar);
+            var ownership = needsRebarOwnership ? GeneratedRebarOwnershipGuard.Build(project) : null;
             foreach (var element in targets)
             {
                 GeneratedGeometryService.PrepareReplacement(document, transaction, element);
+                if (ownership == null) continue;
                 foreach (var key in RebarHandleKeys) EraseRebarSet(document, transaction, element, key, ownership);
             }
             return new GeneratedGeometryInvalidation(targets);
+        }
+
+        private static bool HasGeneratedRebar(ProjectElement element)
+        {
+            foreach (var key in RebarHandleKeys)
+                if (element.Properties.TryGetValue(key, out var raw) && !string.IsNullOrWhiteSpace(raw)) return true;
+            return false;
         }
 
         private static void EraseRebarSet(
