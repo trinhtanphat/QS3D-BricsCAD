@@ -45,6 +45,14 @@ if command.is_file():
         "new WallJunctionPlanner().Plan",
         'MetadataNumber(project, "WallJunctionToleranceM", 0.005d',
         'MetadataNumber(project, "WallArcSagittaM", 0.002d',
+        'MetadataNumber(project, "WallJunctionPlanarityToleranceM", tolerance',
+        "ReadSelection(document, sagitta, planarityTolerance)",
+        "referenceElevationM",
+        "line.StartPoint.Z",
+        "line.EndPoint.Z",
+        "polyline.Elevation",
+        "EnsureElevation",
+        "plan-view đồng phẳng",
         "BulgeArcTessellator.Tessellate",
         'AuditTrail.ForProject(project).Record("wall.junction.analyze"',
     ):
@@ -77,4 +85,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: deterministic End/Straight/L/T/X wall-junction planning, spatial candidate indexing with large-coordinate fallback, finite-safe geometry, command/UI wiring and regression coverage are present.")
+print("PASS: deterministic End/Straight/L/T/X wall-junction planning, spatial candidate indexing with large-coordinate fallback, finite-safe geometry, coplanar CAD source enforcement, command/UI wiring and regression coverage are present.")
