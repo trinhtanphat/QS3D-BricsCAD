@@ -1,70 +1,78 @@
 # BLT-style completion review — 2026-08-10
 
-This review records the source-level completion batch applied directly to `main` after a full repository pass. It preserves concurrent work already merged by other agents and does not claim licensed BricsCAD V25 runtime verification.
+This review records the source-level BLT-completion work applied directly to `main`. It preserves concurrent agent work and does not claim licensed BricsCAD V25 runtime verification.
 
 ## Review scope
 
-- Core/domain contracts used by the UI and geometry adapters.
-- Main WPF workspace, Family/property inspector, semantic tree, selected-object review, Ribbon and Full Domain Hub.
-- Tường KT, Cửa/Lỗ mở, Room Auto, native wall geometry, physical opening boolean workflow and current rebar geometry path.
-- Static geometry/full-domain/room-curve preflight and documentation/status consistency.
-- Concurrent `main` activity was re-read before writes; stale SHA writes were allowed to fail rather than force-overwriting newer work.
+- Core/domain contracts used by UI, semantic selection and geometry adapters.
+- Main WPF Workspace, Family/Instance inspector, selected-object review, Ribbon and Full Domain Hub.
+- Room Auto, Tường KT, wall junction/snap cleanup, Door/Opening host matching/cutting and current rebar geometry paths.
+- Static source/preflight/documentation consistency.
+- Concurrent `main` activity was re-read before writes; stale writes were rejected/rebased instead of force-overwriting newer work.
 
-## Completed in this batch
+## Completed / hardened in the continued review
 
-### BLT-style main workflow
+### Family / Instance BLT property workflow
 
-- Added **Bóc chọn** to the Family/Type pane so users can select a semantic category/Family and capture the current BricsCAD selection without memorizing the corresponding command.
-- The category dispatcher covers Room, Tường Gạch, Vách Kính, Trụ Tường, Door/Opening, structure/earthwork and HT_Phòng workflows.
-- Family properties now use clearer Vietnamese labels, logical BLT-style groups and unit display for common geometry/rebar fields.
-- Numeric validation covers numeric properties even when a field does not have a visible unit suffix, and still rejects NaN/Infinity/invalid text.
-- The compact action row wraps instead of forcing all controls into one fixed horizontal line.
+- Property rows now expose typed metadata for text, boolean and editable-choice editors instead of treating every property as a plain TextBox.
+- The inspector explicitly separates **Family / Type** and **Đối tượng / Instance** scope.
+- Exactly one semantic selection switches into Instance scope; ambiguous multi-element matches stay out of instance editing.
+- Instance overrides can be reset to the current Family value from the row.
+- Family edits update still-inherited values but preserve true instance overrides instead of overwriting every member element.
+- Opening/rebinding the Family inspector no longer dirties the project merely because the bound Family name is loaded.
+- Selection synchronization uses `SemanticReferenceHandles`, including Auto Room boundary provenance/generated-solid fallback.
 
-### Tường KT completion
+### Workspace / Ribbon / Hub parity
 
-- Added explicit `QS3DGLASSWALL` and `QS3DWALLPIER` semantic capture commands with safe starter Family defaults.
-- Generalized the existing guarded LINE wall builder to ArchitecturalWall, GlassWall and WallPier.
-- Generalized the open-POLYLINE/bulge `WallFootprintEngine` builder to the same three categories.
-- Updated `QS3DBUILD3D` so the active/selected Tường Gạch, Vách Kính or Trụ Tường category is passed end-to-end into the correct native builder rather than only accepting ArchitecturalWall.
-- Kept the current Vách Kính/Trụ Tường native path intentionally generic: it is a Tường KT centerline extrusion, not a claim of full curtain-wall framing/panel semantics or specialized pier profiles.
+- Workspace selected-object review exposes Focus, Cô lập, Khôi phục and Locate/Top-view actions.
+- Workspace exposes **Giao tường**, **Snap xem**, **Snap áp** and **Auto Host** directly beside the main Family/modeling actions.
+- Ribbon exposes wall junction/snap, Auto Host, Highlight/Focus/Isolate and both column/shape rebar workflows.
+- Full Domain Hub exposes the same major advanced workflows, reducing command-line-only features.
 
-### Room Auto completion preserved and guarded
+### Tường KT and wall cleanup
 
-- Preserved concurrent direct planar ARC and bounded SPLINE adapters added while this review was in progress.
-- `QS3DROOMAUTO` now accepts planar LINE/POLYLINE/ARC/SPLINE source networks. Direct ARC and polyline bulges are tessellated by sagitta; SPLINE is sampled by configurable chord length with a hard segment cap.
-- ARC/POLYLINE plan-view orientation and all LINE/ARC/POLYLINE/SPLINE sample elevations are validated so mixed-Z/non-planar boundaries are not silently flattened.
-- Room boundary provenance continues through a shared semantic reference resolver so Locate/BQ/Health/BBS/revision navigation does not require duplicate semantic ownership handles.
-- Static guards cover ARC/SPLINE adapter wiring, planarity, bounded sampling and Room Auto lifecycle/rollback/performance contracts.
+- Tường Gạch, Vách Kính and Trụ Tường share guarded LINE/open-POLYLINE native 3D paths.
+- `QS3DWALLJUNCTIONS` classifies L/T/X/Straight/End/Multi centerline nodes.
+- Concurrent wall cleanup work adds `QS3DWALLSNAPPREVIEW` / `QS3DWALLSNAPAPPLY`: endpoint mutation is review-gated and fingerprinted; Apply rejects stale previews and unsupported curved/bulged/nonsemantic sources.
+- Generated semantic geometry invalidated by source-wall mutation is handled with ownership-aware invalidation rather than silently left stale.
+- This closes part of the earlier wall-junction gap, but does **not** yet claim complete automatic physical solid union/reconciliation at every L/T/X/Multi junction.
 
-### Cửa/Lỗ mở and rebar integration
+### Door / Opening
 
-- Preserved the newer physical opening boolean implementation already merged concurrently: cutter preparation happens before mutation and the idempotence fingerprint includes live host/opening geometry, so moving an opening cannot be silently treated as an already-applied cut.
-- Physical cutting now covers compatible generated LINE-host solids for Tường Gạch/ArchitecturalWall, Vách Kính/GlassWall, Trụ Tường/WallPier and Vách BTCT/StructuralWall.
-- Surfaced `QS3DCUTOPENINGS` in Ribbon and Full Domain Hub together with capture and host-link actions.
-- Surfaced the current guarded rectangular-column `QS3DREBAR3D` path in Ribbon and Full Domain Hub while keeping its scope explicit.
+- Physical-cut fingerprints include live host/opening geometry and parameters, preventing a moved opening from being mistaken for an already-applied cut.
+- Physical cutting covers compatible LINE hosts and guarded straight/non-bulged POLYLINE segments that safely project to one segment; curved/bulged/corner-crossing cases fail closed.
+- `QS3DAUTOLINKHOSTS` automates only the semantic host-link step using surface gap, Floor/Zone compatibility, ambiguity rejection and an independent elevation gate. It never silently runs the physical boolean cut.
+- Workspace/Ribbon/Hub expose both Auto Host and explicit manual/cut flows.
 
-### UI discoverability
+### Room Auto
 
-- Ribbon now exposes Tường Gạch, Vách Kính, Trụ Tường, Cửa/Lỗ, Link Host, Khoét Cửa/Lỗ and Cốt thép 3D instead of leaving important flows command-line-only.
-- Full Domain Hub now contains the same major Tường KT/Cửa/rebar entry points.
-- Main workspace, Ribbon and Domain Hub therefore share the same product workflow vocabulary.
+- Preserved direct planar ARC and bounded SPLINE source adapters alongside LINE/POLYLINE.
+- Curve sampling has configurable sagitta/chord limits and hard caps; source elevations/planarity are validated.
+- Auto Room lifecycle remains non-destructive with source provenance, stale-room handling, rollback and semantic-reference Locate behavior.
 
-### Regression/documentation guards
+### Rebar
 
-- `scripts/preflight-geometry-completion.py` now requires the Tường KT variant commands, workspace wiring, Ribbon/Hub buttons, category-aware wall builders, `QS3DBUILD3D` category forwarding and the four compatible LINE-wall boolean host categories.
-- Room static guards cover direct planar ARC and bounded SPLINE Room Auto source adapters.
-- README, command reference, implementation status, master plan and UI specification were refreshed to distinguish implemented source paths from runtime-verified behavior.
+- Preserved rectangular-column 3D bar generation, deterministic linear count/spacing planning and ownership/health checks.
+- BBS-shape-driven geometry supports guarded straight/L/U/Z/custom leg/turn source paths through `QS3DREBAR3DSHAPE` with separate shape ownership/health metadata.
+- Ribbon/Hub expose column and shape rebar geometry/health flows.
+
+### Regression / documentation guards
+
+- Geometry/full-domain/advanced/room/wall-specific preflights continue to guard geometry and ownership contracts.
+- Added `scripts/preflight-blt-workspace.py` to check Family/Instance scope, typed editors, semantic selection sync, Focus/Isolate, Giao tường, wall snap and Auto Host entry-point parity plus key XAML well-formedness.
+- README, COMMANDS, IMPLEMENTATION-STATUS, PLAN, UI-SPEC and ADVANCED-GEOMETRY are being kept aligned with the source-level/runtimed-gated distinction.
 
 ## Preserved concurrent fixes
 
-During the review, `main` advanced repeatedly. The batch deliberately preserved newer concurrent work, including:
+The review intentionally preserved concurrent changes including:
 
-- position/host-aware opening-cut fingerprints and expanded LINE-wall host categories;
-- rectangular column rebar geometry and generated-bar ownership health checks;
-- Room Auto lifecycle/topology hardening, direct planar ARC and bounded SPLINE sampling;
-- shared semantic reference-handle Locate behavior;
-- far-origin wall/opening numeric stability guards;
-- geometry-completion and curve-source preflight wiring.
+- Auto Host with ambiguity/elevation safety;
+- wall snap preview/apply plus atomic generated-geometry invalidation;
+- straight-POLYLINE opening cuts;
+- far-origin-safe wall/opening/junction math;
+- shape rebar source/ownership/health hardening;
+- Room Auto ARC/SPLINE lifecycle hardening;
+- shared semantic reference-handle Locate behavior.
 
 No force update was used to overwrite these changes.
 
@@ -72,11 +80,11 @@ No force update was used to overwrite these changes.
 
 1. Licensed V25 compile + NETLOAD/DemandLoad and private-DWG regression on the newest head.
 2. Real V25 screenshots at 100/125/150/200% DPI and follow-up spacing/icon/context-menu/focus polish.
-3. Production-grade Vách Kính curtain-wall framing/panels and specialized Trụ Tường profiles/material display behavior.
-4. Wall-to-wall joins/T-junction cleanup, freeform/closed-loop profiles and more advanced level/elevation constraints.
-5. Generalized Door/Opening booleans beyond LINE hosts, especially curved/polyline hosts.
-6. General rebar authoring beyond rectangular-column longitudinal bars.
-7. Native non-planar curve projection only if product requirements justify it; direct planar ARC and bounded SPLINE support are already implemented in source.
-8. Transient highlight/isolate/section-box UX proven against BricsCAD V25.
+3. Production-grade Vách Kính curtain-wall framing/panels and specialized Trụ Tường profiles/material presentation.
+4. Complete physical wall-solid reconciliation/union at L/T/X/Multi junctions beyond the current guarded source-centerline snap workflow.
+5. Curved/bulged polyline-host opening booleans and complex corner-spanning openings.
+6. Broader beam/slab/wall/stirrup/hook/bend-radius rebar authoring and editing.
+7. Specialized material/level/classification editors, section-box workflow, commercial icons/shortcuts/context menus and proven large-model virtualization.
+8. Authenticode/signed updater and optional commercial backend.
 
-GitHub Actions remain manual-only. This review updates source and static guards but does not dispatch CI or substitute for licensed BricsCAD V25 runtime proof.
+GitHub Actions remain manual-only. This review updates source/static guards and documentation but does not substitute for licensed BricsCAD V25 runtime proof.
