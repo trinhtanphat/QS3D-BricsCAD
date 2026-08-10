@@ -72,7 +72,9 @@ required = {
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs": [
         "SelectInspectionSemanticSourcesForBuild()",
         "SemanticReferenceHandles.MatchesSelection(x, handles)",
-        "Cad.CadHandleService.Select(doc, matches[0].SourceHandles)",
+        ".SelectMany(x => x.SourceHandles)",
+        ".Distinct(StringComparer.OrdinalIgnoreCase)",
+        "Cad.CadHandleService.Select(doc, sourceHandles)",
         'Send("QS3DBUILD3D")',
     ],
     "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs": [
@@ -213,9 +215,18 @@ if build3d.is_file():
     if "foreach (var category in categories)" in text:
         errors.append("QS3DBUILD3D must not commit independent category builders sequentially in one logical operation")
 
+workspace = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
+if workspace.is_file():
+    text = workspace.read_text(encoding="utf-8")
+    helper = text.split("private int SelectInspectionSemanticSourcesForBuild()", 1)[-1].split("private void ApplyFamilyFilter()", 1)[0]
+    if ".Take(2)" in helper or "matches.Count != 1" in helper:
+        errors.append("Workspace Vẽ/Cập nhật 3D must restore the full selected semantic batch, not only a single element")
+    if ".SelectMany(x => x.SourceHandles)" not in helper or "Cad.CadHandleService.Select(doc, sourceHandles)" not in helper:
+        errors.append("Workspace Vẽ/Cập nhật 3D must resolve selected semantic/generated aliases back to all distinct source handles")
+
 print("QS3D Direct Draw P0 preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw prompts BLT-style P0 dimensions, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and QS3DBUILD3D resolves semantic/generated selections back to complete live sources before rebuilding.")
+print("PASS: Direct Draw prompts BLT-style P0 dimensions, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and QS3DBUILD3D/Workspace resolve semantic/generated selections back to complete live source batches before rebuilding.")
