@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 
 namespace QS3D.Core.Services
 {
@@ -31,15 +32,33 @@ namespace QS3D.Core.Services
         public static IReadOnlyList<ProjectElement> SynchronizeExisting(ProjectState project, ProjectElement room)
         {
             ValidateRoom(project, room);
-            var synchronized = new List<ProjectElement>();
-            foreach (var category in FinishCategories)
+            var rollback = ProjectStateSnapshot.Capture(project);
+            try
             {
-                var finish = RoomFinishIdentityService.FindExisting(project, room, category);
-                if (finish == null) continue;
-                Synchronize(project, room, finish);
-                synchronized.Add(finish);
+                var synchronized = new List<ProjectElement>();
+                foreach (var category in FinishCategories)
+                {
+                    var finish = RoomFinishIdentityService.FindExisting(project, room, category);
+                    if (finish == null) continue;
+                    Synchronize(project, room, finish);
+                    synchronized.Add(finish);
+                }
+                return synchronized.AsReadOnly();
             }
-            return synchronized.AsReadOnly();
+            catch (Exception operationError)
+            {
+                try
+                {
+                    rollback.Restore(project);
+                }
+                catch (Exception restoreError)
+                {
+                    throw new InvalidOperationException(
+                        "Room finish synchronization failed and project rollback also failed.",
+                        new AggregateException(operationError, restoreError));
+                }
+                throw;
+            }
         }
 
         public static void Synchronize(ProjectState project, ProjectElement room, ProjectElement finish)
