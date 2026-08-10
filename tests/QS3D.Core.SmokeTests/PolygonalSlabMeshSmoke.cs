@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             RectangleMatchesLegacyLengthsAndCount();
             ConcaveFootprintSplitsBarsDeterministically();
             SlopedBoundaryRespectsEuclideanCover();
+            FarOriginMatchesLocalLayout();
             SelfIntersectionFailsClosed();
             ImpossibleCoverFailsClosed();
             AggregateBarLimitFailsClosed();
@@ -92,6 +93,45 @@ namespace QS3D.Core.SmokeTests
                 AssertBoundaryDistance(footprint, bar.StartM, required);
                 AssertBoundaryDistance(footprint, bar.EndM, required);
                 AssertBoundaryDistance(footprint, new Point2((bar.StartM.X + bar.EndM.X) / 2d, (bar.StartM.Y + bar.EndM.Y) / 2d), required);
+            }
+        }
+
+        private static void FarOriginMatchesLocalLayout()
+        {
+            var localFootprint = new[]
+            {
+                new Point2(0d, 0d), new Point2(5d, 0d), new Point2(5d, 1d),
+                new Point2(2d, 1d), new Point2(2d, 4d), new Point2(5d, 4d),
+                new Point2(5d, 5d), new Point2(0d, 5d)
+            };
+            const double originX = 1_000_000_000d;
+            const double originY = -1_000_000_000d;
+            var farFootprint = localFootprint.Select(point => new Point2(point.X + originX, point.Y + originY)).ToArray();
+
+            var localInput = BaseInput(localFootprint);
+            localInput.XCount = 5;
+            localInput.YCount = 5;
+            var farInput = BaseInput(farFootprint);
+            farInput.XCount = 5;
+            farInput.YCount = 5;
+
+            var local = PolygonalSlabMeshPlanner.Plan(localInput);
+            var far = PolygonalSlabMeshPlanner.Plan(farInput);
+            Equal(local.Count, far.Count);
+            Near(local.XActualSpacingM, far.XActualSpacingM, 1e-8d);
+            Near(local.YActualSpacingM, far.YActualSpacingM, 1e-8d);
+
+            for (var index = 0; index < local.Bars.Count; index++)
+            {
+                var expected = local.Bars[index];
+                var actual = far.Bars[index];
+                Equal(expected.Face, actual.Face);
+                Equal(expected.Direction, actual.Direction);
+                Near(expected.StartM.X, actual.StartM.X - originX, 5e-7d);
+                Near(expected.StartM.Y, actual.StartM.Y - originY, 5e-7d);
+                Near(expected.EndM.X, actual.EndM.X - originX, 5e-7d);
+                Near(expected.EndM.Y, actual.EndM.Y - originY, 5e-7d);
+                Near(expected.LengthM, actual.LengthM, 5e-7d);
             }
         }
 
