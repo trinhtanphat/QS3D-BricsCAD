@@ -42,6 +42,18 @@ function Assert-AuthenticodeSigner {
     if ($actualSigner -ne $ExpectedSigner) { throw "$Label signer mismatch. Expected $ExpectedSigner, got $actualSigner." }
 }
 
+function Read-PluginAssemblyVersion {
+    param([string]$Path)
+    try {
+        $version = [Reflection.AssemblyName]::GetAssemblyName($Path).Version
+        if (-not $version) { throw 'assembly version is missing' }
+        return $version
+    }
+    catch {
+        throw "QS3D plugin assembly version is unreadable: $($_.Exception.Message)"
+    }
+}
+
 function Assert-ZipPayloadMatchesSignedStaging {
     param([string]$ZipPath, [string]$PackageRoot, [string]$ExpectedSigner)
     $temp = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-manifest-verify-' + [Guid]::NewGuid().ToString('N'))
@@ -99,6 +111,10 @@ $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
 foreach ($name in $SignedPayloadNames) {
     Assert-AuthenticodeSigner -Path (Join-Path $package $name) -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name)
 }
+$signedPluginVersion = Read-PluginAssemblyVersion -Path (Join-Path $package 'QS3D.BricsCAD.V25.dll')
+if ($version -ne $signedPluginVersion) {
+    throw "PACKAGE-METADATA version $version does not match signed QS3D plugin assembly version $signedPluginVersion."
+}
 Assert-ZipPayloadMatchesSignedStaging -ZipPath $zip -PackageRoot $package -ExpectedSigner $expectedSigner
 
 $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -106,7 +122,7 @@ $manifest = [ordered]@{
     schemaVersion = 1
     product = 'QS3D'
     target = 'BricsCAD V25 x64'
-    version = $version.ToString()
+    version = $signedPluginVersion.ToString()
     packageUri = $uri.AbsoluteUri
     sha256 = $zipHash
     signerThumbprint = $expectedSigner
@@ -122,6 +138,6 @@ if ($PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
 }
 
 Write-Host "Update manifest: $outputFull"
-Write-Host "Version: $($version.ToString())"
+Write-Host "Version: $($signedPluginVersion.ToString())"
 Write-Host "Package SHA256: $zipHash"
 Write-Host "Signer: $expectedSigner"
