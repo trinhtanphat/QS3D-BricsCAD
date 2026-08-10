@@ -38,6 +38,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 issues,
                 "DoorOpeningNativeTableBuilder",
                 () => DoorOpeningNativeTableBuilder.Inspect(document, project));
+            AddProviderSafely(
+                issues,
+                "RoomFinishNativeTableBuilder",
+                () => RoomFinishNativeTableBuilder.Inspect(document, project));
             return issues.AsReadOnly();
         }
 
