@@ -28,7 +28,11 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnDrawingListPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             var item = FindRightPanelContainer<ListViewItem>(DrawingList, e.OriginalSource as DependencyObject);
-            if (item == null) return;
+            if (item == null)
+            {
+                DrawingList.UnselectAll();
+                return;
+            }
             item.IsSelected = true;
             item.Focus();
         }
