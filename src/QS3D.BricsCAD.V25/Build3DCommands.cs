@@ -84,12 +84,14 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var built = BuildCategory(document, project, category);
+                // Semantic validation/regeneration can fail on rules/dependencies. Run it before
+                // committing any replacement Solid3d so those blockers cannot leave a partial CAD rebuild.
+                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
+                var built = BuildCategory(document, project, category);
                 if (built <= 0)
                     throw new InvalidOperationException("Không tạo được solid từ source đang chọn. Tường KT cần LINE hoặc open POLYLINE; các cấu kiện khác phải đúng source profile được builder hỗ trợ.");
 
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 project.Touch();
                 PaletteCoordinator.RefreshProject();
                 document.Editor.Regen();
