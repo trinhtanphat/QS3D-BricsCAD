@@ -8,6 +8,7 @@ using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Services;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
@@ -162,12 +163,14 @@ namespace QS3D.BricsCAD.V25
             Func<ObjectId> createSource,
             Action<ProjectElement>? configureElement = null)
         {
+            EnsureActive(document, "Direct Draw " + category);
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
-            var priorGenerated = new HashSet<string>(GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project), StringComparer.OrdinalIgnoreCase);
             var sourceId = ObjectId.Null;
             var sourceHandle = string.Empty;
-            var elementId = string.Empty;
+            ProjectElement? createdElement = null;
+            var regenerated = 0;
+            var solids = 0;
 
             try
             {
@@ -179,47 +182,34 @@ namespace QS3D.BricsCAD.V25
                 var captured = SemanticCaptureService.Capture(document, category);
                 if (captured != 1) throw new InvalidOperationException("Direct Draw cần capture đúng một semantic element, nhận được " + captured + ".");
 
-                var element = project.Elements.SingleOrDefault(x =>
+                createdElement = project.Elements.SingleOrDefault(x =>
                     x.Category == category && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)));
-                if (element == null) throw new InvalidOperationException("Không tìm thấy semantic element vừa tạo cho source " + sourceHandle + ".");
-                elementId = element.Id;
+                if (createdElement == null) throw new InvalidOperationException("Không tìm thấy semantic element vừa tạo cho source " + sourceHandle + ".");
 
-                configureElement?.Invoke(element);
+                configureElement?.Invoke(createdElement);
 
                 // Resolve dependency/rule failures before any native builder commits Solid3d output.
                 // Instance dimensions are configured after the initial capture and therefore need
                 // a deterministic regeneration pass before the native builder consumes them.
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
-                var solids = BuildSelected(document, project, category);
+                solids = BuildSelected(document, project, category);
                 if (solids <= 0) throw new InvalidOperationException("Native 3D builder không tạo được solid cho " + category + ".");
 
                 project.Touch();
-                PaletteCoordinator.RefreshProject();
-                var generatedHandle = element.Properties.TryGetValue("GeneratedSolidHandle", out var generated) ? generated : string.Empty;
-                if (!string.IsNullOrWhiteSpace(generatedHandle)) CadHandleService.Select(document, new[] { generatedHandle });
-                else document.Editor.SetImpliedSelection(new[] { sourceId });
-                document.Editor.Regen();
-
-                var status = "Direct Draw " + category + ": 1 semantic • " + solids + " solid • regenerate " + regenerated + ".";
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
-                document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
             }
             catch (Exception operationError)
             {
-                var cleanupHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                if (!string.IsNullOrWhiteSpace(sourceHandle)) cleanupHandles.Add(sourceHandle);
-                foreach (var handle in GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project))
-                    if (!priorGenerated.Contains(handle)) cleanupHandles.Add(handle);
-
+                var generatedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 Exception? ownershipDiscoveryError = null;
-                if (!string.IsNullOrWhiteSpace(elementId))
+                if (createdElement != null)
                 {
+                    foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(createdElement))
+                        if (!string.IsNullOrWhiteSpace(entry.Key)) generatedHandles.Add(entry.Key.Trim());
                     try
                     {
-                        foreach (var handle in GeneratedGeometryService.FindMatchingOwnedHandles(document, project.ProjectId, elementId, category))
-                            cleanupHandles.Add(handle);
+                        foreach (var handle in GeneratedGeometryService.FindMatchingOwnedHandles(document, project.ProjectId, createdElement.Id, createdElement.Category))
+                            if (!string.IsNullOrWhiteSpace(handle)) generatedHandles.Add(handle.Trim());
                     }
                     catch (Exception ex)
                     {
@@ -227,25 +217,27 @@ namespace QS3D.BricsCAD.V25
                     }
                 }
 
-                Exception? restoreError = null;
                 Exception? cadCleanupError = null;
+                Exception? restoreError = null;
+                try { EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles); }
+                catch (Exception ex) { cadCleanupError = ex; }
                 try { rollback.Restore(project); }
                 catch (Exception ex) { restoreError = ex; }
-                try { EraseHandles(document, cleanupHandles); }
-                catch (Exception ex) { cadCleanupError = ex; }
                 try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
                 catch { }
 
-                if (ownershipDiscoveryError != null || restoreError != null || cadCleanupError != null)
+                if (ownershipDiscoveryError != null || cadCleanupError != null || restoreError != null)
                 {
                     var errors = new List<Exception> { operationError };
                     if (ownershipDiscoveryError != null) errors.Add(ownershipDiscoveryError);
-                    if (restoreError != null) errors.Add(restoreError);
                     if (cadCleanupError != null) errors.Add(cadCleanupError);
+                    if (restoreError != null) errors.Add(restoreError);
                     throw new InvalidOperationException("Direct Draw thất bại và rollback không hoàn tất đầy đủ.", new AggregateException(errors));
                 }
                 throw;
             }
+
+            FinalizeUi(document, createdElement!, sourceId, solids, regenerated);
         }
 
         private static int BuildSelected(Document document, ProjectState project, ElementCategory category)
@@ -373,12 +365,17 @@ namespace QS3D.BricsCAD.V25
             var depth = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, depthM, "DirectDraw Column DepthM"), "DirectDraw Column depth drawing units");
             var halfWidth = width / 2d;
             var halfDepth = depth / 2d;
+            var left = CadGeometryGuard.Subtract(center.X, halfWidth, "DirectDraw Column left X");
+            var right = CadGeometryGuard.Add(center.X, halfWidth, "DirectDraw Column right X");
+            var bottom = CadGeometryGuard.Subtract(center.Y, halfDepth, "DirectDraw Column bottom Y");
+            var top = CadGeometryGuard.Add(center.Y, halfDepth, "DirectDraw Column top Y");
+            var z = CadGeometryGuard.Finite(center.Z, "DirectDraw Column Z");
             return CreatePolyline(document, new[]
             {
-                new Point3d(center.X - halfWidth, center.Y - halfDepth, center.Z),
-                new Point3d(center.X + halfWidth, center.Y - halfDepth, center.Z),
-                new Point3d(center.X + halfWidth, center.Y + halfDepth, center.Z),
-                new Point3d(center.X - halfWidth, center.Y + halfDepth, center.Z)
+                new Point3d(left, bottom, z),
+                new Point3d(right, bottom, z),
+                new Point3d(right, top, z),
+                new Point3d(left, top, z)
             }, true);
         }
 
@@ -421,7 +418,8 @@ namespace QS3D.BricsCAD.V25
         private static double FamilyNumber(ProjectState project, ElementCategory category, string key, double fallback)
         {
             var value = FamilyFiniteNumber(project, category, key, fallback);
-            return value > 0d ? value : fallback;
+            if (!(value > 0d)) throw new InvalidOperationException("Family " + category + "/" + key + " phải là số hữu hạn > 0 cho Direct Draw.");
+            return value;
         }
 
         private static double FamilyFiniteNumber(ProjectState project, ElementCategory category, string key, double fallback)
@@ -434,7 +432,8 @@ namespace QS3D.BricsCAD.V25
             }
             family = family ?? project.Families.FirstOrDefault(x => x.Category == category);
             if (family == null || !family.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return fallback;
-            if (!double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value)) return fallback;
+            if (!double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value))
+                throw new InvalidOperationException("Family " + family.Id + "/" + key + " phải là số hữu hạn cho Direct Draw.");
             return value;
         }
 
@@ -450,34 +449,73 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void EraseHandles(Document document, IEnumerable<string> handles)
+        private static void EraseDirectDrawCad(Document document, ProjectState project, ProjectElement? createdElement, ObjectId sourceId, IEnumerable<string> generatedHandles)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            if (handles == null) throw new ArgumentNullException(nameof(handles));
-
+            if (project == null) throw new ArgumentNullException(nameof(project));
             var normalized = new HashSet<string>(
-                handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                (generatedHandles ?? Array.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
                 StringComparer.OrdinalIgnoreCase);
-            if (normalized.Count == 0) return;
 
-            var ids = CadHandleService.Resolve(document, normalized);
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
+                if (!sourceId.IsNull && sourceId.IsValid)
+                {
+                    var source = transaction.GetObject(sourceId, OpenMode.ForWrite, true) as Entity;
+                    if (source != null && !source.IsErased) source.Erase(true);
+                }
+
+                var ids = CadHandleService.Resolve(document, normalized);
                 foreach (var id in ids)
                 {
-                    var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
-                    if (entity == null)
-                        throw new InvalidOperationException("Direct Draw rollback handle " + id.Handle + " không còn trỏ tới Entity hợp lệ.");
-                    if (!entity.IsErased) entity.Erase(true);
+                    if (createdElement == null) throw new InvalidOperationException("Direct Draw rollback found generated CAD without the newly-created semantic owner.");
+                    if (id.IsNull || !id.IsValid || id == sourceId) continue;
+                    var entity = transaction.GetObject(id, OpenMode.ForWrite, true) as Entity;
+                    if (entity == null) throw new InvalidOperationException("Direct Draw rollback generated handle " + id.Handle + " không còn trỏ tới Entity hợp lệ.");
+                    if (entity.IsErased) continue;
+                    GeneratedGeometryService.RequireMatchingOwnership(entity, project, createdElement, "rollback Direct Draw generated CAD " + id.Handle);
+                    entity.Erase(true);
                 }
                 transaction.Commit();
             }
 
-            var remaining = CadHandleService.GetLiveHandles(document, normalized);
-            if (remaining.Count > 0)
-                throw new InvalidOperationException("Direct Draw rollback còn CAD handle chưa xóa: " + string.Join(", ", remaining.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)) + ".");
-            document.Editor.Regen();
+            var remainingGenerated = CadHandleService.GetLiveHandles(document, normalized);
+            if (remainingGenerated.Count > 0)
+                throw new InvalidOperationException("Direct Draw rollback còn generated CAD handle chưa xóa: " + string.Join(", ", remainingGenerated.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)) + ".");
+            if (!sourceId.IsNull && sourceId.IsValid)
+            {
+                var remainingSource = CadHandleService.GetLiveHandles(document, new[] { sourceId.Handle.ToString() });
+                if (remainingSource.Count > 0)
+                    throw new InvalidOperationException("Direct Draw rollback còn source CAD chưa xóa: " + sourceId.Handle + ".");
+            }
+        }
+
+        private static void FinalizeUi(Document document, ProjectElement element, ObjectId sourceId, int solids, int regenerated)
+        {
+            var status = "Direct Draw " + element.Category + ": 1 semantic • " + solids + " solid • regenerate " + regenerated + ".";
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                var generatedHandle = element.Properties.TryGetValue("GeneratedSolidHandle", out var generated) ? generated : string.Empty;
+                if (!string.IsNullOrWhiteSpace(generatedHandle)) CadHandleService.Select(document, new[] { generatedHandle });
+                else if (!sourceId.IsNull && sourceId.IsValid) document.Editor.SetImpliedSelection(new[] { sourceId });
+                document.Editor.Regen();
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\nQS3D " + status);
+                document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
+            }
+            catch (Exception ex)
+            {
+                try { document.Editor.WriteMessage("\nQS3D " + status + " UI sync warning: " + ex.Message); }
+                catch { }
+            }
+        }
+
+        private static void EnsureActive(Document document, string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(operation + " yêu cầu đúng DWG đã bắt đầu lệnh vẫn là bản vẽ active.");
         }
 
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
