@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25.Cad;
 using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -44,6 +45,8 @@ namespace QS3D.BricsCAD.V25.UI
                     : activeFloor.Name + " • " + activeFloor.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m";
                 FamilyCountText.Text = project.Families.Count.ToString(CultureInfo.InvariantCulture);
                 ElementCountText.Text = project.Elements.Count.ToString(CultureInfo.InvariantCulture);
+                try { UnitText.Text = CadUnitService.Describe(_document); UnitText.ToolTip = null; }
+                catch (Exception unitError) { UnitText.Text = "BLOCKED"; UnitText.ToolTip = unitError.Message; }
                 Title = "QS3D • Thiết lập dự án • " + DrawingLabel(_document);
                 if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
                     SetStatus("Project snapshot đã đồng bộ.");

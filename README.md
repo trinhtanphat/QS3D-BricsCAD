@@ -98,7 +98,7 @@ Beam stirrups can use explicitly configured bend-radius/hook-tail parameters. Fa
 
 - BQ grouping/filtering/Locate and one-sheet XLSX review. `QS3DED2` applies `Selection/Floor/Zone/All` before aggregation, writes one-element-per-row `CHI_TIET` plus Zone-aware `TONG_HOP`, and `QS3DEXCELLOCATE` validates Element ID ↔ Handle ↔ DWG fingerprint before changing CAD selection.
 - Quick Takeoff with drawing-unit conversion.
-- `QS3DB4D` bounded Current Space scan with high-confidence recognition/review. Entity type is a mandatory compatibility gate (for example DBText on `A-WALL` cannot become a wall), and `Solid3d.MassProperties` volume/total-surface metrics remain distinct from planar footprint area.
+- `QS3DB4D` bounded Current Space scan with high-confidence recognition/review. Entity type is a mandatory compatibility gate (for example DBText on `A-WALL` cannot become a wall), metricless `ProxyEntity` candidates remain review-only, and `Solid3d.MassProperties` volume/total-surface metrics remain distinct from planar footprint area. Undefined/unsupported `INSUNITS` must be resolved explicitly through persisted `QS3DUNITS` before B4D/BQ/ED2 quantity conversion.
 - B4D excludes generated output via canonical Core `CollectOwnerHandles(project)`, so owner classification, parsing and dedupe remain one source of truth as generated families evolve.
 - BBS review/XLSX/UTF-8 CSV.
 - Document-bound Schedule Hub for BQ, Room Finish, Material, Curtain, Door/Opening and rebar schedule/export workflows.
@@ -126,7 +126,7 @@ See [`docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`](docs/REVIEW-2026-08-10-CONT
 
 - `QS3D`, `QS3DHIDE`, `QS3DDOMAIN`, `QS3DPROJECTTOOLS`, `QS3DSCHEDULES`
 - `QS3DZONES`, `QS3DLEVELS`, `QS3DFAMILIES`, `QS3DMATERIALS`
-- `QS3DSAVE`, `QS3DRELOAD`, `QS3DREFRESH`, `QS3DREGEN`
+- `QS3DSAVE`, `QS3DRELOAD`, `QS3DREFRESH`, `QS3DREGEN`, `QS3DUNITS`
 - `QS3DHEALTH`, `QS3DHEALTHALL`, `QS3DRELEASECHECK`, `QS3DRUNTIMEPROBE`
 
 ### Semantic model / geometry

@@ -48,7 +48,17 @@ namespace QS3D.Core.Recognition
         public IReadOnlyList<RecognitionCandidate> Candidates { get; }
         public RecognitionCandidate? TopCandidate => Candidates.Count == 0 ? null : Candidates[0];
         public double Margin => Candidates.Count < 2 ? (TopCandidate?.Confidence ?? 0d) : Candidates[0].Confidence - Candidates[1].Confidence;
-        public bool RequiresReview => TopCandidate == null || TopCandidate.Confidence < 0.82d || Margin < 0.15d;
+        public bool IsCaptureReady => TopCandidate != null && EntitySnapshotCaptureEligibility.IsReady(Snapshot, TopCandidate.Category, out _);
+        public string CaptureReadinessReason
+        {
+            get
+            {
+                if (TopCandidate == null) return "No recognition candidate is available.";
+                EntitySnapshotCaptureEligibility.IsReady(Snapshot, TopCandidate.Category, out var reason);
+                return reason;
+            }
+        }
+        public bool RequiresReview => TopCandidate == null || TopCandidate.Confidence < 0.82d || Margin < 0.15d || !IsCaptureReady;
         public string Handle => Snapshot.Handle;
         public string SuggestedCategory => TopCandidate?.Category.ToString() ?? string.Empty;
         public double Confidence => TopCandidate?.Confidence ?? 0d;
@@ -78,7 +88,7 @@ namespace QS3D.Core.Recognition
             if (materialized.Any(x => x == null)) throw new ArgumentException("Recognition results cannot contain null.", nameof(results));
             foreach (var result in materialized) result.ValidateCurrentCandidates();
             Results = materialized.AsReadOnly();
-            AutoAccepted = Results.Where(x => x.TopCandidate is RecognitionCandidate candidate && candidate.Confidence >= autoAcceptConfidence && x.Margin >= minimumMargin).ToList().AsReadOnly();
+            AutoAccepted = Results.Where(x => x.TopCandidate is RecognitionCandidate candidate && candidate.Confidence >= autoAcceptConfidence && x.Margin >= minimumMargin && x.IsCaptureReady).ToList().AsReadOnly();
             ReviewRequired = Results.Except(AutoAccepted).ToList().AsReadOnly();
         }
         public IReadOnlyList<RecognitionResult> Results { get; }
@@ -116,6 +126,8 @@ namespace QS3D.Core.Recognition
             foreach (var rule in _rules)
             {
                 var candidate = Score(rule, layer, contextualText, entityType);
+                if (!EntitySnapshotCaptureEligibility.IsReady(snapshot, rule.Category, out var reason) && candidate.Confidence >= 0.20d)
+                    candidate.Evidence.Add("capture-blocked:" + reason);
                 if (candidate.Confidence >= 0.20d) candidates.Add(candidate);
             }
             return new RecognitionResult(snapshot, candidates.OrderByDescending(x => x.Confidence).ThenBy(x => x.RuleId, StringComparer.OrdinalIgnoreCase).ToList());

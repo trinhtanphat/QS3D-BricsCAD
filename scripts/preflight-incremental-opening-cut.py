@@ -16,7 +16,7 @@ def read(relative: str) -> str:
 
 
 service = read("src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs")
-state = read("src/QS3D.BricsCAD.V25/Cad/PhysicalOpeningCutTargetState.cs")
+state = read("src/QS3D.Core/Services/PhysicalOpeningCutTargetStateCodec.cs")
 live = read("src/QS3D.BricsCAD.V25/Cad/PhysicalOpeningCutLiveStateService.cs")
 invalidator = read("src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs")
 doc = read("docs/LOCAL-V25-INCREMENTAL-OPENING-CUT.md")
@@ -53,8 +53,8 @@ for token in [
     'Convert.ToBase64String',
     'Convert.FromBase64String',
     'StringComparer.OrdinalIgnoreCase',
-    'Physical opening target không còn tồn tại',
-    'không còn linked tới host',
+    'Physical opening target no longer exists',
+    'is no longer linked to host',
 ]:
     if token not in state:
         errors.append("PhysicalOpeningCutTargetState missing bounded/fail-closed contract: " + token)

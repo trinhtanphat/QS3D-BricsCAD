@@ -41,6 +41,7 @@ namespace QS3D.BricsCAD.V25
             var operation = scanCurrentSpace ? "QS3DB4D" : autoApply ? "QS3DRECOGNIZEAUTO" : "QS3DRECOGNIZE";
             Guard(doc, operation, () =>
             {
+                if (!DrawingUnitWorkflow.EnsureResolved(doc, operation)) return;
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
                 var snapshots = scanCurrentSpace ? EntitySnapshotReader.ReadCurrentSpace(doc) : EntitySnapshotReader.ReadCurrentSelection(doc);
                 if (scanCurrentSpace)
