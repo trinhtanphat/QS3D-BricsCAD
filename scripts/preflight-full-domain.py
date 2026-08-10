@@ -15,6 +15,7 @@ required = [
     "src/QS3D.BricsCAD.V25/RoomBoundaryCommands.cs",
     "src/QS3D.BricsCAD.V25/Cad/RoomBoundarySegmentReader.cs",
     "src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs",
+    "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs",
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml",
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml.cs",
     "tests/QS3D.Core.SmokeTests/CompletionRegressionSmoke.cs",
@@ -75,6 +76,15 @@ if room_command.exists():
         if needle not in text: errors.append("QS3DROOMAUTO workflow missing: " + needle)
     if "SourceHandles.Add" in text: errors.append("auto-room discovery must not claim wall/source handles as Room semantic ownership")
 
+room_hub = ROOT / "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml"
+if room_hub.exists() and 'Tag="QS3DROOMAUTO"' not in room_hub.read_text(encoding="utf-8"):
+    errors.append("Full Domain Hub does not expose QS3DROOMAUTO")
+room_ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
+if room_ribbon.exists():
+    text = room_ribbon.read_text(encoding="utf-8")
+    if 'new RibbonButtonSpec("Phòng Auto", "QS3DROOMAUTO")' not in text:
+        errors.append("Ribbon does not expose QS3DROOMAUTO")
+
 completion = ROOT / "tests/QS3D.Core.SmokeTests/CompletionRegressionSmoke.cs"
 if completion.exists():
     text = completion.read_text(encoding="utf-8")
@@ -117,4 +127,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: full-domain files, unique commands, structural quantities/native mass adapters, BBS CSV safety, planar room discovery, DemandLoad packaging/install guards and regression registration are present.")
+print("PASS: full-domain files, unique commands, structural quantities/native mass adapters, BBS CSV safety, planar room discovery/UI wiring, DemandLoad packaging/install guards and regression registration are present.")
