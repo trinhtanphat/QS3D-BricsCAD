@@ -209,7 +209,7 @@ Current source preflights cover, among other things:
 - schedule/export hub wiring;
 - synthetic sample provenance/private-file policy.
 
-`scripts/preflight-all.py` auto-discovers feature preflights, including product-boundary, Direct Draw P0/P1, Door/Opening Direct Draw, P0/extended UCS, targeted opening cut/readiness, Auto Host and Curtain path-frame gates.
+`scripts/preflight-all.py` auto-discovers feature preflights, including product-boundary, Direct Draw P0/P1, Door/Opening Direct Draw, P0/extended UCS (`scripts/preflight-direct-draw-ucs-extended.py`), targeted opening cut/readiness (`scripts/preflight-opening-cut-readiness.py`), Auto Host and Curtain path-frame gates.
 
 ## Manual GitHub Actions policy
 

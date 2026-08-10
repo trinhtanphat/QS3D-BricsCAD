@@ -23,7 +23,7 @@ checks = {
         'Tag="QS3DLEVELS"', 'Tag="QS3DZONES"', 'Tag="QS3DMATERIALS"', 'Tag="QS3DMATERIALXLSX"',
         'Tag="QS3DTEMPLATEEXPORT"', 'Tag="QS3DTEMPLATEIMPORT"', 'Tag="QS3DCURTAIN"', 'Tag="QS3DGEOMETRYEXT"',
         'Tag="QS3DREBARHUB"', 'Tag="QS3DBQ"', 'Tag="QS3DHEALTHALL"', 'Tag="QS3DAUDIT"', 'Click="OnCommandClick"',
-        "Cửa sổ này khóa theo bản vẽ đã mở",
+        "Cửa sổ khóa theo bản vẽ đã mở",
     ],
     "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml.cs": [
         "private readonly Document _document", "ProjectToolsWindow(Document document)", "ProjectContextCoordinator.GetOrCreate(_document)",

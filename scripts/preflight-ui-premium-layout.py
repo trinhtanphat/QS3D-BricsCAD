@@ -119,7 +119,8 @@ checks = {
     "quantity": (
         'Text="BQ REVIEW"', 'x:Name="FloorCombo"', 'x:Name="SearchBox"',
         'x:Name="CategoryList"', 'x:Name="QuantityGrid"', 'x:Name="TotalsText"',
-        'Click="OnColumnVisibilityChanged"', 'Text="DOUBLE-CLICK ROW TO LOCATE • EXPORT XLSX"',
+        'Checked="OnColumnVisibilityChanged"', 'Unchecked="OnColumnVisibilityChanged"',
+        'Text="DOUBLE-CLICK ROW TO LOCATE • EXPORT XLSX"',
     ),
     "rebar_hub": (
         'Text="REBAR WORKFLOW"', 'x:Key="RebarCard"', 'Tag="QS3DREBAR3D"',

@@ -32,7 +32,7 @@ for relative in required:
 checks = {
     "src/QS3D.Core/Domain/ProjectFloorService.cs": [
         "MaxFloors = 2000", "Create", "Update", "SetActive", "Assign", "Delete", "ReferenceCount",
-        "Cannot delete the active floor", "Reassign them before deletion",
+        "Cannot delete the active floor", "Reassign or clear Floor/Level references before deletion",
         "element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity)",
         "flags |= ElementDirtyFlags.Geometry",
     ],
@@ -58,7 +58,7 @@ checks = {
         "ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity",
         "flags |= ElementDirtyFlags.Geometry",
         "Cannot delete the active floor",
-        "Reassign them before deletion",
+        "Reassign or clear Floor/Level references before deletion",
         "Value must be finite",
         "ReferenceEquals(owned, element)",
         "Element does not belong to the project instance",
@@ -67,7 +67,7 @@ checks = {
     "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs": [
         "selected.Contains(handle)", "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
         "ambiguously owned by semantic elements",
-        "Resolve project ownership before bulk property edits",
+        "Resolve project semantic ownership before continuing",
     ],
     "src/QS3D.BricsCAD.V25/Cad/SemanticSelectionResolver.cs": [
         "SelectImplied", "StartOpenCloseTransaction", "SemanticHandleOwnershipResolver.Resolve(project, selectedHandles)",

@@ -15,11 +15,13 @@ for path in (STATE, SMOKE, REG):
 if STATE.is_file():
     text = STATE.read_text(encoding="utf-8")
     for token in (
-        "var normalized = NormalizeLookupId(id);",
-        "normalized.Length == 0 ? null : Elements.FirstOrDefault",
-        "normalized.Length == 0 ? null : Families.FirstOrDefault",
-        "normalized.Length == 0 ? null : QuantityRules.FirstOrDefault",
+        'FindUnique(Elements, NormalizeLookupId(id), x => x.Id, "element")',
+        'FindUnique(Families, NormalizeLookupId(id), x => x.Id, "family")',
+        'FindUnique(QuantityRules, NormalizeLookupId(id), x => x.Id, "quantity rule")',
         "private static string NormalizeLookupId(string id) => (id ?? string.Empty).Trim();",
+        "private static T? FindUnique<T>",
+        "if (normalizedId.Length == 0) return null;",
+        'throw new InvalidOperationException("Project contains duplicate " + label + " id: " + normalizedId)',
     ):
         if token not in text:
             errors.append("ProjectState.cs missing normalized lookup token: " + token)
@@ -29,6 +31,7 @@ if SMOKE.is_file():
     for token in (
         "LookupsNormalizeWhitespaceAndCase();",
         "BlankAndMissingLookupsReturnNull();",
+        "DuplicateLookupsFailClosed();",
         'project.FindElement(" element-1 ")',
         'project.FindFamily(" family-1 ")',
         'project.FindQuantityRule(" rule-1 ")',
@@ -44,4 +47,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] project semantic element/family/rule lookups are statically guarded for trimmed case-insensitive IDs and blank/missing inputs")
+print("[PASS] project semantic element/family/rule lookups are statically guarded for trimmed case-insensitive IDs, blank/missing inputs and duplicate-ID ambiguity")

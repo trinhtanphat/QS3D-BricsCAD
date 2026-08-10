@@ -14,7 +14,7 @@ required = {
         "Locked product form: BricsCAD plugin",
         "docs/PRODUCT-BOUNDARY.md",
         "Do not reinterpret",
-        "docs/AGENT-HANDOFF-CURRENT-2026-08-10.md",
+        "docs/AGENT-HANDOFF-CURRENT-2026-08-10-1824.md",
     ],
     "docs/PRODUCT-BOUNDARY.md": [
         "QS3D is intentionally a **BricsCAD V25 x64 .NET plugin**",
@@ -47,7 +47,7 @@ required = {
         "workflow/UX only",
     ],
     "docs/DIRECT-DRAW-WORKFLOW.md": [
-        "QS3D must remain a **BricsCAD V25 x64 .NET plugin**",
+        "QS3D remains a **BricsCAD V25 x64 .NET plugin**",
         "not a request to create a standalone",
     ],
     "docs/DIRECT-DRAW-P0-IMPLEMENTATION.md": [

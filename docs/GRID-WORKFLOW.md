@@ -141,7 +141,7 @@ This semantic Level contract is source-implemented, but native host/opening/curt
 
 If a tracked Grid `LINE`/`ARC` is edited with native BricsCAD tools, the authoritative-source reconcile path is `QS3DSYNCSOURCE`. The command refreshes tracked source-derived semantic state through the guarded source-reconcile contract. Generated Grid annotation may then be reported stale and should be explicitly rebuilt; source reconcile does not silently run destructive/native downstream rebuilds.
 
-## Local V25 validation
+## Local V25 validation (LOCAL_ONLY)
 
 A local-capable agent should include Grid in the exact-SHA runtime matrix:
 
