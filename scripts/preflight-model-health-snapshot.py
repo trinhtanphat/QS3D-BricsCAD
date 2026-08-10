@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+WINDOW = ROOT / "src/QS3D.BricsCAD.V25/UI/ModelHealthWindow.xaml.cs"
+errors = []
+
+if not WINDOW.is_file():
+    errors.append("missing ModelHealthWindow.xaml.cs")
+else:
+    text = WINDOW.read_text(encoding="utf-8")
+    required = (
+        "private readonly ProjectState _projectAtOpen;",
+        "private bool _staleSnapshot;",
+        "_projectAtOpen = ProjectContextCoordinator.GetOrCreate(_document);",
+        "Activated += (_, __) => RefreshSnapshotFreshness();",
+        "EnsureActiveAndCurrent();",
+        "var current = ProjectContextCoordinator.GetOrCreate(_document);",
+        "ReferenceEquals(current, _projectAtOpen)",
+        "IssueGrid.IsEnabled = false;",
+        "SNAPSHOT ĐÃ CŨ",
+        "QS3DHEALTH hoặc QS3DHEALTHALL",
+    )
+    for token in required:
+        if token not in text:
+            errors.append("ModelHealthWindow missing stale-snapshot token: " + token)
+
+    ensure_pos = text.find("private void EnsureActiveAndCurrent()")
+    refresh_pos = text.find("RefreshSnapshotFreshness();", ensure_pos)
+    stale_pos = text.find("if (_staleSnapshot)", refresh_pos)
+    callback_pos = text.find("_locate(issue);")
+    locate_guard_pos = text.find("EnsureActiveAndCurrent();")
+    if min(ensure_pos, refresh_pos, stale_pos, callback_pos, locate_guard_pos) < 0:
+        errors.append("ModelHealthWindow stale locate ordering could not be verified")
+    elif not locate_guard_pos < callback_pos:
+        errors.append("Model Health locate callback must remain behind active-DWG/current-project validation")
+
+if errors:
+    for error in errors:
+        print("[FAIL] " + error)
+    sys.exit(1)
+
+print("[PASS] Model Health snapshots fail closed after project reload/replacement and cannot execute stale Locate callbacks")
