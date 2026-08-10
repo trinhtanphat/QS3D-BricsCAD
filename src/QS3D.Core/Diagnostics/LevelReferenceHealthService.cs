@@ -31,7 +31,7 @@ namespace QS3D.Core.Diagnostics
                         issues.Add(new ModelHealthIssue("TOP_LEVEL_REQUIRES_BOTTOM_LEVEL", HealthSeverity.Error, "TopLevelId yêu cầu BottomLevelId trên cùng cấu kiện.", element.Id));
                     if (hasBottomOffset)
                         issues.Add(new ModelHealthIssue("BOTTOM_LEVEL_OFFSET_WITHOUT_LEVEL", HealthSeverity.Error, "BottomLevelOffsetM chỉ hợp lệ khi có BottomLevelId.", element.Id));
-                    if (hasTopOffset)
+                    if (hasTopOffset && topId.Length == 0)
                         issues.Add(new ModelHealthIssue("TOP_LEVEL_OFFSET_WITHOUT_LEVEL", HealthSeverity.Error, "TopLevelOffsetM chỉ hợp lệ khi có TopLevelId.", element.Id));
                     continue;
                 }
