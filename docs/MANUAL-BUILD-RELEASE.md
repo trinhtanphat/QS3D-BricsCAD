@@ -70,9 +70,22 @@ Runtime/screenshot validation requires an interactive Windows session.
 
 ## Project/DWG readiness before publication
 
-`QS3DRELEASECHECK` is a project-level release-readiness command. On representative release drawings it checks semantic/source/generated health, policy-safe ownership, all current generated rebar families including Foundation mesh, generated-rebar mode semantics, Curtain live state/stale state and BOM/live-solid guards.
+`QS3DRELEASECHECK` is a project-level release-readiness command. On representative release drawings it checks semantic/source/generated health, dependency-cycle health, policy-safe ownership, all current generated rebar families including Foundation mesh, generated-rebar mode semantics, Curtain live state/stale state and BOM/live-solid guards.
 
 A blank drawing is not meaningful private-DWG release evidence. `QS3DRELEASECHECK` should complement—not replace—the licensed V25 representative-DWG runtime regression.
+
+## Transactional install and secure update qualification
+
+The source-side install/update path is hardened, but a production release should exercise it with an actually signed package before publication:
+
+- per-user DemandLoad installation/replacement snapshots the targeted prior payload and registry registration;
+- if a replacement fails, the installer restores the previous files/registration; if a first install fails, partial new state is removed;
+- the updater accepts only the intended HTTPS/package-host path and verifies archive/path/size limits, SHA-256 and Authenticode signer expectations;
+- update version decisions are bound to the Authenticode-verified manifest/payload metadata rather than trusting a mutable unsigned version label;
+- expected-version mismatch, package substitution or replay/relabel conditions must fail before install;
+- installer/updater must never lower BricsCAD `SECURELOAD`.
+
+Production certificate/key custody, timestamping and publication infrastructure remain external release operations. Source-side verification does not itself prove that a production signing key was used correctly.
 
 ## Release safety rules
 
@@ -84,6 +97,7 @@ A blank drawing is not meaningful private-DWG release evidence. `QS3DRELEASECHEC
 - Keep `confirm_release=RELEASE` as an explicit publication gate.
 - Keep `scripts/preflight-ci-manual-only.py` in the aggregate gate.
 - Never package BricsCAD-owned DLLs, BLT/vendor source, customer/private DWGs, signing secrets or certificates.
+- For a production candidate, exercise upgrade rollback from a known previous version and reject an intentionally mismatched/relabelled update package before publication.
 
 The only repository DWG/DXF fixtures allowed by source policy are the explicitly reviewed synthetic samples under `samples/generated`.
 
@@ -100,6 +114,7 @@ Use the exact requested commit/tag, run `release-v25.yml` manually, keep runtime
 - V25 adapter build result;
 - runtime/NETLOAD result;
 - representative-DWG / `QS3DRELEASECHECK` result when performed;
+- install/update rollback + signed-manifest/version-binding qualification when performed;
 - package SHA-256;
 - GitHub Release tag and attached artifact names.
 
