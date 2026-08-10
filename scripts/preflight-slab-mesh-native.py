@@ -11,6 +11,8 @@ required = [
     "tests/QS3D.Core.SmokeTests/SlabMeshRegressionSmoke.cs",
     "src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs",
     "src/QS3D.BricsCAD.V25/SlabMeshCommands.cs",
 ]
 for rel in required:
@@ -30,25 +32,37 @@ if builder.is_file():
     for needle in (
         "ElementCategory.Slab",
         "RectangularSlabMeshPlanner.Plan",
-        'HandlesKey = "GeneratedRebarHandles"',
+        'HandlesKey = "GeneratedSlabMeshHandles"',
         'Mode = "SlabMeshXY"',
         "GeneratedRebarOwnershipGuard.Build(project)",
         "ownership.EnsureOwned(handle, element, HandlesKey)",
-        "EnsureSlabMeshOwnsGenericRebarSlot",
         "MaxBarsPerBatch = 12000",
         "RebarSlabXNotation",
         "RebarSlabYNotation",
         "RebarSlabCoverM",
         "RebarSlabFaces",
         "RebarSlabXClosestToFace",
-        "same diameter" if False else "cùng đường kính",
         "closed 4-vertex rectangular POLYLINE",
-        "GeneratedRebarSlabXActualSpacingM",
-        "GeneratedRebarSlabYActualSpacingM",
-        '"GeneratedRebarMode"] = Mode',
+        "GeneratedSlabMeshXActualSpacingM",
+        "GeneratedSlabMeshYActualSpacingM",
+        '"GeneratedSlabMeshMode"] = Mode',
         "BooleanOperation" if False else "CreateFrustum",
     ):
         if needle not in text: errors.append("native slab-mesh builder guard missing: " + needle)
+
+ownership_guard = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
+if ownership_guard.is_file() and 'Add(element, "GeneratedSlabMeshHandles", owners)' not in ownership_guard.read_text(encoding="utf-8"):
+    errors.append("slab-mesh handles are missing from cross-set generated ownership")
+
+invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
+if invalidator.is_file() and 'Remove(element, "GeneratedSlabMeshHandles")' not in invalidator.read_text(encoding="utf-8"):
+    errors.append("slab-mesh handles are not invalidated with dependent generated geometry")
+
+health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs"
+if health.is_file():
+    text = health.read_text(encoding="utf-8")
+    for needle in ('HandlesKey = "GeneratedSlabMeshHandles"', "BuildOwnershipIndex(project)", "SLAB_MESH_MODE_INVALID"):
+        if needle not in text: errors.append("slab-mesh health guard missing: " + needle)
 
 command = ROOT / "src/QS3D.BricsCAD.V25/SlabMeshCommands.cs"
 if command.is_file():

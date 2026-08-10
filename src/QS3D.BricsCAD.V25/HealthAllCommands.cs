@@ -69,7 +69,7 @@ namespace QS3D.BricsCAD.V25
                 });
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DHEALTHALL lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);
