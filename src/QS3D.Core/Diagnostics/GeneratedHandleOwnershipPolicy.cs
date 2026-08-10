@@ -41,13 +41,14 @@ namespace QS3D.Core.Diagnostics
             return false;
         }
 
-        public static bool AreSameLogicalOwnerSlots(string left, string right)
+        public static string CanonicalOwnerSlot(string key)
         {
-            var leftNormalized = (left ?? string.Empty).Trim();
-            var rightNormalized = (right ?? string.Empty).Trim();
-            if (string.Equals(leftNormalized, rightNormalized, StringComparison.OrdinalIgnoreCase)) return true;
-            return IsHostSolidAlias(leftNormalized) && IsHostSolidAlias(rightNormalized);
+            var normalized = (key ?? string.Empty).Trim();
+            return IsHostSolidAlias(normalized) ? GeneratedSolidOwnerKey : normalized;
         }
+
+        public static bool AreSameLogicalOwnerSlots(string left, string right) =>
+            string.Equals(CanonicalOwnerSlot(left), CanonicalOwnerSlot(right), StringComparison.OrdinalIgnoreCase);
 
         public static IEnumerable<KeyValuePair<string, string>> EnumerateOwnerHandles(ProjectElement element)
         {
@@ -57,6 +58,19 @@ namespace QS3D.Core.Diagnostics
                 if (!IsOwnerSlot(property.Key) || string.IsNullOrWhiteSpace(property.Value)) continue;
                 foreach (var handle in SplitHandles(property.Value))
                     yield return new KeyValuePair<string, string>(handle, property.Key);
+            }
+        }
+
+        public static IEnumerable<KeyValuePair<string, string>> EnumerateLogicalOwnerHandles(ProjectElement element)
+        {
+            if (element == null) throw new ArgumentNullException(nameof(element));
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in EnumerateOwnerHandles(element))
+            {
+                var slot = CanonicalOwnerSlot(entry.Value);
+                var token = entry.Key + "\n" + slot;
+                if (!seen.Add(token)) continue;
+                yield return new KeyValuePair<string, string>(entry.Key, slot);
             }
         }
 
