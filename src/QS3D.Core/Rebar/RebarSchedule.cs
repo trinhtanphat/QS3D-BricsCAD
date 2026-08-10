@@ -60,7 +60,10 @@ namespace QS3D.Core.Rebar
 
             var groups = RebarNotationParser.Parse(input.Notation);
             if (input.CountOverride.HasValue && groups.Count > 1) throw new InvalidOperationException("CountOverride is ambiguous for compound rebar notation.");
-            var cuttingLength = input.CuttingLengthM + input.LapLengthM + input.AnchorLengthM + input.HookAllowanceM;
+
+            var cuttingLength = RebarMath.Add(input.CuttingLengthM, input.LapLengthM, "cutting + lap length");
+            cuttingLength = RebarMath.Add(cuttingLength, input.AnchorLengthM, "cutting + anchor length");
+            cuttingLength = RebarMath.Add(cuttingLength, input.HookAllowanceM, "cutting + hook allowance");
             if (cuttingLength <= 0d) throw new InvalidOperationException("Rebar cutting length must be greater than zero.");
             var baseMark = string.IsNullOrWhiteSpace(input.BarMark) ? (string.IsNullOrWhiteSpace(input.ElementId) ? "BAR" : input.ElementId) : input.BarMark.Trim();
 
@@ -70,8 +73,9 @@ namespace QS3D.Core.Rebar
                 var quantity = ResolveQuantity(group, input);
                 var mark = groups.Count == 1 ? baseMark : baseMark + "-" + (index + 1).ToString(CultureInfo.InvariantCulture);
                 var unitWeight = RebarWeight.KilogramsPerMeter(group.DiameterMm);
-                var totalLength = cuttingLength * quantity;
-                var netWeight = unitWeight * totalLength;
+                var totalLength = RebarMath.Multiply(cuttingLength, quantity, mark + "/total length");
+                var netWeight = RebarMath.Multiply(unitWeight, totalLength, mark + "/net weight");
+                var totalWeight = RebarWeight.TotalKilograms(group.DiameterMm, totalLength, input.WastePercent);
                 rows.Add(new RebarScheduleRow
                 {
                     ElementId = input.ElementId ?? string.Empty,
@@ -85,7 +89,7 @@ namespace QS3D.Core.Rebar
                     UnitWeightKgM = unitWeight,
                     NetWeightKg = netWeight,
                     WastePercent = input.WastePercent,
-                    TotalWeightKg = netWeight * (1d + input.WastePercent / 100d)
+                    TotalWeightKg = totalWeight
                 });
             }
         }
@@ -98,15 +102,16 @@ namespace QS3D.Core.Rebar
             {
                 if (group.SpacingMm.Value <= 0d) throw new InvalidOperationException("Rebar spacing must be greater than zero.");
                 if (input.DistributionLengthM <= 0d) throw new InvalidOperationException("Rebar distribution length must be greater than zero for spacing notation.");
-                return checked((int)Math.Ceiling(input.DistributionLengthM * 1000d / group.SpacingMm.Value) + 1);
+                var millimeters = RebarMath.Multiply(input.DistributionLengthM, 1000d, "spacing distribution length");
+                var intervals = RebarMath.Divide(millimeters, group.SpacingMm.Value, "spacing interval count");
+                var rounded = Math.Ceiling(intervals);
+                if (rounded > int.MaxValue - 1d) throw new OverflowException("Rebar spacing produces too many bars.");
+                return checked((int)rounded + 1);
             }
             throw new InvalidOperationException("Rebar quantity cannot be inferred. Provide count notation, spacing + distribution length, or CountOverride.");
         }
 
-        private static void EnsureFiniteNonNegative(double value, string name)
-        {
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) throw new ArgumentOutOfRangeException(name);
-        }
+        private static void EnsureFiniteNonNegative(double value, string name) => RebarMath.NonNegative(value, name);
     }
 
     public static class ProjectRebarScheduleBuilder
@@ -124,7 +129,7 @@ namespace QS3D.Core.Rebar
                     BarMark = Text(element, "RebarBarMark", element.Id),
                     ShapeCode = Text(element, "RebarShapeCode", "00"),
                     Notation = notation,
-                    CuttingLengthM = Number(element, "RebarCuttingLengthM", Number(element, "LengthM", Quantity(element, "LengthM"))),
+                    CuttingLengthM = ResolveCuttingLength(element),
                     DistributionLengthM = Number(element, "RebarDistributionLengthM"),
                     LapLengthM = Number(element, "RebarLapLengthM"),
                     AnchorLengthM = Number(element, "RebarAnchorLengthM"),
@@ -135,6 +140,20 @@ namespace QS3D.Core.Rebar
             }
             return RebarScheduleBuilder.Build(inputs);
         }
+
+        private static double ResolveCuttingLength(ProjectElement element)
+        {
+            if (HasValue(element, "RebarCuttingLengthM")) return Number(element, "RebarCuttingLengthM");
+            if (HasValue(element, "LengthM")) return Number(element, "LengthM");
+            if (element.Quantities.TryGetValue("LengthM", out var quantity))
+            {
+                if (double.IsNaN(quantity) || double.IsInfinity(quantity) || quantity < 0d) throw new FormatException("Invalid rebar quantity LengthM on " + element.Id + ": " + quantity.ToString("R", CultureInfo.InvariantCulture));
+                return quantity;
+            }
+            return 0d;
+        }
+
+        private static bool HasValue(ProjectElement element, string key) => element.Properties.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value);
 
         private static string Text(ProjectElement element, string key, string fallback) => element.Properties.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : fallback;
 
@@ -151,7 +170,5 @@ namespace QS3D.Core.Rebar
             if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) || result <= 0) throw new FormatException("Invalid rebar integer property " + key + " on " + element.Id + ": " + value);
             return result;
         }
-
-        private static double Quantity(ProjectElement element, string key) => element.Quantities.TryGetValue(key, out var value) && value >= 0d && !double.IsNaN(value) && !double.IsInfinity(value) ? value : 0d;
     }
 }

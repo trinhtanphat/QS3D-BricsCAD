@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
+using QS3D.Core.Rules;
 
 namespace QS3D.Core.Services
 {
@@ -27,11 +28,13 @@ namespace QS3D.Core.Services
     {
         private readonly DependencyGraph _graph;
         private readonly IList<IElementRegenerator> _regenerators;
+        private readonly QuantityRuleEngine _ruleEngine;
 
         public RegenerationEngine(DependencyGraph graph, IEnumerable<IElementRegenerator> regenerators)
         {
             _graph = graph ?? throw new ArgumentNullException(nameof(graph));
             _regenerators = new List<IElementRegenerator>(regenerators ?? throw new ArgumentNullException(nameof(regenerators)));
+            _ruleEngine = new QuantityRuleEngine();
         }
 
         public void MarkChanged(ProjectState project, string elementId, ElementDirtyFlags flags)
@@ -67,8 +70,16 @@ namespace QS3D.Core.Services
                         selected = regenerator;
                         break;
                     }
-                    if (selected == null) continue;
-                    selected.Regenerate(project, element);
+
+                    var handled = false;
+                    if (selected != null)
+                    {
+                        selected.Regenerate(project, element);
+                        handled = true;
+                    }
+                    if (_ruleEngine.ApplyMatching(project, element) > 0) handled = true;
+                    if (!handled) continue;
+
                     element.MarkClean(ElementDirtyFlags.All);
                     progress++;
                     total++;

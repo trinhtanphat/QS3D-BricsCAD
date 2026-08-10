@@ -1,15 +1,20 @@
-using System;
-
 namespace QS3D.Core.Rebar
 {
     public static class RebarWeight
     {
-        public static double KilogramsPerMeter(double diameterMm) { if (diameterMm <= 0d) throw new ArgumentOutOfRangeException(nameof(diameterMm)); return diameterMm * diameterMm / 162d; }
+        public static double KilogramsPerMeter(double diameterMm)
+        {
+            var diameter = RebarMath.Positive(diameterMm, nameof(diameterMm));
+            return RebarMath.Divide(RebarMath.Multiply(diameter, diameter, nameof(diameterMm)), 162d, nameof(diameterMm));
+        }
+
         public static double TotalKilograms(double diameterMm, double totalLengthMeters, double wastePercent = 0d)
         {
-            if (totalLengthMeters < 0d) throw new ArgumentOutOfRangeException(nameof(totalLengthMeters));
-            if (wastePercent < 0d) throw new ArgumentOutOfRangeException(nameof(wastePercent));
-            return KilogramsPerMeter(diameterMm) * totalLengthMeters * (1d + wastePercent / 100d);
+            var length = RebarMath.NonNegative(totalLengthMeters, nameof(totalLengthMeters));
+            var waste = RebarMath.NonNegative(wastePercent, nameof(wastePercent));
+            var net = RebarMath.Multiply(KilogramsPerMeter(diameterMm), length, "rebar net weight");
+            var wasteFactor = RebarMath.Add(1d, waste / 100d, nameof(wastePercent));
+            return RebarMath.Multiply(net, wasteFactor, "rebar total weight");
         }
     }
 }

@@ -29,6 +29,10 @@ namespace QS3D.Core.Persistence
                         MigrateV1ToV2(root);
                         schema = 2;
                         break;
+                    case 2:
+                        MigrateV2ToV3(root);
+                        schema = 3;
+                        break;
                     default:
                         throw new InvalidDataException("No migration path exists from QSDB schema " + schema.ToString(CultureInfo.InvariantCulture));
                 }
@@ -59,6 +63,18 @@ namespace QS3D.Core.Persistence
                 }
             }
 
+            SetMigrationOrigin(root, "1");
+        }
+
+        private static void MigrateV2ToV3(XElement root)
+        {
+            if (root.Element("rules") == null) root.Add(new XElement("rules"));
+            if (root.Element("audit") == null) root.Add(new XElement("audit"));
+            SetMigrationOrigin(root, "2");
+        }
+
+        private static void SetMigrationOrigin(XElement root, string version)
+        {
             var metadata = root.Element("metadata");
             if (metadata == null)
             {
@@ -66,7 +82,7 @@ namespace QS3D.Core.Persistence
                 root.AddFirst(metadata);
             }
             var exists = metadata.Elements("p").Any(x => string.Equals(x.Attribute("name")?.Value, "QS3D.SchemaMigratedFrom", StringComparison.OrdinalIgnoreCase));
-            if (!exists) metadata.Add(new XElement("p", new XAttribute("name", "QS3D.SchemaMigratedFrom"), new XAttribute("value", "1")));
+            if (!exists) metadata.Add(new XElement("p", new XAttribute("name", "QS3D.SchemaMigratedFrom"), new XAttribute("value", version)));
         }
     }
 }

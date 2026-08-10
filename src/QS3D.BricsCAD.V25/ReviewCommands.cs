@@ -5,6 +5,7 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
+using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Rebar;
 using QS3D.Core.Recognition;
@@ -69,12 +70,22 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, autoApply ? "QS3DRECOGNIZEAUTO" : "QS3DRECOGNIZE", () =>
             {
                 var snapshots = EntitySnapshotReader.ReadCurrentSelection(doc); if (snapshots.Count == 0) return;
-                var batch = new RecognitionEngine().SuggestBatch(snapshots); var applied = 0;
-                Action<RecognitionResult> apply = result => { var candidate = result.TopCandidate; if (candidate == null) return; if (SemanticCaptureService.CaptureSnapshot(doc, result.Snapshot, candidate.Category)) { applied++; PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Nhận dạng → " + candidate.Category + " • " + result.Handle); } };
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var batch = new ProjectRecognitionService().SuggestBatch(project, snapshots); var applied = 0; var skipped = 0;
+                Action<RecognitionResult> apply = result =>
+                {
+                    var candidate = result.TopCandidate; if (candidate == null) return;
+                    var collision = project.Elements.FirstOrDefault(x => x.Category != candidate.Category && x.SourceHandles.Any(h => string.Equals(h, result.Handle, StringComparison.OrdinalIgnoreCase)));
+                    if (collision != null) throw new InvalidOperationException("CAD handle " + result.Handle + " đã thuộc " + collision.Category + ".");
+                    if (!SemanticCaptureService.CaptureSnapshot(doc, result.Snapshot, candidate.Category)) return;
+                    applied++;
+                    AuditTrail.ForProject(project).Record("recognition.apply", candidate.Category.ToString().ToUpperInvariant() + "-" + result.Handle, candidate.RuleId + " • confidence " + candidate.Confidence.ToString("0.000") + " • " + candidate.EvidenceText);
+                    PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Nhận dạng → " + candidate.Category + " • " + result.Handle);
+                };
                 Action<RecognitionResult> locate = result => { var count = CadHandleService.Select(doc, new[] { result.Handle }); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
-                if (autoApply) foreach (var result in batch.AutoAccepted) try { apply(result); } catch { }
+                if (autoApply) foreach (var result in batch.AutoAccepted) try { apply(result); } catch { skipped++; }
                 Application.ShowModelessWindow(IntPtr.Zero, new RecognitionWindow(batch.Results, apply, locate), true);
-                doc.Editor.WriteMessage("\nQS3D Recognition: " + snapshots.Count + " object(s), auto=" + applied + ", review=" + batch.ReviewRequired.Count + ".");
+                doc.Editor.WriteMessage("\nQS3D Recognition: " + snapshots.Count + " object(s), auto=" + applied + ", review=" + batch.ReviewRequired.Count + ", skipped=" + skipped + ".");
             });
         }
 
@@ -82,7 +93,12 @@ namespace QS3D.BricsCAD.V25
         public void RevisionBaseline()
         {
             var doc = Active(); if (doc == null) return;
-            Guard(doc, "QS3DREVBASE", () => { Regenerate(ProjectContextCoordinator.GetOrCreate(doc)); var path = RevisionCoordinator.CaptureBaseline(doc); PaletteCoordinator.SetStatus("Đã lưu baseline revision: " + path); doc.Editor.WriteMessage("\nQS3D revision baseline saved: " + path); });
+            Guard(doc, "QS3DREVBASE", () =>
+            {
+                var project = ProjectContextCoordinator.GetOrCreate(doc); Regenerate(project); var path = RevisionCoordinator.CaptureBaseline(doc);
+                AuditTrail.ForProject(project).Record("revision.baseline", string.Empty, path);
+                PaletteCoordinator.SetStatus("Đã lưu baseline revision: " + path); doc.Editor.WriteMessage("\nQS3D revision baseline saved: " + path);
+            });
         }
 
         [CommandMethod("QS3DREVDIFF", CommandFlags.Modal)]
@@ -93,7 +109,9 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(doc); Regenerate(project); var before = RevisionCoordinator.LoadBaseline(doc); var after = RevisionCoordinator.CaptureCurrent(doc); var rows = new QuantityRevisionReport().Build(before, after);
                 Action<QuantityRevisionRow> locate = row => { var element = project.FindElement(row.ElementId); if (element == null) return; var count = CadHandleService.Select(doc, element.SourceHandles); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
-                Application.ShowModelessWindow(IntPtr.Zero, new RevisionWindow(before, after, rows, locate), true); PaletteCoordinator.SetStatus("Revision diff: " + rows.Count + " thay đổi quantity.");
+                Application.ShowModelessWindow(IntPtr.Zero, new RevisionWindow(before, after, rows, locate), true);
+                AuditTrail.ForProject(project).Record("revision.compare", string.Empty, before.Id + " → " + after.Id + " • " + rows.Count + " quantity changes");
+                PaletteCoordinator.SetStatus("Revision diff: " + rows.Count + " thay đổi quantity.");
             });
         }
 

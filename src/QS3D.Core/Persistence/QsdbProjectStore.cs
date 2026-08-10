@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 using System.Xml.Linq;
+using QS3D.Core.Audit;
 using QS3D.Core.Domain;
+using QS3D.Core.Rules;
 
 namespace QS3D.Core.Persistence
 {
@@ -77,6 +79,17 @@ namespace QS3D.Core.Persistence
                 }
             }
 
+            var rules = root.Element("rules");
+            if (rules != null)
+            {
+                foreach (var item in rules.Elements("rule"))
+                {
+                    if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category)) throw new InvalidDataException("Invalid quantity rule category.");
+                    project.QuantityRules.Add(new QuantityRule(
+                        Required(item, "id"), category, Required(item, "output"), Required(item, "expression"), Required(item, "version")));
+                }
+            }
+
             var elements = root.Element("elements");
             if (elements != null)
             {
@@ -95,6 +108,23 @@ namespace QS3D.Core.Persistence
                         foreach (var q in quantities.Elements("q")) element.SetQuantity(Required(q, "name"), Double(q.Attribute("value")?.Value));
                     element.RestorePersistenceState(Dirty(item.Attribute("dirty")?.Value), Date(item.Attribute("updatedUtc")?.Value));
                     project.Elements.Add(element);
+                }
+            }
+
+            var audit = root.Element("audit");
+            if (audit != null)
+            {
+                foreach (var item in audit.Elements("event"))
+                {
+                    project.AuditEvents.Add(new AuditEvent
+                    {
+                        Utc = Date(item.Attribute("utc")?.Value),
+                        Action = Value(item, "action"),
+                        ElementId = Value(item, "elementId"),
+                        Detail = Value(item, "detail"),
+                        Actor = Value(item, "actor"),
+                        CorrelationId = Value(item, "correlationId")
+                    });
                 }
             }
 
@@ -142,6 +172,8 @@ namespace QS3D.Core.Persistence
                 new XElement("zones", project.Zones.Select(x => new XElement("zone", new XAttribute("id", x.Id), new XAttribute("name", x.Name)))),
                 new XElement("floors", project.Floors.Select(x => new XElement("floor", new XAttribute("id", x.Id), new XAttribute("name", x.Name), new XAttribute("elevationM", F(x.ElevationM))))),
                 new XElement("families", project.Families.Select(x => new XElement("family", new XAttribute("id", x.Id), new XAttribute("name", x.Name), new XAttribute("category", x.Category), Map("properties", x.Properties)))),
+                new XElement("rules", project.QuantityRules.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).Select(x => new XElement("rule",
+                    new XAttribute("id", x.Id), new XAttribute("category", x.Category), new XAttribute("output", x.OutputName), new XAttribute("expression", x.Expression), new XAttribute("version", x.Version)))),
                 new XElement("elements", project.Elements.Select(x => new XElement("element",
                     new XAttribute("id", x.Id), new XAttribute("category", x.Category), new XAttribute("familyId", x.FamilyId ?? string.Empty),
                     new XAttribute("floorId", x.FloorId ?? string.Empty), new XAttribute("zoneId", x.ZoneId ?? string.Empty), new XAttribute("drawingFingerprint", x.DrawingFingerprint ?? string.Empty),
@@ -150,7 +182,14 @@ namespace QS3D.Core.Persistence
                     new XElement("handles", x.SourceHandles.Select(h => new XElement("h", h))),
                     new XElement("dependencies", x.DependsOn.Select(d => new XElement("d", d))),
                     Map("properties", x.Properties),
-                    new XElement("quantities", x.Quantities.OrderBy(q => q.Key, StringComparer.OrdinalIgnoreCase).Select(q => new XElement("q", new XAttribute("name", q.Key), new XAttribute("value", F(q.Value))))))))));
+                    new XElement("quantities", x.Quantities.OrderBy(q => q.Key, StringComparer.OrdinalIgnoreCase).Select(q => new XElement("q", new XAttribute("name", q.Key), new XAttribute("value", F(q.Value)))))))),
+                new XElement("audit", project.AuditEvents.OrderBy(x => x.Utc).Select(x => new XElement("event",
+                    new XAttribute("utc", x.Utc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)),
+                    new XAttribute("action", x.Action ?? string.Empty),
+                    new XAttribute("elementId", x.ElementId ?? string.Empty),
+                    new XAttribute("detail", x.Detail ?? string.Empty),
+                    new XAttribute("actor", x.Actor ?? string.Empty),
+                    new XAttribute("correlationId", x.CorrelationId ?? string.Empty))))));
         }
 
         private static XDocument LoadDocument(string path)
@@ -196,6 +235,10 @@ namespace QS3D.Core.Persistence
             if (duplicateZone != null) throw new InvalidDataException("Duplicate zone id in QSDB: " + duplicateZone.Key);
             var duplicateFloor = project.Floors.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFloor != null) throw new InvalidDataException("Duplicate floor id in QSDB: " + duplicateFloor.Key);
+            var duplicateRule = project.QuantityRules.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicateRule != null) throw new InvalidDataException("Duplicate quantity rule id in QSDB: " + duplicateRule.Key);
+            var duplicateOutput = project.QuantityRules.GroupBy(x => x.Category + "\u001f" + x.OutputName, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicateOutput != null) throw new InvalidDataException("Multiple quantity rules target the same category/output: " + duplicateOutput.Key.Replace("\u001f", "/"));
 
             foreach (var floor in project.Floors)
                 if (double.IsNaN(floor.ElevationM) || double.IsInfinity(floor.ElevationM)) throw new InvalidDataException("Floor elevation must be finite: " + floor.Id);

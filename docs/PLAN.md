@@ -1,53 +1,43 @@
 # QS3D BricsCAD V25 master plan
 
-## V1 implemented foundation
+## Implemented source baseline
 
-- clean-room layered architecture: Core + V25 adapter + WPF UI;
-- source-of-truth policy, `.qsdb`, project lock/backup/recovery;
-- dependency/regeneration/rules/health/revision foundations;
-- native Ribbon bootstrapper and BLT3D-familiar QS3D workspace;
-- active Zone/Floor/Family and semantic property flow;
-- Room / Tường KT / Opening / Door semantic capture;
-- first native 3D Tường KT path for selected LINE geometry;
-- HT_Phòng finish generation;
-- host linking and wall-opening quantity deduction;
-- live Layer/Xref read/control;
-- BQ semantic grouping/filter/column visibility/Locate/XLSX;
-- Quick Takeoff deterministic Length/Area/Count regeneration;
-- fixed-point dirty regeneration via `QS3DREGEN` and automatic regeneration before BQ/BBS/Refresh;
-- manual-only CI gates.
+- clean-room layered architecture: `QS3D.Core` + BricsCAD V25 adapter + WPF/Ribbon UI;
+- `.qsdb` semantic source-of-truth with schema v3 migration, locking, validated temp save, backup/recovery, persisted dirty state, project QuantityRules and audit provenance;
+- dependency/fixed-point regeneration, formula engine, project rule catalog, Model Health and revision foundations;
+- active Zone/Floor/Family semantic property flow and multi-DWG project cache keyed by `Document` identity;
+- Room / Tường KT / Opening / Door / HT_Phòng capture and quantity workflows;
+- Beam / Slab / Column / StructuralWall / Foundation / Stair / Railing / Earthwork deterministic quantity paths;
+- native wall/structural Solid3d source paths already isolated behind the V25 adapter and two-phase generated-geometry replacement;
+- Quick Takeoff Length/Area/Volume/Count with `INSUNITS` conversion;
+- BQ stable-ID grouping/filtering/Locate/XLSX, real recalc and persisted visible-column preferences;
+- rebar notation/BBS model, XLSX export and BBS review/Locate UI;
+- persisted revision baseline/diff workflow using `.qsrev`;
+- deterministic recognition review + confident auto-apply, with project layer mappings overriding fallback heuristics;
+- `.qstemplate` company-standard import/export for Families, QuantityRules, layer mappings, BQ columns and generic material/classification properties;
+- manual-only GitHub Actions and V25 self-hosted NETLOAD/runtime/screenshot harness.
 
-## V1.5 source implementation now present
+## Next validation gates
 
-- deterministic Beam/Slab/Column/StructuralWall/Foundation/Stair/Railing/Earthwork quantity regenerators;
-- BricsCAD semantic capture commands + Ribbon entry points for those structural categories;
-- StructuralWall Door/Opening host deduction and safe re-host dirty propagation;
-- BBS model from semantic `Rebar*` properties: count/spacing/compound notation, positive-value validation, bar mark, shape, cutting length, lap/anchor/hook allowance, waste and kg calculations;
-- real XLSX BBS export through `QS3DBBS`;
-- detailed revision snapshots/diff for category/family/floor/zone/properties/source handles/quantities;
-- Model Health rebar validation + structural material validation;
-- smoke/preflight source guards for structural, BBS, revision and fixed-point regeneration paths.
+1. Static/source preflight on the newest head.
+2. Core Release build + deterministic smoke suite when an execution environment is available; GitHub Actions remain manual and require explicit owner approval.
+3. Licensed Windows BricsCAD V25 compile on `[self-hosted, windows, x64, bricscad-v25]`.
+4. `NETLOAD` and command/Ribbon/palette regression, including recognition/template/revision/BBS workflows.
+5. Private sample DWG regression: wall/room/opening/finish/structural/takeoff/BQ/BBS/template/save/reopen.
+6. Visual regression at 100/125/150/200% DPI with Vietnamese Unicode.
+7. Performance/multi-DWG open-activate-SaveAs-close corpus.
+8. Only after these gates are green, consider automatic PR CI/release-candidate automation.
 
-## Remaining V1 runtime-hardening sequence
+## Runtime-dependent product completion
 
-1. Gate A source/preflight review.
-2. Gate B Core CI **only when explicitly approved** for the newest head.
-3. Gate C licensed Windows BricsCAD V25 build.
-4. Gate D `NETLOAD`, Ribbon/palette, multi-DWG and Unicode/HiDPI smoke test.
-5. private sample DWG regression: wall/room/opening/finish/structural/BQ/BBS/save/reopen.
-6. harden wall polylines/corners/joins and opening solid boolean transaction after real V25 geometry results are known.
-7. visual screenshot comparison against the approved QS3D target UI.
-8. only after A-D + regression are green, consider automatic PR CI.
-
-## Runtime-dependent / future V2
-
-- native 3D Beam/Slab/Column/StructuralWall/Foundation/Stair authoring and geometric rebar placement;
+- robust native 3D Beam/Slab/Column/StructuralWall/Foundation/Stair authoring beyond the current guarded source paths;
+- polyline wall corners, joins/T-junctions and freeform profiles;
+- physical opening/door boolean subtraction from host solids;
 - automatic room-boundary discovery from arbitrary intersecting wall networks;
-- physical opening/door boolean subtraction in generated wall solids;
-- revision visualization overlays and richer persisted audit provenance;
-- template/material/classification import/export ecosystem;
-- recognition engine + optional AI suggestion layer;
-- installer, signed updater, optional Cloudflare license/update backend;
+- geometric rebar placement/shape generation tied to BBS;
+- transient highlight/isolate/section-box UX proven against V25 editions;
+- installer/autoload package, code signing and signed updater;
+- optional Cloudflare license/update/team-sync backend;
 - future AutoCAD adapter reusing `QS3D.Core`.
 
-The core/semantic implementation can continue without BricsCAD installed, but any claim about native geometry, NETLOAD behavior, Ribbon runtime, installer autoload or physical rebar must wait for the licensed V25 runner/session.
+These remaining items must not be marked complete from source review alone when their correctness depends on BricsCAD V25 runtime, private DWG data, signing infrastructure or external deployment.
