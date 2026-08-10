@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -72,9 +73,7 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            var unresolved = new HashSet<string>(
-                elementIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
-                StringComparer.OrdinalIgnoreCase);
+            var unresolved = CanonicalTargetIds(elementIds);
             if (unresolved.Count == 0) return 0;
 
             // Resolve the requested subset in one project-order scan. The previous implementation
@@ -96,6 +95,24 @@ namespace QS3D.Core.Services
             }
 
             return RegenerateTransactional(project, targets, targets.Count);
+        }
+
+        private static HashSet<string> CanonicalTargetIds(IEnumerable<string> elementIds)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var index = 0;
+            foreach (var value in elementIds)
+            {
+                var raw = value ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new ArgumentException("Regeneration target id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new ArgumentException("Regeneration target id must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
+                if (!result.Add(raw))
+                    throw new ArgumentException("Duplicate regeneration target id: " + raw + ".", nameof(elementIds));
+                index++;
+            }
+            return result;
         }
 
         private int RegenerateTransactional(ProjectState project, IEnumerable<ProjectElement> candidates, int passBasis)
