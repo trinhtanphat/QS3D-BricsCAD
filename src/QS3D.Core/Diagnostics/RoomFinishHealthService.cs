@@ -11,6 +11,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
+            var identityGroups = new Dictionary<string, List<ProjectElement>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var finish in project.Elements
                 .Where(x => AutoRoomLifecycle.IsRoomFinishCategory(x.Category))
@@ -74,6 +75,14 @@ namespace QS3D.Core.Diagnostics
                     continue;
                 }
 
+                var identityKey = room.Id + "\u001f" + finish.Category;
+                if (!identityGroups.TryGetValue(identityKey, out var group))
+                {
+                    group = new List<ProjectElement>();
+                    identityGroups[identityKey] = group;
+                }
+                group.Add(finish);
+
                 if (AutoRoomLifecycle.IsStaleAutoRoom(room))
                 {
                     issues.Add(new ModelHealthIssue(
@@ -82,6 +91,18 @@ namespace QS3D.Core.Diagnostics
                         "HT_Phòng thuộc AutoRoom stale " + room.Id + "; quantity đang được loại an toàn cho tới khi Room được tái kích hoạt hoặc dữ liệu được repair.",
                         finish.Id));
                 }
+            }
+
+            foreach (var group in identityGroups.Values.Where(x => x.Count > 1))
+            {
+                var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, group[0]);
+                var ids = string.Join(", ", group.Select(x => x.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+                foreach (var finish in group)
+                    issues.Add(new ModelHealthIssue(
+                        "DUPLICATE_ROOM_FINISH",
+                        HealthSeverity.Error,
+                        "Nhiều " + finish.Category + " cùng tham chiếu Room " + roomId + ": " + ids + ". BQ/Material/HT_Phòng schedule fail closed để tránh cộng đôi khối lượng.",
+                        finish.Id));
             }
 
             return issues.AsReadOnly();
