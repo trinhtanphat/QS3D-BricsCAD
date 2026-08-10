@@ -65,10 +65,7 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWWALLPIER", () =>
             {
                 RequireModelSpace(document);
-                // WallPier Direct Draw is intentionally LINE-only so QS3DBUILD3D reaches the
-                // specialized WallPierProfileSolidBuilder and preserves Rectangular/Chamfered
-                // profile semantics. Multi-segment paths need a separate deterministic profile-
-                // around-corners contract rather than silently falling back to generic wall prism.
+                // WallPier stays LINE-only so QS3DBUILD3D reaches the specialized profile builder.
                 var points = AcquireFixedPath(document, "Trụ Tường", 2);
                 if (points == null) return;
 
@@ -177,6 +174,7 @@ namespace QS3D.BricsCAD.V25
                 createdElement = project.Elements.SingleOrDefault(x =>
                     x.Category == category && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)));
                 if (createdElement == null) throw new InvalidOperationException("Không tìm thấy semantic element vừa tạo cho source " + sourceHandle + ".");
+                var createdElementId = createdElement.Id;
                 configureElement(createdElement);
 
                 // QS3DBUILD3D resolves the active document internally. Re-check immediately before
@@ -184,6 +182,15 @@ namespace QS3D.BricsCAD.V25
                 EnsureActive(document, "Direct Draw P1 " + category + " / QS3DBUILD3D");
                 document.Editor.SetImpliedSelection(new[] { sourceId });
                 new Build3DCommands().Build3D();
+                EnsureActive(document, "Direct Draw P1 " + category + " / post QS3DBUILD3D");
+
+                // QS3DBUILD3D may restore its own ProjectState snapshot and report the failure at its
+                // command surface instead of throwing to this wrapper. A restore replaces element
+                // instances, so the pre-build reference is never authoritative after the nested call.
+                createdElement = project.Elements.SingleOrDefault(x =>
+                    string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase));
+                if (createdElement == null)
+                    throw new InvalidOperationException("Semantic element Direct Draw P1 không còn tồn tại sau QS3DBUILD3D; operation được rollback.");
 
                 if (!createdElement.Properties.TryGetValue("GeneratedSolidHandle", out generatedHandle) || string.IsNullOrWhiteSpace(generatedHandle))
                     throw new InvalidOperationException("QS3DBUILD3D không ghi GeneratedSolidHandle cho Direct Draw P1 " + category + ".");
@@ -239,7 +246,11 @@ namespace QS3D.BricsCAD.V25
             for (var index = 0; index < count; index++)
             {
                 var options = new PromptPointOptions("\n" + label + " - chọn điểm " + (index + 1) + "/" + count + ": ");
-                if (points.Count > 0) { options.UseBasePoint = true; options.BasePoint = points[points.Count - 1]; }
+                if (points.Count > 0)
+                {
+                    options.UseBasePoint = true;
+                    options.BasePoint = points[points.Count - 1];
+                }
                 var result = editor.GetPoint(options);
                 if (result.Status != PromptStatus.OK) return null;
                 if (points.Count > 0 && result.Value.DistanceTo(points[points.Count - 1]) <= 1e-9d)
@@ -260,7 +271,11 @@ namespace QS3D.BricsCAD.V25
                     ? "\n" + label + " - chọn điểm đầu: "
                     : "\n" + label + " - chọn điểm tiếp theo" + (points.Count >= minimumPoints ? " hoặc Enter để kết thúc" : string.Empty) + ": ";
                 var options = new PromptPointOptions(prompt) { AllowNone = points.Count >= minimumPoints };
-                if (points.Count > 0) { options.UseBasePoint = true; options.BasePoint = points[points.Count - 1]; }
+                if (points.Count > 0)
+                {
+                    options.UseBasePoint = true;
+                    options.BasePoint = points[points.Count - 1];
+                }
                 var result = editor.GetPoint(options);
                 if (result.Status == PromptStatus.None && points.Count >= minimumPoints) break;
                 if (result.Status != PromptStatus.OK) return null;
@@ -336,7 +351,13 @@ namespace QS3D.BricsCAD.V25
         private static double? PromptPositiveMeters(Editor editor, string label, double defaultValue)
         {
             var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
-            { AllowNegative = false, AllowZero = false, AllowNone = true, DefaultValue = defaultValue, UseDefaultValue = true };
+            {
+                AllowNegative = false,
+                AllowZero = false,
+                AllowNone = true,
+                DefaultValue = defaultValue,
+                UseDefaultValue = true
+            };
             var result = editor.GetDouble(options);
             if (result.Status == PromptStatus.Cancel) return null;
             if (result.Status != PromptStatus.OK && result.Status != PromptStatus.None) return null;
@@ -348,7 +369,13 @@ namespace QS3D.BricsCAD.V25
         private static double? PromptFiniteMeters(Editor editor, string label, double defaultValue)
         {
             var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
-            { AllowNegative = true, AllowZero = true, AllowNone = true, DefaultValue = defaultValue, UseDefaultValue = true };
+            {
+                AllowNegative = true,
+                AllowZero = true,
+                AllowNone = true,
+                DefaultValue = defaultValue,
+                UseDefaultValue = true
+            };
             var result = editor.GetDouble(options);
             if (result.Status == PromptStatus.Cancel) return null;
             if (result.Status != PromptStatus.OK && result.Status != PromptStatus.None) return null;
