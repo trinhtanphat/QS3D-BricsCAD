@@ -38,7 +38,6 @@ namespace QS3D.BricsCAD.V25.Cad
             public double Cover { get; set; }
             public bool DistributionCentered { get; set; }
             public bool OffsetAxisFromMinimum { get; set; }
-            public bool OffsetZFromMinimum { get; set; }
         }
 
         public static ShapeRebarBuildResult BuildSelected(Document document, ProjectState project)
@@ -88,7 +87,7 @@ namespace QS3D.BricsCAD.V25.Cad
                             var offset = DistributionOffset(index, row.Quantity, placement.Span, placement.Cover, radius, placement.DistributionCentered);
                             var lift = MultiplyFinite(MultiplyFinite(rowIndex, radius, element.Id + "/shape rebar row lift"), 2.5d, element.Id + "/shape rebar row lift");
                             var axialOffset = placement.OffsetAxisFromMinimum ? clearance : 0d;
-                            var zOffset = AddFinite(placement.OffsetZFromMinimum ? clearance : radius, lift, element.Id + "/shape rebar Z offset");
+                            var zOffset = AddFinite(clearance, lift, element.Id + "/shape rebar Z offset");
                             var origin = OffsetPoint(placement.Origin, placement.Axis, axialOffset, placement.Distribution, offset, zOffset, element.Id + "/shape rebar origin");
                             var solid = BuildShape(document, origin, placement.Axis, placement.Distribution, path, radius, element.Id + "/" + row.BarMark);
                             try
@@ -135,7 +134,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 var spanM = element.Category == ElementCategory.StructuralWall || element.Category == ElementCategory.ArchitecturalWall ? CadGeometryGuard.Number(element, family, "ThicknessM", .2d) : CadGeometryGuard.Number(element, family, "WidthM", .3d);
                 var span = CadGeometryGuard.ToDrawingUnits(document, CadGeometryGuard.Positive(spanM, element.Id + "/spanM"), element.Id + "/span");
                 var baseZ = AddFinite(line.StartPoint.Z, bottom, element.Id + "/shape rebar base Z");
-                return new Placement { Origin = Point(line.StartPoint.X, line.StartPoint.Y, baseZ, element.Id + "/shape rebar line origin"), Axis = axis, Distribution = distribution, Span = span, Cover = cover, DistributionCentered = true, OffsetAxisFromMinimum = false, OffsetZFromMinimum = false };
+                return new Placement { Origin = Point(line.StartPoint.X, line.StartPoint.Y, baseZ, element.Id + "/shape rebar line origin"), Axis = axis, Distribution = distribution, Span = span, Cover = cover, DistributionCentered = true, OffsetAxisFromMinimum = false };
             }
             var extents = source.GeometricExtents;
             var width = SubtractFinite(extents.MaxPoint.X, extents.MinPoint.X, element.Id + "/source width");
@@ -143,7 +142,7 @@ namespace QS3D.BricsCAD.V25.Cad
             if (width <= 1e-9d || depth <= 1e-9d) throw new InvalidOperationException("Source extents quá nhỏ cho shape rebar: " + element.Id);
             var alongX = width >= depth;
             var baseZExtents = AddFinite(extents.MinPoint.Z, bottom, element.Id + "/shape rebar base Z");
-            return new Placement { Origin = Point(extents.MinPoint.X, extents.MinPoint.Y, baseZExtents, element.Id + "/shape rebar extents origin"), Axis = alongX ? Vector3d.XAxis : Vector3d.YAxis, Distribution = alongX ? Vector3d.YAxis : Vector3d.XAxis, Span = alongX ? depth : width, Cover = cover, DistributionCentered = false, OffsetAxisFromMinimum = true, OffsetZFromMinimum = true };
+            return new Placement { Origin = Point(extents.MinPoint.X, extents.MinPoint.Y, baseZExtents, element.Id + "/shape rebar extents origin"), Axis = alongX ? Vector3d.XAxis : Vector3d.YAxis, Distribution = alongX ? Vector3d.YAxis : Vector3d.XAxis, Span = alongX ? depth : width, Cover = cover, DistributionCentered = false, OffsetAxisFromMinimum = true };
         }
 
         private static Solid3d BuildShape(Document document, Point3d origin, Vector3d axis, Vector3d distribution, RebarShapePath path, double radius, string label)
