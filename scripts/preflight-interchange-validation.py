@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "src/QS3D.Core/Export/ProjectInterchangeJsonValidator.cs"
 COMMAND = ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeValidationCommands.cs"
 EXPORT = ROOT / "src/QS3D.Core/Export/ProjectInterchangeJsonExporter.cs"
+PROJECT_TOOLS = ROOT / "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectInterchangeValidationSmoke.cs"
 REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 DOC = ROOT / "docs/INTERCHANGE-JSON.md"
 errors = []
 
-for path in (CORE, COMMAND, EXPORT, SMOKE, REGISTRATION, DOC):
+for path in (CORE, COMMAND, EXPORT, PROJECT_TOOLS, SMOKE, REGISTRATION, DOC):
     if not path.is_file():
         errors.append("missing interchange validation dependency: " + str(path.relative_to(ROOT)))
 
@@ -82,6 +84,21 @@ if COMMAND.is_file():
         if token in text:
             errors.append("QS3DINTERCHANGEVALIDATE must not mutate/load/replace project or DWG state; forbidden token: " + token)
 
+if PROJECT_TOOLS.is_file():
+    try:
+        ET.parse(PROJECT_TOOLS)
+    except ET.ParseError as exc:
+        errors.append("ProjectToolsWindow.xaml is not well-formed XML/XAML: " + str(exc))
+    text = PROJECT_TOOLS.read_text(encoding="utf-8")
+    for token in (
+        'Content="Xuất Semantic Snapshot JSON" Tag="QS3DINTERCHANGEJSON"',
+        'Content="Kiểm tra Semantic Snapshot JSON" Tag="QS3DINTERCHANGEVALIDATE"',
+    ):
+        if token not in text:
+            errors.append("Project Tools missing semantic interchange command wiring: " + token)
+    if 'Tag="QS3DINTERCHANGEVALIDATE"' in text and text.count('Tag="QS3DINTERCHANGEVALIDATE"') != 1:
+        errors.append("Project Tools must expose exactly one read-only QS3DINTERCHANGEVALIDATE action")
+
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
@@ -120,4 +137,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DINTERCHANGEVALIDATE remains a bounded read-only semantic snapshot validator tied to the v1 exporter contract, uses iterative dependency-cycle validation and cannot be mistaken for project/DWG import or generated ownership reconstruction.")
+print("PASS: QS3DINTERCHANGEVALIDATE remains a bounded read-only semantic snapshot validator tied to the v1 exporter contract, uses iterative dependency-cycle validation, is exposed beside export in Project Tools and cannot be mistaken for project/DWG import or generated ownership reconstruction.")
