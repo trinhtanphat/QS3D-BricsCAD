@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             TJunction();
             XJunction();
             NearEndpointSnapsByTolerance();
+            HugeCoordinateCrossingUsesFallbackIndex();
             RejectsDuplicateIdsAndInvalidCoordinates();
         }
 
@@ -70,6 +71,17 @@ namespace QS3D.Core.SmokeTests
             Equal(WallJunctionKind.L, junction.Kind);
         }
 
+        private static void HugeCoordinateCrossingUsesFallbackIndex()
+        {
+            var nodes = Plan(
+                Segment("H", -3e200d, 0d, 3e200d, 0d),
+                Segment("V", 0d, -4e200d, 0d, 4e200d));
+            var node = SingleAt(nodes, 0d, 0d);
+            Equal(WallJunctionKind.X, node.Kind);
+            Equal(4, node.RayCount);
+            Equal(2, node.SegmentIds.Count);
+        }
+
         private static void RejectsDuplicateIdsAndInvalidCoordinates()
         {
             Throws<InvalidOperationException>(() => Plan(
@@ -79,6 +91,8 @@ namespace QS3D.Core.SmokeTests
                 new WallAxisSegment("A", new Point2(double.NaN, 0), new Point2(1, 0))));
             Throws<InvalidOperationException>(() => Plan(
                 Segment("A", 0, 0, 0, 0)));
+            Throws<OverflowException>(() => Plan(
+                Segment("A", -double.MaxValue, 0d, double.MaxValue, 0d)));
         }
 
         private static WallAxisSegment Segment(string id, double x1, double y1, double x2, double y2) =>
