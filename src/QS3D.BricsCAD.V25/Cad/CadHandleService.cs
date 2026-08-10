@@ -12,16 +12,34 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (handles == null) throw new ArgumentNullException(nameof(handles));
-            var result = new List<ObjectId>();
+
+            var candidates = new List<ObjectId>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var text in handles)
             {
-                if (string.IsNullOrWhiteSpace(text) || !long.TryParse(text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) continue;
+                var normalized = (text ?? string.Empty).Trim();
+                if (normalized.Length == 0 || !seen.Add(normalized) || !long.TryParse(normalized, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) continue;
                 try
                 {
                     var id = document.Database.GetObjectId(false, new Handle(value), 0);
-                    if (!id.IsNull && id.IsValid) result.Add(id);
+                    if (!id.IsNull && id.IsValid) candidates.Add(id);
                 }
                 catch { }
+            }
+
+            var result = new List<ObjectId>();
+            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                foreach (var id in candidates)
+                {
+                    try
+                    {
+                        var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                        if (entity != null && !entity.IsErased) result.Add(id);
+                    }
+                    catch { }
+                }
+                transaction.Commit();
             }
             return result;
         }

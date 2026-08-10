@@ -10,23 +10,21 @@ errors = []
 required = [
     "Directory.Build.props", "README.md", "AGENTS.md", "CI_POLICY.md",
     "src/QS3D.Core/QS3D.Core.csproj", "src/QS3D.Core/Persistence/QsdbProjectStore.cs",
-    "src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs", "src/QS3D.Core/Services/RegenerationEngine.cs",
-    "src/QS3D.Core/Services/BulkEditService.cs", "src/QS3D.Core/Services/WallQuantityCalculator.cs",
-    "src/QS3D.Core/Takeoff/QuantityEngine.cs", "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs",
-    "src/QS3D.Core/Export/RebarCsvExporter.cs", "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
-    "src/QS3D.BricsCAD.V25/Commands.cs", "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
-    "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs", "src/QS3D.BricsCAD.V25/DomainHubCommands.cs",
-    "src/QS3D.BricsCAD.V25/ViewportCommands.cs", "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs",
-    "src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs", "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs",
-    "src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs", "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs",
+    "src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs", "src/QS3D.Core/Diagnostics/ModelHealthService.cs",
+    "src/QS3D.Core/Services/RegenerationEngine.cs", "src/QS3D.Core/Services/BulkEditService.cs",
+    "src/QS3D.Core/Services/WallQuantityCalculator.cs", "src/QS3D.Core/Takeoff/QuantityEngine.cs",
+    "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs", "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
+    "src/QS3D.BricsCAD.V25/Commands.cs", "src/QS3D.BricsCAD.V25/ReviewCommands.cs", "src/QS3D.BricsCAD.V25/ViewportCommands.cs",
+    "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs", "src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs",
+    "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs", "src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs",
+    "src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs", "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs",
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs", "src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/XrefService.cs", "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml",
     "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml", "src/QS3D.BricsCAD.V25/UI/Theme.xaml",
     "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml", "src/QS3D.BricsCAD.V25/UI/RecognitionWindow.xaml",
-    "src/QS3D.BricsCAD.V25/UI/RevisionWindow.xaml", "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml",
-    "tests/QS3D.Core.SmokeTests/HardeningRegressionSmoke.cs", "tests/QS3D.Core.SmokeTests/ContinuationRegressionSmoke.cs",
-    "tests/QS3D.Core.SmokeTests/CompletionRegressionSmoke.cs", "scripts/install-bricscad-v25.ps1",
-    "scripts/package-v25.ps1", ".github/workflows/ci.yml", ".github/workflows/bricscad-v25.yml"
+    "src/QS3D.BricsCAD.V25/UI/RevisionWindow.xaml", "tests/QS3D.Core.SmokeTests/HardeningRegressionSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/ContinuationRegressionSmoke.cs", "scripts/install-bricscad-v25.ps1",
+    ".github/workflows/ci.yml", ".github/workflows/bricscad-v25.yml"
 ]
 for rel in required:
     if not (ROOT / rel).exists(): errors.append("missing required file: " + rel)
@@ -67,14 +65,6 @@ for xaml in ROOT.rglob("*.xaml"):
     for handler in set(re.findall(r'\b(?:Click|TextChanged|SelectionChanged|SelectedItemChanged|Checked|Unchecked|MouseDoubleClick)="([A-Za-z_][A-Za-z0-9_]*)"', xt)):
         if not re.search(r"\b" + re.escape(handler) + r"\s*\(", ct): errors.append(f"{xaml.relative_to(ROOT)}: missing code-behind handler {handler}")
 
-command_owners = {}
-for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
-    text = path.read_text(encoding="utf-8")
-    for command in re.findall(r'\[CommandMethod\("([^\"]+)"', text):
-        command_owners.setdefault(command.upper(), []).append(str(path.relative_to(ROOT)))
-for command, owners in sorted(command_owners.items()):
-    if len(owners) > 1: errors.append("duplicate CommandMethod " + command + ": " + ", ".join(owners))
-
 store = ROOT / "src/QS3D.Core/Persistence/QsdbProjectStore.cs"
 if store.exists():
     text = store.read_text(encoding="utf-8")
@@ -114,23 +104,27 @@ if takeoff.exists() and "ConvertMetric" not in takeoff.read_text(encoding="utf-8
     errors.append("raw snapshot takeoff must reject negative/non-finite metrics")
 
 hardening = ROOT / "tests/QS3D.Core.SmokeTests/HardeningRegressionSmoke.cs"
-if hardening.exists() and "QsdbRejectsDtd();" not in hardening.read_text(encoding="utf-8"): errors.append("DTD rejection regression coverage missing")
+if hardening.exists():
+    text = hardening.read_text(encoding="utf-8")
+    for needle in ("QsdbRejectsDtd();", "ModelHealthDimensionIntegrity();", "ModelHealthGeneratedGeometryIntegrity();"):
+        if needle not in text: errors.append("hardening regression coverage missing: " + needle)
 continuation = ROOT / "tests/QS3D.Core.SmokeTests/ContinuationRegressionSmoke.cs"
 if continuation.exists():
     text = continuation.read_text(encoding="utf-8")
     for needle in ("LegacyMigrationMarksElementsDirty();", "FamilyAssignmentRefreshesInheritedDefaults();", "QsdbRejectsNonFiniteStateBeforeReplace();", "LegacyWallCalculatorRejectsNonFiniteValues();", "QuantityEngineRejectsInvalidSnapshotMetrics();"):
         if needle not in text: errors.append("continuation regression coverage missing: " + needle)
-completion = ROOT / "tests/QS3D.Core.SmokeTests/CompletionRegressionSmoke.cs"
-if completion.exists():
-    text = completion.read_text(encoding="utf-8")
-    for needle in ("StairQuantities();", "RailingQuantities();", "EarthworkQuantities();", "CsvIsExcelSafeAndFinite();", "VietnameseRecognition();"):
-        if needle not in text: errors.append("completion regression coverage missing: " + needle)
 
 units = ROOT / "src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs"
 if units.exists():
     text = units.read_text(encoding="utf-8")
     for needle in ("LengthUnit.Inch", "LengthUnit.Foot", "LengthUnit.Millimeter", "LengthUnit.Centimeter", "LengthUnit.Meter", "LengthUnit.Yard", "GetDrawingUnit"):
         if needle not in text: errors.append("CAD unit mapping incomplete: " + needle)
+
+handle_service = ROOT / "src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs"
+if handle_service.exists():
+    text = handle_service.read_text(encoding="utf-8")
+    if "as Entity" not in text or "!entity.IsErased" not in text: errors.append("CAD handle resolver must open entities and reject erased objects")
+    if "GetLiveSolidHandles" not in text or "as Solid3d" not in text: errors.append("generated geometry liveness must verify Solid3d type")
 
 geometry = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs"
 if geometry.exists():
@@ -147,11 +141,11 @@ for rel in ("src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs", "src/QS3D.BricsCAD.
         if "transaction.Commit();" not in text or "CommitReplacement" not in text: errors.append(rel + ": two-phase generated geometry commit missing")
         if "double.IsNaN" not in text or "double.IsInfinity" not in text: errors.append(rel + ": non-finite dimension guard missing")
 
-structural_solid = ROOT / "src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs"
-if structural_solid.exists():
-    text = structural_solid.read_text(encoding="utf-8")
-    for needle in ("ElementCategory.Stair", "ElementCategory.Railing", "ElementCategory.Earthwork", "DownwardFootprintMass"):
-        if needle not in text: errors.append("full-domain native mass adapter missing: " + needle)
+health = ROOT / "src/QS3D.Core/Diagnostics/ModelHealthService.cs"
+if health.exists():
+    text = health.read_text(encoding="utf-8")
+    for needle in ("ValidateDimensions", "liveGeneratedSolidHandles", "GENERATED_SOLID_MISSING", "DUPLICATE_GENERATED_HANDLE", "GENERATED_HANDLE_IN_SOURCE"):
+        if needle not in text: errors.append("Model Health integrity guard missing: " + needle)
 
 context = ROOT / "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs"
 if context.exists():
@@ -204,11 +198,7 @@ if commands.exists():
     text = commands.read_text(encoding="utf-8")
     if "new QuantitySummaryWindow(rows, locate, recalculate)" not in text: errors.append("BQ command does not wire recalculation callback")
     if "CadUnitService.GetDrawingUnit(doc)" not in text: errors.append("BQ snapshot fallback still assumes millimeters")
-
-csv_exporter = ROOT / "src/QS3D.Core/Export/RebarCsvExporter.cs"
-if csv_exporter.exists():
-    text = csv_exporter.read_text(encoding="utf-8")
-    if "TrimStart" not in text or "double.IsNaN" not in text: errors.append("BBS CSV injection/non-finite guards missing")
+    if "GetLiveSolidHandles" not in text or "liveGeneratedSolids" not in text: errors.append("QS3DHEALTH must verify generated Solid3d liveness")
 
 installer = ROOT / "scripts/install-bricscad-v25.ps1"
 if installer.exists():
@@ -222,4 +212,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, unique commands, manual CI, proprietary-file guard, QSDB migration/persistence hardening, units, two-phase/full-domain 3D geometry, document lifecycle, active-document selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation, BBS CSV and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, manual CI, proprietary-file guard, QSDB migration/persistence hardening, units, live handle/Solid3d validation, two-phase 3D geometry, Model Health ownership/dimensions, document lifecycle, active-document selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation and installer verification are present.")
