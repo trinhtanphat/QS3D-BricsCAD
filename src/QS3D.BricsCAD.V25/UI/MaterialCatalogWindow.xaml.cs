@@ -12,11 +12,13 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class MaterialCatalogWindow : Window
     {
+        private readonly Document _document;
         private string _editingId = string.Empty;
         private bool _loading;
 
-        public MaterialCatalogWindow()
+        public MaterialCatalogWindow(Document document)
         {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             InitializeComponent();
             Loaded += (_, __) => RefreshAll();
         }
@@ -56,16 +58,15 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnSaveClick(object sender, RoutedEventArgs e)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var id = string.IsNullOrWhiteSpace(_editingId) ? "mat-" + Guid.NewGuid().ToString("N") : _editingId;
                 var material = ProjectMaterialCatalog.UpsertCustom(project, id, NameBox.Text, UnitBox.Text, DescriptionBox.Text);
                 AuditTrail.ForProject(project).Record("material.catalog.upsert", string.Empty, material.Id + " • " + material.Name);
                 _editingId = material.Id;
                 RefreshAll(material.Id);
+                PaletteCoordinator.RefreshProject();
                 SetStatus("Đã lưu custom material: " + material.Name + ".");
             }
             catch (Exception ex) { SetStatus("Lưu material lỗi: " + ex.Message); }
@@ -73,19 +74,16 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnDeleteClick(object sender, RoutedEventArgs e)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null || !(MaterialList.SelectedItem is ProjectMaterial material)) return;
+            if (!(MaterialList.SelectedItem is ProjectMaterial material)) return;
             try
             {
                 if (material.IsBuiltIn) throw new InvalidOperationException("Built-in material không thể xóa.");
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var references = ReferencingElements(project, material.Name).ToList();
-                if (references.Count > 0)
-                    throw new InvalidOperationException("Material đang được " + references.Count + " semantic element tham chiếu. Đổi material các element đó trước khi xóa catalog item.");
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 if (!ProjectMaterialCatalog.DeleteCustom(project, material.Id)) return;
                 AuditTrail.ForProject(project).Record("material.catalog.delete", string.Empty, material.Id + " • " + material.Name);
                 _editingId = string.Empty;
                 RefreshAll();
+                PaletteCoordinator.RefreshProject();
                 SetStatus("Đã xóa custom material: " + material.Name + ".");
             }
             catch (Exception ex) { SetStatus("Xóa material lỗi: " + ex.Message); }
@@ -93,14 +91,14 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnApplyClick(object sender, RoutedEventArgs e)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                    throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Material Catalog trước khi áp dụng cho selection.");
                 if (!(MaterialList.SelectedItem is ProjectMaterial material)) throw new InvalidOperationException("Chọn một material trước khi áp dụng.");
                 var target = (TargetCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Material";
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var elements = SemanticSelectionResolver.ResolveImplied(document, project).ToList();
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var elements = SemanticSelectionResolver.ResolveImplied(_document, project).ToList();
                 if (elements.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
                 if (string.Equals(target, "CurtainFrameMaterial", StringComparison.OrdinalIgnoreCase))
                 {
@@ -128,11 +126,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshAll(string selectedId = "")
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var previous = string.IsNullOrWhiteSpace(selectedId) ? (MaterialList.SelectedItem as ProjectMaterial)?.Id : selectedId;
                 var materials = ProjectMaterialCatalog.GetAll(project).ToList();
                 _loading = true;
@@ -144,17 +140,17 @@ namespace QS3D.BricsCAD.V25.UI
                 finally { _loading = false; }
                 var referenced = ProjectMaterialCatalog.ReferencedMaterialNames(project);
                 ReferencedText.Text = referenced.Count == 0 ? "—" : string.Join(" • ", referenced);
+                Title = "QS3D • Vật liệu • " + DrawingLabel(_document);
             }
             catch (Exception ex) { SetStatus("Đọc Material Catalog lỗi: " + ex.Message); }
         }
 
-        private static IEnumerable<ProjectElement> ReferencingElements(ProjectState project, string materialName)
+        private static string DrawingLabel(Document document)
         {
-            foreach (var element in project.Elements)
-            {
-                if (element.Properties.TryGetValue("Material", out var material) && string.Equals(material?.Trim(), materialName, StringComparison.OrdinalIgnoreCase)) yield return element;
-                else if (element.Properties.TryGetValue("CurtainFrameMaterial", out var frame) && string.Equals(frame?.Trim(), materialName, StringComparison.OrdinalIgnoreCase)) yield return element;
-            }
+            var name = document.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
+            try { return System.IO.Path.GetFileName(name); }
+            catch { return name; }
         }
 
         private void SetStatus(string text)
