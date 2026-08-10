@@ -10,7 +10,7 @@ checks = {
         "SemanticHandleOwnershipResolver", "selected.Contains(handle)", "GeneratedSolidHandle",
         "PhysicalOpeningCutSolidHandle", "GeneratedRebarHandles", "GeneratedShapeRebarHandles",
         "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles", "GeneratedSlabMeshHandles",
-        "GeneratedWallMeshHandles", "GeneratedCurtainFrameHandles", "ambiguously owned by semantic elements",
+        "GeneratedWallMeshHandles", "GeneratedFoundationMeshHandles", "GeneratedCurtainFrameHandles", "ambiguously owned by semantic elements",
     ],
     "src/QS3D.BricsCAD.V25/Cad/SemanticSelectionResolver.cs": [
         "SelectImplied", "StartOpenCloseTransaction", "SemanticHandleOwnershipResolver.Resolve(project, selectedHandles)"
@@ -23,8 +23,10 @@ checks = {
     ],
     "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipSmoke.cs": [
         "ModuleInitializer", "UnrelatedAmbiguityDoesNotBlockCleanSelection", "SelectedAmbiguityIsRejected",
-        "GeneratedMultiHandleResolvesOwner", 'SemanticHandleOwnershipResolver.Resolve(project, new[] { "AA" })',
-        'SemanticHandleOwnershipResolver.Resolve(project, new[] { "BB" })'
+        "GeneratedMultiHandleResolvesOwner", "FoundationMeshGeneratedHandleResolvesOwner",
+        'SemanticHandleOwnershipResolver.Resolve(project, new[] { "AA" })',
+        'SemanticHandleOwnershipResolver.Resolve(project, new[] { "BB" })',
+        'GeneratedFoundationMeshHandles',
     ],
 }
 
@@ -50,4 +52,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: bound-drawing Floor/Material bulk selection resolves only selected ownership handles, rejects selected ambiguity, ignores unrelated conflicts and supports generated geometry channels.")
+print("PASS: bound-drawing Floor/Material bulk selection resolves only selected ownership handles, rejects selected ambiguity, ignores unrelated conflicts and supports all generated geometry channels including Foundation mesh.")
