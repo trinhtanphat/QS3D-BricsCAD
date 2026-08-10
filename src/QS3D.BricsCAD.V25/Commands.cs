@@ -260,7 +260,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     var element = project.FindElement(issue.ElementId); if (element == null) return;
                     IEnumerable<string> locateHandles = SemanticReferenceHandles.Get(element);
-                    if (issue.Code.IndexOf("GENERATED", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (ComprehensiveModelHealthService.TargetsGeneratedOutput(issue))
                     {
                         var generated = GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element)
                             .Select(x => x.Key)
