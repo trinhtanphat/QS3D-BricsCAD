@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             RebarWeightRejectsNonFiniteValues();
             ScheduleRejectsArithmeticOverflow();
             SpacingRejectsArithmeticOverflow();
+            AggregateRejectsOverflow();
             CuttingLengthFallbackIsLazy();
         }
 
@@ -40,6 +41,15 @@ namespace QS3D.Core.SmokeTests
             Throws<OverflowException>(() => RebarScheduleBuilder.Build(new[]
             {
                 new RebarScheduleInput { ElementId = "SPACE", Notation = "D8@100", CuttingLengthM = 1d, DistributionLengthM = double.MaxValue }
+            }));
+        }
+
+        private static void AggregateRejectsOverflow()
+        {
+            Throws<OverflowException>(() => RebarScheduleBuilder.Build(new[]
+            {
+                new RebarScheduleInput { ElementId = "Q1", Notation = "2147483647D1", CuttingLengthM = 1d },
+                new RebarScheduleInput { ElementId = "Q2", Notation = "1D1", CuttingLengthM = 1d }
             }));
         }
 

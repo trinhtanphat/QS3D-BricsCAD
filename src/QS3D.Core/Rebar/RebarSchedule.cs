@@ -44,6 +44,7 @@ namespace QS3D.Core.Rebar
             if (inputs == null) throw new ArgumentNullException(nameof(inputs));
             var rows = new List<RebarScheduleRow>();
             foreach (var input in inputs) Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows);
+            ValidateAggregate(rows);
             return rows;
         }
 
@@ -91,6 +92,21 @@ namespace QS3D.Core.Rebar
                     WastePercent = input.WastePercent,
                     TotalWeightKg = totalWeight
                 });
+            }
+        }
+
+        private static void ValidateAggregate(IReadOnlyList<RebarScheduleRow> rows)
+        {
+            var quantity = 0;
+            var totalLength = 0d;
+            var totalWeight = 0d;
+            foreach (var row in rows)
+            {
+                if (row == null) throw new InvalidOperationException("BBS row cannot be null.");
+                try { quantity = checked(quantity + row.Quantity); }
+                catch (OverflowException ex) { throw new OverflowException("BBS total bar quantity exceeds Int32 capacity.", ex); }
+                totalLength = RebarMath.Add(totalLength, row.TotalLengthM, "BBS aggregate length");
+                totalWeight = RebarMath.Add(totalWeight, row.TotalWeightKg, "BBS aggregate weight");
             }
         }
 
