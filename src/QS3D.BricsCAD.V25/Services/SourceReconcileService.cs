@@ -93,16 +93,15 @@ namespace QS3D.BricsCAD.V25.Services
         {
             var targets = new List<Target>();
             var seenElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var generatedOwners = GeneratedHandleOwnershipIndex.Build(project);
+            var sourceOwners = BuildSourceOwnerIndex(project);
+
             foreach (var snapshot in snapshots)
             {
-                if (GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle, out var generatedOwner, out var generatedSlot))
+                if (generatedOwners.TryFindOwner(snapshot.Handle, out var generatedOwner, out var generatedSlot))
                     throw new InvalidOperationException("Selected handle " + snapshot.Handle + " is QS3D-generated output owned by " + generatedOwner!.Id + "/" + generatedSlot + ". Select the authoritative source CAD instead.");
 
-                var matches = project.Elements
-                    .Where(x => x.SourceHandles.Any(h => string.Equals(h, snapshot.Handle, StringComparison.OrdinalIgnoreCase)))
-                    .Take(2)
-                    .ToList();
-                if (matches.Count == 0)
+                if (!sourceOwners.TryGetValue(snapshot.Handle, out var matches) || matches.Count == 0)
                     throw new InvalidOperationException("Selected CAD source is not tracked by QS3D: " + snapshot.Handle + ". Capture it first instead of reconciling an unknown source.");
                 if (matches.Count > 1)
                     throw new InvalidOperationException("Selected source handle " + snapshot.Handle + " belongs to multiple semantic elements. Repair source ownership before reconcile.");
@@ -115,6 +114,25 @@ namespace QS3D.BricsCAD.V25.Services
                 targets.Add(new Target { Snapshot = snapshot, Element = element });
             }
             return targets;
+        }
+
+        private static Dictionary<string, List<ProjectElement>> BuildSourceOwnerIndex(ProjectState project)
+        {
+            var index = new Dictionary<string, List<ProjectElement>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                foreach (var handle in element.SourceHandles.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    if (string.IsNullOrWhiteSpace(handle)) continue;
+                    if (!index.TryGetValue(handle, out var owners))
+                    {
+                        owners = new List<ProjectElement>(2);
+                        index.Add(handle, owners);
+                    }
+                    if (owners.Count < 2) owners.Add(element);
+                }
+            }
+            return index;
         }
 
         private static IReadOnlyList<ProjectElement> ExpandInvalidationTargets(ProjectState project, IEnumerable<ProjectElement> sourceTargets)
