@@ -71,6 +71,16 @@ When a remote agent reaches a task that requires local-only access, leave the re
 
 When adding major source capability, update `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` or create a newer canonical handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
 
-## GitHub Actions
+## GitHub Actions / release
 
-Follow `CI_POLICY.md`: GitHub Actions are manual-only and may run only when the repository owner explicitly requests them. Multi-agent activity, source changes, documentation changes, commits, pushes, merges, reviews, or handoffs are not implicit permission to run CI.
+Follow `CI_POLICY.md` strictly:
+
+- all workflows are `workflow_dispatch` only;
+- do not add automatic/event-driven triggers;
+- do not dispatch or re-run Actions because code/docs were changed, committed, pushed, merged, reviewed, handed off, or because the owner said `continue all`;
+- CI/build/runtime/release runs require a **separate explicit owner request**;
+- preparing `.github/workflows/release-v25.yml` does not authorize running it;
+- publishing a GitHub Release is allowed only when the owner explicitly requests a release and the manual workflow receives `confirm_release=RELEASE`;
+- use `scripts/preflight-ci-manual-only.py` as the strict repository guard against accidental automatic CI/CD triggers.
+
+For an approved build/release operation, read `docs/MANUAL-BUILD-RELEASE.md` first and resolve the exact commit/tag before dispatching anything.
