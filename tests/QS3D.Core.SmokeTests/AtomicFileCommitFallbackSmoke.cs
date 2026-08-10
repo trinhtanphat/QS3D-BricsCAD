@@ -18,7 +18,7 @@ namespace QS3D.Core.SmokeTests
 
             CommitsAndKeepsBackup(method);
             CommitsAndRemovesSafetyBackup(method);
-            RestoresDestinationWhenInstallFails(method);
+            RestoresDestinationAndPriorBackupWhenInstallFails(method);
         }
 
         private static void CommitsAndKeepsBackup(MethodInfo method)
@@ -56,7 +56,7 @@ namespace QS3D.Core.SmokeTests
             });
         }
 
-        private static void RestoresDestinationWhenInstallFails(MethodInfo method)
+        private static void RestoresDestinationAndPriorBackupWhenInstallFails(MethodInfo method)
         {
             WithDirectory(dir =>
             {
@@ -64,6 +64,7 @@ namespace QS3D.Core.SmokeTests
                 var missingTemp = Path.Combine(dir, "missing.tmp");
                 var backup = destination + ".bak";
                 File.WriteAllText(destination, "old-good");
+                File.WriteAllText(backup, "older-good-backup");
 
                 var threw = false;
                 try { Invoke(method, missingTemp, destination, backup, true); }
@@ -73,6 +74,8 @@ namespace QS3D.Core.SmokeTests
                 }
                 Require(threw, "missing temp did not fail fallback installation");
                 Equal("old-good", File.ReadAllText(destination), "failed fallback did not restore previous destination");
+                Equal("older-good-backup", File.ReadAllText(backup), "failed fallback destroyed or replaced the pre-existing backup");
+                Require(!Directory.GetFiles(dir, "*.previous").Any(), "successful recovery left a staged previous-backup file behind");
             });
         }
 
