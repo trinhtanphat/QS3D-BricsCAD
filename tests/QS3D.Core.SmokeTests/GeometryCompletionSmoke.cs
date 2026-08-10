@@ -191,17 +191,29 @@ namespace QS3D.Core.SmokeTests
             first.Properties["GeneratedRebarHandles"] = "AA;BB";
             first.Properties["GeneratedRebarCount"] = "2";
             first.Properties["GeneratedRebarDiameterMm"] = "20";
+            first.Properties["GeneratedShapeRebarHandles"] = "CC;DD";
+            first.Properties["GeneratedShapeRebarCount"] = "2";
             project.Elements.Add(first);
-            var missing = new GeneratedRebarHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" });
-            True(missing.Any(x => x.Code == "REBAR_GENERATED_SOLID_MISSING"));
+
+            var columnHealth = new GeneratedRebarHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" });
+            True(columnHealth.Any(x => x.Code == "REBAR_GENERATED_SOLID_MISSING"));
+            True(!columnHealth.Any(x => x.Code == "SHAPE_REBAR_GENERATED_SOLID_MISSING"));
+
+            var shapeHealth = new GeneratedRebarHealthService().InspectShape(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "CC" });
+            True(shapeHealth.Any(x => x.Code == "SHAPE_REBAR_GENERATED_SOLID_MISSING"));
 
             var second = new ProjectElement("C2", ElementCategory.Column, string.Empty, string.Empty, string.Empty);
             second.Properties["GeneratedRebarHandles"] = "AA";
             second.Properties["GeneratedRebarCount"] = "1";
             second.Properties["GeneratedRebarDiameterMm"] = "16";
+            second.Properties["GeneratedShapeRebarHandles"] = "CC";
+            second.Properties["GeneratedShapeRebarCount"] = "1";
             project.Elements.Add(second);
-            var conflict = new GeneratedRebarHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA", "BB" });
+            var conflict = new GeneratedRebarHealthService().InspectAll(project,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA", "BB" },
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "CC", "DD" });
             True(conflict.Any(x => x.Code == "REBAR_GENERATED_OWNERSHIP_CONFLICT"));
+            True(conflict.Any(x => x.Code == "SHAPE_REBAR_GENERATED_OWNERSHIP_CONFLICT"));
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
