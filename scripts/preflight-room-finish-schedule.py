@@ -51,6 +51,8 @@ checks = {
     required[6]: ["RoomFinishXlsxExporter.Export", "xl/worksheets/sheet1.xml", "Loại hoàn thiện", "Phòng 101", ">30<"],
     required[7]: ["RoomFinishXlsxSmoke.Run();"],
 }
+checks[required[1]].append("XlsxPackageValidator.Validate")
+checks[required[6]].extend(("Invalid\\u0001Family", "ORIGINAL"))
 for relative, needles in checks.items():
     path = ROOT / relative
     if not path.is_file(): continue

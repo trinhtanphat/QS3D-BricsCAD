@@ -25,6 +25,8 @@ if STORE.is_file():
         "ValidateUtcTimestamp(element.UpdatedUtc",
         "ValidateUtcTimestamp(audit.Utc",
         "value.Kind != DateTimeKind.Utc",
+        "Enum.IsDefined(typeof(ElementCategory), x.Category)",
+        "Invalid \" + label + \" category:",
     ):
         if token not in text:
             errors.append("QsdbProjectStore.cs missing canonical persistence token: " + token)
@@ -39,6 +41,9 @@ if SMOKE.is_file():
         "NonUtcTimestampFailsBeforePersistence",
         "DateTimeKind.Unspecified",
         "DateTimeKind.Local",
+        "UndefinedCategoryFailsClosed",
+        '(ElementCategory)999',
+        'category=\\"999\\"',
         "if (File.Exists(path)) throw new Exception",
     ):
         if token not in text:
