@@ -26,6 +26,7 @@ namespace QS3D.Core.Domain
         public const string GeneratedBeamStirrupStateKey = "QS3D.GeneratedBeamStirrup.State";
         public const string GeneratedSlabMeshStateKey = "QS3D.GeneratedSlabMesh.State";
         public const string GeneratedWallMeshStateKey = "QS3D.GeneratedWallMesh.State";
+        public const string GeneratedFoundationMeshStateKey = "QS3D.GeneratedFoundationMesh.State";
         public const string GeneratedCurtainFrameStateKey = "QS3D.GeneratedCurtainFrame.State";
         public const string GeneratedSolidStaleSnapshotKey = "QS3D.GeneratedSolid.StaleSnapshot";
         public const string GeneratedRebarStaleSnapshotKey = "QS3D.GeneratedRebar.StaleSnapshot";
@@ -34,6 +35,7 @@ namespace QS3D.Core.Domain
         public const string GeneratedBeamStirrupStaleSnapshotKey = "QS3D.GeneratedBeamStirrup.StaleSnapshot";
         public const string GeneratedSlabMeshStaleSnapshotKey = "QS3D.GeneratedSlabMesh.StaleSnapshot";
         public const string GeneratedWallMeshStaleSnapshotKey = "QS3D.GeneratedWallMesh.StaleSnapshot";
+        public const string GeneratedFoundationMeshStaleSnapshotKey = "QS3D.GeneratedFoundationMesh.StaleSnapshot";
         public const string GeneratedCurtainFrameStaleSnapshotKey = "QS3D.GeneratedCurtainFrame.StaleSnapshot";
 
         private const string StaleValue = "stale";
@@ -44,6 +46,7 @@ namespace QS3D.Core.Domain
         private const string GeneratedBeamStirrupHandlesKey = "GeneratedBeamStirrupHandles";
         private const string GeneratedSlabMeshHandlesKey = "GeneratedSlabMeshHandles";
         private const string GeneratedWallMeshHandlesKey = "GeneratedWallMeshHandles";
+        private const string GeneratedFoundationMeshHandlesKey = "GeneratedFoundationMeshHandles";
         private const string GeneratedCurtainFrameHandlesKey = "GeneratedCurtainFrameHandles";
 
         public ProjectElement(string id, ElementCategory category, string familyId, string floorId, string zoneId)
@@ -120,6 +123,7 @@ namespace QS3D.Core.Domain
             marked |= MarkGeneratedOutputStale(GeneratedBeamStirrupHandlesKey, GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey);
             marked |= MarkGeneratedOutputStale(GeneratedSlabMeshHandlesKey, GeneratedSlabMeshStateKey, GeneratedSlabMeshStaleSnapshotKey);
             marked |= MarkGeneratedOutputStale(GeneratedWallMeshHandlesKey, GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
+            marked |= MarkGeneratedOutputStale(GeneratedFoundationMeshHandlesKey, GeneratedFoundationMeshStateKey, GeneratedFoundationMeshStaleSnapshotKey);
             marked |= MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
             if (!marked) return;
             SetAggregateStaleReason(reason);
@@ -141,6 +145,7 @@ namespace QS3D.Core.Domain
                 IsGeneratedBeamStirrupStale() ||
                 IsGeneratedSlabMeshStale() ||
                 IsGeneratedWallMeshStale() ||
+                IsGeneratedFoundationMeshStale() ||
                 IsGeneratedCurtainFrameStale();
             if (!stale)
             {
@@ -157,6 +162,7 @@ namespace QS3D.Core.Domain
         public bool IsGeneratedBeamStirrupStale() => IsGeneratedOutputStale(GeneratedBeamStirrupHandlesKey, GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey);
         public bool IsGeneratedSlabMeshStale() => IsGeneratedOutputStale(GeneratedSlabMeshHandlesKey, GeneratedSlabMeshStateKey, GeneratedSlabMeshStaleSnapshotKey);
         public bool IsGeneratedWallMeshStale() => IsGeneratedOutputStale(GeneratedWallMeshHandlesKey, GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
+        public bool IsGeneratedFoundationMeshStale() => IsGeneratedOutputStale(GeneratedFoundationMeshHandlesKey, GeneratedFoundationMeshStateKey, GeneratedFoundationMeshStaleSnapshotKey);
         public bool IsGeneratedCurtainFrameStale() => IsGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
 
         public void ClearGeneratedSolidStale() => ClearGeneratedOutputStale(GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
@@ -166,6 +172,7 @@ namespace QS3D.Core.Domain
         public void ClearGeneratedBeamStirrupStale() => ClearGeneratedOutputStale(GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey);
         public void ClearGeneratedSlabMeshStale() => ClearGeneratedOutputStale(GeneratedSlabMeshStateKey, GeneratedSlabMeshStaleSnapshotKey);
         public void ClearGeneratedWallMeshStale() => ClearGeneratedOutputStale(GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
+        public void ClearGeneratedFoundationMeshStale() => ClearGeneratedOutputStale(GeneratedFoundationMeshStateKey, GeneratedFoundationMeshStaleSnapshotKey);
         public void ClearGeneratedCurtainFrameStale() => ClearGeneratedOutputStale(GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
 
         public void ClearGeneratedGeometryStale()
@@ -184,6 +191,8 @@ namespace QS3D.Core.Domain
             Remove(GeneratedSlabMeshStaleSnapshotKey);
             Remove(GeneratedWallMeshStateKey);
             Remove(GeneratedWallMeshStaleSnapshotKey);
+            Remove(GeneratedFoundationMeshStateKey);
+            Remove(GeneratedFoundationMeshStaleSnapshotKey);
             Remove(GeneratedCurtainFrameStateKey);
             Remove(GeneratedCurtainFrameStaleSnapshotKey);
             Remove(GeneratedGeometryStateKey);
