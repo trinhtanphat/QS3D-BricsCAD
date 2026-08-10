@@ -143,9 +143,14 @@ namespace QS3D.BricsCAD.V25.UI
             if (doc == null || _inspection.Count == 0) return 0;
             var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
             var project = ProjectContextCoordinator.GetOrCreate(doc);
-            var matches = project.Elements.Where(x => SemanticReferenceHandles.MatchesSelection(x, handles)).Take(2).ToList();
-            if (matches.Count != 1) return 0;
-            return Cad.CadHandleService.Select(doc, matches[0].SourceHandles);
+            var sourceHandles = project.Elements
+                .Where(x => SemanticReferenceHandles.MatchesSelection(x, handles))
+                .SelectMany(x => x.SourceHandles)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (sourceHandles.Count == 0) return 0;
+            return Cad.CadHandleService.Select(doc, sourceHandles);
         }
 
         private void ApplyFamilyFilter()
