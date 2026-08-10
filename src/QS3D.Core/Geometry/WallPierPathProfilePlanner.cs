@@ -58,6 +58,8 @@ namespace QS3D.Core.Geometry
 
     public static class WallPierPathProfilePlanner
     {
+        private const double MachineEpsilon = 2.2204460492503131e-16d;
+
         public static WallPierPathProfile Plan(WallPierPathProfileInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
@@ -133,8 +135,7 @@ namespace QS3D.Core.Geometry
                 Offset(end, last.dx, last.dy, half, -1d)
             };
 
-            var scale = CoordinateScale(polygon);
-            var matchTolerance = Math.Max(tolerance * 10d, scale * 1e-12d);
+            var matchTolerance = TerminalMatchTolerance(polygon, thickness, tolerance);
             var targets = new HashSet<int>();
             foreach (var point in expected)
             {
@@ -172,12 +173,23 @@ namespace QS3D.Core.Geometry
             return result.AsReadOnly();
         }
 
+        private static double TerminalMatchTolerance(IReadOnlyList<Point2> polygon, double thickness, double tolerance)
+        {
+            var scale = CoordinateScale(polygon);
+            var requested = Multiply(tolerance, 10d, "wall-pier terminal requested match tolerance");
+            var precision = Multiply(scale, 32d * MachineEpsilon, "wall-pier terminal coordinate precision");
+            var matchTolerance = Math.Max(requested, precision);
+            var distinctCornerLimit = thickness / 4d;
+            if (!(matchTolerance < distinctCornerLimit))
+                throw new InvalidOperationException("Wall-pier terminal coordinates are too coarse relative to thickness for an unambiguous chamfer. Move the drawing closer to a numerically stable origin or increase profile thickness.");
+            return matchTolerance;
+        }
+
         private static (double dx, double dy) Direction(Point2 start, Point2 end, double tolerance)
         {
             var dx = Finite(end.X - start.X, "wall-pier path direction X");
             var dy = Finite(end.Y - start.Y, "wall-pier path direction Y");
-            var length = Math.Sqrt(dx * dx + dy * dy);
-            length = Finite(length, "wall-pier path segment length");
+            var length = start.DistanceTo(end);
             if (!(length > tolerance)) throw new InvalidOperationException("Wall-pier path contains a degenerate terminal segment.");
             return (dx / length, dy / length);
         }
