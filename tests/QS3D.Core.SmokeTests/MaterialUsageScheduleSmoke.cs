@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             InstanceOverrideUsesCatalogUnit();
             PrimaryQuantitiesIgnoreInvalidFallbacks();
             InvalidUsedFallbackIsRejected();
+            RoomFinishQuantityPriorityMatchesFinishSchedule();
             RejectsInvalidQuantities();
         }
 
@@ -102,6 +103,33 @@ namespace QS3D.Core.SmokeTests
             wall.Quantities["SideAreaM2"] = -1d;
             project.Elements.Add(wall);
             Throws<InvalidOperationException>(() => MaterialUsageScheduleBuilder.Build(project));
+        }
+
+        private static void RoomFinishQuantityPriorityMatchesFinishSchedule()
+        {
+            var project = new ProjectState("finish-parity", "Finish parity");
+            project.Floors.Add(new FloorDefinition("f", "Tầng", 0d));
+
+            AddFinish(project, "floor", ElementCategory.FloorFinish, "Gạch sàn", ("BottomAreaM2", 8d), ("AreaM2", 80d));
+            AddFinish(project, "water", ElementCategory.Waterproofing, "Chống thấm", ("BottomAreaM2", 7d), ("AreaM2", 70d));
+            AddFinish(project, "ceiling", ElementCategory.CeilingFinish, "Trần", ("TopAreaM2", 6d), ("AreaM2", 60d));
+            AddFinish(project, "wall", ElementCategory.WallFinish, "Sơn", ("NetFinishAreaM2", 5d), ("SideAreaM2", 50d), ("AreaM2", 500d));
+            AddFinish(project, "skirt", ElementCategory.Skirting, "Len", ("SkirtingLengthM", 4d), ("InnerPerimeterM", 40d), ("PerimeterM", 400d), ("LengthM", 4000d));
+
+            var materialRows = MaterialUsageScheduleBuilder.Build(project).ToDictionary(x => x.Category, StringComparer.OrdinalIgnoreCase);
+            var finishRows = RoomFinishScheduleBuilder.Build(project).ToDictionary(x => x.Category, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var category in new[] { "FloorFinish", "Waterproofing", "CeilingFinish", "WallFinish" })
+                Near(finishRows[category].AreaM2, materialRows[category].AreaM2);
+            Near(finishRows["Skirting"].LengthM, materialRows["Skirting"].LengthM);
+        }
+
+        private static void AddFinish(ProjectState project, string id, ElementCategory category, string material, params (string Key, double Value)[] quantities)
+        {
+            var element = new ProjectElement(id, category, string.Empty, "f", string.Empty);
+            element.Properties["Material"] = material;
+            foreach (var quantity in quantities) element.Quantities[quantity.Key] = quantity.Value;
+            project.Elements.Add(element);
         }
 
         private static void RejectsInvalidQuantities()
