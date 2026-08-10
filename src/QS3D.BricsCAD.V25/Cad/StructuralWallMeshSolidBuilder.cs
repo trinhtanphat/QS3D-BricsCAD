@@ -20,7 +20,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
     internal static class StructuralWallMeshSolidBuilder
     {
-        private const string HandlesKey = "GeneratedRebarHandles";
+        private const string HandlesKey = "GeneratedWallMeshHandles";
         private const string Mode = "StructuralWallMesh";
         private const int MaxBarsPerBatch = 12000;
 
@@ -28,7 +28,8 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             public ProjectElement Element { get; set; } = null!;
             public List<string> Handles { get; } = new List<string>();
-            public double DiameterMm { get; set; }
+            public double HorizontalDiameterMm { get; set; }
+            public double VerticalDiameterMm { get; set; }
             public double CoverM { get; set; }
             public double HorizontalSpacingM { get; set; }
             public double VerticalSpacingM { get; set; }
@@ -69,12 +70,9 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var line = OpenSelectedWallSource(document, transaction, element, selectedHandles);
                     if (line == null) continue;
-                    EnsureWallMeshOwnsGenericRebarSlot(element);
                     var family = project.FindFamily(element.FamilyId);
                     var horizontal = ParseDirection(element, "RebarWallHorizontalNotation");
                     var vertical = ParseDirection(element, "RebarWallVerticalNotation");
-                    if (Math.Abs(horizontal.DiameterMm - vertical.DiameterMm) > 1e-9d)
-                        throw new InvalidOperationException(element.Id + ": StructuralWall mesh adapter hiện yêu cầu hai phương cùng đường kính để dùng chung GeneratedRebar ownership/health contract.");
 
                     var dx = CadGeometryGuard.Finite(line.EndPoint.X - line.StartPoint.X, element.Id + "/wall dx");
                     var dy = CadGeometryGuard.Finite(line.EndPoint.Y - line.StartPoint.Y, element.Id + "/wall dy");
@@ -126,7 +124,8 @@ namespace QS3D.BricsCAD.V25.Cad
                     var update = new PendingUpdate
                     {
                         Element = element,
-                        DiameterMm = horizontal.DiameterMm,
+                        HorizontalDiameterMm = horizontal.DiameterMm,
+                        VerticalDiameterMm = vertical.DiameterMm,
                         CoverM = coverM,
                         HorizontalSpacingM = layout.HorizontalActualSpacingM,
                         VerticalSpacingM = layout.VerticalActualSpacingM,
@@ -178,13 +177,14 @@ namespace QS3D.BricsCAD.V25.Cad
             foreach (var update in pending)
             {
                 update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
-                update.Element.Properties["GeneratedRebarCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedRebarDiameterMm"] = update.DiameterMm.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedRebarCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedRebarMode"] = Mode;
-                update.Element.Properties["GeneratedRebarWallHorizontalActualSpacingM"] = update.HorizontalSpacingM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedRebarWallVerticalActualSpacingM"] = update.VerticalSpacingM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedRebarWallFaces"] = update.Faces;
+                update.Element.Properties["GeneratedWallMeshCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedWallMeshHorizontalDiameterMm"] = update.HorizontalDiameterMm.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedWallMeshVerticalDiameterMm"] = update.VerticalDiameterMm.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedWallMeshCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedWallMeshMode"] = Mode;
+                update.Element.Properties["GeneratedWallMeshHorizontalActualSpacingM"] = update.HorizontalSpacingM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedWallMeshVerticalActualSpacingM"] = update.VerticalSpacingM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedWallMeshFaces"] = update.Faces;
                 AuditTrail.ForProject(project).Record("geometry.rebar.wall.mesh", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
             }
             if (pending.Count > 0)
@@ -203,13 +203,6 @@ namespace QS3D.BricsCAD.V25.Cad
             var group = groups[0];
             if (!group.Quantity.HasValue && !group.SpacingMm.HasValue) throw new InvalidOperationException(element.Id + "/" + key + " phải có count hoặc spacing.");
             return group;
-        }
-
-        private static void EnsureWallMeshOwnsGenericRebarSlot(ProjectElement element)
-        {
-            if (!element.Properties.TryGetValue("GeneratedRebarMode", out var mode) || string.IsNullOrWhiteSpace(mode)) return;
-            if (!string.Equals(mode.Trim(), Mode, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(element.Id + ": GeneratedRebarHandles đang thuộc mode " + mode + ". Refusing to replace it with StructuralWall mesh without explicit cleanup/review.");
         }
 
         private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
