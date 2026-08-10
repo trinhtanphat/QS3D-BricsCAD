@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             ContinuationRegressionSmoke.Run();
             LogicRegressionSmoke.Run();
             RevisionRegressionSmoke.Run();
+            WorkflowPersistenceSmoke.Run();
         }
     }
 }
