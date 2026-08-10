@@ -71,6 +71,18 @@ namespace QS3D.BricsCAD.V25
                 var count = openingIds == null
                     ? OpeningBooleanService.CutLinkedOpenings(document, project)
                     : OpeningBooleanService.CutLinkedOpenings(document, project, openingIds);
+
+                var liveNote = string.Empty;
+                try
+                {
+                    var stamped = PhysicalOpeningCutLiveStateService.StampStraight(document, project, openingIds);
+                    if (stamped > 0) liveNote = " • live-fingerprint=" + stamped;
+                }
+                catch (Exception stampError)
+                {
+                    liveNote = " • cảnh báo live-health metadata: " + stampError.Message;
+                }
+
                 var message = count == 0
                     ? openingIds == null
                         ? label + ": không có linked opening mới cần khoét, host chưa có generated solid tương thích hoặc fingerprint hiện tại đã khớp."
@@ -78,7 +90,7 @@ namespace QS3D.BricsCAD.V25
                     : openingIds == null
                         ? label + ": đã khoét " + count + " Cửa/Lỗ Mở vào generated host solid."
                         : label + ": đã thực hiện " + count + " phép khoét mới; target có fingerprint đã khớp được giữ nguyên.";
-                FinalizeUi(document, message);
+                FinalizeUi(document, message + liveNote);
             }
             catch (Exception ex)
             {
