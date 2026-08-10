@@ -72,6 +72,24 @@ namespace QS3D.BricsCAD.V25.Cad
             return elements.Count;
         }
 
+        internal static void RebuildInTransaction(
+            Document document,
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement element)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (element == null) throw new ArgumentNullException(nameof(element));
+            if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                throw new InvalidOperationException("Grid annotation rebuild yêu cầu DWG đích vẫn là MdiActiveDocument.");
+            if (element.Category != ElementCategory.Grid)
+                throw new InvalidOperationException("Grid annotation rebuild chỉ nhận ElementCategory.Grid: " + element.Id + ".");
+
+            ReplaceOne(document, transaction, project, element);
+        }
+
         private static void ReplaceOne(Document document, Transaction transaction, ProjectState project, ProjectElement element)
         {
             var label = Property(element, GridNamingService.GridLabelKey);
