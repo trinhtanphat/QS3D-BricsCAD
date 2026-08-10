@@ -13,6 +13,7 @@ namespace QS3D.Core.Domain
         public const string BoundaryStateStale = "Stale";
         public const string BoundarySourceHandlesKey = "BoundarySourceHandles";
         public const string BoundarySourceSignatureKey = "BoundarySourceSignature";
+        private const string FamilyDefaultSnapshotPrefix = "AutoRoomFamilyDefault:";
 
         public static bool IsAutoRoom(ProjectElement element)
         {
@@ -95,6 +96,81 @@ namespace QS3D.Core.Domain
             room.Properties[BoundarySourceSignatureKey] = NormalizeSourceHandles((sourceSignature ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries));
             room.Properties.Remove("BoundaryStaleUtc");
             room.Properties.Remove("BoundaryStaleReason");
+        }
+
+        public static int SyncFamilyDefaults(ProjectState project, ProjectElement room, ProjectFamily family)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (room == null) throw new ArgumentNullException(nameof(room));
+            if (family == null) throw new ArgumentNullException(nameof(family));
+            if (room.Category != ElementCategory.Room || family.Category != ElementCategory.Room)
+                throw new InvalidOperationException("Auto-room family synchronization requires Room category values.");
+
+            var previousFamily = project.FindFamily(room.FamilyId);
+            var prefix = FamilyDefaultSnapshotPrefix + room.Id + ":";
+            var currentFamilyKeys = new HashSet<string>(family.Properties.Keys, StringComparer.OrdinalIgnoreCase);
+            var changed = 0;
+            var metadataChanged = false;
+
+            foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var key = property.Key;
+                var nextDefault = property.Value ?? string.Empty;
+                var snapshotKey = prefix + key;
+                var hasCurrent = room.Properties.TryGetValue(key, out var currentValue);
+                var inherited = !hasCurrent;
+
+                if (hasCurrent && project.Metadata.TryGetValue(snapshotKey, out var previousSnapshot) &&
+                    string.Equals(currentValue, previousSnapshot, StringComparison.Ordinal))
+                {
+                    inherited = true;
+                }
+                else if (hasCurrent && previousFamily != null &&
+                         !string.Equals(previousFamily.Id, family.Id, StringComparison.OrdinalIgnoreCase) &&
+                         previousFamily.Properties.TryGetValue(key, out var previousDefault) &&
+                         string.Equals(currentValue, previousDefault ?? string.Empty, StringComparison.Ordinal))
+                {
+                    inherited = true;
+                }
+
+                if (inherited && (!hasCurrent || !string.Equals(currentValue, nextDefault, StringComparison.Ordinal)))
+                {
+                    room.Properties[key] = nextDefault;
+                    changed++;
+                }
+
+                if (!project.Metadata.TryGetValue(snapshotKey, out var storedDefault) || !string.Equals(storedDefault, nextDefault, StringComparison.Ordinal))
+                {
+                    project.Metadata[snapshotKey] = nextDefault;
+                    metadataChanged = true;
+                }
+            }
+
+            var staleSnapshots = project.Metadata
+                .Where(x => x.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Where(x => !currentFamilyKeys.Contains(x.Key.Substring(prefix.Length)))
+                .ToList();
+            foreach (var snapshot in staleSnapshots)
+            {
+                var propertyName = snapshot.Key.Substring(prefix.Length);
+                if (room.Properties.TryGetValue(propertyName, out var currentValue) && string.Equals(currentValue, snapshot.Value, StringComparison.Ordinal))
+                {
+                    room.Properties.Remove(propertyName);
+                    changed++;
+                }
+                project.Metadata.Remove(snapshot.Key);
+                metadataChanged = true;
+            }
+
+            if (!string.Equals(room.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                room.FamilyId = family.Id;
+                changed++;
+            }
+
+            if (changed > 0) room.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
+            if (changed > 0 || metadataChanged) project.Touch();
+            return changed;
         }
 
         public static bool IsExcludedFromQuantity(ProjectState project, ProjectElement element)
