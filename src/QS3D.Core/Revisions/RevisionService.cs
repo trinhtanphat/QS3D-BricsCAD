@@ -61,8 +61,7 @@ namespace QS3D.Core.Revisions
                 foreach (var property in element.Properties) item.Properties[property.Key] = property.Value ?? string.Empty;
                 foreach (var quantity in element.Quantities)
                     item.Quantities[quantity.Key] = RevisionMath.Finite(quantity.Value, element.Id + "/" + quantity.Key);
-                foreach (var handle in element.SourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
-                    item.SourceHandles.Add(handle);
+                foreach (var handle in CanonicalSourceHandles(element)) item.SourceHandles.Add(handle);
                 snapshot.Elements.Add(item);
             }
             return snapshot;
@@ -96,6 +95,25 @@ namespace QS3D.Core.Revisions
                 if (delta.Fields.Count > 0) result.Add(delta);
             }
             return result;
+        }
+
+        private static IReadOnlyList<string> CanonicalSourceHandles(ProjectElement element)
+        {
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < element.SourceHandles.Count; i++)
+            {
+                var raw = element.SourceHandles[i] ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new InvalidOperationException("Revision capture encountered a blank source handle on element " + element.Id + " at index " + i.ToString(CultureInfo.InvariantCulture) + ".");
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Revision capture encountered a non-canonical padded source handle on element " + element.Id + ": " + raw + ".");
+                if (!seen.Add(raw))
+                    throw new InvalidOperationException("Revision capture encountered a duplicate source handle on element " + element.Id + ": " + raw + ".");
+                result.Add(raw);
+            }
+            result.Sort(StringComparer.OrdinalIgnoreCase);
+            return result.AsReadOnly();
         }
 
         private static Dictionary<string, RevisionElementSnapshot> Index(RevisionSnapshot snapshot, string label)
