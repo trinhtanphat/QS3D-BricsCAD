@@ -14,8 +14,8 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                Application.ShowModelessWindow(IntPtr.Zero, new MaterialCatalogWindow(), true);
-                PaletteCoordinator.SetStatus("Material Catalog: built-in + custom + apply theo semantic selection.");
+                Application.ShowModelessWindow(IntPtr.Zero, new MaterialCatalogWindow(document), true);
+                PaletteCoordinator.SetStatus("Material Catalog: built-in + custom + apply theo semantic selection • khóa theo bản vẽ đang mở.");
             }
             catch (Exception ex)
             {
