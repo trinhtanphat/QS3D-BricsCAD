@@ -21,6 +21,15 @@ namespace QS3D.BricsCAD.V25.Cad
             public int OpeningCount { get; set; }
         }
 
+        private sealed class PreparedCut
+        {
+            public ProjectElement Opening { get; set; } = null!;
+            public OpeningCutPlan Plan { get; set; } = null!;
+            public Point3d Target { get; set; }
+            public double Angle { get; set; }
+            public string FingerprintPart { get; set; } = string.Empty;
+        }
+
         public static int CutLinkedOpenings(Document document, ProjectState project)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -51,17 +60,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     var hostLine = transaction.GetObject(sourceLineId, OpenMode.ForRead, false) as Line;
                     if (hostSolid == null || hostLine == null || hostSolid.IsErased || hostLine.IsErased) continue;
 
-                    var openings = group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList();
-                    var fingerprint = BuildFingerprint(openings);
-                    var currentSolidHandle = solidId.Handle.ToString();
-                    if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolidHandle) &&
-                        host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) &&
-                        string.Equals(cutSolidHandle, currentSolidHandle, StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (string.Equals(cutFingerprint, fingerprint, StringComparison.Ordinal)) continue;
-                        throw new InvalidOperationException("Host " + host.Id + " đã được khoét với opening-set khác trên cùng generated solid. Hãy Build 3D lại host trước khi khoét lại.");
-                    }
-
                     var family = project.FindFamily(host.FamilyId);
                     var hostThicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "ThicknessM", 0.2d), host.Id + "/ThicknessM");
                     var hostHeightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "HeightM", 3.6d), host.Id + "/HeightM");
@@ -73,9 +71,10 @@ namespace QS3D.BricsCAD.V25.Cad
                     var hostLengthM = CadGeometryGuard.ToMeters(document, hostLengthDrawing, host.Id + "/source length");
                     var ux = dx / hostLengthDrawing;
                     var uy = dy / hostLengthDrawing;
-                    var angle = Math.Atan2(dy, dx);
+                    var angle = CadGeometryGuard.Finite(Math.Atan2(dy, dx), host.Id + "/angle");
 
-                    foreach (var opening in openings)
+                    var prepared = new List<PreparedCut>();
+                    foreach (var opening in group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                     {
                         var openingFamily = project.FindFamily(opening.FamilyId);
                         var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "WidthM", 0.9d), opening.Id + "/WidthM");
@@ -92,14 +91,15 @@ namespace QS3D.BricsCAD.V25.Cad
                         var extents = sourceEntity.GeometricExtents;
                         var centerX = CadGeometryGuard.Midpoint(extents.MinPoint.X, extents.MaxPoint.X, opening.Id + "/center X");
                         var centerY = CadGeometryGuard.Midpoint(extents.MinPoint.Y, extents.MaxPoint.Y, opening.Id + "/center Y");
-                        var fromStartX = centerX - hostLine.StartPoint.X;
-                        var fromStartY = centerY - hostLine.StartPoint.Y;
+                        var fromStartX = CadGeometryGuard.Finite(centerX - hostLine.StartPoint.X, opening.Id + "/from start X");
+                        var fromStartY = CadGeometryGuard.Finite(centerY - hostLine.StartPoint.Y, opening.Id + "/from start Y");
                         var alongDrawing = CadGeometryGuard.Add(fromStartX * ux, fromStartY * uy, opening.Id + "/projection along host");
-                        var perpendicularDrawing = Math.Abs(fromStartX * -uy + fromStartY * ux);
+                        var perpendicularDrawing = Math.Abs(CadGeometryGuard.Add(fromStartX * -uy, fromStartY * ux, opening.Id + "/perpendicular distance"));
                         var maximumOffsetDrawing = CadGeometryGuard.ToDrawingUnits(document, hostThicknessM / 2d + 0.25d, opening.Id + "/host proximity tolerance");
                         if (perpendicularDrawing > maximumOffsetDrawing)
                             throw new InvalidOperationException("Opening " + opening.Id + " nằm quá xa host centerline để khoét an toàn.");
 
+                        var centerAlongHostM = CadGeometryGuard.ToMeters(document, alongDrawing, opening.Id + "/center along host");
                         var plan = OpeningCutPlanner.Plan(new OpeningCutInput
                         {
                             HostLengthM = hostLengthM,
@@ -108,33 +108,62 @@ namespace QS3D.BricsCAD.V25.Cad
                             OpeningWidthM = widthM,
                             OpeningHeightM = heightM,
                             SillHeightM = sillM,
-                            CenterAlongHostM = CadGeometryGuard.ToMeters(document, alongDrawing, opening.Id + "/center along host"),
+                            CenterAlongHostM = centerAlongHostM,
                             ClearanceM = clearanceM
                         });
 
-                        var cutterWidth = CadGeometryGuard.ToDrawingUnits(document, plan.CutterWidthM, opening.Id + "/cutter width");
-                        var cutterDepth = CadGeometryGuard.ToDrawingUnits(document, plan.CutterDepthM, opening.Id + "/cutter depth");
-                        var cutterHeight = CadGeometryGuard.ToDrawingUnits(document, plan.CutterHeightM, opening.Id + "/cutter height");
                         var alongCenterDrawing = CadGeometryGuard.ToDrawingUnits(document, plan.CenterAlongHostM, opening.Id + "/center along host");
-                        var centerZ = CadGeometryGuard.Add(hostLine.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, hostBottomOffsetM + plan.CenterElevationM, opening.Id + "/cutter center Z"), opening.Id + "/world cutter center Z");
-                        var target = new Point3d(
-                            hostLine.StartPoint.X + ux * alongCenterDrawing,
-                            hostLine.StartPoint.Y + uy * alongCenterDrawing,
-                            centerZ);
+                        var relativeCenterZM = CadGeometryGuard.Add(hostBottomOffsetM, plan.CenterElevationM, opening.Id + "/relative cutter center Z");
+                        var centerZ = CadGeometryGuard.Add(hostLine.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, relativeCenterZM, opening.Id + "/cutter center Z"), opening.Id + "/world cutter center Z");
+                        var targetX = CadGeometryGuard.Add(hostLine.StartPoint.X, ux * alongCenterDrawing, opening.Id + "/target X");
+                        var targetY = CadGeometryGuard.Add(hostLine.StartPoint.Y, uy * alongCenterDrawing, opening.Id + "/target Y");
+                        var sourceCenterXM = CadGeometryGuard.ToMeters(document, centerX, opening.Id + "/source center X");
+                        var sourceCenterYM = CadGeometryGuard.ToMeters(document, centerY, opening.Id + "/source center Y");
+                        prepared.Add(new PreparedCut
+                        {
+                            Opening = opening,
+                            Plan = plan,
+                            Target = new Point3d(targetX, targetY, centerZ),
+                            Angle = angle,
+                            FingerprintPart = opening.Id + ":" + openingId.Handle.ToString() + ":" +
+                                sourceCenterXM.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                sourceCenterYM.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                plan.CenterAlongHostM.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                widthM.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                heightM.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                sillM.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                                clearanceM.ToString("R", CultureInfo.InvariantCulture)
+                        });
+                    }
 
+                    var fingerprint = string.Join("|", prepared.Select(x => x.FingerprintPart));
+                    var currentSolidHandle = solidId.Handle.ToString();
+                    if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolidHandle) &&
+                        host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) &&
+                        string.Equals(cutSolidHandle, currentSolidHandle, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (string.Equals(cutFingerprint, fingerprint, StringComparison.Ordinal)) continue;
+                        throw new InvalidOperationException("Host " + host.Id + " đã được khoét với opening-set/vị trí khác trên cùng generated solid. Hãy Build 3D lại host trước khi khoét lại.");
+                    }
+
+                    foreach (var item in prepared)
+                    {
+                        var cutterWidth = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterWidthM, item.Opening.Id + "/cutter width");
+                        var cutterDepth = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterDepthM, item.Opening.Id + "/cutter depth");
+                        var cutterHeight = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterHeightM, item.Opening.Id + "/cutter height");
                         using (var cutter = new Solid3d())
                         {
                             cutter.SetDatabaseDefaults(document.Database);
                             cutter.CreateBox(cutterWidth, cutterDepth, cutterHeight);
                             cutter.TransformBy(Matrix3d.Displacement(new Vector3d(-cutterWidth / 2d, -cutterDepth / 2d, -cutterHeight / 2d)));
-                            cutter.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));
-                            cutter.TransformBy(Matrix3d.Displacement(new Vector3d(target.X, target.Y, target.Z)));
+                            cutter.TransformBy(Matrix3d.Rotation(item.Angle, Vector3d.ZAxis, Point3d.Origin));
+                            cutter.TransformBy(Matrix3d.Displacement(new Vector3d(item.Target.X, item.Target.Y, item.Target.Z)));
                             hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
                         }
                         totalCuts++;
                     }
 
-                    pending.Add(new PendingHostUpdate { Host = host, SolidHandle = currentSolidHandle, Fingerprint = fingerprint, OpeningCount = openings.Count });
+                    pending.Add(new PendingHostUpdate { Host = host, SolidHandle = currentSolidHandle, Fingerprint = fingerprint, OpeningCount = prepared.Count });
                 }
                 transaction.Commit();
             }
@@ -164,14 +193,6 @@ namespace QS3D.BricsCAD.V25.Cad
             if (expectedType != null && !expectedType.IsInstanceOfType(entity)) return ObjectId.Null;
             return ids[0];
         }
-
-        private static string BuildFingerprint(IReadOnlyList<ProjectElement> openings)
-        {
-            return string.Join("|", openings.Select(x =>
-                x.Id + ":" + Text(x, "WidthM") + ":" + Text(x, "HeightM") + ":" + Text(x, "SillHeightM") + ":" + Text(x, "BottomOffsetM") + ":" + Text(x, "BooleanClearanceM")));
-        }
-
-        private static string Text(ProjectElement element, string key) => element.Properties.TryGetValue(key, out var value) ? (value ?? string.Empty).Trim() : string.Empty;
 
         private static bool IsSupportedHost(ElementCategory category) =>
             category == ElementCategory.ArchitecturalWall || category == ElementCategory.StructuralWall;
