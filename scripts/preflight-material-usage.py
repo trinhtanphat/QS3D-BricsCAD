@@ -19,11 +19,10 @@ required = [
     "tests/QS3D.Core.SmokeTests/MaterialUsageXlsxRegistration.cs",
 ]
 for relative in required:
-    if not (ROOT / relative).is_file():
-        errors.append("missing material usage file: " + relative)
+    if not (ROOT / relative).is_file(): errors.append("missing material usage file: " + relative)
 
 checks = {
-    "src/QS3D.Core/Reporting/MaterialUsageSchedule.cs": [
+    required[0]: [
         "MaterialUsageRow", "MaterialUsageScheduleBuilder", "PrimaryQuantity",
         'if (unit == "m") return LengthM', 'if (unit == "m2") return AreaM2',
         'if (unit == "m3") return VolumeM3', 'if (unit == "kg") return MassKg',
@@ -31,79 +30,66 @@ checks = {
         'Effective(element, family, "Material")', 'Effective(element, family, "CurtainFrameMaterial")',
         '"CurtainFrame"', '"CurtainNetGlassAreaM2"', '"CurtainFrameLengthM"',
         "element.Properties.TryGetValue(key", "family.Properties.TryGetValue(key", "ElementIds.Add(element.Id)",
-        "must be finite and non-negative", "private static double QFirst", "element.Quantities.ContainsKey(primaryKey)",
+        "must be finite and non-negative", "private static double QFirst(ProjectElement element, params string[] keys)",
+        "element.Quantities.ContainsKey(key)", "QuantityReportMath.AddCount", "QuantityReportMath.Add",
         'QFirst(element, "NetVolumeM3", "VolumeM3")',
         'QFirst(element, "CurtainNetGlassAreaM2", "NetWallAreaM2")',
         'QFirst(element, "NetWallAreaM2", "SideAreaM2")',
-        'QFirst(element, "NetFinishAreaM2", "AreaM2")',
+        'QFirst(element, "NetFinishAreaM2", "SideAreaM2", "AreaM2")',
+        'QFirst(element, "BottomAreaM2", "AreaM2")',
+        'QFirst(element, "TopAreaM2", "AreaM2")',
+        'QFirst(element, "SkirtingLengthM", "InnerPerimeterM", "PerimeterM", "LengthM")',
         'QFirst(element, "OpeningAreaM2", "AreaM2")',
-        'QFirst(element, "AreaM2", "BottomAreaM2")',
     ],
-    "src/QS3D.Core/Export/MaterialUsageXlsxExporter.cs": [
+    required[1]: [
         "MaterialUsageXlsxExporter", "AtomicFileCommit.CreateTempPath", "AtomicFileCommit.ReplaceWithoutBackup",
         "ZipArchive", "KL chính", "Diện tích (m²)", "Thể tích (m³)", "Khối lượng (kg)",
         "PrimaryQuantity", "<autoFilter ref=", "Validate(tempPath)", "Vật liệu", "inlineStr",
     ],
-    "src/QS3D.BricsCAD.V25/MaterialUsageScheduleCommands.cs": [
+    required[2]: [
         'CommandMethod("QS3DMATERIALXLSX"', "RegenerationEngine", "MaterialUsageScheduleBuilder.Build(project)",
-        "MaterialUsageXlsxExporter.Export", "SaveFileDialog", "Vat-Lieu.xlsx",
+        "MaterialUsageXlsxExporter.Export", "SaveFileDialog", "Vat-Lieu.xlsx", "QuantityReportMath.AddCount",
     ],
-    "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml": [
-        'Content="Xuất bảng vật liệu"', 'Click="OnExportClick"', "material usage XLSX",
-    ],
-    "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs": [
-        "OnExportClick", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
-        '_document.SendStringToExecute("QS3DMATERIALXLSX "',
-    ],
-    "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml": [
-        'Tag="QS3DMATERIALXLSX"', 'Content="Xuất bảng vật liệu"',
-    ],
-    "tests/QS3D.Core.SmokeTests/MaterialUsageScheduleSmoke.cs": [
+    required[3]: ['Content="Xuất bảng vật liệu"', 'Click="OnExportClick"', "material usage XLSX"],
+    required[4]: ["OnExportClick", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)", '_document.SendStringToExecute("QS3DMATERIALXLSX "'],
+    required[5]: ['Tag="QS3DMATERIALXLSX"', 'Content="Xuất bảng vật liệu"'],
+    required[6]: [
         "FamilyInheritanceAndCurtainComponents", "InstanceOverrideUsesCatalogUnit", "RejectsInvalidQuantities",
-        "PrimaryQuantitiesIgnoreInvalidFallbacks", "InvalidUsedFallbackIsRejected", "VolumeM3\"] = -99d", "SideAreaM2\"] = double.NaN",
-        "14.4d", "33d", "22d",
+        "PrimaryQuantitiesIgnoreInvalidFallbacks", "InvalidUsedFallbackIsRejected", "RoomFinishQuantityPriorityMatchesFinishSchedule",
+        "RoomFinishScheduleBuilder.Build(project)", "BottomAreaM2", "TopAreaM2", "SkirtingLengthM", "NetFinishAreaM2",
+        "VolumeM3\"] = -99d", "SideAreaM2\"] = double.NaN", "14.4d", "33d", "22d",
     ],
-    "tests/QS3D.Core.SmokeTests/MaterialUsageScheduleRegistration.cs": ["MaterialUsageScheduleSmoke.Run();"],
-    "tests/QS3D.Core.SmokeTests/MaterialUsageXlsxSmoke.cs": [
-        "MaterialUsageXlsxExporter.Export", "xl/worksheets/sheet1.xml", "KL chính", "22.5", "Kính",
-    ],
-    "tests/QS3D.Core.SmokeTests/MaterialUsageXlsxRegistration.cs": ["MaterialUsageXlsxSmoke.Run();"],
+    required[7]: ["MaterialUsageScheduleSmoke.Run();"],
+    required[8]: ["MaterialUsageXlsxExporter.Export", "xl/worksheets/sheet1.xml", "KL chính", "22.5", "Kính"],
+    required[9]: ["MaterialUsageXlsxSmoke.Run();"],
 }
 
 for relative, needles in checks.items():
     path = ROOT / relative
-    if not path.is_file():
-        continue
+    if not path.is_file(): continue
     text = path.read_text(encoding="utf-8")
     for needle in needles:
-        if needle not in text:
-            errors.append(relative + " missing material usage guard/token: " + needle)
+        if needle not in text: errors.append(relative + " missing material usage guard/token: " + needle)
 
-schedule = ROOT / "src/QS3D.Core/Reporting/MaterialUsageSchedule.cs"
+schedule = ROOT / required[0]
 if schedule.is_file():
     text = schedule.read_text(encoding="utf-8")
     for eager in (
-        'Q(element, "NetVolumeM3", Q(',
-        'Q(element, "CurtainNetGlassAreaM2", Q(',
-        'Q(element, "NetWallAreaM2", Q(',
-        'Q(element, "NetFinishAreaM2", Q(',
-        'Q(element, "OpeningAreaM2", Q(',
-        'Q(element, "AreaM2", Q(',
+        'Q(element, "NetVolumeM3", Q(', 'Q(element, "CurtainNetGlassAreaM2", Q(',
+        'Q(element, "NetWallAreaM2", Q(', 'Q(element, "NetFinishAreaM2", Q(',
+        'Q(element, "OpeningAreaM2", Q(', 'Q(element, "AreaM2", Q(',
     ):
-        if eager in text:
-            errors.append("material usage schedule still evaluates a fallback eagerly: " + eager)
+        if eager in text: errors.append("material usage schedule still evaluates a fallback eagerly: " + eager)
 
 commands = []
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
 if adapter.is_dir():
     for path in adapter.rglob("*.cs"):
         commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', path.read_text(encoding="utf-8"))
-if commands.count("QS3DMATERIALXLSX") != 1:
-    errors.append("QS3DMATERIALXLSX must be declared exactly once")
+if commands.count("QS3DMATERIALXLSX") != 1: errors.append("QS3DMATERIALXLSX must be declared exactly once")
 
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-
-print("PASS: material usage schedule uses lazy primary/fallback validation, preserves catalog units/provenance, and exports atomic inline-string XLSX through bound UI/command entry points.")
+print("PASS: material usage keeps lazy validation, checked aggregation, HT_Phòng quantity-priority parity, catalog units/provenance, and atomic XLSX through bound UI/command entry points.")
