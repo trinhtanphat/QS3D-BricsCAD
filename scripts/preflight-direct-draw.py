@@ -28,6 +28,18 @@ required = {
         "AllowNone = points.Count >= minimumPoints",
         "QS3DVIEW3D",
     ],
+    "src/QS3D.BricsCAD.V25/Build3DCommands.cs": [
+        'CommandMethod("QS3DBUILD3D"',
+        "unsupported.Count > 0",
+        "categories.Count > 1",
+        "một category mỗi lần",
+        "ValidateWallSourceBatch",
+        'string.Equals(x, "Line"',
+        'string.Equals(x, "Polyline"',
+        "sourceTypes.Count > 1",
+        "không build chung LINE và open POLYLINE",
+        "BuildCategory(document, project, category)",
+    ],
     "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs": [
         "GeneratedHandleOwnershipPolicy.TryFindOwner",
         "ProjectStateSnapshot.Capture(project)",
@@ -133,10 +145,21 @@ if source.is_file():
     if "priorGenerated.Contains(handle)" not in text:
         errors.append("Direct Draw rollback must preserve generated handles that existed before the operation")
 
+build3d = ROOT / "src/QS3D.BricsCAD.V25/Build3DCommands.cs"
+if build3d.is_file():
+    text = build3d.read_text(encoding="utf-8")
+    guard_category = text.find("if (categories.Count > 1)")
+    guard_wall_type = text.find("if (sourceTypes.Count > 1)")
+    build = text.find("var built = BuildCategory(document, project, category);")
+    if min(guard_category, guard_wall_type, build) < 0 or not (guard_category < guard_wall_type < build):
+        errors.append("QS3DBUILD3D must reject mixed category and mixed wall source-type batches before the first native builder commit")
+    if "foreach (var category in categories)" in text:
+        errors.append("QS3DBUILD3D must not commit independent category builders sequentially in one logical operation")
+
 print("QS3D Direct Draw P0 preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Wall/Beam/Column/Slab Direct Draw preserves legacy capture, rolls back semantic/CAD state, reuses guarded builders, rejects sloped LINE flattening and is exposed in Ribbon/Domain Hub.")
+print("PASS: Direct Draw preserves legacy capture and rollback contracts; QS3DBUILD3D rejects mixed atomicity hazards; native LINE builders reject sloped flattening; P0 authoring is exposed in Ribbon/Domain Hub.")
