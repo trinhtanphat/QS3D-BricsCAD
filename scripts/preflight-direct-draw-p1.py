@@ -14,22 +14,30 @@ required = {
         'CommandMethod("QS3DDRAWFOUNDATION"',
         "SemanticCaptureService.Capture(document, category)",
         "ProjectStateSnapshot.Capture(project)",
-        "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
-        "GeneratedGeometryService.FindMatchingOwnedHandles(document, project.ProjectId, elementId, category)",
+        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(createdElement)",
+        "GeneratedGeometryService.FindMatchingOwnedHandles(document, project.ProjectId, createdElement.Id, createdElement.Category)",
+        "GeneratedGeometryService.RequireMatchingOwnership",
         "new Build3DCommands().Build3D()",
-        'element.Properties.TryGetValue("GeneratedSolidHandle"',
+        'createdElement.Properties.TryGetValue("GeneratedSolidHandle"',
         "CadHandleService.GetLiveHandles(document, new[] { generatedHandle })",
+        "EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles)",
         "rollback.Restore(project)",
-        "EraseHandles(document, cleanupHandles)",
+        "EnsureActive(document, \"Direct Draw P1 \" + category + \" / QS3DBUILD3D\")",
+        "FinalizeUi(document, createdElement!, sourceId, generatedHandle)",
         "PlanarityToleranceM = 0.005d",
         "RequireModelSpace(document)",
         "CadGeometryGuard.ToMeters(document, deltaDrawing",
+        "CadGeometryGuard.Finite(points[index].X",
+        "CadGeometryGuard.Finite(points[index].Y",
         "PreferredFamily",
         "Sửa Family trước khi Direct Draw.",
         "Offset đáy Vách Kính so với Z source (m)",
         "Offset đáy Trụ Tường so với Z source (m)",
         "Offset đáy Vách BTCT so với Z source (m)",
         "Offset đáy Móng so với Z source (m)",
+        'element.SetProperty("ThicknessM"',
+        'element.SetProperty("HeightM"',
+        'element.SetProperty("BottomOffsetM"',
         'ElementCategory.GlassWall',
         'ElementCategory.WallPier',
         'ElementCategory.StructuralWall',
@@ -107,31 +115,51 @@ if source.is_file():
     for forbidden in ("new WallFootprintEngine()", "CreateBox(", "CreateExtrudedSolid(", "return value > 0d ? value : fallback;"):
         if forbidden in text:
             errors.append("Direct Draw P1 contains stale/duplicated authoring behavior: " + forbidden)
-    if "priorGenerated.Contains(handle)" not in text:
-        errors.append("Direct Draw P1 rollback must preserve generated handles that existed before the operation")
+    for key in ("ThicknessM", "HeightM", "BottomOffsetM"):
+        if 'element.Properties["' + key + '"]' in text:
+            errors.append("Direct Draw P1 must not bypass ProjectElement.SetProperty for geometry parameter " + key)
+    if text.count("element.SetProperty(") < 11:
+        errors.append("Direct Draw P1 parameter writes must flow through canonical ProjectElement.SetProperty dirty/stale semantics")
     if text.count("RequireModelSpace(document);") < 4:
         errors.append("Every Direct Draw P1 command must fail closed outside Model Space")
-    if text.count('element.Properties["BottomOffsetM"]') < 4:
-        errors.append("All Direct Draw P1 commands must persist source-relative BottomOffsetM")
+    if text.count('element.SetProperty("BottomOffsetM"') < 4:
+        errors.append("All Direct Draw P1 commands must persist source-relative BottomOffsetM through ProjectElement.SetProperty")
     if "Sửa Family trước khi Direct Draw." not in text or "if (!(value > 0d))" not in text:
         errors.append("Direct Draw P1 must fail closed on invalid configured Family numerics instead of silently substituting fallback values")
     if "CadHandleService.GetLiveHandles(document, new[] { generatedHandle })" not in text:
         errors.append("Direct Draw P1 must verify QS3DBUILD3D produced a live generated solid")
+    if "CadGeometryGuard.Finite(points[index].X" not in text or "CadGeometryGuard.Finite(points[index].Y" not in text:
+        errors.append("Direct Draw P1 POLYLINE persistence must finite-check every X/Y coordinate")
     if 'CommandMethod("QS3DDRAWOPENING"' in text or 'CommandMethod("QS3DDRAWDOOR"' in text:
         errors.append("Door/Opening Direct Draw must not be introduced without explicit host/link/boolean authoring contract")
-    create = text.find("var sourceId = createSource();")
+
+    create = text.find("sourceId = createSource();")
     capture = text.find("SemanticCaptureService.Capture(document, category)")
+    active_check = text.find('EnsureActive(document, "Direct Draw P1 " + category + " / QS3DBUILD3D")')
     build = text.find("new Build3DCommands().Build3D()")
-    verify = text.find('element.Properties.TryGetValue("GeneratedSolidHandle"')
+    verify = text.find('createdElement.Properties.TryGetValue("GeneratedSolidHandle"')
     discover = text.find("GeneratedGeometryService.FindMatchingOwnedHandles")
+    erase = text.find("EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles)")
     restore = text.find("rollback.Restore(project)")
-    erase = text.find("EraseHandles(document, cleanupHandles)")
-    if min(create, capture, build, verify, discover, restore, erase) < 0 or not (create < capture < build < verify < discover < restore < erase):
-        errors.append("Direct Draw P1 ordering must be source -> capture -> canonical build -> live verify; failure discovers tagged output before project restore/CAD cleanup")
+    finalize = text.find("FinalizeUi(document, createdElement!, sourceId, generatedHandle)")
+    if min(create, capture, active_check, build, verify, discover, erase, restore, finalize) < 0:
+        errors.append("Direct Draw P1 lifecycle ordering tokens are incomplete")
+    elif not (create < capture < active_check < build < verify < discover < erase < restore < finalize):
+        errors.append("Direct Draw P1 must create/capture -> re-check active DWG -> canonical build/live verify; failure must discover ownership -> erase CAD -> restore project; UI finalization must run after rollback-critical scope")
+
+    erase_body = text.split("private static void EraseDirectDrawCad", 1)[-1].split("private static void FinalizeUi", 1)[0]
+    if "GeneratedGeometryService.RequireMatchingOwnership" not in erase_body:
+        errors.append("Direct Draw P1 generated rollback must validate XData ownership before erasing generated CAD")
+    if "source.Erase(true)" not in erase_body or "remainingSource" not in erase_body or "remainingGenerated" not in erase_body:
+        errors.append("Direct Draw P1 rollback must atomically remove and verify both operation source and generated CAD")
+
+    finalize_body = text.split("private static void FinalizeUi", 1)[-1].split("private static void EnsureActive", 1)[0]
+    if "try" not in finalize_body or "UI sync warning" not in finalize_body:
+        errors.append("Direct Draw P1 UI finalization must be best-effort and must not convert a successful CAD/project commit into rollback")
 
 print("QS3D Direct Draw P1 preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw P1 is BricsCAD-hosted, Model-Space/unit-aware, uses source-relative offsets, rejects invalid Family numerics, reuses canonical QS3DBUILD3D, and keeps ownership-aware rollback without guessed Door/Opening authoring.")
+print("PASS: Direct Draw P1 is BricsCAD-hosted, Model-Space/unit-aware, uses source-relative canonical SetProperty writes, finite-checks persisted paths, re-checks active DWG before QS3DBUILD3D, verifies live native output, performs ownership-scoped CAD cleanup before semantic restore, and keeps post-commit UI failures non-destructive without guessed Door/Opening authoring.")

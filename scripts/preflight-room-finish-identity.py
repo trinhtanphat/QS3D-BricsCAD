@@ -14,6 +14,7 @@ required = [
     "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs",
     "tests/QS3D.Core.SmokeTests/RoomFinishIdentitySmoke.cs",
     "tests/QS3D.Core.SmokeTests/RoomFinishSynchronizationSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/RoomFinishSynchronizationAtomicSmoke.cs",
     "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs",
 ]
 for relative in required:
@@ -27,6 +28,8 @@ checks = {
     ],
     required[1]: [
         "RoomFinishSynchronizationService", "SynchronizeExisting", "Synchronize(ProjectState project",
+        "SynchronizeCore", "ProjectStateSnapshot.Capture(project)", "RestoreOrThrow",
+        "Room finish batch synchronization", "Room finish synchronization",
         "RoomFinishIdentityService.FindExisting", "AutoRoomLifecycle.ResolveRoomReferenceId",
         "AutoRoomLifecycle.RoomSourceIdKey", "finish.DependsOn.Add(room.Id)",
         "finish.FloorId = room.FloorId", "finish.ZoneId = room.ZoneId", "finish.DrawingFingerprint = room.DrawingFingerprint",
@@ -56,10 +59,17 @@ checks = {
     ],
     required[8]: [
         "RepairsLegacyDependencyScopeAndFingerprint", "RemovedRoomMetricsClearOldDeductions",
-        "QuantityFallbackIsCanonicalized", "RejectsInvalidRoomMetric", "RejectsStaleAutoRoom", "RejectsForeignProjectObject",
-        "RoomFinishSynchronizationService.Synchronize", "NetFinishAreaM2", "SkirtingLengthM",
+        "QuantityFallbackIsCanonicalized", "BatchFailureRollsBackEarlierFinishMutation",
+        "RejectsInvalidRoomMetric", "RejectsStaleAutoRoom", "RejectsForeignProjectObject",
+        "RoomFinishSynchronizationService.Synchronize", "RoomFinishSynchronizationService.SynchronizeExisting",
+        "NetFinishAreaM2", "SkirtingLengthM",
     ],
-    required[9]: ["RoomFinishIdentitySmoke.Run();", "RoomFinishSynchronizationSmoke.Run();"],
+    required[9]: [
+        "ModuleInitializer", "SingleFailureRollsBackPartialMutation", "ProjectState", "invalid-after-area",
+        "RoomFinishSynchronizationService.Synchronize", "did not restore scope/fingerprint", "leaked canonical Room provenance",
+        "leaked a partially-copied Room metric", "leaked a dependency",
+    ],
+    required[10]: ["RoomFinishIdentitySmoke.Run();", "RoomFinishSynchronizationSmoke.Run();"],
 }
 for relative, needles in checks.items():
     path = ROOT / relative
@@ -85,4 +95,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: HT_Phòng identity and Room->finish synchronization are centralized in Core; legacy dependency/scope is repaired, removed Room metrics clear stale finish deductions, duplicates fail closed, and adapter generation/sync uses the shared contract.")
+print("PASS: HT_Phòng identity and Room->finish synchronization are centralized in Core; single and batch synchronization are transactional, legacy dependency/scope is repaired, removed Room metrics clear stale finish deductions, duplicates fail closed, and adapter generation/sync uses the shared contract.")

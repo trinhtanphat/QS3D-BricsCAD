@@ -18,76 +18,6 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class ReviewCommands
     {
-        [CommandMethod("QS3DBUILD3D", CommandFlags.UsePickSet)]
-        public void Build3D()
-        {
-            var doc = Active(); if (doc == null) return;
-            Guard(doc, "QS3DBUILD3D", () =>
-            {
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
-                var snapshots = EntitySnapshotReader.ReadImpliedSelection(doc);
-                if (snapshots.Count == 0) { doc.Editor.WriteMessage("\nQS3D: chọn source CAD cần tạo/cập nhật 3D."); return; }
-
-                var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-                var tracked = project.Elements
-                    .Where(x => x.SourceHandles.Any(handles.Contains))
-                    .ToList();
-                var trackedCategories = tracked
-                    .Select(x => x.Category)
-                    .Distinct()
-                    .ToList();
-                if (trackedCategories.Count > 1)
-                {
-                    var categories = string.Join(", ", trackedCategories.OrderBy(x => x.ToString()).Select(x => x.ToString()));
-                    throw new InvalidOperationException("Selection đang trộn nhiều semantic category (" + categories + "). Chọn một category mỗi lần trước khi Vẽ 3D.");
-                }
-
-                ElementCategory? category = trackedCategories.Count == 1 ? trackedCategories[0] : null;
-                if (!category.HasValue && project.Metadata.TryGetValue("ActiveFamilyId", out var familyId)) category = project.FindFamily(familyId)?.Category;
-                if (!category.HasValue) { doc.Editor.WriteMessage("\nQS3D: chọn source CAD hoặc Family trước khi Vẽ 3D."); return; }
-
-                if (tracked.Count > 0)
-                {
-                    var trackedHandles = new HashSet<string>(tracked.SelectMany(x => x.SourceHandles), StringComparer.OrdinalIgnoreCase);
-                    var untracked = snapshots.Where(x => !trackedHandles.Contains(x.Handle)).Select(x => x.Handle).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                    if (untracked.Count > 0)
-                        throw new InvalidOperationException("Selection đang trộn source đã capture với " + untracked.Count + " source chưa capture. Capture/chọn cùng một semantic category trước khi Vẽ 3D để tránh xử lý một phần.");
-                }
-                else
-                {
-                    SemanticCaptureService.Capture(doc, category.Value);
-                }
-
-                int solids;
-                var detailSolids = 0;
-                if (IsTktWall(category.Value))
-                {
-                    solids = category.Value == ElementCategory.WallPier
-                        ? WallPierProfileSolidBuilder.BuildSelectedLinePiers(doc, project)
-                        : WallSolidBuilder.BuildSelectedLineWalls(doc, project, category.Value);
-                    solids += PolylineWallSolidBuilder.BuildSelected(doc, project, category.Value);
-                    if (category.Value == ElementCategory.GlassWall)
-                    {
-                        var curtain = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(doc, project);
-                        detailSolids = curtain.Frames;
-                    }
-                }
-                else if (StructuralSolidBuilder.Supports(category.Value)) solids = StructuralSolidBuilder.BuildSelected(doc, project, category.Value);
-                else { PaletteCoordinator.SetStatus("Vẽ 3D native hiện hỗ trợ Tường KT (Gạch/Kính/Trụ), Dầm, Sàn, Cột, Vách BTCT, Móng, Cầu thang, Lan can và Đào đất."); return; }
-                if (solids == 0 && detailSolids == 0)
-                {
-                    var hint = GeometryHint(category.Value);
-                    PaletteCoordinator.SetStatus("Không tạo được solid cho " + category + ". " + hint);
-                    doc.Editor.WriteMessage("\nQS3D 3D: không có source tương thích. " + hint);
-                    return;
-                }
-                var regenerated = Regenerate(project); PaletteCoordinator.RefreshProject();
-                var detailText = detailSolids > 0 ? " • curtain frame " + detailSolids : string.Empty;
-                PaletteCoordinator.SetStatus("3D " + category + ": " + solids + " host/solid" + detailText + " • regenerate " + regenerated + " lượt.");
-                doc.Editor.WriteMessage("\nQS3D 3D " + category + ": " + solids + " host/solid(s)" + detailText + "."); doc.SendStringToExecute("QS3DVIEW3D ", true, false, false);
-            });
-        }
-
         [CommandMethod("QS3DBBSVIEW", CommandFlags.Modal)]
         public void ShowBbs()
         {
@@ -177,34 +107,6 @@ namespace QS3D.BricsCAD.V25
 
         private static HashSet<string> CollectGeneratedHandles(ProjectState project) =>
             new HashSet<string>(GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project), StringComparer.OrdinalIgnoreCase);
-
-        private static string GeometryHint(ElementCategory category)
-        {
-            switch (category)
-            {
-                case ElementCategory.Beam:
-                case ElementCategory.StructuralWall:
-                case ElementCategory.Railing:
-                    return "Dùng LINE làm tim cấu kiện.";
-                case ElementCategory.Slab:
-                case ElementCategory.Column:
-                case ElementCategory.Foundation:
-                case ElementCategory.Stair:
-                case ElementCategory.Earthwork:
-                    return "Dùng closed POLYLINE làm footprint.";
-                case ElementCategory.WallPier:
-                    return "Dùng LINE hoặc open POLYLINE plan-view cho profile Rectangular/Chamfered của Trụ Tường; bulge được tessellate và bend nội bộ giữ miter/bevel guard.";
-                case ElementCategory.GlassWall:
-                    return "Dùng LINE để dựng host kính + mullion/transom frame; open POLYLINE vẫn dựng generic host GlassWall.";
-                case ElementCategory.ArchitecturalWall:
-                    return "Dùng LINE hoặc open plan-view POLYLINE làm tim Tường KT; bulge được tessellate trước khi tạo footprint.";
-                default:
-                    return "Source CAD hiện chưa có native solid adapter.";
-            }
-        }
-
-        private static bool IsTktWall(ElementCategory category) =>
-            category == ElementCategory.ArchitecturalWall || category == ElementCategory.GlassWall || category == ElementCategory.WallPier;
 
         private static int Regenerate(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;

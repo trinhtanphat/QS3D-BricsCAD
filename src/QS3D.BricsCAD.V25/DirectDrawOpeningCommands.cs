@@ -48,12 +48,17 @@ namespace QS3D.BricsCAD.V25
                 var widthM = CadGeometryGuard.Positive(CadGeometryGuard.ToMeters(document, widthDrawing, label + "/width"), label + "/WidthM");
 
                 var project = ProjectContextCoordinator.GetOrCreate(document);
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao " + label + " (m)", FamilyNumber(project, category, "HeightM", 2.2d));
+                var heightDefault = FamilyPositiveNumber(project, category, "HeightM", 2.2d);
+                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao " + label + " (m)", heightDefault);
                 if (!heightM.HasValue) return;
-                var sillFallback = FamilyFiniteNumber(project, category, "SillHeightM", FamilyFiniteNumber(project, category, "BottomOffsetM", defaultSillM));
-                var sillM = PromptNonNegativeMeters(document.Editor, "Cao độ bậu " + label + " so với đáy host (m)", sillFallback);
+
+                var bottomOffsetDefault = FamilyNonNegativeNumber(project, category, "BottomOffsetM", defaultSillM);
+                var sillDefault = FamilyNonNegativeNumber(project, category, "SillHeightM", bottomOffsetDefault);
+                var sillM = PromptNonNegativeMeters(document.Editor, "Cao độ bậu " + label + " so với đáy host (m)", sillDefault);
                 if (!sillM.HasValue) return;
-                var clearanceM = PromptNonNegativeMeters(document.Editor, "Khe hở boolean (m)", FamilyFiniteNumber(project, category, "BooleanClearanceM", 0.01d));
+
+                var clearanceDefault = FamilyNonNegativeNumber(project, category, "BooleanClearanceM", 0.01d);
+                var clearanceM = PromptNonNegativeMeters(document.Editor, "Khe hở boolean (m)", clearanceDefault);
                 if (!clearanceM.HasValue) return;
 
                 Execute(document, category, label, points[0], points[1], widthM, heightM.Value, sillM.Value, clearanceM.Value);
@@ -215,6 +220,8 @@ namespace QS3D.BricsCAD.V25
 
         private static double? PromptPositiveMeters(Editor editor, string label, double defaultValue)
         {
+            if (double.IsNaN(defaultValue) || double.IsInfinity(defaultValue) || defaultValue <= 0d)
+                throw new InvalidOperationException(label + " default phải là số hữu hạn > 0.");
             var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
             {
                 AllowNegative = false,
@@ -233,7 +240,8 @@ namespace QS3D.BricsCAD.V25
 
         private static double? PromptNonNegativeMeters(Editor editor, string label, double defaultValue)
         {
-            if (double.IsNaN(defaultValue) || double.IsInfinity(defaultValue) || defaultValue < 0d) defaultValue = 0d;
+            if (double.IsNaN(defaultValue) || double.IsInfinity(defaultValue) || defaultValue < 0d)
+                throw new InvalidOperationException(label + " default phải là số hữu hạn >= 0.");
             var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
             {
                 AllowNegative = false,
@@ -250,24 +258,43 @@ namespace QS3D.BricsCAD.V25
             return value;
         }
 
-        private static double FamilyNumber(ProjectState project, ElementCategory category, string key, double fallback)
+        private static double FamilyPositiveNumber(ProjectState project, ElementCategory category, string key, double fallback)
         {
-            var value = FamilyFiniteNumber(project, category, key, fallback);
-            return value > 0d ? value : fallback;
+            var value = FamilyConfiguredNumber(project, category, key, fallback, out var configured);
+            if (value > 0d) return value;
+            if (!configured && fallback > 0d && !double.IsNaN(fallback) && !double.IsInfinity(fallback)) return fallback;
+            throw new InvalidOperationException(category + "/" + key + " phải là số hữu hạn > 0. Sửa Family trước khi Direct Draw.");
         }
 
-        private static double FamilyFiniteNumber(ProjectState project, ElementCategory category, string key, double fallback)
+        private static double FamilyNonNegativeNumber(ProjectState project, ElementCategory category, string key, double fallback)
         {
-            ProjectFamily? family = null;
+            var value = FamilyConfiguredNumber(project, category, key, fallback, out var configured);
+            if (value >= 0d) return value;
+            if (!configured && fallback >= 0d && !double.IsNaN(fallback) && !double.IsInfinity(fallback)) return fallback;
+            throw new InvalidOperationException(category + "/" + key + " phải là số hữu hạn >= 0. Sửa Family trước khi Direct Draw.");
+        }
+
+        private static double FamilyConfiguredNumber(ProjectState project, ElementCategory category, string key, double fallback, out bool configured)
+        {
+            configured = false;
+            var family = PreferredFamily(project, category);
+            if (family == null || !family.Properties.TryGetValue(key, out var raw)) return fallback;
+            configured = true;
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsNaN(value) || double.IsInfinity(value))
+                throw new InvalidOperationException(category + "/" + key + " không phải số hữu hạn hợp lệ. Sửa Family trước khi Direct Draw.");
+            return value;
+        }
+
+        private static ProjectFamily? PreferredFamily(ProjectState project, ElementCategory category)
+        {
             if (project.Metadata.TryGetValue("ActiveFamilyId", out var activeId))
             {
                 var active = project.FindFamily(activeId);
-                if (active != null && active.Category == category) family = active;
+                if (active != null && active.Category == category) return active;
             }
-            family = family ?? project.Families.FirstOrDefault(x => x.Category == category);
-            if (family == null || !family.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return fallback;
-            if (!double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value)) return fallback;
-            return value;
+            return project.Families.FirstOrDefault(x => x.Category == category);
         }
 
         private static void RequireModelSpace(Document document)

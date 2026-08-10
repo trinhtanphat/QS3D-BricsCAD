@@ -47,14 +47,27 @@ P1 deliberately reuses existing QS3D infrastructure instead of adding another ge
 
 1. create one real source entity in the active DWG;
 2. capture exactly one semantic element with `SemanticCaptureService`;
-3. apply explicit instance dimensions/offsets chosen by the user;
-4. run canonical `QS3DBUILD3D` for complete-source, Model-Space, category, semantic-regeneration and native geometry checks;
-5. require a non-empty `GeneratedSolidHandle` and verify that handle is still live;
-6. select the generated result while keeping source CAD as authoritative editable geometry.
+3. apply explicit instance dimensions/offsets through `ProjectElement.SetProperty()` so Properties/Quantity/Geometry dirty flags and generated-stale invalidation stay on the canonical Core path;
+4. immediately re-check that the DWG which started the command is still the active document before delegating to `QS3DBUILD3D`;
+5. run canonical `QS3DBUILD3D` for complete-source, Model-Space, category, semantic-regeneration and native geometry checks;
+6. require a non-empty `GeneratedSolidHandle` and verify that handle is still live;
+7. select the generated result while keeping source CAD as authoritative editable geometry.
+
+LINE/POLYLINE authoring uses the same finite/unit-aware plan-view rules as P0. Persisted POLYLINE elevation and X/Y vertices are finite-checked before they enter the DWG database.
 
 `QS3DBUILD3D` intentionally reports many user-facing failures instead of throwing them outward. Therefore the P1 wrapper performs the explicit live-generated-handle check; a reported-but-unbuilt result becomes a P1 failure and enters outer rollback rather than being treated as success.
 
-Before source creation, P1 snapshots full project state and the pre-existing generated-owner set. On failure it discovers newly tagged generated output by project/element/category, restores project state, erases only operation-owned source/new output, and verifies requested rollback handles are no longer live. It must never erase unrelated user CAD merely because persisted textual Handles collide.
+Before source creation, P1 snapshots full project state. On failure it gathers generated owner handles from the newly-created semantic element plus matching QS3D XData, then performs rollback in this order:
+
+1. erase the operation-created source CAD;
+2. require matching QS3D project/element/category XData before erasing generated CAD;
+3. commit CAD cleanup and verify neither source nor generated handles remain live;
+4. restore the project snapshot;
+5. clear implied selection best-effort.
+
+The project snapshot is deliberately restored **after** CAD cleanup so ownership information remains available while destructive erase decisions are made. P1 must never erase generated CAD solely because a textual persisted Handle collides with another object.
+
+Palette refresh, result selection, editor regen/status and other UI synchronization happen only **after** the CAD/project operation has succeeded. UI synchronization is best-effort; a Palette/UI failure after a valid native commit must not roll back otherwise-correct CAD and project state.
 
 ## Why Door / Opening Direct Draw is not included
 
@@ -87,7 +100,7 @@ Legacy Capture/Bóc chọn and `QS3DBUILD3D` remain supported for drawings that 
 ## Static guards
 
 - `scripts/preflight-direct-draw.py` continues to own the current P0 and shared `QS3DBUILD3D` hardening contract.
-- `scripts/preflight-direct-draw-p1.py` guards the four P1 commands, command uniqueness, Ribbon/Hub discoverability, Model-Space/unit-aware behavior, source-relative offsets, fail-closed Family numerics, live-generated verification, ownership-aware rollback and the requirement to reuse canonical `QS3DBUILD3D`.
+- `scripts/preflight-direct-draw-p1.py` guards the four P1 commands, command uniqueness, Ribbon/Hub discoverability, Model-Space/unit-aware behavior, source-relative offsets, fail-closed Family numerics, canonical `SetProperty` writes, active-DWG revalidation, live-generated verification, ownership/XData-aware rollback ordering, finite persisted paths and non-destructive post-commit UI synchronization.
 - `scripts/preflight-all.py` auto-discovers both gates.
 
 GitHub Actions remain manual-only. A `continue all` source/docs request does not authorize workflow dispatch.
@@ -105,7 +118,8 @@ Source implementation is not BricsCAD runtime proof. Before these commands are c
 7. WallPier LINE/open-POLYLINE compatibility and specialized-profile boundary;
 8. StructuralWall near-planar LINE tolerance and source-relative offset behavior;
 9. Foundation closed-POLYLINE extrusion, drawing-unit behavior and save/reopen;
-10. forced native-build failure followed by verified project/CAD rollback;
-11. multi-DWG, Unicode/HiDPI and representative private-DWG regression.
+10. forced native-build failure followed by verified source/generated CAD cleanup and project rollback;
+11. forced Palette/UI synchronization failure after a successful native commit, verifying that valid CAD/project state is preserved;
+12. multi-DWG active-document switching guard, Unicode/HiDPI and representative private-DWG regression.
 
 Until those gates are executed, the precise status is **source-implemented / statically guarded, runtime qualification pending**.
