@@ -172,8 +172,8 @@ checks = {
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs": [
         "FamilyScope", "InstanceScope", "PropertyScopes", "SelectedPropertyScope", "SetSelectedElement", "LoadInstanceProperties", "ApplyInstanceProperty",
         "DisplayNameFor", "GroupFor", "IsNumericProperty", "Bề dày", "CỐT THÉP", "EditorKindFor", "ChoicesFor", "IsBooleanProperty",
-        "isInherited", "instance override", "row.CanReset", "Đã đưa", "element.MarkDirty(ElementDirtyFlags.All)",
-        "string.Equals(family.Name, next, StringComparison.Ordinal)", "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance"
+        "ProjectFamilyService.SetProperty", "InheritedInstancesUpdated", "OverridesPreserved", "instance override", "row.CanReset", "Đã đưa", "element.MarkDirty(ElementDirtyFlags.All)",
+        "string.Equals(previous, next, StringComparison.Ordinal)", "ProjectFamilyService.Rename", "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance"
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
         'Tag="QS3DGLASSWALL"', 'Tag="QS3DWALLPIER"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DWALLJUNCTIONS"',
