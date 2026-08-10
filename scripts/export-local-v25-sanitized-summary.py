@@ -8,7 +8,7 @@ from pathlib import Path
 SHA40 = re.compile(r"^[0-9a-fA-F]{40}$")
 SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._/+:-]{1,160}$")
-ALLOWED_STATUS = {"PASS", "FAIL", "SKIPPED"}
+ALLOWED_STATUS = {"PASS", "FAIL", "SKIPPED", "NOT_RUN", "FAIL_OR_INCOMPLETE"}
 
 
 def safe_token(value, fallback="(not recorded)"):
@@ -18,17 +18,30 @@ def safe_token(value, fallback="(not recorded)"):
     return text
 
 
-def normalized_status(value):
+def normalized_status(value, fallback="UNKNOWN"):
     text = str(value or "").strip().upper()
-    return text if text in ALLOWED_STATUS else "UNKNOWN"
+    return text if text in ALLOWED_STATUS else fallback
 
 
 def yes_no(value):
     return "YES" if bool(value) else "NO"
 
 
+def yes_no_unknown(report, key):
+    value = report.get(key)
+    return "YES" if value is True else "NO" if value is False else "UNKNOWN"
+
+
 def build_summary(report):
-    status = normalized_status(report.get("status"))
+    automated_status = normalized_status(report.get("automatedGateStatus") or report.get("status"))
+    source_build_status = normalized_status(report.get("sourceBuildStatus") or report.get("status"))
+    runtime_smoke_status = normalized_status(
+        report.get("runtimeSmokeStatus"),
+        "NOT_RUN" if bool(report.get("runtimeSkipped")) else "UNKNOWN",
+    )
+    interactive_status = normalized_status(report.get("fullInteractiveMatrixStatus"), "NOT_RUN")
+    qualification_scope = safe_token(report.get("qualificationScope"), "legacy-or-unknown")
+
     exact_sha = str(report.get("exactSha") or "").strip()
     if not SHA40.fullmatch(exact_sha):
         exact_sha = "UNRESOLVED"
@@ -41,13 +54,19 @@ def build_summary(report):
     release_tag = safe_token(report.get("releaseTag"), "(none)")
     runtime_skipped = bool(report.get("runtimeSkipped"))
     package_requested = bool(report.get("packageRequested"))
+    customer_release_qualified = yes_no_unknown(report, "customerReleaseQualified")
 
     lines = [
         "# QS3D local V25 qualification — sanitized summary",
         "",
         "> Safe handoff generated from local qualification metadata. This summary intentionally omits local usernames, machine names, absolute paths, private DWG names/content, screenshots, credentials, and raw error messages.",
         "",
-        f"- Automated gate status: **{status}**",
+        f"- Automated gate status: **{automated_status}**",
+        f"- Source/build status: **{source_build_status}**",
+        f"- Runtime smoke status: **{runtime_smoke_status}**",
+        f"- Full interactive/private-DWG matrix: **{interactive_status}**",
+        f"- Customer release qualified: **{customer_release_qualified}**",
+        f"- Qualification scope: `{qualification_scope}`",
         f"- Exact Git SHA: `{exact_sha}`",
         f"- Branch: `{branch}`",
         f"- Plugin SHA-256: `{plugin_hash}`",
@@ -61,6 +80,11 @@ def build_summary(report):
         lines.extend([
             "",
             "**Release qualification warning:** runtime was explicitly skipped. This result cannot qualify a customer release.",
+        ])
+    if customer_release_qualified != "YES":
+        lines.extend([
+            "",
+            "**Scope warning:** this automated/sanitized evidence is not proof of customer-release qualification. Complete and record the full interactive/private-DWG/product gates for the same SHA/package.",
         ])
 
     steps = report.get("steps")
@@ -87,14 +111,19 @@ def build_summary(report):
         "- Door / Opening booleans: `PASS | FAIL | NOT TESTED`",
         "- Room / HT_PHÒNG: `PASS | FAIL | NOT TESTED`",
         "- Curtain host + frame: `PASS | FAIL | NOT TESTED`",
+        "- Curtain panel-by-panel: `PASS | FAIL | NOT IMPLEMENTED`",
+        "- Physical L/T/X wall junction: `PASS | FAIL | NOT IMPLEMENTED`",
         "- Rebar geometry / atomicity: `PASS | FAIL | NOT TESTED`",
+        "- Rebar governing standard/revision: `EXPLICIT VALUE | NOT QUALIFIED`",
+        "- Rebar fabrication qualification: `PASS | FAIL | NOT QUALIFIED`",
         "- Save/reopen + multi-DWG: `PASS | FAIL | NOT TESTED`",
         "- Unicode / HiDPI: `PASS | FAIL | NOT TESTED`",
         "- Private-DWG regression: `PASS | FAIL | NOT TESTED`",
         "- Clean install / upgrade / uninstall: `PASS | FAIL | NOT TESTED`",
+        "- Authenticode + timestamp: `PASS | FAIL | NOT SIGNED`",
         "- Known blockers: `SANITIZED TEXT ONLY`",
         "",
-        "Do not change `FAIL`, `SKIPPED`, `NOT TESTED`, `NOT IMPLEMENTED`, or `NOT QUALIFIED` to PASS from source review alone.",
+        "Do not change `FAIL`, `SKIPPED`, `NOT_RUN`, `NOT TESTED`, `NOT IMPLEMENTED`, or `NOT QUALIFIED` to PASS from source review alone.",
         "",
     ])
     return "\n".join(lines)
