@@ -27,6 +27,7 @@ namespace QS3D.Core.Persistence
             var backupPath = fullPath + ".bak";
             var previousSchemaVersion = project.SchemaVersion;
             var previousUpdatedUtc = project.UpdatedUtc;
+            var previousChangeVersion = project.ChangeVersion;
             var committed = false;
 
             try
@@ -44,7 +45,7 @@ namespace QS3D.Core.Persistence
                 if (!committed)
                 {
                     project.SchemaVersion = previousSchemaVersion;
-                    project.UpdatedUtc = previousUpdatedUtc;
+                    project.RestorePersistenceState(previousUpdatedUtc, previousChangeVersion);
                 }
                 AtomicFileCommit.TryDelete(tempPath);
             }
@@ -307,7 +308,7 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrEmpty(value)) return;
             if (string.IsNullOrWhiteSpace(value))
                 throw new InvalidDataException("QSDB " + label + " must not be whitespace.");
-            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+            if (!string.Equals(value, value!.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + label + " must not contain leading/trailing whitespace.");
         }
 
@@ -365,7 +366,7 @@ namespace QS3D.Core.Persistence
         private static DateTime Date(string? value)
         {
             if (string.IsNullOrWhiteSpace(value)) return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            var raw = value.Trim();
+            var raw = value!.Trim();
             if (!HasExplicitUtcOffset(raw) || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result))
                 throw new InvalidDataException("Invalid QSDB UTC timestamp: " + value);
             return result.UtcDateTime;

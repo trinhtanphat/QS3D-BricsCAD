@@ -53,7 +53,7 @@ for token in [
     'normalized.StartsWith("QS3D.Generated"',
     'normalized.StartsWith("PhysicalOpeningCut"',
     "OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)",
-    "File.Replace(tempPath, fullPath, backupPath, true)",
+    "AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath)",
 ]:
     require(core, token, "interchange core contract")
 

@@ -128,6 +128,7 @@ namespace QS3D.Core.Domain
         public string ActiveZoneId { get; set; } = string.Empty;
         public string ActiveFloorId { get; set; } = string.Empty;
         public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
+        public long ChangeVersion { get; private set; }
         public IList<ZoneDefinition> Zones { get; }
         public IList<FloorDefinition> Floors { get; }
         public IList<ProjectFamily> Families { get; }
@@ -142,7 +143,21 @@ namespace QS3D.Core.Domain
         public ZoneDefinition? FindZone(string id) => FindUnique(Zones, NormalizeLookupId(id), x => x.Id, "zone");
         public QuantityRule? FindQuantityRule(string id) => FindUnique(QuantityRules, NormalizeLookupId(id), x => x.Id, "quantity rule");
 
-        public void Touch() => UpdatedUtc = DateTime.UtcNow;
+        public void Touch()
+        {
+            UpdatedUtc = DateTime.UtcNow;
+            ChangeVersion = checked(ChangeVersion + 1L);
+        }
+
+        internal void RestorePersistenceState(DateTime updatedUtc, long changeVersion)
+        {
+            if (updatedUtc.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("Project persistence timestamp must be UTC.", nameof(updatedUtc));
+            if (changeVersion < 0L)
+                throw new ArgumentOutOfRangeException(nameof(changeVersion), "Project change version cannot be negative.");
+            UpdatedUtc = updatedUtc;
+            ChangeVersion = changeVersion;
+        }
 
         private static string NormalizeLookupId(string id) => (id ?? string.Empty).Trim();
 

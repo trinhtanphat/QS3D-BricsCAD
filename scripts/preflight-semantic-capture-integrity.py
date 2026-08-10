@@ -32,7 +32,7 @@ checks = {
     "snapshot": [
         "ProjectStateSnapshot", "CopyInto(source, target)", "target.Zones.Clear()", "target.Floors.Clear()",
         "target.Families.Clear()", "target.Elements.Clear()", "target.QuantityRules.Clear()", "target.AuditEvents.Clear()",
-        "target.Metadata.Clear()", "RestorePersistenceState", "target.UpdatedUtc = source.UpdatedUtc",
+        "target.Metadata.Clear()", "RestorePersistenceState", "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion)",
     ],
     "policy": ["TryFindOwner", "EnumerateOwnerHandles", "CollectOwnerHandles"],
     "source_owner": [

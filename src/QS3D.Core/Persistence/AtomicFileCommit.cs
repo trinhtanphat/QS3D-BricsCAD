@@ -99,7 +99,7 @@ namespace QS3D.Core.Persistence
                 }
                 else if (!string.IsNullOrWhiteSpace(previousBackupSafety))
                 {
-                    TryDelete(previousBackupSafety);
+                    TryDelete(previousBackupSafety!);
                 }
             }
 

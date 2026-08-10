@@ -17,12 +17,13 @@ if STORE.is_file():
     for token in (
         "var previousSchemaVersion = project.SchemaVersion;",
         "var previousUpdatedUtc = project.UpdatedUtc;",
+        "var previousChangeVersion = project.ChangeVersion;",
         "var committed = false;",
         "AtomicFileCommit.ReplaceWithBackup(tempPath, fullPath, backupPath);",
         "committed = true;",
         "if (!committed)",
         "project.SchemaVersion = previousSchemaVersion;",
-        "project.UpdatedUtc = previousUpdatedUtc;",
+        "project.RestorePersistenceState(previousUpdatedUtc, previousChangeVersion);",
         "AtomicFileCommit.TryDelete(tempPath);",
     ):
         if token not in text:
@@ -40,6 +41,7 @@ if SMOKE.is_file():
         "Directory.CreateDirectory(destinationDirectory);",
         "project.SchemaVersion == beforeSchema",
         "project.UpdatedUtc == beforeUpdatedUtc",
+        "project.ChangeVersion == beforeChangeVersion",
     ):
         if token not in text:
             errors.append("QsdbSaveAtomicitySmoke.cs missing regression token: " + token)

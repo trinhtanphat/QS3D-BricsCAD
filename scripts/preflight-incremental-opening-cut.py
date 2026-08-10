@@ -74,7 +74,7 @@ for token in [
     'PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds)',
     'PhysicalOpeningCutTargetState.Resolve(project, host, cutOpeningIds)',
     '"PHYSICAL_OPENING_CUT_TARGET_STATE_MISSING"',
-    'fingerprintOpenings = LinkedOpenings(project, host.Id).ToList().AsReadOnly()',
+    'var fingerprintOpenings = PhysicalOpeningCutTargetState.Resolve(project, host, cutOpeningIds);',
 ]:
     if token not in live:
         errors.append("PhysicalOpeningCutLiveStateService missing cut-set health contract: " + token)

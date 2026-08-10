@@ -109,7 +109,8 @@ See `docs/DIRECT-DRAW-UCS.md` for the coordinate-system contract and runtime mat
 - Drawing identity remains fail-closed on `.qsdb` fingerprint mismatch and save remains protected by `ProjectFileLock` plus atomic QSDB persistence.
 - `Database.FingerprintGuid` is normalized without assuming a specific TD_Mgd managed wrapper type; path fallback remains available when needed.
 - Unsaved documents receive session-unique sidecar keys instead of sharing `Drawing1.qsdb`.
-- Forget/document-close cleanup removes unsaved-document keys with in-memory context.
+- Successful native DWG Save/SaveAs persists pending semantic state to the matching `.qsdb`; close-time pending state requires an explicit Save/Discard/Cancel choice and a failed canonical save vetoes close while attempting a detached LocalAppData recovery copy.
+- Forget/document-close cleanup first detaches native save/close handlers, then removes persistence stamps, unsaved-document keys and in-memory context.
 - QSDB deserialization rejects duplicate map keys.
 - Dependency/source-handle traversals used by regeneration/review are iterative where deep graphs could overflow recursion.
 
