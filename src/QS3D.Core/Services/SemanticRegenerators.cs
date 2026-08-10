@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using System.Linq;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Services
@@ -26,31 +25,45 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
 
-            var length = Positive(SemanticNumber.Get(element, "LengthM"));
-            var height = Positive(SemanticNumber.Get(element, "HeightM"));
-            var thickness = Positive(SemanticNumber.Get(element, "ThicknessM"));
-            var grossArea = length * height;
-            var linkedOpeningArea = project.Elements
-                .Where(x => (x.Category == ElementCategory.WallOpening || x.Category == ElementCategory.Door) &&
-                            x.Properties.TryGetValue("HostWallId", out var host) &&
-                            string.Equals(host, element.Id, StringComparison.OrdinalIgnoreCase))
-                .Sum(x => x.Quantities.TryGetValue("OpeningAreaM2", out var area)
-                    ? Positive(area)
-                    : Positive(SemanticNumber.Get(x, "WidthM")) * Positive(SemanticNumber.Get(x, "HeightM")));
-            var explicitOpeningArea = Positive(SemanticNumber.Get(element, "OpeningAreaM2"));
-            var openingArea = Clamp(Math.Max(explicitOpeningArea, linkedOpeningArea), 0d, grossArea);
-            var netArea = grossArea - openingArea;
+            var length = QuantityMath.Positive(SemanticNumber.Get(element, "LengthM"));
+            var height = QuantityMath.Positive(SemanticNumber.Get(element, "HeightM"));
+            var thickness = QuantityMath.Positive(SemanticNumber.Get(element, "ThicknessM"));
+            var grossArea = QuantityMath.Multiply(length, height, element.Id + "/gross wall area");
+            var linkedOpeningArea = LinkedOpeningArea(project, element);
+            var explicitOpeningArea = QuantityMath.Positive(SemanticNumber.Get(element, "OpeningAreaM2"));
+            var requestedOpeningArea = Math.Max(explicitOpeningArea, linkedOpeningArea);
+            var openingArea = QuantityMath.Clamp(requestedOpeningArea, 0d, grossArea, element.Id + "/opening area");
+            var netArea = QuantityMath.SubtractFloorZero(grossArea, openingArea, element.Id + "/net wall area");
+            var grossVolume = QuantityMath.Multiply(grossArea, thickness, element.Id + "/gross wall volume");
+            var netVolume = QuantityMath.Multiply(netArea, thickness, element.Id + "/net wall volume");
 
             element.SetQuantity("LengthM", length);
             element.SetQuantity("GrossWallAreaM2", grossArea);
             element.SetQuantity("OpeningAreaM2", openingArea);
             element.SetQuantity("NetWallAreaM2", netArea);
-            element.SetQuantity("GrossVolumeM3", grossArea * thickness);
-            element.SetQuantity("NetVolumeM3", netArea * thickness);
+            element.SetQuantity("GrossVolumeM3", grossVolume);
+            element.SetQuantity("NetVolumeM3", netVolume);
         }
 
-        private static double Positive(double value) => value > 0d && !double.IsNaN(value) && !double.IsInfinity(value) ? value : 0d;
-        private static double Clamp(double value, double minimum, double maximum) => Math.Max(minimum, Math.Min(maximum, value));
+        private static double LinkedOpeningArea(ProjectState project, ProjectElement wall)
+        {
+            var total = 0d;
+            foreach (var child in project.Elements)
+            {
+                if (child.Category != ElementCategory.WallOpening && child.Category != ElementCategory.Door) continue;
+                if (!child.Properties.TryGetValue("HostWallId", out var host) || !string.Equals(host, wall.Id, StringComparison.OrdinalIgnoreCase)) continue;
+                double area;
+                if (child.Quantities.TryGetValue("OpeningAreaM2", out var stored)) area = QuantityMath.Positive(stored);
+                else
+                {
+                    var width = QuantityMath.Positive(SemanticNumber.Get(child, "WidthM"));
+                    var height = QuantityMath.Positive(SemanticNumber.Get(child, "HeightM"));
+                    area = QuantityMath.Multiply(width, height, child.Id + "/opening area");
+                }
+                total = QuantityMath.Add(total, area, wall.Id + "/linked opening area");
+            }
+            return total;
+        }
     }
 
     public sealed class RoomRegenerator : IElementRegenerator
@@ -62,19 +75,27 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
 
-            var area = Positive(SemanticNumber.Get(element, "AreaM2"));
-            var perimeter = Positive(SemanticNumber.Get(element, "PerimeterM"));
-            var height = Positive(SemanticNumber.Get(element, "HeightM"));
-            var openings = Positive(SemanticNumber.Get(element, "OpeningAreaM2"));
-            var doorWidth = Positive(SemanticNumber.Get(element, "DoorWidthM"));
+            var area = QuantityMath.Positive(SemanticNumber.Get(element, "AreaM2"));
+            var perimeter = QuantityMath.Positive(SemanticNumber.Get(element, "PerimeterM"));
+            var height = QuantityMath.Positive(SemanticNumber.Get(element, "HeightM"));
+            var openings = QuantityMath.Positive(SemanticNumber.Get(element, "OpeningAreaM2"));
+            var doorWidth = QuantityMath.Positive(SemanticNumber.Get(element, "DoorWidthM"));
+
+            double? netFinishArea = null;
+            double? skirtingLength = null;
+            if (element.Category == ElementCategory.WallFinish)
+            {
+                var grossFinishArea = QuantityMath.Multiply(perimeter, height, element.Id + "/gross finish area");
+                netFinishArea = QuantityMath.SubtractFloorZero(grossFinishArea, openings, element.Id + "/net finish area");
+            }
+            if (element.Category == ElementCategory.Skirting)
+                skirtingLength = QuantityMath.SubtractFloorZero(perimeter, doorWidth, element.Id + "/skirting length");
 
             element.SetQuantity("AreaM2", area);
             element.SetQuantity("PerimeterM", perimeter);
-            if (element.Category == ElementCategory.WallFinish) element.SetQuantity("NetFinishAreaM2", Math.Max(0d, perimeter * height - openings));
-            if (element.Category == ElementCategory.Skirting) element.SetQuantity("SkirtingLengthM", Math.Max(0d, perimeter - doorWidth));
+            if (netFinishArea.HasValue) element.SetQuantity("NetFinishAreaM2", netFinishArea.Value);
+            if (skirtingLength.HasValue) element.SetQuantity("SkirtingLengthM", skirtingLength.Value);
         }
-
-        private static double Positive(double value) => value > 0d && !double.IsNaN(value) && !double.IsInfinity(value) ? value : 0d;
     }
 
     public sealed class OpeningRegenerator : IElementRegenerator
@@ -86,14 +107,13 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
 
-            var width = Positive(SemanticNumber.Get(element, "WidthM"));
-            var height = Positive(SemanticNumber.Get(element, "HeightM"));
-            var area = width * height;
+            var width = QuantityMath.Positive(SemanticNumber.Get(element, "WidthM"));
+            var height = QuantityMath.Positive(SemanticNumber.Get(element, "HeightM"));
+            var area = QuantityMath.Multiply(width, height, element.Id + "/opening area");
+
             element.SetQuantity("OpeningAreaM2", area);
             element.SetQuantity("Count", 1d);
             if (element.Properties.TryGetValue("HostWallId", out var hostId) && !string.IsNullOrWhiteSpace(hostId)) project.FindElement(hostId)?.MarkDirty(ElementDirtyFlags.Quantity);
         }
-
-        private static double Positive(double value) => value > 0d && !double.IsNaN(value) && !double.IsInfinity(value) ? value : 0d;
     }
 }
