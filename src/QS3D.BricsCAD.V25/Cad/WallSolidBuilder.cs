@@ -22,10 +22,14 @@ namespace QS3D.BricsCAD.V25.Cad
             public double HeightM { get; set; }
         }
 
-        public static int BuildSelectedLineWalls(Document document, ProjectState project)
+        public static int BuildSelectedLineWalls(Document document, ProjectState project) =>
+            BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall);
+
+        public static int BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!IsSupportedWall(category)) throw new ArgumentOutOfRangeException(nameof(category), "Unsupported architectural wall category: " + category);
             var selection = document.Editor.SelectImplied();
             if (selection.Status != PromptStatus.OK || selection.Value == null) return 0;
             var sourceIds = selection.Value.GetObjectIds();
@@ -44,7 +48,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (line == null) continue;
                     var sourceHandle = line.Handle.ToString();
                     var matches = project.Elements
-                        .Where(x => x.Category == ElementCategory.ArchitecturalWall && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)))
+                        .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)))
                         .Take(2)
                         .ToList();
                     if (matches.Count == 0) continue;
@@ -105,7 +109,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
             foreach (var update in pending)
             {
-                GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, ElementCategory.ArchitecturalWall);
+                GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, category);
                 update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["HeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
@@ -118,5 +122,8 @@ namespace QS3D.BricsCAD.V25.Cad
             }
             return pending.Count;
         }
+
+        private static bool IsSupportedWall(ElementCategory category) =>
+            category == ElementCategory.ArchitecturalWall || category == ElementCategory.GlassWall || category == ElementCategory.WallPier;
     }
 }
