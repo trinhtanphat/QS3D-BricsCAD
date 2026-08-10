@@ -14,7 +14,8 @@ namespace QS3D.Core.Diagnostics
             "SLAB_MESH",
             "WALL_MESH",
             "FOUNDATION_MESH",
-            "CURTAIN_FRAME"
+            "CURTAIN_FRAME",
+            "GRID_ANNOTATION"
         };
 
         public IReadOnlyList<ModelHealthIssue> Inspect(
@@ -32,6 +33,7 @@ namespace QS3D.Core.Diagnostics
             Add(issues, seen, new DependencyHealthService().Inspect(project));
             Add(issues, seen, new LevelReferenceHealthService().Inspect(project));
             Add(issues, seen, new GridNamingHealthService().Inspect(project));
+            Add(issues, seen, new GeneratedGridAnnotationHealthService().Inspect(project));
             Add(issues, seen, new GeneratedHandleOwnershipHealthService().Inspect(project));
             Add(issues, seen, new GeneratedRebarOwnershipHealthService().Inspect(project));
             Add(issues, seen, new GeneratedGeometryStaleHealthService().Inspect(project));
