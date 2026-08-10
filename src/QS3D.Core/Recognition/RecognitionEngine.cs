@@ -129,7 +129,7 @@ namespace QS3D.Core.Recognition
         public static string Normalize(string? value)
         {
             if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-            var source = value.Trim().ToLowerInvariant().Replace('đ', 'd');
+            var source = value!.Trim().ToLowerInvariant().Replace('đ', 'd');
             var normalized = source.Normalize(NormalizationForm.FormD);
             var builder = new StringBuilder(normalized.Length);
             foreach (var ch in normalized)
