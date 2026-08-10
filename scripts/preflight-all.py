@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import os
 import subprocess
 import sys
 
@@ -28,6 +29,9 @@ def main():
         print(" -", path.relative_to(ROOT))
 
     failed = []
+    child_env = os.environ.copy()
+    child_env["PYTHONUTF8"] = "1"
+    child_env["PYTHONIOENCODING"] = "utf-8"
     for path in gates:
         rel = path.relative_to(ROOT)
         print("\n===", rel, "===")
@@ -36,6 +40,7 @@ def main():
                 [sys.executable, str(path)],
                 cwd=str(ROOT),
                 check=False,
+                env=child_env,
                 timeout=180,
             )
         except subprocess.TimeoutExpired:
