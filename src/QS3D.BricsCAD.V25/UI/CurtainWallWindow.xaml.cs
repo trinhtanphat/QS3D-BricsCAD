@@ -44,6 +44,7 @@ namespace QS3D.BricsCAD.V25.UI
                     ["CurtainPerimeterFrameWidthM"] = NonNegative(PerimeterFrameBox.Text, "Khung biên").ToString("R", CultureInfo.InvariantCulture),
                     ["CurtainMullionWidthM"] = NonNegative(MullionBox.Text, "Mullion đứng").ToString("R", CultureInfo.InvariantCulture),
                     ["CurtainTransomWidthM"] = NonNegative(TransomBox.Text, "Transom ngang").ToString("R", CultureInfo.InvariantCulture),
+                    ["CurtainFrameDepthM"] = Positive(FrameDepthBox.Text, "Độ sâu khung 3D").ToString("R", CultureInfo.InvariantCulture),
                     ["Material"] = Required(GlassMaterialBox.Text, "Vật liệu kính"),
                     ["CurtainFrameMaterial"] = Required(FrameMaterialBox.Text, "Vật liệu khung")
                 };
@@ -122,6 +123,7 @@ namespace QS3D.BricsCAD.V25.UI
             PerimeterFrameBox.Text = Value(family, "CurtainPerimeterFrameWidthM", "0.05");
             MullionBox.Text = Value(family, "CurtainMullionWidthM", "0.05");
             TransomBox.Text = Value(family, "CurtainTransomWidthM", "0.05");
+            FrameDepthBox.Text = Value(family, "CurtainFrameDepthM", "0.05");
             GlassMaterialBox.Text = Value(family, "Material", "Kính");
             FrameMaterialBox.Text = Value(family, "CurtainFrameMaterial", "Nhôm");
         }
@@ -198,7 +200,8 @@ namespace QS3D.BricsCAD.V25.UI
         private IEnumerable<TextBox> Boxes()
         {
             yield return ThicknessBox; yield return HeightBox; yield return MaxPanelWidthBox; yield return MaxPanelHeightBox;
-            yield return PerimeterFrameBox; yield return MullionBox; yield return TransomBox; yield return GlassMaterialBox; yield return FrameMaterialBox;
+            yield return PerimeterFrameBox; yield return MullionBox; yield return TransomBox; yield return FrameDepthBox;
+            yield return GlassMaterialBox; yield return FrameMaterialBox;
         }
 
         private static double Q(ProjectElement element, string key)
