@@ -92,6 +92,10 @@ namespace QS3D.Core.Rebar
                 Count = input.YCount
             });
 
+            var faceCount = (input.IncludeBottom ? 1L : 0L) + (input.IncludeTop ? 1L : 0L);
+            var projectedBars = faceCount * ((long)xDistribution.OffsetsM.Count + yDistribution.OffsetsM.Count);
+            if (projectedBars > MaxBars) throw new InvalidOperationException("Slab mesh exceeds the supported " + MaxBars + " bar limit.");
+
             var half = RebarMath.Divide(thickness, 2d, "slab half thickness");
             double bottomX;
             double bottomY;
@@ -130,10 +134,9 @@ namespace QS3D.Core.Rebar
                 if (input.IncludeTop && high > half - cover + 1e-12d) throw new InvalidOperationException("Top slab mesh violates concrete cover.");
             }
 
-            var bars = new List<SlabMeshBarPlacement>();
+            var bars = new List<SlabMeshBarPlacement>((int)projectedBars);
             if (input.IncludeBottom) AppendFace(bars, SlabMeshFace.Bottom, xDistribution.OffsetsM, yDistribution.OffsetsM, bottomX, bottomY, xLength, yLength, xDiameter, yDiameter);
             if (input.IncludeTop) AppendFace(bars, SlabMeshFace.Top, xDistribution.OffsetsM, yDistribution.OffsetsM, topX, topY, xLength, yLength, xDiameter, yDiameter);
-            if (bars.Count > MaxBars) throw new InvalidOperationException("Slab mesh exceeds the supported " + MaxBars + " bar limit.");
             return new RectangularSlabMeshLayout(bars.AsReadOnly(), xDistribution.ActualSpacingM, yDistribution.ActualSpacingM);
         }
 
