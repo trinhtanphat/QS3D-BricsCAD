@@ -142,6 +142,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         update.Element.Properties["HeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
                     }
 
+                    if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
@@ -162,10 +163,7 @@ namespace QS3D.BricsCAD.V25.Cad
             }
 
             if (pending.Count > 0)
-            {
-                document.Editor.Regen();
-                project.Touch();
-            }
+                CadPostCommitUi.TryRegen(document, "LINE wall native 3D");
             return pending.Count;
         }
 
