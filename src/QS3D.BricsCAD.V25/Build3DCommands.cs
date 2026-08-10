@@ -7,6 +7,7 @@ using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
+using QS3D.Core.Persistence;
 using QS3D.Core.Services;
 using Teigha.DatabaseServices;
 using Teigha.Runtime;
@@ -116,28 +117,94 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                // Semantic validation/regeneration can fail on rules/dependencies. Run it before
-                // committing any replacement Solid3d so those blockers cannot leave a partial CAD rebuild.
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                var elementIds = selectedElements
+                    .Select(x => x.Id)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                var semanticRollback = ProjectStateSnapshot.Capture(project);
+                var ownershipBefore = CaptureGeneratedSolidHandles(project, elementIds);
+                int regenerated;
+                int built;
+                try
+                {
+                    // Semantic validation/regeneration can fail on rules/dependencies. Run it before
+                    // committing any replacement Solid3d so those blockers cannot leave a partial CAD rebuild.
+                    regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
-                var sourceType = NativeBuildCapability.IsWallCategory(category)
-                    ? sourceSnapshots.Select(x => x.EntityType).Distinct(StringComparer.OrdinalIgnoreCase).Single()
-                    : string.Empty;
-                var built = BuildCategory(document, project, category, sourceType);
-                if (built <= 0)
-                    throw new InvalidOperationException("Không tạo được solid từ source đang chọn. Tường KT cần LINE hoặc open POLYLINE; các cấu kiện khác phải đúng source profile được builder hỗ trợ.");
+                    var sourceType = NativeBuildCapability.IsWallCategory(category)
+                        ? sourceSnapshots.Select(x => x.EntityType).Distinct(StringComparer.OrdinalIgnoreCase).Single()
+                        : string.Empty;
+                    built = BuildCategory(document, project, category, sourceType);
+                    if (built <= 0)
+                        throw new InvalidOperationException("Không tạo được solid từ source đang chọn. Tường KT cần LINE hoặc open POLYLINE; các cấu kiện khác phải đúng source profile được builder hỗ trợ.");
+                }
+                catch (Exception operationError)
+                {
+                    if (GeneratedSolidHandlesMatch(project, ownershipBefore))
+                    {
+                        try
+                        {
+                            semanticRollback.Restore(project);
+                        }
+                        catch (Exception restoreError)
+                        {
+                            throw new InvalidOperationException(
+                                "QS3DBUILD3D thất bại trước native ownership commit và semantic rollback cũng thất bại.",
+                                new AggregateException(operationError, restoreError));
+                        }
+                        throw;
+                    }
+
+                    // A changed generated handle means a native builder may already have committed CAD +
+                    // matching semantic ownership before a post-commit BricsCAD/UI operation failed.
+                    // Rolling the project back here would create a worse CAD/semantic mismatch.
+                    Report(document, "QS3DBUILD3D: native ownership đã thay đổi trước lỗi post-commit; giữ trạng thái đã commit để tránh lệch CAD/semantic. Chi tiết: " + operationError.Message);
+                    return;
+                }
 
                 project.Touch();
 
                 // At this point native CAD + semantic ownership already committed successfully.
                 // Palette/selection/regen/view dispatch are convenience UI and must never turn a
                 // completed rebuild into a false QS3DBUILD3D failure report.
-                FinalizeUi(document, selectedElements, sourceHandles, built, regenerated, category);
+                FinalizeUi(document, elementIds, sourceHandles, built, regenerated, category, project);
             }
             catch (Exception ex)
             {
                 Report(document, "QS3DBUILD3D lỗi: " + ex.Message);
             }
+        }
+
+        private static Dictionary<string, string> CaptureGeneratedSolidHandles(ProjectState project, IEnumerable<string> elementIds)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var elementId in elementIds)
+            {
+                var normalizedId = (elementId ?? string.Empty).Trim();
+                if (normalizedId.Length == 0 || result.ContainsKey(normalizedId)) continue;
+                var element = project.FindElement(normalizedId);
+                result[normalizedId] = GeneratedSolidHandle(element);
+            }
+            return result;
+        }
+
+        private static bool GeneratedSolidHandlesMatch(ProjectState project, IReadOnlyDictionary<string, string> expected)
+        {
+            foreach (var pair in expected)
+            {
+                var element = project.FindElement(pair.Key);
+                if (element == null) return false;
+                if (!string.Equals(GeneratedSolidHandle(element), pair.Value, StringComparison.OrdinalIgnoreCase)) return false;
+            }
+            return true;
+        }
+
+        private static string GeneratedSolidHandle(ProjectElement? element)
+        {
+            if (element == null) return string.Empty;
+            return element.Properties.TryGetValue("GeneratedSolidHandle", out var handle)
+                ? (handle ?? string.Empty).Trim()
+                : string.Empty;
         }
 
         private static bool AreAllModelSpaceEntities(Document document, IReadOnlyCollection<ObjectId> ids)
@@ -221,22 +288,25 @@ namespace QS3D.BricsCAD.V25
 
         private static void FinalizeUi(
             Document document,
-            IReadOnlyCollection<ProjectElement> selectedElements,
+            IReadOnlyCollection<string> elementIds,
             IReadOnlyCollection<string> sourceHandles,
             int built,
             int regenerated,
-            ElementCategory category)
+            ElementCategory category,
+            ProjectState project)
         {
-            var status = "Vẽ/Cập nhật 3D: " + built + " solid • " + selectedElements.Count + " semantic • " + category + " • regenerate " + regenerated + ".";
+            var status = "Vẽ/Cập nhật 3D: " + built + " solid • " + elementIds.Count + " semantic • " + category + " • regenerate " + regenerated + ".";
             try
             {
                 PaletteCoordinator.RefreshProject();
                 document.Editor.Regen();
 
-                // Prefer selecting the newly generated result, like BLT. A subsequent QS3DBUILD3D
-                // still resolves that generated selection back to the stable source handles above.
-                var generatedHandles = selectedElements
-                    .Select(x => x.Properties.TryGetValue("GeneratedSolidHandle", out var handle) ? handle : string.Empty)
+                // Resolve current project elements by id instead of retaining pre-build object references.
+                // Builder rollback restores ProjectState from clones, so stale references must never be reused.
+                var generatedHandles = elementIds
+                    .Select(project.FindElement)
+                    .Where(x => x != null)
+                    .Select(GeneratedSolidHandle)
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
