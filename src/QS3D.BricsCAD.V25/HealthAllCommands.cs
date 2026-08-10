@@ -6,6 +6,7 @@ using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
+using QS3D.Core.Services;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -48,6 +49,7 @@ namespace QS3D.BricsCAD.V25
 
                 var combined = new List<ModelHealthIssue>();
                 combined.AddRange(new ModelHealthService().Inspect(project, liveSources, liveMain));
+                combined.AddRange(new RoomFinishHealthService().Inspect(project));
                 combined.AddRange(new DependencyHealthService().Inspect(project));
                 combined.AddRange(new GeneratedGeometryStaleHealthService().Inspect(project));
                 combined.AddRange(new GeneratedRebarHealthService().InspectAll(project, liveLongitudinal, liveShape));
@@ -78,7 +80,7 @@ namespace QS3D.BricsCAD.V25
                     var element = project.FindElement(issue.ElementId);
                     if (element == null) return;
                     var handles = LocateHandles(element, issue.Code).ToArray();
-                    if (handles.Length == 0) handles = element.SourceHandles.ToArray();
+                    if (handles.Length == 0) handles = SourceHandleResolver.Resolve(project, new[] { element.Id }).ToArray();
                     var count = CadHandleService.Select(document, handles);
                     PaletteCoordinator.SetStatus("Health All Locate " + element.Id + " • " + count + " CAD object");
                     if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
