@@ -9,7 +9,14 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public bool IsVisible { get => _isVisible; set { if (_isVisible == value) return; _isVisible = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsVisible))); } }
         public event PropertyChangedEventHandler? PropertyChanged;
     }
-    public sealed class DrawingItemViewModel { public string Name { get; set; } = string.Empty; public string Path { get; set; } = string.Empty; public string Scale { get; set; } = "1:100"; public bool IsLocked { get; set; } }
+    public sealed class DrawingItemViewModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
+        public string Scale { get; set; } = "1:100";
+        public bool IsLocked { get; set; }
+        public bool IsXref { get; set; }
+    }
     public sealed class RightPanelViewModel : INotifyPropertyChanged
     {
         private string _layerSearch = string.Empty; private string _status = "Sẵn sàng";

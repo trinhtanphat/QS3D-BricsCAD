@@ -17,8 +17,10 @@ namespace QS3D.BricsCAD.V25.UI
             var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null) return;
             try
             {
-                _viewModel.Drawings.Clear(); _viewModel.Drawings.Add(new DrawingItemViewModel { Name = System.IO.Path.GetFileName(doc.Name), Path = doc.Name, Scale = "MODEL", IsLocked = false });
-                foreach (var item in DrawingCatalogReader.ReadReferences(doc)) _viewModel.Drawings.Add(new DrawingItemViewModel { Name = item.Name, Path = item.Path, Scale = "XREF", IsLocked = false });
+                var selectedDrawing = DrawingList?.SelectedItem as DrawingItemViewModel;
+                _viewModel.Drawings.Clear(); _viewModel.Drawings.Add(new DrawingItemViewModel { Name = System.IO.Path.GetFileName(doc.Name), Path = doc.Name, Scale = "MODEL", IsLocked = false, IsXref = false });
+                foreach (var item in DrawingCatalogReader.ReadReferences(doc)) _viewModel.Drawings.Add(new DrawingItemViewModel { Name = item.Name, Path = item.Path, Scale = "XREF", IsLocked = false, IsXref = true });
+                if (selectedDrawing != null) DrawingList.SelectedItem = _viewModel.Drawings.FirstOrDefault(x => x.IsXref == selectedDrawing.IsXref && string.Equals(x.Name, selectedDrawing.Name, StringComparison.OrdinalIgnoreCase));
                 RefreshLayers(); _viewModel.Status = _viewModel.Drawings.Count + " bản vẽ • " + _viewModel.Layers.Count + " layer";
             }
             catch (Exception ex) { _viewModel.Status = "Lỗi đọc DWG: " + ex.Message; }
@@ -46,10 +48,28 @@ namespace QS3D.BricsCAD.V25.UI
             try { var count = LayerVisibilityService.SetVisible(doc, names, visible); _viewModel.Status = (visible ? "Đã hiện " : "Đã ẩn ") + count + " layer"; RefreshLayers(); } catch (Exception ex) { _viewModel.Status = ex.Message; }
         }
         private void OnAttachXrefClick(object sender, RoutedEventArgs e) => Send("_XATTACH");
-        private void OnReloadXrefClick(object sender, RoutedEventArgs e) => Send("_XREF");
-        private void OnMoveDrawingClick(object sender, RoutedEventArgs e) => Send("_MOVE");
-        private void OnDeleteDrawingClick(object sender, RoutedEventArgs e) => Send("_ERASE");
+        private void OnReloadXrefClick(object sender, RoutedEventArgs e)
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument; var item = SelectedXref(); if (doc == null || item == null) return;
+            try { XrefService.Reload(doc, item.Name); _viewModel.Status = "Đã nạp lại Xref " + item.Name; Refresh(); } catch (Exception ex) { _viewModel.Status = ex.Message; }
+        }
+        private void OnMoveDrawingClick(object sender, RoutedEventArgs e)
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument; var item = SelectedXref(); if (doc == null || item == null) return;
+            try { var count = XrefService.SelectInstances(doc, item.Name); if (count == 0) { _viewModel.Status = "Không tìm thấy instance Xref trong space hiện tại."; return; } _viewModel.Status = "Đã chọn " + count + " instance của " + item.Name + "."; Send("_MOVE"); } catch (Exception ex) { _viewModel.Status = ex.Message; }
+        }
+        private void OnDeleteDrawingClick(object sender, RoutedEventArgs e)
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument; var item = SelectedXref(); if (doc == null || item == null) return;
+            if (MessageBox.Show("Detach Xref “" + item.Name + "” khỏi bản vẽ? File nguồn sẽ không bị xóa.", "QS3D", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+            try { XrefService.Detach(doc, item.Name); _viewModel.Status = "Đã detach Xref " + item.Name; Refresh(); } catch (Exception ex) { _viewModel.Status = ex.Message; }
+        }
         private void OnZoomWindowClick(object sender, RoutedEventArgs e) => Send("_ZOOM _W");
+        private DrawingItemViewModel? SelectedXref()
+        {
+            var item = DrawingList.SelectedItem as DrawingItemViewModel; if (item == null) { _viewModel.Status = "Chọn một Xref trong Quản lý bản vẽ."; return null; }
+            if (!item.IsXref) { _viewModel.Status = "Thao tác này chỉ áp dụng cho Xref, không áp dụng DWG chính."; return null; } return item;
+        }
         private static void Send(string command) => Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + " ", true, false, false);
     }
 }

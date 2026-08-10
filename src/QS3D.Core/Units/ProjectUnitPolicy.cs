@@ -2,7 +2,7 @@ using System;
 
 namespace QS3D.Core.Units
 {
-    public enum LengthUnit { Millimeter, Centimeter, Meter }
+    public enum LengthUnit { Millimeter, Centimeter, Meter, Inch, Foot, Yard }
 
     public sealed class ProjectUnitPolicy
     {
@@ -14,25 +14,24 @@ namespace QS3D.Core.Units
         }
         public LengthUnit DrawingUnit { get; }
         public int DisplayDecimals { get; }
-        public double ToMeters(double drawingLength)
+        public double ToMeters(double drawingLength) => drawingLength * LinearToMeters(DrawingUnit);
+        public double FromMeters(double meters) => meters / LinearToMeters(DrawingUnit);
+        public double AreaToSquareMeters(double drawingArea) { var scale = LinearToMeters(DrawingUnit); return drawingArea * scale * scale; }
+        public double VolumeToCubicMeters(double drawingVolume) { var scale = LinearToMeters(DrawingUnit); return drawingVolume * scale * scale * scale; }
+        public double RoundForDisplay(double value) => Math.Round(value, DisplayDecimals, MidpointRounding.AwayFromZero);
+
+        private static double LinearToMeters(LengthUnit unit)
         {
-            switch (DrawingUnit)
+            switch (unit)
             {
-                case LengthUnit.Millimeter: return drawingLength / 1000d;
-                case LengthUnit.Centimeter: return drawingLength / 100d;
-                default: return drawingLength;
+                case LengthUnit.Millimeter: return 0.001d;
+                case LengthUnit.Centimeter: return 0.01d;
+                case LengthUnit.Meter: return 1d;
+                case LengthUnit.Inch: return 0.0254d;
+                case LengthUnit.Foot: return 0.3048d;
+                case LengthUnit.Yard: return 0.9144d;
+                default: throw new ArgumentOutOfRangeException(nameof(unit));
             }
         }
-        public double AreaToSquareMeters(double drawingArea)
-        {
-            var scale = ToMeters(1d);
-            return drawingArea * scale * scale;
-        }
-        public double VolumeToCubicMeters(double drawingVolume)
-        {
-            var scale = ToMeters(1d);
-            return drawingVolume * scale * scale * scale;
-        }
-        public double RoundForDisplay(double value) => Math.Round(value, DisplayDecimals, MidpointRounding.AwayFromZero);
     }
 }
