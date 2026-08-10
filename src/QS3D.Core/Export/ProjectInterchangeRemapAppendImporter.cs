@@ -224,9 +224,19 @@ namespace QS3D.Core.Export
                     ReferencesRewritten = rewrites
                 };
             }
-            catch
+            catch (Exception operationError)
             {
-                rollback.Restore(target);
+                try
+                {
+                    rollback.Restore(target);
+                }
+                catch (Exception restoreError)
+                {
+                    throw new InvalidOperationException(
+                        "Interchange Import As New failed and project rollback also failed.",
+                        new AggregateException(operationError, restoreError));
+                }
+
                 throw;
             }
         }
