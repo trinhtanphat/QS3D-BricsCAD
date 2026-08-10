@@ -34,6 +34,12 @@ namespace QS3D.Core.Services
                     if (!hasDirectReference && !hasBoundaryReference)
                         AddGeneratedSolidHandle(element, knownHandles, handles);
 
+                    if (AutoRoomLifecycle.IsRoomFinishCategory(element.Category))
+                    {
+                        var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, element);
+                        if (roomId.Length > 0 && !visited.Contains(roomId)) stack.Push(roomId);
+                    }
+
                     for (var index = element.DependsOn.Count - 1; index >= 0; index--)
                     {
                         var dependency = (element.DependsOn[index] ?? string.Empty).Trim();
