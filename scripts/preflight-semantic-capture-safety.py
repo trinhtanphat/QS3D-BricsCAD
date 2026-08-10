@@ -24,6 +24,8 @@ if capture.is_file():
         "RestoreOrThrow(project, rollback, operationError",
         "rollback.Restore(project)",
         "AggregateException(operationError, restoreError)",
+        'RestoreOrThrow(project, rollback, operationError, "Room finish generation")',
+        'RestoreOrThrow(project, rollback, operationError, "Room finish synchronization")',
     ):
         if needle not in text:
             errors.append("SemanticCaptureService missing transactional/generated-source guard: " + needle)
@@ -38,6 +40,18 @@ if capture.is_file():
     loop = text.find("foreach (var snapshot in snapshots)", capture_method)
     if capture_method < 0 or rollback < 0 or loop < 0 or rollback > loop:
         errors.append("multi-selection semantic Capture must snapshot project before the capture loop")
+
+    finish_method = text.find("public static int GenerateRoomFinishes(Document document)")
+    finish_rollback = text.find("var rollback = ProjectStateSnapshot.Capture(project);", finish_method)
+    finish_loop = text.find("foreach (var room in rooms)", finish_method)
+    if finish_method < 0 or finish_rollback < 0 or finish_loop < 0 or finish_rollback > finish_loop:
+        errors.append("GenerateRoomFinishes must snapshot project before mutating the finish batch")
+
+    sync_method = text.find("public static int SyncExistingRoomFinishes(ProjectState project, ProjectElement room)")
+    sync_rollback = text.find("var rollback = ProjectStateSnapshot.Capture(project);", sync_method)
+    sync_loop = text.find("foreach (var category in RoomFinishCategories)", sync_method)
+    if sync_method < 0 or sync_rollback < 0 or sync_loop < 0 or sync_rollback > sync_loop:
+        errors.append("SyncExistingRoomFinishes must snapshot project before mutating existing finishes")
 
 if policy.is_file():
     text = policy.read_text(encoding="utf-8")
@@ -63,4 +77,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: semantic capture rejects QS3D-generated output before mutation and rolls back both single-snapshot and multi-selection project state on failure.")
+print("PASS: semantic capture rejects generated output before mutation; capture and room-finish batches restore full project state on failure.")
