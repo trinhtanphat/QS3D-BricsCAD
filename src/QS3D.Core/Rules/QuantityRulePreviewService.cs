@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 
@@ -72,6 +73,18 @@ namespace QS3D.Core.Rules
         public bool HasChanges => ChangeCount > 0;
     }
 
+    public sealed class QuantityRuleGuardedApplyResult
+    {
+        internal QuantityRuleGuardedApplyResult(int appliedOperationCount, ModelHealthBaselineDiff healthDiff)
+        {
+            AppliedOperationCount = appliedOperationCount;
+            HealthDiff = healthDiff ?? throw new ArgumentNullException(nameof(healthDiff));
+        }
+
+        public int AppliedOperationCount { get; }
+        public ModelHealthBaselineDiff HealthDiff { get; }
+    }
+
     public sealed class QuantityRulePreviewService
     {
         private const string ProvenancePrefix = "Rule:";
@@ -110,6 +123,43 @@ namespace QS3D.Core.Rules
 
         public int ApplyProject(ProjectState project, QuantityRuleProjectPreview preview)
         {
+            ValidateFreshProjectPreview(project, preview);
+            var snapshot = ProjectStateSnapshot.Capture(project);
+            try
+            {
+                return ApplyFreshProjectPreview(project, preview);
+            }
+            catch
+            {
+                snapshot.Restore(project);
+                throw;
+            }
+        }
+
+        public QuantityRuleGuardedApplyResult ApplyProjectWithHealthGuard(ProjectState project, QuantityRuleProjectPreview preview)
+        {
+            ValidateFreshProjectPreview(project, preview);
+            var health = new ModelHealthBaselineService();
+            var before = health.CaptureSemantic(project);
+            var snapshot = ProjectStateSnapshot.Capture(project);
+            try
+            {
+                var applied = ApplyFreshProjectPreview(project, preview);
+                var after = health.CaptureSemantic(project);
+                var diff = health.Compare(before, after);
+                if (diff.NewErrorCount > 0)
+                    throw new InvalidOperationException("Quantity-rule apply introduced " + diff.NewErrorCount + " new Model Health error(s); project state was rolled back.");
+                return new QuantityRuleGuardedApplyResult(applied, diff);
+            }
+            catch
+            {
+                snapshot.Restore(project);
+                throw;
+            }
+        }
+
+        private void ValidateFreshProjectPreview(ProjectState project, QuantityRuleProjectPreview preview)
+        {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (preview == null) throw new ArgumentNullException(nameof(preview));
             if (!string.Equals(preview.ProjectId, project.ProjectId, StringComparison.Ordinal))
@@ -118,24 +168,18 @@ namespace QS3D.Core.Rules
             var current = PreviewProject(project);
             if (!Equivalent(preview, current))
                 throw new InvalidOperationException("Quantity-rule project preview is stale; recompute preview before applying.");
+        }
 
-            var snapshot = ProjectStateSnapshot.Capture(project);
-            try
+        private int ApplyFreshProjectPreview(ProjectState project, QuantityRuleProjectPreview preview)
+        {
+            var applied = 0;
+            foreach (var item in preview.Elements.Where(x => x.HasChanges).OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
             {
-                var applied = 0;
-                foreach (var item in preview.Elements.Where(x => x.HasChanges).OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
-                {
-                    var element = project.FindElement(item.ElementId)
-                        ?? throw new InvalidOperationException("Quantity-rule apply lost element " + item.ElementId + ".");
-                    applied = checked(applied + _engine.ApplyMatching(project, element));
-                }
-                return applied;
+                var element = project.FindElement(item.ElementId)
+                    ?? throw new InvalidOperationException("Quantity-rule apply lost element " + item.ElementId + ".");
+                applied = checked(applied + _engine.ApplyMatching(project, element));
             }
-            catch
-            {
-                snapshot.Restore(project);
-                throw;
-            }
+            return applied;
         }
 
         private QuantityRuleElementPreview PreviewDetached(ProjectState detached, ProjectElement element)
@@ -167,9 +211,11 @@ namespace QS3D.Core.Rules
                     string.Equals(beforeRule, afterRule, StringComparison.Ordinal))
                     continue;
 
-                var kind = !beforeHasValue && afterHasValue
+                var beforeManaged = beforeHasValue || beforeRule.Length > 0;
+                var afterManaged = afterHasValue || afterRule.Length > 0;
+                var kind = !beforeManaged && afterManaged
                     ? QuantityRulePreviewChangeKind.Added
-                    : beforeHasValue && !afterHasValue
+                    : beforeManaged && !afterManaged
                         ? QuantityRulePreviewChangeKind.Removed
                         : QuantityRulePreviewChangeKind.Changed;
                 changes.Add(new QuantityRulePreviewChange(
