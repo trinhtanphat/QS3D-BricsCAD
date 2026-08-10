@@ -49,12 +49,16 @@ namespace QS3D.Core.Geometry
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
             var layout = CurtainWallLayoutPlanner.Plan(input);
+            var projectedDetailSolids = checked((long)layout.PanelCount + layout.VerticalFrameCount + layout.HorizontalFrameCount);
+            if (projectedDetailSolids > MaxDetailSolids)
+                throw new InvalidOperationException("Curtain wall native detail requires too many panel/frame solids: " + projectedDetailSolids + ".");
+
             var verticalFrames = BuildVerticalFrames(input, layout);
             var horizontalFrames = BuildHorizontalFrames(input, layout);
             var panels = BuildPanelCells(verticalFrames, horizontalFrames);
             var solidCount = checked(panels.Count + verticalFrames.Count + horizontalFrames.Count);
-            if (solidCount > MaxDetailSolids)
-                throw new InvalidOperationException("Curtain wall native detail requires too many panel/frame solids: " + solidCount + ".");
+            if (solidCount != projectedDetailSolids)
+                throw new InvalidOperationException("Curtain wall native detail count does not match the projected grid count.");
 
             var panelArea = 0d;
             foreach (var panel in panels) panelArea = Add(panelArea, Multiply(panel.WidthM, panel.HeightM, "curtain detail panel area"), "curtain detail total panel area");
