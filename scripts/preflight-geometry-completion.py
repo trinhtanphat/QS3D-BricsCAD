@@ -11,6 +11,7 @@ required = [
     "src/QS3D.Core/Geometry/OpeningCutPlanner.cs",
     "src/QS3D.Core/Rebar/RectangularRebarLayoutPlanner.cs",
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs",
+    "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs",
     "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs",
@@ -23,6 +24,7 @@ required = [
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs",
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml",
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs",
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs",
 ]
 for relative in required:
@@ -39,8 +41,13 @@ checks = {
     "src/QS3D.Core/Rebar/RectangularRebarLayoutPlanner.cs": [
         "BarsAlongWidth", "BarsAlongDepth", "CoverM", "DiameterMm", "no usable reinforcement envelope"
     ],
+    "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
+        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
+        "GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
+    ],
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs": [
-        "WallFootprintEngine", "BulgeArcTessellator.Tessellate", "Region.CreateFromCurves", "CreateExtrudedSolid", "WallJoinMode"
+        "WallFootprintEngine", "BulgeArcTessellator.Tessellate", "Region.CreateFromCurves", "CreateExtrudedSolid", "WallJoinMode",
+        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelected(Document document, ProjectState project, ElementCategory category)"
     ],
     "src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs": [
         "OpeningCutPlanner.Plan", "PhysicalOpeningCutSolidHandle", "PhysicalOpeningCutFingerprint", "BooleanOperationType.BoolSubtract", "FingerprintPart", "HostFingerprint"
@@ -71,6 +78,10 @@ checks = {
         'new RibbonButtonSpec("Vách Kính", "QS3DGLASSWALL")', 'new RibbonButtonSpec("Trụ Tường", "QS3DWALLPIER")',
         'new RibbonButtonSpec("Khoét Cửa/Lỗ", "QS3DCUTOPENINGS")', 'new RibbonButtonSpec("Cốt thép 3D", "QS3DREBAR3D")'
     ],
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": [
+        "IsTktWall(category.Value)", "ElementCategory.GlassWall", "ElementCategory.WallPier",
+        "WallSolidBuilder.BuildSelectedLineWalls(doc, project, category.Value)", "PolylineWallSolidBuilder.BuildSelected(doc, project, category.Value)"
+    ],
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs": [
         "StraightWallFootprint", "PolylineWallCorner", "OpeningCutPlan", "RectangularRebarLayout", "GeneratedRebarHealth"
     ],
@@ -98,16 +109,10 @@ for required_command in ("QS3DCUTOPENINGS", "QS3DREBAR3D", "QS3DREBARHEALTH", "Q
 if len(commands) != len(set(x.upper() for x in commands)):
     errors.append("duplicate CommandMethod names detected")
 
-review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
-if review.is_file():
-    text = review.read_text(encoding="utf-8")
-    if "PolylineWallSolidBuilder.BuildSelected" not in text:
-        errors.append("QS3DBUILD3D does not invoke polyline wall builder")
-
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: polyline wall footprints, opening boolean planning, fail-safe rectangular rebar geometry/health and BLT-style TKT/UI workflow guards are present.")
+print("PASS: TKT line/polyline wall variants, opening boolean planning, fail-safe rectangular rebar geometry/health and BLT-style UI workflow guards are present.")
