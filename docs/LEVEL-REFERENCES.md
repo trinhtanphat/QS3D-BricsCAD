@@ -30,8 +30,31 @@ This batch establishes Core semantics, lifecycle guards, Health All / Release Ch
 
 The Floor/Level UI intentionally does **not** expose Bottom/Top Level assignment yet. Native CAD builders currently share source-relative placement assumptions with physical openings, curtain frames and rebar. Exposing Level assignment before those paths consume the same placement resolver would create a misleading UI where semantic Level state and CAD geometry disagree.
 
-The native integration batch must therefore update the vertical-placement chain coherently, including host solids and every dependent generated system that derives Z/effective height. Only after that integration is source-reviewed should Bottom/Top Level assignment be exposed in the Level Manager.
+The native integration batch must therefore update the vertical-placement chain coherently, including host solids, semantic quantity regeneration and every dependent generated system that derives Z/effective height. Only after that integration is source-reviewed and qualified on BricsCAD V25 should Bottom/Top Level assignment be exposed in the Level Manager.
+
+## Native integration qualification policy
+
+`LevelReferenceNativeIntegrationPolicy` is the explicit source gate for categories whose complete native/dependent vertical-placement chain has been integrated and qualified. The current policy intentionally qualifies **no category**.
+
+Do not add a category to that policy merely because one host builder has been changed. Qualification for a category requires, at minimum:
+
+- its native host builder uses the shared Level placement contract;
+- semantic quantities use the same effective bottom/top/height contract;
+- hosted Door/Opening geometry remains vertically consistent;
+- dependent Curtain/rebar/mesh/detail outputs that apply to the category use the same placement or are safely invalidated/rebuilt;
+- source reconcile, rebuild, save/reopen and Floor elevation changes preserve the resolved placement;
+- legacy elements with no Level references remain byte/behavior compatible at the semantic contract level;
+- exact-SHA BricsCAD V25 runtime scenarios pass before the category is called production-qualified.
+
+Until those conditions are met, keep the policy fail-closed.
 
 ## Release behavior
 
-`LevelReferenceHealthService` is included in `QS3DHEALTHALL` and `QS3DRELEASECHECK`. Invalid Level references are release-blocking errors even before native placement is enabled, so malformed or hand-edited metadata cannot silently enter a release.
+`LevelReferenceHealthService` is included in `QS3DHEALTH`, `QS3DHEALTHALL` and `QS3DRELEASECHECK`.
+
+- malformed Level metadata produces its specific release-blocking semantic error;
+- a semantically valid opt-in Level reference on an unqualified category produces `LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING` as a release-blocking Error;
+- invalid references do not also receive the pending-integration error, so health output preserves the real root cause;
+- elements with no Level reference continue on the legacy placement path and are not blocked by this gate.
+
+This prevents hand-edited or future UI-created Level metadata from making a candidate look release-ready while native Solid3d/QTO/dependent geometry still follows legacy source-relative Z/height assumptions.

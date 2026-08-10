@@ -14,12 +14,13 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly Action<ModelHealthIssue>? _locate;
         private readonly Document _document;
 
-        public ModelHealthWindow(IReadOnlyList<ModelHealthIssue> issues, Action<ModelHealthIssue>? locate = null)
+        public ModelHealthWindow(Document document, IReadOnlyList<ModelHealthIssue> issues, Action<ModelHealthIssue>? locate = null)
         {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             if (issues == null) throw new ArgumentNullException(nameof(issues));
             _locate = locate;
-            _document = BcadApplication.DocumentManager.MdiActiveDocument ?? throw new InvalidOperationException("Không có DWG active khi mở Model Health.");
             InitializeComponent();
+            DocumentBoundWindowLifetime.Attach(this, _document);
             IssueGrid.ItemsSource = issues;
             SummaryText.Text = issues.Count(x => x.Severity == HealthSeverity.Error) + " lỗi • " + issues.Count(x => x.Severity == HealthSeverity.Warning) + " cảnh báo • " + issues.Count(x => x.Severity == HealthSeverity.Info) + " thông tin";
         }

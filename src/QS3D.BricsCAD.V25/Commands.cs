@@ -68,7 +68,7 @@ namespace QS3D.BricsCAD.V25
                 };
 
                 var rows = recalculate();
-                Application.ShowModelessWindow(IntPtr.Zero, new QuantitySummaryWindow(rows, locate, recalculate), true);
+                Application.ShowModelessWindow(IntPtr.Zero, new QuantitySummaryWindow(doc, rows, locate, recalculate), true);
             });
         }
 
@@ -256,7 +256,7 @@ namespace QS3D.BricsCAD.V25
                 var summary = new HealthSummary(issues);
                 var text = "Model Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(text); doc.Editor.WriteMessage("\nQS3D " + text);
-                var window = new ModelHealthWindow(issues, issue =>
+                var window = new ModelHealthWindow(doc, issues, issue =>
                 {
                     var element = project.FindElement(issue.ElementId); if (element == null) return;
                     IEnumerable<string> locateHandles = SemanticReferenceHandles.Get(element);

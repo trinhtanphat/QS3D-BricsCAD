@@ -16,11 +16,14 @@ for path in paths.values():
 
 service_tokens = (
     "new ModelHealthService().Inspect",
+    "new RoomFinishHealthService().Inspect",
     "new DependencyHealthService().Inspect",
+    "new LevelReferenceHealthService().Inspect",
     "new GeneratedHandleOwnershipHealthService().Inspect",
     "new GeneratedRebarOwnershipHealthService().Inspect",
     "new GeneratedGeometryStaleHealthService().Inspect",
     "new GeneratedRebarModeHealthService().Inspect",
+    "new RebarFabricationQualificationHealthService().Inspect",
     "new GeneratedRebarHealthService().InspectAll",
     "new GeneratedTieRebarHealthService().Inspect",
     "new GeneratedBeamStirrupHealthService().Inspect",
@@ -66,6 +69,9 @@ if paths["smoke"].is_file():
         "GeneratedCurtainFrameHandles",
         'HasCode(issues, "DEPENDENCY_CYCLE")',
         'HasCode(issues, "GENERATED_SOLID_STALE")',
+        'HasCode(issues, "TOP_LEVEL_REQUIRES_BOTTOM_LEVEL")',
+        'HasCode(issues, "UNLINKED_ROOM_FINISH")',
+        'HasCode(issues, "REBAR_FAB_OUTPUT_MISSING")',
     ):
         if token not in text:
             errors.append("ComprehensiveModelHealthSmoke.cs missing coverage token: " + token)
@@ -76,4 +82,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: QS3DHEALTH uses canonical generated ownership, one live-solid set, all generated-output health services, dependency/stale diagnostics, and canonical generated locate behavior.")
+print("PASS: QS3DHEALTH comprehensive Core health includes semantic, dependency, stale, ownership, fabrication, and all generated-output diagnostics.")

@@ -22,6 +22,7 @@ def require(text: str, token: str, label: str) -> None:
 floors = read("src/QS3D.Core/Domain/ProjectFloorService.cs")
 placement = read("src/QS3D.Core/Domain/ElementVerticalPlacementService.cs")
 health = read("src/QS3D.Core/Diagnostics/LevelReferenceHealthService.cs")
+qualification = read("src/QS3D.Core/Diagnostics/LevelReferenceNativeIntegrationPolicy.cs")
 health_all = read("src/QS3D.BricsCAD.V25/HealthAllCommands.cs")
 release = read("src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs")
 smoke = read("tests/QS3D.Core.SmokeTests/LevelReferenceSmoke.cs")
@@ -57,8 +58,18 @@ for token in [
     '"BOTTOM_LEVEL_OFFSET_INVALID"',
     '"TOP_LEVEL_OFFSET_INVALID"',
     '"LEVEL_RANGE_INVALID"',
+    '"LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING"',
+    "LevelReferenceNativeIntegrationPolicy.IsQualified(element.Category)",
+    "AddNativeIntegrationPendingIfSemanticallyValid",
 ]:
     require(health, token, "level health")
+
+for token in [
+    "public static class LevelReferenceNativeIntegrationPolicy",
+    "public static bool IsQualified(ElementCategory category)",
+    "return false;",
+]:
+    require(qualification, token, "native integration qualification policy")
 
 require(health_all, "new LevelReferenceHealthService().Inspect(project)", "Health All wiring")
 require(release, "new LevelReferenceHealthService().Inspect(project)", "Release Check wiring")
@@ -66,6 +77,8 @@ require(smoke, "LegacyPlacementRemainsSourceRelative", "legacy compatibility smo
 require(smoke, "BottomAndTopLevelsResolveAbsolutePlacement", "absolute placement smoke")
 require(smoke, "TopAssignmentRequiresBottomAndValidRange", "assignment safety smoke")
 require(smoke, "FloorMutationTracksAllReferenceKinds", "floor lifecycle smoke")
+require(smoke, "HealthBlocksValidLevelReferencesUntilNativeQualification", "native qualification blocker smoke")
+require(smoke, '"LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING"', "pending qualification smoke")
 require(registration, "LevelReferenceSmoke.Run();", "smoke registration")
 
 # Until native builders consume ElementVerticalPlacementService coherently, the Level Picker must not expose
@@ -75,4 +88,4 @@ for forbidden in ["Gán Level đáy", "Gán Level đỉnh", "OnAssignBottomLevel
         print(f"[FAIL] Level Picker exposes native-looking level reference UI before builder integration: {forbidden}")
         sys.exit(1)
 
-print("[PASS] opt-in level reference semantics are health-guarded and legacy placement remains compatible")
+print("[PASS] opt-in level reference semantics preserve legacy placement, malformed refs fail closed, and semantically valid refs stay release-blocked until native/dependent placement is explicitly qualified")

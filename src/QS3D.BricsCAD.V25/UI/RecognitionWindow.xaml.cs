@@ -14,15 +14,16 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly IReadOnlyList<RecognitionResult> _rows;
         private readonly Action<RecognitionResult>? _apply;
         private readonly Action<RecognitionResult>? _locate;
-        private readonly Document? _document;
+        private readonly Document _document;
 
-        public RecognitionWindow(IReadOnlyList<RecognitionResult> rows, Action<RecognitionResult>? apply = null, Action<RecognitionResult>? locate = null)
+        public RecognitionWindow(Document document, IReadOnlyList<RecognitionResult> rows, Action<RecognitionResult>? apply = null, Action<RecognitionResult>? locate = null)
         {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _apply = apply;
             _locate = locate;
-            _document = BcadApplication.DocumentManager.MdiActiveDocument;
             InitializeComponent();
+            DocumentBoundWindowLifetime.Attach(this, _document);
             Grid.ItemsSource = _rows;
             RefreshStatus(0, 0, null);
         }
@@ -81,7 +82,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureActiveDocument()
         {
-            if (_document == null || !ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, _document))
+            if (!ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, _document))
                 throw new InvalidOperationException("Cửa sổ Recognition thuộc một DWG khác. Hãy quay lại DWG đã mở cửa sổ này hoặc đóng và mở lại Recognition trong DWG hiện tại.");
         }
 

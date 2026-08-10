@@ -41,10 +41,22 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             _graph.Rebuild(project.Elements);
-            var source = project.FindElement(elementId) ?? throw new KeyNotFoundException("Unknown element: " + elementId);
+
+            var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+                byId[element.Id] = element;
+
+            var normalizedId = (elementId ?? string.Empty).Trim();
+            if (!byId.TryGetValue(normalizedId, out var source))
+                throw new KeyNotFoundException("Unknown element: " + elementId);
+
+            var dependents = new List<ProjectElement>();
+            foreach (var dependentId in _graph.GetDependentsTransitive(source.Id))
+                if (byId.TryGetValue(dependentId, out var dependent)) dependents.Add(dependent);
+
             source.MarkDirty(flags);
-            foreach (var dependentId in _graph.GetDependentsTransitive(elementId))
-                project.FindElement(dependentId)?.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+            foreach (var dependent in dependents)
+                dependent.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             project.Touch();
         }
 

@@ -79,7 +79,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
 
-                var window = new ModelHealthWindow(issues, issue =>
+                var window = new ModelHealthWindow(document, issues, issue =>
                 {
                     var element = project.FindElement(issue.ElementId);
                     if (element == null) return;

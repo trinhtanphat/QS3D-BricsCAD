@@ -20,6 +20,7 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
+                var issueCountBefore = issues.Count;
                 var bottomId = Property(element, ProjectFloorService.BottomLevelIdKey);
                 var topId = Property(element, ProjectFloorService.TopLevelIdKey);
                 var hasBottomOffset = HasProperty(element, ProjectFloorService.BottomLevelOffsetKey);
@@ -51,6 +52,7 @@ namespace QS3D.Core.Diagnostics
                 {
                     if (hasTopOffset)
                         issues.Add(new ModelHealthIssue("TOP_LEVEL_OFFSET_WITHOUT_LEVEL", HealthSeverity.Error, "TopLevelOffsetM chỉ hợp lệ khi có TopLevelId.", element.Id));
+                    AddNativeIntegrationPendingIfSemanticallyValid(issues, issueCountBefore, element);
                     continue;
                 }
 
@@ -75,8 +77,20 @@ namespace QS3D.Core.Diagnostics
                         issues.Add(new ModelHealthIssue("LEVEL_RANGE_INVALID", HealthSeverity.Error, "Cao độ Level đỉnh + offset phải lớn hơn Level đáy + offset.", element.Id));
                     }
                 }
+
+                AddNativeIntegrationPendingIfSemanticallyValid(issues, issueCountBefore, element);
             }
             return issues.AsReadOnly();
+        }
+
+        private static void AddNativeIntegrationPendingIfSemanticallyValid(List<ModelHealthIssue> issues, int issueCountBefore, ProjectElement element)
+        {
+            if (issues.Count != issueCountBefore || LevelReferenceNativeIntegrationPolicy.IsQualified(element.Category)) return;
+            issues.Add(new ModelHealthIssue(
+                "LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING",
+                HealthSeverity.Error,
+                "Level reference hợp lệ về semantic nhưng native host/dependent placement của category này chưa được qualification dùng chung ElementVerticalPlacementService. Giữ Release blocked cho tới khi native integration + V25 proof hoàn tất.",
+                element.Id));
         }
 
         private static string Property(ProjectElement element, string key) =>

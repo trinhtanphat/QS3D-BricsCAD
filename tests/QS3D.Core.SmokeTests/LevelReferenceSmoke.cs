@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             TopAssignmentRequiresBottomAndValidRange();
             FloorMutationTracksAllReferenceKinds();
             HealthRejectsBrokenLevelReferences();
+            HealthBlocksValidLevelReferencesUntilNativeQualification();
         }
 
         private static void LegacyPlacementRemainsSourceRelative()
@@ -99,6 +100,7 @@ namespace QS3D.Core.SmokeTests
             missingBottom.Properties[ProjectFloorService.BottomLevelIdKey] = "missing";
             var topWithoutBottom = NewElement(project, "bad-top");
             topWithoutBottom.Properties[ProjectFloorService.TopLevelIdKey] = "L2";
+            topWithoutBottom.Properties[ProjectFloorService.TopLevelOffsetKey] = "0.2";
             var badOffset = NewElement(project, "bad-offset");
             badOffset.Properties[ProjectFloorService.BottomLevelIdKey] = "L1";
             badOffset.Properties[ProjectFloorService.BottomLevelOffsetKey] = "NaN";
@@ -109,8 +111,29 @@ namespace QS3D.Core.SmokeTests
             var issues = new LevelReferenceHealthService().Inspect(project);
             True(issues.Any(x => x.Code == "BOTTOM_LEVEL_REFERENCE_INVALID" && x.ElementId == missingBottom.Id));
             True(issues.Any(x => x.Code == "TOP_LEVEL_REQUIRES_BOTTOM_LEVEL" && x.ElementId == topWithoutBottom.Id));
+            True(!issues.Any(x => x.Code == "TOP_LEVEL_OFFSET_WITHOUT_LEVEL" && x.ElementId == topWithoutBottom.Id));
             True(issues.Any(x => x.Code == "BOTTOM_LEVEL_OFFSET_INVALID" && x.ElementId == badOffset.Id));
             True(issues.Any(x => x.Code == "LEVEL_RANGE_INVALID" && x.ElementId == badRange.Id));
+            True(!issues.Any(x => x.Code == "LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING" && x.ElementId == missingBottom.Id));
+            True(!issues.Any(x => x.Code == "LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING" && x.ElementId == topWithoutBottom.Id));
+        }
+
+        private static void HealthBlocksValidLevelReferencesUntilNativeQualification()
+        {
+            var project = NewProject();
+            var bottomOnly = NewElement(project, "valid-bottom");
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { bottomOnly });
+            bottomOnly.Properties[ProjectFloorService.BottomLevelOffsetKey] = "0.1";
+
+            var bounded = NewElement(project, "valid-bounded");
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { bounded });
+            ProjectFloorService.AssignTopLevel(project, "L2", new[] { bounded });
+            bounded.Properties[ProjectFloorService.TopLevelOffsetKey] = "-0.1";
+
+            var issues = new LevelReferenceHealthService().Inspect(project);
+            True(issues.Any(x => x.Code == "LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING" && x.ElementId == bottomOnly.Id));
+            True(issues.Any(x => x.Code == "LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING" && x.ElementId == bounded.Id));
+            True(!LevelReferenceNativeIntegrationPolicy.IsQualified(ElementCategory.Beam));
         }
 
         private static ProjectState NewProject()
