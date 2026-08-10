@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             BasicBomGuard();
             RoomFinishProvenanceReachesReleaseGuard();
+            ProvenanceConflictDoesNotCrashReleaseGuard();
         }
 
         private static void BasicBomGuard()
@@ -66,6 +67,28 @@ namespace QS3D.Core.SmokeTests
             var issues = BomReleaseGuardService.Inspect(project);
             Has(issues, "ORPHAN_ROOM_FINISH");
             Has(issues, "BOM_EMPTY");
+        }
+
+        private static void ProvenanceConflictDoesNotCrashReleaseGuard()
+        {
+            var project = new ProjectState("finish-conflict-release", "Finish conflict release guard");
+            project.Floors.Add(new FloorDefinition("f1", "Tầng 1", 0d));
+            project.Zones.Add(new ZoneDefinition("z1", "Zone 1"));
+            project.Families.Add(new ProjectFamily("room", "Phòng", ElementCategory.Room));
+            project.Families.Add(new ProjectFamily("finish", "Sơn", ElementCategory.WallFinish));
+            project.Elements.Add(new ProjectElement("room-a", ElementCategory.Room, "room", "f1", "z1"));
+            project.Elements.Add(new ProjectElement("room-b", ElementCategory.Room, "room", "f1", "z1"));
+            var finish = new ProjectElement("finish-conflict", ElementCategory.WallFinish, "finish", "f1", "z1");
+            finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = "room-a";
+            finish.Properties["ParentRoomId"] = "room-b";
+            finish.SetQuantity("NetFinishAreaM2", 10d);
+            finish.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(finish);
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Has(issues, "ROOM_PROVENANCE_CONFLICT");
+            Has(issues, "BOM_EXCLUSION_FAILED");
+            Has(issues, "BOM_REPORT_FAILED");
         }
 
         private static void Empty(IReadOnlyList<ModelHealthIssue> issues)
