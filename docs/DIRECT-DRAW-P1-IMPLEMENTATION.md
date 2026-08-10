@@ -1,4 +1,4 @@
-# QS3D Direct Draw P1 subset — implementation handoff
+# QS3D Direct Draw P1 — implementation handoff
 
 Updated: 2026-08-10 (UTC+7).
 
@@ -8,7 +8,9 @@ QS3D remains a **BricsCAD V25 x64 .NET plugin**, not a standalone CAD applicatio
 
 This extends the P0 authoring flow in `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` without changing the canonical product decision in `docs/PRODUCT-BOUNDARY.md`.
 
-## Source-implemented P1 commands
+Door/Opening Direct Draw is now implemented as a separate guarded extension documented in `docs/DIRECT-DRAW-OPENINGS.md`; the physical boolean step remains intentionally explicit.
+
+## Source-implemented P1 native commands
 
 ### `QS3DDRAWGLASSWALL` — Vách Kính
 
@@ -17,15 +19,15 @@ This extends the P0 authoring flow in `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` wi
 - Prompts thickness, height and `BottomOffsetM`; the bottom offset is **relative to the source Z**, matching the existing native wall contract.
 - Uses the compatible active GlassWall Family when available. An explicitly configured non-finite/invalid Family numeric fails closed instead of being silently replaced by a fallback.
 - Captures `GlassWall` semantic state, then reuses canonical `QS3DBUILD3D` for the backing native wall solid.
-- Does **not** claim completion of Curtain perimeter/mullion/transom frames. Use `QS3DCURTAIN3D` / Curtain Hub for that workflow.
+- Curtain perimeter/mullion/transom frames remain owned by `QS3DCURTAIN3D` / Curtain Hub and their dedicated source/runtime contracts; Direct Draw does not duplicate that frame engine.
 
 ### `QS3DDRAWWALLPIER` — Trụ Tường
 
 - Requires Model Space.
 - Accepts 2+ plan-view points as LINE/open POLYLINE source.
 - Prompts thickness, height and source-relative bottom offset with the same fail-closed Family numeric rule.
-- Captures `WallPier` semantic state and reuses the guarded `QS3DBUILD3D` wall compatibility path.
-- Does not broaden the specialized WallPier profile contract beyond the current native source/build support. Freeform/specialized open-POLYLINE profile parity remains separate product/runtime work.
+- Captures `WallPier` semantic state and reuses guarded canonical `QS3DBUILD3D`, including the specialized WallPier dispatch where the current native source path supports it.
+- Does not broaden the specialized profile contract into arbitrary freeform geometry.
 
 ### `QS3DDRAWSTRUCTWALL` — Vách BTCT
 
@@ -41,7 +43,7 @@ This extends the P0 authoring flow in `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` wi
 - Prompts thickness and source-relative bottom offset.
 - Captures `Foundation` semantic state and delegates native extrusion to canonical `QS3DBUILD3D` / `StructuralSolidBuilder` behavior.
 
-## Shared safety contract
+## Shared native P1 safety contract
 
 P1 deliberately reuses existing QS3D infrastructure instead of adding another geometry engine:
 
@@ -69,18 +71,41 @@ The project snapshot is deliberately restored **after** CAD cleanup so ownership
 
 Palette refresh, result selection, editor regen/status and other UI synchronization happen only **after** the CAD/project operation has succeeded. UI synchronization is best-effort; a Palette/UI failure after a valid native commit must not roll back otherwise-correct CAD and project state.
 
-## Why Door / Opening Direct Draw is not included
+## Door / Opening Direct Draw extension
 
-`QS3DDRAWOPENING` and `QS3DDRAWDOOR` are intentionally **not** added in this P1 subset. Door/Opening authoring has extra decisions that should not be guessed:
+### `QS3DDRAWDOOR`
 
-- semantic host compatibility and automatic vs manual host selection;
-- Floor/Zone/elevation ambiguity;
-- opening dimensions and sill rules;
-- whether physical boolean cutting is requested;
-- straight vs curved host support;
-- rollback when host relation succeeds but physical cutting cannot commit.
+- Requires Model Space.
+- Picks two plan-view edge points and creates a real LINE source; its plan length is authoritative `WidthM` after unit conversion.
+- Prompts/inherits positive `HeightM`, non-negative sill/bottom offset and non-negative `BooleanClearanceM`.
+- Explicit malformed/non-finite/negative Family configuration fails closed rather than being silently masked by a fallback.
+- Writes instance values through `ProjectElement.SetProperty()`.
+- Captures exactly one Door and performs deterministic semantic regeneration.
+- Revalidates active-DWG affinity, selects only the newly-created Door source, then reuses the established `QS3DAUTOLINKHOSTS` logic.
+- Requires `HostWallId` and performs a second deterministic regeneration after Auto Host. No-host or ambiguous-host placement rolls back source/project state rather than leaving an orphan Door.
 
-Until that contract is explicit, the existing capture + Auto Host/Manual Host + guarded cut commands remain the correct workflow.
+### `QS3DDRAWOPENING`
+
+- Uses the same guarded lifecycle for `WallOpening`.
+- Its source LINE remains the authoritative DWG provenance; no fake semantic-only handle is introduced.
+
+Auto Host itself now has atomic apply-batch hardening in current source; Direct Draw still retains its own outer single-authoring snapshot/cleanup boundary so nested command-surface behavior cannot make an incomplete new Door/Opening look successful.
+
+### Physical boolean remains explicit
+
+Door/Opening Direct Draw intentionally completes **source + semantic + verified Auto Host**, not an implicit global physical cut.
+
+The existing `QS3DCUTOPENINGS` path can process linked openings grouped by host. Automatically invoking that broader mutation from one Direct Draw operation could also cut unrelated pending openings. The safe current workflow is:
+
+```text
+QS3DDRAWDOOR / QS3DDRAWOPENING
+-> review Host / dimensions / sill / clearance
+-> explicitly run QS3DCUTOPENINGS when physical host mutation is intended
+```
+
+A future one-shot cut requires an explicit-target opening-subset API plus proven rollback of host Solid3d mutation. Do not queue or call the current global cut path from Door/Opening Direct Draw.
+
+See `docs/DIRECT-DRAW-OPENINGS.md` for the detailed contract and runtime checklist.
 
 ## Discoverability
 
@@ -94,14 +119,17 @@ The BricsCAD-hosted `TẠO MỚI` Ribbon tab and Full Domain Hub expose the curr
 - `QS3DDRAWCOLUMN`
 - `QS3DDRAWSLAB`
 - `QS3DDRAWFOUNDATION`
+- `QS3DDRAWDOOR`
+- `QS3DDRAWOPENING`
 
-Legacy Capture/Bóc chọn and `QS3DBUILD3D` remain supported for drawings that already contain source geometry.
+Legacy Capture/Bóc chọn and `QS3DBUILD3D` remain supported for drawings that already contain source geometry. Legacy `QS3DDOOR`, `QS3DOPENING`, Auto/Manual Host and physical cut commands also remain available.
 
 ## Static guards
 
 - `scripts/preflight-direct-draw.py` continues to own the current P0 and shared `QS3DBUILD3D` hardening contract.
-- `scripts/preflight-direct-draw-p1.py` guards the four P1 commands, command uniqueness, Ribbon/Hub discoverability, Model-Space/unit-aware behavior, source-relative offsets, fail-closed Family numerics, canonical `SetProperty` writes, active-DWG revalidation, live-generated verification, ownership/XData-aware rollback ordering, finite persisted paths and non-destructive post-commit UI synchronization.
-- `scripts/preflight-all.py` auto-discovers both gates.
+- `scripts/preflight-direct-draw-p1.py` guards the four native P1 commands, command uniqueness, Ribbon/Hub discoverability, Model-Space/unit-aware behavior, source-relative offsets, fail-closed Family numerics, canonical `SetProperty` writes, active-DWG revalidation, live-generated verification, ownership/XData-aware rollback ordering, finite persisted paths and non-destructive post-commit UI synchronization.
+- `scripts/preflight-direct-draw-openings.py` guards Door/Opening command uniqueness, Model-Space/unit-aware source creation, canonical `SetProperty` writes, fail-closed Family numerics, active-DWG checks, selection-scoped Auto Host, post-link regeneration, exact source cleanup before project restore, non-destructive UI sync, Ribbon/Hub wiring and the prohibition on implicit global physical cutting.
+- `scripts/preflight-all.py` auto-discovers the feature gates.
 
 GitHub Actions remain manual-only. A `continue all` source/docs request does not authorize workflow dispatch.
 
@@ -113,13 +141,19 @@ Source implementation is not BricsCAD runtime proof. Before these commands are c
 2. NETLOAD/DemandLoad registration;
 3. Ribbon/Domain Hub invocation;
 4. cancel-at-each-prompt behavior with no orphan CAD/project state;
-5. source → semantic → native solid success for all four P1 categories;
+5. source → semantic → native solid success for all four native P1 categories;
 6. GlassWall backing host followed by Curtain-frame workflow;
 7. WallPier LINE/open-POLYLINE compatibility and specialized-profile boundary;
 8. StructuralWall near-planar LINE tolerance and source-relative offset behavior;
 9. Foundation closed-POLYLINE extrusion, drawing-unit behavior and save/reopen;
 10. forced native-build failure followed by verified source/generated CAD cleanup and project rollback;
 11. forced Palette/UI synchronization failure after a successful native commit, verifying that valid CAD/project state is preserved;
-12. multi-DWG active-document switching guard, Unicode/HiDPI and representative private-DWG regression.
+12. Door/Opening width correctness in millimeter and meter drawings;
+13. Door/Opening valid-host, no-host and ambiguous-host behavior across Floor/Zone/elevation/gap gates;
+14. Door/Opening height/sill/bottom-offset/clearance persistence and schedule/export behavior;
+15. explicit `QS3DCUTOPENINGS` after Direct Draw, including host fingerprint/rebuild behavior;
+16. World UCS and representative rotated UCS behavior;
+17. a private copy of owner-provided `MB MONG.dwg` without committing the drawing;
+18. multi-DWG active-document switching guard, Unicode/HiDPI and representative private-DWG regression.
 
 Until those gates are executed, the precise status is **source-implemented / statically guarded, runtime qualification pending**.
