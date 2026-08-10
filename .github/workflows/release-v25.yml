@@ -1,0 +1,169 @@
+name: QS3D Manual V25 Build & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        type: string
+      confirm_release:
+        description: "Explicit publish confirmation"
+        required: true
+        default: "NO"
+        type: choice
+        options:
+          - "NO"
+          - "RELEASE"
+      run_runtime:
+        description: "Run real BricsCAD V25 NETLOAD/runtime validation before packaging"
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: "Publish as GitHub prerelease"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qs3d-manual-v25-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}
+    runs-on: [self-hosted, windows, x64, bricscad-v25]
+    env:
+      BRICSCAD_V25_DIR: ${{ vars.BRICSCAD_V25_DIR }}
+      BRICSCAD_V25_PROFILE: ${{ vars.BRICSCAD_V25_PROFILE }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Validate manual release request
+        shell: powershell
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
+            throw "release_tag must look like v1.2.3 or v1.2.3-rc.1"
+          }
+          git rev-parse --verify HEAD | Out-Null
+          if (git tag --list $env:RELEASE_TAG) {
+            throw "Tag already exists locally: $env:RELEASE_TAG"
+          }
+
+      - name: Manual-only CI policy gate
+        run: python scripts/preflight-ci-manual-only.py
+
+      - name: Generic source guard
+        run: python scripts/preflight.py
+
+      - name: All discovered feature source guards
+        run: python scripts/preflight-all.py
+
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+
+      - name: Deterministic Core smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+
+      - name: Validate BricsCAD V25 references
+        shell: powershell
+        run: |
+          if (-not $env:BRICSCAD_V25_DIR) { throw "BRICSCAD_V25_DIR repository variable is not set." }
+          foreach ($name in @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll')) {
+            if (-not (Test-Path (Join-Path $env:BRICSCAD_V25_DIR $name))) {
+              throw "Required BricsCAD V25 runtime file is missing: $name"
+            }
+          }
+
+      - name: Build BricsCAD V25 plugin
+        run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
+
+      - name: Real V25 NETLOAD/runtime validation
+        if: ${{ inputs.run_runtime }}
+        shell: powershell
+        run: |
+          $plugin = (Resolve-Path "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll").Path
+          & .\scripts\test-bricscad-v25-runtime.ps1 `
+            -BricsCadDir $env:BRICSCAD_V25_DIR `
+            -PluginDll $plugin `
+            -Profile $env:BRICSCAD_V25_PROFILE `
+            -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v25-runtime"
+
+      - name: Build V25 release package
+        shell: powershell
+        run: .\scripts\package-v25.ps1
+
+      - name: Create package checksum
+        shell: powershell
+        run: |
+          $zip = (Resolve-Path "dist\QS3D-BricsCAD-V25.zip").Path
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  QS3D-BricsCAD-V25.zip" | Set-Content "dist\QS3D-BricsCAD-V25.zip.sha256" -Encoding ASCII
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: QS3D-BricsCAD-V25-${{ inputs.release_tag }}
+          if-no-files-found: error
+          path: |
+            dist/QS3D-BricsCAD-V25.zip
+            dist/QS3D-BricsCAD-V25.zip.sha256
+            artifacts/bricscad-v25-runtime/
+
+      - name: Publish GitHub Release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+            "User-Agent" = "QS3D-Manual-Release"
+          }
+          $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
+          $body = @{
+            tag_name = $env:RELEASE_TAG
+            target_commitish = $env:GITHUB_SHA
+            name = "QS3D for BricsCAD V25 $env:RELEASE_TAG"
+            body = "Owner-approved manual build/release. Source checks, Core build/smoke tests, V25 adapter build and package creation completed in the manual release workflow. Runtime evidence is included in the workflow artifacts when run_runtime=true."
+            draft = $false
+            prerelease = $isPrerelease
+            generate_release_notes = $true
+          } | ConvertTo-Json
+          $release = Invoke-RestMethod `
+            -Method Post `
+            -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $body
+
+          $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
+          foreach ($assetPath in @('dist\QS3D-BricsCAD-V25.zip', 'dist\QS3D-BricsCAD-V25.zip.sha256')) {
+            $asset = (Resolve-Path $assetPath).Path
+            $name = [System.IO.Path]::GetFileName($asset)
+            $encodedName = [Uri]::EscapeDataString($name)
+            $contentType = if ($name.EndsWith('.zip')) { 'application/zip' } else { 'text/plain' }
+            Invoke-RestMethod `
+              -Method Post `
+              -Uri ($uploadBase + '?name=' + $encodedName) `
+              -Headers $headers `
+              -ContentType $contentType `
+              -InFile $asset | Out-Null
+          }

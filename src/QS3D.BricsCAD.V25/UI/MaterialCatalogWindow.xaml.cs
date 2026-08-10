@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
+using Application = Bricscad.ApplicationServices.Application;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -24,6 +25,18 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         private void OnRefreshClick(object sender, RoutedEventArgs e) => RefreshAll();
+
+        private void OnExportClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                    throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Material Catalog trước khi xuất bảng vật liệu.");
+                SetStatus("Chuẩn bị Material Usage XLSX…");
+                _document.SendStringToExecute("QS3DMATERIALXLSX ", true, false, false);
+            }
+            catch (Exception ex) { SetStatus("Xuất bảng vật liệu lỗi: " + ex.Message); }
+        }
 
         private void OnMaterialSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -93,7 +106,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
                     throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Material Catalog trước khi áp dụng cho selection.");
                 if (!(MaterialList.SelectedItem is ProjectMaterial material)) throw new InvalidOperationException("Chọn một material trước khi áp dụng.");
                 var target = (TargetCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Material";

@@ -23,7 +23,10 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
-                var family = project.Families.FirstOrDefault(x => x.Category == category);
+                var active = ProjectFamilyActivationService.GetActive(project);
+                var family = active != null && active.Category == category
+                    ? active
+                    : project.Families.FirstOrDefault(x => x.Category == category);
                 if (family == null)
                 {
                     family = new ProjectFamily(Guid.NewGuid().ToString("N"), label, category);
@@ -53,8 +56,7 @@ namespace QS3D.BricsCAD.V25
                     EnsureDefault(family, "WallPierChamferM", "0.02");
                 }
 
-                project.Metadata["ActiveFamilyId"] = family.Id;
-                project.Touch();
+                ProjectFamilyActivationService.SetActive(project, family.Id);
                 var count = SemanticCaptureService.Capture(document, category);
                 PaletteCoordinator.RefreshProject();
                 var status = label + ": đã ghi " + count + " cấu kiện semantic.";

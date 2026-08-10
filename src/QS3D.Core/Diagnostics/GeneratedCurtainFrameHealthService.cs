@@ -55,15 +55,21 @@ namespace QS3D.Core.Diagnostics
                 var count = Integer(element, "GeneratedCurtainFrameCount", issues, "CURTAIN_FRAME_COUNT_INVALID");
                 var columns = Integer(element, "GeneratedCurtainFrameColumns", issues, "CURTAIN_FRAME_COLUMNS_INVALID");
                 var rows = Integer(element, "GeneratedCurtainFrameRows", issues, "CURTAIN_FRAME_ROWS_INVALID");
+                var baseCount = OptionalInteger(element, "GeneratedCurtainFrameBaseCount", false, issues, "CURTAIN_FRAME_BASE_COUNT_INVALID");
+                var openingCount = OptionalInteger(element, "GeneratedCurtainFrameOpeningCount", true, issues, "CURTAIN_FRAME_OPENING_COUNT_INVALID") ?? 0;
                 if (count.HasValue && count.Value != validCount)
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_COUNT_MISMATCH", HealthSeverity.Warning, "GeneratedCurtainFrameCount không khớp số handle hợp lệ.", element.Id));
-                if (count.HasValue && columns.HasValue && rows.HasValue)
+                if (columns.HasValue && rows.HasValue)
                 {
-                    int expectedCount;
-                    try { expectedCount = checked(columns.Value + rows.Value + 2); }
-                    catch (OverflowException) { expectedCount = -1; }
-                    if (expectedCount < 0 || count.Value != expectedCount)
-                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "Số frame không khớp Columns+Rows+2.", element.Id));
+                    int expectedBase;
+                    try { expectedBase = checked(columns.Value + rows.Value + 2); }
+                    catch (OverflowException) { expectedBase = -1; }
+                    if (expectedBase < 0)
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "Curtain frame grid count bị overflow.", element.Id));
+                    else if (baseCount.HasValue && baseCount.Value != expectedBase)
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "GeneratedCurtainFrameBaseCount không khớp Columns+Rows+2.", element.Id));
+                    else if (!baseCount.HasValue && openingCount == 0 && count.HasValue && count.Value != expectedBase)
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "Legacy curtain frame count không khớp Columns+Rows+2.", element.Id));
                 }
 
                 var storedDepth = PositiveValue(element, "GeneratedCurtainFrameDepthM", "CURTAIN_FRAME_DEPTH_INVALID", issues);
@@ -73,8 +79,14 @@ namespace QS3D.Core.Diagnostics
                 CompareCurrent(element, "HeightM", storedHeight, "CURTAIN_FRAME_HEIGHT_STALE", issues);
                 ValidateConfigFingerprint(project, element, storedLength, storedHeight, storedDepth, issues);
 
-                if (!element.Properties.TryGetValue("GeneratedCurtainFrameMode", out var mode) || !string.Equals(mode, "LineFrameOverlay", StringComparison.OrdinalIgnoreCase))
+                if (!element.Properties.TryGetValue("GeneratedCurtainFrameMode", out var mode) ||
+                    !(string.Equals(mode, "LineFrameOverlay", StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "LineFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase)))
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_MODE_INVALID", HealthSeverity.Warning, "GeneratedCurtainFrameMode thiếu hoặc không hợp lệ.", element.Id));
+                else if (openingCount > 0 && !string.Equals(mode, "LineFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase))
+                    issues.Add(new ModelHealthIssue("CURTAIN_FRAME_OPENING_MODE_MISMATCH", HealthSeverity.Warning, "Curtain frame có linked opening nhưng metadata chưa ở opening-aware mode; rebuild curtain frames.", element.Id));
+                else if (openingCount == 0 && string.Equals(mode, "LineFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase))
+                    issues.Add(new ModelHealthIssue("CURTAIN_FRAME_OPENING_MODE_MISMATCH", HealthSeverity.Warning, "Curtain frame opening-aware mode không khớp GeneratedCurtainFrameOpeningCount=0; rebuild curtain frames.", element.Id));
+
                 if (element.Category != ElementCategory.GlassWall)
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated curtain frame metadata chỉ hợp lệ trên GlassWall element.", element.Id));
                 if (element.IsGeneratedCurtainFrameStale())
@@ -135,6 +147,17 @@ namespace QS3D.Core.Diagnostics
             if (!element.Properties.TryGetValue(key, out var raw) || !int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) || value < 1)
             {
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " thiếu hoặc không hợp lệ.", element.Id));
+                return null;
+            }
+            return value;
+        }
+
+        private static int? OptionalInteger(ProjectElement element, string key, bool allowZero, List<ModelHealthIssue> issues, string code)
+        {
+            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return null;
+            if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) || (allowZero ? value < 0 : value < 1))
+            {
+                issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " không hợp lệ.", element.Id));
                 return null;
             }
             return value;

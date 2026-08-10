@@ -32,6 +32,8 @@ namespace QS3D.Core.SmokeTests
             CurtainWallDetailSmoke.Run();
             GeneratedOutputHealthStaleSmoke.Run();
             CurtainFrameOpeningSmoke.Run();
+            CurtainFrameOpeningHealthSmoke.Run();
+            BomReleaseGuardSmoke.Run();
         }
     }
 }

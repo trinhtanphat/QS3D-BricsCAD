@@ -13,9 +13,8 @@ namespace QS3D.Core.Services
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             if (string.IsNullOrWhiteSpace(propertyName)) throw new ArgumentException("Property name is required.", nameof(propertyName));
             var changed = new List<string>();
-            foreach (var element in elements)
+            foreach (var element in OwnedDistinct(project, elements))
             {
-                if (element == null) continue;
                 element.Properties.TryGetValue(propertyName, out var before);
                 var next = value ?? string.Empty;
                 if (string.Equals(before ?? string.Empty, next, StringComparison.Ordinal)) continue;
@@ -34,9 +33,9 @@ namespace QS3D.Core.Services
             if (string.IsNullOrWhiteSpace(propertyName)) throw new ArgumentException("Property name is required.", nameof(propertyName));
             if (double.IsNaN(factor) || double.IsInfinity(factor)) throw new ArgumentOutOfRangeException(nameof(factor));
             var changed = new List<string>();
-            foreach (var element in elements)
+            foreach (var element in OwnedDistinct(project, elements))
             {
-                if (element == null || !element.Properties.TryGetValue(propertyName, out var text)) continue;
+                if (!element.Properties.TryGetValue(propertyName, out var text)) continue;
                 if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var current) || double.IsNaN(current) || double.IsInfinity(current))
                     throw new FormatException("Invalid numeric property " + propertyName + " on " + element.Id + ": " + text);
                 var next = current * factor;
@@ -99,6 +98,28 @@ namespace QS3D.Core.Services
             }
             if (count > 0) project.Touch();
             return count;
+        }
+
+        private static IReadOnlyList<ProjectElement> OwnedDistinct(ProjectState project, IEnumerable<ProjectElement> elements)
+        {
+            var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var projectElement in project.Elements)
+            {
+                if (projectElement == null) continue;
+                if (projectElements.ContainsKey(projectElement.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElement.Id);
+                projectElements[projectElement.Id] = projectElement;
+            }
+
+            var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in elements)
+            {
+                if (element == null) continue;
+                if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
+                    throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
+                unique[owned.Id] = owned;
+            }
+            return new List<ProjectElement>(unique.Values).AsReadOnly();
         }
 
         private static ElementDirtyFlags DirtyFlags(ProjectElement element, string propertyName)

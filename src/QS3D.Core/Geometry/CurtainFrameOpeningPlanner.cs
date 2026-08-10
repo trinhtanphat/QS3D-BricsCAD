@@ -47,7 +47,8 @@ namespace QS3D.Core.Geometry
 
     public static class CurtainFrameOpeningPlanner
     {
-        private const int MaxFragments = 20000;
+        private const int MaxOpenings = 4096;
+        private const int MaxOutputFragments = 20000;
         private const double Epsilon = 1e-10d;
 
         public static IReadOnlyList<CurtainWallRect> Interrupt(
@@ -56,16 +57,26 @@ namespace QS3D.Core.Geometry
         {
             if (frames == null) throw new ArgumentNullException(nameof(frames));
             if (openings == null) throw new ArgumentNullException(nameof(openings));
-            var result = frames.Select(ValidateFrame).ToList();
-            var cuts = openings.ToList();
-            foreach (var opening in cuts)
+            var result = new List<CurtainWallRect>();
+            foreach (var frame in frames)
+            {
+                if (result.Count >= MaxOutputFragments) throw new InvalidOperationException("Curtain frame input exceeds safety limit " + MaxOutputFragments + ".");
+                result.Add(ValidateFrame(frame));
+            }
+            var cuts = new List<CurtainOpeningRect>();
+            foreach (var opening in openings)
             {
                 if (opening == null) throw new ArgumentException("Opening collection contains null.", nameof(openings));
+                if (cuts.Count >= MaxOpenings) throw new InvalidOperationException("Curtain opening input exceeds safety limit " + MaxOpenings + ".");
+                cuts.Add(opening);
+            }
+            foreach (var opening in cuts)
+            {
                 var next = new List<CurtainWallRect>();
                 foreach (var frame in result)
                 {
                     Subtract(frame, opening, next);
-                    if (next.Count > MaxFragments) throw new InvalidOperationException("Curtain frame opening interruption exceeds fragment safety limit " + MaxFragments + ".");
+                    if (next.Count > MaxOutputFragments) throw new InvalidOperationException("Curtain frame opening interruption exceeds fragment safety limit " + MaxOutputFragments + ".");
                 }
                 result = next;
                 if (result.Count == 0) break;

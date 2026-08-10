@@ -78,6 +78,8 @@ namespace QS3D.BricsCAD.V25.Cad
 
                 Remove(element, "GeneratedCurtainFrameHandles");
                 Remove(element, "GeneratedCurtainFrameCount");
+                Remove(element, "GeneratedCurtainFrameBaseCount");
+                Remove(element, "GeneratedCurtainFrameOpeningCount");
                 Remove(element, "GeneratedCurtainFrameColumns");
                 Remove(element, "GeneratedCurtainFrameRows");
                 Remove(element, "GeneratedCurtainFrameDepthM");

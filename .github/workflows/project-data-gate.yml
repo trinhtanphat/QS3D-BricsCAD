@@ -1,0 +1,40 @@
+name: QS3D Project Data Gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  project-data-and-core:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Manual-only CI policy gate
+        run: python scripts/preflight-ci-manual-only.py
+      - name: Generic source preflight
+        run: python scripts/preflight.py
+      - name: Material and floor picker preflight
+        run: python scripts/preflight-material-floor-pickers.py
+      - name: Zone manager preflight
+        run: python scripts/preflight-zones.py
+      - name: Family manager preflight
+        run: python scripts/preflight-families.py
+      - name: Project Tools preflight
+        run: python scripts/preflight-project-tools.py
+      - name: Material usage preflight
+        run: python scripts/preflight-material-usage.py
+      - name: Project assignment integrity preflight
+        run: python scripts/preflight-project-assignment-integrity.py
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic Core smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release

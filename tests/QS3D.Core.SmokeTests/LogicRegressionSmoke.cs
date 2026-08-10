@@ -18,7 +18,9 @@ namespace QS3D.Core.SmokeTests
             RecognitionRejectsNonFiniteConfidence();
             RecognitionRejectsDuplicateRuleIds();
             HostUnlinkRejectsNonOpeningElements();
+            CurtainFramesStaleOnLinkRehostAndUnlink();
             OpeningDimensionsRejectNegativeValues();
+            BulkEditRejectsForeignSameIdElements();
         }
 
         private static void RecognitionUsesTokenBoundaries()
@@ -92,6 +94,40 @@ namespace QS3D.Core.SmokeTests
             True(room.Properties.ContainsKey("HostWallId"));
         }
 
+        private static void CurtainFramesStaleOnLinkRehostAndUnlink()
+        {
+            var project = new ProjectState("curtain-host-link", "Curtain host lifecycle");
+            var wallA = new ProjectElement("GW-A", ElementCategory.GlassWall, "glass", "floor", "zone");
+            var wallB = new ProjectElement("GW-B", ElementCategory.GlassWall, "glass", "floor", "zone");
+            wallA.Properties["GeneratedCurtainFrameHandles"] = "A1;A2";
+            wallB.Properties["GeneratedCurtainFrameHandles"] = "B1;B2";
+            wallA.ClearGeneratedGeometryStale();
+            wallB.ClearGeneratedGeometryStale();
+            var opening = new ProjectElement("D1", ElementCategory.Door, "door", "floor", "zone");
+            project.Elements.Add(wallA);
+            project.Elements.Add(wallB);
+            project.Elements.Add(opening);
+            var service = new HostLinkService();
+
+            service.LinkOpening(project, opening.Id, wallA.Id);
+            True(wallA.IsGeneratedCurtainFrameStale());
+            True(!wallA.IsGeneratedSolidStale());
+
+            wallA.ClearGeneratedCurtainFrameStale();
+            wallB.ClearGeneratedCurtainFrameStale();
+            service.LinkOpening(project, opening.Id, wallB.Id);
+            True(wallA.IsGeneratedCurtainFrameStale());
+            True(wallB.IsGeneratedCurtainFrameStale());
+            True(!wallA.IsGeneratedSolidStale());
+            True(!wallB.IsGeneratedSolidStale());
+
+            wallB.ClearGeneratedCurtainFrameStale();
+            service.UnlinkOpening(project, opening.Id);
+            True(wallB.IsGeneratedCurtainFrameStale());
+            True(!wallB.IsGeneratedSolidStale());
+            True(!opening.Properties.ContainsKey("HostWallId"));
+        }
+
         private static void OpeningDimensionsRejectNegativeValues()
         {
             Throws<ArgumentOutOfRangeException>(() => WallQuantityCalculator.Calculate(4d, 3d, .2d, new[]
@@ -109,6 +145,29 @@ namespace QS3D.Core.SmokeTests
             });
             True(valid.OpeningAreaM2 > 0d);
             True(valid.NetAreaM2 < valid.GrossAreaM2);
+        }
+
+        private static void BulkEditRejectsForeignSameIdElements()
+        {
+            var project = new ProjectState("bulk-owned", "Bulk ownership");
+            var owned = new ProjectElement("same-id", ElementCategory.Slab, "family", "floor", "zone");
+            owned.Properties["ThicknessM"] = "0.2";
+            project.Elements.Add(owned);
+            var foreign = new ProjectElement("same-id", ElementCategory.Slab, "family", "floor", "zone");
+            foreign.Properties["ThicknessM"] = "0.2";
+            var service = new BulkEditService();
+
+            Throws<InvalidOperationException>(() => service.SetProperty(project, new[] { foreign }, "ThicknessM", "0.3"));
+            Equal("0.2", owned.Properties["ThicknessM"]);
+            Equal("0.2", foreign.Properties["ThicknessM"]);
+
+            Throws<InvalidOperationException>(() => service.MultiplyNumericProperty(project, new[] { foreign }, "ThicknessM", 2d));
+            Equal("0.2", owned.Properties["ThicknessM"]);
+            Equal("0.2", foreign.Properties["ThicknessM"]);
+
+            var changed = service.SetProperty(project, new[] { owned, owned }, "ThicknessM", "0.25");
+            Equal(1, changed.Count);
+            Equal("0.25", owned.Properties["ThicknessM"]);
         }
 
         private static void Equal<T>(T expected, T actual) { if (!Equals(expected, actual)) throw new Exception("Expected " + expected + ", got " + actual); }

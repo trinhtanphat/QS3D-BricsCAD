@@ -16,17 +16,26 @@ namespace QS3D.Core.Services
             if (!IsWall(wall.Category)) throw new InvalidOperationException("Host is not a wall: " + wallId);
 
             var previousHost = opening.Properties.TryGetValue("HostWallId", out var previous) ? previous : string.Empty;
-            if (!string.IsNullOrWhiteSpace(previousHost) && !string.Equals(previousHost, wall.Id, StringComparison.OrdinalIgnoreCase))
+            var relationshipChanged = !string.Equals(previousHost, wall.Id, StringComparison.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(previousHost) && relationshipChanged)
             {
                 for (var i = opening.DependsOn.Count - 1; i >= 0; i--)
                     if (string.Equals(opening.DependsOn[i], previousHost, StringComparison.OrdinalIgnoreCase)) opening.DependsOn.RemoveAt(i);
-                project.FindElement(previousHost)?.MarkDirty(ElementDirtyFlags.Quantity);
+                MarkHostOpeningRelationChanged(project.FindElement(previousHost), opening.Id, "unlinked/re-hosted");
             }
 
             opening.Properties["HostWallId"] = wall.Id;
-            if (!opening.DependsOn.Any(x => string.Equals(x, wall.Id, StringComparison.OrdinalIgnoreCase))) opening.DependsOn.Add(wall.Id);
+            var dependencyAdded = false;
+            if (!opening.DependsOn.Any(x => string.Equals(x, wall.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                opening.DependsOn.Add(wall.Id);
+                dependencyAdded = true;
+            }
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-            wall.MarkDirty(ElementDirtyFlags.Quantity);
+            if (relationshipChanged || dependencyAdded)
+                MarkHostOpeningRelationChanged(wall, opening.Id, "linked/re-hosted");
+            else
+                wall.MarkDirty(ElementDirtyFlags.Quantity);
             project.Touch();
             AuditTrail.ForProject(project).Record("host.link", opening.Id, (string.IsNullOrWhiteSpace(previousHost) ? "" : previousHost + " → ") + wall.Id);
         }
@@ -38,11 +47,35 @@ namespace QS3D.Core.Services
             EnsureOpening(opening, openingId);
             var hostId = opening.Properties.TryGetValue("HostWallId", out var value) ? value : string.Empty;
             opening.Properties.Remove("HostWallId");
-            for (var i = opening.DependsOn.Count - 1; i >= 0; i--) if (string.Equals(opening.DependsOn[i], hostId, StringComparison.OrdinalIgnoreCase)) opening.DependsOn.RemoveAt(i);
+            var dependencyRemoved = false;
+            for (var i = opening.DependsOn.Count - 1; i >= 0; i--)
+            {
+                if (!string.Equals(opening.DependsOn[i], hostId, StringComparison.OrdinalIgnoreCase)) continue;
+                opening.DependsOn.RemoveAt(i);
+                dependencyRemoved = true;
+            }
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-            if (!string.IsNullOrWhiteSpace(hostId)) project.FindElement(hostId)?.MarkDirty(ElementDirtyFlags.Quantity);
+            if (!string.IsNullOrWhiteSpace(hostId))
+            {
+                var host = project.FindElement(hostId);
+                if (host != null)
+                {
+                    if (dependencyRemoved || !opening.Properties.ContainsKey("HostWallId"))
+                        MarkHostOpeningRelationChanged(host, opening.Id, "unlinked");
+                    else
+                        host.MarkDirty(ElementDirtyFlags.Quantity);
+                }
+            }
             project.Touch();
             AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
+        }
+
+        private static void MarkHostOpeningRelationChanged(ProjectElement? host, string openingId, string action)
+        {
+            if (host == null) return;
+            host.MarkDirty(ElementDirtyFlags.Quantity);
+            if (host.Category == ElementCategory.GlassWall)
+                host.MarkGeneratedCurtainFrameStale("Linked opening " + openingId + " was " + action + ".");
         }
 
         private static void EnsureOpening(ProjectElement element, string id)

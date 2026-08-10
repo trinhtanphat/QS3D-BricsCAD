@@ -92,33 +92,33 @@ namespace QS3D.Core.Reporting
             var metrics = new UsageMetrics
             {
                 LengthM = Q(element, "LengthM"),
-                VolumeM3 = Q(element, "NetVolumeM3", Q(element, "VolumeM3")),
+                VolumeM3 = QFirst(element, "NetVolumeM3", "VolumeM3"),
                 MassKg = Q(element, "WeightKg")
             };
 
             switch (element.Category)
             {
                 case ElementCategory.GlassWall:
-                    metrics.AreaM2 = Q(element, "CurtainNetGlassAreaM2", Q(element, "NetWallAreaM2"));
+                    metrics.AreaM2 = QFirst(element, "CurtainNetGlassAreaM2", "NetWallAreaM2");
                     break;
                 case ElementCategory.ArchitecturalWall:
                 case ElementCategory.WallPier:
                 case ElementCategory.StructuralWall:
-                    metrics.AreaM2 = Q(element, "NetWallAreaM2", Q(element, "SideAreaM2"));
+                    metrics.AreaM2 = QFirst(element, "NetWallAreaM2", "SideAreaM2");
                     break;
                 case ElementCategory.WallFinish:
-                    metrics.AreaM2 = Q(element, "NetFinishAreaM2", Q(element, "AreaM2"));
+                    metrics.AreaM2 = QFirst(element, "NetFinishAreaM2", "AreaM2");
                     break;
                 case ElementCategory.Door:
                 case ElementCategory.WallOpening:
-                    metrics.AreaM2 = Q(element, "OpeningAreaM2", Q(element, "AreaM2"));
+                    metrics.AreaM2 = QFirst(element, "OpeningAreaM2", "AreaM2");
                     break;
                 case ElementCategory.Skirting:
                     metrics.LengthM = Q(element, "SkirtingLengthM", metrics.LengthM);
                     metrics.AreaM2 = Q(element, "AreaM2");
                     break;
                 default:
-                    metrics.AreaM2 = Q(element, "AreaM2", Q(element, "BottomAreaM2"));
+                    metrics.AreaM2 = QFirst(element, "AreaM2", "BottomAreaM2");
                     break;
             }
             return metrics;
@@ -167,6 +167,12 @@ namespace QS3D.Core.Reporting
             if (element.Properties.TryGetValue(key, out var instance) && !string.IsNullOrWhiteSpace(instance)) return instance.Trim();
             if (family != null && family.Properties.TryGetValue(key, out var inherited) && !string.IsNullOrWhiteSpace(inherited)) return inherited.Trim();
             return string.Empty;
+        }
+
+        private static double QFirst(ProjectElement element, string primaryKey, string fallbackKey)
+        {
+            if (element.Quantities.ContainsKey(primaryKey)) return Q(element, primaryKey);
+            return Q(element, fallbackKey);
         }
 
         private static double Q(ProjectElement element, string key, double fallback = 0d)

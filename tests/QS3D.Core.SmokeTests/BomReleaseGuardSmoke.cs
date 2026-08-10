@@ -1,0 +1,50 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using QS3D.Core.Diagnostics;
+using QS3D.Core.Domain;
+
+namespace QS3D.Core.SmokeTests
+{
+    internal static class BomReleaseGuardSmoke
+    {
+        public static void Run()
+        {
+            var project = new ProjectState("bom", "BOM release guard");
+            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+            var element = new ProjectElement("beam-1", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            element.SourceHandles.Add("1A");
+            element.SetQuantity("NetConcreteM3", 1.25d);
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            Empty(BomReleaseGuardService.Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
+
+            element.MarkDirty(ElementDirtyFlags.Quantity);
+            Has(BomReleaseGuardService.Inspect(project), "BOM_QUANTITY_DIRTY");
+            element.MarkClean(ElementDirtyFlags.All);
+
+            element.Quantities["NetConcreteM3"] = double.NaN;
+            Has(BomReleaseGuardService.Inspect(project), "BOM_QUANTITY_NONFINITE");
+            element.Quantities["NetConcreteM3"] = 1.25d;
+
+            element.SourceHandles.Clear();
+            Has(BomReleaseGuardService.Inspect(project), "BOM_TRACEABILITY_MISSING");
+            element.Properties["GeneratedSolidHandle"] = "2B";
+            Has(BomReleaseGuardService.Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase)), "BOM_GENERATED_HANDLE_MISSING");
+            var live = new HashSet<string>(new[] { "2B" }, StringComparer.OrdinalIgnoreCase);
+            if (BomReleaseGuardService.Inspect(project, live).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
+                throw new Exception("Live generated Handle must satisfy the BOM release guard.");
+        }
+
+        private static void Empty(IReadOnlyList<ModelHealthIssue> issues)
+        {
+            if (issues.Count != 0) throw new Exception("Clean BOM fixture unexpectedly produced: " + string.Join(", ", issues.Select(x => x.Code)));
+        }
+
+        private static void Has(IReadOnlyList<ModelHealthIssue> issues, string code)
+        {
+            if (!issues.Any(x => string.Equals(x.Code, code, StringComparison.Ordinal))) throw new Exception("Expected BOM issue " + code + ".");
+        }
+    }
+}
