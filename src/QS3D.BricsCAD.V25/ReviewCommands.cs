@@ -32,7 +32,11 @@ namespace QS3D.BricsCAD.V25
                 if (snapshots.Count == 0) { doc.Editor.WriteMessage("\nQS3D: chọn source CAD cần tạo/cập nhật 3D."); return; }
                 if (tracked == null) SemanticCaptureService.Capture(doc, category.Value);
                 int solids;
-                if (category == ElementCategory.ArchitecturalWall) solids = WallSolidBuilder.BuildSelectedLineWalls(doc, project);
+                if (category == ElementCategory.ArchitecturalWall)
+                {
+                    solids = WallSolidBuilder.BuildSelectedLineWalls(doc, project);
+                    solids += PolylineWallSolidBuilder.BuildSelected(doc, project);
+                }
                 else if (StructuralSolidBuilder.Supports(category.Value)) solids = StructuralSolidBuilder.BuildSelected(doc, project, category.Value);
                 else { PaletteCoordinator.SetStatus("Vẽ 3D native hiện hỗ trợ Tường KT, Dầm, Sàn, Cột, Vách BTCT, Móng, Cầu thang, Lan can và Đào đất."); return; }
                 if (solids == 0)
@@ -130,7 +134,7 @@ namespace QS3D.BricsCAD.V25
                 case ElementCategory.Earthwork:
                     return "Dùng closed POLYLINE làm footprint.";
                 case ElementCategory.ArchitecturalWall:
-                    return "Dùng LINE plan-view cho Tường KT.";
+                    return "Dùng LINE hoặc open plan-view POLYLINE làm tim Tường KT; bulge được tessellate trước khi tạo footprint.";
                 default:
                     return "Source CAD hiện chưa có native solid adapter.";
             }
