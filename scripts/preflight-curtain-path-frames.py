@@ -8,6 +8,7 @@ errors = []
 files = {
     "planner": ROOT / "src/QS3D.Core/Geometry/CurtainPathFramePlanner.cs",
     "reader": ROOT / "src/QS3D.BricsCAD.V25/Cad/CadPolylinePathReader.cs",
+    "line_builder": ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs",
     "builder": ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallPathFrameSolidBuilder.cs",
     "fingerprint": ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameLiveFingerprint.cs",
     "live": ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameLiveStateService.cs",
@@ -33,6 +34,12 @@ checks = {
         "ReadOpenWcsXy", "polyline.Closed", "polyline.Normal.X", "polyline.Normal.Z - 1d",
         "BulgeArcTessellator.Tessellate", "maximumSagittaM",
     ],
+    "line_builder": [
+        'Mode = "LineFrameOverlay"', 'OpeningAwareMode = "LineFrameOverlay.OpeningAware"',
+        "BuildSelectedLineWalls", "CurtainFrameOpeningPlanner.Interrupt", "GeneratedCurtainFrameOwnershipGuard.Build",
+        "ownership.EnsureOwned", "GeneratedCurtainFrameConfigFingerprint", "ClearGeneratedCurtainFrameStale",
+        "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192", "project.Touch()",
+    ],
     "builder": [
         'Mode = "PathFrameOverlay"', 'OpeningAwareMode = "PathFrameOverlay.OpeningAware"',
         "BuildSelectedOpenPolylines", "CadPolylinePathReader.ReadOpenWcsXy", "CurtainPathFramePlanner.Length",
@@ -41,6 +48,7 @@ checks = {
         'GeneratedCurtainFrameSourceKind"] = "OpenPolyline"', "GeneratedCurtainFramePathSegmentCount",
         "GeneratedCurtainFrameMappedFrameCount", "GeneratedCurtainFrameConfigFingerprint", "ClearGeneratedCurtainFrameStale",
         "CreateBox", "Matrix3d.Rotation", "WallArcSagittaM", "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192",
+        "project.Touch()",
     ],
     "fingerprint": [
         "AppendHostGeometry", "hostSource is Line", "hostSource is Polyline", "polyline.GetPoint2dAt",
@@ -92,6 +100,12 @@ if files["builder"].is_file():
         if needle in text:
             errors.append("curtain path frame builder contains forbidden ownership/geometry shortcut: " + needle)
 
+for key in ("line_builder", "builder"):
+    if files[key].is_file():
+        text = files[key].read_text(encoding="utf-8")
+        if "Editor.Regen(" in text:
+            errors.append(str(files[key].relative_to(ROOT)) + " native builder must remain UI-free after CAD/semantic commit; Regen belongs to command FinalizeUi")
+
 if files["build_command"].is_file():
     text = files["build_command"].read_text(encoding="utf-8")
     regen_index = text.find("RegenerateDirty(project)")
@@ -117,4 +131,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: open/bulged WCS-XY GlassWall POLYLINE sources map deterministic curtain stations to tessellated path segments, project linked openings to nearest path stations, preserve dedicated generated-frame ownership/stale metadata, validate semantics before native Curtain3D mutation, and keep post-commit UI synchronization non-fatal.")
+print("PASS: line and open/bulged WCS-XY GlassWall frame builders stay UI-free after commit, path sources map deterministic curtain stations to tessellated segments, linked openings preserve ownership/stale metadata, Curtain3D validates semantics before native mutation, and post-commit UI synchronization stays non-fatal at command level.")
