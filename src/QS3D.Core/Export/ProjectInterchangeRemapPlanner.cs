@@ -1,0 +1,315 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using QS3D.Core.Domain;
+
+namespace QS3D.Core.Export
+{
+    public enum InterchangeRemapIdentityKind
+    {
+        Zone = 0,
+        Floor = 1,
+        Family = 2,
+        Element = 3
+    }
+
+    public sealed class ProjectInterchangeRemapItem
+    {
+        public InterchangeRemapIdentityKind Kind { get; set; }
+        public string SourceId { get; set; } = string.Empty;
+        public string TargetId { get; set; } = string.Empty;
+        public string SourceName { get; set; } = string.Empty;
+        public string TargetName { get; set; } = string.Empty;
+        public bool IdChanged { get; set; }
+        public bool NameChanged { get; set; }
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public sealed class ProjectInterchangeReferenceRewrite
+    {
+        public string OwnerElementSourceId { get; set; } = string.Empty;
+        public string ReferenceKind { get; set; } = string.Empty;
+        public string PropertyKey { get; set; } = string.Empty;
+        public string SourceReferenceId { get; set; } = string.Empty;
+        public string TargetReferenceId { get; set; } = string.Empty;
+    }
+
+    public sealed class ProjectInterchangeOpaqueReferenceWarning
+    {
+        public string OwnerElementSourceId { get; set; } = string.Empty;
+        public string PropertyKey { get; set; } = string.Empty;
+        public string PropertyValue { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public sealed class ProjectInterchangeRemapPlan
+    {
+        public string SourceProjectId { get; set; } = string.Empty;
+        public int ValidationWarnings { get; set; }
+        public IReadOnlyList<ProjectInterchangeRemapItem> Items { get; set; } = Array.Empty<ProjectInterchangeRemapItem>();
+        public IReadOnlyList<ProjectInterchangeReferenceRewrite> ReferenceRewrites { get; set; } = Array.Empty<ProjectInterchangeReferenceRewrite>();
+        public IReadOnlyList<ProjectInterchangeOpaqueReferenceWarning> OpaqueReferenceWarnings { get; set; } = Array.Empty<ProjectInterchangeOpaqueReferenceWarning>();
+        public int IdRemapCount => Items.Count(x => x.IdChanged);
+        public int NameRemapCount => Items.Count(x => x.NameChanged);
+        public int IdentityCount => Items.Count;
+        public bool CanAppendAsNew => OpaqueReferenceWarnings.Count == 0;
+
+        public string MapId(InterchangeRemapIdentityKind kind, string sourceId)
+        {
+            var item = Items.SingleOrDefault(x => x.Kind == kind && string.Equals(x.SourceId, sourceId, StringComparison.OrdinalIgnoreCase));
+            if (item == null) throw new InvalidOperationException("Remap plan does not contain " + kind + " source identity " + sourceId + ".");
+            return item.TargetId;
+        }
+    }
+
+    /// <summary>
+    /// Plans an import-as-new identity/name remap without mutating target or source state.
+    /// Typed references are mapped explicitly. Property-carried references remain fail-closed unless
+    /// they are a recognized HostWallId relation; ID-looking opaque properties are reported for policy.
+    /// </summary>
+    public static class ProjectInterchangeRemapPlanner
+    {
+        private const int MaxIdLength = 128;
+        private const int MaxNameLength = 512;
+        private const string HostWallIdKey = "HostWallId";
+
+        public static ProjectInterchangeRemapPlan Plan(ProjectState target, string json)
+        {
+            if (target == null) throw new ArgumentNullException(nameof(target));
+            var source = ProjectInterchangeValidatedSnapshotReader.Read(json);
+
+            var items = new List<ProjectInterchangeRemapItem>();
+            items.AddRange(PlanNamedIdentities(
+                InterchangeRemapIdentityKind.Zone,
+                source.Zones.Select(x => new NamedIdentity(x.Id, x.Name)),
+                target.Zones.Select(x => new NamedIdentity(x.Id, x.Name))));
+            items.AddRange(PlanNamedIdentities(
+                InterchangeRemapIdentityKind.Floor,
+                source.Floors.Select(x => new NamedIdentity(x.Id, x.Name)),
+                target.Floors.Select(x => new NamedIdentity(x.Id, x.Name))));
+            items.AddRange(PlanNamedIdentities(
+                InterchangeRemapIdentityKind.Family,
+                source.Families.Select(x => new NamedIdentity(x.Id, x.Name)),
+                target.Families.Select(x => new NamedIdentity(x.Id, x.Name))));
+            items.AddRange(PlanElements(source, target));
+
+            var zoneMap = BuildMap(items, InterchangeRemapIdentityKind.Zone);
+            var floorMap = BuildMap(items, InterchangeRemapIdentityKind.Floor);
+            var familyMap = BuildMap(items, InterchangeRemapIdentityKind.Family);
+            var elementMap = BuildMap(items, InterchangeRemapIdentityKind.Element);
+            var rewrites = new List<ProjectInterchangeReferenceRewrite>();
+            var opaque = new List<ProjectInterchangeOpaqueReferenceWarning>();
+            var sourceElementIds = new HashSet<string>(source.Elements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var element in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                AddTypedRewrite(rewrites, element.Id, "FamilyId", string.Empty, element.FamilyId, familyMap);
+                AddTypedRewrite(rewrites, element.Id, "FloorId", string.Empty, element.FloorId, floorMap);
+                AddTypedRewrite(rewrites, element.Id, "ZoneId", string.Empty, element.ZoneId, zoneMap);
+                foreach (var dependency in element.Dependencies)
+                    AddTypedRewrite(rewrites, element.Id, "DependsOn", string.Empty, dependency, elementMap);
+
+                foreach (var property in element.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(property.Key, HostWallIdKey, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (string.IsNullOrWhiteSpace(property.Value)) continue;
+                        var hostId = property.Value.Trim();
+                        if (!sourceElementIds.Contains(hostId))
+                        {
+                            opaque.Add(new ProjectInterchangeOpaqueReferenceWarning
+                            {
+                                OwnerElementSourceId = element.Id,
+                                PropertyKey = property.Key,
+                                PropertyValue = property.Value ?? string.Empty,
+                                Reason = "HostWallId is drawing/project-local but does not resolve to an Element inside the source snapshot; import-as-new must not guess a target host."
+                            });
+                            continue;
+                        }
+                        AddTypedRewrite(rewrites, element.Id, "PropertyElementId", property.Key, hostId, elementMap);
+                        continue;
+                    }
+
+                    if (LooksLikeOpaqueIdentityProperty(property.Key, property.Value, sourceElementIds))
+                    {
+                        opaque.Add(new ProjectInterchangeOpaqueReferenceWarning
+                        {
+                            OwnerElementSourceId = element.Id,
+                            PropertyKey = property.Key,
+                            PropertyValue = property.Value ?? string.Empty,
+                            Reason = "Property looks like an Element identity/reference but no explicit rewrite policy is registered for this key."
+                        });
+                    }
+                }
+            }
+
+            return new ProjectInterchangeRemapPlan
+            {
+                SourceProjectId = source.Project.Id,
+                ValidationWarnings = source.Validation.WarningCount,
+                Items = items
+                    .OrderBy(x => x.Kind)
+                    .ThenBy(x => x.SourceId, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                    .AsReadOnly(),
+                ReferenceRewrites = rewrites
+                    .OrderBy(x => x.OwnerElementSourceId, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.ReferenceKind, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.PropertyKey, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.SourceReferenceId, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                    .AsReadOnly(),
+                OpaqueReferenceWarnings = opaque
+                    .OrderBy(x => x.OwnerElementSourceId, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.PropertyKey, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                    .AsReadOnly()
+            };
+        }
+
+        private static IEnumerable<ProjectInterchangeRemapItem> PlanNamedIdentities(
+            InterchangeRemapIdentityKind kind,
+            IEnumerable<NamedIdentity> source,
+            IEnumerable<NamedIdentity> target)
+        {
+            var incoming = source.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList();
+            var existing = target.ToList();
+            var occupiedIds = new HashSet<string>(existing.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+            foreach (var item in incoming) occupiedIds.Add(item.Id);
+            var occupiedNames = new HashSet<string>(existing.Select(x => x.Name), StringComparer.OrdinalIgnoreCase);
+            foreach (var item in incoming) occupiedNames.Add(item.Name);
+
+            foreach (var sourceItem in incoming)
+            {
+                var idCollision = existing.Any(x => string.Equals(x.Id, sourceItem.Id, StringComparison.OrdinalIgnoreCase));
+                var nameCollision = existing.Any(x => string.Equals(x.Name, sourceItem.Name, StringComparison.OrdinalIgnoreCase));
+                var targetId = idCollision ? NextId(sourceItem.Id, occupiedIds) : sourceItem.Id;
+                var targetName = nameCollision ? NextName(sourceItem.Name, occupiedNames) : sourceItem.Name;
+                occupiedIds.Add(targetId);
+                occupiedNames.Add(targetName);
+
+                yield return new ProjectInterchangeRemapItem
+                {
+                    Kind = kind,
+                    SourceId = sourceItem.Id,
+                    TargetId = targetId,
+                    SourceName = sourceItem.Name,
+                    TargetName = targetName,
+                    IdChanged = !string.Equals(sourceItem.Id, targetId, StringComparison.Ordinal),
+                    NameChanged = !string.Equals(sourceItem.Name, targetName, StringComparison.Ordinal),
+                    Reason = Reason(idCollision, nameCollision)
+                };
+            }
+        }
+
+        private static IEnumerable<ProjectInterchangeRemapItem> PlanElements(ProjectInterchangeValidatedSnapshot source, ProjectState target)
+        {
+            var occupiedIds = new HashSet<string>(target.Elements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+            foreach (var element in source.Elements) occupiedIds.Add(element.Id);
+
+            foreach (var element in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                var collision = target.FindElement(element.Id) != null;
+                var targetId = collision ? NextId(element.Id, occupiedIds) : element.Id;
+                occupiedIds.Add(targetId);
+                yield return new ProjectInterchangeRemapItem
+                {
+                    Kind = InterchangeRemapIdentityKind.Element,
+                    SourceId = element.Id,
+                    TargetId = targetId,
+                    IdChanged = !string.Equals(element.Id, targetId, StringComparison.Ordinal),
+                    NameChanged = false,
+                    Reason = collision ? "ID collision with target Element; import-as-new requires a new semantic Element ID." : "No target Element ID collision."
+                };
+            }
+        }
+
+        private static Dictionary<string, string> BuildMap(IEnumerable<ProjectInterchangeRemapItem> items, InterchangeRemapIdentityKind kind) =>
+            items.Where(x => x.Kind == kind)
+                .ToDictionary(x => x.SourceId, x => x.TargetId, StringComparer.OrdinalIgnoreCase);
+
+        private static void AddTypedRewrite(
+            ICollection<ProjectInterchangeReferenceRewrite> output,
+            string owner,
+            string referenceKind,
+            string propertyKey,
+            string sourceReference,
+            IReadOnlyDictionary<string, string> map)
+        {
+            if (string.IsNullOrWhiteSpace(sourceReference)) return;
+            var sourceId = sourceReference.Trim();
+            if (!map.TryGetValue(sourceId, out var targetId))
+                throw new InvalidOperationException("Strict remap planner could not resolve " + referenceKind + " source reference " + sourceId + " for Element " + owner + ".");
+            if (string.Equals(sourceId, targetId, StringComparison.Ordinal)) return;
+            output.Add(new ProjectInterchangeReferenceRewrite
+            {
+                OwnerElementSourceId = owner,
+                ReferenceKind = referenceKind,
+                PropertyKey = propertyKey ?? string.Empty,
+                SourceReferenceId = sourceId,
+                TargetReferenceId = targetId
+            });
+        }
+
+        private static bool LooksLikeOpaqueIdentityProperty(string key, string value, ISet<string> sourceElementIds)
+        {
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) return false;
+            var trimmedKey = key.Trim();
+            var looksLikeIdKey = trimmedKey.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
+                                 trimmedKey.EndsWith("Ref", StringComparison.OrdinalIgnoreCase) ||
+                                 trimmedKey.EndsWith("RefId", StringComparison.OrdinalIgnoreCase);
+            if (!looksLikeIdKey) return false;
+            return sourceElementIds.Contains(value.Trim());
+        }
+
+        private static string NextId(string sourceId, ISet<string> occupied)
+        {
+            for (var suffix = 1; suffix < 1000000; suffix++)
+            {
+                var marker = suffix == 1 ? "-import" : "-import-" + suffix;
+                var candidate = AppendBounded(sourceId, marker, MaxIdLength);
+                if (!occupied.Contains(candidate)) return candidate;
+            }
+            throw new InvalidOperationException("Unable to allocate a collision-free semantic import ID for " + sourceId + ".");
+        }
+
+        private static string NextName(string sourceName, ISet<string> occupied)
+        {
+            for (var suffix = 1; suffix < 1000000; suffix++)
+            {
+                var marker = suffix == 1 ? " (Imported)" : " (Imported " + suffix + ")";
+                var candidate = AppendBounded(sourceName, marker, MaxNameLength);
+                if (!occupied.Contains(candidate)) return candidate;
+            }
+            throw new InvalidOperationException("Unable to allocate a collision-free semantic import name for " + sourceName + ".");
+        }
+
+        private static string AppendBounded(string value, string suffix, int maxLength)
+        {
+            var source = (value ?? string.Empty).Trim();
+            if (suffix.Length >= maxLength) throw new InvalidOperationException("Remap suffix exceeds semantic identity/name limit.");
+            var keep = Math.Min(source.Length, maxLength - suffix.Length);
+            return source.Substring(0, keep).TrimEnd() + suffix;
+        }
+
+        private static string Reason(bool idCollision, bool nameCollision)
+        {
+            if (idCollision && nameCollision) return "Target already owns both this semantic ID and display name; import-as-new remaps both.";
+            if (idCollision) return "Target already owns this semantic ID; import-as-new remaps ID and preserves the non-conflicting display name.";
+            if (nameCollision) return "Target already owns this display name on another identity; import-as-new preserves ID and renames the incoming display name.";
+            return "No target ID/name collision.";
+        }
+
+        private sealed class NamedIdentity
+        {
+            public NamedIdentity(string id, string name)
+            {
+                Id = id ?? string.Empty;
+                Name = name ?? string.Empty;
+            }
+
+            public string Id { get; }
+            public string Name { get; }
+        }
+    }
+}
