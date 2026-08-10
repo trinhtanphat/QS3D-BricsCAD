@@ -119,26 +119,26 @@ namespace QS3D.Core.Domain
         public IList<AuditEvent> AuditEvents { get; }
         public IDictionary<string, string> Metadata { get; }
 
-        public ProjectElement? FindElement(string id)
-        {
-            var normalized = NormalizeLookupId(id);
-            return normalized.Length == 0 ? null : Elements.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
-        }
-
-        public ProjectFamily? FindFamily(string id)
-        {
-            var normalized = NormalizeLookupId(id);
-            return normalized.Length == 0 ? null : Families.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
-        }
-
-        public QuantityRule? FindQuantityRule(string id)
-        {
-            var normalized = NormalizeLookupId(id);
-            return normalized.Length == 0 ? null : QuantityRules.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
-        }
+        public ProjectElement? FindElement(string id) => FindUnique(Elements, NormalizeLookupId(id), x => x.Id, "element");
+        public ProjectFamily? FindFamily(string id) => FindUnique(Families, NormalizeLookupId(id), x => x.Id, "family");
+        public QuantityRule? FindQuantityRule(string id) => FindUnique(QuantityRules, NormalizeLookupId(id), x => x.Id, "quantity rule");
 
         public void Touch() => UpdatedUtc = DateTime.UtcNow;
 
         private static string NormalizeLookupId(string id) => (id ?? string.Empty).Trim();
+
+        private static T? FindUnique<T>(IEnumerable<T> items, string normalizedId, Func<T, string> idSelector, string label) where T : class
+        {
+            if (normalizedId.Length == 0) return null;
+            T? match = null;
+            foreach (var item in items)
+            {
+                if (item == null) throw new InvalidOperationException("Project contains a null " + label + " entry.");
+                if (!string.Equals(idSelector(item), normalizedId, StringComparison.OrdinalIgnoreCase)) continue;
+                if (match != null) throw new InvalidOperationException("Project contains duplicate " + label + " id: " + normalizedId);
+                match = item;
+            }
+            return match;
+        }
     }
 }
