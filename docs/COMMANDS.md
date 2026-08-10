@@ -73,13 +73,15 @@ Common boolean fields use a checkbox, mode/material/classification-like fields u
 - `QS3DBBS` — BBS XLSX export.
 - `QS3DBBSCSV` — UTF-8 CSV export with spreadsheet formula-injection guards.
 - `QS3DREBAR3D` — guarded rectangular-column longitudinal-bar `Solid3d` generation.
-- `QS3DREBARHEALTH` — verify generated column-bar ownership/handle/count state.
+- `QS3DBEAMREBAR3D` — guarded beam longitudinal-bar generation for supported Beam `LINE` source; it uses the protected `GeneratedRebarHandles` ownership path shared by generated longitudinal bars.
+- `QS3DREBARHEALTH` — verify generated longitudinal-bar ownership/handle/count state.
 - `QS3DREBAR3DSHAPE` — generate supported BBS-shape-driven 3D bars. Source supports straight and configured L/U/Z/custom leg/turn paths; shape metadata and total cutting length are validated before geometry mutation.
 - `QS3DREBARSHAPEHEALTH` — verify generated shape-bar ownership/handle state.
-- `QS3DBEAMSTIRRUP3D` — generate rectangular beam-stirrup loop solids along supported horizontal Beam `LINE` source. Distribution is driven by deterministic beam-stirrup planning using count or spacing plus section/end cover and diameter. Generated handles use dedicated ownership metadata; batch/element counts are bounded.
-- `QS3DBEAMSTIRRUPHEALTH` — review generated beam-stirrup handles/ownership/live-solid state and Locate affected solids.
+- `QS3DREBARSTIRRUP3D` — generate rectangular beam-stirrup loop solids along supported horizontal Beam `LINE` source. Distribution is driven by deterministic beam-stirrup planning using count or spacing plus section/end cover and diameter. Generated handles use dedicated ownership metadata; batch/element counts are bounded.
+- `QS3DREBARSTIRRUPHEALTH` — review generated beam-stirrup handles/ownership/live-solid state and Locate affected solids.
 - `QS3DREBARTIES3D` — generate rectangular column tie loop solids for supported Column semantic elements with closed 4-vertex rectangular POLYLINE source. Tie diameter, count/spacing and cover/clearance inputs are validated before native geometry mutation.
 - `QS3DREBARTIEHEALTH` — review generated column tie ownership/live-solid state and Locate affected solids.
+- `QS3DREBARHEALTHALL` — aggregate generated longitudinal, BBS-shape, column-tie and beam-stirrup health into one review window. The aggregator includes `GeneratedBeamStirrupHandles` so stirrup issues are not skipped.
 - Beam stirrup and column tie loops currently use guarded segmented-cylinder geometry. They do **not** invent fabrication hooks, bend radii or code-specific anchorage where explicit dimensions are absent.
 
 See [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for shape/stirrup/tie metadata and current geometric limits.
@@ -103,7 +105,7 @@ See [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for shape/stirrup/tie metadat
 
 ## UI entry points
 
-The main palette, Ribbon and Full Domain Hub expose the major product flows consistently: Room Auto, Tường KT, Giao tường + review-gated snap cleanup, Auto/Manual Door-Opening host linking, physical cuts, Build 3D, Focus/Isolate/Section Box, BQ/BBS, column longitudinal rebar, BBS-shape rebar, beam stirrups, column ties, health checks and revision tools. The goal is to minimize command-line memorization while preserving explicit commands for power users and test harnesses.
+The main palette, Ribbon and Full Domain Hub expose the major product flows consistently: Room Auto, Tường KT, Giao tường + review-gated snap cleanup, Auto/Manual Door-Opening host linking, physical cuts, Build 3D, Focus/Isolate/Section Box, BQ/BBS, column/beam longitudinal rebar, BBS-shape rebar, beam stirrups, column ties, health checks and revision tools. The goal is to minimize command-line memorization while preserving explicit commands for power users and test harnesses.
 
 ## Packaging and autoload
 
