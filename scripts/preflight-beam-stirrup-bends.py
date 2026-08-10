@@ -58,6 +58,7 @@ if health.is_file():
         "GeneratedBeamStirrupHookLengthM", "GeneratedBeamStirrupHookTailAngleDeg",
         "Beam.Line.RectangularClosedLoop", "Beam.Line.RectangularRoundedLoop", "Beam.Line.RectangularHookedPath",
         "BEAM_STIRRUP_GENERATED_LENGTH_MISMATCH", "BEAM_STIRRUP_GENERATED_MODE_MISMATCH",
+        "BEAM_STIRRUP_GENERATED_MODE_INVALID", "advanced stirrup metadata",
         "Old generated snapshots predate bend/hook length metadata"
     ):
         if needle not in text: errors.append("beam stirrup advanced health missing: " + needle)
@@ -85,7 +86,7 @@ if health_smoke.is_file():
     text = health_smoke.read_text(encoding="utf-8")
     for needle in (
         "LegacySnapshotRemainsCompatible();", "AdvancedSnapshotIsAccepted();",
-        "LengthMismatchIsReported();", "HookModeMismatchIsReported();"
+        "LengthMismatchIsReported();", "HookModeMismatchIsReported();", "MissingAdvancedModeIsReported();"
     ):
         if needle not in text: errors.append("beam stirrup metadata health smoke missing: " + needle)
 
