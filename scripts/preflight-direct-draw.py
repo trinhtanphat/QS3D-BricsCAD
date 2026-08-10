@@ -9,9 +9,13 @@ errors = []
 required = {
     "src/QS3D.BricsCAD.V25/DirectDrawCommands.cs": [
         'CommandMethod("QS3DDRAWWALL"',
+        'CommandMethod("QS3DDRAWGLASSWALL"',
+        'CommandMethod("QS3DDRAWWALLPIER"',
         'CommandMethod("QS3DDRAWBEAM"',
+        'CommandMethod("QS3DDRAWSTRUCTWALL"',
         'CommandMethod("QS3DDRAWCOLUMN"',
         'CommandMethod("QS3DDRAWSLAB"',
+        'CommandMethod("QS3DDRAWFOUNDATION"',
         "SemanticCaptureService.Capture(document, category)",
         "ProjectStateSnapshot.Capture(project)",
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
@@ -23,6 +27,10 @@ required = {
         "WallSolidBuilder.BuildSelectedLineWalls",
         "PolylineWallSolidBuilder.BuildSelected",
         "StructuralSolidBuilder.BuildSelected",
+        "ElementCategory.GlassWall",
+        "ElementCategory.WallPier",
+        "ElementCategory.StructuralWall",
+        "ElementCategory.Foundation",
         "CreateLine(document",
         "CreatePolyline(document",
         "CreateColumnFootprint",
@@ -30,6 +38,7 @@ required = {
         "PromptFiniteMeters",
         "FamilyNumber",
         "FamilyFiniteNumber",
+        "PreferredFamily",
         'element.Properties["ThicknessM"]',
         'element.Properties["WidthM"]',
         'element.Properties["DepthM"]',
@@ -92,6 +101,8 @@ required = {
         "category == ElementCategory.Beam",
         "category == ElementCategory.Slab",
         "category == ElementCategory.Column",
+        "category == ElementCategory.StructuralWall",
+        "category == ElementCategory.Foundation",
         "BuildLinePrism",
         "BuildClosedPolylinePrism",
         "GeneratedGeometryService.PrepareReplacement",
@@ -102,6 +113,8 @@ required = {
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
         "BuildSelectedLineWalls",
+        "ElementCategory.GlassWall",
+        "ElementCategory.WallPier",
         "GeneratedGeometryService.PrepareReplacement",
         "GeneratedGeometryService.CommitReplacement",
         'CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z',
@@ -110,23 +123,32 @@ required = {
     ],
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs": [
         "BuildSelected",
+        "WallPierPathProfilePlanner.Plan",
         "GeneratedGeometryService.PrepareReplacement",
         "GeneratedGeometryService.CommitReplacement",
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
         'RibbonTabSpec("QS3D_AUTHOR", "TẠO MỚI"',
         '"QS3DDRAWWALL"',
+        '"QS3DDRAWGLASSWALL"',
+        '"QS3DDRAWWALLPIER"',
         '"QS3DDRAWBEAM"',
         '"QS3DDRAWCOLUMN"',
         '"QS3DDRAWSLAB"',
+        '"QS3DDRAWSTRUCTWALL"',
+        '"QS3DDRAWFOUNDATION"',
         '"QS3DBUILD3D"',
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
         'Text="TẠO MỚI / DIRECT DRAW"',
         'Tag="QS3DDRAWWALL"',
+        'Tag="QS3DDRAWGLASSWALL"',
+        'Tag="QS3DDRAWWALLPIER"',
         'Tag="QS3DDRAWBEAM"',
         'Tag="QS3DDRAWCOLUMN"',
         'Tag="QS3DDRAWSLAB"',
+        'Tag="QS3DDRAWSTRUCTWALL"',
+        'Tag="QS3DDRAWFOUNDATION"',
         "Capture/Bóc chọn",
     ],
     "docs/DIRECT-DRAW-WORKFLOW.md": [
@@ -134,8 +156,17 @@ required = {
         "QS3DDRAWBEAM",
         "QS3DDRAWCOLUMN",
         "QS3DDRAWSLAB",
+        "P1 candidates",
         "Atomicity and cancellation",
         "Ribbon / discoverability",
+    ],
+    "docs/DIRECT-DRAW-P1-IMPLEMENTATION.md": [
+        "QS3DDRAWGLASSWALL",
+        "QS3DDRAWWALLPIER",
+        "QS3DDRAWSTRUCTWALL",
+        "QS3DDRAWFOUNDATION",
+        "WallPierPathProfilePlanner",
+        "source-implemented",
     ],
 }
 
@@ -156,8 +187,10 @@ if command_root.is_dir():
         text = path.read_text(encoding="utf-8")
         commands.extend(re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', text))
 for name in (
-    "QS3DDRAWWALL", "QS3DDRAWBEAM", "QS3DDRAWCOLUMN", "QS3DDRAWSLAB",
-    "QS3DWALL", "QS3DBEAM", "QS3DCOLUMN", "QS3DSLAB", "QS3DBUILD3D",
+    "QS3DDRAWWALL", "QS3DDRAWGLASSWALL", "QS3DDRAWWALLPIER", "QS3DDRAWBEAM",
+    "QS3DDRAWCOLUMN", "QS3DDRAWSLAB", "QS3DDRAWSTRUCTWALL", "QS3DDRAWFOUNDATION",
+    "QS3DWALL", "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DBEAM", "QS3DCOLUMN", "QS3DSLAB",
+    "QS3DSTRUCTWALL", "QS3DFOUNDATION", "QS3DBUILD3D",
 ):
     if commands.count(name) != 1:
         errors.append(name + " must be declared exactly once, found " + str(commands.count(name)))
@@ -186,19 +219,36 @@ if source.is_file():
         errors.append("Direct Draw must create source -> capture -> semantic regen -> build; failure discovers tagged output before semantic restore and CAD cleanup")
     if "priorGenerated.Contains(handle)" not in text:
         errors.append("Direct Draw rollback must preserve generated handles that existed before the operation")
-    if text.count("RequireModelSpace(document);") < 4:
-        errors.append("Every P0 Direct Draw command must fail closed outside Model Space")
+    if text.count("RequireModelSpace(document);") < 8:
+        errors.append("Every current P0/P1 Direct Draw command must fail closed outside Model Space")
     if "Math.Abs(points[index].Z - z) > 1e-6d" in text:
         errors.append("Direct Draw planarity must be unit-aware rather than using raw drawing-unit tolerance")
-    if text.count('element.Properties["BottomOffsetM"]') < 4:
-        errors.append("All P0 Direct Draw commands must persist the prompted base elevation/offset")
-    if text.count("PromptPositiveMeters(document.Editor") < 7:
-        errors.append("P0 Direct Draw must prompt key positive dimensions instead of silently using all Family defaults")
+    if text.count('element.Properties["BottomOffsetM"]') < 8:
+        errors.append("All current P0/P1 Direct Draw commands must persist the prompted base offset")
+    if text.count("PromptPositiveMeters(document.Editor") < 13:
+        errors.append("Direct Draw P0/P1 must prompt key positive dimensions instead of silently using all Family defaults")
+    if "var family = PreferredFamily(project, category);" not in text or "Sửa Family trước khi Direct Draw" not in text:
+        errors.append("Direct Draw must preserve fail-closed invalid Family numeric validation")
     erase_body = text.split("private static void EraseHandles", 1)[-1].split("private static Document? Active", 1)[0]
     if "catch { }" in erase_body or "catch{}" in erase_body.replace(" ", ""):
         errors.append("Direct Draw CAD rollback must not swallow per-entity erase failures")
     if "transaction.Commit();" not in erase_body or "CadHandleService.GetLiveHandles(document, normalized)" not in erase_body:
         errors.append("Direct Draw CAD rollback must commit erase transaction and verify no requested handles remain live")
+
+    wall_pier_match = re.search(r"public void DrawWallPier\(\)(.*?)(?=\n\s*\[CommandMethod|\n\s*private static)", text, re.S)
+    if not wall_pier_match:
+        errors.append("Direct Draw P1 must declare DrawWallPier")
+    else:
+        wall_pier_body = wall_pier_match.group(1)
+        if "CreatePolyline(document, points, false)" not in wall_pier_body:
+            errors.append("WallPier Direct Draw must persist an open POLYLINE so path-profile semantics are preserved")
+        if "points.Count == 2 ? CreateLine" in wall_pier_body:
+            errors.append("WallPier Direct Draw must not downgrade two-point authoring to the generic LINE box path")
+
+    if "category == ElementCategory.ArchitecturalWall || category == ElementCategory.GlassWall || category == ElementCategory.WallPier" not in text:
+        errors.append("Direct Draw P1 wall categories must reuse the established wall builders")
+    if "category == ElementCategory.StructuralWall || category == ElementCategory.Foundation" not in text:
+        errors.append("Direct Draw P1 structural categories must reuse StructuralSolidBuilder")
 
 build3d = ROOT / "src/QS3D.BricsCAD.V25/Build3DCommands.cs"
 if build3d.is_file():
@@ -229,9 +279,9 @@ if workspace.is_file():
     if ".SelectMany(x => x.SourceHandles)" not in helper or "Cad.CadHandleService.Select(doc, sourceHandles)" not in helper:
         errors.append("Workspace Vẽ/Cập nhật 3D must resolve selected semantic/generated aliases back to all distinct source handles")
 
-print("QS3D Direct Draw P0 preflight")
+print("QS3D Direct Draw P0/P1 preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw prompts BLT-style P0 dimensions, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and QS3DBUILD3D/Workspace resolve semantic/generated selections back to complete live Model-Space source batches before rebuilding.")
+print("PASS: Direct Draw P0/P1 prompts key dimensions, preserves fail-closed Family/Model-Space/unit-aware guards and rollback cleanup, routes WallPier through path-profile semantics, and QS3DBUILD3D/Workspace resolve semantic/generated selections back to complete live Model-Space source batches before rebuilding.")
