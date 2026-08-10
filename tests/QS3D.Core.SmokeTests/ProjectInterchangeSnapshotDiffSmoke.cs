@@ -54,10 +54,11 @@ namespace QS3D.Core.SmokeTests
         {
             var left = Project("E-1", "B-01", 5d);
             var right = Project("E-1", "B-02", 7d);
-            right.Elements[0].SourceHandles.Clear();
-            right.Elements[0].SourceHandles.Add("FFFF");
-            right.Elements[0].DependsOn.Clear();
-            right.Elements[0].DependsOn.Add("E-BASE-2");
+            var rightElement = right.Elements.Single(x => x.Id == "E-1");
+            rightElement.SourceHandles.Clear();
+            rightElement.SourceHandles.Add("FFFF");
+            rightElement.DependsOn.Clear();
+            rightElement.DependsOn.Add("E-BASE-2");
             var base2 = new ProjectElement("E-BASE-2", ElementCategory.Beam, "FAM-B", "F-01", "Z-01");
             base2.SetProperty("Mark", "BASE-2");
             base2.SetQuantity("LengthM", 1d);
@@ -69,7 +70,8 @@ namespace QS3D.Core.SmokeTests
             var change = diff.Changes.Single(x => x.ObjectKind == InterchangeSnapshotObjectKind.Element && x.Id == "E-1");
 
             Equal(InterchangeSnapshotChangeKind.Changed, change.ChangeKind);
-            True(change.Fields.Contains("sourceHandles"));
+            if (!change.Fields.Contains("sourceHandles"))
+                throw new Exception("Expected sourceHandles change; actual fields: " + string.Join(",", change.Fields) + ".");
             True(change.Fields.Contains("dependencies"));
             True(change.Fields.Contains("properties"));
             True(change.Fields.Contains("quantities"));
@@ -79,15 +81,17 @@ namespace QS3D.Core.SmokeTests
         {
             var left = Project("E-1", "B-01", 5d);
             var right = Project("E-1", "B-01", 5d);
-            left.Elements[0].SourceHandles.Add("BBBB");
-            right.Elements[0].SourceHandles.Insert(0, "bbbb");
+            var leftElement = left.Elements.Single(x => x.Id == "E-1");
+            var rightElement = right.Elements.Single(x => x.Id == "E-1");
+            leftElement.SourceHandles.Add("BBBB");
+            rightElement.SourceHandles.Insert(0, "bbbb");
             var dep2Left = new ProjectElement("E-BASE-2", ElementCategory.Beam, "FAM-B", "F-01", "Z-01");
             dep2Left.SetProperty("Mark", "BASE-2"); dep2Left.SetQuantity("LengthM", 1d);
             var dep2Right = new ProjectElement("E-BASE-2", ElementCategory.Beam, "FAM-B", "F-01", "Z-01");
             dep2Right.SetProperty("Mark", "BASE-2"); dep2Right.SetQuantity("LengthM", 1d);
             left.Elements.Add(dep2Left); right.Elements.Add(dep2Right);
-            left.Elements[0].DependsOn.Add("E-BASE-2");
-            right.Elements[0].DependsOn.Insert(0, "e-base-2");
+            leftElement.DependsOn.Add("E-BASE-2");
+            rightElement.DependsOn.Insert(0, "e-base-2");
 
             var diff = ProjectInterchangeSnapshotDiff.CompareJson(
                 ProjectInterchangeJsonExporter.Build(left),
