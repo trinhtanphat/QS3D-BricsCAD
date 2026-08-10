@@ -21,22 +21,27 @@ for relative in required:
 
 checks = {
     "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs": [
-        "using QS3D.Core.Persistence;", "ProjectStateSnapshot.Capture(project)", "var cadCommitted = false;",
+        "using QS3D.Core.Persistence;", "using QS3D.Core.Geometry;", "ProjectStateSnapshot.Capture(project)", "var cadCommitted = false;",
         "foreach (var update in pending) CommitSemanticUpdate(project, update);", "if (pending.Count > 0) project.Touch();",
         "rollback.Restore(project)", "AggregateException(operationError, restoreError)",
-        "RectangularSlabMeshPlanner.Plan", "ElementCategory.Foundation", "GeneratedFoundationMeshHandles",
+        "RectangularSlabMeshPlanner.Plan", "PolygonalSlabMeshPlanner.Plan", "ElementCategory.Foundation", "GeneratedFoundationMeshHandles",
         "GeneratedRebarOwnershipGuard.Build", "ownership.EnsureOwned", "RebarFoundationXNotation", "RebarFoundationYNotation",
-        "RebarFoundationFaces", "MaxBarsPerBatch", "FoundationMeshXY", "duplicateSelectedSource", "checked(batchBars + layout.Count)",
-        "CadGeometryGuard.Multiply", "CadGeometryGuard.Subtract", "ClearGeneratedFoundationMeshStale",
-        'AuditTrail.ForProject(project).Record("geometry.rebar.foundation.mesh"'
+        "RebarFoundationFaces", "MaxBarsPerBatch", "ReserveBatchBars(ref batchBars, layout.Count)", "ReserveBatchBars(ref batchBars, polygonLayout.Count)",
+        "FoundationMeshXY", "RectangleLocalXY", "PolygonGlobalXY", "GeneratedFoundationMeshFootprintMode",
+        "duplicateSelectedSource", "checked(batchBars + count)", "CadGeometryGuard.Multiply", "CadGeometryGuard.Subtract",
+        "ReadPolygonFootprint", "ValidateCommonFootprint", "polygonal Foundation mesh chưa hỗ trợ bulge/curved boundary",
+        "polyline.Normal.Z < 1d - 1e-9d", "ClearGeneratedFoundationMeshStale",
+        'AuditTrail.ForProject(project).Record('
     ],
     "src/QS3D.BricsCAD.V25/FoundationMeshCommands.cs": [
-        "QS3DFOUNDATIONREBAR3D", "FinalizeUi", "document.Editor.Regen()", "UI sync warning: ", "TryWriteMessage"
+        "QS3DFOUNDATIONREBAR3D", "closed straight plan-view POLYLINE", "Rectangle giữ local X/Y", "polygon dùng drawing X/Y",
+        "FinalizeUi", "document.Editor.Regen()", "UI sync warning: ", "TryWriteMessage"
     ],
     "src/QS3D.Core/Diagnostics/GeneratedFoundationMeshHealthService.cs": [
         "FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT", "FOUNDATION_MESH_GENERATED_SOLID_MISSING",
         "FOUNDATION_MESH_CATEGORY_MISMATCH", "FOUNDATION_MESH_GENERATED_STALE", "IsGeneratedFoundationMeshStale",
-        "GeneratedHandleOwnershipPolicy.IsOwnerSlot", "OwnershipIndex", "Conflicts", "IsConflicted"
+        "GeneratedHandleOwnershipPolicy.IsOwnerSlot", "OwnershipIndex", "Conflicts", "IsConflicted",
+        "GeneratedFoundationMeshFootprintMode", "FOUNDATION_MESH_FOOTPRINT_MODE_INVALID", "RectangleLocalXY", "PolygonGlobalXY"
     ],
     "src/QS3D.BricsCAD.V25/FoundationMeshHealthCommands.cs": ["QS3DFOUNDATIONREBARHEALTH"],
     "src/QS3D.BricsCAD.V25/RebarMeshSetupCommands.cs": ["ElementCategory.Foundation"],
@@ -75,6 +80,10 @@ checks = {
     "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipSmoke.cs": ["FoundationMeshGeneratedHandleResolvesOwner", "FutureGeneratedOwnerSlotResolvesOwner", "GeneratedFoundationMeshHandles"],
     "tests/QS3D.Core.SmokeTests/GeneratedGeometryStaleSmoke.cs": ["FOUNDATION_MESH_GENERATED_STALE", "GeneratedFoundationMeshHandles"],
     "tests/QS3D.Core.SmokeTests/GeneratedOutputHealthStaleSmoke.cs": ["FoundationMeshUsesSnapshotState"],
+    "docs/FOUNDATION-REBAR3D.md": [
+        "RectangleLocalXY", "PolygonGlobalXY", "PolygonalSlabMeshPlanner", "GeneratedFoundationMeshFootprintMode",
+        "curved/bulged boundaries", "holes/islands/multiple outer loops", "exact-SHA licensed BricsCAD V25 qualification"
+    ],
 }
 for relative, needles in checks.items():
     path = ROOT / relative
@@ -90,7 +99,7 @@ foundation_builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilde
 if foundation_builder.is_file():
     text = foundation_builder.read_text(encoding="utf-8")
     start = text.find("public static FoundationMeshBuildResult BuildSelected(Document document, ProjectState project)")
-    end = text.find("private static void CommitSemanticUpdate", start + 1) if start >= 0 else -1
+    end = text.find("private static PendingUpdate CreateUpdate", start + 1) if start >= 0 else -1
     if start < 0 or end < 0:
         errors.append("foundation mesh atomicity guard cannot isolate BuildSelected method")
     else:
@@ -112,6 +121,12 @@ if foundation_builder.is_file():
             errors.append("Foundation mesh requires exactly one semantic replacement phase and one CAD commit/flag boundary")
         if "Editor.Regen(" in body:
             errors.append("Foundation native mesh builder must remain UI-free; viewport regen belongs to FoundationMeshCommands post-commit FinalizeUi")
+        if body.find("ReserveBatchBars(ref batchBars, layout.Count)") > body.find("ErasePrevious(document, transaction, element, ownership)"):
+            errors.append("Rectangle Foundation mesh must reserve the batch limit before destructive replacement")
+        polygon_reserve = body.find("ReserveBatchBars(ref batchBars, polygonLayout.Count)")
+        polygon_erase = body.find("ErasePrevious(document, transaction, element, ownership)", polygon_reserve if polygon_reserve >= 0 else 0)
+        if polygon_reserve < 0 or polygon_erase < 0 or polygon_reserve > polygon_erase:
+            errors.append("Polygon Foundation mesh must reserve the batch limit before destructive replacement")
 
     helper_start = text.find("private static void CommitSemanticUpdate")
     helper_end = text.find("private sealed class RectangleFrame", helper_start + 1) if helper_start >= 0 else -1
@@ -119,8 +134,8 @@ if foundation_builder.is_file():
     for token in (
         "GeneratedFoundationMeshHandles", "GeneratedFoundationMeshCount", "GeneratedFoundationMeshXDiameterMm",
         "GeneratedFoundationMeshYDiameterMm", "GeneratedFoundationMeshCoverM", "GeneratedFoundationMeshMode",
-        "GeneratedFoundationMeshXActualSpacingM", "GeneratedFoundationMeshYActualSpacingM", "GeneratedFoundationMeshFaces",
-        "ClearGeneratedFoundationMeshStale()", 'AuditTrail.ForProject(project).Record("geometry.rebar.foundation.mesh"',
+        "GeneratedFoundationMeshFootprintMode", "GeneratedFoundationMeshXActualSpacingM", "GeneratedFoundationMeshYActualSpacingM", "GeneratedFoundationMeshFaces",
+        "ClearGeneratedFoundationMeshStale()", 'AuditTrail.ForProject(project).Record(', "update.FootprintMode",
     ):
         if token not in helper:
             errors.append("Foundation mesh semantic commit helper missing metadata/audit contract: " + token)
@@ -163,4 +178,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Foundation mesh uses dedicated stale/health metadata and canonical policy-driven ownership across destructive guards, dynamic semantic selection, B4D exclusion, unified health/release-readiness and UI contracts; generated handles/count/spacing/faces/audit/revision advance while CAD is rollback-capable, pre-commit failures restore the deep project snapshot, the native builder stays UI-free, and command-level UI synchronization is non-fatal.")
+print("PASS: Foundation mesh preserves the legacy rotated-rectangle local-axis path and adds guarded straight simple polygon clipping through the shared polygonal planner; batch reservation precedes destructive replacement, generated ownership/count/spacing/faces/footprint-mode/audit/revision advance while CAD is rollback-capable, pre-commit failures restore the deep project snapshot, footprint health accepts only RectangleLocalXY/PolygonGlobalXY, and curved/bulged/holes/local-axis-generalization plus exact V25 runtime proof remain explicit gates.")
