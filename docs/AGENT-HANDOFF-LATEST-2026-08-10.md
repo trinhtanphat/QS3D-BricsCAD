@@ -2,537 +2,328 @@
 
 **Audit/update date:** 2026-08-10 (UTC+7)  
 **Repository:** `trinhtanphat/QS3D-BricsCAD`  
-**Branch:** `main`  
-**Source reconciliation cutoff for this edition:** `b00d03f65bf89ff9a06b2c65fa68722c7cad92ce` (`ci: auto discover all feature preflight gates`) plus the rebased B4D/ED2, DWG-identity and generated-geometry hardening branch documented below.
+**Canonical branch:** `main`  
+**Foundation/rebar source reconciliation merge:** `df43d67286a2b972f7787961b0c11ed5e3529ae6` (`feat(rebar): finalize Foundation mesh integration`)  
 **Historical exhaustive session audit:** `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md`  
-**Status:** this file is the **canonical current handoff**. If this file, an older chat message, or the historical handoff conflicts with newer `main`, **newer source wins**.
 
-> The repository is being modified by multiple agents. Fetch `main` before work and again before every push. Inspect commits newer than the cutoff above rather than replaying an old feature branch over current `main`.
-
----
-
-## 1. Review/evidence boundary
-
-The historical audit already established:
-
-- **377 / 377 accessible current-session records** were read sequentially; the terminal page reported **0 remaining**;
-- **2 targeted prior-history retrievals** were also performed for earlier QS3D / BLT3D / BricsCAD V25 work;
-- those chat/history findings were reconciled against GitHub source, not treated as source-of-truth by themselves.
-
-That proves review of the material exposed to this session. It does not honestly certify deleted/inaccessible account-wide history or commits created after this document's cutoff.
+This file is the **canonical current handoff**. If this file, older chat text, historical handoffs or an old feature branch conflicts with a newer `main`, **newer source wins**. Fetch `main` again before every integration write because this repository is actively modified by multiple agents.
 
 ---
 
-## 2. Owner intent and non-negotiable architecture
+## 1. Owner intent and architecture
 
-QS3D is an original, clean-room **BLT3D-like semantic BIM / quantity takeoff plugin for BricsCAD V25**.
+QS3D is an original clean-room **BLT3D-like semantic BIM / quantity-takeoff plugin for BricsCAD V25**, not a copy of proprietary BLT source/assets.
 
-Non-negotiable requirements:
+Non-negotiable architecture:
 
-- target BricsCAD **V25**, Windows x64;
-- adapter target **.NET Framework 4.8**; Core target `netstandard2.0`;
-- native BricsCAD viewport remains the real 2D/3D canvas in the middle;
-- Ribbon + WPF palettes provide QS3D workflow around the native viewport;
-- dark, compact Vietnamese CAD UI inspired by the supplied BLT3D references without copying proprietary source/assets;
-- keep deterministic business/domain logic in `QS3D.Core` and BricsCAD API calls in `QS3D.BricsCAD.V25`;
-- visible UI actions should perform real work, not decorative mock behavior;
-- BricsCAD/BLT proprietary DLLs, private DWG/DOCX fixtures and license materials must not be committed;
-- do not call source/static/Core success “BricsCAD runtime verified”.
+- BricsCAD **V25**, Windows x64;
+- adapter: **.NET Framework 4.8**;
+- deterministic/domain logic: `QS3D.Core` on `netstandard2.0`;
+- BricsCAD API/native geometry: `QS3D.BricsCAD.V25`;
+- native BricsCAD viewport remains the real 2D/3D canvas;
+- dark compact Vietnamese Ribbon/WPF workflow around the native viewport;
+- no BricsCAD/BLT proprietary DLLs, private customer DWG/DOCX or license secrets in Git;
+- visible actions should perform real work rather than decorative mock behavior.
 
-Requirement-document priorities that remain central:
-
-- **TƯỜNG KT**;
-- **HT_PHÒNG**;
-- **Cửa / Lỗ mở**;
-- **BQ → Excel**.
-
-Private runtime fixture from the session: `260808.SHOP XAY TUONG_NHA NOI TRU.dwg`. Keep it private.
+Priority product domains remain **TƯỜNG KT, HT_PHÒNG, Cửa/Lỗ mở, BQ/Excel, semantic structure and guarded rebar authoring**.
 
 ---
 
-## 3. Multi-agent / CI rules
+## 2. Multi-agent and CI policy
 
-Read `AGENTS.md` and `CI_POLICY.md` before source edits.
-
-Required integration pattern:
+Before edits/merge:
 
 ```text
 fetch latest main
 → inspect concurrent commits
-→ preserve their work
-→ apply/merge new feature onto latest tree
-→ resolve overlaps as a union, not ours/theirs blindly
+→ preserve concurrent work
+→ apply/rebase onto latest tree
+→ resolve overlaps as a union
 → review final diff
-→ push without force
+→ push/merge without force
 ```
 
-Never reset/force-push `main` backwards.
+Never reset or force-push `main` backwards.
 
-GitHub Actions policy remains **manual-only**. Release workflows use `workflow_dispatch`; commits, merges, docs, “continue all”, reviews or source changes do **not** authorize a CI dispatch.
-
-Temporary CI gate branches may contain push-trigger helper workflows, but those temporary workflow commits must not be copied into release `main`.
+GitHub Actions/release workflows remain **manual-only**. `continue all`, source review, merge, docs update or release-preparation text **does not authorize workflow dispatch**. This Foundation audit did **not** dispatch Actions.
 
 ---
 
-## 4. Current project/persistence/domain foundation
+## 3. Current persistence/domain foundation
 
 Current source includes:
 
 - Project / Zone / Floor / Family / semantic Element model;
-- data-driven Family/instance properties and active project context;
-- multi-DWG project cache keyed by `Document` identity;
+- Family-vs-Instance property scope and inherited override handling;
+- multi-DWG context keyed by live BricsCAD `Document` identity;
 - Save As drawing-identity synchronization;
-- **QSDB schema v3**, deterministic `v1 → v2 → v3` migration;
-- persisted dirty flags/timestamps;
-- persisted QuantityRules and audit provenance;
-- validated temp-save / atomic replacement where supported;
-- `.bak` recovery and protected failure state;
-- single-writer project locking;
-- XML DTD/external-entity and file-size guards;
-- non-finite/invalid persisted-state rejection;
-- family reassignment that refreshes inherited defaults while preserving deliberate instance overrides;
-- dependency graph + bounded fixed-point regeneration;
-- finite/overflow-safe semantic quantity math with atomic quantity-map replacement on success only.
+- `.qsdb` schema v3 with deterministic migration;
+- persisted dirty flags/timestamps, QuantityRules and audit events;
+- validated/atomic save path, backup recovery and project locking;
+- XML/file-size/non-finite safety guards;
+- dependency graph + bounded deterministic regeneration;
+- `.qstemplate` import/export;
+- revision baseline/diff persistence.
 
-### QuantityRules
-
-QuantityRules are project data, not UI hard-codes. The engine supports numeric Family/instance/current-quantity variables, dependency ordering, stale managed-output cleanup, provenance and cycle detection. Circular dependencies fail atomically rather than partially applying outputs.
+QuantityRules are project data, support dependency ordering and reject invalid/circular state rather than partially mutating outputs.
 
 ---
 
-## 5. Current Tường KT / wall workflow
+## 4. Architecture / Room / Door-Opening / Curtain source paths
 
-### Semantic categories
+### TƯỜNG KT
+
+Current source has semantic + guarded native paths for:
 
 - Tường Gạch / `ArchitecturalWall`;
 - Vách Kính / `GlassWall`;
-- Trụ Tường / `WallPier`.
+- Trụ Tường / `WallPier`;
+- LINE and supported open-POLYLINE centerlines;
+- bulged segments through deterministic tessellation where the current command supports them;
+- wall-junction L/T/X/Multi analysis;
+- review-gated wall endpoint **Preview → Apply** cleanup;
+- finite/self-intersection/miter/bevel guards.
 
-### Native source paths
+### Room / HT_PHÒNG
 
-`QS3DWALL`, `QS3DGLASSWALL`, `QS3DWALLPIER`, and `QS3DBUILD3D` now support TKT wall variants through:
+`QS3DROOMAUTO` supports guarded plan-view LINE/POLYLINE/ARC/SPLINE boundary discovery with deterministic snapping/intersection/T-junction handling, bridge removal, bounded-face traversal, stable provenance and non-destructive stale/reuse lifecycle.
 
-- LINE centerlines;
-- open plan-view POLYLINE centerlines;
-- bulged POLYLINE segments via deterministic arc tessellation;
-- `WallFootprintEngine` for miter joins with bevel fallback;
-- self-intersection/reversal/degenerate-geometry rejection;
-- far-origin-stable footprint area/perimeter math;
-- guarded generated-Solid3d replacement and source/generated handle separation.
+HT_PHÒNG semantics include floor/waterproofing/skirting/wall/ceiling finish workflows. Boundary provenance must not become duplicate semantic ownership of wall source handles.
 
-`WallMiterLimit` and `WallArcSagittaM` are project metadata controls used by this source path.
-
-### Wall junction topology / review-gated cleanup
-
-Current source includes deterministic wall-junction analysis:
-
-- End / Straight / L / T / X / Multi classification;
-- sweep/broad-phase + spatial candidate indexing;
-- tolerance-aware endpoint/crossing detection;
-- finite/extreme-coordinate guards;
-- plan-view/coplanar CAD-selection guards;
-- `QS3DWALLJUNCTIONS` diagnostic analysis;
-- `WallJunctionAdjustmentPlanner` for reviewable endpoint snap proposals;
-- current command output reports **SnapPlan** proposals instead of silently changing CAD.
-
-Concurrent work after the initial planner also added the user-facing **Wall Snap Preview / Apply** workflow documented in `docs/COMMANDS.md`:
-
-- preview first;
-- review/apply is guarded by plan/source fingerprints and source-handle identity;
-- apply is intended for review-gated endpoint cleanup, not blind auto-trimming.
-
-Inspect current `WallJunction*` source and `docs/COMMANDS.md` before changing this workflow because it has been evolving concurrently.
-
----
-
-## 6. Room / HT_Phòng
-
-### `QS3DROOMAUTO`
-
-Automatic room discovery is no longer limited to straight lines. Current source accepts plan-view:
-
-- LINE;
-- POLYLINE;
-- bulged POLYLINE;
-- ARC;
-- SPLINE.
-
-Core/adapter behavior includes:
-
-- drawing-unit normalization;
-- configurable endpoint/topology tolerance;
-- configurable minimum area;
-- deterministic bulge/arc tessellation;
-- `RoomBoundarySplineChordM` sampling for SPLINE with bounded maximum segment count;
-- planarity/elevation validation;
-- intersection/T-junction subdivision;
-- endpoint snapping;
-- dangling-bridge removal;
-- bounded-face traversal;
-- stable boundary keys, area/perimeter and boundary-source provenance;
-- iterative bridge detection and source-evidence indexing for larger graphs;
-- rollback of semantic/audit changes if regeneration fails;
-- auto-room lifecycle reuse/stale handling;
-- deterministic child-finish synchronization for existing auto rooms.
-
-Important ownership invariant: auto-room boundary sources are provenance and must not be claimed as duplicate semantic `SourceHandles` ownership of wall entities.
-
-### HT_Phòng
-
-Current semantic finish workflow covers floor finish, waterproofing, skirting, wall finish and ceiling finish.
-
-Safety invariant: finish untracking/removal must not erase unrelated CAD geometry.
-
----
-
-## 7. Door / Opening workflow
-
-Current source supports:
-
-- `QS3DOPENING` / `QS3DDOOR` semantic capture;
-- `QS3DLINKHOST` manual host linking;
-- `QS3DAUTOLINKHOSTS` conservative automatic host matching;
-- semantic opening deduction from host quantities;
-- `QS3DCUTOPENINGS` physical boolean source path.
-
-### Auto host matcher
-
-Current matcher is deliberately conservative:
-
-- compatible wall/vách host categories only;
-- floor/zone constraints;
-- live source geometry;
-- distance/tolerance thresholds;
-- ambiguity margin;
-- elevation tolerance so openings are not linked to wrong-floor walls;
-- already-linked openings are not silently reassigned;
-- auto-link records audit provenance;
-- it does **not** automatically run physical boolean cutting.
-
-### Physical boolean cut
-
-Current source supports generated compatible hosts with:
-
-- LINE centerline host;
-- **straight open POLYLINE** centerline host;
-- source/fingerprint/proximity guards;
-- `OpeningCutPlanner` / `PolylineOpeningCutPlanner`;
-- cutter box + `BoolSubtract` inside a CAD transaction;
-- idempotence metadata tied to generated host solid + opening/host geometry;
-- rejection when geometry changed and a previously-cut solid must be rebuilt first.
-
-Current limitation: **curved/bulged host POLYLINE physical cutting remains intentionally unsupported**. Do not claim semantic deduction equals a physical curved-host boolean.
-
----
-
-## 8. Structural / native 3D
-
-Semantic + deterministic quantity paths exist for:
-
-- Beam;
-- Slab;
-- Column;
-- StructuralWall;
-- Foundation;
-- Stair;
-- Railing;
-- Earthwork.
-
-Source-level native 3D paths exist for TKT wall variants and supported structural forms through LINE and/or closed POLYLINE depending on category, with generated-geometry ownership and validation guards.
-
-These native adapters remain **runtime-gated** until a real V25 build/NETLOAD regression proves the exact current SHA.
-
----
-
-## 9. Rebar / BBS / generated rebar geometry
-
-### Deterministic BBS
-
-Current Core includes:
-
-- notation parsing and validation;
-- guarded arithmetic;
-- bar mark / shape / cutting-length concepts;
-- lap/anchor/hook/waste fields used by schedule logic;
-- kg/m, total length and total weight;
-- `QS3DBBS` XLSX;
-- `QS3DBBSVIEW` review/Locate;
-- `QS3DBBSCSV` UTF-8 CSV with formula-injection/control-character/non-finite guards and atomic replacement.
-
-### Column vertical rebar geometry
-
-`QS3DREBAR3D` supports a guarded first native path for rectangular columns:
-
-- closed 4-vertex rectangle POLYLINE;
-- XY/orthogonality/bulge guards;
-- `RebarNotation` one-diameter path;
-- cover + explicit/inferred bars-along-width/depth;
-- deterministic rectangular perimeter layout;
-- vertical Solid3d bars.
-
-### BBS shape geometry
-
-Concurrent full-domain work added:
-
-- `RebarShapePathBuilder` for deterministic STRAIGHT / L / U / S path generation;
-- `QS3DREBAR3DSHAPE`;
-- segmented-cylinder native shape solids with bounded per-element/per-batch counts;
-- `GeneratedShapeRebarHandles` metadata.
-
-### Ownership / health invariants
-
-`GeneratedRebarOwnershipGuard` indexes both:
-
-- `GeneratedRebarHandles`;
-- `GeneratedShapeRebarHandles`.
-
-Before destructive re-generation, a handle must be owned by the exact element/property key; cross-element/cross-key ownership conflicts are rejected instead of erased.
-
-`GeneratedRebarHealthService` distinguishes column vs shape handle sets and supports separate liveness checks. Commands include:
-
-- `QS3DREBARHEALTH`;
-- `QS3DREBARSHAPEHEALTH`.
-
-Keep physical BBS-shape geometry and BBS schedule semantics separate: a valid schedule is not proof every shape can be safely authored in native CAD for every host/category.
-
----
-
-## 10. Recognition / templates / audit / revision
-
-### Recognition
-
-Recognition is deterministic/rule-based and review-oriented:
-
-- layer/text/block/tag evidence;
-- entity-type compatibility;
-- Vietnamese normalization;
-- token-boundary matching (e.g. normalized `dam` must not match inside `DAMAGE`);
-- confidence + candidate margin;
-- review UI;
-- high-confidence auto-apply only;
-- semantic collision rejection;
-- project/company layer mappings override fallback heuristics;
-- invalid/ambiguous mapping/confidence state rejected.
-- `QS3DB4D` performs a bounded whole-Current-Space scan, excludes generated mass/rebar/shape-rebar handles, reads curve/Polyline/Region/Hatch/Solid3d metrics and auto-applies only high-confidence results. Rescan replaces stale source-derived metrics/`CAD.*` metadata while preserving existing Family/Floor/Zone context.
-
-### Templates
-
-`.qstemplate` can carry company standards such as:
-
-- Families;
-- QuantityRules;
-- recognition layer mappings;
-- BQ visible columns;
-- generic Family material/classification properties.
-
-Template import is guarded by validation, backup/rollback logic, inherited-vs-instance property safety and audit provenance. Do not introduce implicit destructive project saves during failed import.
-
-### Audit / Revision
-
-Current source has:
-
-- persisted project audit trail and Audit UI;
-- revision baseline/diff persistence via `.qsrev`;
-- Before/After/Delta/% rows + Locate;
-- finite/overflow-safe revision arithmetic and duplicate-ID rejection.
-
----
-
-## 11. UI / navigation currently implemented
-
-Current source includes the dark BLT-like workspace structure, Ribbon, Workspace palettes and Full Domain Hub.
-
-Important current UX additions include:
-
-- typed property editors for booleans/choices/numbers;
-- inherited-vs-instance override behavior;
-- selection inspection;
-- Focus / Isolate / Unisolate;
-- Zone/Floor/Family/tree workflows;
-- TKT variant capture;
-- Wall junction analysis / preview/apply workflow;
-- Room Auto;
-- Opening auto host / physical cut;
-- column + BBS-shape rebar 3D and health;
-- BQ/BBS/Recognition/Revision/Template/Audit/Health access.
-
-The native BricsCAD viewport remains the central viewport; UI mockups are design targets, not runtime screenshots.
-
----
-
-## 12. Model Health / CAD ownership invariants
-
-Model Health currently covers multiple layers:
-
-- required semantic dimensions by category;
-- material inheritance issues;
-- host/dependency consistency;
-- rebar definitions/lengths;
-- source handle liveness;
-- erased/non-Entity source rejection;
-- generated host Solid3d format/ownership/category/liveness;
-- generated-vs-source-handle separation;
-- column generated rebar ownership/count/liveness;
-- BBS shape generated rebar ownership/count via Core and dedicated shape-health liveness command.
-
-Do not weaken Health just to make incomplete data appear valid.
-
----
-
-## 13. BQ / reporting / Excel
-
-Current BQ/reporting includes:
-
-- stable Floor/Family grouping where appropriate;
-- semantic regeneration before consumption;
-- filters, Locate and real recalculate callback;
-- visible-column preferences persisted in project metadata;
-- finite/overflow-safe accumulation;
-- real XLSX output with expected headers/filter/freeze behavior;
-- drawing-unit-aware fallback takeoff rather than silent hard-coded millimeters.
-- exported aggregate rows contain stable QS3D Element IDs, hexadecimal CAD handles and the owning DWG fingerprint;
-- `QS3DED2` aliases the BQ/export workflow;
-- `QS3DEXCELLOCATE` fails closed when the workbook fingerprint differs from the active DWG. Legacy BLT hidden `$<decimal handle>` rows are supported only after explicit `YES` confirmation because they have no fingerprint;
-- generated room-finish rows resolve source handles transitively through their Room dependency without duplicating semantic ownership.
-
-Undefined/unsupported units must remain explicitly surfaced to users.
-
----
-
-## 14. V25 package / DemandLoad / runtime probe
+### Door / Opening
 
 Current source includes:
 
-- V25 release ZIP tooling;
-- generated command manifest;
-- package metadata + SHA-256 hashes;
-- exclusion of BricsCAD-owned runtime DLLs;
-- per-user V25 DemandLoad install/uninstall scripts;
-- payload hash verification;
-- optional Authenticode enforcement;
-- staged replacement, `-WhatIf`/confirmation and safe uninstall;
-- runtime probe that verifies actual palette visibility rather than command dispatch alone.
+- Door/Opening semantic capture;
+- manual host link;
+- conservative Auto Host with floor/zone/elevation/ambiguity guards;
+- semantic opening deductions;
+- physical opening cut paths for supported generated wall hosts;
+- guarded straight-polyline and newer curved-host source paths where current source explicitly supports them;
+- Door/Opening schedule/export UI added by concurrent main work.
 
-Historical GitHub-hosted successful runs include `31343984922`, `31346731964`, `31346906413` for their exact older snapshots.
+Never generalize current guarded curved/opening support into a claim that arbitrary freeform corner-crossing booleans are solved.
 
-They do **not** certify newer source committed after those heads.
+### Curtain / Vách Kính
 
-Historical Gate C attempt `31341184031` remained queued because no matching `[self-hosted, windows, x64, bricscad-v25]` runner was available.
+Concurrent `main` work includes dedicated Curtain Hub/frame overlay, opening-aware frame planning, generated Curtain-frame ownership/stale/health metadata and current release/schedule tooling. Inspect current Curtain source before changing it; it evolved materially during this audit.
 
 ---
 
-## 15. Manual preflight structure on current source
+## 5. Structure, quantity, recognition and reporting
 
-Manual workflows currently include source guards such as:
+Semantic structure/quantity paths exist for Beam, Slab, Column, StructuralWall, Foundation, Stair, Railing and Earthwork, with guarded native source paths depending on category.
 
-- `scripts/preflight.py`;
-- `scripts/preflight-full-domain.py`;
-- `scripts/preflight-room-lifecycle.py`;
-- `scripts/preflight-geometry-completion.py`;
-- `scripts/preflight-room-curve-sources.py`;
-- `scripts/preflight-wall-junctions.py`;
-- release PowerShell syntax checks;
-- Core Release build/smokes when explicitly dispatched;
-- V25 adapter/package/runtime steps only on the self-hosted V25 runner when explicitly dispatched.
+Current reporting includes:
 
-Newest source was **not** automatically CI-run merely because these preflights were wired into the manual workflows.
+- deterministic semantic regeneration;
+- BQ review/group/filter/Locate;
+- drawing-unit-aware fallback takeoff;
+- XLSX/CSV paths with spreadsheet/file safety guards;
+- stable element/drawing references in current exports;
+- Door/Opening and other schedule work added concurrently on `main`.
 
----
-
-## 15.1 Local integration evidence
-
-- branch baseline: `origin/main` `b00d03f` plus rebased B4D/ED2 and hardening changes;
-- exact installed BricsCAD V25.2.10 references compiled the Release/x64 adapter with **0 warnings / 0 errors**;
-- deterministic Core smoke executable: `ALL PASS`;
-- all twenty-one local `preflight*.py` scripts, including the aggregate auto-discovery gate: PASS using BricsCAD's bundled Python 3.9;
-- reconciled beam longitudinal/stirrup and column-tie batches now compile; generated-output stale lifecycle is implemented, destructive beam-rebar replacement is ownership-guarded, and Wall Snap revalidates both source fingerprint and plan hash inside the write transaction;
-- supplied `DGKL.xlsx` was inspected read-only: row 5 decimal handles `12510,12512` → `30DE,30E0`; row 6 → `30DF,30E1`;
-- no GitHub Action was dispatched and no private DWG/XLSX/BLT payload was added to Git.
-
-This is source/build/static/file-format evidence, not interactive NETLOAD or command-runtime proof.
+Recognition is deterministic/rule-based with review, confidence/margin handling, semantic collision rejection and project/company layer mappings. Whole-space B4D/recognition code must continue to exclude generated geometry families rather than recapturing generated solids as new semantic source CAD.
 
 ---
 
-## 16. Remaining truth gaps / work still not safe to call complete
+## 6. Current rebar/native generated families
 
-Even though source breadth is now large, keep these gaps explicit:
+Current source has guarded generated rebar families for:
 
-1. the final published SHA still needs real V25 NETLOAD/DemandLoad qualification and a final compile confirmation if `main` moves again;
-2. private sample-DWG regression;
-3. actual Ribbon/Palette/Domain Hub/typed-property/Focus/Isolate/Room Auto/Rebar/Opening-cut runtime verification;
-4. Windows 100/125/150/200% DPI + Vietnamese Unicode visual acceptance;
-5. wall polyline/freeform authoring and corner/junction behavior beyond currently guarded source paths;
-6. wall Snap Apply must be runtime-proven before treating it as production-safe CAD mutation;
-7. curved/bulged wall-host physical opening boolean;
-8. larger real-world room-network performance and topology corpus;
-9. broader physical rebar placement/host-aware ties/stirrups/bend-radius semantics;
-10. production Authenticode signing/signed updater and optional commercial backend.
+1. Column longitudinal bars — `QS3DREBAR3D`;
+2. Column ties — `QS3DREBARTIES3D`;
+3. Beam longitudinal bars — `QS3DBEAMREBAR3D`;
+4. Beam stirrups — `QS3DREBARSTIRRUP3D`;
+5. supported BBS-shape geometry — `QS3DREBAR3DSHAPE`;
+6. Slab X/Y mesh — `QS3DSLABREBAR3D`;
+7. Structural Wall H/V mesh — `QS3DWALLREBAR3D`;
+8. **Foundation X/Y mesh — `QS3DFOUNDATIONREBAR3D`**.
 
-Cloudflare, if used later, is an optional backend for licensing/update/team metadata/package delivery, not the runtime host for the Windows BricsCAD plugin.
+### Foundation Mesh — merged in `df43d672...`
 
----
+Foundation Mesh deliberately reuses **`RectangularSlabMeshPlanner`** rather than forking another mesh math engine.
 
-## 17. Local V25 acceptance sequence
+Native adapter contract:
 
-A local/Windows agent with licensed BricsCAD V25 should prioritize:
+- selected QS3D `Foundation` semantic source;
+- one closed 4-vertex rectangular plan-view `POLYLINE` per Foundation element;
+- rotated rectangles supported;
+- bulged/arbitrary polygons rejected rather than placing straight bars outside the host;
+- duplicate semantic ownership rejected before CAD mutation;
+- bounded batch bar count;
+- finite-safe coordinate/offset math;
+- X and Y may use **independent diameter, count or spacing**;
+- one direction cannot specify count and spacing simultaneously;
+- `RebarFoundationFaces = Bottom | Top | Both`;
+- `RebarFoundationXClosestToFace` controls layer ordering;
+- native transaction commits before Foundation stale state is cleared.
 
-1. fetch latest `main`, record exact SHA;
-2. build Core + adapter Release/x64 against exact installed V25 assemblies;
-3. package + DemandLoad/NETLOAD;
-4. run `QS3DRUNTIMEPROBE` and retain safe evidence;
-5. verify Ribbon + left/right palettes + Domain Hub;
-6. test 100/125/150/200% DPI;
-7. multi-document open/activate/Save As/close;
-8. Xref/layer/select/Focus/Isolate;
-9. TKT LINE/open-POLYLINE/bulge build + rebuild;
-10. Wall Junction analysis, preview and guarded Apply;
-11. Room Auto with LINE/POLYLINE/bulge/ARC/SPLINE and stale/split/merge lifecycle;
-12. Opening manual/auto host, re-host, straight-POLYLINE physical cut, and changed-geometry rejection;
-13. HT_Phòng sync/untracking safety;
-14. structural native 3D source paths;
-15. column `QS3DREBAR3D`, BBS-shape `QS3DREBAR3DSHAPE`, both health commands;
-16. BQ/`QS3DED2` XLSX fingerprint round-trip plus `QS3DEXCELLOCATE` for both matching QS3D export and explicitly confirmed legacy BLT row;
-17. `QS3DB4D` whole-space scan, generated-geometry exclusion, ambiguous review and same-handle rescan after Area/Text removal;
-18. BBS XLSX/CSV;
-19. Recognition + company mappings;
-20. Template export/import rollback and inheritance behavior;
-21. Revision/Audit/Model Health;
-22. package install/uninstall on a clean V25 test profile;
-23. private DWG + screenshot evidence.
+Dedicated generated metadata starts with `GeneratedFoundationMesh*`, including handles/count/diameters/actual spacing/cover/faces/mode.
 
-Only then update runtime status as “verified”.
+Detailed contract: `docs/FOUNDATION-REBAR3D.md`.
 
----
+### Mesh Setup
 
-## 18. Agent start protocol
+`QS3DREBARMESHSETUP` now supports:
 
-Every new agent:
+- Slab;
+- StructuralWall;
+- Foundation.
 
-```text
-1. Read AGENTS.md
-2. Read CI_POLICY.md
-3. Fetch latest main
-4. Inspect commits newer than ded0b605f5630851f5bfc8a383651acd32e0005d
-5. Read this file
-6. Read docs/IMPLEMENTATION-STATUS.md
-7. Read docs/COMMANDS.md and docs/PLAN.md
-8. Inspect actual source for the feature
-9. Decide Core-safe vs real-V25-required
-10. Implement on latest tree
-11. Fetch main again before push and reconcile races
-12. Do not dispatch Actions without explicit owner request
-```
+The setup UI validates **explicit user input** only. It does not recommend structural reinforcement. A previous artificial same-diameter restriction was removed: direction 1 and direction 2 may use independent diameter/count/spacing because the native planners support that contract.
 
-Use `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` when deeper chronology, screenshot evidence, early branch names or historical reasoning is needed.
+### Beam consistency fix
+
+Beam longitudinal native geometry now uses the same **5 mm near-horizontal planarity tolerance** as Beam Stirrup. This avoids the previous inconsistent state where the same slightly noisy Beam LINE could pass stirrup generation but fail longitudinal generation.
 
 ---
 
-## 19. Final continuation statement
+## 7. Generated ownership, invalidation and stale lifecycle
 
-Current QS3D source is well beyond the original UI shell: it includes schema-v3 persistence, deterministic regeneration/rules, TKT/Room/HT_Phòng/Cửa, structural semantics/native source paths, wall topology analysis/review-gated cleanup, automatic room discovery including direct curves, conservative automatic host matching, guarded physical opening cuts, B4D whole-space recognition, BQ/ED2 fingerprinted XLSX reverse lookup, deterministic BBS + CSV, column and BBS-shape native rebar source paths, Recognition, Template, Revision, Audit, Model Health, Focus/Isolate, Xref/Layer/selection and V25 DemandLoad/package tooling.
+Generated rebar ownership is fail-closed. Before destructive replacement, a handle must be owned by the exact element/property family. Cross-element/cross-family handle conflicts are rejected rather than erased.
 
-The major remaining truth boundary is still **current-main execution inside a real licensed BricsCAD V25 environment**.
+Current rebar-generated ownership families include:
+
+- `GeneratedRebarHandles`;
+- `GeneratedShapeRebarHandles`;
+- `GeneratedTieRebarHandles`;
+- `GeneratedBeamStirrupHandles`;
+- `GeneratedSlabMeshHandles`;
+- `GeneratedWallMeshHandles`;
+- `GeneratedFoundationMeshHandles`.
+
+Host geometry rebuild through `GeneratedDependentGeometryInvalidator` invalidates/erases owned dependent rebar sets, including Foundation Mesh, and preserves the current Curtain generated-frame lifecycle.
+
+`ProjectElement` now tracks per-output stale snapshots for **nine generated output families**:
+
+1. generated host solid;
+2. longitudinal rebar;
+3. BBS-shape rebar;
+4. Column ties;
+5. Beam stirrups;
+6. Slab mesh;
+7. Wall mesh;
+8. Foundation mesh;
+9. Curtain frame.
+
+A semantic/source mutation marks only existing generated outputs stale. Replacing a handle set or explicitly completing that builder clears its own stale family without pretending unrelated outputs were rebuilt.
+
+---
+
+## 8. Health model
+
+`QS3DREBARHEALTHALL` includes longitudinal, shape, ties, stirrups, Slab mesh, Wall mesh and Foundation mesh plus cross-family ownership checks.
+
+`QS3DHEALTHALL` aggregates:
+
+- semantic/model health;
+- generated stale health;
+- rebar family health;
+- Curtain-frame health;
+- rebar-specific cross-key ownership;
+- generic generated-handle ownership (`GeneratedHandleOwnershipHealthService` from concurrent `main`);
+- generated rebar mode/category metadata checks;
+- dedupe + Locate.
+
+`GeneratedRebarModeHealthService` was corrected so Slab/Wall/Foundation mesh validation reads their **dedicated handle and mode slots** rather than incorrectly depending on `GeneratedRebarHandles`.
+
+Foundation health command: `QS3DFOUNDATIONREBARHEALTH`.
+
+Do not weaken Health to make incomplete data appear valid.
+
+---
+
+## 9. BBS boundary
+
+BBS schedule semantics and native mesh geometry are intentionally separate.
+
+`ProjectRebarScheduleBuilder` relies on explicit semantic BBS/cutting/distribution data. Slab/Wall/Foundation native mesh geometry does **not** automatically invent fabrication hooks, anchorage, cutting lengths or schedule rows from footprint geometry alone.
+
+Do not fabricate missing engineering/fabrication data merely to make every native mesh appear in BBS.
+
+---
+
+## 10. UI entry points
+
+Current source exposes the main rebar/health workflow through:
+
+- Ribbon QTY tab;
+- Full Domain Hub;
+- Rebar 3D Hub;
+- Mesh Setup;
+- Health All / Rebar Health All.
+
+Foundation Mesh and Foundation Health are present beside Slab/Wall mesh. Concurrent `main` also contains current Release Readiness, Door schedule and Curtain tools; preserve those entries when editing Ribbon/Hub files.
+
+---
+
+## 11. Static/smoke regression source
+
+Foundation integration added/extended source gates for:
+
+- Foundation native source/ownership/health/UI contracts;
+- generated stale snapshots;
+- unified Rebar Health All;
+- full Health All;
+- mode/category health;
+- Foundation-specific smoke registration;
+- nine-family generated stale regression;
+- generated-output snapshot health regression.
+
+`preflight-all.py` auto-discovers `preflight-*.py`, so no separate Foundation workflow was added.
+
+**Important validation boundary:** during this audit these new/modified preflight scripts and Core smoke tests were added/reconciled in source, but were **not executed in this chat**, and GitHub Actions were **not dispatched**.
+
+---
+
+## 12. V25 runtime / release boundary
+
+The repository contains current package/DemandLoad/runtime-probe/release-readiness source. Concurrent `main` also added synthetic sample/release preparation work.
+
+Historical green GitHub runs certify only their exact older snapshots. They do not certify the current `main`.
+
+Historical V25 Gate C remained blocked/queued because no matching licensed `[self-hosted, windows, x64, bricscad-v25]` runner was available.
+
+For the current source, still required before claiming V25 runtime completion:
+
+- build adapter against the exact installed V25 `BrxMgd.dll` / `TD_Mgd.dll`;
+- DemandLoad/NETLOAD on licensed BricsCAD V25;
+- command/Ribbon/palette smoke regression;
+- private-DWG regression for geometry, ownership, save/reopen/multi-DWG behavior;
+- Foundation/Slab/Wall rebar native geometry verification in real drawing units;
+- Unicode/HiDPI/screenshot comparison on the real runtime.
 
 Precise wording remains mandatory:
 
-**source-implemented / deterministic-Core-covered / locally compiled ≠ NETLOAD/runtime-verified in BricsCAD V25.**
+**source-implemented / deterministic-Core-covered / static-regression-source-present ≠ NETLOAD/runtime-verified in BricsCAD V25.**
+
+---
+
+## 13. Remaining product work
+
+Major remaining runtime/product gaps include:
+
+- exact current V25 compile/NETLOAD/private-DWG proof;
+- generalized clipped/polygonal Slab/Foundation mesh beyond the guarded rectangle adapter;
+- broader structural rebar authoring such as advanced wall zones, multi-zone Beam reinforcement and editing/manipulation;
+- fabrication hooks/bend radii/anchorage only when explicit engineering data exists;
+- more production-grade Curtain/Pier authoring beyond current guarded paths;
+- more complete wall-junction solid reconciliation for complex intersections;
+- arbitrary freeform/corner-crossing opening booleans beyond current guarded source paths;
+- real-runtime UI/DPI polish;
+- production signing/updater/licensing infrastructure and certificates where applicable.
+
+---
+
+## 14. Next-agent checklist
+
+1. Read `AGENTS.md`, `CI_POLICY.md` and this handoff.
+2. Fetch current `main`; do not assume `df43d672...` is still HEAD.
+3. Inspect commits newer than `df43d672...` before touching shared Ribbon/Hub/Health/release files.
+4. Never reintroduce a second Slab/Foundation mesh math engine; reuse/generalize current planners.
+5. Preserve independent mesh direction inputs.
+6. Preserve per-output stale snapshots and fail-closed generated ownership.
+7. Do not infer BBS fabrication data from native mesh geometry without explicit semantic inputs.
+8. Do not run Actions unless the user explicitly authorizes CI/workflow execution.
+9. Do not call current native paths runtime-verified without a licensed V25 build/NETLOAD/private-DWG proof.
