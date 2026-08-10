@@ -15,8 +15,16 @@ files = {
     "bbs": UI / "RebarScheduleWindow.xaml.cs",
     "door_schedule": UI / "DoorOpeningScheduleWindow.xaml.cs",
     "room_schedule": UI / "RoomFinishScheduleWindow.xaml.cs",
+    "domain_hub": UI / "DomainHubWindow.xaml.cs",
     "commands": ADAPTER / "Commands.cs",
     "review": ADAPTER / "ReviewCommands.cs",
+    "families": ADAPTER / "FamilyManagerCommands.cs",
+    "levels": ADAPTER / "FloorLevelCommands.cs",
+    "zones": ADAPTER / "ZoneManagerCommands.cs",
+    "materials": ADAPTER / "MaterialCatalogCommands.cs",
+    "project_tools": ADAPTER / "ProjectToolsCommands.cs",
+    "schedule_hub": ADAPTER / "ScheduleHubCommands.cs",
+    "curtain_hub": ADAPTER / "CurtainWallHubCommands.cs",
 }
 for key, path in files.items():
     if not path.is_file():
@@ -63,6 +71,31 @@ if not errors:
     if "new RebarScheduleWindow(doc, rows, locate, fileName)" not in text["review"]:
         errors.append("QS3DBBSVIEW launcher must pass its source Document to RebarScheduleWindow")
 
+    manager_contracts = {
+        "families": "new FamilyManagerWindow(document)",
+        "levels": "new FloorLevelWindow(document)",
+        "zones": "new ZoneManagerWindow(document)",
+        "materials": "new MaterialCatalogWindow(document)",
+        "project_tools": "new ProjectToolsWindow(document)",
+        "schedule_hub": "new ScheduleHubWindow(document)",
+        "curtain_hub": "new CurtainWallWindow(document)",
+    }
+    for key, constructor in manager_contracts.items():
+        source = text[key]
+        if constructor not in source:
+            errors.append(key + " launcher lost its explicit source Document constructor")
+        if "DocumentBoundWindowLifetime.Attach(window, document);" not in source:
+            errors.append(key + " launcher must attach its document-bound modeless window lifetime")
+        if "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
+            errors.append(key + " launcher must show the same registered window instance")
+
+    # DomainHub is intentionally an active-document command launcher, not a source-DWG-bound editor.
+    # Binding it to the document that happened to be active when the hub opened would break intended multi-DWG UX.
+    if "Application.DocumentManager.MdiActiveDocument" not in text["domain_hub"]:
+        errors.append("DomainHub must continue resolving the active DWG at command-click time")
+    if "DocumentBoundWindowLifetime.Attach" in text["domain_hub"] or "private readonly Document _document" in text["domain_hub"]:
+        errors.append("DomainHub must remain active-document dynamic, not source-DWG-bound")
+
 print("QS3D document-bound modeless lifetime preflight")
 if errors:
     for error in errors:
@@ -70,4 +103,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: core modeless review/health/BQ/BBS/Door/HT_Phòng windows are explicitly bound to their source Document and unregister/close when that DWG is destroyed, preventing stale Document/project retention after close.")
+print("PASS: document-bound review/health/BQ/BBS/schedule/manager/hub windows close with their source DWG, while the intentionally active-document Domain Hub remains dynamic across DWGs.")
