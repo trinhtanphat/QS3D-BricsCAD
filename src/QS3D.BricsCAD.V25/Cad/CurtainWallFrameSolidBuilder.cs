@@ -34,6 +34,7 @@ namespace QS3D.BricsCAD.V25.Cad
             public double FrameDepthM { get; set; }
             public double SourceLengthM { get; set; }
             public double HeightM { get; set; }
+            public string ConfigFingerprint { get; set; } = string.Empty;
         }
 
         public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project)
@@ -92,6 +93,18 @@ namespace QS3D.BricsCAD.V25.Cad
                         MullionWidthM = NonNegative(CadGeometryGuard.Number(element, family, "CurtainMullionWidthM", 0.05d), element.Id + "/CurtainMullionWidthM"),
                         TransomWidthM = NonNegative(CadGeometryGuard.Number(element, family, "CurtainTransomWidthM", 0.05d), element.Id + "/CurtainTransomWidthM")
                     };
+                    var configFingerprint = CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
+                    {
+                        LengthM = lengthM,
+                        HeightM = heightM,
+                        BottomOffsetM = bottomOffsetM,
+                        MaxPanelWidthM = input.MaxPanelWidthM,
+                        MaxPanelHeightM = input.MaxPanelHeightM,
+                        PerimeterFrameWidthM = input.PerimeterFrameWidthM,
+                        MullionWidthM = input.MullionWidthM,
+                        TransomWidthM = input.TransomWidthM,
+                        FrameDepthM = frameDepthM
+                    });
                     var detail = CurtainWallDetailPlanner.Plan(input);
                     var frameCount = checked(detail.VerticalFrames.Count + detail.HorizontalFrames.Count);
                     if (frameCount > MaxFramesPerElement) throw new InvalidOperationException(element.Id + " cần " + frameCount + " curtain frame solids, vượt giới hạn native " + MaxFramesPerElement + ". Tăng panel size hoặc chia vách.");
@@ -109,7 +122,8 @@ namespace QS3D.BricsCAD.V25.Cad
                         Rows = detail.Layout.Rows,
                         FrameDepthM = frameDepthM,
                         SourceLengthM = lengthM,
-                        HeightM = heightM
+                        HeightM = heightM,
+                        ConfigFingerprint = configFingerprint
                     };
 
                     foreach (var frame in detail.VerticalFrames.Concat(detail.HorizontalFrames))
@@ -140,6 +154,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["GeneratedCurtainFrameDepthM"] = update.FrameDepthM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedCurtainFrameSourceLengthM"] = update.SourceLengthM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedCurtainFrameHeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedCurtainFrameConfigFingerprint"] = update.ConfigFingerprint;
                 update.Element.Properties["GeneratedCurtainFrameMode"] = Mode;
                 update.Element.ClearGeneratedCurtainFrameStale();
                 AuditTrail.ForProject(project).Record("geometry.curtain.frames", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " frame solids");
