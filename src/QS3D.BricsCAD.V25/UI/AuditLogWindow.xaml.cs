@@ -3,30 +3,42 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Bricscad.ApplicationServices;
 using QS3D.Core.Audit;
-using QS3D.Core.Domain;
 
 namespace QS3D.BricsCAD.V25.UI
 {
     public partial class AuditLogWindow : Window
     {
-        private readonly ProjectState _project;
+        private readonly Document _document;
         private IReadOnlyList<AuditEvent> _rows = Array.Empty<AuditEvent>();
 
-        public AuditLogWindow(ProjectState project)
+        public AuditLogWindow(Document document)
         {
-            _project = project ?? throw new ArgumentNullException(nameof(project));
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             InitializeComponent();
+            Activated += (_, __) => Reload();
             Reload();
         }
 
         private void Reload()
         {
-            _rows = _project.AuditEvents
-                .Where(x => x != null)
-                .OrderByDescending(x => x.Utc)
-                .ToList();
-            ApplyFilter();
+            try
+            {
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                _rows = project.AuditEvents
+                    .Where(x => x != null)
+                    .OrderByDescending(x => x.Utc)
+                    .ToList();
+                Title = "QS3D • Nhật ký thay đổi • " + DrawingLabel(_document);
+                ApplyFilter();
+            }
+            catch (Exception ex)
+            {
+                _rows = Array.Empty<AuditEvent>();
+                if (Grid != null) Grid.ItemsSource = _rows;
+                if (Summary != null) Summary.Text = "Không đọc được audit: " + ex.Message;
+            }
         }
 
         private void OnSearchChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
@@ -43,5 +55,13 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         private static bool Contains(string value, string query) => (value ?? string.Empty).IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0;
+
+        private static string DrawingLabel(Document document)
+        {
+            var name = document.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
+            try { return System.IO.Path.GetFileName(name); }
+            catch { return name; }
+        }
     }
 }
