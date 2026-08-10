@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             UnrelatedAmbiguityDoesNotBlockCleanSelection();
             SelectedAmbiguityIsRejected();
             GeneratedMultiHandleResolvesOwner();
+            FoundationMeshGeneratedHandleResolvesOwner();
         }
 
         private static void UnrelatedAmbiguityDoesNotBlockCleanSelection()
@@ -42,6 +43,18 @@ namespace QS3D.Core.SmokeTests
             var resolved = SemanticHandleOwnershipResolver.Resolve(project, new[] { "c2" });
             if (resolved.Count != 1 || resolved[0].Id != "CW")
                 throw new Exception("Generated multi-handle selection did not resolve its semantic owner.");
+        }
+
+        private static void FoundationMeshGeneratedHandleResolvesOwner()
+        {
+            var project = Project();
+            var foundation = new ProjectElement("FND", ElementCategory.Foundation, string.Empty, string.Empty, string.Empty);
+            foundation.Properties["GeneratedFoundationMeshHandles"] = "F1; F2 ; F2";
+            project.Elements.Add(foundation);
+
+            var resolved = SemanticHandleOwnershipResolver.Resolve(project, new[] { "f2" });
+            if (resolved.Count != 1 || resolved[0].Id != "FND")
+                throw new Exception("Generated foundation-mesh selection did not resolve its semantic owner.");
         }
 
         private static ProjectState Project()
