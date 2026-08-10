@@ -207,11 +207,11 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshAfterCommit(Action refresh, string successMessage, string context)
         {
+            SetStatus(successMessage);
             try
             {
                 refresh();
                 PaletteCoordinator.RefreshProject();
-                SetStatus(successMessage);
             }
             catch (Exception refreshError)
             {
