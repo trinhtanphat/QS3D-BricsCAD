@@ -47,6 +47,7 @@ namespace QS3D.BricsCAD.V25
                 combined.AddRange(new GeneratedTieRebarHealthService().Inspect(project, liveTies));
                 combined.AddRange(new GeneratedBeamStirrupHealthService().Inspect(project, liveStirrups));
                 combined.AddRange(new GeneratedSlabMeshHealthService().Inspect(project, liveSlabMesh));
+                combined.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
 
                 var issues = combined
                     .GroupBy(x => x.Severity + "|" + x.Code + "|" + x.ElementId + "|" + x.Message, StringComparer.Ordinal)
