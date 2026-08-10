@@ -35,6 +35,23 @@ namespace QS3D.BricsCAD.V25.Cad
             return result;
         }
 
+        public static IReadOnlyList<EntitySnapshot> ReadHandles(Document document, IEnumerable<string> handles)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (handles == null) throw new ArgumentNullException(nameof(handles));
+            var objectIds = CadHandleService.Resolve(document, handles);
+            if (objectIds.Count == 0) return Array.Empty<EntitySnapshot>();
+
+            var result = new List<EntitySnapshot>(objectIds.Count);
+            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                foreach (var id in objectIds)
+                    AddSnapshot(transaction, id, result);
+                transaction.Commit();
+            }
+            return result;
+        }
+
         private static IReadOnlyList<EntitySnapshot> ReadSelection(Document document, bool promptIfEmpty)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
