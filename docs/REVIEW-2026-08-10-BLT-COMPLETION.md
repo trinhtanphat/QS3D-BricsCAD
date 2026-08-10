@@ -7,7 +7,7 @@ This review records the source-level completion batch applied directly to `main`
 - Core/domain contracts used by the UI and geometry adapters.
 - Main WPF workspace, Family/property inspector, semantic tree, selected-object review, Ribbon and Full Domain Hub.
 - Tường KT, Cửa/Lỗ mở, Room Auto, native wall geometry, physical opening boolean workflow and current rebar geometry path.
-- Static geometry/full-domain preflight and documentation/status consistency.
+- Static geometry/full-domain/room-curve preflight and documentation/status consistency.
 - Concurrent `main` activity was re-read before writes; stale SHA writes were allowed to fail rather than force-overwriting newer work.
 
 ## Completed in this batch
@@ -30,14 +30,16 @@ This review records the source-level completion batch applied directly to `main`
 
 ### Room Auto completion preserved and guarded
 
-- Preserved the concurrent direct planar ARC adapter added while this review was in progress.
-- `QS3DROOMAUTO` now accepts planar LINE/POLYLINE/ARC source networks; direct ARC and polyline bulges are tessellated before Core topology discovery.
-- ARC/POLYLINE plan-view normal and cross-source elevation tolerance are validated so mixed-Z/non-planar boundaries are not silently flattened.
-- `scripts/preflight-full-domain.py` now guards the ARC adapter, planarity checks and command wiring in addition to the existing Room Auto lifecycle/rollback/performance contracts.
+- Preserved concurrent direct planar ARC and bounded SPLINE adapters added while this review was in progress.
+- `QS3DROOMAUTO` now accepts planar LINE/POLYLINE/ARC/SPLINE source networks. Direct ARC and polyline bulges are tessellated by sagitta; SPLINE is sampled by configurable chord length with a hard segment cap.
+- ARC/POLYLINE plan-view orientation and all LINE/ARC/POLYLINE/SPLINE sample elevations are validated so mixed-Z/non-planar boundaries are not silently flattened.
+- Room boundary provenance continues through a shared semantic reference resolver so Locate/BQ/Health/BBS/revision navigation does not require duplicate semantic ownership handles.
+- Static guards cover ARC/SPLINE adapter wiring, planarity, bounded sampling and Room Auto lifecycle/rollback/performance contracts.
 
 ### Cửa/Lỗ mở and rebar integration
 
 - Preserved the newer physical opening boolean implementation already merged concurrently: cutter preparation happens before mutation and the idempotence fingerprint includes live host/opening geometry, so moving an opening cannot be silently treated as an already-applied cut.
+- Physical cutting now covers compatible generated LINE-host solids for Tường Gạch/ArchitecturalWall, Vách Kính/GlassWall, Trụ Tường/WallPier and Vách BTCT/StructuralWall.
 - Surfaced `QS3DCUTOPENINGS` in Ribbon and Full Domain Hub together with capture and host-link actions.
 - Surfaced the current guarded rectangular-column `QS3DREBAR3D` path in Ribbon and Full Domain Hub while keeping its scope explicit.
 
@@ -49,19 +51,20 @@ This review records the source-level completion batch applied directly to `main`
 
 ### Regression/documentation guards
 
-- `scripts/preflight-geometry-completion.py` now requires the Tường KT variant commands, workspace wiring, Ribbon/Hub buttons, category-aware wall builders and `QS3DBUILD3D` category forwarding.
-- `scripts/preflight-full-domain.py` now requires direct planar ARC Room Auto + planarity wiring.
+- `scripts/preflight-geometry-completion.py` now requires the Tường KT variant commands, workspace wiring, Ribbon/Hub buttons, category-aware wall builders, `QS3DBUILD3D` category forwarding and the four compatible LINE-wall boolean host categories.
+- Room static guards cover direct planar ARC and bounded SPLINE Room Auto source adapters.
 - README, command reference, implementation status, master plan and UI specification were refreshed to distinguish implemented source paths from runtime-verified behavior.
 
 ## Preserved concurrent fixes
 
-During the review, `main` advanced several times. The batch deliberately preserved newer concurrent work, including:
+During the review, `main` advanced repeatedly. The batch deliberately preserved newer concurrent work, including:
 
-- position/host-aware opening-cut fingerprints;
+- position/host-aware opening-cut fingerprints and expanded LINE-wall host categories;
 - rectangular column rebar geometry and generated-bar ownership health checks;
-- Room Auto lifecycle/topology hardening plus direct planar ARC support;
+- Room Auto lifecycle/topology hardening, direct planar ARC and bounded SPLINE sampling;
+- shared semantic reference-handle Locate behavior;
 - far-origin wall/opening numeric stability guards;
-- geometry-completion preflight/CI wiring.
+- geometry-completion and curve-source preflight wiring.
 
 No force update was used to overwrite these changes.
 
@@ -71,9 +74,9 @@ No force update was used to overwrite these changes.
 2. Real V25 screenshots at 100/125/150/200% DPI and follow-up spacing/icon/context-menu/focus polish.
 3. Production-grade Vách Kính curtain-wall framing/panels and specialized Trụ Tường profiles/material display behavior.
 4. Wall-to-wall joins/T-junction cleanup, freeform/closed-loop profiles and more advanced level/elevation constraints.
-5. Generalized Door/Opening booleans for curved/polyline hosts beyond the current compatible LINE-host path.
+5. Generalized Door/Opening booleans beyond LINE hosts, especially curved/polyline hosts.
 6. General rebar authoring beyond rectangular-column longitudinal bars.
-7. SPLINE/native non-planar room-boundary support only if product requirements justify it; direct planar ARC is already implemented in source.
+7. Native non-planar curve projection only if product requirements justify it; direct planar ARC and bounded SPLINE support are already implemented in source.
 8. Transient highlight/isolate/section-box UX proven against BricsCAD V25.
 
 GitHub Actions remain manual-only. This review updates source and static guards but does not dispatch CI or substitute for licensed BricsCAD V25 runtime proof.
