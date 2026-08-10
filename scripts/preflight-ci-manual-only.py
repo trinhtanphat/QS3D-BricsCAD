@@ -54,14 +54,22 @@ else:
             if re.search(rf"(?m)^\s{{2}}{re.escape(trigger)}\s*:", trigger_block):
                 errors.append(f"{path.name}: forbidden trigger in on: block: {trigger}")
 
+        if "github.event_name == 'workflow_dispatch'" not in text:
+            errors.append(f"{path.name}: every executable workflow must hard-guard jobs to workflow_dispatch event")
+
+        if path.name == "release-v25.yml":
+            for token in ("confirm_release", "inputs.confirm_release == 'RELEASE'", "contents: write"):
+                if token not in text:
+                    errors.append("release-v25.yml missing explicit manual publish guard: " + token)
+
 policy = (ROOT / "CI_POLICY.md").read_text(encoding="utf-8") if (ROOT / "CI_POLICY.md").is_file() else ""
-for token in ("workflow_dispatch", "manual-only", "explicitly requests"):
+for token in ("workflow_dispatch", "manual-only", "explicitly requests", "MANUAL-BUILD-RELEASE"):
     if token not in policy:
         errors.append("CI_POLICY.md missing manual-only policy token: " + token)
 
 readme = (ROOT / "README.md").read_text(encoding="utf-8") if (ROOT / "README.md").is_file() else ""
-if "manual-only" not in readme or "workflow_dispatch" not in readme:
-    errors.append("README.md must state that GitHub Actions are manual-only/workflow_dispatch-only")
+if "manual-only" not in readme or "workflow_dispatch" not in readme or "release-v25.yml" not in readme:
+    errors.append("README.md must document manual-only Actions and the owner-approved release workflow")
 
 print("QS3D manual-only GitHub Actions preflight")
 if errors:
@@ -70,4 +78,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: every GitHub Actions workflow is workflow_dispatch-only; no automatic CI/CD trigger is allowed.")
+print("PASS: every GitHub Actions workflow is workflow_dispatch-only, job-guarded to the manual event, and release publication requires explicit RELEASE confirmation.")
