@@ -10,6 +10,7 @@
 ## Semantic capture
 
 - `QS3DROOM`, `QS3DWALL`, `QS3DOPENING`, `QS3DDOOR`.
+- `QS3DROOMAUTO` — discover bounded room faces from selected straight LINE/POLYLINE networks. The Core engine splits intersections/T-junctions, snaps endpoints by tolerance and removes dangling bridge edges before calculating room area/perimeter.
 - `QS3DBEAM`, `QS3DSLAB`, `QS3DCOLUMN`, `QS3DSTRUCTWALL`, `QS3DFOUNDATION`.
 - `QS3DSTAIR`, `QS3DRAILING`, `QS3DEARTHWORK`.
 - `QS3DFINISH` — generate room finish semantics.
@@ -35,3 +36,9 @@
 
 - `QS3DREVBASE`, `QS3DREVDIFF` — revision baseline/delta workflow.
 - `QS3DVIEW3D`, `QS3DVIEWTOP`, `QS3DORBIT`, `QS3DZOOMSELECTED`, `QS3DZOOMALL` — viewport commands.
+
+## Packaging and autoload
+
+- `scripts/package-v25.ps1` creates the V25 release ZIP, excludes proprietary BricsCAD assemblies, generates `COMMANDS.txt` from current QS3D `CommandMethod` declarations and includes SHA-256 checksums.
+- The package contains `install-demandload.ps1`, a per-user BricsCAD V25 registry DemandLoad installer. It uses OnCommand loading and does not require HKLM writes.
+- DemandLoad/NETLOAD remain part of the licensed V25 runtime gate; source presence is not treated as runtime verification.
