@@ -52,7 +52,6 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("xuất HT_Phòng XLSX");
-                if (_rows.Count == 0) throw new InvalidOperationException("Schedule hiện chưa có dòng để xuất.");
                 var drawingName = string.IsNullOrWhiteSpace(_document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(_document.Name);
                 var dialog = new SaveFileDialog
                 {
@@ -64,8 +63,13 @@ namespace QS3D.BricsCAD.V25.UI
                     FileName = drawingName + "-HT-Phong.xlsx"
                 };
                 if (dialog.ShowDialog() != true) return;
-                RoomFinishXlsxExporter.Export(dialog.FileName, _rows);
-                SetStatus("Đã xuất " + _rows.Count + " nhóm HT_Phòng → " + dialog.FileName);
+
+                var current = BuildCurrentRows(out var regenerated);
+                if (current.Count == 0) throw new InvalidOperationException("Schedule hiện chưa có dòng để xuất.");
+                _rows = current;
+                ApplyFilter();
+                RoomFinishXlsxExporter.Export(dialog.FileName, current);
+                SetStatus("Đã làm mới (regen " + regenerated + ") và xuất " + current.Count + " nhóm HT_Phòng → " + dialog.FileName);
             }
             catch (Exception ex) { SetStatus("Xuất HT_Phòng XLSX lỗi: " + ex.Message); }
         }
@@ -74,10 +78,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureActive("làm mới HT_Phòng Schedule");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                _rows = RoomFinishScheduleBuilder.Build(project);
+                _rows = BuildCurrentRows(out var regenerated);
                 Title = "QS3D • HT_Phòng • " + DrawingLabel(_document);
                 ApplyFilter();
                 SetStatus("Đã nạp " + _rows.Count + " nhóm HT_Phòng • regen " + regenerated + " cấu kiện dirty.");
@@ -88,6 +89,14 @@ namespace QS3D.BricsCAD.V25.UI
                 ApplyFilter();
                 SetStatus("Đọc HT_Phòng Schedule lỗi: " + ex.Message);
             }
+        }
+
+        private IReadOnlyList<RoomFinishScheduleRow> BuildCurrentRows(out int regenerated)
+        {
+            EnsureActive("đọc HT_Phòng Schedule hiện hành");
+            var project = ProjectContextCoordinator.GetOrCreate(_document);
+            regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+            return RoomFinishScheduleBuilder.Build(project);
         }
 
         private void ApplyFilter()
@@ -131,7 +140,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void SetStatus(string text)
         {
             StatusText.Text = text ?? string.Empty;
-            PaletteCoordinator.SetStatus(StatusText.Text);
+            try { PaletteCoordinator.SetStatus(StatusText.Text); } catch { }
         }
     }
 }
