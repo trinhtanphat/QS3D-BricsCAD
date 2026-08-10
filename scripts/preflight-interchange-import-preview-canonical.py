@@ -14,15 +14,25 @@ for path in (SOURCE, SMOKE):
 if SOURCE.is_file():
     text = SOURCE.read_text(encoding="utf-8")
     for token in (
-        "_ = ProjectInterchangeValidatedSnapshotReader.Read(json);",
+        "var source = ProjectInterchangeValidatedSnapshotReader.Read(json);",
+        "var sourceProjectId = source.Project.Id;",
+        "foreach (var zone in source.Zones)",
+        "foreach (var floor in source.Floors)",
+        "foreach (var family in source.Families)",
+        "foreach (var element in source.Elements)",
         "if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))",
         "return raw;",
-        'var canonical = Required(raw, label + " category");',
     ):
         if token not in text:
-            errors.append("ProjectInterchangeImportPreview.cs missing canonical preview token: " + token)
-    if "return value!.Trim();" in text:
-        errors.append("Import preview must not silently trim semantic identity values after validation.")
+            errors.append("ProjectInterchangeImportPreview.cs missing single-reader preview token: " + token)
+    for forbidden in (
+        "ParseValidatedManifest",
+        "DataContractJsonSerializer",
+        "ManifestContract",
+        "return value!.Trim();",
+    ):
+        if forbidden in text:
+            errors.append("Import preview must not maintain a second identity parser/normalizer: " + forbidden)
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -41,4 +51,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: interchange preview shares the canonical typed-reader boundary and cannot preview identities/timestamps that apply will later reject.")
+print("PASS: interchange preview consumes the canonical typed snapshot directly and cannot diverge through a second manifest parser or silent identity trimming.")
