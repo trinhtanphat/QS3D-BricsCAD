@@ -4,9 +4,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 INVALIDATOR = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
 SOURCE_RECONCILE = ROOT / "src/QS3D.BricsCAD.V25/Services/SourceReconcileService.cs"
+GRID_BUILDER = ROOT / "src/QS3D.BricsCAD.V25/Cad/GridAnnotationBuilder.cs"
 
 text = INVALIDATOR.read_text(encoding="utf-8")
 reconcile = SOURCE_RECONCILE.read_text(encoding="utf-8")
+builder = GRID_BUILDER.read_text(encoding="utf-8")
 
 required = {
     "grid annotation owner slot": "GridAnnotationBuilder.HandlesKey",
@@ -29,11 +31,33 @@ if 'RemoveByPrefix(element, "GeneratedSemanticTag")' in text:
 if "GeneratedSemanticTagHandles" in text:
     raise SystemExit("source-reconcile grid annotation preflight failed: semantic tag handles must remain outside spatial generated-output invalidation")
 
+for token in (
+    "internal static void RebuildInTransaction(",
+    "Transaction transaction,",
+    "ProjectElement element)",
+    "ReplaceOne(document, transaction, project, element);",
+):
+    if token not in builder:
+        raise SystemExit("source-reconcile grid annotation preflight failed: transaction-local Grid rebuild contract missing: " + token)
+
+for token in (
+    "var annotatedGridTargets = invalidationTargets.Where(HasGridAnnotationIntent).ToList();",
+    "private static bool HasGridAnnotationIntent(ProjectElement element)",
+    "element.Category == ElementCategory.Grid",
+    "element.Properties.TryGetValue(GridAnnotationBuilder.HandlesKey, out var raw)",
+    "foreach (var grid in annotatedGridTargets)",
+    "GridAnnotationBuilder.RebuildInTransaction(document, transaction, project, grid);",
+):
+    if token not in reconcile:
+        raise SystemExit("source-reconcile grid annotation preflight failed: Grid annotation intent-preservation contract missing: " + token)
+
 order = [
+    "var annotatedGridTargets = invalidationTargets.Where(HasGridAnnotationIntent).ToList();",
     "GeneratedDependentGeometryInvalidator.Prepare",
     "RefreshSourceDerivedState",
     "RegenerateAffectedToStable",
     "invalidation.CommitMetadata();",
+    "GridAnnotationBuilder.RebuildInTransaction(document, transaction, project, grid);",
     "transaction.Commit();",
 ]
 pos = [reconcile.find(token) for token in order]
