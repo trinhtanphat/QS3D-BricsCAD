@@ -8,6 +8,7 @@ errors = []
 
 required = {
     "src/QS3D.BricsCAD.V25/DirectDrawP1Commands.cs": [
+        'using QS3D.Core.Persistence;',
         'CommandMethod("QS3DDRAWGLASSWALL"',
         'CommandMethod("QS3DDRAWWALLPIER"',
         'CommandMethod("QS3DDRAWSTRUCTWALL"',
@@ -162,4 +163,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw P1 is BricsCAD-hosted, Model-Space/unit-aware, uses source-relative canonical SetProperty writes, finite-checks persisted paths, re-checks active DWG before QS3DBUILD3D, verifies live native output, performs ownership-scoped CAD cleanup before semantic restore, and keeps post-commit UI failures non-destructive without guessed Door/Opening authoring.")
+print("PASS: Direct Draw P1 compiles its project snapshot rollback contract and is BricsCAD-hosted, Model-Space/unit-aware, uses source-relative canonical SetProperty writes, finite-checks persisted paths, re-checks active DWG before QS3DBUILD3D, verifies live native output, performs ownership-scoped CAD cleanup before semantic restore, and keeps post-commit UI failures non-destructive without guessed Door/Opening authoring.")
