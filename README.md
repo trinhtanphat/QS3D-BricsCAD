@@ -39,6 +39,14 @@ QS3D is beyond prototype stage. The current source contains the following integr
 - Drawing-bound Project Tools with Zone Manager, Floor/Level, Family Manager, Material Catalog and **Schedule Hub (`QS3DSCHEDULES`)**. Modeless project editors are tied to the drawing that opened them so switching DWGs does not silently mutate another project.
 - Project mutation APIs require the actual project-owned element instance rather than trusting a same-ID caller object.
 
+### Direct authoring
+
+- BLT-style P0 Direct Draw is implemented for `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWSLAB` and `QS3DDRAWCOLUMN`.
+- P1 Direct Draw extends the same real-DWG-source/semantic/native pipeline to `QS3DDRAWGLASSWALL`, `QS3DDRAWWALLPIER`, `QS3DDRAWSTRUCTWALL` and `QS3DDRAWFOUNDATION`.
+- Host-aware `QS3DDRAWDOOR` and `QS3DDRAWOPENING` create real source geometry, semantic Door/WallOpening data and guarded host links; physical boolean cutting remains an explicit cut operation.
+- Direct Draw uses the existing Family/Instance model, generated ownership and guarded native builders rather than creating a second CAD/model system.
+- Direct Draw rollback is ownership-scoped: failed new authoring attempts remove their own source/generated CAD and restore project state instead of deleting foreign generated handles.
+
 ### Review and viewport workflow
 
 - Locate/Zoom, Highlight, Focus, Isolate/Restore, Section Box, Section Plane and clip-display review actions.
@@ -61,10 +69,11 @@ QS3D is beyond prototype stage. The current source contains the following integr
 - Deterministic panel grid, quantities, schedule and XLSX.
 - `QS3DCURTAIN3D` keeps one backing GlassWall host solid for opening booleans and adds separate ownership-protected perimeter/mullion/transom `Solid3d` overlays.
 - Supported LINE Curtain frames are opening-aware: linked Door/Opening rectangles interrupt frame runs deterministically.
-- Frame state carries dedicated handles, counts, grid/opening metadata, configuration fingerprint and live-geometry validation.
+- Open/bulged WCS-XY POLYLINE GlassWall paths now map deterministic curtain stations onto tessellated path segments and generate ownership-protected native frame fragment solids, including linked-opening interruption.
+- Frame state carries dedicated handles, counts, grid/opening/path metadata, configuration fingerprint and live-geometry validation.
 - Opening property changes and link/re-host/unlink relations stale only the dependent frame overlay when appropriate.
 - Curtain destructive ownership and dedicated ownership health use the shared generated-handle policy so new generated families cannot be silently erased/ignored because of a forgotten hard-coded slot.
-- Curved/open-POLYLINE native frame overlays and panel-by-panel backing glass solids remain product/runtime work.
+- Panel-by-panel backing glass solids and whole-command host+frame rollback remain product/runtime work; current LINE/path frame source paths still require licensed BricsCAD V25 runtime qualification before production claims.
 
 ### Structure and rebar 3D
 
@@ -109,7 +118,7 @@ Generated ownership is treated as a product invariant rather than a UI conventio
 - host-solid ownership aliases are covered by ownership health so a generated host/cut alias cannot silently become a second owner;
 - `QS3DRELEASECHECK` includes dependency-cycle health, Foundation mesh health, generated-rebar mode health, stale state, safe ownership and BOM/live-solid release guards.
 
-See [`docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`](docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md) for the current deep audit, decisions and remaining runtime gates.
+See [`docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`](docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md) for the deep audit and [`docs/PRODUCTION-HARDENING-PLAN-2026-08-10.md`](docs/PRODUCTION-HARDENING-PLAN-2026-08-10.md) for the current source-to-production gap map.
 
 ## Main commands
 
@@ -125,6 +134,9 @@ See [`docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`](docs/REVIEW-2026-08-10-CONT
 - `QS3DROOM`, `QS3DROOMAUTO`, `QS3DFINISH`
 - `QS3DWALL`, `QS3DGLASSWALL`, `QS3DWALLPIER`, `QS3DWALLJUNCTIONS`
 - `QS3DWALLSNAPPREVIEW`, `QS3DWALLSNAPAPPLY`
+- `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWSLAB`, `QS3DDRAWCOLUMN`
+- `QS3DDRAWGLASSWALL`, `QS3DDRAWWALLPIER`, `QS3DDRAWSTRUCTWALL`, `QS3DDRAWFOUNDATION`
+- `QS3DDRAWDOOR`, `QS3DDRAWOPENING`
 - `QS3DCURTAIN`, `QS3DCURTAIN3D`, `QS3DCURTAINFRAMES3D`, `QS3DCURTAINFRAMEHEALTH`, `QS3DCURTAINXLSX`
 - `QS3DOPENING`, `QS3DDOOR`, `QS3DAUTOLINKHOSTS`, `QS3DLINKHOST`, `QS3DCUTOPENINGS`, `QS3DCUTOPENINGSCURVED`
 - `QS3DBEAM`, `QS3DSLAB`, `QS3DCOLUMN`, `QS3DSTRUCTWALL`, `QS3DFOUNDATION`, `QS3DSTAIR`, `QS3DRAILING`, `QS3DEARTHWORK`
