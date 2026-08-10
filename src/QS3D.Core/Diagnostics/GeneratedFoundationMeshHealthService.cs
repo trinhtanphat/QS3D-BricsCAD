@@ -66,8 +66,8 @@ namespace QS3D.Core.Diagnostics
                 if (element.Category != ElementCategory.Foundation)
                     issues.Add(new ModelHealthIssue("FOUNDATION_MESH_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated foundation mesh metadata chỉ hợp lệ trên Foundation element.", element.Id));
 
-                if (element.Dirty != ElementDirtyFlags.None)
-                    issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_STALE", HealthSeverity.Warning, "Foundation đang dirty nhưng vẫn còn generated foundation mesh; rebuild/health-check trước khi phát hành bản vẽ.", element.Id));
+                if (element.IsGeneratedFoundationMeshStale())
+                    issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_STALE", HealthSeverity.Warning, "Generated foundation mesh snapshot không còn khớp semantic/source hiện tại; rebuild lưới thép móng 3D trước khi phát hành bản vẽ.", element.Id));
             }
             return issues;
         }
@@ -96,6 +96,7 @@ namespace QS3D.Core.Diagnostics
                 foreach (var handle in element.SourceHandles) Reserve(owners, handle, element.Id + "/SourceHandles");
                 ReserveProperty(owners, element, "GeneratedSolidHandle");
                 ReserveProperty(owners, element, "PhysicalOpeningCutSolidHandle");
+                ReserveProperty(owners, element, "GeneratedCurtainFrameHandles");
             }
             foreach (var element in project.Elements)
             {
