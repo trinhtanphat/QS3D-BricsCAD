@@ -18,15 +18,15 @@ namespace QS3D.BricsCAD.V25
             {
                 if (_window != null && _window.IsLoaded) _window.Close();
                 var project = ProjectContextCoordinator.GetOrCreate(document);
-                _window = new AuditLogWindow(project);
+                _window = new AuditLogWindow(document);
                 _window.Closed += (_, __) => _window = null;
                 Application.ShowModelessWindow(IntPtr.Zero, _window, true);
-                PaletteCoordinator.SetStatus("Đã mở Nhật ký thay đổi • " + project.AuditEvents.Count + " sự kiện.");
+                try { PaletteCoordinator.SetStatus("Đã mở Nhật ký thay đổi • " + project.AuditEvents.Count + " sự kiện."); } catch { }
             }
             catch (System.Exception ex)
             {
-                document.Editor.WriteMessage("\nQS3DAUDIT error: " + ex.Message);
-                PaletteCoordinator.SetStatus("Nhật ký thay đổi lỗi: " + ex.Message);
+                try { document.Editor.WriteMessage("\nQS3DAUDIT error: " + ex.Message); } catch { }
+                try { PaletteCoordinator.SetStatus("Nhật ký thay đổi lỗi: " + ex.Message); } catch { }
             }
         }
     }
