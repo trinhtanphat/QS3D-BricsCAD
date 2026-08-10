@@ -77,6 +77,16 @@ for label, (relative, event_name) in contracts.items():
     if audit_token not in helper_body:
         errors.append(f"{label}: audit event is not owned by CommitSemanticUpdate")
 
+shape_command = ROOT / "src/QS3D.BricsCAD.V25/ShapeRebarGeometryCommands.cs"
+if not shape_command.is_file():
+    errors.append("shape rebar: missing command surface")
+else:
+    command_text = shape_command.read_text(encoding="utf-8")
+    if "geometry.rebar3d.shape" in command_text:
+        errors.append("shape rebar: legacy post-commit geometry.rebar3d.shape audit must not return")
+    if "AuditTrail.ForProject(" in command_text:
+        errors.append("shape rebar: command/UI layer must not publish replacement audit after the builder CAD commit")
+
 print("QS3D generated rebar/mesh audit preflight")
 if errors:
     for error in errors:
@@ -84,4 +94,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: every generated rebar/mesh replacement family records its canonical audit event through the pre-CAD-commit semantic update path.")
+print("PASS: every generated rebar/mesh replacement family records its canonical audit event through the pre-CAD-commit semantic update path, with no duplicate Shape Rebar audit in the post-commit UI layer.")
