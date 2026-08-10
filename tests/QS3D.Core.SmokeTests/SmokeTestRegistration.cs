@@ -59,6 +59,7 @@ namespace QS3D.Core.SmokeTests
             ProjectSessionAuditSmoke.Run();
             ProjectInterchangeValidationSmoke.Run();
             QsdbSaveAtomicitySmoke.Run();
+            AuditTrailSnapshotSmoke.Run();
         }
     }
 }
