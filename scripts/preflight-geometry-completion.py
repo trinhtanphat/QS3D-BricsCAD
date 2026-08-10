@@ -28,6 +28,7 @@ required = [
     "src/QS3D.BricsCAD.V25/Commands.cs",
     "src/QS3D.BricsCAD.V25/ModelReviewCommands.cs",
     "src/QS3D.BricsCAD.V25/WallJunctionCommands.cs",
+    "src/QS3D.BricsCAD.V25/Services/SemanticReferenceHandles.cs",
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml",
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs",
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs",
@@ -96,18 +97,25 @@ checks = {
     "src/QS3D.BricsCAD.V25/ModelReviewCommands.cs": [
         "QS3DHIGHLIGHT", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE"
     ],
+    "src/QS3D.BricsCAD.V25/WallJunctionCommands.cs": [
+        "QS3DWALLJUNCTIONS", "WallJunctionPlanner().Plan", "WallJunctionKind.L", "WallJunctionKind.T", "WallJunctionKind.X"
+    ],
+    "src/QS3D.BricsCAD.V25/Services/SemanticReferenceHandles.cs": [
+        "MatchesSelection", "BoundarySourceHandlesKey", "GeneratedSolidHandle"
+    ],
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml": [
-        "Bóc chọn", "OnCaptureSelectedClick", "Vẽ 3D", "PropertyBooleanEditor", "PropertyChoiceEditor", "OnFocusSelectedClick", "OnIsolateSelectedClick", "OnUnisolateClick"
+        "Bóc chọn", "OnCaptureSelectedClick", "Vẽ 3D", "OnWallJunctionsClick", "PropertyBooleanEditor", "PropertyChoiceEditor", "OnFocusSelectedClick", "OnIsolateSelectedClick", "OnUnisolateClick"
     ],
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs": [
-        "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DFINISH", "CommandFor", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE", "SelectInspection"
+        "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DFINISH", "QS3DWALLJUNCTIONS", "CommandFor", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE", "SelectInspection",
+        "SemanticReferenceHandles.MatchesSelection"
     ],
     "src/QS3D.BricsCAD.V25/UI/ViewModels/PropertyRowViewModel.cs": [
         "BooleanEditor", "ChoiceEditor", "BooleanValue", "Choices", "IsEditable"
     ],
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs": [
         "DisplayNameFor", "GroupFor", "IsNumericProperty", "Bề dày", "CỐT THÉP", "EditorKindFor", "ChoicesFor", "IsBooleanProperty",
-        "isInherited", "instance override", "element.MarkDirty(ElementDirtyFlags.All)"
+        "isInherited", "instance override", "element.MarkDirty(ElementDirtyFlags.All)", "string.Equals(family.Name, next, StringComparison.Ordinal)"
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
         'Tag="QS3DGLASSWALL"', 'Tag="QS3DWALLPIER"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DWALLJUNCTIONS"',
@@ -115,7 +123,10 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
         'new RibbonButtonSpec("Vách Kính", "QS3DGLASSWALL")', 'new RibbonButtonSpec("Trụ Tường", "QS3DWALLPIER")',
-        'new RibbonButtonSpec("Khoét Cửa/Lỗ", "QS3DCUTOPENINGS")', 'new RibbonButtonSpec("Cốt thép 3D", "QS3DREBAR3D")'
+        'new RibbonButtonSpec("Giao tường", "QS3DWALLJUNCTIONS")', 'new RibbonButtonSpec("Khoét Cửa/Lỗ", "QS3DCUTOPENINGS")',
+        'new RibbonButtonSpec("Focus", "QS3DFOCUS")', 'new RibbonButtonSpec("Cô lập", "QS3DISOLATE")', 'new RibbonButtonSpec("Khôi phục", "QS3DUNISOLATE")',
+        'new RibbonButtonSpec("Cốt thép cột 3D", "QS3DREBAR3D")', 'new RibbonButtonSpec("Cốt thép shape 3D", "QS3DREBAR3DSHAPE")',
+        'new RibbonButtonSpec("Health shape", "QS3DREBARSHAPEHEALTH")'
     ],
     "src/QS3D.BricsCAD.V25/ReviewCommands.cs": [
         "IsTktWall(category.Value)", "ElementCategory.GlassWall", "ElementCategory.WallPier",
@@ -169,4 +180,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: TKT line/polyline wall variants, safe LINE + straight-POLYLINE opening cuts, far-origin-safe footprint math, rectangular/linear/shape rebar ownership+health, wall-junction analysis, typed Family editors, instance-override preservation and BLT-style Focus/Isolate workflow guards are present.")
+print("PASS: TKT line/polyline wall variants, safe LINE + straight-POLYLINE opening cuts, far-origin-safe footprint/junction math, rectangular/linear/shape rebar ownership+health, typed Family editors, preserved instance overrides, semantic selection sync and BLT-style junction/Focus/Isolate workflows are present.")
