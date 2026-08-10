@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using Bricscad.ApplicationServices;
 using Bricscad.Windows;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Model;
@@ -53,6 +54,7 @@ namespace QS3D.BricsCAD.V25
             if (_workspace != null) _workspace.Visible = true;
             if (_right != null) _right.Visible = true;
             RefreshAll();
+            SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
         }
 
         public static void Hide()
@@ -67,6 +69,7 @@ namespace QS3D.BricsCAD.V25
             if (_workspace != null) _workspace.Visible = true;
             if (_right != null) _right.Visible = false;
             _workspacePanel?.SetStatus("Safe Mode: panel bản vẽ/layer đang tắt.");
+            SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
         }
 
         public static void SetInspection(IReadOnlyList<EntitySnapshot> snapshots) { EnsureCreated(); _workspacePanel?.SetInspection(snapshots); }
