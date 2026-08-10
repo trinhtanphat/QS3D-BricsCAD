@@ -3,7 +3,7 @@
 **Audit/update date:** 2026-08-10 (UTC+7)  
 **Repository:** `trinhtanphat/QS3D-BricsCAD`  
 **Branch:** `main`  
-**Repository/source reconciliation cutoff for this edition:** `fc59fccc5d116b28758ddcbc77bdf10217f71f21` (`fix(rules): make quantity rule dependencies deterministic`)  
+**Repository/source reconciliation cutoff for this edition:** `f127360` (`feat(room): support curved polyline boundary discovery`) plus the B4D/ED2/Handle and local V25 compile patch documented below.
 **Historical exhaustive session handoff:** `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md`  
 **Status of this file:** **canonical for current source status and continuation**. The older session-history handoff is retained as the detailed historical audit trail, but any source-status statement in that older file that conflicts with this file or newer `main` is superseded.
 
@@ -313,6 +313,10 @@ Current BQ behavior includes:
 - XLSX export;
 - finite/overflow-safe report accumulation rather than unchecked `+=`;
 - filters/freeze/header behavior covered by deterministic source/tests.
+- exported aggregate rows carry stable QS3D Element IDs and hexadecimal CAD handles;
+- `QS3DED2` aliases the BQ/export workflow;
+- `QS3DEXCELLOCATE` reads a QS3D export row or the supplied legacy BLT hidden `$<decimal handle>` convention and selects/zooms the corresponding live CAD entities;
+- derived room-finish rows resolve handles transitively through their source-room dependency without duplicating semantic handle ownership.
 
 ### 7.10 Rebar / BBS
 
@@ -354,6 +358,8 @@ Current behavior includes:
 - invalid confidence/margin and ambiguous mappings rejected;
 - semantic category collision protection;
 - **project/company layer mappings can override fallback heuristics deterministically**.
+- `QS3DB4D` performs a whole-Current-Space scan, excludes QS3D-generated solids, reads Polyline/Region/Hatch/Solid3d metrics and auto-applies only high-confidence results while leaving ambiguous results in review.
+- rescanning an already tracked object preserves its assigned Family/Floor/Zone instead of silently moving it to the active context.
 
 ### 7.12 Templates and company standards
 
@@ -523,7 +529,10 @@ Native 3D / viewport:
 
 Quantity/rebar/recognition/revision:
 
+- `QS3DB4D`
 - `QS3DBQ`
+- `QS3DED2`
+- `QS3DEXCELLOCATE`
 - `QS3DBBS`
 - `QS3DBBSVIEW`
 - `QS3DBBSCSV`
@@ -564,6 +573,16 @@ Historical V25 integration run:
 - `31341184031` — queued/no matching self-hosted `[self-hosted, windows, x64, bricscad-v25]` runner at the time it was attempted.
 
 Therefore GitHub-hosted success does **not** prove current V25 adapter compilation/NETLOAD/runtime.
+
+### 10.4 Local-machine evidence for the B4D/ED2 integration
+
+- exact installed BricsCAD **V25.2.10** managed references compiled the Release/x64 adapter with **0 warnings / 0 errors**;
+- the complete Core smoke executable passed three consecutive runs after moving suite registration out of a module initializer that could deadlock parallel tests before `Main`;
+- generic and full-domain/release preflights passed without dispatching GitHub Actions;
+- read-only `DGKL.xlsx` checks resolved row 5 decimal handles `12510,12512` to `30DE,30E0` and row 6 to `30DF,30E1`;
+- the verified local package contains the plugin/Core DLLs, command manifest, SHA-256 manifest and DemandLoad install/uninstall scripts, while excluding BricsCAD-owned DLLs.
+
+This is compile/static/file-format evidence. It is not a claim that the newest DLL has been NETLOADed into the currently open interactive BricsCAD session.
 
 ---
 
@@ -610,14 +629,16 @@ A Windows agent with licensed BricsCAD V25 should do this before any release cla
 16. edit Family/default/instance values and verify inheritance rules;
 17. run QuantityRules with dependent outputs and verify order independence/cycle rejection;
 18. BQ recalc + XLSX; inspect finite totals and visible-column persistence;
-19. BBS VIEW/XLSX/CSV; inspect formula-injection and malformed-row behavior;
-20. Recognition review/auto with company layer mappings, ambiguous layers and false-positive token cases;
-21. Template export/import, destructive confirmation, failed-import rollback and no implicit `.qsdb` save;
-22. revision baseline/diff and finite-safe delta/% math;
-23. Model Health on missing dimensions, stale source/generated handles, duplicate ownership and generated-category mismatch;
-24. audit-log review;
-25. package ZIP/hashes/command manifest/install/uninstall on a clean V25 test profile;
-26. capture runtime screenshots only after all above relevant UI paths actually load.
+19. Run `QS3DB4D` on the private drawing, review ambiguous results and verify a rescan does not reassign existing Family/Floor/Zone context;
+20. Run `QS3DED2`, export handles, then use `QS3DEXCELLOCATE` on both the new export and a copied legacy BLT workbook row;
+21. BBS VIEW/XLSX/CSV; inspect formula-injection and malformed-row behavior;
+22. Recognition review/auto with company layer mappings, ambiguous layers and false-positive token cases;
+23. Template export/import, destructive confirmation, failed-import rollback and no implicit `.qsdb` save;
+24. revision baseline/diff and finite-safe delta/% math;
+25. Model Health on missing dimensions, stale source/generated handles, duplicate ownership and generated-category mismatch;
+26. audit-log review;
+27. package ZIP/hashes/command manifest/install/uninstall on a clean V25 test profile;
+28. capture runtime screenshots only after all above relevant UI paths actually load.
 
 ---
 
@@ -800,7 +821,7 @@ The older handoff cutoff `c987b34...` is an ancestor of later `main`; subsequent
 
 ## 18. Final continuation statement
 
-QS3D is no longer merely a UI shell or early quantity prototype. Current source contains a broad semantic project model, schema-v3 persistence, recovery, deterministic regeneration/rules, Tường KT/HT_Phòng/Cửa, structural categories, native 3D source paths, BQ/XLSX, BBS XLSX/CSV, Recognition, company layer mappings, templates, Revision, Model Health, automatic planar room discovery, Audit, Domain Hub, Xref/Layer/selection integration and V25 release/DemandLoad tooling.
+QS3D is no longer merely a UI shell or early quantity prototype. Current source contains a broad semantic project model, schema-v3 persistence, recovery, deterministic regeneration/rules, Tường KT/HT_Phòng/Cửa, structural categories, native 3D source paths, B4D-style whole-drawing recognition, BQ/ED2 XLSX with reverse Handle lookup, BBS XLSX/CSV, Recognition, company layer mappings, templates, Revision, Model Health, automatic planar/curved-polyline room discovery, Audit, Domain Hub, Xref/Layer/selection integration and V25 release/DemandLoad tooling.
 
 The largest remaining truth boundary is **real BricsCAD V25 execution on the newest exact source SHA**. Until that happens, terminology must stay precise:
 

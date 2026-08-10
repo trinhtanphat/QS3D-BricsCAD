@@ -13,7 +13,9 @@ Clean-room BricsCAD V25 quantity takeoff / 3D QS plugin inspired by the workflow
 - `QS3D` — show QS3D workspace
 - `QS3DHIDE` — hide QS3D palettes
 - `QS3DINSPECT` — inspect current/prompted selection
-- `QS3DBQ` — quantity summary + Excel export
+- `QS3DB4D` — scan all entities in Current Space, auto-capture high-confidence BLT/QS3D categories and open recognition review
+- `QS3DBQ`, `QS3DED2` — quantity summary + Excel export with QS3D Element IDs and CAD handles
+- `QS3DEXCELLOCATE` — read a QS3D/legacy BLT workbook row and select its CAD handles in the active drawing
 - `QS3DHEALTH` — model health diagnostics
 - `QS3DABOUT` — build identity
 
