@@ -21,6 +21,7 @@
                     <Button Content="Tường Gạch" Tag="QS3DWALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
                     <Button Content="Vách Kính" Tag="QS3DGLASSWALL" Click="OnCommandClick"/>
                     <Button Content="Trụ Tường" Tag="QS3DWALLPIER" Click="OnCommandClick"/>
+                    <Button Content="Phân tích giao tường L/T/X" Tag="QS3DWALLJUNCTIONS" Click="OnCommandClick"/>
                     <Button Content="Lỗ Mở Vách" Tag="QS3DOPENING" Click="OnCommandClick"/>
                     <Button Content="Cửa Đi" Tag="QS3DDOOR" Click="OnCommandClick"/>
                     <Button Content="Liên kết Cửa/Lỗ với host" Tag="QS3DLINKHOST" Click="OnCommandClick"/>
@@ -38,7 +39,7 @@
                     <Button Content="Lan can" Tag="QS3DRAILING" Click="OnCommandClick"/>
                     <Button Content="Đào đất" Tag="QS3DEARTHWORK" Click="OnCommandClick"/>
                     <Button Content="Tạo / cập nhật 3D từ đối tượng chọn" Tag="QS3DBUILD3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
-                    <TextBlock Text="Tường Gạch hỗ trợ LINE hoặc open POLYLINE tim tường (kể cả bulge). Kết cấu dùng LINE/closed POLYLINE theo loại. Phòng Auto dùng LINE/POLYLINE, tự xử lý cung, giao điểm và T-junction." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+                    <TextBlock Text="Tường KT hỗ trợ LINE hoặc open POLYLINE tim tường (kể cả bulge). Kết cấu dùng LINE/closed POLYLINE theo loại. Phòng Auto nhận LINE/POLYLINE/ARC/SPLINE plan-view, tự xử lý cung, giao điểm và T-junction." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
 
                     <TextBlock Text="DỰ ÁN &amp; TEMPLATE" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
                     <Button Content="Lưu project QS3D" Tag="QS3DSAVE" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
