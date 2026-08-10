@@ -18,6 +18,7 @@ services = [
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipHealthService.cs",
+    ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarModeHealthService.cs",
 ]
 for path in [command] + services:
@@ -68,12 +69,32 @@ if command.is_file():
 ownership = ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs"
 if ownership.is_file():
     text = ownership.read_text(encoding="utf-8")
-    for needle in ("GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles", "GeneratedSlabMeshHandles", "GeneratedWallMeshHandles", "GeneratedFoundationMeshHandles"):
-        if needle not in text: errors.append("cross-family ownership health missing: " + needle)
+    for needle in ("GeneratedHandleOwnershipPolicy.RebarHandleKeys", "REBAR_GENERATED_CROSS_KEY_OWNERSHIP_CONFLICT"):
+        if needle not in text: errors.append("cross-family ownership health missing shared policy contract: " + needle)
+
+policy = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
+if policy.is_file():
+    text = policy.read_text(encoding="utf-8")
+    for needle in (
+        "RebarHandleKeys", "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles",
+        "GeneratedBeamStirrupHandles", "GeneratedSlabMeshHandles", "GeneratedWallMeshHandles", "GeneratedFoundationMeshHandles"):
+        if needle not in text: errors.append("generated ownership policy missing unified-health channel: " + needle)
+
+for relative in (
+    "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedTieRebarHealthService.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedBeamStirrupHealthService.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedWallMeshHealthService.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs",
+):
+    path = ROOT / relative
+    if path.is_file() and "GeneratedHandleOwnershipPolicy.IsOwnerSlot" not in path.read_text(encoding="utf-8"):
+        errors.append(relative + " must use shared owner-slot policy for dedicated ownership health")
 
 print("QS3D unified full-health preflight")
 if errors:
     for error in errors: print("ERROR:", error)
-    print(f"FAILED with {len(errors)} error(s).")
+    print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: full model/generated/rebar/curtain health aggregation covers longitudinal, shape, tie, stirrup, slab mesh, wall mesh, foundation mesh, curtain frames, rebar-specific and generic ownership, mode semantics, dedupe and Locate wiring.")
+print("PASS: full model/generated/rebar/curtain health aggregation covers longitudinal, shape, tie, stirrup, slab mesh, wall mesh, foundation mesh, curtain frames with policy-driven ownership, mode semantics, dedupe and Locate wiring.")
