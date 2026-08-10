@@ -49,6 +49,7 @@ namespace QS3D.Core.Geometry
     public sealed class WallJunctionPlanner
     {
         private const int MaxSegments = 10000;
+        private const double ParallelDirectionEpsilon = 1e-12d;
 
         private sealed class SegmentInfo
         {
@@ -59,6 +60,8 @@ namespace QS3D.Core.Geometry
             public double MaxY { get; set; }
             public double Dx { get; set; }
             public double Dy { get; set; }
+            public double Ux { get; set; }
+            public double Uy { get; set; }
             public double Length { get; set; }
         }
 
@@ -85,6 +88,7 @@ namespace QS3D.Core.Geometry
         {
             private readonly double _tolerance;
             private readonly Dictionary<CellKey, List<Candidate>> _buckets = new Dictionary<CellKey, List<Candidate>>();
+            private readonly List<Candidate> _unindexed = new List<Candidate>();
             private readonly List<Candidate> _all = new List<Candidate>();
 
             public CandidateIndex(double tolerance) { _tolerance = tolerance; }
@@ -92,49 +96,81 @@ namespace QS3D.Core.Geometry
 
             public void Add(Point2 point, string segmentId)
             {
-                var key = Cell(point);
                 Candidate? best = null;
                 var bestDistance = double.PositiveInfinity;
-                for (var dx = -1; dx <= 1; dx++)
+                if (TryCell(point, out var key))
                 {
-                    for (var dy = -1; dy <= 1; dy++)
+                    for (var dx = -1; dx <= 1; dx++)
                     {
-                        var neighbor = new CellKey(checked(key.X + dx), checked(key.Y + dy));
-                        if (!_buckets.TryGetValue(neighbor, out var bucket)) continue;
-                        foreach (var candidate in bucket)
+                        for (var dy = -1; dy <= 1; dy++)
                         {
-                            var distance = candidate.Point.DistanceTo(point);
-                            if (distance <= _tolerance && distance < bestDistance)
-                            {
-                                best = candidate;
-                                bestDistance = distance;
-                            }
+                            var neighbor = new CellKey(key.X + dx, key.Y + dy);
+                            if (!_buckets.TryGetValue(neighbor, out var bucket)) continue;
+                            FindBest(bucket, point, ref best, ref bestDistance);
                         }
                     }
+                    FindBest(_unindexed, point, ref best, ref bestDistance);
+                }
+                else
+                {
+                    FindBest(_all, point, ref best, ref bestDistance);
                 }
 
                 if (best == null)
                 {
                     best = new Candidate { Point = point };
                     _all.Add(best);
-                    if (!_buckets.TryGetValue(key, out var bucket))
+                    if (TryCell(point, out key))
                     {
-                        bucket = new List<Candidate>();
-                        _buckets[key] = bucket;
+                        if (!_buckets.TryGetValue(key, out var bucket))
+                        {
+                            bucket = new List<Candidate>();
+                            _buckets[key] = bucket;
+                        }
+                        bucket.Add(best);
                     }
-                    bucket.Add(best);
+                    else
+                    {
+                        _unindexed.Add(best);
+                    }
                 }
                 best.SegmentIds.Add(segmentId);
             }
 
-            private CellKey Cell(Point2 point) => new CellKey(Quantize(point.X, _tolerance), Quantize(point.Y, _tolerance));
+            private void FindBest(IEnumerable<Candidate> candidates, Point2 point, ref Candidate? best, ref double bestDistance)
+            {
+                foreach (var candidate in candidates)
+                {
+                    var distance = candidate.Point.DistanceTo(point);
+                    if (distance <= _tolerance && distance < bestDistance)
+                    {
+                        best = candidate;
+                        bestDistance = distance;
+                    }
+                }
+            }
 
-            private static long Quantize(double value, double tolerance)
+            private bool TryCell(Point2 point, out CellKey key)
+            {
+                if (TryQuantize(point.X, _tolerance, out var x) && TryQuantize(point.Y, _tolerance, out var y))
+                {
+                    key = new CellKey(x, y);
+                    return true;
+                }
+                key = default;
+                return false;
+            }
+
+            private static bool TryQuantize(double value, double tolerance, out long cell)
             {
                 var scaled = value / tolerance;
-                if (double.IsNaN(scaled) || double.IsInfinity(scaled) || scaled <= long.MinValue + 2d || scaled >= long.MaxValue - 2d)
-                    throw new InvalidOperationException("Wall junction coordinate/tolerance ratio exceeds the supported spatial-index range.");
-                return (long)Math.Floor(scaled);
+                if (!double.IsNaN(scaled) && !double.IsInfinity(scaled) && scaled > long.MinValue + 2d && scaled < long.MaxValue - 2d)
+                {
+                    cell = (long)Math.Floor(scaled);
+                    return true;
+                }
+                cell = 0L;
+                return false;
             }
         }
 
@@ -155,10 +191,14 @@ namespace QS3D.Core.Geometry
                 if (!seenIds.Add(segment.Id)) throw new InvalidOperationException("Duplicate wall segment id: " + segment.Id);
                 Validate(segment.Start, segment.Id + "/start");
                 Validate(segment.End, segment.Id + "/end");
-                var dx = segment.End.X - segment.Start.X;
-                var dy = segment.End.Y - segment.Start.Y;
-                var length = Math.Sqrt(dx * dx + dy * dy);
-                if (!Finite(length) || length <= tolerance * 1e-6d) throw new InvalidOperationException("Degenerate wall segment: " + segment.Id);
+                var dx = SubtractFinite(segment.End.X, segment.Start.X, segment.Id + " dx");
+                var dy = SubtractFinite(segment.End.Y, segment.Start.Y, segment.Id + " dy");
+                var length = segment.Start.DistanceTo(segment.End);
+                var minimumLength = tolerance * 1e-6d;
+                if (!Finite(minimumLength) || length <= minimumLength) throw new InvalidOperationException("Degenerate wall segment: " + segment.Id);
+                var ux = dx / length;
+                var uy = dy / length;
+                if (!Finite(ux) || !Finite(uy)) throw new OverflowException("Wall direction normalization overflowed: " + segment.Id);
                 segments.Add(new SegmentInfo
                 {
                     Segment = segment,
@@ -168,6 +208,8 @@ namespace QS3D.Core.Geometry
                     MaxY = Math.Max(segment.Start.Y, segment.End.Y),
                     Dx = dx,
                     Dy = dy,
+                    Ux = ux,
+                    Uy = uy,
                     Length = length
                 });
             }
@@ -227,15 +269,11 @@ namespace QS3D.Core.Geometry
 
         private static IEnumerable<Point2> Intersections(SegmentInfo a, SegmentInfo b, double tolerance)
         {
-            var ax = a.Segment.Start.X;
-            var ay = a.Segment.Start.Y;
-            var bx = b.Segment.Start.X;
-            var by = b.Segment.Start.Y;
-            var determinant = Cross(a.Dx, a.Dy, b.Dx, b.Dy);
-            var qx = bx - ax;
-            var qy = by - ay;
+            var determinant = CrossFinite(a.Ux, a.Uy, b.Ux, b.Uy, "wall direction cross");
+            var qx = SubtractFinite(b.Segment.Start.X, a.Segment.Start.X, "wall intersection qx");
+            var qy = SubtractFinite(b.Segment.Start.Y, a.Segment.Start.Y, "wall intersection qy");
 
-            if (Math.Abs(determinant) <= tolerance * 1e-3d)
+            if (Math.Abs(determinant) <= ParallelDirectionEpsilon)
             {
                 if (DistanceToInfiniteLine(b.Segment.Start, a) > tolerance || DistanceToInfiniteLine(b.Segment.End, a) > tolerance)
                     yield break;
@@ -244,13 +282,13 @@ namespace QS3D.Core.Geometry
                 yield break;
             }
 
-            var ta = Cross(qx, qy, b.Dx, b.Dy) / determinant;
-            var tb = Cross(qx, qy, a.Dx, a.Dy) / determinant;
-            var epsilonA = tolerance / a.Length;
-            var epsilonB = tolerance / b.Length;
-            if (ta < -epsilonA || ta > 1d + epsilonA || tb < -epsilonB || tb > 1d + epsilonB) yield break;
-            var clamped = Math.Max(0d, Math.Min(1d, ta));
-            var pointResult = new Point2(ax + a.Dx * clamped, ay + a.Dy * clamped);
+            var distanceA = CrossFinite(qx, qy, b.Ux, b.Uy, "wall intersection distance A") / determinant;
+            var distanceB = CrossFinite(qx, qy, a.Ux, a.Uy, "wall intersection distance B") / determinant;
+            if (!Finite(distanceA) || !Finite(distanceB)) throw new OverflowException("Wall intersection parameter overflowed.");
+            if (distanceA < -tolerance || distanceA > a.Length + tolerance || distanceB < -tolerance || distanceB > b.Length + tolerance) yield break;
+
+            var clampedDistance = Math.Max(0d, Math.Min(a.Length, distanceA));
+            var pointResult = CoordinateAt(a, clampedDistance);
             Validate(pointResult, "wall intersection");
             yield return pointResult;
         }
@@ -263,12 +301,9 @@ namespace QS3D.Core.Geometry
 
         private static double DistanceToInfiniteLine(Point2 point, SegmentInfo segment)
         {
-            var qx = point.X - segment.Segment.Start.X;
-            var qy = point.Y - segment.Segment.Start.Y;
-            var cross = Math.Abs(Cross(qx, qy, segment.Dx, segment.Dy));
-            var value = cross / segment.Length;
-            if (!Finite(value)) throw new OverflowException("Wall line-distance calculation overflowed.");
-            return value;
+            var qx = SubtractFinite(point.X, segment.Segment.Start.X, "wall line-distance qx");
+            var qy = SubtractFinite(point.Y, segment.Segment.Start.Y, "wall line-distance qy");
+            return Math.Abs(CrossFinite(qx, qy, segment.Ux, segment.Uy, "wall line-distance cross"));
         }
 
         private static void AddRays(Point2 node, SegmentInfo segment, double tolerance, List<Point2> rays)
@@ -278,16 +313,16 @@ namespace QS3D.Core.Geometry
             if (atStart && atEnd) return;
             if (atStart)
             {
-                rays.Add(Unit(segment.Dx, segment.Dy));
+                rays.Add(new Point2(segment.Ux, segment.Uy));
                 return;
             }
             if (atEnd)
             {
-                rays.Add(Unit(-segment.Dx, -segment.Dy));
+                rays.Add(new Point2(-segment.Ux, -segment.Uy));
                 return;
             }
-            rays.Add(Unit(segment.Dx, segment.Dy));
-            rays.Add(Unit(-segment.Dx, -segment.Dy));
+            rays.Add(new Point2(segment.Ux, segment.Uy));
+            rays.Add(new Point2(-segment.Ux, -segment.Uy));
         }
 
         private static List<Point2> MergeDirections(IEnumerable<Point2> rays, double angularTolerance)
@@ -315,14 +350,41 @@ namespace QS3D.Core.Geometry
             return WallJunctionKind.Multi;
         }
 
-        private static Point2 Unit(double x, double y)
+        private static Point2 CoordinateAt(SegmentInfo segment, double distance)
         {
-            var length = Math.Sqrt(x * x + y * y);
-            if (!Finite(length) || length <= 0d) throw new InvalidOperationException("Wall direction is degenerate.");
-            return new Point2(x / length, y / length);
+            var x = AddFinite(segment.Segment.Start.X, MultiplyFinite(segment.Ux, distance, "wall coordinate x delta"), "wall coordinate x");
+            var y = AddFinite(segment.Segment.Start.Y, MultiplyFinite(segment.Uy, distance, "wall coordinate y delta"), "wall coordinate y");
+            return new Point2(x, y);
         }
 
-        private static double Cross(double ax, double ay, double bx, double by) => ax * by - ay * bx;
+        private static double CrossFinite(double ax, double ay, double bx, double by, string label)
+        {
+            var first = MultiplyFinite(ax, by, label + " first product");
+            var second = MultiplyFinite(ay, bx, label + " second product");
+            return SubtractFinite(first, second, label);
+        }
+
+        private static double MultiplyFinite(double first, double second, string label)
+        {
+            var value = first * second;
+            if (!Finite(value)) throw new OverflowException(label + " overflowed.");
+            return value;
+        }
+
+        private static double AddFinite(double first, double second, string label)
+        {
+            var value = first + second;
+            if (!Finite(value)) throw new OverflowException(label + " overflowed.");
+            return value;
+        }
+
+        private static double SubtractFinite(double first, double second, string label)
+        {
+            var value = first - second;
+            if (!Finite(value)) throw new OverflowException(label + " overflowed.");
+            return value;
+        }
+
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static void Validate(Point2 point, string label)
         {
