@@ -8,9 +8,12 @@ errors = []
 
 planner = ROOT / "src/QS3D.Core/Rebar/BeamStirrupLayoutPlanner.cs"
 builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs"
+health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedBeamStirrupHealthService.cs"
+invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/BeamStirrupBendSmoke.cs"
+health_smoke = ROOT / "tests/QS3D.Core.SmokeTests/BeamStirrupMetadataHealthSmoke.cs"
 
-for path in (planner, builder, smoke):
+for path in (planner, builder, health, invalidator, smoke, health_smoke):
     if not path.is_file(): errors.append("missing beam stirrup bend file: " + str(path.relative_to(ROOT)))
 
 if planner.is_file():
@@ -42,9 +45,32 @@ if builder.is_file():
         "var closed = loop[0].DistanceTo(loop[loop.Count - 1]) <= 1e-12d;",
         "var before = closed || index > 1 ? overlap : 0d;",
         "var after = closed || index < loop.Count - 1 ? overlap : 0d;",
-        "GeneratedRebarOwnershipGuard.Build", "ownership.EnsureOwned", "GeneratedBeamStirrupHandles"
+        "GeneratedRebarOwnershipGuard.Build", "ownership.EnsureOwned", "GeneratedBeamStirrupHandles",
+        "ClearGeneratedBeamStirrupStale()"
     ):
         if needle not in text: errors.append("beam stirrup bend V25 wiring missing: " + needle)
+
+if health.is_file():
+    text = health.read_text(encoding="utf-8")
+    for needle in (
+        "GeneratedBeamStirrupCenterlineLengthM", "GeneratedBeamStirrupTotalCenterlineLengthM",
+        "GeneratedBeamStirrupPolylineLengthM", "GeneratedBeamStirrupBendRadiusM",
+        "GeneratedBeamStirrupHookLengthM", "GeneratedBeamStirrupHookTailAngleDeg",
+        "Beam.Line.RectangularClosedLoop", "Beam.Line.RectangularRoundedLoop", "Beam.Line.RectangularHookedPath",
+        "BEAM_STIRRUP_GENERATED_LENGTH_MISMATCH", "BEAM_STIRRUP_GENERATED_MODE_MISMATCH",
+        "Old generated snapshots predate bend/hook length metadata"
+    ):
+        if needle not in text: errors.append("beam stirrup advanced health missing: " + needle)
+
+if invalidator.is_file():
+    text = invalidator.read_text(encoding="utf-8")
+    for key in (
+        "GeneratedBeamStirrupCenterlineLengthM", "GeneratedBeamStirrupTotalCenterlineLengthM",
+        "GeneratedBeamStirrupPolylineLengthM", "GeneratedBeamStirrupBendRadiusM",
+        "GeneratedBeamStirrupHookLengthM", "GeneratedBeamStirrupHookTailAngleDeg"
+    ):
+        if 'Remove(element, "' + key + '")' not in text:
+            errors.append("beam stirrup invalidation does not clear: " + key)
 
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
@@ -55,9 +81,17 @@ if smoke.is_file():
     ):
         if needle not in text: errors.append("beam stirrup bend smoke missing: " + needle)
 
-print("QS3D beam stirrup bend/hook preflight")
+if health_smoke.is_file():
+    text = health_smoke.read_text(encoding="utf-8")
+    for needle in (
+        "LegacySnapshotRemainsCompatible();", "AdvancedSnapshotIsAccepted();",
+        "LengthMismatchIsReported();", "HookModeMismatchIsReported();"
+    ):
+        if needle not in text: errors.append("beam stirrup metadata health smoke missing: " + needle)
+
+print("QS3D beam stirrup bend/hook lifecycle preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: legacy beam stirrup compatibility, explicit bend/hook geometry, exact centerline metadata, endpoint-safe segmented Solid3d path and smoke coverage are present.")
+print("PASS: legacy compatibility, explicit bend/hook geometry, exact length metadata, endpoint-safe V25 path, health consistency and invalidation cleanup are present.")
