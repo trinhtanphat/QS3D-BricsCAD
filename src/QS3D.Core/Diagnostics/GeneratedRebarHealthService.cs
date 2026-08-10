@@ -17,36 +17,56 @@ namespace QS3D.Core.Diagnostics
             public bool RequiresSingleDiameter { get; set; }
         }
 
-        private static readonly HandleSetSpec[] Specs =
+        private static readonly HandleSetSpec ColumnSpec = new HandleSetSpec
         {
-            new HandleSetSpec
-            {
-                HandlesKey = "GeneratedRebarHandles",
-                CountKey = "GeneratedRebarCount",
-                CodePrefix = "REBAR",
-                DisplayName = "column rebar",
-                RequiresSingleDiameter = true
-            },
-            new HandleSetSpec
-            {
-                HandlesKey = "GeneratedShapeRebarHandles",
-                CountKey = "GeneratedShapeRebarCount",
-                CodePrefix = "SHAPE_REBAR",
-                DisplayName = "shape rebar",
-                RequiresSingleDiameter = false
-            }
+            HandlesKey = "GeneratedRebarHandles",
+            CountKey = "GeneratedRebarCount",
+            CodePrefix = "REBAR",
+            DisplayName = "column rebar",
+            RequiresSingleDiameter = true
         };
 
-        public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveSolidHandles = null)
+        private static readonly HandleSetSpec ShapeSpec = new HandleSetSpec
+        {
+            HandlesKey = "GeneratedShapeRebarHandles",
+            CountKey = "GeneratedShapeRebarCount",
+            CodePrefix = "SHAPE_REBAR",
+            DisplayName = "shape rebar",
+            RequiresSingleDiameter = false
+        };
+
+        public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveColumnSolidHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
             var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
             foreach (var element in project.Elements)
             {
-                foreach (var spec in Specs)
-                    InspectSet(element, spec, liveSolidHandles, owners, issues);
+                InspectSet(element, ColumnSpec, liveColumnSolidHandles, owners, issues);
+                InspectSet(element, ShapeSpec, null, owners, issues);
+            }
+            return issues;
+        }
+
+        public IReadOnlyList<ModelHealthIssue> InspectShape(ProjectState project, ISet<string>? liveShapeSolidHandles = null)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var issues = new List<ModelHealthIssue>();
+            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+                InspectSet(element, ShapeSpec, liveShapeSolidHandles, owners, issues);
+            return issues;
+        }
+
+        public IReadOnlyList<ModelHealthIssue> InspectAll(ProjectState project, ISet<string>? liveColumnSolidHandles, ISet<string>? liveShapeSolidHandles)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var issues = new List<ModelHealthIssue>();
+            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                InspectSet(element, ColumnSpec, liveColumnSolidHandles, owners, issues);
+                InspectSet(element, ShapeSpec, liveShapeSolidHandles, owners, issues);
             }
             return issues;
         }
