@@ -1,5 +1,7 @@
 using System;
+using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -12,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             StraightRectangularPathMatchesLegacyPlanner();
             StraightChamferedPathMatchesLegacyPlanner();
             BentPathUsesSharedFootprintAndTerminalChamfers();
+            CurrentPathSnapshotDrivesWallPierQuantity();
+            StalePathSnapshotFallsBackToSemanticProfile();
             RejectsOversizedTerminalChamfer();
             RejectsSelfIntersectingPath();
             RejectsImpossibleAndNonFiniteProfiles();
@@ -131,6 +135,70 @@ namespace QS3D.Core.SmokeTests
             Near(rectangular.FootprintAreaM2 - 2d * chamfer * chamfer, chamfered.FootprintAreaM2);
             Near(rectangular.FootprintPerimeterM - 8d * chamfer + 4d * Math.Sqrt(2d) * chamfer, chamfered.FootprintPerimeterM);
             if (chamfered.Polygon.Count != rectangular.Polygon.Count + 4) throw new Exception("Chamfered WallPier path must replace exactly four terminal corners.");
+        }
+
+        private static void CurrentPathSnapshotDrivesWallPierQuantity()
+        {
+            var project = new ProjectState("wall-pier-path", "WallPier Path");
+            var family = new ProjectFamily("pier-family", "Trụ chamfer", ElementCategory.WallPier);
+            family.Properties["WallPierProfileMode"] = "Chamfered";
+            family.Properties["WallPierChamferM"] = "0.02";
+            project.Families.Add(family);
+            var element = PathSnapshotElement(family.Id);
+            project.Elements.Add(element);
+
+            new WallRegenerator().Regenerate(project, element);
+            Near(0.2792d, element.Quantities["WallPierProfileCrossSectionAreaM2"]);
+            Near(3.25d, element.Quantities["WallPierProfilePerimeterM"]);
+            Near(0.8376d, element.Quantities["WallPierProfileGrossVolumeM3"]);
+            Near(9.75d, element.Quantities["WallPierProfileLateralAreaM2"]);
+            Near(0.8376d, element.Quantities["GrossVolumeM3"]);
+        }
+
+        private static void StalePathSnapshotFallsBackToSemanticProfile()
+        {
+            var project = new ProjectState("wall-pier-stale", "WallPier Stale");
+            var family = new ProjectFamily("pier-family", "Trụ chamfer", ElementCategory.WallPier);
+            family.Properties["WallPierProfileMode"] = "Chamfered";
+            family.Properties["WallPierChamferM"] = "0.02";
+            project.Families.Add(family);
+            var element = PathSnapshotElement(family.Id);
+            project.Elements.Add(element);
+            element.MarkDirty(ElementDirtyFlags.Properties);
+            if (!element.IsGeneratedSolidStale()) throw new Exception("Generated WallPier host should be stale after semantic mutation.");
+
+            new WallRegenerator().Regenerate(project, element);
+            var fallback = WallPierProfilePlanner.Plan(new WallPierProfileInput
+            {
+                Mode = WallPierProfileMode.Chamfered,
+                WidthM = 1.4d,
+                DepthM = 0.2d,
+                HeightM = 3d,
+                ChamferM = 0.02d
+            });
+            Near(fallback.CrossSectionPerimeterM, element.Quantities["WallPierProfilePerimeterM"]);
+            if (Math.Abs(element.Quantities["WallPierProfilePerimeterM"] - 3.25d) < 1e-6d)
+                throw new Exception("Stale WallPier path snapshot must not drive quantity regeneration.");
+        }
+
+        private static ProjectElement PathSnapshotElement(string familyId)
+        {
+            var element = new ProjectElement("PIER-1", ElementCategory.WallPier, familyId, string.Empty, string.Empty);
+            element.Properties["LengthM"] = "1.4";
+            element.Properties["HeightM"] = "3";
+            element.Properties["ThicknessM"] = "0.2";
+            element.Properties["GeneratedSolidHandle"] = "AB";
+            element.Properties["WallPierPathProfileKind"] = "OpenPolyline";
+            element.Properties["WallPierPathProfileMode"] = "Chamfered";
+            element.Properties["WallPierPathProfileChamferM"] = "0.02";
+            element.Properties["WallPierPathProfileCenterlineLengthM"] = "1.4";
+            element.Properties["WallPierPathProfileThicknessM"] = "0.2";
+            element.Properties["WallPierPathProfileHeightM"] = "3";
+            element.Properties["WallPierPathProfileAreaM2"] = "0.2792";
+            element.Properties["WallPierPathProfilePerimeterM"] = "3.25";
+            element.Properties["WallPierPathProfileGrossVolumeM3"] = "0.8376";
+            element.Properties["WallPierPathProfileLateralAreaM2"] = "9.75";
+            return element;
         }
 
         private static void RejectsOversizedTerminalChamfer()
