@@ -97,6 +97,7 @@ namespace QS3D.BricsCAD.V25
                 createdElement = project.Elements.SingleOrDefault(x =>
                     x.Category == category && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)));
                 if (createdElement == null) throw new InvalidOperationException("Không tìm thấy semantic " + label + " vừa tạo cho source " + sourceHandle + ".");
+                var createdElementId = createdElement.Id;
 
                 createdElement.SetProperty("WidthM", widthM.ToString("R", CultureInfo.InvariantCulture));
                 createdElement.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
@@ -113,6 +114,14 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.SetImpliedSelection(new[] { sourceId });
                 new AutoHostLinkCommands().AutoLinkHosts();
                 EnsureActive(document, "Direct Draw " + label + " / post Auto Host");
+
+                // AutoHost may rollback its ProjectState snapshot and command-surface errors are
+                // intentionally swallowed there. Never trust the pre-AutoHost element reference:
+                // resolve the canonical element again from the current project by stable Id.
+                createdElement = project.Elements.SingleOrDefault(x =>
+                    string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase));
+                if (createdElement == null)
+                    throw new InvalidOperationException(label + " vừa tạo không còn tồn tại sau Auto Host; operation được rollback.");
 
                 if (!createdElement.Properties.TryGetValue("HostWallId", out hostId) || string.IsNullOrWhiteSpace(hostId))
                     throw new InvalidOperationException(label + " chưa tìm được host duy nhất trong phạm vi Auto Host; operation được rollback để không tạo opening mồ côi.");
