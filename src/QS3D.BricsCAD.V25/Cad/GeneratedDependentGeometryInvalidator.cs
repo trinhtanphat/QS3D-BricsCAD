@@ -37,6 +37,13 @@ namespace QS3D.BricsCAD.V25.Cad
                 Remove(element, "GeneratedShapeRebarHandles");
                 Remove(element, "GeneratedShapeRebarCount");
                 Remove(element, "GeneratedShapeRebarMode");
+
+                Remove(element, "GeneratedBeamStirrupHandles");
+                Remove(element, "GeneratedBeamStirrupCount");
+                Remove(element, "GeneratedBeamStirrupDiameterMm");
+                Remove(element, "GeneratedBeamStirrupActualSpacingM");
+                Remove(element, "GeneratedBeamStirrupNotation");
+                Remove(element, "GeneratedBeamStirrupMode");
             }
         }
 
@@ -51,7 +58,8 @@ namespace QS3D.BricsCAD.V25.Cad
         private static readonly string[] RebarHandleKeys =
         {
             "GeneratedRebarHandles",
-            "GeneratedShapeRebarHandles"
+            "GeneratedShapeRebarHandles",
+            "GeneratedBeamStirrupHandles"
         };
 
         public static GeneratedGeometryInvalidation Prepare(
