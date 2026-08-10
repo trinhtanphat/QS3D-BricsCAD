@@ -5,6 +5,7 @@ using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 
@@ -48,92 +49,116 @@ namespace QS3D.BricsCAD.V25.Cad
 
             var pending = new List<PendingUpdate>();
             var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var cadCommitted = false;
 
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            try
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                foreach (var id in sourceIds)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var line = transaction.GetObject(id, OpenMode.ForRead, false) as Line;
-                    if (line == null) continue;
-                    if (!line.OwnerId.Equals(modelSpace.ObjectId))
-                        throw new InvalidOperationException("Wall source phải nằm trong Model Space trước khi tạo native 3D: " + line.Handle + ".");
-                    var sourceHandle = line.Handle.ToString();
-                    var matches = project.Elements
-                        .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)))
-                        .Take(2)
-                        .ToList();
-                    if (matches.Count == 0) continue;
-                    if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + sourceHandle + " đang thuộc nhiều QS3D wall element.");
-                    var element = matches[0];
-                    if (!processedElements.Add(element.Id)) throw new InvalidOperationException("Wall element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
-
-                    var family = project.FindFamily(element.FamilyId);
-                    var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .2d), element.Id + "/ThicknessM");
-                    var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
-                    var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                    var dx = CadGeometryGuard.Subtract(line.EndPoint.X, line.StartPoint.X, element.Id + "/dx");
-                    var dy = CadGeometryGuard.Subtract(line.EndPoint.Y, line.StartPoint.Y, element.Id + "/dy");
-                    var dz = CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z, element.Id + "/dz");
-                    var planTolerance = CadGeometryGuard.Positive(
-                        CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/wall planarity tolerance"),
-                        element.Id + "/wall planarity tolerance drawing units");
-                    if (Math.Abs(dz) > planTolerance)
-                        throw new InvalidOperationException("Wall source LINE hiện yêu cầu gần ngang (|ΔZ| <= 0.005 m): " + element.Id);
-                    var length = CadGeometryGuard.Hypot(dx, dy, element.Id + "/source length");
-                    if (length <= 1e-6) throw new InvalidOperationException("Wall source LINE quá ngắn: " + element.Id);
-
-                    var thickness = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, thicknessM, element.Id + "/ThicknessM"), element.Id + "/Thickness drawing units");
-                    var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/HeightM"), element.Id + "/Height drawing units");
-                    var bottomOffset = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
-                    var angle = CadGeometryGuard.Finite(Math.Atan2(dy, dx), element.Id + "/angle");
-                    var midX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/mid X");
-                    var midY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/mid Y");
-                    var midZ = CadGeometryGuard.Add(line.StartPoint.Z, bottomOffset, element.Id + "/base Z");
-                    midZ = CadGeometryGuard.Add(midZ, height / 2d, element.Id + "/mid Z");
-                    var mid = new Point3d(midX, midY, midZ);
-
-                    var solid = new Solid3d();
-                    try
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    foreach (var id in sourceIds)
                     {
-                        solid.SetDatabaseDefaults(document.Database);
-                        solid.CreateBox(length, thickness, height);
-                        solid.TransformBy(Matrix3d.Displacement(new Vector3d(-length / 2d, -thickness / 2d, -height / 2d)));
-                        solid.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));
-                        solid.TransformBy(Matrix3d.Displacement(new Vector3d(mid.X, mid.Y, mid.Z)));
-                        solid.Layer = line.Layer;
+                        var line = transaction.GetObject(id, OpenMode.ForRead, false) as Line;
+                        if (line == null) continue;
+                        if (!line.OwnerId.Equals(modelSpace.ObjectId))
+                            throw new InvalidOperationException("Wall source phải nằm trong Model Space trước khi tạo native 3D: " + line.Handle + ".");
+                        var sourceHandle = line.Handle.ToString();
+                        var matches = project.Elements
+                            .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)))
+                            .Take(2)
+                            .ToList();
+                        if (matches.Count == 0) continue;
+                        if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + sourceHandle + " đang thuộc nhiều QS3D wall element.");
+                        var element = matches[0];
+                        if (!processedElements.Add(element.Id)) throw new InvalidOperationException("Wall element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
 
-                        var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
-                        modelSpace.AppendEntity(solid);
-                        transaction.AddNewlyCreatedDBObject(solid, true);
-                        GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category);
-                        pending.Add(new PendingUpdate
+                        var family = project.FindFamily(element.FamilyId);
+                        var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .2d), element.Id + "/ThicknessM");
+                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
+                        var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var dx = CadGeometryGuard.Subtract(line.EndPoint.X, line.StartPoint.X, element.Id + "/dx");
+                        var dy = CadGeometryGuard.Subtract(line.EndPoint.Y, line.StartPoint.Y, element.Id + "/dy");
+                        var dz = CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z, element.Id + "/dz");
+                        var planTolerance = CadGeometryGuard.Positive(
+                            CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/wall planarity tolerance"),
+                            element.Id + "/wall planarity tolerance drawing units");
+                        if (Math.Abs(dz) > planTolerance)
+                            throw new InvalidOperationException("Wall source LINE hiện yêu cầu gần ngang (|ΔZ| <= 0.005 m): " + element.Id);
+                        var length = CadGeometryGuard.Hypot(dx, dy, element.Id + "/source length");
+                        if (length <= 1e-6) throw new InvalidOperationException("Wall source LINE quá ngắn: " + element.Id);
+
+                        var thickness = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, thicknessM, element.Id + "/ThicknessM"), element.Id + "/Thickness drawing units");
+                        var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/HeightM"), element.Id + "/Height drawing units");
+                        var bottomOffset = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
+                        var angle = CadGeometryGuard.Finite(Math.Atan2(dy, dx), element.Id + "/angle");
+                        var midX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/mid X");
+                        var midY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/mid Y");
+                        var midZ = CadGeometryGuard.Add(line.StartPoint.Z, bottomOffset, element.Id + "/base Z");
+                        midZ = CadGeometryGuard.Add(midZ, height / 2d, element.Id + "/mid Z");
+                        var mid = new Point3d(midX, midY, midZ);
+
+                        var solid = new Solid3d();
+                        try
                         {
-                            Element = element,
-                            PreviousHandle = previousHandle,
-                            GeneratedHandle = solid.Handle.ToString(),
-                            LengthM = CadGeometryGuard.ToMeters(document, length, element.Id + "/source length"),
-                            ThicknessM = thicknessM,
-                            HeightM = heightM
-                        });
+                            solid.SetDatabaseDefaults(document.Database);
+                            solid.CreateBox(length, thickness, height);
+                            solid.TransformBy(Matrix3d.Displacement(new Vector3d(-length / 2d, -thickness / 2d, -height / 2d)));
+                            solid.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));
+                            solid.TransformBy(Matrix3d.Displacement(new Vector3d(mid.X, mid.Y, mid.Z)));
+                            solid.Layer = line.Layer;
+
+                            var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
+                            modelSpace.AppendEntity(solid);
+                            transaction.AddNewlyCreatedDBObject(solid, true);
+                            GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category);
+                            pending.Add(new PendingUpdate
+                            {
+                                Element = element,
+                                PreviousHandle = previousHandle,
+                                GeneratedHandle = solid.Handle.ToString(),
+                                LengthM = CadGeometryGuard.ToMeters(document, length, element.Id + "/source length"),
+                                ThicknessM = thicknessM,
+                                HeightM = heightM
+                            });
+                        }
+                        catch
+                        {
+                            solid.Dispose();
+                            throw;
+                        }
                     }
-                    catch
+
+                    // Commit semantic ownership while the CAD transaction is still rollback-capable.
+                    // If this phase fails, the transaction is aborted and the project snapshot is
+                    // restored, so a new Solid3d can never survive without matching semantic state.
+                    foreach (var update in pending)
                     {
-                        solid.Dispose();
-                        throw;
+                        GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category);
+                        update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.Properties["HeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
+                    }
+
+                    transaction.Commit();
+                    cadCommitted = true;
+                }
+            }
+            catch (Exception operationError)
+            {
+                if (!cadCommitted)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "LINE wall replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
                     }
                 }
-                transaction.Commit();
-            }
-
-            foreach (var update in pending)
-            {
-                GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category);
-                update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["HeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
+                throw;
             }
 
             if (pending.Count > 0)

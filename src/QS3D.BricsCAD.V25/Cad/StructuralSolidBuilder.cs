@@ -4,6 +4,7 @@ using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 
@@ -35,67 +36,88 @@ namespace QS3D.BricsCAD.V25.Cad
             if (ids.Length == 0) return 0;
             var pending = new List<PendingUpdate>();
             var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var cadCommitted = false;
 
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            try
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                foreach (var id in ids)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
-                    if (entity == null || entity.IsErased) continue;
-                    var handle = entity.Handle.ToString();
-                    var matches = project.Elements
-                        .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
-                        .Take(2)
-                        .ToList();
-                    if (matches.Count == 0) continue;
-                    if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + handle + " đang thuộc nhiều QS3D " + category + " element.");
-                    var element = matches[0];
-                    if (!processedElements.Add(element.Id)) throw new InvalidOperationException(category + " element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    foreach (var id in ids)
+                    {
+                        var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                        if (entity == null || entity.IsErased) continue;
+                        var handle = entity.Handle.ToString();
+                        var matches = project.Elements
+                            .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
+                            .Take(2)
+                            .ToList();
+                        if (matches.Count == 0) continue;
+                        if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + handle + " đang thuộc nhiều QS3D " + category + " element.");
+                        var element = matches[0];
+                        if (!processedElements.Add(element.Id)) throw new InvalidOperationException(category + " element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
 
-                    var family = project.FindFamily(element.FamilyId);
-                    Solid3d solid;
-                    if (UsesLine(category))
-                    {
-                        if (!(entity is Line line)) throw new InvalidOperationException(category + " element " + element.Id + " cần source LINE để dựng 3D.");
-                        solid = BuildLinePrism(document, line, element, family, category);
-                    }
-                    else
-                    {
-                        if (!(entity is Polyline polyline) || !polyline.Closed) throw new InvalidOperationException(category + " element " + element.Id + " cần closed POLYLINE để dựng 3D.");
-                        solid = BuildClosedPolylinePrism(document, polyline, element, family, category);
-                    }
-
-                    try
-                    {
-                        solid.Layer = entity.Layer;
-                        var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
-                        modelSpace.AppendEntity(solid);
-                        transaction.AddNewlyCreatedDBObject(solid, true);
-                        GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category);
-                        pending.Add(new PendingUpdate
+                        var family = project.FindFamily(element.FamilyId);
+                        Solid3d solid;
+                        if (UsesLine(category))
                         {
-                            Element = element,
-                            PreviousHandle = previousHandle,
-                            GeneratedHandle = solid.Handle.ToString(),
-                            Category = category
-                        });
+                            if (!(entity is Line line)) throw new InvalidOperationException(category + " element " + element.Id + " cần source LINE để dựng 3D.");
+                            solid = BuildLinePrism(document, line, element, family, category);
+                        }
+                        else
+                        {
+                            if (!(entity is Polyline polyline) || !polyline.Closed) throw new InvalidOperationException(category + " element " + element.Id + " cần closed POLYLINE để dựng 3D.");
+                            solid = BuildClosedPolylinePrism(document, polyline, element, family, category);
+                        }
+
+                        try
+                        {
+                            solid.Layer = entity.Layer;
+                            var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
+                            modelSpace.AppendEntity(solid);
+                            transaction.AddNewlyCreatedDBObject(solid, true);
+                            GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category);
+                            pending.Add(new PendingUpdate
+                            {
+                                Element = element,
+                                PreviousHandle = previousHandle,
+                                GeneratedHandle = solid.Handle.ToString(),
+                                Category = category
+                            });
+                        }
+                        catch
+                        {
+                            solid.Dispose();
+                            throw;
+                        }
                     }
-                    catch
+
+                    foreach (var update in pending)
                     {
-                        solid.Dispose();
-                        throw;
+                        GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, update.Category);
+                        update.Element.Properties["GeneratedSolidMode"] = GeometryMode(update.Category);
+                    }
+
+                    transaction.Commit();
+                    cadCommitted = true;
+                }
+            }
+            catch (Exception operationError)
+            {
+                if (!cadCommitted)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Structural replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
                     }
                 }
-                transaction.Commit();
-            }
-
-            foreach (var update in pending)
-            {
-                GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, update.Category);
-                update.Element.Properties["GeneratedSolidMode"] = GeometryMode(update.Category);
+                throw;
             }
 
             if (pending.Count > 0)
