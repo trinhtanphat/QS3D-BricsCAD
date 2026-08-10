@@ -84,6 +84,7 @@ checks = {
         "processed.Add(element.Id)",
         "ClearPathProfileSnapshot(update.Element)",
         'StartsWith("WallPierPathProfile"',
+        "update.Element.MarkDirty(ElementDirtyFlags.Quantity)",
     ],
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs": [
         "category == ElementCategory.WallPier",
@@ -101,6 +102,7 @@ checks = {
         'properties["WallPierPathProfilePerimeterM"]',
         'properties["WallPierPathProfileGrossVolumeM3"]',
         'properties["WallPierPathProfileLateralAreaM2"]',
+        "update.Element.MarkDirty(ElementDirtyFlags.Quantity)",
         "GeneratedGeometryService.PrepareReplacement",
         "GeneratedGeometryService.CommitReplacement",
     ],
@@ -117,6 +119,10 @@ checks = {
         "StraightRectangularPathMatchesLegacyPlanner",
         "StraightChamferedPathMatchesLegacyPlanner",
         "BentPathUsesSharedFootprintAndTerminalChamfers",
+        "CurrentPathSnapshotDrivesWallPierQuantity",
+        "StalePathSnapshotFallsBackToSemanticProfile",
+        "GeneratedSolidHandle",
+        "Generated WallPier host should be stale",
         "RejectsOversizedTerminalChamfer",
         "RejectsSelfIntersectingPath",
         "RejectsImpossibleAndNonFiniteProfiles",
@@ -153,4 +159,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: WallPier LINE and open-POLYLINE Rectangular/Chamfered planning, shared footprint joins, exact current-snapshot quantities, guarded native Solid3d wiring, stale cleanup, smoke and docs are present.")
+print("PASS: WallPier LINE and open-POLYLINE Rectangular/Chamfered planning, shared footprint joins, exact current-snapshot quantities, quantity refresh, guarded native Solid3d wiring, stale cleanup, smoke and docs are present.")
