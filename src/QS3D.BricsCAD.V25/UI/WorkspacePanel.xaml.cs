@@ -10,8 +10,10 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Services;
 using Application = Bricscad.ApplicationServices.Application;
 using QS3D.BricsCAD.V25.UI.ViewModels;
+using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
+using QS3D.Core.Persistence;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -149,14 +151,22 @@ namespace QS3D.BricsCAD.V25.UI
 
         public void RefreshProject()
         {
-            var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null) return;
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
             _loadingContext = true;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc); _viewModel.Load(project);
-                ZoneCombo.SelectedIndex = _viewModel.ActiveZoneIndex(); FloorCombo.SelectedIndex = _viewModel.ActiveFloorIndex(); ApplyFamilyFilter();
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                _viewModel.Load(project);
+                ZoneCombo.SelectedIndex = _viewModel.ActiveZoneIndex();
+                FloorCombo.SelectedIndex = _viewModel.ActiveFloorIndex();
+                ApplyFamilyFilter();
                 var active = project.Metadata.TryGetValue("ActiveFamilyId", out var id) ? project.FindFamily(id) : null;
                 FamilyList.SelectedItem = active ?? FamilyList.Items.Cast<object>().OfType<ProjectFamily>().FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Đọc Workspace lỗi: " + ex.Message);
             }
             finally { _loadingContext = false; }
         }
@@ -181,8 +191,20 @@ namespace QS3D.BricsCAD.V25.UI
             finally { _loadingContext = false; }
         }
 
-        private void OnZoneChanged(object sender, SelectionChangedEventArgs e) { if (!_loadingContext) _viewModel.SetActiveZone(ZoneCombo.SelectedItem as string); }
-        private void OnFloorChanged(object sender, SelectionChangedEventArgs e) { if (!_loadingContext) _viewModel.SetActiveFloor(FloorCombo.SelectedItem as string); }
+        private void OnZoneChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingContext) return;
+            try { _viewModel.SetActiveZone(ZoneCombo.SelectedItem as string); }
+            catch (Exception ex) { SetStatus("Đổi Zone làm việc lỗi: " + ex.Message); }
+        }
+
+        private void OnFloorChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingContext) return;
+            try { _viewModel.SetActiveFloor(FloorCombo.SelectedItem as string); }
+            catch (Exception ex) { SetStatus("Đổi tầng làm việc lỗi: " + ex.Message); }
+        }
+
         private void OnModelTreeSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (!(e.NewValue is TreeViewItem item)) return;
@@ -203,19 +225,88 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnAddClick(object sender, RoutedEventArgs e)
         {
-            var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null) return; var project = ProjectContextCoordinator.GetOrCreate(doc); var basis = FamilyList.SelectedItem as ProjectFamily;
-            var category = basis?.Category ?? _categoryFilter ?? ElementCategory.Room; var baseName = basis?.Name ?? category.ToString(); var n = 2; var name = baseName + "-" + n;
-            while (project.Families.Any(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase))) name = baseName + "-" + (++n);
-            var family = new ProjectFamily(Guid.NewGuid().ToString("N"), name, category); if (basis != null) foreach (var property in basis.Properties) family.Properties[property.Key] = property.Value;
-            project.Families.Add(family); project.Metadata["ActiveFamilyId"] = family.Id; project.Touch(); RefreshProject(); FamilyList.SelectedItem = family; SetStatus("Đã tạo Family “" + name + "”.");
+            try
+            {
+                var doc = Application.DocumentManager.MdiActiveDocument;
+                if (doc == null) throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active.");
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var selected = FamilyList.SelectedItem as ProjectFamily;
+                var basis = selected == null ? null : project.FindFamily(selected.Id);
+                if (selected != null && basis == null)
+                    throw new InvalidOperationException("Family đang chọn không còn tồn tại trong project hiện tại. Hãy Refresh Workspace.");
+
+                var category = basis?.Category ?? _categoryFilter ?? ElementCategory.Room;
+                var baseName = basis?.Name ?? category.ToString();
+                var n = 2;
+                var name = baseName + "-" + n;
+                while (project.Families.Any(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase))) name = baseName + "-" + (++n);
+
+                var family = ExecuteAtomic(project, () =>
+                {
+                    ProjectFamily created;
+                    if (basis != null)
+                    {
+                        created = ProjectFamilyService.Duplicate(project, basis.Id, Guid.NewGuid().ToString("N"), name);
+                        AuditTrail.ForProject(project).Record("family.duplicate", string.Empty, basis.Id + " -> " + created.Id + " • " + created.Name + " • Workspace");
+                    }
+                    else
+                    {
+                        created = ProjectFamilyService.Create(project, Guid.NewGuid().ToString("N"), name, category);
+                        AuditTrail.ForProject(project).Record("family.create", string.Empty, created.Id + " • " + created.Category + " • " + created.Name + " • Workspace");
+                    }
+                    ProjectFamilyActivationService.SetActive(project, created.Id);
+                    return created;
+                }, "Tạo/Nhân bản Family từ Workspace");
+
+                RefreshAfterCommit(
+                    () =>
+                    {
+                        RefreshProject();
+                        FamilyList.SelectedItem = project.FindFamily(family.Id);
+                    },
+                    basis == null ? "Đã tạo Family “" + family.Name + "”." : "Đã nhân bản Family “" + basis.Name + "” → “" + family.Name + "”.",
+                    "Workspace Family create/duplicate");
+            }
+            catch (Exception ex) { SetStatus("Tạo/Nhân bản Family lỗi: " + ex.Message); }
         }
 
         private void OnDeleteClick(object sender, RoutedEventArgs e)
         {
-            var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null) return; var family = FamilyList.SelectedItem as ProjectFamily; if (family == null) return;
-            var project = ProjectContextCoordinator.GetOrCreate(doc); var used = project.Elements.Count(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase));
-            if (used > 0) { SetStatus("Không thể xóa: Family đang được " + used + " cấu kiện sử dụng."); return; }
-            project.Families.Remove(family); if (project.Metadata.TryGetValue("ActiveFamilyId", out var id) && string.Equals(id, family.Id, StringComparison.OrdinalIgnoreCase)) project.Metadata.Remove("ActiveFamilyId"); project.Touch(); RefreshProject(); SetStatus("Đã xóa Family.");
+            try
+            {
+                var doc = Application.DocumentManager.MdiActiveDocument;
+                if (doc == null) throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active.");
+                if (!(FamilyList.SelectedItem is ProjectFamily selected)) return;
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var family = project.FindFamily(selected.Id)
+                    ?? throw new InvalidOperationException("Family đang chọn không còn tồn tại trong project hiện tại. Hãy Refresh Workspace.");
+                var used = ProjectFamilyService.ReferenceCount(project, family.Id);
+                if (used > 0)
+                {
+                    SetStatus("Không thể xóa: Family đang được " + used + " cấu kiện sử dụng.");
+                    return;
+                }
+
+                var deleted = ExecuteAtomic(project, () =>
+                {
+                    if (project.Metadata.TryGetValue("ActiveFamilyId", out var activeId) && string.Equals(activeId, family.Id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        project.Metadata.Remove("ActiveFamilyId");
+                        project.Touch();
+                    }
+                    var removed = ProjectFamilyService.Delete(project, family.Id);
+                    if (removed)
+                        AuditTrail.ForProject(project).Record("family.delete", string.Empty, family.Id + " • " + family.Name + " • Workspace");
+                    return removed;
+                }, "Xóa Family từ Workspace");
+                if (!deleted) return;
+
+                RefreshAfterCommit(
+                    RefreshProject,
+                    "Đã xóa Family “" + family.Name + "”.",
+                    "Workspace Family delete");
+            }
+            catch (Exception ex) { SetStatus("Xóa Family lỗi: " + ex.Message); }
         }
 
         private void OnCaptureSelectedClick(object sender, RoutedEventArgs e)
@@ -262,13 +353,30 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnQuantityClick(object sender, RoutedEventArgs e) => Send("QS3DBQ");
         private void OnHealthClick(object sender, RoutedEventArgs e) => Send("QS3DHEALTH");
         private void OnSaveClick(object sender, RoutedEventArgs e) => Send("QS3DSAVE");
-        private void OnRefreshClick(object sender, RoutedEventArgs e) { RefreshProject(); PaletteCoordinator.RefreshCad(); }
+        private void OnRefreshClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                RefreshProject();
+                PaletteCoordinator.RefreshCad();
+            }
+            catch (Exception ex) { SetStatus("Làm mới Workspace/CAD lỗi: " + ex.Message); }
+        }
         private void OnLocateSelectedClick(object sender, RoutedEventArgs e) { var count = SelectInspection(); SetStatus("Đã chọn lại " + count + " đối tượng CAD."); if (count > 0) Send("QS3DZOOMSELECTED"); }
         private void OnFocusSelectedClick(object sender, RoutedEventArgs e) { var count = SelectInspection(); if (count <= 0) { SetStatus("Chưa có đối tượng để Focus."); return; } SetStatus("Focus " + count + " đối tượng."); Send("QS3DFOCUS"); }
         private void OnIsolateSelectedClick(object sender, RoutedEventArgs e) { var count = SelectInspection(); if (count <= 0) { SetStatus("Chưa có đối tượng để Cô lập."); return; } SetStatus("Cô lập " + count + " đối tượng."); Send("QS3DISOLATE"); }
         private void OnUnisolateClick(object sender, RoutedEventArgs e) { SetStatus("Khôi phục đối tượng đã cô lập."); Send("QS3DUNISOLATE"); }
         private void OnResetPropertyClick(object sender, RoutedEventArgs e) { if (sender is Button button && button.CommandParameter is PropertyRowViewModel row) row.ResetValue(); }
-        private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e) { if (_loadingContext) return; _viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily); _viewModel.ShowFamilyProperties(); }
+        private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingContext) return;
+            try
+            {
+                _viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily);
+                _viewModel.ShowFamilyProperties();
+            }
+            catch (Exception ex) { SetStatus("Đổi Family active lỗi: " + ex.Message); }
+        }
         private void OnFamilySearchChanged(object sender, TextChangedEventArgs e) => ApplyFamilyFilter();
 
         private int SelectInspection()
@@ -328,6 +436,62 @@ namespace QS3D.BricsCAD.V25.UI
                 default: return "QS3DTAKEOFF";
             }
         }
-        private static void Send(string command) => Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + " ", true, false, false);
+
+        private static T ExecuteAtomic<T>(ProjectState project, Func<T> operation, string operationName)
+        {
+            var rollback = ProjectStateSnapshot.Capture(project);
+            try
+            {
+                return operation();
+            }
+            catch (Exception operationError)
+            {
+                try
+                {
+                    rollback.Restore(project);
+                }
+                catch (Exception restoreError)
+                {
+                    throw new InvalidOperationException(
+                        operationName + " thất bại và rollback project cũng không hoàn tất.",
+                        new AggregateException(operationError, restoreError));
+                }
+                throw;
+            }
+        }
+
+        private void RefreshAfterCommit(Action refresh, string successMessage, string context)
+        {
+            SetStatus(successMessage);
+            try { refresh(); }
+            catch (Exception refreshError)
+            {
+                SetStatus(successMessage + " UI sync warning: " + refreshError.Message);
+                var doc = Application.DocumentManager.MdiActiveDocument;
+                if (doc != null)
+                {
+                    try { doc.Editor.WriteMessage("\nQS3D " + context + " đã commit; UI sync warning: " + refreshError.Message); }
+                    catch { }
+                }
+            }
+        }
+
+        private void Send(string command)
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null)
+            {
+                SetStatus("Không có bản vẽ BricsCAD đang active.");
+                return;
+            }
+            var normalized = (command ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                SetStatus("Command rỗng; không gửi sang BricsCAD.");
+                return;
+            }
+            try { document.SendStringToExecute(normalized + " ", true, false, false); }
+            catch (Exception ex) { SetStatus("Không thể gửi lệnh " + normalized + ": " + ex.Message); }
+        }
     }
 }
