@@ -47,6 +47,7 @@ namespace QS3D.Core.SmokeTests
             RegenerationSubsetSmoke.Run();
             GeneratedHandleOwnershipIndexSmoke.Run();
             DependencyGraphDirectDependentsSmoke.Run();
+            ProjectStateLookupSmoke.Run();
         }
     }
 }
