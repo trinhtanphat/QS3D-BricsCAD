@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             AlphabeticSequenceCrossesZDeterministically();
             ExistingExternalLabelBlocksWholeBatch();
             NonGridInputBlocksWholeBatch();
+            UnrelatedDuplicateIdentityBlocksWholeBatch();
         }
 
         private static void NumericSequenceIsOrderedAndPadded()
@@ -83,6 +84,19 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(wall);
 
             Throws<InvalidOperationException>(() => GridNamingService.Renumber(project, new[] { grid.Id, wall.Id }, new GridNamingOptions()));
+            Equal("OLD", grid.Properties[GridNamingService.GridLabelKey]);
+            True(!grid.Properties.ContainsKey(GridNamingService.GridSequenceIndexKey));
+        }
+
+        private static void UnrelatedDuplicateIdentityBlocksWholeBatch()
+        {
+            var project = Project();
+            var grid = Grid(project, "G-A");
+            grid.SetProperty(GridNamingService.GridLabelKey, "OLD");
+            project.Elements.Add(new ProjectElement("DUP", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty));
+            project.Elements.Add(new ProjectElement("dup", ElementCategory.Beam, string.Empty, string.Empty, string.Empty));
+
+            Throws<InvalidOperationException>(() => GridNamingService.Renumber(project, new[] { grid.Id }, new GridNamingOptions()));
             Equal("OLD", grid.Properties[GridNamingService.GridLabelKey]);
             True(!grid.Properties.ContainsKey(GridNamingService.GridSequenceIndexKey));
         }
