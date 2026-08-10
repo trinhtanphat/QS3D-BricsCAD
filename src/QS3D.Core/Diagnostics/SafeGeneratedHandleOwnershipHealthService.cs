@@ -62,6 +62,10 @@ namespace QS3D.Core.Diagnostics
                     list = new List<Claim>();
                     claims[handle] = list;
                 }
+                if (list.Any(x =>
+                    string.Equals(x.ElementId, element.Id, StringComparison.OrdinalIgnoreCase) &&
+                    GeneratedHandleOwnershipPolicy.AreSameLogicalOwnerSlots(x.Slot, slot)))
+                    continue;
                 list.Add(new Claim { ElementId = element.Id, Slot = slot });
             }
         }
