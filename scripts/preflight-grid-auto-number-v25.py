@@ -30,6 +30,9 @@ if COMMAND.is_file():
         'second.Value.TransformBy(ucs)',
         'GridSpatialOrderingPlanner.OrderParallelLines(extraction.Curves, orderingAxis.Value)',
         'ConfirmPlan(document.Editor, ordered, namingOptions)',
+        'Áp dụng auto-number theo thứ tự này? [Yes/No] <No>',
+        'if (confirm.Status == PromptStatus.None) return false;',
+        'confirm.Status == PromptStatus.OK && string.Equals(confirm.StringResult, "Yes"',
         'ProjectStateSnapshot.Capture(project)',
         'GridNamingService.Renumber(project, orderedIds, namingOptions)',
         'rollback.Restore(project)',
@@ -47,10 +50,12 @@ if COMMAND.is_file():
         'GridReferenceCurve.Arc(',
         '.OrderBy(',
         '.OrderByDescending(',
+        'Áp dụng auto-number theo thứ tự này? [Yes/No] <Yes>',
+        'if (confirm.Status == PromptStatus.None) return true;',
     )
     for token in forbidden:
         if token in text:
-            errors.append("Grid auto-number must remain read-only CAD + Core-planner-owned ordering: " + token)
+            errors.append("Grid auto-number must remain read-only CAD + Core-planner-owned ordering + explicit Yes-only confirmation: " + token)
 
     planner = text.find('GridSpatialOrderingPlanner.OrderParallelLines(extraction.Curves, orderingAxis.Value)')
     confirm = text.find('ConfirmPlan(document.Editor, ordered, namingOptions)')
@@ -87,6 +92,8 @@ if DOC.is_file():
     for token in (
         'QS3DGRIDNUMBERAUTO',
         'explicit ordering axis',
+        'explicit `Yes`',
+        'Enter/default means No',
         'UCS → WCS',
         'parallel LINE',
         'ARC/radial',
@@ -104,4 +111,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Grid auto-number uses explicit WCS ordering axis, same-plane semantic LINE sources, Core fail-closed spatial ordering, reviewed confirmation and semantic rollback; runtime remains separately qualified.")
+print("PASS: Grid auto-number uses explicit WCS ordering axis, same-plane semantic LINE sources, Core fail-closed spatial ordering, explicit Yes-only confirmation and semantic rollback; runtime remains separately qualified.")
