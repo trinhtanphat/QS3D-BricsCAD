@@ -365,9 +365,19 @@ namespace QS3D.Core.Persistence
         private static DateTime Date(string? value)
         {
             if (string.IsNullOrWhiteSpace(value)) return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var result))
+            var raw = value.Trim();
+            if (!HasExplicitUtcOffset(raw) || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result))
                 throw new InvalidDataException("Invalid QSDB UTC timestamp: " + value);
-            return result.ToUniversalTime();
+            return result.UtcDateTime;
+        }
+
+        private static bool HasExplicitUtcOffset(string value)
+        {
+            if (value.EndsWith("Z", StringComparison.OrdinalIgnoreCase)) return true;
+            var timeSeparator = value.IndexOf('T');
+            if (timeSeparator < 0) return false;
+            var offsetSeparator = Math.Max(value.LastIndexOf('+'), value.LastIndexOf('-'));
+            return offsetSeparator > timeSeparator;
         }
 
         private static ElementDirtyFlags Dirty(string? value)
