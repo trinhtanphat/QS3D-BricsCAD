@@ -76,7 +76,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     var placement = ResolvePlacement(document, project, element, source);
                     ErasePrevious(document, transaction, element, ownership);
                     var item = new PendingElement { Element = element };
-                    var rowIndex = 0;
                     foreach (var row in elementRows)
                     {
                         var path = RebarShapePathBuilder.Build(row.ShapeCode, row.CuttingLengthM, Text(element, "RebarShapeLegsM"), Text(element, "RebarShapeTurnsDeg"));
@@ -85,10 +84,8 @@ namespace QS3D.BricsCAD.V25.Cad
                         for (var index = 0; index < row.Quantity; index++)
                         {
                             var offset = DistributionOffset(index, row.Quantity, placement.Span, placement.Cover, radius, placement.DistributionCentered);
-                            var lift = MultiplyFinite(MultiplyFinite(rowIndex, radius, element.Id + "/shape rebar row lift"), 2.5d, element.Id + "/shape rebar row lift");
                             var axialOffset = placement.OffsetAxisFromMinimum ? clearance : 0d;
-                            var zOffset = AddFinite(clearance, lift, element.Id + "/shape rebar Z offset");
-                            var origin = OffsetPoint(placement.Origin, placement.Axis, axialOffset, placement.Distribution, offset, zOffset, element.Id + "/shape rebar origin");
+                            var origin = OffsetPoint(placement.Origin, placement.Axis, axialOffset, placement.Distribution, offset, clearance, element.Id + "/shape rebar origin");
                             var solid = BuildShape(document, origin, placement.Axis, placement.Distribution, path, radius, element.Id + "/" + row.BarMark);
                             try
                             {
@@ -100,7 +97,6 @@ namespace QS3D.BricsCAD.V25.Cad
                             }
                             finally { solid?.Dispose(); }
                         }
-                        rowIndex++;
                     }
                     pending.Add(item);
                 }
@@ -131,8 +127,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 var length = CadGeometryGuard.Hypot(dx, dy, element.Id + "/axis");
                 if (length <= 1e-9) throw new InvalidOperationException("Source LINE quá ngắn cho shape rebar: " + element.Id);
                 var axis = new Vector3d(dx / length, dy / length, 0d); var distribution = new Vector3d(-axis.Y, axis.X, 0d);
-                var spanM = element.Category == ElementCategory.StructuralWall || element.Category == ElementCategory.ArchitecturalWall ? CadGeometryGuard.Number(element, family, "ThicknessM", .2d) : CadGeometryGuard.Number(element, family, "WidthM", .3d);
-                var span = CadGeometryGuard.ToDrawingUnits(document, CadGeometryGuard.Positive(spanM, element.Id + "/spanM"), element.Id + "/span");
+                var spanProperty = IsWallLike(element.Category) ? "ThicknessM" : "WidthM";
+                var spanFallback = IsWallLike(element.Category) ? .2d : .3d;
+                var spanM = CadGeometryGuard.Number(element, family, spanProperty, spanFallback);
+                var span = CadGeometryGuard.ToDrawingUnits(document, CadGeometryGuard.Positive(spanM, element.Id + "/" + spanProperty), element.Id + "/span");
                 var baseZ = AddFinite(line.StartPoint.Z, bottom, element.Id + "/shape rebar base Z");
                 return new Placement { Origin = Point(line.StartPoint.X, line.StartPoint.Y, baseZ, element.Id + "/shape rebar line origin"), Axis = axis, Distribution = distribution, Span = span, Cover = cover, DistributionCentered = true, OffsetAxisFromMinimum = false };
             }
@@ -246,6 +244,12 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static double SubtractFinite(double first, double second, string label)
             => CadGeometryGuard.Finite(CadGeometryGuard.Finite(first, label + "/first") - CadGeometryGuard.Finite(second, label + "/second"), label);
+
+        private static bool IsWallLike(ElementCategory category) =>
+            category == ElementCategory.ArchitecturalWall ||
+            category == ElementCategory.StructuralWall ||
+            category == ElementCategory.GlassWall ||
+            category == ElementCategory.WallPier;
 
         private static Vector3d Normalize(Vector3d vector, string label) { var length = Hypot3(vector.X, vector.Y, vector.Z, label); if (length <= 1e-12) throw new InvalidOperationException("Không xác định được " + label + "."); return new Vector3d(vector.X / length, vector.Y / length, vector.Z / length); }
         private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
