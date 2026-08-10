@@ -44,7 +44,8 @@ namespace QS3D.Core.Export
         AddSourceSemanticData = 0,
         KeepTarget = 1,
         UseSourceSemanticData = 2,
-        BlockedIncompatible = 3
+        BlockedIncompatible = 3,
+        Unresolved = 4
     }
 
     public sealed class ProjectInterchangeImportPolicy
@@ -112,7 +113,7 @@ namespace QS3D.Core.Export
         public IReadOnlyList<string> PolicyErrors { get; }
         public IReadOnlyList<string> GlobalBlocks { get; }
         public IReadOnlyList<InterchangeImportResolutionItem> Items { get; }
-        public bool HasUnresolvedPolicy => PolicyErrors.Count > 0;
+        public bool HasUnresolvedPolicy => PolicyErrors.Count > 0 || Items.Any(x => x.Action == InterchangeImportResolutionAction.Unresolved);
         public bool HasBlocks => GlobalBlocks.Count > 0 || Items.Any(x => x.Action == InterchangeImportResolutionAction.BlockedIncompatible);
         public bool CanProceedToMutationDesign => !HasUnresolvedPolicy && !HasBlocks;
 
@@ -306,8 +307,8 @@ namespace QS3D.Core.Export
                         : "Explicit policy chooses source semantic data for this existing identity.";
                     break;
                 default:
-                    resolved = InterchangeImportResolutionAction.KeepTarget;
-                    reason = "Collision policy is unresolved. This placeholder action must not be executed; inspect PolicyErrors.";
+                    resolved = InterchangeImportResolutionAction.Unresolved;
+                    reason = "Collision policy is unresolved. No executable target/source choice has been selected.";
                     break;
             }
 
