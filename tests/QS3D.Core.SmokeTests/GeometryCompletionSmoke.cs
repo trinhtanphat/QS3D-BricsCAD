@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             StraightWallFootprint();
             PolylineWallCorner();
+            FarOriginWallFootprint();
             WallFootprintRejectsSelfIntersection();
             OpeningCutPlan();
             OpeningCutRejectsInvalidPlacement();
@@ -42,6 +43,18 @@ namespace QS3D.Core.SmokeTests
             Near(1.6d, result.Area);
             Near(16.4d, result.Perimeter);
             True(result.Polygon.All(p => Finite(p.X) && Finite(p.Y)));
+        }
+
+        private static void FarOriginWallFootprint()
+        {
+            const double origin = 1_000_000_000d;
+            var result = new WallFootprintEngine().Build(new[]
+            {
+                new Point2(origin, origin), new Point2(origin + 5d, origin), new Point2(origin + 5d, origin + 3d)
+            }, 0.2d);
+            Near(8d, result.CenterlineLength, 1e-8d);
+            Near(1.6d, result.Area, 1e-7d);
+            Near(16.4d, result.Perimeter, 1e-7d);
         }
 
         private static void WallFootprintRejectsSelfIntersection()
@@ -77,6 +90,7 @@ namespace QS3D.Core.SmokeTests
             Near(-0.01d, plan.BaseElevationM);
             Near(2.21d, plan.TopElevationM);
             Near(1.1d, plan.CenterElevationM);
+            True(Finite(plan.CenterElevationM));
         }
 
         private static void OpeningCutRejectsInvalidPlacement()
