@@ -13,14 +13,19 @@ else:
     text = runner.read_text(encoding="utf-8")
     required = (
         "schema = 2",
+        "$sourceBuildCompleted = $false",
+        "$runtimeSmokeCompleted = $false",
+        "$sourceBuildCompleted = $true",
+        "$runtimeSmokeCompleted = $true",
         "automatedGateStatus = $automatedGateStatus",
-        "sourceBuildStatus = $automatedGateStatus",
+        "sourceBuildStatus = $sourceBuildStatus",
         "runtimeSmokeStatus = $runtimeSmokeStatus",
         'fullInteractiveMatrixStatus = "NOT_RUN"',
         "customerReleaseQualified = $false",
         "qualificationScope = $qualificationScope",
-        'if ($SkipRuntime) { "source-build" } else { "source-build+runtime-smoke" }',
-        'if ($SkipRuntime) { "NOT_RUN" } elseif ($null -eq $fatal) { "PASS" } else { "FAIL_OR_INCOMPLETE" }',
+        'if ($sourceBuildCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }',
+        'if ($SkipRuntime) { "NOT_RUN" } elseif ($runtimeSmokeCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }',
+        'if ($runtimeSmokeCompleted) { "source-build+runtime-smoke" } elseif ($sourceBuildCompleted) { "source-build" } else { "incomplete" }',
         "AUTOMATED SOURCE/BUILD GATES PASS",
         "AUTOMATED SOURCE/BUILD + LICENSED V25 NETLOAD/RIBBON/PALETTE SMOKE PASS",
         "FULL INTERACTIVE/PRIVATE-DWG PRODUCT MATRIX: NOT RUN by this script.",
@@ -32,12 +37,13 @@ else:
 
     forbidden = (
         'Write-Host "AUTOMATED LOCAL V25 QUALIFICATION PASS',
+        "sourceBuildStatus = $automatedGateStatus",
         'customerReleaseQualified = $true',
         'fullInteractiveMatrixStatus = "PASS"',
     )
     for token in forbidden:
         if token in text:
-            errors.append("local V25 runner overclaims automated evidence scope: " + token)
+            errors.append("local V25 runner overclaims or conflates automated evidence scope: " + token)
 
 if not runbook.is_file():
     errors.append("missing canonical local V25 qualification runbook")
@@ -49,4 +55,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: the canonical local runner distinguishes automated source/build gates, optional NETLOAD/Ribbon/Palette runtime smoke and the still-manual interactive/private-DWG product matrix; automated evidence cannot claim customer-release qualification.")
+print("PASS: the canonical local runner preserves independent source/build and NETLOAD/Ribbon/Palette runtime-smoke evidence, labels the interactive/private-DWG product matrix NOT_RUN, and cannot claim customer-release qualification from automation alone.")
