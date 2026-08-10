@@ -28,6 +28,21 @@ The closure is computed from the pre-import target state and includes:
 
 That union is passed once to `GeneratedDependentGeometryInvalidator.Prepare(...)` before catalog or element mutation begins.
 
+## Family inheritance during ALL replacement
+
+Family definitions are applied through `ProjectFamilyService` instead of raw dictionary replacement.
+
+For an existing replaced Family:
+
+- source-removed properties are removed first while the old Family value is still available;
+- a member Element loses that property only if its instance value still equals the previous inherited Family value;
+- changed/new source Family properties propagate only to Elements that still inherit the Family value/default;
+- true Element-level overrides remain preserved at this stage.
+
+After catalog propagation, an Element that is itself selected for `UseSourceSemanticData` receives its complete source portable Element properties in the same transaction. Target-only Elements therefore retain their genuine overrides, while replaced Elements intentionally receive the source Element state.
+
+Every existing member of a replaced Family is included in the union invalidation closure before this propagation occurs.
+
 ## One transaction
 
 The apply order is intentionally strict:
@@ -37,7 +52,7 @@ The apply order is intentionally strict:
 3. one `ProjectStateSnapshot.Capture(project)`;
 4. one BricsCAD document lock and one native CAD transaction;
 5. one generated-output invalidation preparation using old target ownership metadata;
-6. apply all planner-approved Zone/Floor/Family source definitions;
+6. apply all planner-approved Zone/Floor/Family source definitions using inheritance-aware Family services;
 7. apply all planner-approved Element portable semantic state;
 8. preserve existing target Element `SourceHandles` and drawing fingerprint for replaced Elements;
 9. mark the affected existing closure dirty;
@@ -46,7 +61,7 @@ The apply order is intentionally strict:
 12. record import metadata/audit and touch the project;
 13. commit the single native transaction.
 
-If anything fails before native commit, the CAD transaction aborts and the captured semantic project state is restored.
+If anything fails before native commit, the CAD transaction aborts and the captured semantic project state is restored, including any Family propagation already performed inside the semantic phase.
 
 ## Source CAD ownership remains target-local
 
