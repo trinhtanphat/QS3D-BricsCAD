@@ -157,6 +157,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["WallPierProfileMode"] = update.Mode.ToString();
                 if (update.Mode == WallPierProfileMode.Chamfered)
                     update.Element.Properties["WallPierChamferM"] = update.ChamferM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.MarkDirty(ElementDirtyFlags.Quantity);
             }
             if (pending.Count > 0)
             {
