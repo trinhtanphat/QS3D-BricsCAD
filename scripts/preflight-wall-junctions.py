@@ -6,12 +6,14 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 planner = ROOT / "src/QS3D.Core/Geometry/WallJunctionPlanner.cs"
+adjustment = ROOT / "src/QS3D.Core/Geometry/WallJunctionAdjustmentPlanner.cs"
 command = ROOT / "src/QS3D.BricsCAD.V25/WallJunctionCommands.cs"
 hub = ROOT / "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml"
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/WallJunctionRegressionSmoke.cs"
+adjustment_smoke = ROOT / "tests/QS3D.Core.SmokeTests/WallJunctionAdjustmentSmoke.cs"
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 
-for path in (planner, command, hub, smoke, registration):
+for path in (planner, adjustment, command, hub, smoke, adjustment_smoke, registration):
     if not path.is_file():
         errors.append("missing wall-junction file: " + str(path.relative_to(ROOT)))
 
@@ -37,6 +39,21 @@ if planner.is_file():
     ):
         if needle not in text:
             errors.append("wall junction planner guard missing: " + needle)
+
+if adjustment.is_file():
+    text = adjustment.read_text(encoding="utf-8")
+    for needle in (
+        "WallEndpointKind",
+        "WallEndpointAdjustment",
+        "WallJunctionAdjustmentPlan",
+        "new WallJunctionPlanner().Plan",
+        "junctionTolerance",
+        "movementEpsilon",
+        "ambiguous equally-near junction targets",
+        "would collapse segment",
+    ):
+        if needle not in text:
+            errors.append("wall junction adjustment guard missing: " + needle)
 
 if command.is_file():
     text = command.read_text(encoding="utf-8")
@@ -76,8 +93,23 @@ if smoke.is_file():
         if needle not in text:
             errors.append("wall junction regression missing: " + needle)
 
-if registration.is_file() and "WallJunctionRegressionSmoke.Run();" not in registration.read_text(encoding="utf-8"):
-    errors.append("WallJunctionRegressionSmoke is not registered")
+if adjustment_smoke.is_file():
+    text = adjustment_smoke.read_text(encoding="utf-8")
+    for needle in (
+        "NearEndpointProducesSnap();",
+        "ExactJunctionNeedsNoMove();",
+        "TJunctionInteriorNeedsNoEndpointMove();",
+        "RejectsCollapsingAdjustment();",
+    ):
+        if needle not in text:
+            errors.append("wall junction adjustment regression missing: " + needle)
+
+if registration.is_file():
+    text = registration.read_text(encoding="utf-8")
+    if "WallJunctionRegressionSmoke.Run();" not in text:
+        errors.append("WallJunctionRegressionSmoke is not registered")
+    if "WallJunctionAdjustmentSmoke.Run();" not in text:
+        errors.append("WallJunctionAdjustmentSmoke is not registered")
 
 if errors:
     for error in errors:
@@ -85,4 +117,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: deterministic End/Straight/L/T/X wall-junction planning, spatial candidate indexing with large-coordinate fallback, finite-safe geometry, coplanar CAD source enforcement, command/UI wiring and regression coverage are present.")
+print("PASS: deterministic wall-junction topology, reviewable endpoint snap plans, spatial indexing, finite-safe/coplanar CAD analysis, command/UI wiring and regression coverage are present.")
