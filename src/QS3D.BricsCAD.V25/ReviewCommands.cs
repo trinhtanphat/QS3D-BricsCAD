@@ -32,13 +32,13 @@ namespace QS3D.BricsCAD.V25
                 if (snapshots.Count == 0) { doc.Editor.WriteMessage("\nQS3D: chọn source CAD cần tạo/cập nhật 3D."); return; }
                 if (tracked == null) SemanticCaptureService.Capture(doc, category.Value);
                 int solids;
-                if (category == ElementCategory.ArchitecturalWall)
+                if (IsTktWall(category.Value))
                 {
-                    solids = WallSolidBuilder.BuildSelectedLineWalls(doc, project);
-                    solids += PolylineWallSolidBuilder.BuildSelected(doc, project);
+                    solids = WallSolidBuilder.BuildSelectedLineWalls(doc, project, category.Value);
+                    solids += PolylineWallSolidBuilder.BuildSelected(doc, project, category.Value);
                 }
                 else if (StructuralSolidBuilder.Supports(category.Value)) solids = StructuralSolidBuilder.BuildSelected(doc, project, category.Value);
-                else { PaletteCoordinator.SetStatus("Vẽ 3D native hiện hỗ trợ Tường KT, Dầm, Sàn, Cột, Vách BTCT, Móng, Cầu thang, Lan can và Đào đất."); return; }
+                else { PaletteCoordinator.SetStatus("Vẽ 3D native hiện hỗ trợ Tường KT (Gạch/Kính/Trụ), Dầm, Sàn, Cột, Vách BTCT, Móng, Cầu thang, Lan can và Đào đất."); return; }
                 if (solids == 0)
                 {
                     var hint = GeometryHint(category.Value);
@@ -134,11 +134,16 @@ namespace QS3D.BricsCAD.V25
                 case ElementCategory.Earthwork:
                     return "Dùng closed POLYLINE làm footprint.";
                 case ElementCategory.ArchitecturalWall:
+                case ElementCategory.GlassWall:
+                case ElementCategory.WallPier:
                     return "Dùng LINE hoặc open plan-view POLYLINE làm tim Tường KT; bulge được tessellate trước khi tạo footprint.";
                 default:
                     return "Source CAD hiện chưa có native solid adapter.";
             }
         }
+
+        private static bool IsTktWall(ElementCategory category) =>
+            category == ElementCategory.ArchitecturalWall || category == ElementCategory.GlassWall || category == ElementCategory.WallPier;
 
         private static int Regenerate(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
