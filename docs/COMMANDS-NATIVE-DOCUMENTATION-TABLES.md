@@ -22,6 +22,15 @@ The generic Table uses bounded `SemanticDocumentationTableBuilder` output. It is
 
 The native BQ Table mirrors all 19 `XlsxQuantityExporter` columns, including `QS3D Element ID`, `CAD Handle (hex)` and `QS3D Drawing Fingerprint` traceability.
 
+## BBS authoritative Table
+
+- `QS3DBBSTABLE` — regenerate dirty semantic state and create/replace a native BBS Table from `ProjectRebarScheduleBuilder` rows.
+- `QS3DBBSTABLEREFRESH` — regenerate dirty semantic state and rebuild at the persisted WCS position.
+- `QS3DBBSTABLEREMOVE` — erase only the positively owned BBS Table artifact and clear project metadata.
+- `QS3DBBSTABLEHEALTH` — read-only BBS fingerprint/live native health plus a dirty rebar-source warning; it never regenerates.
+
+The BBS native Table mirrors the same 15 `RebarScheduleRow` fields used by the existing XLSX schedule, including fabrication provenance fields. Those provenance values are not an engineering/code-compliance claim.
+
 ## Door / Opening authoritative Table
 
 - `QS3DDOOROPENINGTABLE` — create/replace from `DoorOpeningScheduleBuilder` rows.
@@ -45,7 +54,7 @@ The native BQ Table mirrors all 19 `XlsxQuantityExporter` columns, including `QS
 
 ## Shared lifecycle
 
-The four specialized schedules use `ProjectOwnedNativeTableArtifactService` and dedicated project-level `QS3DDOC` ownership. They do not create a dummy semantic element or reuse `GeneratedSolidHandle`.
+The five specialized schedules use `ProjectOwnedNativeTableArtifactService` and dedicated project-level `QS3DDOC` ownership. They do not create a dummy semantic element or reuse `GeneratedSolidHandle`.
 
 Creation is ModelSpace-only. A newly picked point requires a planar UCS whose XY plane is parallel to WCS XY and is transformed to drawing-local WCS. Refresh uses persisted WCS and does not require the current UCS to match creation. Removal is ownership-scoped.
 
@@ -55,6 +64,7 @@ Related docs:
 
 - `docs/NATIVE-SEMANTIC-ELEMENT-TABLE-P0.md`
 - `docs/NATIVE-BQ-TABLE-P0.md`
+- `docs/NATIVE-BBS-TABLE-P0.md`
 - `docs/NATIVE-DOOR-OPENING-TABLE-P0.md`
 - `docs/NATIVE-ROOM-FINISH-TABLE-P0.md`
 - `docs/NATIVE-MATERIAL-USAGE-TABLE-P0.md`

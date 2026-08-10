@@ -31,6 +31,8 @@ if SERVICE.is_file():
         '"MaterialUsageNativeTableBuilder"',
         "BqNativeTableBuilder.Inspect(document, project)",
         '"BqNativeTableBuilder"',
+        "BbsNativeTableBuilder.Inspect(document, project)",
+        '"BbsNativeTableBuilder"',
         "private static void AddProviderSafely(",
         "Func<IReadOnlyList<ModelHealthIssue>> provider",
         "catch (System.Exception ex) when (IsRecoverableDiagnosticFailure(ex))",
@@ -54,6 +56,7 @@ if SERVICE.is_file():
         '"RoomFinishNativeTableBuilder"',
         '"MaterialUsageNativeTableBuilder"',
         '"BqNativeTableBuilder"',
+        '"BbsNativeTableBuilder"',
     )
     positions = []
     start = 0
@@ -74,8 +77,8 @@ if SERVICE.is_file():
             "all=" + repr(sorted(all_inspect_calls)) + ", safe=" + repr(sorted(safe_lambda_calls)))
 
     provider_invocations = text.count("AddProviderSafely(") - 1
-    if provider_invocations < 8:
-        errors.append("Expected at least eight isolated native runtime health providers; found %d." % provider_invocations)
+    if provider_invocations < 9:
+        errors.append("Expected at least nine isolated native runtime health providers; found %d." % provider_invocations)
 
     if "catch (System.Exception ex)\n" in text:
         errors.append("Runtime health provider isolation must not use an unfiltered broad System.Exception catch.")
