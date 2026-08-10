@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             WorkflowSafetySmoke.Run();
             CompletionRegressionSmoke.Run();
             SemanticOverflowSmoke.Run();
+            RoomBoundarySmoke.Run();
         }
     }
 }
