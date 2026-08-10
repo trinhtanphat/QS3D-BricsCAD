@@ -15,6 +15,7 @@ for path in (command, regenerators, category):
 if command.is_file():
     text = command.read_text(encoding="utf-8")
     for needle in (
+        "using QS3D.BricsCAD.V25.UI;",
         'CommandMethod("QS3DGRID", CommandFlags.UsePickSet)',
         "EntitySnapshotReader.ReadCurrentSelection",
         'string.Equals(entityType, "Line"',
@@ -23,6 +24,7 @@ if command.is_file():
         "double.IsNaN",
         "double.IsInfinity",
         "SemanticCaptureService.Capture(document, ElementCategory.Grid)",
+        "PaletteCoordinator.RefreshProject()",
         "không sinh native 3D",
     ):
         if needle not in text:
@@ -46,4 +48,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DGRID captures only finite positive LINE/ARC reference geometry through transactional semantic capture, uses the existing Grid generic takeoff model, and does not pretend to create native 3D Grid geometry.")
+print("PASS: QS3DGRID captures only finite positive LINE/ARC reference geometry through transactional semantic capture, uses the existing Grid generic takeoff model, synchronizes the Workspace through the UI coordinator, and does not pretend to create native 3D Grid geometry.")
