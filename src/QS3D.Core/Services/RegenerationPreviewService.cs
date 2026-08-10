@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -13,12 +14,14 @@ namespace QS3D.Core.Services
         internal RegenerationPreview(
             string projectId,
             long sourceChangeVersion,
+            IEnumerable<string> targetElementIds,
             int regeneratedElementCount,
             IEnumerable<RevisionDelta> deltas,
             ModelHealthBaselineDiff healthDiff)
         {
             ProjectId = projectId ?? string.Empty;
             SourceChangeVersion = sourceChangeVersion;
+            TargetElementIds = (targetElementIds ?? Enumerable.Empty<string>()).ToList().AsReadOnly();
             RegeneratedElementCount = regeneratedElementCount;
             Deltas = (deltas ?? Enumerable.Empty<RevisionDelta>()).ToList().AsReadOnly();
             HealthDiff = healthDiff ?? throw new ArgumentNullException(nameof(healthDiff));
@@ -26,6 +29,8 @@ namespace QS3D.Core.Services
 
         public string ProjectId { get; }
         public long SourceChangeVersion { get; }
+        public IReadOnlyList<string> TargetElementIds { get; }
+        public bool IsSubset => TargetElementIds.Count > 0;
         public int RegeneratedElementCount { get; }
         public IReadOnlyList<RevisionDelta> Deltas { get; }
         public ModelHealthBaselineDiff HealthDiff { get; }
@@ -51,24 +56,15 @@ namespace QS3D.Core.Services
     {
         public RegenerationPreview Preview(ProjectState project)
         {
-            if (project == null) throw new ArgumentNullException(nameof(project));
-            var sourceChangeVersion = project.ChangeVersion;
-            var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
-            var revisions = new RevisionService();
-            var health = new ModelHealthBaselineService();
-            var beforeRevision = revisions.Capture(detached, "regen-preview-before");
-            var beforeHealth = health.CaptureSemantic(detached);
+            return PreviewInternal(project, Array.Empty<string>());
+        }
 
-            var count = NewEngine().RegenerateDirty(detached);
-
-            var afterRevision = revisions.Capture(detached, "regen-preview-after");
-            var afterHealth = health.CaptureSemantic(detached);
-            return new RegenerationPreview(
-                project.ProjectId,
-                sourceChangeVersion,
-                count,
-                revisions.Compare(beforeRevision, afterRevision),
-                health.Compare(beforeHealth, afterHealth));
+        public RegenerationPreview PreviewSubset(ProjectState project, IEnumerable<string> elementIds)
+        {
+            if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+            var targets = CanonicalPreviewTargets(elementIds);
+            if (targets.Count == 0) throw new ArgumentException("Subset regeneration preview requires at least one target element id.", nameof(elementIds));
+            return PreviewInternal(project, targets);
         }
 
         public RegenerationGuardedApplyResult Apply(ProjectState project, RegenerationPreview preview)
@@ -80,7 +76,7 @@ namespace QS3D.Core.Services
             if (preview.SourceChangeVersion != project.ChangeVersion)
                 throw new InvalidOperationException("Regeneration preview is stale because the project changed after preview; recompute before applying.");
 
-            var current = Preview(project);
+            var current = preview.IsSubset ? PreviewSubset(project, preview.TargetElementIds) : Preview(project);
             if (!Equivalent(preview, current))
                 throw new InvalidOperationException("Regeneration preview is stale; recompute preview before applying.");
             if (current.IntroducesHealthErrors)
@@ -91,7 +87,10 @@ namespace QS3D.Core.Services
             var snapshot = ProjectStateSnapshot.Capture(project);
             try
             {
-                var count = NewEngine().RegenerateDirty(project);
+                var engine = NewEngine();
+                var count = preview.IsSubset
+                    ? engine.RegenerateDirtySubset(project, preview.TargetElementIds)
+                    : engine.RegenerateDirty(project);
                 var afterHealth = health.CaptureSemantic(project);
                 var diff = health.Compare(beforeHealth, afterHealth);
                 if (diff.NewErrorCount > 0)
@@ -105,6 +104,53 @@ namespace QS3D.Core.Services
             }
         }
 
+        private RegenerationPreview PreviewInternal(ProjectState project, IReadOnlyList<string> targets)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var sourceChangeVersion = project.ChangeVersion;
+            var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
+            var revisions = new RevisionService();
+            var health = new ModelHealthBaselineService();
+            var beforeRevision = revisions.Capture(detached, "regen-preview-before");
+            var beforeHealth = health.CaptureSemantic(detached);
+
+            var engine = NewEngine();
+            var count = targets.Count == 0
+                ? engine.RegenerateDirty(detached)
+                : engine.RegenerateDirtySubset(detached, targets);
+
+            var afterRevision = revisions.Capture(detached, "regen-preview-after");
+            var afterHealth = health.CaptureSemantic(detached);
+            return new RegenerationPreview(
+                project.ProjectId,
+                sourceChangeVersion,
+                targets,
+                count,
+                revisions.Compare(beforeRevision, afterRevision),
+                health.Compare(beforeHealth, afterHealth));
+        }
+
+        private static IReadOnlyList<string> CanonicalPreviewTargets(IEnumerable<string> elementIds)
+        {
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var index = 0;
+            foreach (var value in elementIds)
+            {
+                var raw = value ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new ArgumentException("Regeneration preview target cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new ArgumentException("Regeneration preview target must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
+                if (!seen.Add(raw))
+                    throw new ArgumentException("Duplicate regeneration preview target: " + raw + ".", nameof(elementIds));
+                result.Add(raw);
+                index++;
+            }
+            result.Sort(StringComparer.OrdinalIgnoreCase);
+            return result.AsReadOnly();
+        }
+
         private static RegenerationEngine NewEngine()
         {
             return new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
@@ -114,6 +160,7 @@ namespace QS3D.Core.Services
         {
             if (!string.Equals(left.ProjectId, right.ProjectId, StringComparison.Ordinal) ||
                 left.SourceChangeVersion != right.SourceChangeVersion ||
+                !TargetScopeEquivalent(left.TargetElementIds, right.TargetElementIds) ||
                 left.RegeneratedElementCount != right.RegeneratedElementCount ||
                 left.Deltas.Count != right.Deltas.Count ||
                 !HealthEquivalent(left.HealthDiff, right.HealthDiff))
@@ -137,6 +184,14 @@ namespace QS3D.Core.Services
                         return false;
                 }
             }
+            return true;
+        }
+
+        private static bool TargetScopeEquivalent(IReadOnlyList<string> left, IReadOnlyList<string> right)
+        {
+            if (left.Count != right.Count) return false;
+            for (var i = 0; i < left.Count; i++)
+                if (!string.Equals(left[i], right[i], StringComparison.OrdinalIgnoreCase)) return false;
             return true;
         }
 
