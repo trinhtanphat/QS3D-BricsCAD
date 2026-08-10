@@ -14,7 +14,8 @@ namespace QS3D.Core.Diagnostics
             "GeneratedTieRebarHandles",
             "GeneratedBeamStirrupHandles",
             "GeneratedSlabMeshHandles",
-            "GeneratedWallMeshHandles"
+            "GeneratedWallMeshHandles",
+            "GeneratedFoundationMeshHandles"
         };
 
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
@@ -31,13 +32,7 @@ namespace QS3D.Core.Diagnostics
                     {
                         var token = element.Id + "/" + key;
                         if (owners.TryGetValue(handle, out var previous) && !string.Equals(previous, token, StringComparison.OrdinalIgnoreCase))
-                        {
-                            issues.Add(new ModelHealthIssue(
-                                "REBAR_GENERATED_CROSS_KEY_OWNERSHIP_CONFLICT",
-                                HealthSeverity.Error,
-                                "Generated rebar handle " + handle + " được khai báo bởi cả " + previous + " và " + token + ".",
-                                element.Id));
-                        }
+                            issues.Add(new ModelHealthIssue("REBAR_GENERATED_CROSS_KEY_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated rebar handle " + handle + " được khai báo bởi cả " + previous + " và " + token + ".", element.Id));
                         else owners[handle] = token;
                     }
                 }
