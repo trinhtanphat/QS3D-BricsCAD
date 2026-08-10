@@ -51,7 +51,7 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 var unsupported = selectedElements
-                    .Where(x => !IsNativeBuildCategory(x.Category))
+                    .Where(x => !NativeBuildCapability.Supports(x.Category))
                     .Select(x => x.Category)
                     .Distinct()
                     .OrderBy(x => x.ToString(), StringComparer.Ordinal)
@@ -120,7 +120,7 @@ namespace QS3D.BricsCAD.V25
                 // committing any replacement Solid3d so those blockers cannot leave a partial CAD rebuild.
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
-                var sourceType = IsWallCategory(category)
+                var sourceType = NativeBuildCapability.IsWallCategory(category)
                     ? sourceSnapshots.Select(x => x.EntityType).Distinct(StringComparer.OrdinalIgnoreCase).Single()
                     : string.Empty;
                 var built = BuildCategory(document, project, category, sourceType);
@@ -165,7 +165,7 @@ namespace QS3D.BricsCAD.V25
             out string error)
         {
             error = string.Empty;
-            if (!IsWallCategory(category)) return true;
+            if (!NativeBuildCapability.IsWallCategory(category)) return true;
 
             var sourceHandles = new HashSet<string>(
                 selectedElements.SelectMany(x => x.SourceHandles).Where(x => !string.IsNullOrWhiteSpace(x)),
@@ -201,7 +201,7 @@ namespace QS3D.BricsCAD.V25
 
         private static int BuildCategory(Document document, ProjectState project, ElementCategory category, string sourceType)
         {
-            if (IsWallCategory(category))
+            if (NativeBuildCapability.IsWallCategory(category))
             {
                 if (string.Equals(sourceType, "Line", StringComparison.OrdinalIgnoreCase))
                 {
@@ -252,14 +252,6 @@ namespace QS3D.BricsCAD.V25
                 TryWriteMessage(document, "\nQS3D " + status + " UI sync warning: " + ex.Message);
             }
         }
-
-        private static bool IsWallCategory(ElementCategory category) =>
-            category == ElementCategory.ArchitecturalWall ||
-            category == ElementCategory.GlassWall ||
-            category == ElementCategory.WallPier;
-
-        private static bool IsNativeBuildCategory(ElementCategory category) =>
-            IsWallCategory(category) || StructuralSolidBuilder.Supports(category);
 
         private static void Write(Document document, string message) => Report(document, message);
 
