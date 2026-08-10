@@ -6,6 +6,7 @@ using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
@@ -71,117 +72,140 @@ namespace QS3D.BricsCAD.V25.Cad
             var ownership = GeneratedRebarOwnershipGuard.Build(project);
             var pending = new List<PendingUpdate>();
             var batchBars = 0;
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var cadCommitted = false;
+            try
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                foreach (var element in elements)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var polyline = OpenSelectedFoundationSource(document, transaction, element, selectedHandles);
-                    if (polyline == null) continue;
-                    var family = project.FindFamily(element.FamilyId);
-                    var xGroup = ParseDirection(element, family, "RebarFoundationXNotation");
-                    var yGroup = ParseDirection(element, family, "RebarFoundationYNotation");
-                    var frame = ReadRectangle(document, element, polyline);
-                    var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .5d), element.Id + "/ThicknessM");
-                    var coverM = CadGeometryGuard.Number(element, family, "RebarFoundationCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .05d));
-                    if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarFoundationCoverM phải >= 0.");
-                    var faces = Text(element, family, "RebarFoundationFaces", "Bottom");
-                    var includeBottom = string.Equals(faces, "Bottom", StringComparison.OrdinalIgnoreCase) || string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase);
-                    var includeTop = string.Equals(faces, "Top", StringComparison.OrdinalIgnoreCase) || string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase);
-                    if (!includeBottom && !includeTop) throw new InvalidOperationException(element.Id + "/RebarFoundationFaces phải là Bottom, Top hoặc Both.");
-                    var xClosest = Boolean(element, family, "RebarFoundationXClosestToFace", true);
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    foreach (var element in elements)
+                    {
+                        var polyline = OpenSelectedFoundationSource(document, transaction, element, selectedHandles);
+                        if (polyline == null) continue;
+                        var family = project.FindFamily(element.FamilyId);
+                        var xGroup = ParseDirection(element, family, "RebarFoundationXNotation");
+                        var yGroup = ParseDirection(element, family, "RebarFoundationYNotation");
+                        var frame = ReadRectangle(document, element, polyline);
+                        var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .5d), element.Id + "/ThicknessM");
+                        var coverM = CadGeometryGuard.Number(element, family, "RebarFoundationCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .05d));
+                        if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarFoundationCoverM phải >= 0.");
+                        var faces = Text(element, family, "RebarFoundationFaces", "Bottom");
+                        var includeBottom = string.Equals(faces, "Bottom", StringComparison.OrdinalIgnoreCase) || string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase);
+                        var includeTop = string.Equals(faces, "Top", StringComparison.OrdinalIgnoreCase) || string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase);
+                        if (!includeBottom && !includeTop) throw new InvalidOperationException(element.Id + "/RebarFoundationFaces phải là Bottom, Top hoặc Both.");
+                        var xClosest = Boolean(element, family, "RebarFoundationXClosestToFace", true);
 
-                    var layout = RectangularSlabMeshPlanner.Plan(new RectangularSlabMeshInput
-                    {
-                        SpanXM = frame.SpanXM,
-                        SpanYM = frame.SpanYM,
-                        ThicknessM = thicknessM,
-                        CoverM = coverM,
-                        XDiameterMm = xGroup.DiameterMm,
-                        YDiameterMm = yGroup.DiameterMm,
-                        XSpacingMm = xGroup.SpacingMm,
-                        XCount = xGroup.Quantity,
-                        YSpacingMm = yGroup.SpacingMm,
-                        YCount = yGroup.Quantity,
-                        IncludeBottom = includeBottom,
-                        IncludeTop = includeTop,
-                        XClosestToFace = xClosest
-                    });
-                    if (batchBars > MaxBarsPerBatch - layout.Count) throw new InvalidOperationException("Foundation mesh batch vượt giới hạn " + MaxBarsPerBatch + " bar.");
-                    batchBars = checked(batchBars + layout.Count);
-
-                    ErasePrevious(document, transaction, element, ownership);
-                    var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                    var centerOffsetM = CadGeometryGuard.Add(bottomM, thicknessM / 2d, element.Id + "/foundation mesh center offset Z");
-                    var centerZ = CadGeometryGuard.Add(
-                        polyline.Elevation,
-                        CadGeometryGuard.ToDrawingUnits(document, centerOffsetM, element.Id + "/foundation mesh center Z"),
-                        element.Id + "/foundation mesh world center Z");
-                    var update = new PendingUpdate
-                    {
-                        Element = element,
-                        XDiameterMm = xGroup.DiameterMm,
-                        YDiameterMm = yGroup.DiameterMm,
-                        CoverM = coverM,
-                        XSpacingM = layout.XActualSpacingM,
-                        YSpacingM = layout.YActualSpacingM,
-                        Faces = includeBottom && includeTop ? "Both" : (includeTop ? "Top" : "Bottom")
-                    };
-                    foreach (var placement in layout.Bars)
-                    {
-                        var run = placement.Direction == SlabMeshDirection.X ? frame.XAxis : frame.YAxis;
-                        var distribution = placement.Direction == SlabMeshDirection.X ? frame.YAxis : frame.XAxis;
-                        var distributionOffset = CadGeometryGuard.ToDrawingUnits(document, placement.DistributionOffsetM, element.Id + "/foundation mesh distribution");
-                        var elevationOffset = CadGeometryGuard.ToDrawingUnits(document, placement.ElevationOffsetM, element.Id + "/foundation mesh elevation");
-                        var length = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.LengthM, element.Id + "/foundation mesh bar length"), element.Id + "/foundation mesh bar length drawing");
-                        var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.DiameterMm / 2000d, element.Id + "/foundation mesh bar radius"), element.Id + "/foundation mesh bar radius drawing");
-                        var center = new Point3d(
-                            CadGeometryGuard.Add(frame.Center.X, CadGeometryGuard.Multiply(distribution.X, distributionOffset, element.Id + "/foundation mesh distribution X"), element.Id + "/foundation mesh center X"),
-                            CadGeometryGuard.Add(frame.Center.Y, CadGeometryGuard.Multiply(distribution.Y, distributionOffset, element.Id + "/foundation mesh distribution Y"), element.Id + "/foundation mesh center Y"),
-                            CadGeometryGuard.Add(centerZ, elevationOffset, element.Id + "/foundation mesh center Z"));
-                        var half = length / 2d;
-                        var start = new Point3d(
-                            CadGeometryGuard.Subtract(center.X, CadGeometryGuard.Multiply(run.X, half, element.Id + "/foundation mesh start X offset"), element.Id + "/foundation mesh start X"),
-                            CadGeometryGuard.Subtract(center.Y, CadGeometryGuard.Multiply(run.Y, half, element.Id + "/foundation mesh start Y offset"), element.Id + "/foundation mesh start Y"),
-                            CadGeometryGuard.Finite(center.Z, element.Id + "/foundation mesh start Z"));
-                        Solid3d? bar = CreateCylinder(document, start, run, length, radius, element.Id + "/foundation mesh bar");
-                        try
+                        var layout = RectangularSlabMeshPlanner.Plan(new RectangularSlabMeshInput
                         {
-                            bar.Layer = polyline.Layer;
-                            modelSpace.AppendEntity(bar);
-                            transaction.AddNewlyCreatedDBObject(bar, true);
-                            update.Handles.Add(bar.Handle.ToString());
-                            bar = null;
+                            SpanXM = frame.SpanXM,
+                            SpanYM = frame.SpanYM,
+                            ThicknessM = thicknessM,
+                            CoverM = coverM,
+                            XDiameterMm = xGroup.DiameterMm,
+                            YDiameterMm = yGroup.DiameterMm,
+                            XSpacingMm = xGroup.SpacingMm,
+                            XCount = xGroup.Quantity,
+                            YSpacingMm = yGroup.SpacingMm,
+                            YCount = yGroup.Quantity,
+                            IncludeBottom = includeBottom,
+                            IncludeTop = includeTop,
+                            XClosestToFace = xClosest
+                        });
+                        if (batchBars > MaxBarsPerBatch - layout.Count) throw new InvalidOperationException("Foundation mesh batch vượt giới hạn " + MaxBarsPerBatch + " bar.");
+                        batchBars = checked(batchBars + layout.Count);
+
+                        ErasePrevious(document, transaction, element, ownership);
+                        var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var centerOffsetM = CadGeometryGuard.Add(bottomM, thicknessM / 2d, element.Id + "/foundation mesh center offset Z");
+                        var centerZ = CadGeometryGuard.Add(
+                            polyline.Elevation,
+                            CadGeometryGuard.ToDrawingUnits(document, centerOffsetM, element.Id + "/foundation mesh center Z"),
+                            element.Id + "/foundation mesh world center Z");
+                        var update = new PendingUpdate
+                        {
+                            Element = element,
+                            XDiameterMm = xGroup.DiameterMm,
+                            YDiameterMm = yGroup.DiameterMm,
+                            CoverM = coverM,
+                            XSpacingM = layout.XActualSpacingM,
+                            YSpacingM = layout.YActualSpacingM,
+                            Faces = includeBottom && includeTop ? "Both" : (includeTop ? "Top" : "Bottom")
+                        };
+                        foreach (var placement in layout.Bars)
+                        {
+                            var run = placement.Direction == SlabMeshDirection.X ? frame.XAxis : frame.YAxis;
+                            var distribution = placement.Direction == SlabMeshDirection.X ? frame.YAxis : frame.XAxis;
+                            var distributionOffset = CadGeometryGuard.ToDrawingUnits(document, placement.DistributionOffsetM, element.Id + "/foundation mesh distribution");
+                            var elevationOffset = CadGeometryGuard.ToDrawingUnits(document, placement.ElevationOffsetM, element.Id + "/foundation mesh elevation");
+                            var length = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.LengthM, element.Id + "/foundation mesh bar length"), element.Id + "/foundation mesh bar length drawing");
+                            var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.DiameterMm / 2000d, element.Id + "/foundation mesh bar radius"), element.Id + "/foundation mesh bar radius drawing");
+                            var center = new Point3d(
+                                CadGeometryGuard.Add(frame.Center.X, CadGeometryGuard.Multiply(distribution.X, distributionOffset, element.Id + "/foundation mesh distribution X"), element.Id + "/foundation mesh center X"),
+                                CadGeometryGuard.Add(frame.Center.Y, CadGeometryGuard.Multiply(distribution.Y, distributionOffset, element.Id + "/foundation mesh distribution Y"), element.Id + "/foundation mesh center Y"),
+                                CadGeometryGuard.Add(centerZ, elevationOffset, element.Id + "/foundation mesh center Z"));
+                            var half = length / 2d;
+                            var start = new Point3d(
+                                CadGeometryGuard.Subtract(center.X, CadGeometryGuard.Multiply(run.X, half, element.Id + "/foundation mesh start X offset"), element.Id + "/foundation mesh start X"),
+                                CadGeometryGuard.Subtract(center.Y, CadGeometryGuard.Multiply(run.Y, half, element.Id + "/foundation mesh start Y offset"), element.Id + "/foundation mesh start Y"),
+                                CadGeometryGuard.Finite(center.Z, element.Id + "/foundation mesh start Z"));
+                            Solid3d? bar = CreateCylinder(document, start, run, length, radius, element.Id + "/foundation mesh bar");
+                            try
+                            {
+                                bar.Layer = polyline.Layer;
+                                modelSpace.AppendEntity(bar);
+                                transaction.AddNewlyCreatedDBObject(bar, true);
+                                update.Handles.Add(bar.Handle.ToString());
+                                bar = null;
+                            }
+                            finally { bar?.Dispose(); }
                         }
-                        finally { bar?.Dispose(); }
+                        pending.Add(update);
                     }
-                    pending.Add(update);
+
+                    foreach (var update in pending) CommitSemanticUpdate(project, update);
+                    transaction.Commit();
+                    cadCommitted = true;
                 }
-                transaction.Commit();
+            }
+            catch (Exception operationError)
+            {
+                if (!cadCommitted)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Foundation mesh replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                }
+                throw;
             }
 
-            foreach (var update in pending)
-            {
-                update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
-                update.Element.Properties["GeneratedFoundationMeshCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedFoundationMeshXDiameterMm"] = update.XDiameterMm.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedFoundationMeshYDiameterMm"] = update.YDiameterMm.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedFoundationMeshCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedFoundationMeshMode"] = Mode;
-                update.Element.Properties["GeneratedFoundationMeshXActualSpacingM"] = update.XSpacingM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedFoundationMeshYActualSpacingM"] = update.YSpacingM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedFoundationMeshFaces"] = update.Faces;
-                update.Element.ClearGeneratedFoundationMeshStale();
-                AuditTrail.ForProject(project).Record("geometry.rebar.foundation.mesh", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
-            }
             if (pending.Count > 0)
             {
                 project.Touch();
-                document.Editor.Regen();
+                try { document.Editor.Regen(); } catch { }
             }
             return new FoundationMeshBuildResult { Elements = pending.Count, Bars = pending.Sum(x => x.Handles.Count) };
+        }
+
+        private static void CommitSemanticUpdate(ProjectState project, PendingUpdate update)
+        {
+            update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
+            update.Element.Properties["GeneratedFoundationMeshCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedFoundationMeshXDiameterMm"] = update.XDiameterMm.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedFoundationMeshYDiameterMm"] = update.YDiameterMm.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedFoundationMeshCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedFoundationMeshMode"] = Mode;
+            update.Element.Properties["GeneratedFoundationMeshXActualSpacingM"] = update.XSpacingM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedFoundationMeshYActualSpacingM"] = update.YSpacingM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedFoundationMeshFaces"] = update.Faces;
+            update.Element.ClearGeneratedFoundationMeshStale();
+            AuditTrail.ForProject(project).Record("geometry.rebar.foundation.mesh", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
         }
 
         private sealed class RectangleFrame

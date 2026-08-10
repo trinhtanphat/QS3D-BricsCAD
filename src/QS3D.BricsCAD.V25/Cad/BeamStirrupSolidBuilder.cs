@@ -6,6 +6,7 @@ using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
@@ -75,144 +76,162 @@ namespace QS3D.BricsCAD.V25.Cad
             var ownership = GeneratedRebarOwnershipGuard.Build(project);
             var pending = new List<PendingUpdate>();
             var batchCount = 0;
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var cadCommitted = false;
 
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            try
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-
-                foreach (var element in elements)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var source = OpenSelectedBeamSource(document, transaction, element, selectedHandles);
-                    if (source == null) continue;
-                    if (!element.Properties.TryGetValue("RebarStirrupNotation", out var notation) || string.IsNullOrWhiteSpace(notation))
-                        throw new InvalidOperationException(element.Id + " chưa có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8).");
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
 
-                    var groups = RebarNotationParser.Parse(notation);
-                    if (groups.Count != 1) throw new InvalidOperationException(element.Id + "/RebarStirrupNotation chỉ hỗ trợ một nhóm diameter/count-or-spacing cho một stirrup set.");
-                    var group = groups[0];
-                    if (!group.Quantity.HasValue && !group.SpacingMm.HasValue)
-                        throw new InvalidOperationException(element.Id + "/RebarStirrupNotation phải có count hoặc spacing; diameter-only không đủ để đặt đai.");
-                    if (group.Quantity.HasValue && group.SpacingMm.HasValue)
-                        throw new InvalidOperationException(element.Id + "/RebarStirrupNotation không được đồng thời có count và spacing.");
-
-                    var family = project.FindFamily(element.FamilyId);
-                    var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WidthM", .3d), element.Id + "/WidthM");
-                    var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", .5d), element.Id + "/HeightM");
-                    var sectionCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .025d));
-                    var endCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupEndCoverM", sectionCoverM);
-                    var bendRadiusM = CadGeometryGuard.Number(element, family, "RebarStirrupBendRadiusM", 0d);
-                    var hookLengthM = CadGeometryGuard.Number(element, family, "RebarStirrupHookLengthM", 0d);
-                    var hookTailAngleDeg = CadGeometryGuard.Number(element, family, "RebarStirrupHookTailAngleDeg", 0d);
-                    var maximumSagittaM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "RebarStirrupMaximumSagittaM", .001d), element.Id + "/RebarStirrupMaximumSagittaM");
-                    if (sectionCoverM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupCoverM phải >= 0.");
-                    if (endCoverM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupEndCoverM phải >= 0.");
-                    if (bendRadiusM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupBendRadiusM phải >= 0.");
-                    if (hookLengthM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupHookLengthM phải >= 0.");
-                    var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-
-                    var dx = CadGeometryGuard.Subtract(source.EndPoint.X, source.StartPoint.X, element.Id + "/beam dx");
-                    var dy = CadGeometryGuard.Subtract(source.EndPoint.Y, source.StartPoint.Y, element.Id + "/beam dy");
-                    var lengthDrawing = CadGeometryGuard.Hypot(dx, dy, element.Id + "/beam length");
-                    if (lengthDrawing <= 1e-9d) throw new InvalidOperationException("Beam LINE quá ngắn cho stirrup 3D: " + element.Id);
-                    var zDelta = CadGeometryGuard.Subtract(source.EndPoint.Z, source.StartPoint.Z, element.Id + "/beam dz");
-                    var zTolerance = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/stirrup planarity tolerance"), element.Id + "/stirrup planarity tolerance drawing units");
-                    if (Math.Abs(zDelta) > zTolerance) throw new InvalidOperationException("Beam stirrup 3D hiện yêu cầu source LINE gần ngang (|ΔZ| <= 0.005 m): " + element.Id);
-
-                    var layout = BeamStirrupLayoutPlanner.Plan(new BeamStirrupLayoutInput
+                    foreach (var element in elements)
                     {
-                        LengthM = CadGeometryGuard.ToMeters(document, lengthDrawing, element.Id + "/beam length"),
-                        WidthM = widthM,
-                        HeightM = heightM,
-                        SectionCoverM = sectionCoverM,
-                        EndCoverM = endCoverM,
-                        DiameterMm = group.DiameterMm,
-                        Count = group.Quantity,
-                        SpacingMm = group.SpacingMm,
-                        BendRadiusM = bendRadiusM,
-                        MaximumSagittaM = maximumSagittaM,
-                        HookLengthM = hookLengthM,
-                        HookTailAngleDeg = hookTailAngleDeg
-                    });
-                    if (layout.Count > MaxStirrupsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxStirrupsPerElement + " stirrup/element.");
-                    if (batchCount > MaxStirrupsPerBatch - layout.Count) throw new InvalidOperationException("Beam stirrup 3D vượt giới hạn " + MaxStirrupsPerBatch + " stirrup/batch.");
-                    batchCount = checked(batchCount + layout.Count);
+                        var source = OpenSelectedBeamSource(document, transaction, element, selectedHandles);
+                        if (source == null) continue;
+                        if (!element.Properties.TryGetValue("RebarStirrupNotation", out var notation) || string.IsNullOrWhiteSpace(notation))
+                            throw new InvalidOperationException(element.Id + " chưa có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8).");
 
-                    ErasePrevious(document, transaction, element, ownership);
-                    var update = new PendingUpdate
-                    {
-                        Element = element,
-                        DiameterMm = group.DiameterMm,
-                        ActualSpacingM = layout.ActualSpacingM,
-                        CenterlineLengthM = layout.CenterlineLengthM,
-                        PolylineLengthM = layout.PolylineLengthM,
-                        BendRadiusM = layout.BendRadiusM,
-                        HookLengthM = hookLengthM,
-                        HookTailAngleDeg = hookTailAngleDeg,
-                        HasHookTails = layout.HasHookTails,
-                        Notation = notation.Trim()
-                    };
+                        var groups = RebarNotationParser.Parse(notation);
+                        if (groups.Count != 1) throw new InvalidOperationException(element.Id + "/RebarStirrupNotation chỉ hỗ trợ một nhóm diameter/count-or-spacing cho một stirrup set.");
+                        var group = groups[0];
+                        if (!group.Quantity.HasValue && !group.SpacingMm.HasValue)
+                            throw new InvalidOperationException(element.Id + "/RebarStirrupNotation phải có count hoặc spacing; diameter-only không đủ để đặt đai.");
+                        if (group.Quantity.HasValue && group.SpacingMm.HasValue)
+                            throw new InvalidOperationException(element.Id + "/RebarStirrupNotation không được đồng thời có count và spacing.");
 
-                    var ux = dx / lengthDrawing;
-                    var uy = dy / lengthDrawing;
-                    var perpendicular = new Vector3d(-uy, ux, 0d);
-                    var midX = CadGeometryGuard.Midpoint(source.StartPoint.X, source.EndPoint.X, element.Id + "/beam mid X");
-                    var midY = CadGeometryGuard.Midpoint(source.StartPoint.Y, source.EndPoint.Y, element.Id + "/beam mid Y");
-                    var baseZ = CadGeometryGuard.Add(source.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, bottomM, element.Id + "/BottomOffsetM"), element.Id + "/beam base Z");
-                    var centerZ = CadGeometryGuard.Add(baseZ, CadGeometryGuard.ToDrawingUnits(document, heightM / 2d, element.Id + "/half height"), element.Id + "/beam center Z");
-                    var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, group.DiameterMm / 2000d, element.Id + "/stirrup radius"), element.Id + "/stirrup radius drawing");
+                        var family = project.FindFamily(element.FamilyId);
+                        var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WidthM", .3d), element.Id + "/WidthM");
+                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", .5d), element.Id + "/HeightM");
+                        var sectionCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .025d));
+                        var endCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupEndCoverM", sectionCoverM);
+                        var bendRadiusM = CadGeometryGuard.Number(element, family, "RebarStirrupBendRadiusM", 0d);
+                        var hookLengthM = CadGeometryGuard.Number(element, family, "RebarStirrupHookLengthM", 0d);
+                        var hookTailAngleDeg = CadGeometryGuard.Number(element, family, "RebarStirrupHookTailAngleDeg", 0d);
+                        var maximumSagittaM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "RebarStirrupMaximumSagittaM", .001d), element.Id + "/RebarStirrupMaximumSagittaM");
+                        if (sectionCoverM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupCoverM phải >= 0.");
+                        if (endCoverM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupEndCoverM phải >= 0.");
+                        if (bendRadiusM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupBendRadiusM phải >= 0.");
+                        if (hookLengthM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupHookLengthM phải >= 0.");
+                        var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
 
-                    foreach (var stationM in layout.StationOffsetsM)
-                    {
-                        var station = CadGeometryGuard.ToDrawingUnits(document, stationM, element.Id + "/stirrup station");
-                        var deltaX = CadGeometryGuard.Multiply(ux, station, element.Id + "/stirrup station X");
-                        var deltaY = CadGeometryGuard.Multiply(uy, station, element.Id + "/stirrup station Y");
-                        var center = new Point3d(
-                            CadGeometryGuard.Add(midX, deltaX, element.Id + "/stirrup center X"),
-                            CadGeometryGuard.Add(midY, deltaY, element.Id + "/stirrup center Y"),
-                            centerZ);
-                        var stirrup = BuildLoop(document, center, perpendicular, layout.SectionLoop, radius, element.Id + "/stirrup");
-                        try
+                        var dx = CadGeometryGuard.Subtract(source.EndPoint.X, source.StartPoint.X, element.Id + "/beam dx");
+                        var dy = CadGeometryGuard.Subtract(source.EndPoint.Y, source.StartPoint.Y, element.Id + "/beam dy");
+                        var lengthDrawing = CadGeometryGuard.Hypot(dx, dy, element.Id + "/beam length");
+                        if (lengthDrawing <= 1e-9d) throw new InvalidOperationException("Beam LINE quá ngắn cho stirrup 3D: " + element.Id);
+                        var zDelta = CadGeometryGuard.Subtract(source.EndPoint.Z, source.StartPoint.Z, element.Id + "/beam dz");
+                        var zTolerance = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/stirrup planarity tolerance"), element.Id + "/stirrup planarity tolerance drawing units");
+                        if (Math.Abs(zDelta) > zTolerance) throw new InvalidOperationException("Beam stirrup 3D hiện yêu cầu source LINE gần ngang (|ΔZ| <= 0.005 m): " + element.Id);
+
+                        var layout = BeamStirrupLayoutPlanner.Plan(new BeamStirrupLayoutInput
                         {
-                            stirrup.Layer = source.Layer;
-                            modelSpace.AppendEntity(stirrup);
-                            transaction.AddNewlyCreatedDBObject(stirrup, true);
-                            update.Handles.Add(stirrup.Handle.ToString());
-                            stirrup = null!;
-                        }
-                        finally { stirrup?.Dispose(); }
-                    }
-                    pending.Add(update);
-                }
-                transaction.Commit();
-            }
+                            LengthM = CadGeometryGuard.ToMeters(document, lengthDrawing, element.Id + "/beam length"),
+                            WidthM = widthM,
+                            HeightM = heightM,
+                            SectionCoverM = sectionCoverM,
+                            EndCoverM = endCoverM,
+                            DiameterMm = group.DiameterMm,
+                            Count = group.Quantity,
+                            SpacingMm = group.SpacingMm,
+                            BendRadiusM = bendRadiusM,
+                            MaximumSagittaM = maximumSagittaM,
+                            HookLengthM = hookLengthM,
+                            HookTailAngleDeg = hookTailAngleDeg
+                        });
+                        if (layout.Count > MaxStirrupsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxStirrupsPerElement + " stirrup/element.");
+                        if (batchCount > MaxStirrupsPerBatch - layout.Count) throw new InvalidOperationException("Beam stirrup 3D vượt giới hạn " + MaxStirrupsPerBatch + " stirrup/batch.");
+                        batchCount = checked(batchCount + layout.Count);
 
-            foreach (var update in pending)
+                        ErasePrevious(document, transaction, element, ownership);
+                        var update = new PendingUpdate
+                        {
+                            Element = element,
+                            DiameterMm = group.DiameterMm,
+                            ActualSpacingM = layout.ActualSpacingM,
+                            CenterlineLengthM = layout.CenterlineLengthM,
+                            PolylineLengthM = layout.PolylineLengthM,
+                            BendRadiusM = layout.BendRadiusM,
+                            HookLengthM = hookLengthM,
+                            HookTailAngleDeg = hookTailAngleDeg,
+                            HasHookTails = layout.HasHookTails,
+                            Notation = notation.Trim()
+                        };
+
+                        var ux = dx / lengthDrawing;
+                        var uy = dy / lengthDrawing;
+                        var perpendicular = new Vector3d(-uy, ux, 0d);
+                        var midX = CadGeometryGuard.Midpoint(source.StartPoint.X, source.EndPoint.X, element.Id + "/beam mid X");
+                        var midY = CadGeometryGuard.Midpoint(source.StartPoint.Y, source.EndPoint.Y, element.Id + "/beam mid Y");
+                        var baseZ = CadGeometryGuard.Add(source.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, bottomM, element.Id + "/BottomOffsetM"), element.Id + "/beam base Z");
+                        var centerZ = CadGeometryGuard.Add(baseZ, CadGeometryGuard.ToDrawingUnits(document, heightM / 2d, element.Id + "/half height"), element.Id + "/beam center Z");
+                        var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, group.DiameterMm / 2000d, element.Id + "/stirrup radius"), element.Id + "/stirrup radius drawing");
+
+                        foreach (var stationM in layout.StationOffsetsM)
+                        {
+                            var station = CadGeometryGuard.ToDrawingUnits(document, stationM, element.Id + "/stirrup station");
+                            var deltaX = CadGeometryGuard.Multiply(ux, station, element.Id + "/stirrup station X");
+                            var deltaY = CadGeometryGuard.Multiply(uy, station, element.Id + "/stirrup station Y");
+                            var center = new Point3d(
+                                CadGeometryGuard.Add(midX, deltaX, element.Id + "/stirrup center X"),
+                                CadGeometryGuard.Add(midY, deltaY, element.Id + "/stirrup center Y"),
+                                centerZ);
+                            var stirrup = BuildLoop(document, center, perpendicular, layout.SectionLoop, radius, element.Id + "/stirrup");
+                            try
+                            {
+                                stirrup.Layer = source.Layer;
+                                modelSpace.AppendEntity(stirrup);
+                                transaction.AddNewlyCreatedDBObject(stirrup, true);
+                                update.Handles.Add(stirrup.Handle.ToString());
+                                stirrup = null!;
+                            }
+                            finally { stirrup?.Dispose(); }
+                        }
+                        pending.Add(update);
+                    }
+
+                    foreach (var update in pending) CommitSemanticUpdate(project, update);
+                    if (pending.Count > 0) project.Touch();
+                    transaction.Commit();
+                    cadCommitted = true;
+                }
+            }
+            catch (Exception operationError)
             {
-                update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
-                update.Element.Properties["GeneratedBeamStirrupCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedBeamStirrupDiameterMm"] = update.DiameterMm.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedBeamStirrupActualSpacingM"] = update.ActualSpacingM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedBeamStirrupCenterlineLengthM"] = update.CenterlineLengthM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedBeamStirrupTotalCenterlineLengthM"] = CadGeometryGuard.Multiply(update.CenterlineLengthM, update.Handles.Count, update.Element.Id + "/stirrup total centerline").ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedBeamStirrupPolylineLengthM"] = update.PolylineLengthM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedBeamStirrupBendRadiusM"] = update.BendRadiusM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedBeamStirrupHookLengthM"] = update.HookLengthM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedBeamStirrupHookTailAngleDeg"] = update.HookTailAngleDeg.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedBeamStirrupNotation"] = update.Notation;
-                update.Element.Properties["GeneratedBeamStirrupMode"] = update.HasHookTails ? "Beam.Line.RectangularHookedPath" : (update.BendRadiusM > 1e-12d ? "Beam.Line.RectangularRoundedLoop" : "Beam.Line.RectangularClosedLoop");
-                update.Element.ClearGeneratedBeamStirrupStale();
-                AuditTrail.ForProject(project).Record("geometry.rebar.beam.stirrup", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " stirrups");
+                if (!cadCommitted)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Beam stirrup replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                }
+                throw;
             }
 
             var count = pending.Sum(x => x.Handles.Count);
-            if (count > 0)
-            {
-                project.Touch();
-                document.Editor.Regen();
-            }
             return new BeamStirrupBuildResult { Elements = pending.Count, Stirrups = count };
+        }
+
+        private static void CommitSemanticUpdate(ProjectState project, PendingUpdate update)
+        {
+            update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
+            update.Element.Properties["GeneratedBeamStirrupCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedBeamStirrupDiameterMm"] = update.DiameterMm.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedBeamStirrupActualSpacingM"] = update.ActualSpacingM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedBeamStirrupCenterlineLengthM"] = update.CenterlineLengthM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedBeamStirrupTotalCenterlineLengthM"] = CadGeometryGuard.Multiply(update.CenterlineLengthM, update.Handles.Count, update.Element.Id + "/stirrup total centerline").ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedBeamStirrupPolylineLengthM"] = update.PolylineLengthM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedBeamStirrupBendRadiusM"] = update.BendRadiusM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedBeamStirrupHookLengthM"] = update.HookLengthM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedBeamStirrupHookTailAngleDeg"] = update.HookTailAngleDeg.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedBeamStirrupNotation"] = update.Notation;
+            update.Element.Properties["GeneratedBeamStirrupMode"] = update.HasHookTails ? "Beam.Line.RectangularHookedPath" : (update.BendRadiusM > 1e-12d ? "Beam.Line.RectangularRoundedLoop" : "Beam.Line.RectangularClosedLoop");
+            update.Element.ClearGeneratedBeamStirrupStale();
+            AuditTrail.ForProject(project).Record("geometry.rebar.beam.stirrup", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " stirrups");
         }
 
         private static Solid3d BuildLoop(Document document, Point3d center, Vector3d horizontal, IReadOnlyList<QS3D.Core.Geometry.Point2> loop, double radius, string label)
