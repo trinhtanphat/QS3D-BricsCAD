@@ -25,6 +25,18 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnRefreshClick(object sender, RoutedEventArgs e) => RefreshAll();
 
+        private void OnExportClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                    throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Material Catalog trước khi xuất bảng vật liệu.");
+                SetStatus("Chuẩn bị Material Usage XLSX…");
+                _document.SendStringToExecute("QS3DMATERIALXLSX ", true, false, false);
+            }
+            catch (Exception ex) { SetStatus("Xuất bảng vật liệu lỗi: " + ex.Message); }
+        }
+
         private void OnMaterialSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loading || !(MaterialList.SelectedItem is ProjectMaterial material)) return;
