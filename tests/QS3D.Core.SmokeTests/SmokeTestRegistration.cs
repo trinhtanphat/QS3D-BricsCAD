@@ -61,6 +61,7 @@ namespace QS3D.Core.SmokeTests
             BulkEditCanonicalizationSmoke.Run();
             RegenerationAtomicitySmoke.Run();
             HostLinkCanonicalizationSmoke.Run();
+            ProjectFamilyAssignmentAtomicitySmoke.Run();
             ProjectSessionAuditSmoke.Run();
             ProjectInterchangeValidationSmoke.Run();
             QsdbSaveAtomicitySmoke.Run();

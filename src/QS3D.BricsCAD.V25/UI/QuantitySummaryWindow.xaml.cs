@@ -6,8 +6,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
-using QS3D.Core.Domain;
 using QS3D.Core.Export;
+using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 using QS3D.Core.Templates;
 using BcadApplication = Bricscad.ApplicationServices.Application;
@@ -21,7 +21,6 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly Action<QuantityReportRow>? _locate;
         private readonly Func<IReadOnlyList<QuantityReportRow>>? _recalculate;
         private readonly Document _document;
-        private readonly ProjectState _project;
         private bool _loadingColumnPreferences;
 
         public QuantitySummaryWindow(Document document, IReadOnlyList<QuantityReportRow> rows, Action<QuantityReportRow>? locate = null, Func<IReadOnlyList<QuantityReportRow>>? recalculate = null)
@@ -30,7 +29,6 @@ namespace QS3D.BricsCAD.V25.UI
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _locate = locate;
             _recalculate = recalculate;
-            _project = ProjectContextCoordinator.GetOrCreate(_document);
             InitializeComponent();
             DocumentBoundWindowLifetime.Attach(this, _document);
             ReloadFloors();
@@ -58,9 +56,23 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void LoadColumnPreferences()
         {
-            if (!_project.Metadata.TryGetValue(TemplateProfileStore.VisibleBqColumnsKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
-            var visible = new HashSet<string>(raw.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase); _loadingColumnPreferences = true;
-            try { foreach (var box in ColumnToggleBoxes()) { if (!TryColumnIndex(box, out var index)) continue; var show = index < ColumnKeys.Length && visible.Contains(ColumnKeys[index]); box.IsChecked = show; if (index < QuantityGrid.Columns.Count) QuantityGrid.Columns[index].Visibility = show ? Visibility.Visible : Visibility.Collapsed; } }
+            var project = ProjectContextCoordinator.GetOrCreate(_document);
+            var hasSaved = project.Metadata.TryGetValue(TemplateProfileStore.VisibleBqColumnsKey, out var raw) && !string.IsNullOrWhiteSpace(raw);
+            var visible = hasSaved
+                ? new HashSet<string>(raw!.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(ColumnKeys, StringComparer.OrdinalIgnoreCase);
+
+            _loadingColumnPreferences = true;
+            try
+            {
+                foreach (var box in ColumnToggleBoxes())
+                {
+                    if (!TryColumnIndex(box, out var index)) continue;
+                    var show = index < ColumnKeys.Length && visible.Contains(ColumnKeys[index]);
+                    box.IsChecked = show;
+                    if (index < QuantityGrid.Columns.Count) QuantityGrid.Columns[index].Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
             finally { _loadingColumnPreferences = false; }
         }
 
@@ -69,9 +81,21 @@ namespace QS3D.BricsCAD.V25.UI
             if (_loadingColumnPreferences) return;
             EnsureActive("lưu cấu hình cột BQ");
             var visible = new List<string>();
-            for (var index = 0; index < QuantityGrid.Columns.Count && index < ColumnKeys.Length; index++) if (QuantityGrid.Columns[index].Visibility == Visibility.Visible) visible.Add(ColumnKeys[index]);
-            _project.Metadata[TemplateProfileStore.VisibleBqColumnsKey] = string.Join("|", visible);
-            _project.Touch();
+            for (var index = 0; index < QuantityGrid.Columns.Count && index < ColumnKeys.Length; index++)
+                if (QuantityGrid.Columns[index].Visibility == Visibility.Visible) visible.Add(ColumnKeys[index]);
+
+            var project = ProjectContextCoordinator.GetOrCreate(_document);
+            var rollback = ProjectStateSnapshot.Capture(project);
+            try
+            {
+                project.Metadata[TemplateProfileStore.VisibleBqColumnsKey] = string.Join("|", visible);
+                project.Touch();
+            }
+            catch (Exception operationError)
+            {
+                RestoreOrThrow(project, rollback, operationError);
+                throw;
+            }
         }
 
         private IEnumerable<CheckBox> ColumnToggleBoxes() { foreach (var child in EnumerateLogicalChildren(this)) if (child is CheckBox box && box.Tag != null) yield return box; }
@@ -94,6 +118,7 @@ namespace QS3D.BricsCAD.V25.UI
                 ReloadFloors(floor);
                 ReloadCategories(category);
                 ApplyFilter();
+                LoadColumnPreferences();
             }
             catch (Exception ex) { MessageBox.Show(this, "Không thể tính lại khối lượng: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
         }
@@ -141,6 +166,7 @@ namespace QS3D.BricsCAD.V25.UI
                     ReloadFloors(floor);
                     ReloadCategories(category);
                     ApplyFilter();
+                    LoadColumnPreferences();
                 }
                 var visibleRows = (QuantityGrid.ItemsSource as IEnumerable<QuantityReportRow>)?.ToList() ?? _rows.ToList();
                 if (visibleRows.Count == 0) throw new InvalidOperationException("BQ hiện không có dòng nào để xuất.");
@@ -150,6 +176,17 @@ namespace QS3D.BricsCAD.V25.UI
                 MessageBox.Show(this, "Đã tính lại dữ liệu hiện hành và xuất Excel thành công.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex) { MessageBox.Show(this, "Không thể xuất Excel: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Error); }
+        }
+
+        private static void RestoreOrThrow(QS3D.Core.Domain.ProjectState project, ProjectStateSnapshot rollback, Exception operationError)
+        {
+            try { rollback.Restore(project); }
+            catch (Exception restoreError)
+            {
+                throw new InvalidOperationException(
+                    "Lưu cấu hình cột BQ thất bại và rollback project cũng không hoàn tất.",
+                    new AggregateException(operationError, restoreError));
+            }
         }
 
         private void EnsureActive(string operation)
