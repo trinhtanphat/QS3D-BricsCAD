@@ -304,6 +304,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             switch (category)
             {
+                case ElementCategory.Grid: return "QS3DGRID";
                 case ElementCategory.ArchitecturalWall: return "QS3DWALL";
                 case ElementCategory.GlassWall: return "QS3DGLASSWALL";
                 case ElementCategory.WallPier: return "QS3DWALLPIER";
