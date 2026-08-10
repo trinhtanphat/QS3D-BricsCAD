@@ -27,6 +27,7 @@ if builder.is_file():
         "ElementCategory.Beam", "BeamLongitudinalRebarPlanner.Plan", "RebarBeamTopCount", "RebarBeamBottomCount",
         "RebarBeamEndCoverM", "RebarBeamDiameterMm", "Matrix3d.Rotation(Math.PI / 2d", '"BeamLongitudinalBars"',
         "Refusing to orphan or overwrite rebar ownership", "CadGeometryGuard.Midpoint(line.StartPoint.Z, line.EndPoint.Z",
+        "GeneratedRebarOwnershipGuard.Build", "ownership.EnsureOwned",
     ):
         if needle not in text: errors.append("beam rebar solid builder missing: " + needle)
     if "CadGeometryGuard.Multiply" in text: errors.append("beam rebar builder references nonexistent CadGeometryGuard.Multiply")

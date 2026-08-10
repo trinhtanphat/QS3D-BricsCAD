@@ -38,12 +38,20 @@ namespace QS3D.BricsCAD.V25.Cad
                 Remove(element, "GeneratedShapeRebarCount");
                 Remove(element, "GeneratedShapeRebarMode");
 
+                Remove(element, "GeneratedTieRebarHandles");
+                Remove(element, "GeneratedTieRebarCount");
+                Remove(element, "GeneratedTieRebarDiameterMm");
+                Remove(element, "GeneratedTieRebarActualSpacingM");
+                Remove(element, "GeneratedTieRebarCoverM");
+                Remove(element, "GeneratedTieRebarMode");
+
                 Remove(element, "GeneratedBeamStirrupHandles");
                 Remove(element, "GeneratedBeamStirrupCount");
                 Remove(element, "GeneratedBeamStirrupDiameterMm");
                 Remove(element, "GeneratedBeamStirrupActualSpacingM");
                 Remove(element, "GeneratedBeamStirrupNotation");
                 Remove(element, "GeneratedBeamStirrupMode");
+                element.ClearGeneratedGeometryStale();
             }
         }
 
@@ -59,6 +67,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             "GeneratedRebarHandles",
             "GeneratedShapeRebarHandles",
+            "GeneratedTieRebarHandles",
             "GeneratedBeamStirrupHandles"
         };
 
@@ -84,7 +93,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var ownership = needsRebarOwnership ? GeneratedRebarOwnershipGuard.Build(project) : null;
             foreach (var element in targets)
             {
-                GeneratedGeometryService.PrepareReplacement(document, transaction, element);
+                GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
                 if (ownership == null) continue;
                 foreach (var key in RebarHandleKeys) EraseRebarSet(document, transaction, element, key, ownership);
             }

@@ -36,6 +36,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var pending = new List<PendingUpdate>();
             var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var totalBars = 0;
+            var ownership = GeneratedRebarOwnershipGuard.Build(project);
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
@@ -79,7 +80,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     var startX = CadGeometryGuard.Add(line.StartPoint.X, ux * endCover, element.Id + "/beam rebar start X");
                     var startY = CadGeometryGuard.Add(line.StartPoint.Y, uy * endCover, element.Id + "/beam rebar start Y");
                     var centerZ = CadGeometryGuard.Midpoint(line.StartPoint.Z, line.EndPoint.Z, element.Id + "/beam center Z");
-                    ErasePrevious(document, transaction, element);
+                    ErasePrevious(document, transaction, element, ownership);
                     var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, CoverM = coverM, EndCoverM = endCoverM, TopCount = counts.Item1, BottomCount = counts.Item2 };
                     foreach (var local in layout.TopBarCenters.Concat(layout.BottomBarCenters))
                     {
@@ -118,6 +119,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["GeneratedRebarBeamTopCount"] = update.TopCount.ToString(CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedRebarBeamBottomCount"] = update.BottomCount.ToString(CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedRebarMode"] = "BeamLongitudinalBars";
+                update.Element.ClearGeneratedRebarStale();
                 AuditTrail.ForProject(project).Record("geometry.rebar.beam", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
             }
             if (pending.Count > 0) { document.Editor.Regen(); project.Touch(); }
@@ -143,9 +145,13 @@ namespace QS3D.BricsCAD.V25.Cad
             if (top.HasValue || bottom.HasValue)
             {
                 if (!top.HasValue || !bottom.HasValue) throw new InvalidOperationException("Khai báo đồng thời RebarBeamTopCount và RebarBeamBottomCount.");
-                return Tuple.Create(top.Value, bottom.Value);
+                return Tuple.Create(top.GetValueOrDefault(), bottom.GetValueOrDefault());
             }
-            if (groups.Count == 1 && groups[0].Quantity.HasValue && groups[0].Quantity.Value >= 4 && groups[0].Quantity.Value % 2 == 0) return Tuple.Create(groups[0].Quantity.Value / 2, groups[0].Quantity.Value / 2);
+            if (groups.Count == 1 && groups[0].Quantity.HasValue)
+            {
+                var quantity = groups[0].Quantity.GetValueOrDefault();
+                if (quantity >= 4 && quantity % 2 == 0) return Tuple.Create(quantity / 2, quantity / 2);
+            }
             throw new InvalidOperationException(element.Id + ": không thể suy ra top/bottom beam layout từ RebarNotation. Khai báo RebarBeamTopCount và RebarBeamBottomCount.");
         }
 
@@ -156,11 +162,12 @@ namespace QS3D.BricsCAD.V25.Cad
             return value;
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue("GeneratedRebarHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                ownership.EnsureOwned(handle, element, "GeneratedRebarHandles");
                 var ids = CadHandleService.Resolve(document, new[] { handle });
                 if (ids.Count == 0) continue;
                 if (ids.Count > 1) throw new InvalidOperationException("Generated rebar handle " + handle + " resolves to multiple live CAD objects.");

@@ -119,6 +119,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["GeneratedTieRebarActualSpacingM"] = update.ActualSpacingM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedTieRebarCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedTieRebarMode"] = "ColumnRectangularTies";
+                update.Element.ClearGeneratedTieRebarStale();
                 AuditTrail.ForProject(project).Record("geometry.rebar.column.tie", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " ties");
             }
             if (pending.Count > 0) { project.Touch(); document.Editor.Regen(); }
