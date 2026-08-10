@@ -37,11 +37,16 @@ Common boolean fields use a checkbox, mode/material/classification-like fields u
 - `QS3DWALL` — capture Tường Gạch / ArchitecturalWall.
 - `QS3DGLASSWALL` — capture Vách Kính / GlassWall.
 - `QS3DWALLPIER` — capture Trụ Tường / WallPier.
-- `QS3DWALLJUNCTIONS` — analyze selected LINE/open-POLYLINE wall centerlines and classify L/T/X/Straight/End/Multi junction nodes. This command is currently diagnostic/analysis; it does not automatically boolean-union or reshape generated wall solids.
+- `QS3DWALLJUNCTIONS` — analyze selected LINE/open-POLYLINE wall centerlines and classify L/T/X/Straight/End/Multi junction nodes. The report also includes a reviewable endpoint snap plan.
+- `QS3DWALLSNAPPREVIEW` — calculate endpoint cleanup for **QS3D semantic wall source** LINE/open straight POLYLINE only. It records a SHA-256 preview signature; curved/bulged polylines are review-only and are not moved automatically.
+- `QS3DWALLSNAPAPPLY` — apply the previously previewed endpoint moves only when the current selection/geometry/tolerances still hash to the same preview signature. Changed source geometry requires previewing again. Affected semantic owners are marked `Geometry|Quantity` dirty after mutation.
+- Wall snap metadata: `WallJunctionToleranceM` (default `0.005`), `WallJunctionPlanarityToleranceM` (defaults to junction tolerance), `WallJunctionSnapEpsilonM` (small movement/no-op epsilon).
 - All three Tường KT variants use the guarded `QS3DBUILD3D` LINE/open-POLYLINE centerline pipeline. Polyline bulges are tessellated before wall-footprint generation.
 - `QS3DOPENING` — capture Lỗ Mở Vách.
 - `QS3DDOOR` — capture Cửa Đi.
-- `QS3DLINKHOST` — link selected Door/Opening semantics to a selected wall host.
+- `QS3DAUTOLINKHOSTS` — safely match selected Door/Opening semantics to the nearest compatible wall host. Matching uses wall surface gap rather than centerline distance alone, groups tessellated segments by semantic host, rejects near-tie ambiguity, respects Floor/Zone when assigned, and applies an independent source-elevation gate before linking. It does **not** silently run the physical boolean cut.
+- Auto Host metadata: `AutoHostMaxGapM` (default `0.25`), `AutoHostAmbiguityM` (default `0.02`), `AutoHostElevationToleranceM` (default `0.25`), plus `WallArcSagittaM` for curved polyline centerline matching.
+- `QS3DLINKHOST` — manually link selected Door/Opening semantics to a selected wall host; this remains the explicit override workflow.
 - `QS3DCUTOPENINGS` — physically subtract linked Door/Opening cutters from supported generated wall solids. LINE hosts are supported for ArchitecturalWall, GlassWall, WallPier and StructuralWall. Straight non-bulged POLYLINE hosts are also supported when the opening safely projects to one segment and does not cross a corner/junction. Curved/bulged polyline cuts are rejected rather than approximated silently.
 - The physical-cut fingerprint includes live host/opening placement and dimensions; changed geometry on an already-cut generated solid requires rebuilding the host before re-cutting.
 
@@ -89,7 +94,7 @@ See [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for shape metadata and curren
 
 ## UI entry points
 
-The main palette, Ribbon and Full Domain Hub expose the major product flows consistently: Room Auto, Tường KT, Giao tường, Cửa/Lỗ, Build 3D, Focus/Isolate, BQ/BBS, column rebar, shape rebar, health checks and revision tools. The goal is to minimize command-line memorization while preserving explicit commands for power users and test harnesses.
+The main palette, Ribbon and Full Domain Hub expose the major product flows consistently: Room Auto, Tường KT, Giao tường + review-gated snap cleanup, Auto/Manual Door-Opening host linking, physical cuts, Build 3D, Focus/Isolate, BQ/BBS, column rebar, shape rebar, health checks and revision tools. The goal is to minimize command-line memorization while preserving explicit commands for power users and test harnesses.
 
 ## Packaging and autoload
 
