@@ -11,6 +11,8 @@ This file distinguishes **implemented source paths** from behavior that still re
 - Multi-document project cache bound to live Document/DWG identity with fingerprint and Save As guards.
 - Floor/Zone/Family assignment and object-based Bulk Edit require the actual `ProjectElement` instance owned by the project; same-ID foreign objects fail closed.
 - Project Tools, Zone/Floor/Family/Material editors are drawing-bound so switching active DWGs does not silently edit another project.
+- Semantic capture is transactional at project-state level: single recognition/manual capture and multi-selection capture snapshot the complete `ProjectState` before mutation, reject QS3D-generated output handles as semantic input, and restore Families/Elements/Rules/Audit/Metadata/timestamps when conversion or regeneration fails. If rollback itself fails, the original and rollback errors are preserved together instead of hiding the first failure.
+- HT_Phòng generation and synchronization use the same full-project snapshot/rollback pattern so a failed finish regenerator cannot leave a partially-created five-family finish batch in memory.
 
 ### BLT-style UI / semantic selection
 
@@ -18,13 +20,13 @@ This file distinguishes **implemented source paths** from behavior that still re
 - Active Family is explicit and category-safe; GlassWall/WallPier capture respects the selected active Family when categories match.
 - Locate/Zoom, Highlight, Focus, Isolate/Restore, Section Box, Section Plane and clip-display review flows.
 - Full Domain Hub, Project Tools, Schedule Hub, Rebar 3D Hub, Curtain Hub and Geometry Extensions provide discoverable workflow entry points.
-- Semantic handle ownership resolution includes current generated channels, including Slab mesh, StructuralWall mesh, **Foundation mesh** and Curtain frame overlays.
+- Semantic handle ownership resolution includes current generated channels, including Slab mesh, StructuralWall mesh, **Foundation mesh** and Curtain frame overlays, and now consumes the shared generated-owner enumeration instead of a hard-coded family list so future `Generated*Handle(s)` slots resolve automatically.
 
 ### Room / finishes / schedules
 
 - Deterministic `RoomBoundaryEngine` and bounded LINE/POLYLINE/ARC/SPLINE Room Auto sampling/topology.
 - Non-destructive stale-room lifecycle with provenance and audit retention.
-- HT_Phòng generation/synchronization for floor finish, waterproofing, skirting, wall finish and ceiling finish.
+- HT_Phòng generation/synchronization for floor finish, waterproofing, skirting, wall finish and ceiling finish, with batch rollback on failure.
 - Room Finish schedule and XLSX workflow.
 
 ### Tường KT / wall geometry / Door-Opening
@@ -57,7 +59,7 @@ Remaining Curtain product/runtime work: curved/open-POLYLINE frame overlay and p
 - Quick Takeoff uses drawing unit conversion.
 - BQ grouping/filtering/Locate/XLSX and ED2 Excel/Handle round-trip with DWG fingerprint safety.
 - Deterministic recognition/review/auto-apply.
-- `QS3DB4D` bounded Current Space scan now excludes **all generated owner-slot handles through the shared ownership policy**, preventing QS3D-generated geometry from feeding back into source recognition when new generated families are introduced.
+- `QS3DB4D` bounded Current Space scan excludes **all generated owner-slot handles through the shared ownership policy**, preventing QS3D-generated geometry from feeding back into source recognition when new generated families are introduced. Recognition/B4D apply still flows through the guarded transactional semantic-capture path, so an output handle cannot be recaptured if a future scanner regression reaches that stage.
 
 ### Schedules / exports
 
@@ -92,9 +94,10 @@ Fabrication-grade hook/bend-radius/anchorage/code-specific detailing is not infe
 
 ### Generated ownership / stale / health hardening
 
-- Shared `GeneratedHandleOwnershipPolicy` defines generated owner slots and rebar owner slots.
-- Semantic selection resolves generated ownership back to semantic elements.
-- B4D source scanning excludes generated owner slots through the same policy.
+- Shared `GeneratedHandleOwnershipPolicy` is the single classification contract for `PhysicalOpeningCutSolidHandle` and `Generated*Handle` / `Generated*Handles`, while provenance/reference metadata such as `HostHandle` remains non-owner state.
+- The Core policy exposes `RebarHandleKeys` / `IsRebarOwnerSlot` for destructive rebar families plus normalized `EnumerateOwnerHandles`, project-wide `CollectOwnerHandles` and fail-closed `TryFindOwner` for cross-feature consumers. A handle claimed by different owner slots is treated as ambiguous even when the semantic element ID is the same.
+- The BricsCAD adapter policy is a delegation facade only; it no longer duplicates generated-slot classification semantics.
+- Semantic selection, B4D exclusion, safe ownership health, BOM release liveness, semantic capture and Release Readiness all consume the shared owner contract.
 - Rebar, Tie and Curtain destructive guards use policy-driven ownership instead of stale manual lists.
 - Curtain dedicated ownership health also uses the shared policy.
 - Generated dependent invalidation clears dedicated metadata for mass, opening cuts, rebar families and opening-aware Curtain frames.
@@ -102,7 +105,8 @@ Fabrication-grade hook/bend-radius/anchorage/code-specific detailing is not infe
 
 ### Release readiness / packaging
 
-- `QS3DRELEASECHECK` includes Model Health, safe generated ownership, longitudinal/shape/tie/stirrup/slab/wall/**Foundation** mesh health, Curtain health/live state, stale state, generated-rebar mode semantics and BOM/live-solid release guards.
+- `QS3DRELEASECHECK` includes Model Health, **Dependency Health**, safe generated ownership, longitudinal/shape/tie/stirrup/slab/wall/**Foundation** mesh health, Curtain health/live state, stale state, generated-rebar mode semantics and BOM/live-solid release guards.
+- Release generated-handle collection and Locate use the shared owner enumeration instead of a separate property parser, so a future generated owner family participates in live-solid validation without another release-code list update.
 - `scripts/package-v25.ps1` packages the x64 Release/net48 adapter output, requires QS3D adapter/Core DLLs, excludes BricsCAD-owned assemblies, includes installer/updater/sample assets, generates hashes and creates `COMMANDS.txt` directly from `[CommandMethod]` source declarations.
 - Manual V25 release workflow can run source gates, Core build/smoke, V25 x64 compile, optional real runtime validation, packaging/checksum and GitHub Release publication after explicit owner approval.
 
@@ -113,12 +117,14 @@ Current source preflights cover, among other things:
 - manual-only GitHub Actions policy and per-job manual guards;
 - command uniqueness and key XAML contracts;
 - project-editor drawing affinity and project-owned mutation integrity;
-- semantic selection including Foundation mesh;
-- B4D future-proof generated-source exclusion;
+- semantic selection including dynamic future generated owner slots;
+- B4D future-proof generated-source exclusion through the Core owner policy;
+- transactional semantic capture, generated-input rejection and HT_Phòng batch rollback;
+- generated owner-slot compilation/enumeration and future-family BOM liveness;
 - wall junction/snap/Auto Host/opening cuts;
 - Curtain opening-aware lifecycle and policy-driven ownership;
 - Slab/Wall/Foundation mesh lifecycle/health/ownership;
-- unified Release Readiness;
+- unified Release Readiness including Dependency/Foundation/mode/BOM contracts;
 - schedule/export hub wiring;
 - synthetic sample provenance/private-file policy.
 
@@ -146,7 +152,7 @@ An **earlier** integrated snapshot based on `b00d03f` was compiled against Brics
 
 Earlier GitHub-hosted runs also predate the newest batches. They are historical evidence only and **must not** be described as validation of the current `main` head.
 
-The current final SHA still requires an explicitly approved build/runtime validation before it can be called current V25-verified.
+The current final SHA still requires an explicitly approved build/runtime validation before it can be called current V25-verified. During the full-repository hardening audit, the execution container could not resolve `github.com`, so this batch does **not** claim a local `dotnet build`, Core smoke execution or aggregate Python preflight pass.
 
 ## Runtime/product work still remaining
 
@@ -163,4 +169,4 @@ The current final SHA still requires an explicitly approved build/runtime valida
 - Unicode/HiDPI and large-model performance regression;
 - production signing/updater/commercial licensing work where required.
 
-See `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the current audit plan, fixes and architectural decisions.
+See `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` and `docs/FULL-REPO-AUDIT-2026-08-10.md` for the current audit plans, fixes, architectural decisions and validation boundary.
