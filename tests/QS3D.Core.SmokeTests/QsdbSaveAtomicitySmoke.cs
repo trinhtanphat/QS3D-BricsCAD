@@ -22,6 +22,7 @@ namespace QS3D.Core.SmokeTests
             project.Metadata["marker"] = "unchanged";
             var beforeSchema = project.SchemaVersion;
             var beforeUpdatedUtc = project.UpdatedUtc;
+            var beforeChangeVersion = project.ChangeVersion;
             var destinationDirectory = Path.Combine(Path.GetTempPath(), "qs3d-save-destination-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(destinationDirectory);
 
@@ -44,6 +45,7 @@ namespace QS3D.Core.SmokeTests
                 Require(failed, "Saving over an existing directory unexpectedly succeeded.");
                 Require(project.SchemaVersion == beforeSchema, "Failed save changed the in-memory schema version.");
                 Require(project.UpdatedUtc == beforeUpdatedUtc, "Failed save changed the in-memory UpdatedUtc timestamp.");
+                Require(project.ChangeVersion == beforeChangeVersion, "Failed save changed the in-memory persistence version.");
                 Require(project.Metadata.TryGetValue("marker", out var marker) && marker == "unchanged", "Failed save changed unrelated semantic state.");
                 Require(Directory.Exists(destinationDirectory), "Failed save replaced the destination directory.");
             }
