@@ -48,10 +48,9 @@ namespace QS3D.BricsCAD.V25
                     () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
                     element =>
                     {
-                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -81,10 +80,9 @@ namespace QS3D.BricsCAD.V25
                     () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
                     element =>
                     {
-                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -114,10 +112,9 @@ namespace QS3D.BricsCAD.V25
                     () => CreateLine(document, points[0], points[1]),
                     element =>
                     {
-                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -145,24 +142,25 @@ namespace QS3D.BricsCAD.V25
                     () => CreatePolyline(document, points, true),
                     element =>
                     {
-                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
 
         private static void Execute(Document document, ElementCategory category, Func<ObjectId> createSource, Action<ProjectElement> configureElement)
         {
+            EnsureActive(document, "Direct Draw P1 " + category);
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
-            var priorGenerated = new HashSet<string>(GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project), StringComparer.OrdinalIgnoreCase);
+            var sourceId = ObjectId.Null;
             var sourceHandle = string.Empty;
-            var elementId = string.Empty;
+            ProjectElement? createdElement = null;
+            var generatedHandle = string.Empty;
 
             try
             {
-                var sourceId = createSource();
+                sourceId = createSource();
                 if (sourceId.IsNull || !sourceId.IsValid) throw new InvalidOperationException("Không tạo được CAD source cho Direct Draw P1.");
                 sourceHandle = sourceId.Handle.ToString();
                 document.Editor.SetImpliedSelection(new[] { sourceId });
@@ -170,68 +168,62 @@ namespace QS3D.BricsCAD.V25
                 var captured = SemanticCaptureService.Capture(document, category);
                 if (captured != 1) throw new InvalidOperationException("Direct Draw P1 cần capture đúng một semantic element, nhận được " + captured + ".");
 
-                var element = project.Elements.SingleOrDefault(x =>
+                createdElement = project.Elements.SingleOrDefault(x =>
                     x.Category == category && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)));
-                if (element == null) throw new InvalidOperationException("Không tìm thấy semantic element vừa tạo cho source " + sourceHandle + ".");
-                elementId = element.Id;
-                configureElement(element);
+                if (createdElement == null) throw new InvalidOperationException("Không tìm thấy semantic element vừa tạo cho source " + sourceHandle + ".");
+                configureElement(createdElement);
 
-                // Reuse canonical compatibility build behavior so P1 follows the same complete-source,
-                // Model-Space, regeneration and generated-ownership gates as QS3DBUILD3D.
+                // QS3DBUILD3D resolves the active document internally. Re-check immediately before
+                // delegating so a document switch can never redirect this P1 operation to another DWG.
+                EnsureActive(document, "Direct Draw P1 " + category + " / QS3DBUILD3D");
                 document.Editor.SetImpliedSelection(new[] { sourceId });
                 new Build3DCommands().Build3D();
 
-                if (!element.Properties.TryGetValue("GeneratedSolidHandle", out var generatedHandle) || string.IsNullOrWhiteSpace(generatedHandle))
+                if (!createdElement.Properties.TryGetValue("GeneratedSolidHandle", out generatedHandle) || string.IsNullOrWhiteSpace(generatedHandle))
                     throw new InvalidOperationException("QS3DBUILD3D không ghi GeneratedSolidHandle cho Direct Draw P1 " + category + ".");
                 var liveGenerated = CadHandleService.GetLiveHandles(document, new[] { generatedHandle });
                 if (!liveGenerated.Contains(generatedHandle, StringComparer.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Generated solid của Direct Draw P1 không còn live sau QS3DBUILD3D: " + generatedHandle + ".");
 
                 project.Touch();
-                PaletteCoordinator.RefreshProject();
-                CadHandleService.Select(document, new[] { generatedHandle });
-                document.Editor.Regen();
-                var status = "Direct Draw P1 " + category + ": source + semantic + native 3D hoàn tất.";
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
             }
             catch (Exception operationError)
             {
-                var cleanupHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                if (!string.IsNullOrWhiteSpace(sourceHandle)) cleanupHandles.Add(sourceHandle);
-                foreach (var handle in GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project))
-                    if (!priorGenerated.Contains(handle)) cleanupHandles.Add(handle);
-
+                var generatedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 Exception? ownershipDiscoveryError = null;
-                if (!string.IsNullOrWhiteSpace(elementId))
+                if (createdElement != null)
                 {
+                    foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(createdElement))
+                        if (!string.IsNullOrWhiteSpace(entry.Key)) generatedHandles.Add(entry.Key.Trim());
                     try
                     {
-                        foreach (var handle in GeneratedGeometryService.FindMatchingOwnedHandles(document, project.ProjectId, elementId, category))
-                            cleanupHandles.Add(handle);
+                        foreach (var handle in GeneratedGeometryService.FindMatchingOwnedHandles(document, project.ProjectId, createdElement.Id, createdElement.Category))
+                            if (!string.IsNullOrWhiteSpace(handle)) generatedHandles.Add(handle.Trim());
                     }
                     catch (Exception ex) { ownershipDiscoveryError = ex; }
                 }
 
-                Exception? restoreError = null;
                 Exception? cleanupError = null;
+                Exception? restoreError = null;
+                try { EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles); }
+                catch (Exception ex) { cleanupError = ex; }
                 try { rollback.Restore(project); }
                 catch (Exception ex) { restoreError = ex; }
-                try { EraseHandles(document, cleanupHandles); }
-                catch (Exception ex) { cleanupError = ex; }
                 try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
                 catch { }
 
-                if (ownershipDiscoveryError != null || restoreError != null || cleanupError != null)
+                if (ownershipDiscoveryError != null || cleanupError != null || restoreError != null)
                 {
                     var errors = new List<Exception> { operationError };
                     if (ownershipDiscoveryError != null) errors.Add(ownershipDiscoveryError);
-                    if (restoreError != null) errors.Add(restoreError);
                     if (cleanupError != null) errors.Add(cleanupError);
+                    if (restoreError != null) errors.Add(restoreError);
                     throw new InvalidOperationException("Direct Draw P1 thất bại và rollback không hoàn tất đầy đủ.", new AggregateException(errors));
                 }
                 throw;
             }
+
+            FinalizeUi(document, createdElement!, sourceId, generatedHandle);
         }
 
         private static IReadOnlyList<Point3d>? AcquireFixedPath(Document document, string label, int count)
@@ -308,6 +300,7 @@ namespace QS3D.BricsCAD.V25
 
         private static ObjectId CreatePolyline(Document document, IReadOnlyList<Point3d> points, bool closed)
         {
+            if (points == null) throw new ArgumentNullException(nameof(points));
             if (points.Count < (closed ? 3 : 2)) throw new InvalidOperationException("Không đủ điểm để tạo POLYLINE Direct Draw.");
             ValidatePlanView(document, points, closed ? "Closed POLYLINE" : "Open POLYLINE");
             using (document.LockDocument())
@@ -317,9 +310,13 @@ namespace QS3D.BricsCAD.V25
                 var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
                 var polyline = new Polyline();
                 polyline.SetDatabaseDefaults(document.Database);
-                polyline.Elevation = points[0].Z;
+                polyline.Elevation = CadGeometryGuard.Finite(points[0].Z, "Direct Draw P1 POLYLINE elevation");
                 for (var index = 0; index < points.Count; index++)
-                    polyline.AddVertexAt(index, new Point2d(points[index].X, points[index].Y), 0d, 0d, 0d);
+                {
+                    var x = CadGeometryGuard.Finite(points[index].X, "Direct Draw P1 POLYLINE X[" + index + "]");
+                    var y = CadGeometryGuard.Finite(points[index].Y, "Direct Draw P1 POLYLINE Y[" + index + "]");
+                    polyline.AddVertexAt(index, new Point2d(x, y), 0d, 0d, 0d);
+                }
                 polyline.Closed = closed;
                 var id = modelSpace.AppendEntity(polyline);
                 transaction.AddNewlyCreatedDBObject(polyline, true);
@@ -392,26 +389,72 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void EraseHandles(Document document, IEnumerable<string> handles)
+        private static void EraseDirectDrawCad(Document document, ProjectState project, ProjectElement? createdElement, ObjectId sourceId, IEnumerable<string> generatedHandles)
         {
-            var normalized = new HashSet<string>(handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
-            if (normalized.Count == 0) return;
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var normalized = new HashSet<string>(
+                (generatedHandles ?? Array.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            if (normalized.Count > 0 && createdElement == null)
+                throw new InvalidOperationException("Direct Draw P1 rollback found generated CAD without the newly-created semantic owner.");
             var ids = CadHandleService.Resolve(document, normalized);
+
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
+                if (!sourceId.IsNull && sourceId.IsValid)
+                {
+                    var source = transaction.GetObject(sourceId, OpenMode.ForWrite, true) as Entity;
+                    if (source != null && !source.IsErased) source.Erase(true);
+                }
+
                 foreach (var id in ids)
                 {
-                    var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
-                    if (entity == null) throw new InvalidOperationException("Direct Draw rollback handle " + id.Handle + " không còn trỏ tới Entity hợp lệ.");
-                    if (!entity.IsErased) entity.Erase(true);
+                    if (id.IsNull || !id.IsValid || id == sourceId) continue;
+                    var entity = transaction.GetObject(id, OpenMode.ForWrite, true) as Entity;
+                    if (entity == null) throw new InvalidOperationException("Direct Draw P1 rollback generated handle " + id.Handle + " không còn trỏ tới Entity hợp lệ.");
+                    if (entity.IsErased) continue;
+                    GeneratedGeometryService.RequireMatchingOwnership(entity, project, createdElement!, "rollback Direct Draw P1 generated CAD " + id.Handle);
+                    entity.Erase(true);
                 }
                 transaction.Commit();
             }
-            var remaining = CadHandleService.GetLiveHandles(document, normalized);
-            if (remaining.Count > 0)
-                throw new InvalidOperationException("Direct Draw rollback còn CAD handle chưa xóa: " + string.Join(", ", remaining.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)) + ".");
-            document.Editor.Regen();
+
+            var remainingGenerated = CadHandleService.GetLiveHandles(document, normalized);
+            if (remainingGenerated.Count > 0)
+                throw new InvalidOperationException("Direct Draw P1 rollback còn generated CAD handle chưa xóa: " + string.Join(", ", remainingGenerated.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)) + ".");
+            if (!sourceId.IsNull && sourceId.IsValid)
+            {
+                var remainingSource = CadHandleService.GetLiveHandles(document, new[] { sourceId.Handle.ToString() });
+                if (remainingSource.Count > 0)
+                    throw new InvalidOperationException("Direct Draw P1 rollback còn source CAD chưa xóa: " + sourceId.Handle + ".");
+            }
+        }
+
+        private static void FinalizeUi(Document document, ProjectElement element, ObjectId sourceId, string generatedHandle)
+        {
+            var status = "Direct Draw P1 " + element.Category + ": source + semantic + native 3D hoàn tất.";
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                if (!string.IsNullOrWhiteSpace(generatedHandle)) CadHandleService.Select(document, new[] { generatedHandle });
+                else if (!sourceId.IsNull && sourceId.IsValid) document.Editor.SetImpliedSelection(new[] { sourceId });
+                document.Editor.Regen();
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\nQS3D " + status);
+            }
+            catch (Exception ex)
+            {
+                try { document.Editor.WriteMessage("\nQS3D " + status + " UI sync warning: " + ex.Message); }
+                catch { }
+            }
+        }
+
+        private static void EnsureActive(Document document, string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(operation + " yêu cầu đúng DWG đã bắt đầu lệnh vẫn là bản vẽ active.");
         }
 
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
