@@ -64,6 +64,7 @@
                     <TextBlock Text="CỐT THÉP / KHỐI LƯỢNG" Style="{StaticResource SectionLabel}" Margin="0,14,0,4"/>
                     <Button Content="Bảng Cửa / Lỗ mở" Tag="QS3DDOORSCHEDULE" Click="OnCommandClick"/>
                     <Button Content="Xuất Cửa / Lỗ mở XLSX" Tag="QS3DDOORXLSX" Click="OnCommandClick"/>
+                    <Button Content="Thiết lập lưới thép selection" Tag="QS3DREBARMESHSETUP" Click="OnCommandClick"/>
                     <Button Content="Tạo / cập nhật cốt thép cột 3D" Tag="QS3DREBAR3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
                     <Button Content="Tạo đai cột 3D" Tag="QS3DREBARTIES3D" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra đai cột 3D" Tag="QS3DREBARTIEHEALTH" Click="OnCommandClick"/>
@@ -74,6 +75,8 @@
                     <Button Content="Kiểm tra lưới thép sàn" Tag="QS3DSLABREBARHEALTH" Click="OnCommandClick"/>
                     <Button Content="Tạo lưới thép vách ngang/dọc 3D" Tag="QS3DWALLREBAR3D" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra lưới thép vách" Tag="QS3DWALLREBARHEALTH" Click="OnCommandClick"/>
+                    <Button Content="Tạo lưới thép móng X/Y 3D" Tag="QS3DFOUNDATIONREBAR3D" Click="OnCommandClick"/>
+                    <Button Content="Kiểm tra lưới thép móng" Tag="QS3DFOUNDATIONREBARHEALTH" Click="OnCommandClick"/>
                     <Button Content="Tạo cốt thép 3D theo BBS shape" Tag="QS3DREBAR3DSHAPE" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra toàn bộ cốt thép 3D" Tag="QS3DREBARHEALTHALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra solid cốt thép cột/dầm" Tag="QS3DREBARHEALTH" Click="OnCommandClick"/>
