@@ -69,6 +69,42 @@ Implement only after compiling against the installed V25 assemblies:
 
 Run Wall, Beam, Column, Slab plus one P1 family and Door/Opening. Verify mouse preview, ORTHO/OSNAP interaction, ESC, UNDO, repeated creation, save/reopen, HiDPI and document switching. Capture only sanitized evidence.
 
+## P0 — Level references → native placement/UI integration
+
+### Current boundary
+
+`docs/LEVEL-REFERENCES.md`, `ProjectFloorService`, `ElementVerticalPlacementService` and Level-reference Health/Release diagnostics establish the semantic contract, but the current native CAD builders and authoring UI intentionally do not expose or consume Bottom/Top Level placement yet. Do not expose Level assignment in UI before the host solids **and every dependent generated system** resolve the same effective bottom/top/height contract.
+
+### Required integration scope
+
+At minimum, review and coherently integrate:
+
+- native host builders for Wall/GlassWall/Column/Beam/Slab/StructuralWall/Foundation/Stair/Railing where vertical placement applies;
+- Door/WallOpening host-relative placement and opening-cut geometry;
+- Curtain host and LINE/path frame builders;
+- generated Column/Beam/Shape/Tie/Stirrup/Slab/Wall/Foundation rebar/mesh that derives Z, height or placement from its host;
+- Direct Draw P0/P1/Door/Opening initial semantic values;
+- regeneration/rebuild, stale/fingerprint logic and save/reopen;
+- Floor/Level Manager assignment UI only after native integration is coherent.
+
+Use `ElementVerticalPlacementService` as the semantic source of truth. Do not independently reimplement Bottom/Top Level arithmetic in each builder. Legacy elements with no Level references must retain existing source-relative behavior exactly.
+
+### Source acceptance
+
+- Bottom only resolves absolute bottom from Level elevation + explicit offset while preserving legacy effective height;
+- Bottom + Top resolves absolute bottom/top and effective height from both Levels;
+- Top without Bottom, missing Level IDs, non-finite offsets and `top <= bottom` remain fail-closed;
+- no double-application of legacy `BottomOffsetM` after `BottomLevelId` is present;
+- host and all dependent generated geometry use the same resolved vertical placement;
+- changing/renaming a Level does not silently corrupt references; deleting a referenced Level remains guarded;
+- Level mutation marks every affected host/dependent generated family stale or deterministically rebuilds it according to the existing dependency contract;
+- Health All / Release Check catch host/generated vertical-placement divergence where it can be diagnosed deterministically;
+- add/update static preflights only after the native contract is actually wired.
+
+### Required V25 proof
+
+On one exact SHA, test legacy/no-Level and Level-enabled cases in both mm and m drawings. Cover World UCS plus planar 30°/45°/90° UCS, save/reopen and rebuild. For representative host families, verify source/native/generated geometry Z/height before and after Bottom Level change, Top Level change, offsets, invalid/deleted references and UNDO. PASS requires no semantic/native split-brain and no change in legacy geometry when Level references are absent.
+
 ## P0 — commercial license enforcement wiring
 
 ### Current boundary
@@ -135,7 +171,7 @@ When a local agent completes any section above, append or update a safe status n
 ```text
 Exact SHA: <40-char SHA>
 Environment: Windows x64 + BricsCAD V25 <edition/build>
-Gate: <Curtain orchestration | DrawJig/repeated authoring | licensing | signing | performance>
+Gate: <Curtain orchestration | DrawJig/repeated authoring | Level integration | licensing | signing | performance>
 Result: PASS/FAIL/BLOCKED
 Automated exact-SHA runner: PASS/FAIL
 Interactive scenarios: PASS/FAIL
