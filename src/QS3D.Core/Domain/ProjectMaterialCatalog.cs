@@ -78,10 +78,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var material = new ProjectMaterial(id, name, unit, description, false);
-            if (BuiltIns.Any(x => string.Equals(x.Id, material.Id, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException("Built-in material ids cannot be overwritten.");
-            if (BuiltIns.Any(x => string.Equals(x.Name, material.Name, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException("A built-in material already uses the name '" + material.Name + "'.");
+            EnsureDoesNotShadowBuiltIn(material);
 
             var custom = ReadCustom(project);
             var byId = custom.FindIndex(x => string.Equals(x.Id, material.Id, StringComparison.OrdinalIgnoreCase));
@@ -188,11 +185,20 @@ namespace QS3D.Core.Domain
                 var fields = lines[index].Split('|');
                 if (fields.Length != 4) throw new InvalidOperationException("Invalid material catalog record at line " + (index + 1) + ".");
                 var material = new ProjectMaterial(Decode(fields[0]), Decode(fields[1]), Decode(fields[2]), Decode(fields[3]), false);
+                EnsureDoesNotShadowBuiltIn(material);
                 if (!ids.Add(material.Id)) throw new InvalidOperationException("Duplicate material id in project catalog: " + material.Id);
                 if (!names.Add(material.Name)) throw new InvalidOperationException("Duplicate material name in project catalog: " + material.Name);
                 result.Add(material);
             }
             return result;
+        }
+
+        private static void EnsureDoesNotShadowBuiltIn(ProjectMaterial material)
+        {
+            if (BuiltIns.Any(x => string.Equals(x.Id, material.Id, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Built-in material ids cannot be overwritten: " + material.Id + ".");
+            if (BuiltIns.Any(x => string.Equals(x.Name, material.Name, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("A built-in material already uses the name '" + material.Name + "'.");
         }
 
         private static void WriteCustom(ProjectState project, IEnumerable<ProjectMaterial> source)
