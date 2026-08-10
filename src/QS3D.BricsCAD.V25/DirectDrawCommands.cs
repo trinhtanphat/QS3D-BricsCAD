@@ -49,10 +49,9 @@ namespace QS3D.BricsCAD.V25
                     () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
                     element =>
                     {
-                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -82,10 +81,9 @@ namespace QS3D.BricsCAD.V25
                     () => CreateLine(document, points[0], points[1]),
                     element =>
                     {
-                        element.Properties["WidthM"] = widthM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("WidthM", widthM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -113,9 +111,8 @@ namespace QS3D.BricsCAD.V25
                     () => CreatePolyline(document, points, true),
                     element =>
                     {
-                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -147,11 +144,10 @@ namespace QS3D.BricsCAD.V25
                     () => CreateColumnFootprint(document, centerResult.Value, widthM.Value, depthM.Value),
                     element =>
                     {
-                        element.Properties["WidthM"] = widthM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["DepthM"] = depthM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("WidthM", widthM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("DepthM", depthM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -356,9 +352,13 @@ namespace QS3D.BricsCAD.V25
                 var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
                 var polyline = new Polyline();
                 polyline.SetDatabaseDefaults(document.Database);
-                polyline.Elevation = points[0].Z;
+                polyline.Elevation = CadGeometryGuard.Finite(points[0].Z, "Direct Draw POLYLINE elevation");
                 for (var index = 0; index < points.Count; index++)
-                    polyline.AddVertexAt(index, new Point2d(points[index].X, points[index].Y), 0d, 0d, 0d);
+                {
+                    var x = CadGeometryGuard.Finite(points[index].X, "Direct Draw POLYLINE X[" + index + "]");
+                    var y = CadGeometryGuard.Finite(points[index].Y, "Direct Draw POLYLINE Y[" + index + "]");
+                    polyline.AddVertexAt(index, new Point2d(x, y), 0d, 0d, 0d);
+                }
                 polyline.Closed = closed;
                 var id = modelSpace.AppendEntity(polyline);
                 transaction.AddNewlyCreatedDBObject(polyline, true);
@@ -371,14 +371,17 @@ namespace QS3D.BricsCAD.V25
         {
             var width = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, widthM, "DirectDraw Column WidthM"), "DirectDraw Column width drawing units");
             var depth = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, depthM, "DirectDraw Column DepthM"), "DirectDraw Column depth drawing units");
-            var halfWidth = width / 2d;
-            var halfDepth = depth / 2d;
+            var halfWidth = CadGeometryGuard.Multiply(width, 0.5d, "DirectDraw Column half width");
+            var halfDepth = CadGeometryGuard.Multiply(depth, 0.5d, "DirectDraw Column half depth");
+            var centerX = CadGeometryGuard.Finite(center.X, "DirectDraw Column center X");
+            var centerY = CadGeometryGuard.Finite(center.Y, "DirectDraw Column center Y");
+            var centerZ = CadGeometryGuard.Finite(center.Z, "DirectDraw Column center Z");
             return CreatePolyline(document, new[]
             {
-                new Point3d(center.X - halfWidth, center.Y - halfDepth, center.Z),
-                new Point3d(center.X + halfWidth, center.Y - halfDepth, center.Z),
-                new Point3d(center.X + halfWidth, center.Y + halfDepth, center.Z),
-                new Point3d(center.X - halfWidth, center.Y + halfDepth, center.Z)
+                new Point3d(CadGeometryGuard.Subtract(centerX, halfWidth, "DirectDraw Column min X"), CadGeometryGuard.Subtract(centerY, halfDepth, "DirectDraw Column min Y"), centerZ),
+                new Point3d(CadGeometryGuard.Add(centerX, halfWidth, "DirectDraw Column max X"), CadGeometryGuard.Subtract(centerY, halfDepth, "DirectDraw Column min Y"), centerZ),
+                new Point3d(CadGeometryGuard.Add(centerX, halfWidth, "DirectDraw Column max X"), CadGeometryGuard.Add(centerY, halfDepth, "DirectDraw Column max Y"), centerZ),
+                new Point3d(CadGeometryGuard.Subtract(centerX, halfWidth, "DirectDraw Column min X"), CadGeometryGuard.Add(centerY, halfDepth, "DirectDraw Column max Y"), centerZ)
             }, true);
         }
 
