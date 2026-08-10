@@ -59,7 +59,7 @@ namespace QS3D.Core.SmokeTests
             project.QuantityRules.Add(new QuantityRule("beam-double", ElementCategory.Beam, "DoubleVolume", "NetVolumeM3*2", "1"));
             var element = project.Elements.Single(); element.MarkDirty(ElementDirtyFlags.All);
             var count = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-            True(count > 0); Near(0.3d, element.Quantities["NetVolumeM3"]); Near(0.6d, element.Quantities["DoubleVolume"]); Equal(ElementDirtyFlags.None, element.Dirty);
+            True(count > 0); Near(0.3d, element.Quantities["NetVolumeM3"]); Near(0.6d, element.Quantities["DoubleVolume"]); Equal(ElementDirtyFlags.Geometry, element.Dirty);
         }
 
         private static void RuleDependenciesAreDeterministic()

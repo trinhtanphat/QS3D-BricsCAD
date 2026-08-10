@@ -86,9 +86,11 @@ if room_reader.exists():
 room_command = ROOT / "src/QS3D.BricsCAD.V25/RoomBoundaryCommands.cs"
 if room_command.exists():
     text = room_command.read_text(encoding="utf-8")
+    if 'BoundaryMode"] = "AutoNetwork"' not in text and "AutoRoomLifecycle.BoundaryModeAutoNetwork" not in text:
+        errors.append("QS3DROOMAUTO workflow missing: AutoNetwork boundary mode assignment")
     for needle in (
-        'BoundaryMode"] = "AutoNetwork"', "BoundarySourceHandles", "BoundaryArcSagittaM", "RoomBoundaryArcSagittaM", "AuditTrail.ForProject", "RegeneratorCatalog.CreateDefault",
-        "ReadCurrentSelection(document, arcSagitta, tolerance)", "LINE, POLYLINE hoặc ARC plan-view"
+        "BoundarySourceHandles", "BoundaryArcSagittaM", "RoomBoundaryArcSagittaM", "AuditTrail.ForProject", "RegeneratorCatalog.CreateDefault",
+        "ReadCurrentSelection(document, arcSagitta, tolerance, splineChord)", "LINE, POLYLINE, ARC hoặc SPLINE plan-view"
     ):
         if needle not in text: errors.append("QS3DROOMAUTO workflow missing: " + needle)
     if "SourceHandles.Add" in text: errors.append("auto-room discovery must not claim wall/source handles as Room semantic ownership")
@@ -146,4 +148,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: full-domain files, unique commands, structural quantities/native mass adapters, BBS CSV safety, planar LINE/POLYLINE/ARC room discovery performance/rollback/UI wiring, DemandLoad packaging/install guards and regression registration are present.")
+print("PASS: full-domain files, unique commands, structural quantities/native mass adapters, BBS CSV safety, planar LINE/POLYLINE/ARC/SPLINE room discovery performance/rollback/UI wiring, DemandLoad packaging/install guards and regression registration are present.")
