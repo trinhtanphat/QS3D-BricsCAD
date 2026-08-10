@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             CoversAllGeneratedOutputFamilies();
             CoversDependencyAndStaleDiagnostics();
             CoversSemanticIntegrityFamilies();
+            CoversGeneratedLocateTargetClassification();
         }
 
         private static void CoversAllGeneratedOutputFamilies()
@@ -81,6 +82,35 @@ namespace QS3D.Core.SmokeTests
             HasCode(issues, "TOP_LEVEL_REQUIRES_BOTTOM_LEVEL");
             HasCode(issues, "UNLINKED_ROOM_FINISH");
             HasCode(issues, "REBAR_FAB_OUTPUT_MISSING");
+        }
+
+        private static void CoversGeneratedLocateTargetClassification()
+        {
+            foreach (var code in new[]
+            {
+                "GENERATED_SOLID_STALE",
+                "INVALID_REBAR_GENERATED_HANDLE",
+                "SHAPE_REBAR_CATEGORY_MISMATCH",
+                "TIE_REBAR_CATEGORY_MISMATCH",
+                "BEAM_STIRRUP_CATEGORY_MISMATCH",
+                "SLAB_MESH_COUNT_MISMATCH",
+                "WALL_MESH_CATEGORY_MISMATCH",
+                "FOUNDATION_MESH_COUNT_MISMATCH",
+                "CURTAIN_FRAME_COUNT_INVALID",
+                "INVALID_CURTAIN_FRAME_GENERATED_HANDLE"
+            })
+            {
+                var issue = new ModelHealthIssue(code, HealthSeverity.Warning, "smoke", "E");
+                if (!ComprehensiveModelHealthService.TargetsGeneratedOutput(issue))
+                    throw new InvalidOperationException("Generated-output health code was not classified for generated CAD locate: " + code + ".");
+            }
+
+            foreach (var code in new[] { "MISSING_FAMILY", "DEPENDENCY_CYCLE", "TOP_LEVEL_REQUIRES_BOTTOM_LEVEL", "REBAR_FAB_OUTPUT_MISSING" })
+            {
+                var issue = new ModelHealthIssue(code, HealthSeverity.Warning, "smoke", "E");
+                if (ComprehensiveModelHealthService.TargetsGeneratedOutput(issue))
+                    throw new InvalidOperationException("Semantic/non-CAD health code was incorrectly classified as a generated CAD locate target: " + code + ".");
+            }
         }
 
         private static ProjectState Project(string suffix) => new ProjectState("health-" + suffix, "Health " + suffix);
