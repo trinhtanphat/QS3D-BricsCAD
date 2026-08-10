@@ -70,8 +70,12 @@ namespace QS3D.BricsCAD.V25.Services
             }
             else
             {
-                family = project.FindFamily(element.FamilyId) ?? ResolveFamily(project, category);
-                if (string.IsNullOrWhiteSpace(element.FamilyId)) element.FamilyId = family.Id;
+                family = project.FindFamily(element.FamilyId);
+                if (family == null || family.Category != category)
+                {
+                    family = ResolveFamily(project, category);
+                    element.FamilyId = family.Id;
+                }
             }
             element.Category = category;
             element.SourceHandles.Clear();

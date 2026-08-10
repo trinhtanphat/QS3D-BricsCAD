@@ -18,14 +18,16 @@ Before starting substantive work, read in this order:
 2. `docs/PRODUCT-BOUNDARY.md` — **canonical product/hosting boundary**;
 3. `CI_POLICY.md`;
 4. fetch the latest `main`;
-5. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — **canonical current source/status handoff**;
-6. `docs/IMPLEMENTATION-STATUS.md`;
-7. `docs/PLAN.md` and `docs/COMMANDS.md`;
-8. `docs/DIRECT-DRAW-WORKFLOW.md` — **owner-required BLT-style direct authoring direction for new Wall/Beam/Column/Slab geometry**;
-9. `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` — **current source implementation, rollback contract, sample-DWG boundary and required V25 runtime qualification for Direct Draw P0**;
-10. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
+5. `docs/AGENT-HANDOFF-CURRENT-2026-08-10.md` — **short canonical current-state delta for fast-moving source**;
+6. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — broader current-source baseline/handoff retained for detail;
+7. `docs/IMPLEMENTATION-STATUS.md`;
+8. `docs/PLAN.md` and `docs/COMMANDS.md`;
+9. `docs/DIRECT-DRAW-WORKFLOW.md` — **owner-required BLT-style direct authoring direction**;
+10. `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` — current P0 source/rollback/runtime boundary;
+11. `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md` — guarded GlassWall/WallPier/StructuralWall/Foundation Direct Draw subset;
+12. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
 
-The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the latest handoff or current source, current `main` wins. For product-form/hosting ambiguity, `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes that requirement.
+The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the current handoff or current source, current `main` wins. For product-form/hosting ambiguity, `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes that requirement.
 
 ## Mandatory sync discipline
 
@@ -80,7 +82,7 @@ Remote agents must not claim local BricsCAD runtime verification merely because 
 
 When a remote agent reaches a task that requires local-only access, leave the repository in a runnable/testable state and document the exact local validation needed. When a local agent finishes that validation, commit only reusable source/scripts/docs/evidence that are safe for the repository; never commit proprietary BricsCAD DLLs or private fixtures.
 
-When adding major source capability, update `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` or create a newer canonical handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
+When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
 
 ## GitHub Actions / release
 

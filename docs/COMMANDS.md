@@ -1,6 +1,6 @@
 # QS3D command reference
 
-Updated for the integrated source baseline on 2026-08-10. Commands that create/mutate native BricsCAD geometry remain subject to the licensed V25 runtime gate.
+Updated for the integrated source baseline on 2026-08-10. These names are **BricsCAD command-line/plugin commands after QS3D is loaded**, not standalone EXE or PowerShell commands. Commands that create/mutate native BricsCAD geometry remain subject to the licensed V25 runtime gate.
 
 ## Workspace, project and schedules
 
@@ -34,22 +34,29 @@ Typed controls include finite-number/text fields, boolean checkbox and editable 
 
 ## Direct Draw / Tạo mới
 
-Direct Draw is the authoring path for **new geometry**. It creates a real BricsCAD source entity, captures it into the normal QS3D semantic model and immediately reuses the established native 3D builder. The legacy capture commands remain the path for CAD that was already drawn.
+Direct Draw is the authoring path for **new geometry inside BricsCAD**. It creates a real BricsCAD source entity, captures it into the normal QS3D semantic model and reuses established native 3D behavior. The legacy capture commands remain the path for CAD that was already drawn.
+
+### P0
 
 - `QS3DDRAWWALL` — draw a new ArchitecturalWall from two or more plan-view points. Two points create a LINE source; longer paths create an open POLYLINE. Prompts/inherits wall thickness, height and bottom offset, then creates semantic + owned native 3D in one operation.
 - `QS3DDRAWBEAM` — draw a new Beam from two plan-view points. Prompts/inherits width, height and bottom offset, then creates the semantic Beam + native prism.
 - `QS3DDRAWCOLUMN` — pick the Column center, then prompt/inherit width, depth, height and bottom offset. QS3D creates a rectangular closed-POLYLINE source + semantic Column + native 3D.
 - `QS3DDRAWSLAB` — interactively pick at least three plan-view boundary points and press Enter. Prompts/inherits slab thickness and bottom offset, then creates a closed-POLYLINE source + semantic Slab + native 3D.
 
-Current P0 Direct Draw is intentionally guarded:
+P0 is intentionally guarded: Model Space only, unit-aware 5 mm planarity checks, semantic regeneration before native mutation, full project snapshot and verified cleanup of operation-owned source/generated CAD on failure.
 
-- it runs in **Model Space** only;
-- picked path points must remain plan-view within **5 mm vertical tolerance**, converted through the active drawing unit policy;
-- semantic regeneration occurs before native builder mutation;
-- failure restores project state and cleans the operation-owned source/generated output, including XData-tagged generated output that could otherwise become orphaned;
-- successful creation selects the generated host when available and keeps the normal semantic/source provenance for rebuild, health, quantities and downstream workflows.
+### Guarded P1 subset
 
-Ribbon **TẠO MỚI** and the Full Domain Hub expose these commands directly. See `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` for the exact source/runtime boundary.
+- `QS3DDRAWGLASSWALL` — draw a GlassWall from two or more plan-view points, prompt/inherit thickness/height/bottom offset, capture semantic state and reuse `QS3DBUILD3D` for the backing native GlassWall host. Dedicated Curtain frames remain `QS3DCURTAIN3D` / Curtain Hub work.
+- `QS3DDRAWWALLPIER` — draw a WallPier from LINE/open-POLYLINE source, prompt/inherit thickness/height/bottom offset, capture semantic state and reuse the current wall compatibility build path. This does not claim arbitrary specialized/freeform profile parity.
+- `QS3DDRAWSTRUCTWALL` — draw a two-point StructuralWall LINE, prompt/inherit thickness/height/bottom offset and reuse canonical `QS3DBUILD3D` / structural builder behavior.
+- `QS3DDRAWFOUNDATION` — draw a closed Foundation POLYLINE from at least three plan-view points, prompt/inherit thickness/bottom offset and reuse canonical `QS3DBUILD3D` / structural builder behavior.
+
+P1 also runs in Model Space, uses the same 5 mm unit-aware plan-view tolerance, snapshots semantic state, preserves pre-existing generated ownership, and requires a live `GeneratedSolidHandle` after `QS3DBUILD3D`. If the canonical build path reports failure without throwing, that live-handle check converts it into an outer Direct Draw rollback.
+
+`QS3DDRAWDOOR` and `QS3DDRAWOPENING` are intentionally not defined yet; Door/Opening needs an explicit host/link/elevation/boolean/rollback authoring contract rather than guessed behavior.
+
+Ribbon **TẠO MỚI** and the Full Domain Hub expose the current Direct Draw set. See `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` and `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md` for the exact source/runtime boundary.
 
 ## Room and finish workflow
 
@@ -110,7 +117,7 @@ Native source conventions include LINE for supported linear structure and closed
 
 - `QS3DRECOGNIZE` — deterministic recognition + review.
 - `QS3DRECOGNIZEAUTO` — auto-apply only sufficiently confident recognition.
-- `QS3DB4D` — bounded Current Space scan. It reads supported CAD metrics and now excludes **every generated owner-slot handle via the shared generated ownership policy**, preventing QS3D output from being re-ingested as source CAD when new generated families are added.
+- `QS3DB4D` — bounded Current Space scan. It reads supported CAD metrics and excludes every generated owner-slot handle through the shared generated ownership policy, preventing QS3D output from being re-ingested as source CAD when generated families evolve.
 - `QS3DBQ` — quantity summary/filter/group/Locate/XLSX.
 - `QS3DED2` — ED2-style Excel/Handle workflow.
 - `QS3DEXCELLOCATE` — locate workbook rows with DWG fingerprint safety; legacy no-fingerprint handle rows require explicit confirmation.
@@ -190,4 +197,4 @@ Destructive rebar/tie/curtain guards use the shared generated ownership policy s
 - `COMMANDS.txt` is generated directly from current source `[CommandMethod]` declarations, so new commands do not rely on a manually maintained release manifest.
 - GitHub Actions remain manual-only. `release-v25.yml` additionally requires explicit `confirm_release=RELEASE` before publication.
 
-See [`REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`](REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md) for the current deep review and [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for geometry-specific limits.
+See [`REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`](REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md), [`DIRECT-DRAW-P0-IMPLEMENTATION.md`](DIRECT-DRAW-P0-IMPLEMENTATION.md), [`DIRECT-DRAW-P1-IMPLEMENTATION.md`](DIRECT-DRAW-P1-IMPLEMENTATION.md) and [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for current boundaries.

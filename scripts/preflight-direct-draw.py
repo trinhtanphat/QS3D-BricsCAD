@@ -108,6 +108,12 @@ required = {
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
         "BuildSelectedLineWalls",
+        "ValidateSourceBatch(document, sourceIds)",
+        "SourceBatchKind",
+        "entity.OwnerId.Equals(modelSpaceId)",
+        "Tường KT native 3D chỉ hỗ trợ source LINE hoặc open POLYLINE",
+        "Không build chung LINE và open POLYLINE trong một wall batch",
+        "polyline.Closed",
         "GeneratedGeometryService.PrepareReplacement",
         "GeneratedGeometryService.CommitReplacement",
         'CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z',
@@ -242,9 +248,22 @@ if workspace.is_file():
     if ".SelectMany(x => x.SourceHandles)" not in helper or "Cad.CadHandleService.Select(doc, sourceHandles)" not in helper:
         errors.append("Workspace Vẽ/Cập nhật 3D must resolve selected semantic/generated aliases back to all distinct source handles")
 
+wall_builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs"
+if wall_builder.is_file():
+    text = wall_builder.read_text(encoding="utf-8")
+    validate = text.find("ValidateSourceBatch(document, sourceIds)")
+    pending = text.find("var pending = new List<PendingUpdate>();")
+    native_transaction = text.find("using (document.LockDocument())", pending)
+    if min(validate, pending, native_transaction) < 0 or not (validate < pending < native_transaction):
+        errors.append("WallSolidBuilder must validate the entire source batch before any native Solid3d transaction can commit")
+    if "sawLine && sawPolyline" not in text:
+        errors.append("WallSolidBuilder must reject mixed LINE/open POLYLINE batches before the first builder commits")
+    if "!entity.OwnerId.Equals(modelSpaceId)" not in text:
+        errors.append("WallSolidBuilder must reject non-Model-Space source provenance before native generation")
+
 print("QS3D Direct Draw P0 preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw P0 uses source-relative offsets, rejects invalid configured Family numerics, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and QS3DBUILD3D/Workspace resolve complete live Model-Space source batches before rebuilding.")
+print("PASS: Direct Draw P0 uses source-relative offsets, rejects invalid configured Family numerics, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and wall/QS3DBUILD3D/Workspace source batches fail closed before partial native rebuilds.")
