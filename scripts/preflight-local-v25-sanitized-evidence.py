@@ -17,6 +17,10 @@ else:
     for needle in (
         "qualification-summary.md",
         "sanitized summary",
+        "automatedGateStatus",
+        "runtimeSmokeStatus",
+        "fullInteractiveMatrixStatus",
+        "customerReleaseQualified",
         "runtime was explicitly skipped",
         "NOT PROVED BY THIS SUMMARY",
         "private DWG names/content",
@@ -44,8 +48,14 @@ else:
 
 if not errors:
     fixture = {
-        "schema": 1,
+        "schema": 2,
         "status": "PASS",
+        "automatedGateStatus": "PASS",
+        "sourceBuildStatus": "PASS",
+        "runtimeSmokeStatus": "NOT_RUN",
+        "fullInteractiveMatrixStatus": "NOT_RUN",
+        "customerReleaseQualified": False,
+        "qualificationScope": "source-build",
         "exactSha": "a" * 40,
         "branch": "main",
         "runnerUser": "PRIVATE_USER_SENTINEL",
@@ -111,6 +121,12 @@ if not errors:
             for required in (
                 "`" + ("a" * 40) + "`",
                 "`" + ("b" * 64) + "`",
+                "Automated gate status: **PASS**",
+                "Source/build status: **PASS**",
+                "Runtime smoke status: **NOT_RUN**",
+                "Full interactive/private-DWG matrix: **NOT_RUN**",
+                "Customer release qualified: **NO**",
+                "Qualification scope: `source-build`",
                 "Runtime skipped: **YES**",
                 "This result cannot qualify a customer release",
                 "Core deterministic smoke suite",
@@ -127,4 +143,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: local V25 qualification evidence can be exported to a deterministic Markdown handoff without carrying machine/user/path/private-DWG/raw-error fields, and runtime-skip remains visibly non-release-qualified.")
+print("PASS: local V25 qualification evidence can be exported to a deterministic Markdown handoff without carrying machine/user/path/private-DWG/raw-error fields, preserves scoped schema-v2 gate states, and keeps runtime-skip visibly non-release-qualified.")
