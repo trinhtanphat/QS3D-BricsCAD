@@ -19,9 +19,10 @@ The repository is beyond prototype stage. Source currently includes:
 - Property inspector with Vietnamese labels/groups, units, finite-number validation, typed controls (`TextBox`, boolean `CheckBox`, editable choice `ComboBox`) and **Family / Type vs Đối tượng / Instance** scope. A single semantic selection opens Instance scope; overrides can be reset to the Family value, and later Family edits preserve true instance overrides instead of overwriting them.
 - Selected-object review actions for Locate/Zoom, **Focus**, **Cô lập/Khôi phục**, plus semantic-reference matching so Room Auto boundary-derived elements remain discoverable without duplicating source ownership. Guarded Section Box / Section Plane / clip display review commands are also exposed through Ribbon/Hub.
 - Semantic Project/Zone/Floor/Family/Element model, `.qsdb` schema migration, deterministic regeneration, audit, revision baseline/diff, template import/export and Model Health.
+- **Project Tools** entry point `QS3DPROJECTTOOLS` consolidates drawing-bound Floor/Level, Material Catalog, Template/module/health shortcuts. Modeless level/material pickers are bound to the drawing that opened them so switching active DWGs does not silently edit the wrong project.
 - Tường KT workflows for Tường Gạch, Vách Kính and Trụ Tường, including explicit semantic capture commands, wall-junction analysis and guarded native 3D paths.
 - Tường Gạch and generic Tường KT source paths accept LINE and open POLYLINE centerlines; polyline bulges are tessellated and converted through the deterministic wall-footprint engine.
-- **Vách Kính / Curtain Wall** now has deterministic panel-grid quantities/schedule/XLSX plus a dedicated native LINE workflow. `QS3DCURTAIN3D` keeps one backing GlassWall host solid for Door/Opening booleans and adds ownership-protected mullion/transom/perimeter-frame `Solid3d` overlays. Frame depth is Family-editable, generated frame metadata carries a deterministic configuration fingerprint, and Full Health detects missing/stale frame snapshots. Open/curved POLYLINE still uses the generic backing host and does not yet generate curved frame overlays; Door/Opening cuts currently affect the backing host, not frame overlays.
+- **Vách Kính / Curtain Wall** has deterministic panel-grid quantities/schedule/XLSX plus a dedicated native LINE workflow. `QS3DCURTAIN3D` keeps one backing GlassWall host solid for Door/Opening booleans and adds ownership-protected mullion/transom/perimeter-frame `Solid3d` overlays. Frame depth is Family-editable, generated frame metadata carries deterministic configuration/live-geometry fingerprints, and Full Health detects missing/stale frame snapshots. Core planning can interrupt curtain-frame runs around hosted openings instead of treating the façade grid as opening-blind. Open/curved POLYLINE still uses the generic backing host and does not yet generate curved frame overlays.
 - **Trụ Tường / WallPier** has deterministic rectangular/chamfered profile quantities and a specialized LINE profile builder. Open POLYLINE WallPier still falls back to the guarded generic Tường KT footprint path.
 - `QS3DWALLJUNCTIONS` analyzes selected LINE/open-POLYLINE wall centerlines and classifies L/T/X/Straight/End/Multi junction nodes with finite-safe, large-coordinate-aware geometry guards.
 - `QS3DWALLSNAPPREVIEW` / `QS3DWALLSNAPAPPLY` add review-gated wall centerline cleanup: Preview fingerprints endpoint moves without mutation; Apply rejects stale previews and unsupported curved/bulged/nonsemantic source. Affected generated geometry is invalidated with ownership-aware safeguards before later rebuild. This improves source-junction cleanup but is not yet complete automatic wall-solid union/reconciliation.
@@ -37,14 +38,14 @@ The repository is beyond prototype stage. Source currently includes:
 - Structural-wall mesh source path: `QS3DWALLREBAR3D` generates horizontal/vertical Near/Far/Both mesh for supported StructuralWall LINE hosts. Horizontal/vertical diameters and distribution are independent and stored under dedicated `GeneratedWallMesh*` metadata; `QS3DWALLREBARHEALTH` performs dedicated health checks.
 - `QS3DREBARHEALTHALL` aggregates longitudinal, BBS-shape, column-tie, beam-stirrup, slab-mesh and wall-mesh health plus cross-family ownership diagnostics. `QS3DHEALTHALL` additionally aggregates core model/generated-solid/stale-state/mode and curtain-frame diagnostics in one review window with Locate support.
 - Current beam stirrup/column tie geometry intentionally uses segmented-cylinder rectangular loops. Production fabrication hooks, bend radii and code-specific detailing are **not** inferred without explicit dimensions.
-- BQ grouping/filtering/Locate/XLSX, Quick Takeoff, recognition/review/auto-accept, Layer/Xref adapters, Ribbon, Full Domain Hub, Curtain Hub, Geometry Extensions, viewport tools and release packaging/DemandLoad scripts.
+- BQ grouping/filtering/Locate/XLSX, Quick Takeoff, recognition/review/auto-accept, Layer/Xref adapters, Ribbon, Full Domain Hub, Project Tools, Curtain Hub, Geometry Extensions, viewport tools and release packaging/DemandLoad scripts.
 - Ribbon/Workspace/Domain Hub expose the major BLT-style workflows consistently: Tường KT, Vách Kính Hub/Curtain 3D, Giao tường, Snap xem/áp, Auto/Manual Host, Cửa/Lỗ, Room Auto, Focus/Isolate, Section review, BQ/BBS, column/beam longitudinal rebar, BBS shape rebar, beam stirrups, column ties, slab mesh, wall mesh and unified health.
-- Static preflights and deterministic Core smoke coverage include geometry/rebar/Room Auto/Auto Host/wall-snap/curtain guards, command uniqueness, typed Family/Instance inspector contracts, generated ownership/invalidation and XAML well-formedness checks. `scripts/preflight-all.py` discovers the feature preflights, while GitHub Actions remain manual-only.
+- Static preflights and deterministic Core smoke coverage include geometry/rebar/Room Auto/Auto Host/wall-snap/curtain guards, command uniqueness, typed Family/Instance inspector contracts, generated ownership/invalidation, modeless drawing-affinity and XAML well-formedness checks. `scripts/preflight-all.py` auto-discovers feature preflights, including `scripts/preflight-ci-manual-only.py`, which rejects any GitHub Actions trigger other than `workflow_dispatch`.
 
 ## Main commands
 
 ### Workspace / project
-- `QS3D`, `QS3DHIDE`, `QS3DDOMAIN`
+- `QS3D`, `QS3DHIDE`, `QS3DDOMAIN`, `QS3DPROJECTTOOLS`
 - `QS3DSAVE`, `QS3DRELOAD`, `QS3DREFRESH`, `QS3DREGEN`
 - `QS3DHEALTH`, `QS3DHEALTHALL`, `QS3DRUNTIMEPROBE`
 
@@ -81,7 +82,7 @@ See [`docs/COMMANDS.md`](docs/COMMANDS.md) and [`docs/ADVANCED-GEOMETRY.md`](doc
 - `src/QS3D.BricsCAD.V25` — BricsCAD document/database adapters, native geometry builders, commands, WPF palettes and Ribbon integration.
 - `tests/QS3D.Core.SmokeTests` — deterministic Core regression/smoke suite.
 - `scripts` — static preflight, V25 packaging, DemandLoad install/uninstall and runtime harness support.
-- `docs` — requirements, UI specification, implementation status, runtime gate and handoff documentation.
+- `docs` — requirements, UI specification, implementation status, runtime gate, manual release and handoff documentation.
 
 ## Release/runtime truth
 
@@ -90,22 +91,38 @@ Source presence is **not** the same as BricsCAD V25 runtime proof. Before callin
 1. compile the V25 adapter against the exact V25 managed assemblies;
 2. NETLOAD/DemandLoad the produced DLL and run command/Ribbon/palette smoke tests;
 3. test private representative DWGs, save/reopen and multi-DWG lifecycle;
-4. verify native Solid3d wall/opening/rebar/curtain behavior, including LINE/open-POLYLINE Tường KT, WallPier profile LINE, curtain backing host + frame overlay, wall snap preview/apply, straight/curved opening cuts, beam/column longitudinal bars, BBS shape bars, beam stirrups, column ties, slab mesh and wall mesh;
+4. verify native Solid3d wall/opening/rebar/curtain behavior, including LINE/open-POLYLINE Tường KT, WallPier profile LINE, curtain backing host + frame overlay/opening interruption, wall snap preview/apply, straight/curved opening cuts, beam/column longitudinal bars, BBS shape bars, beam stirrups, column ties, slab mesh and wall mesh;
 5. verify Auto Host against ambiguous/nearby/multi-level real drawings without accidental host assignment;
 6. verify Room Auto with mixed LINE/POLYLINE/ARC/SPLINE plan-view boundaries, chord/sagitta controls and non-planar rejection;
-7. verify Focus/Isolate/Section review lifecycle and Family/Instance/Floor-Level property editing in the real V25 palette host;
-8. verify curtain-frame rebuild/fingerprint behavior after panel-grid/Family/source changes and confirm opening cuts do not create misleading frame geometry;
+7. verify Focus/Isolate/Section review lifecycle and Family/Instance/Floor-Level/Material editing in the real V25 palette host;
+8. verify curtain-frame rebuild/fingerprint behavior after panel-grid/Family/source/opening changes;
 9. capture visual regressions at 100/125/150/200% DPI with Vietnamese Unicode;
 10. run performance tests on large room-boundary, wall-junction/Auto Host, curtain-grid, quantity and rebar models.
 
 Until those gates are green, runtime-dependent features are described as **implemented source paths**, not as verified production behavior.
 
+## Manual CI/CD and release policy
+
+GitHub Actions are deliberately **idle by default**. All workflows under `.github/workflows/` must remain **`workflow_dispatch` only**. A commit, push, PR, merge, documentation update, source fix, review or `continue all` request must **not** start CI/CD.
+
+Current manual workflows:
+
+- `ci.yml` — Core/static validation;
+- `bricscad-v25.yml` — V25 integration build/runtime validation;
+- `curved-opening.yml` — focused curved-opening gate;
+- `geometry-extensions.yml` — focused geometry gate;
+- `release-v25.yml` — owner-approved build/package/GitHub Release workflow.
+
+`scripts/preflight-ci-manual-only.py` fails if any workflow adds an automatic/event trigger such as `push`, `pull_request`, `schedule`, `workflow_run`, `workflow_call`, `repository_dispatch`, release/deployment events, or anything other than `workflow_dispatch`.
+
+When the repository owner explicitly asks to **build and release**, use `release-v25.yml` for the chosen commit/tag. Publishing additionally requires `confirm_release=RELEASE`. The workflow runs source gates, Core build/smoke tests, V25 adapter build, optional real V25 runtime validation, packaging, SHA-256 generation and GitHub Release publication. Merely preparing the workflow or pushing code never authorizes running it.
+
+See [`CI_POLICY.md`](CI_POLICY.md), [`AGENTS.md`](AGENTS.md), [`docs/CI.md`](docs/CI.md) and [`docs/MANUAL-BUILD-RELEASE.md`](docs/MANUAL-BUILD-RELEASE.md).
+
 ## Build policy
 
-Do not commit `BrxMgd.dll`, `TD_Mgd.dll`, BLT/BLT3D folders, or private DWG/DOCX fixtures. The BricsCAD plugin resolves V25 assemblies through `BRICSCAD_V25_DIR` with `Private=false`.
-
-GitHub Actions on `main` are **manual-only and owner-controlled**. Documentation/Markdown, `docs:` and `chore:` commits do not need GitHub CI, and no commit/push/merge should dispatch Actions automatically. Even source changes run GitHub CI only when the repository owner explicitly requests it.
+Do not commit `BrxMgd.dll`, `TD_Mgd.dll`, BLT/BLT3D folders, private DWG/DOCX fixtures, signing certificates or private runtime assets. The BricsCAD plugin resolves V25 assemblies through `BRICSCAD_V25_DIR` with `Private=false`.
 
 This is a multi-agent repository. Sync latest `main` before work and again before each write so concurrent changes are not overwritten. Prefer source/static work remotely; reserve licensed BricsCAD V25/private-DWG validation for a machine that actually has those resources.
 
-Read `CI_POLICY.md` and `AGENTS.md`, then `docs/CI-READINESS.md`, before changing CI or running any GitHub Action.
+Read `CI_POLICY.md` and `AGENTS.md`, then `docs/CI-READINESS.md` and `docs/MANUAL-BUILD-RELEASE.md`, before changing CI or running any GitHub Action.
