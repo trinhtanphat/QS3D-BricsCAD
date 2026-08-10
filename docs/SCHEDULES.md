@@ -13,7 +13,9 @@ Các schedule chuyên dụng này bổ sung cho `QS3DBQ`; chúng không thay th�
 ## Schedule Hub
 
 - `QS3DSCHEDULES` — cửa sổ modeless document-bound gom BQ, HT_Phòng, vật liệu, Vách Kính, Cửa/Lỗ và BBS/Rebar workflows.
-- Nếu user chuyển sang DWG khác, Schedule Hub không gửi command sang drawing mới; phải kích hoạt lại đúng DWG đã mở Hub.
+- Snapshot badges không còn đếm raw semantic rows: Hub regenerate dirty data rồi dùng chính `ProjectQuantityReportBuilder`, `RoomFinishScheduleBuilder`, `DoorOpeningScheduleBuilder`, `CurtainWallScheduleBuilder` và `MaterialUsageScheduleBuilder`. Vì vậy stale/orphan/invalid data bị xử lý giống schedule/export thay vì badge báo một số còn XLSX báo số khác.
+- `Cấu kiện BQ`, `HT_Phòng`, `Door / Opening` và `GlassWall` dùng checked counts; `Vật liệu dùng` đếm material name distinct từ Material Usage schedule.
+- Nếu user chuyển sang DWG khác, Hub giữ snapshot đang hiển thị, không regenerate project nền và không gửi command sang drawing mới; phải kích hoạt lại đúng DWG đã mở Hub.
 
 ## BQ tổng hợp
 
