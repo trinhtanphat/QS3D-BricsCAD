@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
+using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 
 namespace QS3D.Core.Export
@@ -19,17 +20,25 @@ namespace QS3D.Core.Export
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
-            if (File.Exists(fullPath)) File.Delete(fullPath);
-
-            using (var stream = File.Create(fullPath))
-            using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
+            var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
+            try
             {
-                WriteEntry(archive, "[Content_Types].xml", ContentTypesXml);
-                WriteEntry(archive, "_rels/.rels", RootRelationshipsXml);
-                WriteEntry(archive, "xl/workbook.xml", WorkbookXml);
-                WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
-                WriteEntry(archive, "xl/styles.xml", StylesXml);
-                WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+                using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
+                {
+                    WriteEntry(archive, "[Content_Types].xml", ContentTypesXml);
+                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml);
+                    WriteEntry(archive, "xl/workbook.xml", WorkbookXml);
+                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
+                    WriteEntry(archive, "xl/styles.xml", StylesXml);
+                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                }
+                ValidatePackage(tempPath);
+                AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
+            }
+            finally
+            {
+                AtomicFileCommit.TryDelete(tempPath);
             }
         }
 
@@ -82,6 +91,15 @@ namespace QS3D.Core.Export
             return sb.ToString();
         }
 
+        private static void ValidatePackage(string path)
+        {
+            using (var archive = ZipFile.OpenRead(path))
+            {
+                foreach (var name in new[] { "[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet1.xml" })
+                    if (archive.GetEntry(name) == null) throw new InvalidDataException("Generated XLSX package is missing " + name + ".");
+            }
+        }
+
         private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)
         {
             sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>")
@@ -90,6 +108,7 @@ namespace QS3D.Core.Export
 
         private static void AppendNumberCell(StringBuilder sb, string cellRef, double value)
         {
+            if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "XLSX numeric values must be finite.");
             sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>")
                 .Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
         }
