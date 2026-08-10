@@ -1,0 +1,68 @@
+name: QS3D Full Domain Safe Merge
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci/full-domain-integration-final-20260810
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_BRANCH: agent/full-domain-integrate-20260810
+  MERGED_MARKER_BRANCH: validated/full-domain-merged-20260810
+
+jobs:
+  merge-and-validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Merge integration onto latest main without committing
+        shell: powershell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main "$env:SOURCE_BRANCH"
+          $mainBefore = (git rev-parse origin/main).Trim()
+          $source = (git rev-parse "origin/$env:SOURCE_BRANCH").Trim()
+          "MAIN_BEFORE=$mainBefore" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SOURCE_SHA=$source" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          git checkout -B qs3d-full-domain-merge origin/main
+          git merge --no-ff --no-commit $source
+      - name: Verify no temporary CI workflow entered merge tree
+        shell: powershell
+        run: |
+          $bad = Get-ChildItem .github/workflows -File | Where-Object { $_.Name -match 'gate-temp|merge-temp|validation-status-temp' }
+          if ($bad) { throw "Temporary CI workflow leaked into merged tree: $($bad.Name -join ', ')" }
+      - name: Repository preflight
+        run: python scripts/preflight.py
+      - name: Full-domain preflight
+        run: python scripts/preflight-full-domain.py
+      - name: Build core
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+      - name: Commit tested merge
+        shell: powershell
+        run: |
+          git commit -m "feat: integrate full-domain QS3D workflows"
+      - name: Race check and push main
+        shell: powershell
+        run: |
+          git fetch origin main
+          $latest = (git rev-parse origin/main).Trim()
+          if ($latest -ne $env:MAIN_BEFORE) { throw "main advanced during validation; refusing to push. before=$env:MAIN_BEFORE latest=$latest" }
+          $merged = (git rev-parse HEAD).Trim()
+          git push origin "HEAD:refs/heads/main"
+          git push origin "HEAD:refs/heads/$env:MERGED_MARKER_BRANCH" --force
+          Write-Host "Merged main: $merged"
