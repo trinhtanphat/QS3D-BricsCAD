@@ -21,8 +21,9 @@ namespace QS3D.Core.Documentation
     {
         public SemanticDocumentationRow(string elementId, IReadOnlyList<string> cells)
         {
+            if (cells == null) throw new ArgumentNullException(nameof(cells));
             ElementId = elementId;
-            Cells = cells;
+            Cells = new List<string>(cells).AsReadOnly();
         }
 
         public string ElementId { get; }
@@ -36,9 +37,11 @@ namespace QS3D.Core.Documentation
             IReadOnlyList<string> headers,
             IReadOnlyList<SemanticDocumentationRow> rows)
         {
+            if (headers == null) throw new ArgumentNullException(nameof(headers));
+            if (rows == null) throw new ArgumentNullException(nameof(rows));
             Title = title;
-            Headers = headers;
-            Rows = rows;
+            Headers = new List<string>(headers).AsReadOnly();
+            Rows = new List<SemanticDocumentationRow>(rows).AsReadOnly();
         }
 
         public string Title { get; }
