@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI.ViewModels;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
@@ -47,7 +48,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (_inspection.Count == 0) return; var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null) return;
             var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase); var project = ProjectContextCoordinator.GetOrCreate(doc);
-            var element = project.Elements.FirstOrDefault(x => x.SourceHandles.Any(handles.Contains)); if (element == null || string.IsNullOrWhiteSpace(element.FamilyId)) return;
+            var element = project.Elements.FirstOrDefault(x => SemanticReferenceHandles.MatchesSelection(x, handles)); if (element == null || string.IsNullOrWhiteSpace(element.FamilyId)) return;
             var family = project.FindFamily(element.FamilyId); if (family == null) return;
             _loadingContext = true;
             try { _categoryFilter = family.Category; ApplyFamilyFilter(); FamilyList.SelectedItem = family; FamilyList.ScrollIntoView(family); _viewModel.SetActiveFamily(family); }
