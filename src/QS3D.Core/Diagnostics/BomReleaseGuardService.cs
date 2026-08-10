@@ -39,7 +39,7 @@ namespace QS3D.Core.Diagnostics
                     issues.Add(new ModelHealthIssue("BOM_TRACEABILITY_MISSING", HealthSeverity.Warning, "Dòng khối lượng không truy vết được về CAD Handle nguồn/generated.", element.Id));
 
                 if (liveGeneratedHandles != null)
-                    foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
+                    foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element))
                         if (!liveGeneratedHandles.Contains(entry.Key))
                             issues.Add(new ModelHealthIssue("BOM_GENERATED_HANDLE_MISSING", HealthSeverity.Error, entry.Value + " tham chiếu CAD Handle không còn tồn tại: " + entry.Key + ".", element.Id));
             }
