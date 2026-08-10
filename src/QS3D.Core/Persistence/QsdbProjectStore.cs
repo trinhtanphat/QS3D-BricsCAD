@@ -247,6 +247,8 @@ namespace QS3D.Core.Persistence
             if (project.QuantityRules.Any(x => !Enum.IsDefined(typeof(ElementCategory), x.Category))) throw new InvalidDataException("QSDB quantity rule category is undefined.");
             if (project.AuditEvents.Any(x => x == null)) throw new InvalidDataException("QSDB audit trail cannot contain null events.");
             ValidateUtcTimestamp(project.UpdatedUtc, "project UpdatedUtc");
+            ValidateOptionalCanonicalValue(project.ActiveZoneId, "active zone id");
+            ValidateOptionalCanonicalValue(project.ActiveFloorId, "active floor id");
             var duplicateFamily = project.Families.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFamily != null) throw new InvalidDataException("Duplicate family id in QSDB: " + duplicateFamily.Key);
             var duplicateElement = project.Elements.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
@@ -267,6 +269,9 @@ namespace QS3D.Core.Persistence
             foreach (var element in project.Elements)
             {
                 ValidateUtcTimestamp(element.UpdatedUtc, "element " + element.Id + " UpdatedUtc");
+                ValidateOptionalCanonicalValue(element.FamilyId, "element " + element.Id + " family id");
+                ValidateOptionalCanonicalValue(element.FloorId, "element " + element.Id + " floor id");
+                ValidateOptionalCanonicalValue(element.ZoneId, "element " + element.Id + " zone id");
                 ValidateCanonicalStringList(element.SourceHandles, "element " + element.Id + " source handles");
                 ValidateCanonicalStringList(element.DependsOn, "element " + element.Id + " dependencies");
                 ValidateStringMap(element.Properties, "element " + element.Id + " properties");
@@ -295,6 +300,15 @@ namespace QS3D.Core.Persistence
                     throw new InvalidDataException("QSDB " + label + " contains a non-canonical padded value at index " + index + ".");
                 index++;
             }
+        }
+
+        private static void ValidateOptionalCanonicalValue(string? value, string label)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidDataException("QSDB " + label + " must not be whitespace.");
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("QSDB " + label + " must not contain leading/trailing whitespace.");
         }
 
         private static void ValidateCanonicalKey(string key, string label)
