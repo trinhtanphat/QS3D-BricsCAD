@@ -39,6 +39,16 @@ for token in required_service:
 
 for token in [
     'public const string OpeningIdsKey = "PhysicalOpeningCutOpeningIdsV1"',
+    'private const int MaxOpeningIds = 4096',
+    'private const int MaxElementIdLength = 128',
+    'private const int MaxEncodedIdLength = 1024',
+    'private const int MaxSerializedLength = 4 * 1024 * 1024',
+    'if (raw.Length > MaxSerializedLength)',
+    'if (tokens.Length > MaxOpeningIds)',
+    'if (encoded.Length > MaxEncodedIdLength)',
+    'if (id.Length == 0 || id.Length > MaxElementIdLength || !seen.Add(id))',
+    'if (result.Count > MaxOpeningIds)',
+    'if (serialized.Length > MaxSerializedLength)',
     'Convert.ToBase64String',
     'Convert.FromBase64String',
     'StringComparer.OrdinalIgnoreCase',
@@ -46,7 +56,7 @@ for token in [
     'không còn linked tới host',
 ]:
     if token not in state:
-        errors.append("PhysicalOpeningCutTargetState missing fail-closed contract: " + token)
+        errors.append("PhysicalOpeningCutTargetState missing bounded/fail-closed contract: " + token)
 
 for token in [
     'PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds)',
@@ -64,6 +74,7 @@ for token in [
     "A -> B on the same host",
     "reselect A",
     "all-linked after selected-cut",
+    "Partial/malformed metadata",
     "save, close, reopen",
     "PASS / FAIL / NOT TESTED",
 ]:
@@ -87,4 +98,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: straight-host selected opening cuts preserve an explicit accumulated cut set, validate prior state before mutation, subtract only newly selected openings, keep live-health aligned with the actual cut set, and invalidate all physical-cut metadata on host rebuild.")
+print("PASS: straight-host selected opening cuts preserve a bounded explicit accumulated cut set, validate prior state before mutation, subtract only newly selected openings, keep live-health aligned with the actual cut set, and invalidate all physical-cut metadata on host rebuild.")

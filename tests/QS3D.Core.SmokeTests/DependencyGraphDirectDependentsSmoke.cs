@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         {
             DirectLookupIsDeterministicAndNonTransitive();
             LookupNormalizesSourceId();
+            ElementLookupNormalizesAndRetainsReference();
+            FailedDuplicateRebuildPreservesPreviousIndex();
             TransitiveLookupNormalizesAndIsDeterministic();
             TransitiveCycleDoesNotReturnSource();
             MissingSourceIsEmpty();
@@ -41,6 +43,38 @@ namespace QS3D.Core.SmokeTests
             var direct = graph.GetDirectDependents(" ROOT ");
             if (direct.Count != 1 || !string.Equals(direct[0], "Child", StringComparison.OrdinalIgnoreCase))
                 throw new Exception("Direct dependency lookup must normalize source IDs case-insensitively.");
+        }
+
+        private static void ElementLookupNormalizesAndRetainsReference()
+        {
+            var root = Element("Root");
+            var graph = new DependencyGraph();
+            graph.Rebuild(new[] { root });
+            if (!graph.TryGetElement(" ROOT ", out var resolved) || !ReferenceEquals(root, resolved))
+                throw new Exception("Dependency graph element index must normalize IDs and retain the exact semantic element reference from the successful rebuild.");
+            if (graph.TryGetElement("missing", out _) || graph.TryGetElement(" ", out _))
+                throw new Exception("Dependency graph element index must return false for missing/blank IDs.");
+        }
+
+        private static void FailedDuplicateRebuildPreservesPreviousIndex()
+        {
+            var original = Element("ORIGINAL");
+            var graph = new DependencyGraph();
+            graph.Rebuild(new[] { original });
+
+            try
+            {
+                graph.Rebuild(new[] { Element("DUP"), Element("dup") });
+                throw new Exception("Duplicate dependency graph rebuild must fail closed.");
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            if (!graph.TryGetElement("original", out var resolved) || !ReferenceEquals(original, resolved))
+                throw new Exception("A failed dependency graph rebuild must preserve the previously committed element index.");
+            if (graph.TryGetElement("dup", out _))
+                throw new Exception("A failed duplicate rebuild must not leak partial element-index state.");
         }
 
         private static void TransitiveLookupNormalizesAndIsDeterministic()
