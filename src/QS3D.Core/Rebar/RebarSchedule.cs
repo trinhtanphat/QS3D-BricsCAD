@@ -153,7 +153,7 @@ namespace QS3D.Core.Rebar
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var inputs = new List<RebarScheduleInput>();
-            foreach (var element in project.Elements)
+            foreach (var element in ValidateProjectElements(project))
             {
                 if (!element.Properties.TryGetValue("RebarNotation", out var notation) || string.IsNullOrWhiteSpace(notation)) continue;
                 inputs.Add(new RebarScheduleInput
@@ -175,6 +175,20 @@ namespace QS3D.Core.Rebar
                 });
             }
             return RebarScheduleBuilder.Build(inputs);
+        }
+
+        private static IReadOnlyList<ProjectElement> ValidateProjectElements(ProjectState project)
+        {
+            var elements = new List<ProjectElement>(project.Elements.Count);
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (string.IsNullOrWhiteSpace(element.Id)) throw new InvalidOperationException("Project contains a semantic element with a blank id.");
+                if (!ids.Add(element.Id)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id);
+                elements.Add(element);
+            }
+            return elements.AsReadOnly();
         }
 
         private static double ResolveCuttingLength(ProjectElement element)
