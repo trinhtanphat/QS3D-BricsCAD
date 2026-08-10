@@ -17,6 +17,7 @@ required = {
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
         "rollback.Restore(project)",
         "EraseHandles(document, cleanupHandles)",
+        "RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
         "WallSolidBuilder.BuildSelectedLineWalls",
         "PolylineWallSolidBuilder.BuildSelected",
         "StructuralSolidBuilder.BuildSelected",
@@ -26,6 +27,8 @@ required = {
         "PromptPositiveMeters",
         "FamilyNumber",
         "AllowNone = points.Count >= minimumPoints",
+        "CadHandleService.GetLiveHandles(document, normalized)",
+        "Direct Draw rollback còn CAD handle chưa xóa",
         "QS3DVIEW3D",
     ],
     "src/QS3D.BricsCAD.V25/Build3DCommands.cs": [
@@ -136,15 +139,21 @@ if source.is_file():
             errors.append("DirectDrawCommands must reuse established builders instead of duplicating native geometry: " + token)
     create = text.find("sourceId = createSource();")
     capture = text.find("SemanticCaptureService.Capture(document, category)")
+    regenerate = text.find("var regenerated = new RegenerationEngine")
     build = text.find("BuildSelected(document, project, category)")
     restore = text.find("rollback.Restore(project)")
     erase = text.find("EraseHandles(document, cleanupHandles)")
-    if min(create, capture, build, restore, erase) < 0:
+    if min(create, capture, regenerate, build, restore, erase) < 0:
         errors.append("Direct Draw transaction/rollback ordering tokens are incomplete")
-    elif not (create < capture < build < restore < erase):
-        errors.append("Direct Draw must create source -> capture -> build, then restore semantic state before CAD cleanup")
+    elif not (create < capture < regenerate < build < restore < erase):
+        errors.append("Direct Draw must create source -> capture -> semantic regen -> build, then restore semantic state before CAD cleanup")
     if "priorGenerated.Contains(handle)" not in text:
         errors.append("Direct Draw rollback must preserve generated handles that existed before the operation")
+    erase_body = text.split("private static void EraseHandles", 1)[-1].split("private static Document? Active", 1)[0]
+    if "catch { }" in erase_body or "catch{}" in erase_body.replace(" ", ""):
+        errors.append("Direct Draw CAD rollback must not swallow per-entity erase failures")
+    if "transaction.Commit();" not in erase_body or "CadHandleService.GetLiveHandles(document, normalized)" not in erase_body:
+        errors.append("Direct Draw CAD rollback must commit erase transaction and verify no requested handles remain live")
 
 build3d = ROOT / "src/QS3D.BricsCAD.V25/Build3DCommands.cs"
 if build3d.is_file():
@@ -164,4 +173,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw preserves legacy capture/rollback; QS3DBUILD3D rejects mixed atomicity hazards and validates semantic regeneration before CAD mutation; native LINE builders reject sloped flattening; P0 authoring is discoverable.")
+print("PASS: Direct Draw and QS3DBUILD3D validate semantic state before CAD mutation, reject mixed atomicity hazards, verify rollback cleanup, reuse guarded builders and expose P0 authoring UI.")
