@@ -120,7 +120,15 @@ namespace QS3D.Core.Recognition
             return result;
         }
 
-        private static string BestTerm(IEnumerable<string> terms, string haystack) => terms.Where(x => haystack.Contains(x)).OrderByDescending(x => x.Length).FirstOrDefault() ?? string.Empty;
+        private static string BestTerm(IEnumerable<string> terms, string haystack) => terms.Where(x => ContainsTerm(haystack, x)).OrderByDescending(x => x.Length).FirstOrDefault() ?? string.Empty;
+
+        private static bool ContainsTerm(string haystack, string term)
+        {
+            if (string.IsNullOrWhiteSpace(haystack) || string.IsNullOrWhiteSpace(term)) return false;
+            if (string.Equals(haystack, term, StringComparison.OrdinalIgnoreCase)) return true;
+            return (" " + haystack + " ").IndexOf(" " + term + " ", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         private static bool IsTextMetadata(string key) => key.IndexOf("text", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("name", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("block", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("tag", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 

@@ -11,7 +11,7 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             var wall = project.FindElement(wallId) ?? throw new InvalidOperationException("Wall element not found: " + wallId);
-            if (opening.Category != ElementCategory.WallOpening && opening.Category != ElementCategory.Door) throw new InvalidOperationException("Element is not an opening/door: " + openingId);
+            EnsureOpening(opening, openingId);
             if (!IsWall(wall.Category)) throw new InvalidOperationException("Host is not a wall: " + wallId);
 
             var previousHost = opening.Properties.TryGetValue("HostWallId", out var previous) ? previous : string.Empty;
@@ -33,12 +33,19 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
+            EnsureOpening(opening, openingId);
             var hostId = opening.Properties.TryGetValue("HostWallId", out var value) ? value : string.Empty;
             opening.Properties.Remove("HostWallId");
             for (var i = opening.DependsOn.Count - 1; i >= 0; i--) if (string.Equals(opening.DependsOn[i], hostId, StringComparison.OrdinalIgnoreCase)) opening.DependsOn.RemoveAt(i);
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             if (!string.IsNullOrWhiteSpace(hostId)) project.FindElement(hostId)?.MarkDirty(ElementDirtyFlags.Quantity);
             project.Touch();
+        }
+
+        private static void EnsureOpening(ProjectElement element, string id)
+        {
+            if (element.Category != ElementCategory.WallOpening && element.Category != ElementCategory.Door)
+                throw new InvalidOperationException("Element is not an opening/door: " + id);
         }
 
         private static bool IsWall(ElementCategory category) =>
