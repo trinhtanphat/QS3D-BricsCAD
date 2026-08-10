@@ -42,6 +42,7 @@ namespace QS3D.BricsCAD.V25
                     EnsureDefault(family, "CurtainPerimeterFrameWidthM", "0.05");
                     EnsureDefault(family, "CurtainMullionWidthM", "0.05");
                     EnsureDefault(family, "CurtainTransomWidthM", "0.05");
+                    EnsureDefault(family, "CurtainFrameDepthM", "0.05");
                     EnsureDefault(family, "CurtainFrameMaterial", "Nhôm");
                 }
                 else
