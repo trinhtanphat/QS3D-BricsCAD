@@ -29,6 +29,8 @@ if SERVICE.is_file():
         '"RoomFinishNativeTableBuilder"',
         "MaterialUsageNativeTableBuilder.Inspect(document, project)",
         '"MaterialUsageNativeTableBuilder"',
+        "BqNativeTableBuilder.Inspect(document, project)",
+        '"BqNativeTableBuilder"',
         "private static void AddProviderSafely(",
         "Func<IReadOnlyList<ModelHealthIssue>> provider",
         "catch (System.Exception ex) when (IsRecoverableDiagnosticFailure(ex))",
@@ -51,6 +53,7 @@ if SERVICE.is_file():
         '"DoorOpeningNativeTableBuilder"',
         '"RoomFinishNativeTableBuilder"',
         '"MaterialUsageNativeTableBuilder"',
+        '"BqNativeTableBuilder"',
     )
     positions = []
     start = 0
@@ -71,8 +74,8 @@ if SERVICE.is_file():
             "all=" + repr(sorted(all_inspect_calls)) + ", safe=" + repr(sorted(safe_lambda_calls)))
 
     provider_invocations = text.count("AddProviderSafely(") - 1
-    if provider_invocations < 7:
-        errors.append("Expected at least seven isolated native runtime health providers; found %d." % provider_invocations)
+    if provider_invocations < 8:
+        errors.append("Expected at least eight isolated native runtime health providers; found %d." % provider_invocations)
 
     if "catch (System.Exception ex)\n" in text:
         errors.append("Runtime health provider isolation must not use an unfiltered broad System.Exception catch.")
@@ -91,4 +94,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: all seven current native runtime-health providers are isolated, future Foo.Inspect(document, project) providers cannot bypass AddProviderSafely unnoticed, recoverable provider failures become diagnostics, and fatal runtime failures still bubble.")
+print("PASS: all current native runtime-health providers are isolated, future Foo.Inspect(document, project) providers cannot bypass AddProviderSafely unnoticed, recoverable provider failures become diagnostics, and fatal runtime failures still bubble.")
