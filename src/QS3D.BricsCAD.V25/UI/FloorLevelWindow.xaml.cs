@@ -21,6 +21,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
             InitializeComponent();
+            DocumentBoundWindowLifetime.Attach(this, _document);
             Loaded += (_, __) => RefreshAll();
         }
 
