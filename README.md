@@ -113,6 +113,7 @@ Current manual workflows:
 - `bricscad-v25.yml` — V25 integration build/runtime validation;
 - `curved-opening.yml` — focused curved-opening gate;
 - `geometry-extensions.yml` — focused geometry gate;
+- `project-data-gate.yml` — focused Zone/Floor/Family/Material/Project Tools/integrity gate;
 - `release-v25.yml` — owner-approved build/package/GitHub Release workflow.
 
 `scripts/preflight-ci-manual-only.py` fails if any workflow adds an automatic/event trigger such as `push`, `pull_request`, `schedule`, `workflow_run`, `workflow_call`, `repository_dispatch`, release/deployment events, or anything other than `workflow_dispatch`. Executable jobs are additionally hard-guarded to `github.event_name == 'workflow_dispatch'`; the release job also requires `confirm_release=RELEASE`.
