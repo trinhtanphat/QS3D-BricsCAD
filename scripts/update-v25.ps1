@@ -77,6 +77,18 @@ function Read-InstalledVersion {
     }
 }
 
+function Read-SignedPluginVersion {
+    param([string]$Path)
+    try {
+        $version = [Reflection.AssemblyName]::GetAssemblyName($Path).Version
+        if (-not $version) { throw 'assembly version is missing' }
+        return $version
+    }
+    catch {
+        throw "Signed QS3D plugin assembly version is unreadable: $($_.Exception.Message)"
+    }
+}
+
 function Assert-AuthenticodeSigner {
     param([string]$Path, [string]$ExpectedSigner, [string]$Label)
     $signature = Get-AuthenticodeSignature -FilePath $Path
@@ -231,9 +243,17 @@ try {
     Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
     Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner
 
+    $signedPluginVersion = Read-SignedPluginVersion -Path (Join-Path $extractRoot 'QS3D.BricsCAD.V25.dll')
+    if ($signedPluginVersion -ne $targetVersion) {
+        throw "Signed QS3D plugin assembly version $signedPluginVersion does not match manifest version $targetVersion. Refusing replay/downgrade metadata substitution."
+    }
+
     $downloadedMetadata = Get-Content -LiteralPath (Join-Path $extractRoot 'PACKAGE-METADATA.json') -Raw | ConvertFrom-Json
     if (-not $downloadedMetadata.PSObject.Properties['version']) { throw 'Downloaded PACKAGE-METADATA.json is missing version.' }
     $packageVersion = [Version]::Parse([string]$downloadedMetadata.version)
+    if ($packageVersion -ne $signedPluginVersion) {
+        throw "Downloaded package metadata version $packageVersion does not match signed plugin assembly version $signedPluginVersion."
+    }
     if ($packageVersion -ne $targetVersion) { throw "Downloaded package version $packageVersion does not match manifest version $targetVersion." }
 
     $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
