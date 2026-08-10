@@ -11,7 +11,7 @@ Commands:
 - `QS3DELEMENTTABLE` — create/replace the project-owned native `Table` at a picked ModelSpace point.
 - `QS3DELEMENTTABLEREFRESH` — rebuild at the persisted WCS position from current semantic state.
 - `QS3DELEMENTTABLEREMOVE` — erase only a positively owned native Table and clear its project metadata.
-- `QS3DELEMENTTABLEHEALTH` — read-only persisted/native ownership, live-type and semantic-staleness checks.
+- `QS3DELEMENTTABLEHEALTH` — read-only persisted/native ownership, semantic-staleness and live Table shape/text/position checks.
 
 The P0 table is the generic **QS3D Semantic Element Schedule** with columns `Id`, `Category`, `Family`, `Floor`, `Zone`. Rows are ordered by semantic element ID and are rendered through `SemanticDocumentationTableBuilder` / `SemanticTagRenderer`.
 
@@ -44,9 +44,22 @@ A foreign object, wrong live type or ownership mismatch is never erased.
 
 Before CAD mutation, all semantic table rows are rendered and fingerprinted. Broken/ambiguous semantic references therefore fail before replacement.
 
-Build/remove capture `ProjectStateSnapshot`. Semantic metadata/audit mutation occurs while the CAD transaction is still rollback-capable. If the CAD operation fails before commit, the semantic snapshot is restored.
+Build/remove capture `ProjectStateSnapshot`. Semantic metadata/audit mutation occurs while the CAD transaction is still rollback-capable. `AuditTrail.ForProject(...).Record(...)` advances project revision through `ProjectState.Touch()`. If the CAD operation fails before commit, the semantic snapshot is restored.
 
 Changing semantic values makes the persisted fingerprint stale. `QS3DELEMENTTABLEREFRESH` replaces the positively owned old Table using its old persisted fingerprint and writes a new fingerprint from the newly rendered semantic snapshot.
+
+## Live native health
+
+`GeneratedSemanticElementTableRuntimeHealthService` extends the persisted ownership/fingerprint checks with read-only live native validation. It verifies:
+
+- native Table still resolves and remains positively `QS3DDOC`-owned;
+- live row/column count matches the current semantic snapshot;
+- title, headers and semantic cells match the bounded Core-rendered snapshot;
+- live `Table.Position` still matches the persisted drawing-local WCS position.
+
+Cell-detail output is bounded so a manually corrupted large Table cannot flood Health/Release output. The service opens native data read-only and never repairs, erases or rewrites Table content.
+
+`QS3DELEMENTTABLEHEALTH` consumes this full runtime service. The shared native runtime health aggregator also consumes it, and `QS3DRELEASECHECK` consumes that aggregator. Therefore live semantic Table ownership/content/shape/position drift is a release blocker while exact licensed V25 runtime qualification remains a separate gate.
 
 ## P0 space/unit boundary
 
@@ -67,7 +80,7 @@ python scripts/preflight-native-semantic-element-table.py
 
 `preflight-all.py` discovers this gate automatically.
 
-The gate checks the bounded Core renderer dependency, dedicated project-level ownership, rollback ordering, native Table API use, unit conversion, ModelSpace scope and health diagnostics. It is static source validation only.
+The gate checks the bounded Core renderer dependency, dedicated project-level ownership, rollback ordering, native Table API use, unit conversion, ModelSpace scope, read-only live drift diagnostics, runtime aggregation and Release Check wiring. It is static source validation only.
 
 ## Required local BricsCAD V25 qualification
 
@@ -79,15 +92,16 @@ Run on a clean working copy and record the exact 40-character source SHA.
 4. Verify Vietnamese/Unicode values, long Family/Floor/Zone values and row counts near realistic project sizes.
 5. Test `INSUNITS` millimeter and meter drawings; visual table size should remain physically consistent.
 6. Test World UCS and a rotated planar UCS. Confirm the picked point is stored/used in WCS. Confirm tilted/3D UCS fails closed.
-7. Change semantic Family/Floor/Zone data. `QS3DELEMENTTABLEHEALTH` should report stale before refresh; `QS3DELEMENTTABLEREFRESH` should update the native Table at the stored position.
-8. Run refresh repeatedly without semantic changes and verify one owned live Table remains.
-9. On a disposable copy, replace/corrupt the persisted handle target or `QS3DDOC` XData; refresh/remove must fail without erasing the foreign object.
-10. Delete the owned Table manually; health must report missing. Refresh should recreate it from persisted project state without deleting unrelated CAD.
-11. Run `QS3DELEMENTTABLEREMOVE`; verify only the owned Table is erased and metadata is cleared.
-12. Save, close, reopen, then repeat health/refresh/remove. Confirm the persistent handle and metadata survive correctly.
-13. Open two DWGs and alternate commands; verify project ownership never crosses documents.
-14. Enter a Layout/PaperSpace and confirm P0 build/refresh refuses the unsupported context rather than creating misplaced content.
-15. Run `QS3DRUNTIMECHECK`, `QS3DSUPPORTBUNDLE` and the normal local V25 qualification suite; archive only sanitized logs/screenshots.
+7. Change semantic Family/Floor/Zone data. `QS3DELEMENTTABLEHEALTH` should report semantic stale before refresh; `QS3DELEMENTTABLEREFRESH` should update the native Table at the stored position.
+8. Edit the live native Table directly: change title/header/data text, insert/remove a row/column and move the Table. Health and Release Check should report the corresponding live shape/text/position drift without repairing the Table.
+9. Run refresh repeatedly without semantic changes and verify one owned live Table remains.
+10. On a disposable copy, replace/corrupt the persisted handle target or `QS3DDOC` XData; refresh/remove must fail without erasing the foreign object.
+11. Delete the owned Table manually; health must report missing. Refresh should recreate it from persisted project state without deleting unrelated CAD.
+12. Run `QS3DELEMENTTABLEREMOVE`; verify only the owned Table is erased and metadata is cleared.
+13. Save, close, reopen, then repeat health/refresh/remove. Confirm the persistent handle and metadata survive correctly.
+14. Open two DWGs and alternate commands; verify project ownership never crosses documents.
+15. Enter a Layout/PaperSpace and confirm P0 build/refresh refuses the unsupported context rather than creating misplaced content.
+16. Run `QS3DRUNTIMECHECK`, `QS3DSUPPORTBUNDLE` and the normal local V25 qualification suite; archive only sanitized logs/screenshots.
 
 Record results in the canonical local handoff (`docs/LOCAL-V25-QUALIFICATION.md` / remaining-local issue log). Do not commit private DWGs, proprietary BricsCAD DLLs or customer data.
 
@@ -95,7 +109,7 @@ Record results in the canonical local handoff (`docs/LOCAL-V25-QUALIFICATION.md`
 
 - specialized native Table adapters for authoritative BQ/BBS/Room Finish/Door-Opening/Material schedules;
 - Table style/standards presets and controlled column sizing beyond the P0 defaults;
-- live cell-content/format drift diagnostics beyond ownership/type + semantic fingerprint checks;
+- deeper live formatting/style drift diagnostics beyond shape/text/position/ownership;
 - persisted first-class SemanticSchedule definitions if product requirements need multiple user-defined schedules;
 - Layout/Sheet/Viewport/title-block lifecycle and PaperSpace scales;
 - exact V25 save/reopen/Undo/Unicode/HiDPI/multi-DWG qualification.
