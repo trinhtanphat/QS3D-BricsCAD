@@ -41,6 +41,7 @@ namespace QS3D.Core.SmokeTests
             LevelReferenceSmoke.Run();
             GridNamingSmoke.Run();
             GridNamingHealthSmoke.Run();
+            GridIntersectionPlannerSmoke.Run();
             PolygonScanlineClipperSmoke.Run();
             SemanticTagRendererSmoke.Run();
             SemanticDocumentationTableSmoke.Run();

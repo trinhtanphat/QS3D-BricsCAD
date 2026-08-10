@@ -5,10 +5,11 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 PLANNER = ROOT / "src/QS3D.Core/Geometry/GridIntersectionPlanner.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/GridIntersectionPlannerSmoke.cs"
+REG = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 DOC = ROOT / "docs/GRID-INTERSECTIONS.md"
 errors = []
 
-for path in (PLANNER, SMOKE, DOC):
+for path in (PLANNER, SMOKE, REG, DOC):
     if not path.is_file():
         errors.append("missing Grid intersection contract file: " + str(path.relative_to(ROOT)))
 
@@ -43,6 +44,9 @@ if SMOKE.is_file():
         if token not in text:
             errors.append("GridIntersectionPlannerSmoke.cs missing regression scenario: " + token)
 
+if REG.is_file() and "GridIntersectionPlannerSmoke.Run();" not in REG.read_text(encoding="utf-8"):
+    errors.append("Grid intersection smoke exists but is not registered in RunAll()")
+
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
     for token in (
@@ -63,4 +67,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: finite LINE/ARC Grid intersections are bounded and fail closed on ambiguous overlap/coincident support while native extraction, ordering, constraints and visualization remain explicit V25 gates.")
+print("PASS: finite LINE/ARC Grid intersections are bounded, their smoke is registered, and ambiguous overlap/coincident support fails closed while native extraction, ordering, constraints and visualization remain explicit V25 gates.")
