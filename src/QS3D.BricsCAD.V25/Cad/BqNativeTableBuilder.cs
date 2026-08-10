@@ -23,6 +23,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private static readonly string[] Headers =
         {
             "Tầng",
+            "Zone",
             "Loại",
             "Tên cấu kiện",
             "SL",
@@ -95,6 +96,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 output.Add(new[]
                 {
                     row.Floor ?? string.Empty,
+                    row.Zone ?? string.Empty,
                     row.Category ?? string.Empty,
                     row.FamilyName ?? string.Empty,
                     row.Count.ToString(CultureInfo.InvariantCulture),

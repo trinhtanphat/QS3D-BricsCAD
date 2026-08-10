@@ -32,6 +32,7 @@ if BUILDER.is_file():
         'ProjectOwnedNativeTableArtifactService.Build',
         'ProjectOwnedNativeTableArtifactService.Remove',
         'ProjectOwnedNativeTableArtifactService.Inspect',
+        '"Zone"', 'row.Zone',
         '"QS3D Element ID"', '"CAD Handle (hex)"', '"QS3D Drawing Fingerprint"',
         '"BQ_" + x.Code', '"BQ_TABLE_PROJECT_DIRTY"',
     ) + metric_tokens + trace_tokens:
@@ -66,7 +67,7 @@ if ROW.is_file():
 
 if XLSX.is_file():
     text = XLSX.read_text(encoding="utf-8")
-    for token in metric_tokens + trace_tokens + ('"QS3D Element ID"', '"CAD Handle (hex)"', '"QS3D Drawing Fingerprint"', 'var range = "A1:S"'):
+    for token in metric_tokens + trace_tokens + ('"Zone"', 'row.Zone', '"QS3D Element ID"', '"CAD Handle (hex)"', '"QS3D Drawing Fingerprint"', 'var range = "A1:T"'):
         if token not in text: errors.append("XlsxQuantityExporter.cs lost BQ parity token: " + token)
 
 if SHARED.is_file():
@@ -84,7 +85,7 @@ if RELEASE.is_file() and 'GeneratedSolidRuntimeHealthService.Inspect(document, p
 
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
-    for token in ('QS3DBQTABLE', 'ProjectQuantityReportBuilder', 'XlsxQuantityExporter', '19 columns', 'QS3DDOC', 'ModelSpace', 'licensed BricsCAD V25'):
+    for token in ('QS3DBQTABLE', 'ProjectQuantityReportBuilder', 'XlsxQuantityExporter', '20 columns', 'QS3DDOC', 'ModelSpace', 'licensed BricsCAD V25'):
         if token not in text: errors.append("NATIVE-BQ-TABLE-P0.md missing parity/product/runtime boundary: " + token)
 
 if errors:
@@ -92,4 +93,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BQ native Table consumes authoritative ProjectQuantityReportBuilder rows with all 19 XlsxQuantityExporter quantity/traceability columns, regenerates semantic quantities before build/refresh, uses reusable project-level QS3DDOC ownership/rollback/live drift health, reports dirty state read-only, and is wired into Release Check without claiming licensed V25 qualification.")
+print("PASS: BQ native Table consumes authoritative ProjectQuantityReportBuilder rows with all 20 XlsxQuantityExporter zone/quantity/traceability columns, regenerates semantic quantities before build/refresh, uses reusable project-level QS3DDOC ownership/rollback/live drift health, reports dirty state read-only, and is wired into Release Check without claiming licensed V25 qualification.")
