@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             ReferencedMaterialsAreDiscovered();
             RenamePropagatesReferencesAndStaleState();
             RenameStalesInheritedConsumersButPreservesOverrides();
+            RenameRejectsCorruptReferenceGraphBeforeMutation();
             ReferencedMaterialCannotBeDeleted();
             RejectsDuplicateBuiltInAndCorruptStorage();
             RejectsStoredBuiltInShadowing();
@@ -115,6 +116,27 @@ namespace QS3D.Core.SmokeTests
             if (!inherited.IsGeneratedSolidStale()) throw new Exception("Inherited material consumers must become stale when the Family reference is renamed.");
             if (overridden.Properties["Material"] != "Gạch") throw new Exception("True instance material override must be preserved.");
             if (overridden.IsGeneratedSolidStale()) throw new Exception("Unchanged material override must not become stale solely because the Family material was renamed.");
+        }
+
+        private static void RenameRejectsCorruptReferenceGraphBeforeMutation()
+        {
+            var project = new ProjectState("p-atomic", "Material atomicity");
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-atomic", "Vật liệu cũ", "m²", "");
+            var family = new ProjectFamily("f-atomic", "Tường", ElementCategory.ArchitecturalWall);
+            family.Properties["Material"] = "Vật liệu cũ";
+            project.Families.Add(family);
+            project.Elements.Add(null);
+
+            Throws<InvalidOperationException>(() => ProjectMaterialCatalog.UpsertCustom(project, "mat-atomic", "Vật liệu mới", "m²", ""));
+            if (ProjectMaterialCatalog.GetCustom(project).Single().Name != "Vật liệu cũ")
+                throw new Exception("Rejected material rename must not partially rewrite catalog metadata.");
+            if (family.Properties["Material"] != "Vật liệu cũ")
+                throw new Exception("Rejected material rename must not partially rewrite Family references.");
+
+            Throws<InvalidOperationException>(() => ProjectMaterialCatalog.ReferencedMaterialNames(project));
+            Throws<InvalidOperationException>(() => ProjectMaterialCatalog.DeleteCustom(project, "mat-atomic"));
+            if (ProjectMaterialCatalog.GetCustom(project).Single().Name != "Vật liệu cũ")
+                throw new Exception("Rejected material delete must preserve catalog metadata.");
         }
 
         private static void ReferencedMaterialCannotBeDeleted()
