@@ -1,14 +1,19 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Media;
 
 namespace QS3D.BricsCAD.V25.UI.ViewModels
 {
     public sealed class LayerItemViewModel : INotifyPropertyChanged
     {
         private bool _isVisible;
+        private bool _isLocked;
+
         public string Name { get; set; } = string.Empty;
         public short ColorIndex { get; set; }
+        public Brush ColorBrush { get; set; } = Brushes.Transparent;
+
         public bool IsVisible
         {
             get => _isVisible;
@@ -19,6 +24,18 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsVisible)));
             }
         }
+
+        public bool IsLocked
+        {
+            get => _isLocked;
+            set
+            {
+                if (_isLocked == value) return;
+                _isLocked = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLocked)));
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
     }
 
