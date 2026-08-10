@@ -44,15 +44,20 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
         "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
-        "GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
+        "GeneratedGeometryService.PrepareReplacement(document, transaction, project, element)",
+        "GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category)",
+        "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
     ],
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs": [
         "WallFootprintEngine", "BulgeArcTessellator.Tessellate", "Region.CreateFromCurves", "CreateExtrudedSolid", "WallJoinMode",
-        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelected(Document document, ProjectState project, ElementCategory category)"
+        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelected(Document document, ProjectState project, ElementCategory category)",
+        "GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category)",
+        "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
     ],
     "src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs": [
         "OpeningCutPlanner.Plan", "PhysicalOpeningCutSolidHandle", "PhysicalOpeningCutFingerprint", "BooleanOperationType.BoolSubtract", "FingerprintPart", "HostFingerprint",
-        "ElementCategory.ArchitecturalWall", "ElementCategory.GlassWall", "ElementCategory.WallPier", "ElementCategory.StructuralWall"
+        "ElementCategory.ArchitecturalWall", "ElementCategory.GlassWall", "ElementCategory.WallPier", "ElementCategory.StructuralWall",
+        "GeneratedGeometryService.RequireMatchingOwnership"
     ],
     "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs": [
         "RectangularRebarLayoutPlanner.Plan", "CreateFrustum", "GeneratedRebarHandles", "RebarBarsAlongWidth", "RebarBarsAlongDepth",
