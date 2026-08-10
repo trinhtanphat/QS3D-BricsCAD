@@ -38,6 +38,10 @@ if CORE.is_file():
         "MaxFileBytes",
         "MaxElements",
         "MaxIssues",
+        "var indegree = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)",
+        "var dependents = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)",
+        "var ready = new SortedSet<string>",
+        "while (ready.Count > 0)",
     )
     for token in required:
         if token not in text:
@@ -48,10 +52,11 @@ if CORE.is_file():
         "QsdbProjectStore",
         "RegenerationEngine",
         "ProjectState ",
+        "VisitDependencies(",
     )
     for token in forbidden:
         if token in text:
-            errors.append("Core interchange validator must remain detached/read-only; forbidden token: " + token)
+            errors.append("Core interchange validator must remain detached/read-only and dependency validation must stay iterative; forbidden token: " + token)
 
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
@@ -115,4 +120,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DINTERCHANGEVALIDATE remains a bounded read-only semantic snapshot validator tied to the v1 exporter contract and cannot be mistaken for project/DWG import or generated ownership reconstruction.")
+print("PASS: QS3DINTERCHANGEVALIDATE remains a bounded read-only semantic snapshot validator tied to the v1 exporter contract, uses iterative dependency-cycle validation and cannot be mistaken for project/DWG import or generated ownership reconstruction.")
