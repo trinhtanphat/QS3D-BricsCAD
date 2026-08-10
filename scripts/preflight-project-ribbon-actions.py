@@ -9,9 +9,10 @@ INTERCHANGE = ROOT / "src" / "QS3D.BricsCAD.V25" / "ProjectInterchangeCommands.c
 INTERCHANGE_VALIDATE = ROOT / "src" / "QS3D.BricsCAD.V25" / "ProjectInterchangeValidationCommands.cs"
 GRID = ROOT / "src" / "QS3D.BricsCAD.V25" / "GridCommands.cs"
 GRID_NUMBER = ROOT / "src" / "QS3D.BricsCAD.V25" / "GridNamingCommands.cs"
+GRID_ANNOTATION = ROOT / "src" / "QS3D.BricsCAD.V25" / "GridAnnotationCommands.cs"
 errors = []
 
-for path in (RIBBON, SYNC, INTERCHANGE, INTERCHANGE_VALIDATE, GRID, GRID_NUMBER):
+for path in (RIBBON, SYNC, INTERCHANGE, INTERCHANGE_VALIDATE, GRID, GRID_NUMBER, GRID_ANNOTATION):
     if not path.is_file():
         errors.append("missing project ribbon command source: " + str(path.relative_to(ROOT)))
 
@@ -25,6 +26,8 @@ if RIBBON.is_file():
         'new ButtonSpec("QS3D_PROJECT_LEVELS", "Tầng / Cao độ", "QS3DLEVELS")',
         'new ButtonSpec("QS3D_PROJECT_GRID", "Grid / Trục", "QS3DGRID")',
         'new ButtonSpec("QS3D_PROJECT_GRIDNUMBER", "Đánh số Grid", "QS3DGRIDNUMBER")',
+        'new ButtonSpec("QS3D_PROJECT_GRIDANNOTATE", "Gắn nhãn Grid", "QS3DGRIDANNOTATE")',
+        'new ButtonSpec("QS3D_PROJECT_GRIDANNOTATEALL", "Gắn nhãn tất cả Grid", "QS3DGRIDANNOTATEALL")',
     ):
         if needle not in text:
             errors.append("ProjectRibbonAugmenter.cs missing project command: " + needle)
@@ -44,6 +47,13 @@ if GRID.is_file() and '[CommandMethod("QS3DGRID", CommandFlags.UsePickSet)]' not
 if GRID_NUMBER.is_file() and '[CommandMethod("QS3DGRIDNUMBER", CommandFlags.Modal)]' not in GRID_NUMBER.read_text(encoding="utf-8"):
     errors.append("GridNamingCommands.cs no longer exposes QS3DGRIDNUMBER")
 
+if GRID_ANNOTATION.is_file():
+    text = GRID_ANNOTATION.read_text(encoding="utf-8")
+    if '[CommandMethod("QS3DGRIDANNOTATE", CommandFlags.UsePickSet)]' not in text:
+        errors.append("GridAnnotationCommands.cs no longer exposes QS3DGRIDANNOTATE")
+    if '[CommandMethod("QS3DGRIDANNOTATEALL", CommandFlags.Modal)]' not in text:
+        errors.append("GridAnnotationCommands.cs no longer exposes QS3DGRIDANNOTATEALL")
+
 print("QS3D project Ribbon command preflight")
 if errors:
     for error in errors:
@@ -51,4 +61,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: the Project Ribbon exposes Project Tools, source reconcile, read-only semantic export/validation and the guarded Grid capture/numbering workflow with live command implementations.")
+print("PASS: the Project Ribbon exposes Project Tools, source reconcile, read-only semantic export/validation and the guarded Grid capture/numbering/native-annotation workflow with live command implementations.")
