@@ -27,7 +27,19 @@ namespace QS3D.Core.Audit
             _project = project;
         }
 
-        public IReadOnlyList<AuditEvent> Events => _events as IReadOnlyList<AuditEvent> ?? new List<AuditEvent>(_events);
+        public IReadOnlyList<AuditEvent> Events
+        {
+            get
+            {
+                var snapshot = new List<AuditEvent>(_events.Count);
+                foreach (var item in _events)
+                {
+                    if (item == null) throw new InvalidOperationException("Audit trail contains a null event.");
+                    snapshot.Add(Clone(item));
+                }
+                return snapshot.AsReadOnly();
+            }
+        }
 
         public static AuditTrail ForProject(ProjectState project)
         {
@@ -54,6 +66,19 @@ namespace QS3D.Core.Audit
             if (_events.Count == 0) return;
             _events.Clear();
             _project?.Touch();
+        }
+
+        private static AuditEvent Clone(AuditEvent item)
+        {
+            return new AuditEvent
+            {
+                Utc = item.Utc,
+                Action = item.Action ?? string.Empty,
+                ElementId = item.ElementId ?? string.Empty,
+                Detail = item.Detail ?? string.Empty,
+                Actor = item.Actor ?? string.Empty,
+                CorrelationId = item.CorrelationId ?? string.Empty
+            };
         }
     }
 }
