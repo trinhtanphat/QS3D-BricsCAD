@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using QS3D.Core.Audit;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 using QS3D.Core.Services;
@@ -61,10 +62,12 @@ namespace QS3D.Core.Export
             if (target == null) throw new ArgumentNullException(nameof(target));
             var source = ProjectInterchangeValidatedSnapshotReader.Read(json);
             var remap = ProjectInterchangeRemapPlanner.Plan(target, json);
-            var ownershipProperties = source.Elements.Sum(x => x.Properties.Count(p => IsImportedOwnershipMetadata(p.Key)));
+            var ownershipProperties = checked(
+                source.Families.Sum(x => x.Properties.Count(p => IsImportedOwnershipMetadata(p.Key))) +
+                source.Elements.Sum(x => x.Properties.Count(p => IsImportedOwnershipMetadata(p.Key))));
             var plan = new ProjectInterchangeRemapAppendPlan(remap, ownershipProperties)
             {
-                SourceHandleCount = source.Elements.Sum(x => x.SourceHandles.Count)
+                SourceHandleCount = CountSourceHandles(source)
             };
             ValidateExecutionSafety(source, plan);
             return plan;
@@ -83,6 +86,9 @@ namespace QS3D.Core.Export
 
             try
             {
+                var ownershipDiscarded = 0;
+                var rewrites = 0;
+
                 var zones = source.Zones.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList();
                 foreach (var snapshot in zones)
                 {
@@ -103,11 +109,20 @@ namespace QS3D.Core.Export
                     var item = Item(plan.Remap, InterchangeRemapIdentityKind.Family, snapshot.Id);
                     var family = ProjectFamilyService.Create(target, item.TargetId, item.TargetName, snapshot.Category);
                     foreach (var property in snapshot.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+                    {
+                        if (IsImportedOwnershipMetadata(property.Key))
+                        {
+                            ownershipDiscarded = checked(ownershipDiscarded + 1);
+                            continue;
+                        }
+                        if (LooksLikeUnregisteredSemanticReference(property.Key, property.Value))
+                            throw new InvalidOperationException(
+                                "Import As New found unregistered ID/ref-like Family property " + property.Key +
+                                " on source Family " + snapshot.Id + ". Register an explicit rewrite policy before importing.");
                         ProjectFamilyService.SetProperty(target, family.Id, property.Key, property.Value ?? string.Empty);
+                    }
                 }
 
-                var ownershipDiscarded = 0;
-                var rewrites = 0;
                 var elements = source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList();
                 foreach (var snapshot in elements)
                 {
@@ -124,7 +139,7 @@ namespace QS3D.Core.Export
                     foreach (var dependency in snapshot.Dependencies)
                     {
                         var mapped = plan.Remap.MapId(InterchangeRemapIdentityKind.Element, dependency);
-                        if (!string.Equals(mapped, dependency, StringComparison.Ordinal)) rewrites++;
+                        if (!string.Equals(mapped, dependency, StringComparison.Ordinal)) rewrites = checked(rewrites + 1);
                         added.DependsOn.Add(mapped);
                     }
 
@@ -132,7 +147,7 @@ namespace QS3D.Core.Export
                     {
                         if (IsImportedOwnershipMetadata(property.Key))
                         {
-                            ownershipDiscarded++;
+                            ownershipDiscarded = checked(ownershipDiscarded + 1);
                             continue;
                         }
 
@@ -143,8 +158,9 @@ namespace QS3D.Core.Export
                                 added.Properties[property.Key] = string.Empty;
                                 continue;
                             }
-                            var mappedHost = plan.Remap.MapId(InterchangeRemapIdentityKind.Element, property.Value.Trim());
-                            if (!string.Equals(mappedHost, property.Value.Trim(), StringComparison.Ordinal)) rewrites++;
+                            var sourceHost = property.Value.Trim();
+                            var mappedHost = plan.Remap.MapId(InterchangeRemapIdentityKind.Element, sourceHost);
+                            if (!string.Equals(mappedHost, sourceHost, StringComparison.Ordinal)) rewrites = checked(rewrites + 1);
                             added.Properties[property.Key] = mappedHost;
                             continue;
                         }
@@ -163,6 +179,12 @@ namespace QS3D.Core.Export
                     added.MarkDirty(ElementDirtyFlags.All);
                     target.Elements.Add(added);
                 }
+
+                if (ownershipDiscarded != plan.OwnershipPropertiesToDiscard)
+                    throw new InvalidOperationException(
+                        "Import As New ownership discard count changed after planning. Planned " +
+                        plan.OwnershipPropertiesToDiscard.ToString(CultureInfo.InvariantCulture) +
+                        ", applied " + ownershipDiscarded.ToString(CultureInfo.InvariantCulture) + ". Refusing stale import authorization.");
 
                 ValidateCombinedTarget(target);
 
@@ -221,6 +243,18 @@ namespace QS3D.Core.Export
                     (first == null ? "." : ": Element " + first.OwnerElementSourceId + " / " + first.PropertyKey + "."));
             }
 
+            foreach (var family in source.Families)
+            {
+                foreach (var property in family.Properties)
+                {
+                    if (IsImportedOwnershipMetadata(property.Key)) continue;
+                    if (!LooksLikeUnregisteredSemanticReference(property.Key, property.Value)) continue;
+                    throw new InvalidOperationException(
+                        "Import As New is fail-closed because Family property " + property.Key + " on source Family " + family.Id +
+                        " looks like a semantic ID/reference but has no explicit rewrite policy.");
+                }
+            }
+
             foreach (var element in source.Elements)
             {
                 foreach (var property in element.Properties)
@@ -233,6 +267,14 @@ namespace QS3D.Core.Export
                         " looks like a semantic ID/reference but has no explicit rewrite policy.");
                 }
             }
+        }
+
+        private static int CountSourceHandles(ProjectInterchangeValidatedSnapshot source)
+        {
+            var count = 0;
+            foreach (var element in source.Elements)
+                count = checked(count + element.SourceHandles.Count);
+            return count;
         }
 
         private static bool LooksLikeUnregisteredSemanticReference(string key, string value)
@@ -251,6 +293,7 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(key)) return false;
             var k = key.Trim();
+            if (GeneratedHandleOwnershipPolicy.IsOwnerSlot(k)) return true;
             if (k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return true;
             if (k.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             // Handle-bearing properties are drawing-local by construction. Keep descriptive CAD.*
@@ -267,7 +310,7 @@ namespace QS3D.Core.Export
             if (string.IsNullOrWhiteSpace(sourceId)) return string.Empty;
             var trimmed = sourceId.Trim();
             var mapped = plan.MapId(kind, trimmed);
-            if (!string.Equals(mapped, trimmed, StringComparison.Ordinal)) rewrites++;
+            if (!string.Equals(mapped, trimmed, StringComparison.Ordinal)) rewrites = checked(rewrites + 1);
             return mapped;
         }
 
