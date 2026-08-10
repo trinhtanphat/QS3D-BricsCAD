@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Recognition;
+using BcadApplication = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -20,7 +21,7 @@ namespace QS3D.BricsCAD.V25.UI
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _apply = apply;
             _locate = locate;
-            _document = Application.DocumentManager.MdiActiveDocument;
+            _document = BcadApplication.DocumentManager.MdiActiveDocument;
             InitializeComponent();
             Grid.ItemsSource = _rows;
             RefreshStatus(0, 0, null);
@@ -80,7 +81,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureActiveDocument()
         {
-            if (_document == null || !ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+            if (_document == null || !ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, _document))
                 throw new InvalidOperationException("Cửa sổ Recognition thuộc một DWG khác. Hãy quay lại DWG đã mở cửa sổ này hoặc đóng và mở lại Recognition trong DWG hiện tại.");
         }
 
