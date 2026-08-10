@@ -1,0 +1,67 @@
+name: QS3D Merge Beam Stirrup Overlaps
+
+on:
+  push:
+    branches:
+      - ci/merge-beam-stirrup-overlaps-20260810
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beam-stirrup-release-integration-20260810
+          fetch-depth: 0
+      - name: Three-way merge tested overlap files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin agent/beam-stirrup-final-latest-20260810
+          THEIRS=origin/agent/beam-stirrup-final-latest-20260810
+          BASE=$(git merge-base HEAD "$THEIRS")
+          echo "merge base: $BASE"
+          paths=(
+            '.github/workflows/ci.yml'
+            '.github/workflows/bricscad-v25.yml'
+            'src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs'
+            'src/QS3D.BricsCAD.V25/Cad/CurvedOpeningBooleanService.cs'
+            'tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs'
+          )
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          for path in "${paths[@]}"; do
+            echo "=== merging $path ==="
+            mkdir -p "$tmp/$(dirname "$path")"
+            cp "$path" "$tmp/ours"
+            git show "$BASE:$path" > "$tmp/base"
+            git show "$THEIRS:$path" > "$tmp/theirs"
+            set +e
+            git merge-file -p "$tmp/ours" "$tmp/base" "$tmp/theirs" > "$tmp/merged"
+            rc=$?
+            set -e
+            if [ "$rc" -ne 0 ]; then
+              echo "CONFLICT in $path"
+              cat "$tmp/merged"
+              exit 1
+            fi
+            cp "$tmp/merged" "$path"
+          done
+          git diff --check
+          git diff --stat
+      - name: Commit merged overlap files to integration branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No overlap changes required.'
+            exit 0
+          fi
+          git config user.name 'trinhtanphat'
+          git config user.email '89531707+trinhtanphat@users.noreply.github.com'
+          git add .github/workflows/ci.yml .github/workflows/bricscad-v25.yml src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs src/QS3D.BricsCAD.V25/Cad/CurvedOpeningBooleanService.cs tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs
+          git commit -m 'merge: reconcile latest main with validated stirrup batch'
+          git push origin HEAD:agent/beam-stirrup-release-integration-20260810
