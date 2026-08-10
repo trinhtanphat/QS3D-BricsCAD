@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             SameCategoryFamilyNameCollisionIsRenamed();
             FamilyOpaqueReferenceBlocksPreview();
             ElementOpaqueReferenceBlocksPreviewEvenForExternalValue();
+            BlockedAppendPlanRemainsInspectableAndImportFailsClosed();
         }
 
         private static void FamilyNameCollisionIsScopedByCategory()
@@ -66,6 +67,28 @@ namespace QS3D.Core.SmokeTests
             Equal("SOURCE-ELEM", warning.OwnerElementSourceId);
         }
 
+        private static void BlockedAppendPlanRemainsInspectableAndImportFailsClosed()
+        {
+            var target = NewProject("target", ElementCategory.Column, "TARGET-FAM", "Target Family", "TARGET-ELEM");
+            var source = NewProject("source", ElementCategory.Beam, "SOURCE-FAM", "Source Family", "SOURCE-ELEM");
+            source.Elements.Single().Properties["ExternalRefIds"] = "NOT-A-SOURCE-ELEMENT";
+            var json = ProjectInterchangeJsonExporter.Build(source);
+            var zones = target.Zones.Count;
+            var floors = target.Floors.Count;
+            var families = target.Families.Count;
+            var elements = target.Elements.Count;
+
+            var plan = ProjectInterchangeRemapAppendImporter.Plan(target, json);
+
+            False(plan.CanImport);
+            True(plan.Remap.OpaqueReferenceWarnings.Any(x => x.PropertyKey == "ExternalRefIds"));
+            Throws<InvalidOperationException>(() => ProjectInterchangeRemapAppendImporter.Import(target, json));
+            Equal(zones, target.Zones.Count);
+            Equal(floors, target.Floors.Count);
+            Equal(families, target.Families.Count);
+            Equal(elements, target.Elements.Count);
+        }
+
         private static ProjectState NewProject(
             string id,
             ElementCategory category,
@@ -94,6 +117,19 @@ namespace QS3D.Core.SmokeTests
         private static void False(bool value)
         {
             if (value) throw new Exception("Expected condition to be false.");
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T)
+            {
+                return;
+            }
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
         }
     }
 
