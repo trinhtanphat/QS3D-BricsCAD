@@ -2,9 +2,11 @@
 
 `QS3DINTERCHANGEJSON` exports a **read-only semantic interchange snapshot** from the active QS3D project.
 
-`QS3DINTERCHANGEVALIDATE` opens an existing snapshot and performs **read-only structural/semantic validation**. A validation PASS means the file is structurally consistent with the supported v1 snapshot contract for review; it does **not** import, merge, restore or mutate the active QS3D project/DWG.
+`QS3DINTERCHANGEVALIDATE` opens an existing snapshot and performs **read-only structural/semantic validation**. A validation PASS means the file is structurally consistent with the supported v1 snapshot contract for review; it does **not** by itself import, merge, restore or mutate the active QS3D project/DWG.
 
-This is intentionally not a replacement for `.qsdb`, not a DWG backup and not a two-way import contract. The first interoperability goal is to let reporting, estimating, QA and integration systems consume stable QS3D semantic data without depending on BricsCAD-native object handles.
+A deliberately narrow mutating path now exists through `QS3DINTERCHANGEAPPEND`. It accepts only the guarded append-all-new contract documented in [`INTERCHANGE-APPEND-ONLY-IMPORT.md`](INTERCHANGE-APPEND-ONLY-IMPORT.md); validation PASS alone is never permission to mutate a project.
+
+This is intentionally not a replacement for `.qsdb`, not a DWG backup and not a general two-way round-trip contract. The interoperability goal is to let reporting, estimating, QA and integration systems consume stable QS3D semantic data without depending on BricsCAD-native object handles, while keeping any supported mutation path behind a separate fail-closed policy boundary.
 
 ## Format contract
 
@@ -52,11 +54,14 @@ The exporter never mutates the project. The BricsCAD export command preserves th
 
 A failed or cancelled export therefore does not clear dirty flags, change quantities/properties, advance semantic timestamps, or replace live project object references.
 
+The append-only importer has a separate mutation boundary. It validates and plans without mutation, requires all incoming IDs/names to be new under its documented collision rules, repeats preflight immediately before apply, discards source CAD ownership/handles, marks imported elements dirty, and restores a `ProjectStateSnapshot` if apply/final validation throws. It does not create, erase or replace native BricsCAD entities.
+
 ## Commands
 
 ```text
 QS3DINTERCHANGEJSON
 QS3DINTERCHANGEVALIDATE
+QS3DINTERCHANGEAPPEND
 ```
 
 Default export extension:
@@ -67,7 +72,7 @@ Default export extension:
 
 ### Read-only validator contract
 
-`ProjectInterchangeJsonValidator` parses the supported v1 semantic snapshot without constructing or replacing a live `ProjectState`. The adapter command does not call `ProjectContextCoordinator.GetOrCreate` and does not touch DWG entities.
+`ProjectInterchangeJsonValidator` parses the supported v1 semantic snapshot without constructing or replacing a live `ProjectState`. The validator command does not call `ProjectContextCoordinator.GetOrCreate` and does not touch DWG entities.
 
 The validator currently checks, fail-closed where applicable:
 
@@ -89,7 +94,15 @@ The validator currently checks, fail-closed where applicable:
 - finite numeric quantities/elevations;
 - rejection of generated/native ownership runtime fields such as `Generated*`, `QS3D.Generated*` and `PhysicalOpeningCut*`.
 
-Warnings such as missing/non-UTC provenance timestamps can be reported without turning a structurally usable review snapshot into an import contract. The command prints only a bounded number of issues to the BricsCAD editor and always labels the result `READ-ONLY / NOT IMPORTED`.
+Warnings such as missing/non-UTC provenance timestamps can be reported without turning a structurally usable review snapshot into mutation authority. The validation command prints only a bounded number of issues to the BricsCAD editor and always labels its own result `READ-ONLY / NOT IMPORTED`.
+
+### Guarded append-only mutation contract
+
+`QS3DINTERCHANGEAPPEND` is intentionally narrower than a generic importer. It uses the canonical validated snapshot reader plus the append-only planner/importer contract. Before mutation it rejects ID/name collisions according to the target-authority rules, presents a read-only plan, and repeats preflight after confirmation so stale intent cannot be applied if the target changed while the dialog was open.
+
+Source drawing handles are provenance from another DWG, not target ownership. They are discarded rather than rebound. Existing target project identity/context remains authoritative, imported elements are marked dirty, and no native CAD entities are reconstructed by the append operation.
+
+For the full supported mutation boundary, atomicity rules and remaining limitations, read [`INTERCHANGE-APPEND-ONLY-IMPORT.md`](INTERCHANGE-APPEND-ONLY-IMPORT.md).
 
 ## Validation
 
@@ -98,28 +111,34 @@ Source/static contracts:
 ```text
 python scripts/preflight-interchange-json.py
 python scripts/preflight-interchange-validation.py
+python scripts/preflight-interchange-append-only-import.py
 ```
 
 The export preflight explicitly rejects regressions where the command calls `RegenerateDirty(project)` or exports the live `project`, and it requires the Save dialog to occur before `ProjectContextCoordinator.GetOrCreate(document)`. Core smoke coverage also proves the detached copy does not share mutable project/element instances with the live project.
 
 The validation preflight guards that `QS3DINTERCHANGEVALIDATE` remains read-only, that the validator stays bound to the exporter format/version and SI/provenance/ownership rules, that strict UTF-8 and required v1 structure remain fail-closed, and that validator smoke coverage remains registered.
 
-Before commercial release, also run the normal Core build/preflight and exact-SHA V25 qualification. Export/validation logic is CAD-kernel-independent after file/project acquisition, but command registration, dialog behavior, Unicode paths and real customer snapshots still need the local V25 matrix.
+The append-only preflight/smoke contract guards the separate Plan/import boundary, all-new collision rules, source-handle/ownership discard, repeated preflight and rollback behavior. Do not infer those guards passed for a commit unless they were actually executed on that exact source SHA.
+
+Before commercial release, also run the normal Core build/preflight and exact-SHA V25 qualification. Export/validation/import planning logic is largely CAD-kernel-independent after file/project acquisition, but command registration, dialogs, Unicode paths, save/reopen behavior, multi-DWG behavior and real customer snapshots still need the local V25 matrix.
 
 ## Intentionally not claimed yet
 
-Version 1 still does **not** claim:
+Version 1 still does **not** claim a generic JSON round-trip importer. The only mutating snapshot path currently documented here is the conservative `QS3DINTERCHANGEAPPEND` all-new append contract.
 
-- JSON re-import/round-trip;
-- snapshot merge into the current project;
-- ID collision resolution;
+Still not claimed:
+
+- merge/replace of existing snapshot identities in the current project;
+- automatic skip/rename/remap collision execution;
 - current-DWG source-handle rebinding;
-- ownership reconstruction;
+- generated/native ownership reconstruction;
+- native CAD geometry creation/replacement from imported semantic objects;
 - schema/version migration beyond the exact supported v1 validation boundary;
+- generic import undo/session/save-reopen qualification;
 - IFC import/export;
 - Revit exchange;
 - BCF;
 - vendor-specific APIs;
 - cloud/team synchronization.
 
-Any future importer must define collision handling, unit validation, project/drawing identity, ownership reconstruction, provenance, schema/version migration and rollback before it can mutate a project. Do not deserialize a semantic snapshot directly into live generated CAD ownership, and do not treat `QS3DINTERCHANGEVALIDATE PASS` as permission to import it.
+Any broader importer or merge/replace path must define collision execution, unit validation, project/drawing identity, ownership clearing/reconstruction, provenance, schema/version migration and rollback before it can mutate existing project state. Do not deserialize a semantic snapshot directly into live generated CAD ownership, and do not treat `QS3DINTERCHANGEVALIDATE PASS` as permission to import it.
