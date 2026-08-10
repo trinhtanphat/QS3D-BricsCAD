@@ -57,6 +57,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var rows = ProjectRebarScheduleBuilder.Build(project).Where(x => elementIds.Contains(x.ElementId)).GroupBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).ToDictionary(x => x.Key, x => x.ToList(), StringComparer.OrdinalIgnoreCase);
             var totalRequested = rows.Values.SelectMany(x => x).Sum(x => (long)x.Quantity);
             if (totalRequested > MaxBarsPerBatch) throw new InvalidOperationException("Shape Rebar 3D vượt giới hạn " + MaxBarsPerBatch + " thanh/batch.");
+            var ownership = GeneratedRebarOwnershipGuard.Build(project);
 
             var pending = new List<PendingElement>();
             using (document.LockDocument())
@@ -71,7 +72,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (requested > MaxBarsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxBarsPerElement + " thanh shape 3D.");
                     var source = OpenFirstSource(document, transaction, element) ?? throw new InvalidOperationException("Không tìm thấy source CAD cho " + element.Id);
                     var placement = ResolvePlacement(document, project, element, source);
-                    ErasePrevious(document, transaction, element);
+                    ErasePrevious(document, transaction, element, ownership);
                     var item = new PendingElement { Element = element };
                     var rowIndex = 0;
                     foreach (var row in elementRows)
@@ -173,13 +174,20 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static double DistributionOffset(int index, int count, double span, double cover, double radius) { if (count <= 1) return 0d; var usable = Math.Max(0d, span - 2d * (cover + radius)); return usable * index / (count - 1d); }
         private static Vector3d Normalize(Vector3d vector, string label) { var length = vector.Length; if (length <= 1e-12 || double.IsNaN(length) || double.IsInfinity(length)) throw new InvalidOperationException("Không xác định được " + label + "."); return new Vector3d(vector.X / length, vector.Y / length, vector.Z / length); }
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
-            foreach (var text in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (!long.TryParse(text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) continue;
-                try { var id = document.Database.GetObjectId(false, new Handle(value), 0); if (id.IsNull || !id.IsValid) continue; var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity; if (entity != null && !entity.IsErased) entity.Erase(); } catch { }
+                ownership.EnsureOwned(handle, element, HandlesKey);
+                var ids = CadHandleService.Resolve(document, new[] { handle });
+                if (ids.Count == 0) continue;
+                if (ids.Count > 1) throw new InvalidOperationException("Generated shape rebar handle " + handle + " resolves to multiple live CAD objects.");
+                var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
+                if (entity == null || entity.IsErased) continue;
+                var solid = entity as Solid3d;
+                if (solid == null) throw new InvalidOperationException("Generated shape rebar handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
+                solid.Erase();
             }
         }
         private static Entity? OpenFirstSource(Document document, Transaction transaction, ProjectElement element)
