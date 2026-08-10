@@ -215,6 +215,7 @@ namespace QS3D.BricsCAD.V25.Cad
             properties["WallPierPathProfilePerimeterM"] = update.WallPierPerimeterM.ToString("R", CultureInfo.InvariantCulture);
             properties["WallPierPathProfileGrossVolumeM3"] = update.WallPierGrossVolumeM3.ToString("R", CultureInfo.InvariantCulture);
             properties["WallPierPathProfileLateralAreaM2"] = update.WallPierLateralAreaM2.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.MarkDirty(ElementDirtyFlags.Quantity);
         }
 
         private static WallPierProfileMode ResolveWallPierMode(ProjectElement element, ProjectFamily? family)
