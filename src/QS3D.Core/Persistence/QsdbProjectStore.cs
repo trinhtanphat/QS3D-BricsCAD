@@ -243,6 +243,7 @@ namespace QS3D.Core.Persistence
             if (project.Elements.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id))) throw new InvalidDataException("QSDB elements require non-empty ids.");
             if (project.QuantityRules.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || string.IsNullOrWhiteSpace(x.OutputName))) throw new InvalidDataException("QSDB quantity rules require non-empty ids and outputs.");
             if (project.AuditEvents.Any(x => x == null)) throw new InvalidDataException("QSDB audit trail cannot contain null events.");
+            ValidateUtcTimestamp(project.UpdatedUtc, "project UpdatedUtc");
             var duplicateFamily = project.Families.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFamily != null) throw new InvalidDataException("Duplicate family id in QSDB: " + duplicateFamily.Key);
             var duplicateElement = project.Elements.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
@@ -262,6 +263,7 @@ namespace QS3D.Core.Persistence
             foreach (var family in project.Families) ValidateStringMap(family.Properties, "family " + family.Id + " properties");
             foreach (var element in project.Elements)
             {
+                ValidateUtcTimestamp(element.UpdatedUtc, "element " + element.Id + " UpdatedUtc");
                 ValidateCanonicalStringList(element.SourceHandles, "element " + element.Id + " source handles");
                 ValidateCanonicalStringList(element.DependsOn, "element " + element.Id + " dependencies");
                 ValidateStringMap(element.Properties, "element " + element.Id + " properties");
@@ -271,6 +273,8 @@ namespace QS3D.Core.Persistence
                     if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value)) throw new InvalidDataException("Element quantity must be finite: " + element.Id + "/" + quantity.Key);
                 }
             }
+            foreach (var audit in project.AuditEvents)
+                ValidateUtcTimestamp(audit.Utc, "audit event UTC timestamp");
         }
 
         private static void ValidateStringMap(System.Collections.Generic.IDictionary<string, string> values, string label)
@@ -295,6 +299,12 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(key)) throw new InvalidDataException("QSDB " + label + " must not be empty.");
             if (!string.Equals(key, key.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + label + " must not contain leading/trailing whitespace.");
+        }
+
+        private static void ValidateUtcTimestamp(DateTime value, string label)
+        {
+            if (value.Kind != DateTimeKind.Utc)
+                throw new InvalidDataException("QSDB " + label + " must have DateTimeKind.Utc for deterministic persistence.");
         }
 
         private static bool IsRecoverableDataFailure(Exception exception) => exception is InvalidDataException || exception is XmlException || exception is FormatException || exception is FileNotFoundException;
