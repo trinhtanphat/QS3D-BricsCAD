@@ -40,9 +40,26 @@ for path in list(ROOT.rglob("*.csproj")) + list(ROOT.rglob("*.xaml")):
 
 for bad in ("BrxMgd.dll", "TD_Mgd.dll", "TD_MgdBrep.dll"):
     if list(ROOT.rglob(bad)): errors.append("proprietary BricsCAD assembly must not be committed: " + bad)
+allowed_synthetic_cad = {
+    Path("samples/generated/QS3D-Sample.dwg"),
+    Path("samples/generated/QS3D-Sample.dxf"),
+}
 for ext in ("*.dwg", "*.dxf", "*.docx"):
-    found = [str(p.relative_to(ROOT)) for p in ROOT.rglob(ext)]
+    found = []
+    for path in ROOT.rglob(ext):
+        relative = path.relative_to(ROOT)
+        if ext in ("*.dwg", "*.dxf") and relative in allowed_synthetic_cad:
+            continue
+        found.append(str(relative))
     if found: errors.append(f"private/reference artifact must not be committed ({ext}): {found}")
+sample_readme = ROOT / "samples/generated/README.md"
+if any((ROOT / relative).is_file() for relative in allowed_synthetic_cad):
+    if not sample_readme.is_file():
+        errors.append("synthetic CAD fixtures require samples/generated/README.md provenance")
+    else:
+        sample_text = sample_readme.read_text(encoding="utf-8")
+        for token in ("generated specifically for QS3D", "no BLT source", "private project data"):
+            if token not in sample_text: errors.append("synthetic sample provenance README missing token: " + token)
 for path in ROOT.rglob("*"):
     if path.is_dir() and path.name.lower() in {"blt", "blt3d"}: errors.append("vendor folder must not be committed: " + str(path.relative_to(ROOT)))
 
@@ -247,7 +264,7 @@ snapshot_reader = ROOT / "src/QS3D.BricsCAD.V25/Cad/EntitySnapshotReader.cs"
 if review_commands.exists() and snapshot_reader.exists():
     review_text = review_commands.read_text(encoding="utf-8")
     snapshot_text = snapshot_reader.read_text(encoding="utf-8")
-    for needle in ("QS3DB4D", "ReadCurrentSpace", "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles"):
+    for needle in ("QS3DB4D", "ReadCurrentSpace", "CollectGeneratedHandles(project)", "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)"):
         if needle not in review_text: errors.append("B4D generated-source exclusion missing: " + needle)
     for needle in ("ReadCurrentSpace", "MaxCurrentSpaceEntities"):
         if needle not in snapshot_text: errors.append("B4D bounded whole-Current-Space scan missing: " + needle)
@@ -275,4 +292,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, manual CI, proprietary-file guard, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, manual CI, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, future-proof B4D generated-source exclusion and installer verification are present.")
