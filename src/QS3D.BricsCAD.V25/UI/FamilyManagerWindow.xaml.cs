@@ -87,6 +87,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("duplicate Family");
                 if (!(FamilyList.SelectedItem is ProjectFamily source)) throw new InvalidOperationException("Chọn Family trước khi duplicate.");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var name = NextCopyName(project, source);
@@ -103,6 +104,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("lưu Family");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 ProjectFamily family;
                 if (_creatingNew)
@@ -131,6 +133,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("xóa Family");
                 if (!(FamilyList.SelectedItem is ProjectFamily family)) throw new InvalidOperationException("Chọn Family trước khi xóa.");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 if (!ProjectFamilyService.Delete(project, family.Id)) return;
@@ -146,6 +149,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("lưu Family property");
                 var family = FamilyList.SelectedItem as ProjectFamily ?? throw new InvalidOperationException("Chọn Family trước khi lưu property.");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var result = ProjectFamilyService.SetProperty(project, family.Id, PropertyKeyBox.Text, PropertyValueBox.Text);
@@ -161,6 +165,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("xóa Family property");
                 var family = FamilyList.SelectedItem as ProjectFamily ?? throw new InvalidOperationException("Chọn Family trước khi xóa property.");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var key = PropertyKeyBox.Text;
