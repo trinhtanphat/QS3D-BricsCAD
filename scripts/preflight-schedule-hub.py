@@ -9,6 +9,8 @@ required = [
     "src/QS3D.BricsCAD.V25/UI/ScheduleHubWindow.xaml",
     "src/QS3D.BricsCAD.V25/UI/ScheduleHubWindow.xaml.cs",
     "src/QS3D.BricsCAD.V25/ScheduleHubCommands.cs",
+    "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml",
+    "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml",
 ]
 for relative in required:
     if not (ROOT / relative).is_file(): errors.append("missing Schedule Hub file: " + relative)
@@ -29,6 +31,8 @@ checks = {
         "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)", "EnsureActive", "_document.SendStringToExecute", "DrawingLabel(_document)",
     ],
     required[2]: ['CommandMethod("QS3DSCHEDULES"', "new ScheduleHubWindow(document)", "ShowModelessWindow"],
+    required[3]: ['Tag="QS3DSCHEDULES"', "Schedule / Bóc khối lượng"],
+    required[4]: ['Tag="QS3DSCHEDULES"', "Schedule / Bóc khối lượng Hub"],
 }
 for relative, needles in checks.items():
     path = ROOT / relative
@@ -52,4 +56,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: document-bound Schedule Hub exposes BQ, room-finish, material, curtain, door/opening and rebar schedule/export workflows.")
+print("PASS: document-bound Schedule Hub exposes BQ, room-finish, material, curtain, door/opening and rebar schedule/export workflows and remains discoverable from Project Tools and Full Domain Hub.")
