@@ -72,6 +72,7 @@ namespace QS3D.Core.Diagnostics
                 ReserveProperty(owners, element, "GeneratedShapeRebarHandles");
                 ReserveProperty(owners, element, HandlesKey);
                 ReserveProperty(owners, element, "GeneratedBeamStirrupHandles");
+                ReserveProperty(owners, element, "GeneratedRebarMatHandles");
             }
             return owners;
         }
