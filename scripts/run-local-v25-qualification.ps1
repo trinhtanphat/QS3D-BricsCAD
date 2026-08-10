@@ -4,6 +4,7 @@ param(
     [string]$BricsCadDir,
     [string]$Profile = "",
     [string]$ArtifactDir = "",
+    [string]$PythonPath = "",
     [switch]$SkipRuntime,
     [switch]$SkipScreenshot,
     [switch]$Package,
@@ -43,6 +44,54 @@ $packageCompleted = $false
 $signingQualified = $false
 $packageZipSha256 = ""
 $normalizedSignerThumbprint = ""
+$pythonExe = ""
+
+function Test-PythonInterpreter {
+    param([Parameter(Mandatory = $true)][string]$Candidate)
+    try {
+        & $Candidate -c "import sys; raise SystemExit(0 if sys.version_info.major == 3 else 1)" *> $null
+        return $LASTEXITCODE -eq 0
+    }
+    catch {
+        return $false
+    }
+}
+
+function Resolve-PythonInterpreter {
+    param([string]$RequestedPath)
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedPath)) {
+        $resolved = [IO.Path]::GetFullPath($RequestedPath)
+        if (-not (Test-Path -LiteralPath $resolved -PathType Leaf) -or -not (Test-PythonInterpreter $resolved)) {
+            throw "-PythonPath must point to a working Python 3 interpreter: $resolved"
+        }
+        return $resolved
+    }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+    if (-not [string]::IsNullOrWhiteSpace($env:QS3D_PYTHON)) { $candidates.Add($env:QS3D_PYTHON) }
+    foreach ($name in @("python.exe", "python3.exe", "py.exe")) {
+        $command = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue
+        if ($null -ne $command -and -not [string]::IsNullOrWhiteSpace($command.Source)) { $candidates.Add($command.Source) }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        $candidates.Add((Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"))
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        $programsRoot = Join-Path $env:LOCALAPPDATA "Programs\Python"
+        if (Test-Path -LiteralPath $programsRoot -PathType Container) {
+            foreach ($candidate in Get-ChildItem -LiteralPath $programsRoot -Recurse -Filter python.exe -File -ErrorAction SilentlyContinue) {
+                $candidates.Add($candidate.FullName)
+            }
+        }
+    }
+
+    foreach ($candidate in $candidates | Select-Object -Unique) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        if ((Test-Path -LiteralPath $candidate -PathType Leaf) -and (Test-PythonInterpreter $candidate)) { return $candidate }
+    }
+    throw "A working Python 3 interpreter was not found. Install Python, set QS3D_PYTHON, or pass -PythonPath."
+}
 
 function Invoke-ExternalChecked {
     param(
@@ -52,6 +101,18 @@ function Invoke-ExternalChecked {
     & $FilePath @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "$FilePath exited with code $LASTEXITCODE."
+    }
+}
+
+function Invoke-PythonChecked {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+    $previousPythonIoEncoding = $env:PYTHONIOENCODING
+    try {
+        $env:PYTHONIOENCODING = "utf-8"
+        Invoke-ExternalChecked $pythonExe $Arguments
+    }
+    finally {
+        $env:PYTHONIOENCODING = $previousPythonIoEncoding
     }
 }
 
@@ -113,11 +174,13 @@ try {
         }
     }
 
-    foreach ($command in @("git", "python", "dotnet")) {
+    foreach ($command in @("git", "dotnet")) {
         if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
             throw "Required command is not available on PATH: $command"
         }
     }
+    $pythonExe = Resolve-PythonInterpreter $PythonPath
+    Write-Host "Python 3: $pythonExe"
     foreach ($name in @("bricscad.exe", "BrxMgd.dll", "TD_Mgd.dll")) {
         $path = Join-Path $BricsCadDir $name
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -144,13 +207,13 @@ try {
         }
 
         Invoke-QualificationStep "Manual-only CI policy" {
-            Invoke-ExternalChecked "python" @("scripts/preflight-ci-manual-only.py")
+            Invoke-PythonChecked @("scripts/preflight-ci-manual-only.py")
         }
         Invoke-QualificationStep "Generic source preflight" {
-            Invoke-ExternalChecked "python" @("scripts/preflight.py")
+            Invoke-PythonChecked @("scripts/preflight.py")
         }
         Invoke-QualificationStep "Aggregate feature preflights" {
-            Invoke-ExternalChecked "python" @("scripts/preflight-all.py")
+            Invoke-PythonChecked @("scripts/preflight-all.py")
         }
         Invoke-QualificationStep "Core Release build" {
             Invoke-ExternalChecked "dotnet" @("build", "src/QS3D.Core/QS3D.Core.csproj", "-c", "Release")
@@ -323,7 +386,7 @@ finally {
         signerThumbprint = if ($SignPackage) { $normalizedSignerThumbprint } else { "" }
         timestampUrl = if ($SignPackage) { $TimestampUrl } else { "" }
         manualScenarioChecklist = "docs/LOCAL-V25-QUALIFICATION.md"
-        steps = @($steps)
+        steps = $steps.ToArray()
         error = if ($null -eq $fatal) { "" } else { $fatal.Exception.Message }
     }
     $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath -Encoding UTF8
