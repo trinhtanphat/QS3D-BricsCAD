@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             HealthyFoundation();
+            AcceptsLegacyMissingFootprintMode();
             AcceptsPolygonFootprintMode();
             DetectsInvalidFootprintMode();
             DetectsWrongCategoryAndStaleSnapshot();
@@ -30,6 +31,16 @@ namespace QS3D.Core.SmokeTests
             Require(!issues.Any(x => x.Severity == HealthSeverity.Error), "healthy foundation mesh produced an error");
             Require(!issues.Any(x => x.Code == "FOUNDATION_MESH_FOOTPRINT_MODE_INVALID"), "RectangleLocalXY should be a healthy Foundation footprint mode");
             Require(!issues.Any(x => x.Code == "FOUNDATION_MESH_GENERATED_STALE"), "fresh foundation mesh should not be stale");
+        }
+
+        private static void AcceptsLegacyMissingFootprintMode()
+        {
+            var project = new ProjectState("P-legacy", "Legacy rectangle");
+            var foundation = MeshElement("F-LEGACY", ElementCategory.Foundation, "AA", "1");
+            foundation.Properties.Remove("GeneratedFoundationMeshFootprintMode");
+            project.Elements.Add(foundation);
+            var issues = new GeneratedFoundationMeshHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" });
+            Require(!issues.Any(x => x.Code == "FOUNDATION_MESH_FOOTPRINT_MODE_INVALID"), "legacy rectangle metadata without footprint mode must remain release-compatible");
         }
 
         private static void AcceptsPolygonFootprintMode()
