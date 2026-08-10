@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             RepairsLegacyDependencyScopeAndFingerprint();
             RemovedRoomMetricsClearOldDeductions();
             QuantityFallbackIsCanonicalized();
+            BatchFailureRollsBackEarlierFinishMutation();
             RejectsInvalidRoomMetric();
             RejectsStaleAutoRoom();
             RejectsForeignProjectObject();
@@ -90,6 +91,38 @@ namespace QS3D.Core.SmokeTests
 
             RoomFinishSynchronizationService.Synchronize(project, room, finish);
             Equal("12.5", finish.Properties["AreaM2"]);
+        }
+
+        private static void BatchFailureRollsBackEarlierFinishMutation()
+        {
+            var project = Project(out var room);
+            room.FloorId = "f2";
+            room.ZoneId = "z2";
+            room.DrawingFingerprint = "NEW-FP";
+            room.Properties["AreaM2"] = "25";
+
+            var floor = Finish("LEGACY-FLOOR", ElementCategory.FloorFinish, "f1", "z1");
+            floor.DrawingFingerprint = "OLD-FP";
+            floor.Properties["ParentRoomId"] = room.Id;
+            project.Elements.Add(floor);
+
+            var otherRoom = new ProjectElement("ROOM-OTHER", ElementCategory.Room, room.FamilyId, "f2", "z2");
+            project.Elements.Add(otherRoom);
+            var bad = Finish("BAD-WATERPROOF", ElementCategory.Waterproofing, "f1", "z1");
+            bad.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
+            bad.Properties["ParentRoomId"] = otherRoom.Id;
+            project.Elements.Add(bad);
+
+            Throws<InvalidOperationException>(() => RoomFinishSynchronizationService.SynchronizeExisting(project, room));
+
+            var restored = project.FindElement("LEGACY-FLOOR") ?? throw new Exception("Rollback lost the earlier finish.");
+            Equal("f1", restored.FloorId);
+            Equal("z1", restored.ZoneId);
+            Equal("OLD-FP", restored.DrawingFingerprint);
+            True(!restored.Properties.ContainsKey(AutoRoomLifecycle.RoomSourceIdKey));
+            True(restored.Properties.TryGetValue("ParentRoomId", out var parent) && parent == room.Id);
+            True(!restored.DependsOn.Any(x => string.Equals(x, room.Id, StringComparison.OrdinalIgnoreCase)));
+            True(!restored.Properties.ContainsKey("AreaM2"));
         }
 
         private static void RejectsInvalidRoomMetric()
