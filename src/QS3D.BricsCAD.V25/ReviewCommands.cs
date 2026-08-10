@@ -26,7 +26,11 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(doc); Regenerate(project); var rows = ProjectRebarScheduleBuilder.Build(project);
                 if (rows.Count == 0) { doc.Editor.WriteMessage("\nQS3D BBS: chưa có cấu kiện khai báo RebarNotation."); return; }
-                Action<RebarScheduleRow> locate = row => { var element = project.FindElement(row.ElementId); if (element == null) return; var count = CadHandleService.Select(doc, SourceHandleResolver.Resolve(project, new[] { element.Id })); PaletteCoordinator.SetStatus("BBS Locate " + row.BarMark + " • " + count + " CAD object"); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
+                Action<RebarScheduleRow> locate = row =>
+                {
+                    var count = LocateCurrentElement(doc, row.ElementId, "BBS Locate");
+                    PaletteCoordinator.SetStatus("BBS Locate " + row.BarMark + " • " + count + " CAD object");
+                };
                 var fileName = (string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name)) + "-BBS.xlsx";
                 Application.ShowModelessWindow(IntPtr.Zero, new RebarScheduleWindow(doc, rows, locate, fileName), true);
             });
@@ -103,11 +107,32 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DREVDIFF", () =>
             {
                 var project = ProjectContextCoordinator.GetOrCreate(doc); Regenerate(project); var before = RevisionCoordinator.LoadBaseline(doc); var after = RevisionCoordinator.CaptureCurrent(doc); var rows = new QuantityRevisionReport().Build(before, after);
-                Action<QuantityRevisionRow> locate = row => { var element = project.FindElement(row.ElementId); if (element == null) return; var count = CadHandleService.Select(doc, SourceHandleResolver.Resolve(project, new[] { element.Id })); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
+                Action<QuantityRevisionRow> locate = row => LocateCurrentElement(doc, row.ElementId, "Revision Locate");
                 Application.ShowModelessWindow(IntPtr.Zero, new RevisionWindow(doc, before, after, rows, locate), true);
                 AuditTrail.ForProject(project).Record("revision.compare", string.Empty, before.Id + " → " + after.Id + " • " + rows.Count + " quantity changes");
                 PaletteCoordinator.SetStatus("Revision diff: " + rows.Count + " thay đổi quantity.");
             });
+        }
+
+        private static int LocateCurrentElement(Document document, string elementId, string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(operation + ": hãy kích hoạt lại đúng bản vẽ nguồn trước khi định vị.");
+            if (string.IsNullOrWhiteSpace(elementId))
+                throw new InvalidOperationException(operation + ": dòng review không có ElementId hợp lệ.");
+
+            var currentProject = ProjectContextCoordinator.GetOrCreate(document);
+            var element = currentProject.FindElement(elementId)
+                ?? throw new InvalidOperationException(operation + ": cấu kiện " + elementId + " không còn tồn tại trong project hiện tại. Hãy làm mới bảng review.");
+            var handles = SourceHandleResolver.Resolve(currentProject, new[] { element.Id });
+            if (handles.Count == 0)
+                throw new InvalidOperationException(operation + ": cấu kiện " + element.Id + " không còn CAD source handle hợp lệ trong project hiện tại.");
+
+            var count = CadHandleService.Select(document, handles);
+            if (count == 0)
+                throw new InvalidOperationException(operation + ": CAD source của cấu kiện " + element.Id + " không còn tồn tại trong bản vẽ hiện tại.");
+            document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+            return count;
         }
 
         private static HashSet<string> CollectGeneratedHandles(ProjectState project) =>
