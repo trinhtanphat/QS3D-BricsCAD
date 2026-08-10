@@ -61,7 +61,7 @@ require(command, "closed straight-segment plan-view POLYLINE", "command guidance
 require(command, "Rectangle giữ local-axis legacy; polygon dùng drawing X/Y", "axis contract")
 require(health, '"GeneratedSlabMeshMode"', "slab health metadata")
 require(mode_health, 'RequireExactMode(element, "GeneratedSlabMeshMode", "SlabMeshXY"', "mode compatibility")
-require(invalidator, 'GeneratedHandleOwnershipPolicy.RebarHandleKeys', "generated invalidation/ownership")
+require(invalidator, "CoreOwnershipPolicy.RebarHandleKeys", "generated invalidation/ownership")
 
 if 'private const string Mode = "SlabMeshXY"' not in builder:
     print("[FAIL] polygon footprint must not invent a new generated rebar mode")
