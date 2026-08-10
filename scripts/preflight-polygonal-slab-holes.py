@@ -19,7 +19,8 @@ if PLANNER.is_file():
     for token in (
         "public IReadOnlyList<IReadOnlyList<Point2>> HoleFootprintsM",
         "if (input.HoleFootprintsM == null)",
-        "PolygonRegionScanlineClipper.NormalizeAndValidate(input.FootprintM, input.HoleFootprintsM)",
+        "PolygonRegionScanlineClipper.NormalizeAndValidate(localOuter, localHoles)",
+        "TranslateLoopToLocal(input.FootprintM, origin",
         "PolygonRegionScanlineClipper.Clip(region, axis, coordinate)",
         "SubtractBoundaryClearance(region.BoundaryLoops, axis, coordinate, interior, clearance)",
         "foreach (var loop in boundaryLoops)",

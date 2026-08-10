@@ -45,6 +45,7 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DBQ", () =>
             {
+                if (!DrawingUnitWorkflow.EnsureResolved(doc, "QS3DBQ")) return;
                 Func<IReadOnlyList<QuantityReportRow>> recalculate = () =>
                 {
                     var project = ProjectContextCoordinator.GetOrCreate(doc);
@@ -52,7 +53,6 @@ namespace QS3D.BricsCAD.V25
                     if (regenerated > 0) PaletteCoordinator.SetStatus("BQ: đã regenerate " + regenerated + " lượt cấu kiện trước khi tổng hợp.");
                     if (project.Elements.Count > 0) return ProjectQuantityReportBuilder.Group(project);
                     var unit = Cad.CadUnitService.GetDrawingUnit(doc);
-                    if (Cad.CadUnitService.IsAssumedMillimeter(doc)) PaletteCoordinator.SetStatus("BQ: INSUNITS chưa hỗ trợ/không xác định, tạm dùng millimeter.");
                     var snapshotRows = SnapshotQuantityAdapter.Build(Cad.EntitySnapshotReader.ReadCurrentSelection(doc), unit);
                     foreach (var snapshotRow in snapshotRows) snapshotRow.DrawingFingerprint = project.DrawingFingerprint;
                     return snapshotRows;
@@ -79,6 +79,7 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DED2", () =>
             {
+                if (!DrawingUnitWorkflow.EnsureResolved(doc, "QS3DED2")) return;
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
                 if (project.Elements.Count == 0)
                     throw new InvalidOperationException("ED2 chưa có semantic element để xuất. Chạy QS3DB4D/capture trước.");
@@ -189,6 +190,7 @@ namespace QS3D.BricsCAD.V25
         }
 
         [CommandMethod("QS3DSAVE", CommandFlags.Modal)] public void SaveProject() { var doc = Active(); if (doc == null) return; Guard(doc, "QS3DSAVE", () => { var path = ProjectContextCoordinator.Save(doc); PaletteCoordinator.SetStatus("Đã lưu " + path); doc.Editor.WriteMessage("\nQS3D saved: " + path); }); }
+        [CommandMethod("QS3DUNITS", CommandFlags.Modal)] public void ConfigureDrawingUnits() { var doc = Active(); if (doc == null) return; Guard(doc, "QS3DUNITS", () => DrawingUnitWorkflow.Configure(doc)); }
         [CommandMethod("QS3DRELOAD", CommandFlags.Modal)] public void ReloadProject() { var doc = Active(); if (doc == null) return; Guard(doc, "QS3DRELOAD", () => { ProjectContextCoordinator.Reload(doc); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Đã nạp lại project từ .qsdb"); }); }
         [CommandMethod("QS3DREFRESH", CommandFlags.Modal)]
         public void Refresh()

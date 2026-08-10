@@ -56,7 +56,7 @@ if health.is_file():
         "Beam.Line.RectangularClosedLoop", "Beam.Line.RectangularRoundedLoop", "Beam.Line.RectangularHookedPath",
         "BEAM_STIRRUP_GENERATED_LENGTH_MISMATCH", "BEAM_STIRRUP_GENERATED_MODE_MISMATCH",
         "BEAM_STIRRUP_GENERATED_MODE_INVALID", "advanced stirrup metadata",
-        "Old generated snapshots predate bend/hook length metadata", "GeneratedHandleOwnershipPolicy.IsOwnerSlot"
+        "if (!hasAdvancedMetadata) return;", "GeneratedHandleOwnershipPolicy.IsOwnerSlot"
     ):
         if needle not in text: errors.append("beam stirrup advanced health missing: " + needle)
 

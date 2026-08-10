@@ -54,7 +54,7 @@ namespace QS3D.BricsCAD.V25
                 return true;
             }
 
-            project = null;
+            project = null!;
             if (!TryGetExistingProjectPath(document, out var path)) return false;
             if (!File.Exists(path) && !File.Exists(path + ".bak")) return false;
 
