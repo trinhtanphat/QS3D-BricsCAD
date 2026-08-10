@@ -50,7 +50,7 @@ namespace QS3D.Core.Reporting
                     element.Category == ElementCategory.Door || element.Category == ElementCategory.WallOpening ? Q(element, "OpeningAreaM2") : Q(element, "DoorAreaM2"),
                     element.Id + "/DoorAreaM2");
                 row.SideAreaM2 = QuantityReportMath.Add(row.SideAreaM2,
-                    element.Category == ElementCategory.WallFinish ? QFirst(element, "SideAreaM2", "NetFinishAreaM2") : Q(element, "SideAreaM2"),
+                    element.Category == ElementCategory.WallFinish ? QFirst(element, "NetFinishAreaM2", "SideAreaM2") : Q(element, "SideAreaM2"),
                     element.Id + "/SideAreaM2");
                 row.BottomAreaM2 = QuantityReportMath.Add(row.BottomAreaM2,
                     element.Category == ElementCategory.FloorFinish || element.Category == ElementCategory.Waterproofing ? QFirst(element, "BottomAreaM2", "AreaM2") : Q(element, "BottomAreaM2"),

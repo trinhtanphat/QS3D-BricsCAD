@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
@@ -11,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             LinkedOpeningReport();
             PreferredBqQuantityDoesNotEvaluateUnusedFallbacks();
+            WallFinishPrefersRegeneratedNetArea();
         }
 
         private static void LinkedOpeningReport()
@@ -51,6 +53,24 @@ namespace QS3D.Core.SmokeTests
             var row = ProjectQuantityReportBuilder.Group(project)[0];
             if (Math.Abs(row.GrossConcreteM3 - 2d) > 1e-12 || Math.Abs(row.NetConcreteM3 - 1.5d) > 1e-12 || Math.Abs(row.DeductionM3 - 0.5d) > 1e-12)
                 throw new Exception("BQ must use preferred quantities lazily without evaluating invalid unused legacy fallbacks.");
+        }
+
+        private static void WallFinishPrefersRegeneratedNetArea()
+        {
+            var project = new ProjectState("p3", "Wall finish BQ precedence");
+            project.Floors.Add(new FloorDefinition("f", "Tầng", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Vùng"));
+            var family = new ProjectFamily("wf", "Sơn tường", ElementCategory.WallFinish);
+            project.Families.Add(family);
+            var finish = new ProjectElement("WF-NET", ElementCategory.WallFinish, family.Id, "f", "z");
+            finish.Quantities["SideAreaM2"] = 99d;
+            finish.Quantities["NetFinishAreaM2"] = 12.5d;
+            finish.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(finish);
+
+            var row = ProjectQuantityReportBuilder.Group(project).Single();
+            if (Math.Abs(row.SideAreaM2 - 12.5d) > 1e-12)
+                throw new Exception("WallFinish BQ must prefer regenerated NetFinishAreaM2 over legacy/raw SideAreaM2.");
         }
     }
 }
