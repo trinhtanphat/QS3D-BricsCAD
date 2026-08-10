@@ -17,7 +17,8 @@
 - explicit **Family / Type** vs **Đối tượng / Instance** property scope. Exactly one semantic selection switches to Instance scope; edits affect only that element and a reset action restores the current Family value.
 - Family edits update values that still inherit the previous Family value while preserving true instance overrides. Opening the inspector no longer dirties the project just by rebinding the Family name.
 - semantic selection synchronization uses the shared `SemanticReferenceHandles` resolver, including Auto Room boundary provenance and generated-solid fallback; ambiguous multi-element matches do not silently open Instance editing.
-- selected-object review exposes Locate/Zoom, transient highlight, `QS3DFOCUS`, `QS3DISOLATE` and `QS3DUNISOLATE`. Ribbon and Full Domain Hub expose the same major review/model workflows.
+- selected-object review exposes Locate/Zoom, transient highlight, `QS3DFOCUS`, `QS3DISOLATE` and `QS3DUNISOLATE`.
+- the primary Workspace now exposes **Giao tường**, **Snap xem**, **Snap áp** and **Auto Host** beside the main Family/modeling actions; Ribbon and Full Domain Hub expose the same advanced wall/host/review/rebar workflows.
 
 ### Room / finishes
 
@@ -59,6 +60,7 @@
 - V25 release packaging produces command manifest, metadata, hashes and DemandLoad install/uninstall helpers while excluding BricsCAD-owned runtime assemblies.
 - per-user DemandLoad installer supports hash verification, optional Authenticode enforcement, `-WhatIf`/confirmation semantics and does not lower `SECURELOAD`.
 - generic/full-domain/geometry/room-curve/advanced-geometry static preflights cover command uniqueness, geometry/rebar safety, Room Auto lifecycle, wall junction analysis + review-gated snap apply, straight-polyline opening cuts, safe Auto Host matching/elevation/ambiguity separation, Family/Instance inspector contracts, semantic selection sync and key XAML well-formedness.
+- `scripts/preflight-blt-workspace.py` specifically guards typed Family/Instance controls, reset override, semantic selection sync, Workspace/Ribbon/Hub Giao tường + Snap Preview/Apply + Auto Host + review entry-point parity and key XAML well-formedness.
 - both manual-only workflows include the safe Auto Host source preflight; no workflow was dispatched as part of these source changes.
 - `main` GitHub Actions workflows remain `workflow_dispatch` only.
 
