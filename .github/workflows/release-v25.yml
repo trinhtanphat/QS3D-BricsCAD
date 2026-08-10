@@ -67,8 +67,8 @@ jobs:
       - name: Validate manual release request
         shell: powershell
         run: |
-          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
-            throw "release_tag must look like v1.2.3 or v1.2.3-rc.1"
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') {
+            throw "release_tag must look like v1.2.3, v1.2.3-rc.1 or v1.2.3-rc.1+build.4"
           }
           git rev-parse --verify HEAD | Out-Null
           if (git tag --list $env:RELEASE_TAG) {
@@ -76,6 +76,11 @@ jobs:
           }
 
           $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
+          $hasPrereleaseSuffix = $env:RELEASE_TAG -match '^v[0-9]+\.[0-9]+\.[0-9]+-'
+          if ($isPrerelease -ne $hasPrereleaseSuffix) {
+            throw "prerelease input must match the release_tag suffix: use prerelease=true only with tags such as v1.2.3-rc.1/beta.1."
+          }
+
           $runRuntime = $env:RELEASE_RUN_RUNTIME -eq 'true'
           $signPackage = $env:RELEASE_SIGN_PACKAGE -eq 'true'
           if (-not $isPrerelease -and -not $runRuntime) {
