@@ -23,6 +23,7 @@ namespace QS3D.Core.SmokeTests
             RuleCyclesAreAtomic();
             TemplateRoundTripApply();
             ProjectLayerMappingWins();
+            ProjectLayerMappingOverridesFallback();
         }
 
         private static void SchemaV2MigratesToV3()
@@ -124,6 +125,25 @@ namespace QS3D.Core.SmokeTests
             var snapshot = new EntitySnapshot("AA", "Line", "A-MISC");
             var result = new ProjectRecognitionService().Suggest(project, snapshot);
             True(result.TopCandidate != null); Equal(ElementCategory.Door, result.TopCandidate!.Category); Near(.99d, result.TopCandidate.Confidence); True(!result.RequiresReview);
+        }
+
+        private static void ProjectLayerMappingOverridesFallback()
+        {
+            var project = new ProjectState("p", "Recognition override");
+            project.Metadata[TemplateProfileStore.LayerMappingPrefix + "A-BEAM"] = ElementCategory.Door.ToString();
+            var snapshot = new EntitySnapshot("AB", "Line", "A-BEAM");
+            snapshot.Metadata["Text"] = "Dầm chính";
+
+            var service = new ProjectRecognitionService();
+            var result = service.Suggest(project, snapshot);
+            Equal(1, result.Candidates.Count);
+            True(result.TopCandidate != null);
+            Equal(ElementCategory.Door, result.TopCandidate!.Category);
+            True(!result.RequiresReview);
+
+            var batch = service.SuggestBatch(project, new[] { snapshot });
+            Equal(1, batch.AutoAccepted.Count);
+            Equal(0, batch.ReviewRequired.Count);
         }
 
         private static ProjectState NewBeamProject()

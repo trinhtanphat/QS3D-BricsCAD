@@ -16,13 +16,8 @@ namespace QS3D.Core.Recognition
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var mapped = ExactLayerMapping(project, snapshot.Layer);
-            var fallback = _fallback.Suggest(snapshot);
-            if (mapped == null) return fallback;
-
-            var candidates = new List<RecognitionCandidate> { mapped };
-            foreach (var candidate in fallback.Candidates)
-                if (candidate.Category != mapped.Category) candidates.Add(candidate);
-            return new RecognitionResult(snapshot, candidates);
+            if (mapped != null) return new RecognitionResult(snapshot, new[] { mapped });
+            return _fallback.Suggest(snapshot);
         }
 
         public RecognitionBatch SuggestBatch(ProjectState project, IEnumerable<EntitySnapshot> snapshots, double autoAcceptConfidence = 0.92d, double minimumMargin = 0.15d)
