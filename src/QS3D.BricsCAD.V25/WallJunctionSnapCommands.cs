@@ -123,6 +123,7 @@ namespace QS3D.BricsCAD.V25
 
                 var touchedHandles = new HashSet<string>(plan.Edits.Select(x => x.SourceHandle), StringComparer.OrdinalIgnoreCase);
                 var touchedOwners = ResolveUniqueWallOwners(project, touchedHandles);
+                var updatedLengthsM = BuildUpdatedSourceLengths(plan, touchedHandles, touchedOwners);
                 var units = CadUnitService.GetPolicy(document);
                 GeneratedGeometryInvalidation invalidation;
                 using (document.LockDocument())
@@ -156,15 +157,18 @@ namespace QS3D.BricsCAD.V25
 
                 invalidation.CommitMetadata();
                 foreach (var element in touchedOwners)
+                {
+                    element.Properties["LengthM"] = updatedLengthsM[element.Id].ToString("R", CultureInfo.InvariantCulture);
                     element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Quantity);
+                }
                 var owners = touchedOwners.Count;
                 ClearPreview(project);
                 project.Touch();
                 AuditTrail.ForProject(project).Record("wall.junction.snap.apply", string.Empty,
-                    plan.Edits.Count.ToString(CultureInfo.InvariantCulture) + " endpoint edit(s) • owners=" + owners.ToString(CultureInfo.InvariantCulture) + " • invalidated3d=" + invalidation.ElementCount.ToString(CultureInfo.InvariantCulture));
+                    plan.Edits.Count.ToString(CultureInfo.InvariantCulture) + " endpoint edit(s) • owners=" + owners.ToString(CultureInfo.InvariantCulture) + " • invalidated3d=" + invalidation.ElementCount.ToString(CultureInfo.InvariantCulture) + " • sourceLengthSynced=true");
                 document.Editor.Regen();
                 PaletteCoordinator.RefreshProject();
-                var summary = "Wall Snap applied: " + plan.Edits.Count + " endpoint(s) • " + owners + " semantic owner(s) • generated 3D/rebar invalidated. Rebuild 3D/Regenerate trước khi xuất BQ.";
+                var summary = "Wall Snap applied: " + plan.Edits.Count + " endpoint(s) • " + owners + " semantic owner(s) • source LengthM synchronized • generated 3D/rebar invalidated. Rebuild 3D/Regenerate trước khi xuất BQ.";
                 PaletteCoordinator.SetStatus(summary);
                 document.Editor.WriteMessage("\nQS3D " + summary);
             });
@@ -304,6 +308,49 @@ namespace QS3D.BricsCAD.V25
                 owners[owner.Id] = owner;
             }
             return owners.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static IReadOnlyDictionary<string, double> BuildUpdatedSourceLengths(SnapPlan plan, ISet<string> touchedHandles, IReadOnlyList<ProjectElement> touchedOwners)
+        {
+            var targets = plan.Edits.ToDictionary(x => x.Key, x => x.Target, StringComparer.OrdinalIgnoreCase);
+            var lengthByHandle = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            foreach (var segment in plan.Segments.Where(x => touchedHandles.Contains(x.SourceHandle)))
+            {
+                var start = ResolvePlannedEndpoint(segment, true, targets);
+                var end = ResolvePlannedEndpoint(segment, false, targets);
+                var length = start.DistanceTo(end);
+                if (!(length > 0d) || double.IsNaN(length) || double.IsInfinity(length))
+                    throw new InvalidOperationException("Wall Snap would create a zero/non-finite source segment: " + segment.SourceHandle + ".");
+                if (!lengthByHandle.TryGetValue(segment.SourceHandle, out var total)) total = 0d;
+                total += length;
+                if (double.IsNaN(total) || double.IsInfinity(total)) throw new OverflowException("Wall source length exceeds supported numeric range: " + segment.SourceHandle + ".");
+                lengthByHandle[segment.SourceHandle] = total;
+            }
+
+            var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            foreach (var owner in touchedOwners)
+            {
+                var sources = owner.SourceHandles
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (sources.Count != 1 || !touchedHandles.Contains(sources[0]))
+                    throw new InvalidOperationException("Wall Snap chỉ đồng bộ LengthM khi semantic owner có đúng một authoritative source handle: " + owner.Id + ".");
+                if (!lengthByHandle.TryGetValue(sources[0], out var length) || !(length > 0d))
+                    throw new InvalidOperationException("Không tính được source LengthM sau Wall Snap cho " + owner.Id + ".");
+                result[owner.Id] = length;
+            }
+            return result;
+        }
+
+        private static Point2 ResolvePlannedEndpoint(EditableSegment segment, bool start, IReadOnlyDictionary<string, Point2> targets)
+        {
+            var key = segment.IsLine
+                ? segment.SourceHandle + "/" + (start ? WallEndpointKind.Start : WallEndpointKind.End)
+                : segment.SourceHandle + "/V" + (start ? segment.StartVertex : segment.EndVertex).ToString(CultureInfo.InvariantCulture);
+            if (targets.TryGetValue(key, out var target)) return target;
+            return start ? segment.Axis.Start : segment.Axis.End;
         }
 
         private static string BuildSourceFingerprint(IReadOnlyList<EditableSegment> segments, double tolerance, double epsilon)
