@@ -12,7 +12,16 @@ namespace QS3D.Core.Services
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             var wall = project.FindElement(wallId) ?? throw new InvalidOperationException("Wall element not found: " + wallId);
             if (opening.Category != ElementCategory.WallOpening && opening.Category != ElementCategory.Door) throw new InvalidOperationException("Element is not an opening/door: " + openingId);
-            if (wall.Category != ElementCategory.ArchitecturalWall && wall.Category != ElementCategory.GlassWall && wall.Category != ElementCategory.WallPier) throw new InvalidOperationException("Host is not a wall: " + wallId);
+            if (!IsWall(wall.Category)) throw new InvalidOperationException("Host is not a wall: " + wallId);
+
+            var previousHost = opening.Properties.TryGetValue("HostWallId", out var previous) ? previous : string.Empty;
+            if (!string.IsNullOrWhiteSpace(previousHost) && !string.Equals(previousHost, wall.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                for (var i = opening.DependsOn.Count - 1; i >= 0; i--)
+                    if (string.Equals(opening.DependsOn[i], previousHost, StringComparison.OrdinalIgnoreCase)) opening.DependsOn.RemoveAt(i);
+                project.FindElement(previousHost)?.MarkDirty(ElementDirtyFlags.Quantity);
+            }
+
             opening.Properties["HostWallId"] = wall.Id;
             if (!opening.DependsOn.Any(x => string.Equals(x, wall.Id, StringComparison.OrdinalIgnoreCase))) opening.DependsOn.Add(wall.Id);
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
@@ -31,5 +40,11 @@ namespace QS3D.Core.Services
             if (!string.IsNullOrWhiteSpace(hostId)) project.FindElement(hostId)?.MarkDirty(ElementDirtyFlags.Quantity);
             project.Touch();
         }
+
+        private static bool IsWall(ElementCategory category) =>
+            category == ElementCategory.ArchitecturalWall ||
+            category == ElementCategory.GlassWall ||
+            category == ElementCategory.WallPier ||
+            category == ElementCategory.StructuralWall;
     }
 }

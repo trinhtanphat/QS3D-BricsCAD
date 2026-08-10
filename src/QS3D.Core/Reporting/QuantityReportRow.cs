@@ -21,7 +21,6 @@ namespace QS3D.Core.Reporting
         public double BottomAreaM2 { get; set; }
         public double TopAreaM2 { get; set; }
         public double OtherAreaM2 { get; set; }
-        public double SteelWeightKg { get; set; }
         public IList<string> ElementIds { get; }
     }
 }

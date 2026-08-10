@@ -5,17 +5,16 @@ using System.IO;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
-using QS3D.Core.Reporting;
+using QS3D.Core.Rebar;
 
 namespace QS3D.Core.Export
 {
-    public static class XlsxQuantityExporter
+    public static class XlsxRebarScheduleExporter
     {
-        public static void Export(string path, IReadOnlyList<QuantityReportRow> rows)
+        public static void Export(string path, IReadOnlyList<RebarScheduleRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -33,77 +32,55 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static string BuildSheet(IReadOnlyList<QuantityReportRow> rows)
+        private static string BuildSheet(IReadOnlyList<RebarScheduleRow> rows)
         {
-            var headers = new[]
-            {
-                "Tầng", "Loại", "Tên cấu kiện", "SL", "BT gộp (m³)", "Trừ giao (m³)", "BT còn (m³)",
-                "Cốp pha (m²)", "Dài (m)", "Chu vi ngoài (m)", "Chu vi trong (m)", "DT cửa (m²)",
-                "Thành bên (m²)", "DT đáy (m²)", "DT đỉnh (m²)", "DT khác (m²)"
-            };
-
+            var headers = new[] { "Element", "Bar Mark", "Shape", "Notation", "Ø (mm)", "SL", "L cắt (m)", "Tổng L (m)", "kg/m", "KL net (kg)", "Hao hụt (%)", "KL tổng (kg)" };
             var lastRow = Math.Max(1, rows.Count + 1);
-            var range = "A1:P" + lastRow.ToString(CultureInfo.InvariantCulture);
+            var range = "A1:L" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-            sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
-            sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
-            sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
-            sb.Append("<sheetData>");
+            sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"").Append(range).Append("\"/>");
+            sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews><sheetData>");
             sb.Append("<row r=\"1\">");
-            for (var c = 0; c < headers.Length; c++) AppendInlineStringCell(sb, CellRef(c, 1), headers[c], 1);
+            for (var c = 0; c < headers.Length; c++) AppendText(sb, CellRef(c, 1), headers[c], 1);
             sb.Append("</row>");
-
             for (var i = 0; i < rows.Count; i++)
             {
-                var row = rows[i];
-                var r = i + 2;
+                var row = rows[i]; var r = i + 2;
                 sb.Append("<row r=\"").Append(r).Append("\">");
-                AppendInlineStringCell(sb, CellRef(0, r), row.Floor, 0);
-                AppendInlineStringCell(sb, CellRef(1, r), row.Category, 0);
-                AppendInlineStringCell(sb, CellRef(2, r), row.FamilyName, 0);
-                AppendNumberCell(sb, CellRef(3, r), row.Count);
-                AppendNumberCell(sb, CellRef(4, r), row.GrossConcreteM3);
-                AppendNumberCell(sb, CellRef(5, r), row.DeductionM3);
-                AppendNumberCell(sb, CellRef(6, r), row.NetConcreteM3);
-                AppendNumberCell(sb, CellRef(7, r), row.FormworkM2);
-                AppendNumberCell(sb, CellRef(8, r), row.LengthM);
-                AppendNumberCell(sb, CellRef(9, r), row.OuterPerimeterM);
-                AppendNumberCell(sb, CellRef(10, r), row.InnerPerimeterM);
-                AppendNumberCell(sb, CellRef(11, r), row.DoorAreaM2);
-                AppendNumberCell(sb, CellRef(12, r), row.SideAreaM2);
-                AppendNumberCell(sb, CellRef(13, r), row.BottomAreaM2);
-                AppendNumberCell(sb, CellRef(14, r), row.TopAreaM2);
-                AppendNumberCell(sb, CellRef(15, r), row.OtherAreaM2);
+                AppendText(sb, CellRef(0, r), row.ElementId, 0);
+                AppendText(sb, CellRef(1, r), row.BarMark, 0);
+                AppendText(sb, CellRef(2, r), row.ShapeCode, 0);
+                AppendText(sb, CellRef(3, r), row.Notation, 0);
+                AppendNumber(sb, CellRef(4, r), row.DiameterMm);
+                AppendNumber(sb, CellRef(5, r), row.Quantity);
+                AppendNumber(sb, CellRef(6, r), row.CuttingLengthM);
+                AppendNumber(sb, CellRef(7, r), row.TotalLengthM);
+                AppendNumber(sb, CellRef(8, r), row.UnitWeightKgM);
+                AppendNumber(sb, CellRef(9, r), row.NetWeightKg);
+                AppendNumber(sb, CellRef(10, r), row.WastePercent);
+                AppendNumber(sb, CellRef(11, r), row.TotalWeightKg);
                 sb.Append("</row>");
             }
-
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
             return sb.ToString();
         }
 
-        private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)
+        private static void AppendText(StringBuilder sb, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>")
-                .Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>").Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
         }
 
-        private static void AppendNumberCell(StringBuilder sb, string cellRef, double value)
+        private static void AppendNumber(StringBuilder sb, string cellRef, double value)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>")
-                .Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
+            if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value));
+            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
         }
 
         private static string CellRef(int columnZeroBased, int row)
         {
-            var n = columnZeroBased + 1;
-            var name = string.Empty;
-            while (n > 0)
-            {
-                n--;
-                name = (char)('A' + (n % 26)) + name;
-                n /= 26;
-            }
+            var n = columnZeroBased + 1; var name = string.Empty;
+            while (n > 0) { n--; name = (char)('A' + n % 26) + name; n /= 26; }
             return name + row.ToString(CultureInfo.InvariantCulture);
         }
 
@@ -115,7 +92,7 @@ namespace QS3D.Core.Export
 
         private const string ContentTypesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>";
         private const string RootRelationshipsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>";
-        private const string WorkbookXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Khối lượng\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>";
+        private const string WorkbookXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"BBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>";
         private const string WorkbookRelationshipsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
         private const string StylesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Segoe UI\"/></font><font><b/><sz val=\"11\"/><name val=\"Segoe UI\"/></font></fonts><fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills><borders count=\"1\"><border/></borders><cellStyleXfs count=\"1\"><xf/></cellStyleXfs><cellXfs count=\"3\"><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" numFmtId=\"4\" applyNumberFormat=\"1\"/></cellXfs></styleSheet>";
     }

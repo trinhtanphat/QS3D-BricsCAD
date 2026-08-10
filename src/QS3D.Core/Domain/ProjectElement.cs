@@ -70,5 +70,12 @@ namespace QS3D.Core.Domain
             Quantities[name.Trim()] = value;
             MarkClean(ElementDirtyFlags.Quantity);
         }
+
+        internal void RestorePersistenceState(ElementDirtyFlags dirty, DateTime updatedUtc)
+        {
+            if ((dirty & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(dirty));
+            Dirty = dirty;
+            UpdatedUtc = updatedUtc.Kind == DateTimeKind.Utc ? updatedUtc : updatedUtc.ToUniversalTime();
+        }
     }
 }

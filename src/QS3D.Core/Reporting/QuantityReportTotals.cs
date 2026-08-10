@@ -12,7 +12,6 @@ namespace QS3D.Core.Reporting
         public double FormworkM2 { get; private set; }
         public double LengthM { get; private set; }
         public double DoorAreaM2 { get; private set; }
-        public double SteelWeightKg { get; private set; }
         public static QuantityReportTotals FromRows(IEnumerable<QuantityReportRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
@@ -27,7 +26,6 @@ namespace QS3D.Core.Reporting
                 totals.FormworkM2 += row.FormworkM2;
                 totals.LengthM += row.LengthM;
                 totals.DoorAreaM2 += row.DoorAreaM2;
-                totals.SteelWeightKg += row.SteelWeightKg;
             }
             return totals;
         }

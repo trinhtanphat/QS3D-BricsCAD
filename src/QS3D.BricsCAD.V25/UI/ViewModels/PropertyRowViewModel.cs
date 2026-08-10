@@ -11,16 +11,20 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public string Name { get; set; } = string.Empty;
         public string Unit { get; set; } = string.Empty;
         public bool IsReadOnly { get; set; }
-        public Action<string>? Apply { private get; set; }
+        public Func<string, string>? Apply { private get; set; }
         public string Value
         {
             get => _value;
             set
             {
-                var next = value ?? string.Empty;
-                if (_value == next) return;
+                var requested = value ?? string.Empty;
+                var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;
+                if (_value == next)
+                {
+                    if (requested != next) OnChanged();
+                    return;
+                }
                 _value = next;
-                if (!IsReadOnly) Apply?.Invoke(next);
                 OnChanged();
             }
         }

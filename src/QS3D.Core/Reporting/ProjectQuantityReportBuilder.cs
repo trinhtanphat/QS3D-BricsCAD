@@ -20,7 +20,7 @@ namespace QS3D.Core.Reporting
                 var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
                 var familyName = families.TryGetValue(element.FamilyId, out var family) ? family.Name : element.FamilyId;
                 var category = element.Category.ToString();
-                var key = floor + "\u001f" + category + "\u001f" + familyName;
+                var key = element.FloorId + "\u001f" + category + "\u001f" + element.FamilyId;
                 if (!rows.TryGetValue(key, out var row))
                 {
                     row = new QuantityReportRow { Floor = floor, Category = category, FamilyName = familyName };
@@ -44,7 +44,6 @@ namespace QS3D.Core.Reporting
                 row.BottomAreaM2 += Q(element, "BottomAreaM2", element.Category == ElementCategory.FloorFinish || element.Category == ElementCategory.Waterproofing ? Q(element, "AreaM2") : 0d);
                 row.TopAreaM2 += Q(element, "TopAreaM2", element.Category == ElementCategory.CeilingFinish ? Q(element, "AreaM2") : 0d);
                 row.OtherAreaM2 += Q(element, "OtherAreaM2");
-                row.SteelWeightKg += Q(element, "SteelWeightKg");
             }
 
             return order.Select(x => rows[x]).ToList();
