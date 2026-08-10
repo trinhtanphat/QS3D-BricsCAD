@@ -10,6 +10,7 @@ errors = []
 files = {
     "workspace": UI / "WorkspacePanel.xaml",
     "right": UI / "RightPanel.xaml",
+    "hub": UI / "DomainHubWindow.xaml",
     "theme": UI / "Theme.xaml",
 }
 
@@ -83,6 +84,32 @@ if right.is_file():
         if needle in text:
             errors.append("RightPanel.xaml contains dark host-risk foreground: " + needle)
 
+hub = files["hub"]
+if hub.is_file():
+    text = hub.read_text(encoding="utf-8")
+    required = (
+        'x:Key="HubSectionCard"',
+        'x:Key="HubCommandButton"',
+        'x:Key="HubAccentButton"',
+        'Text="WORKFLOW HUB"',
+        'Text="PROFESSIONAL CAD WORKSPACE"',
+        'Foreground="{StaticResource LuxuryBrush}"',
+        'Tag="QS3DDRAWWALL"',
+        'Tag="QS3DDRAWDOOR"',
+        'Tag="QS3DAUTOLINKHOSTS"',
+        'Tag="QS3DSECTIONBOX"',
+        'Tag="QS3DREBARHEALTHALL"',
+        'Tag="QS3DRELEASECHECK"',
+        'x:Name="StatusText"',
+    )
+    for needle in required:
+        if needle not in text:
+            errors.append("DomainHubWindow.xaml missing premium/workflow-card contract: " + needle)
+
+    for needle in ('Background="#17191C"', 'Foreground="Black"', 'Foreground="#000000"'):
+        if needle in text:
+            errors.append("DomainHubWindow.xaml still contains legacy/hardcoded dark-host styling: " + needle)
+
 theme = files["theme"]
 if theme.is_file():
     text = theme.read_text(encoding="utf-8")
@@ -96,7 +123,7 @@ if theme.is_file():
         if needle not in text:
             errors.append("Theme.xaml missing premium design-system contract: " + needle)
 
-print("QS3D premium workspace/right-panel preflight")
+print("QS3D premium workspace/right-panel/hub preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
@@ -104,6 +131,6 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: Workspace and RightPanel use the premium CAD-first hierarchy, preserve BLT workflow handlers, "
-    "retain live layer state, and avoid black-text regressions on the dark BricsCAD host."
+    "PASS: Workspace, RightPanel and Domain Hub use the premium CAD-first hierarchy, preserve BLT workflow "
+    "entry points and live layer state, and avoid black-text/legacy host styling regressions."
 )
