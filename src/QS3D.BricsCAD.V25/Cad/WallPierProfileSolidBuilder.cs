@@ -163,6 +163,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         update.Element.MarkDirty(ElementDirtyFlags.Quantity);
                     }
 
+                    if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
@@ -183,10 +184,7 @@ namespace QS3D.BricsCAD.V25.Cad
             }
 
             if (pending.Count > 0)
-            {
-                document.Editor.Regen();
-                project.Touch();
-            }
+                CadPostCommitUi.TryRegen(document, "WallPier profile native 3D");
             return pending.Count;
         }
 
