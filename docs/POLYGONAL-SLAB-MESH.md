@@ -32,10 +32,16 @@ The Core planner clips every X/Y scanline to the actual polygon and subtracts co
 
 For notation expressed as a count, such as `20D10`, the count controls the number of **distributed scanlines** in that direction. A concavity can split one scanline into multiple physical bars, so `GeneratedSlabMeshCount` can be greater than the notation count. This is intentional geometry behavior, not a fabrication mark count.
 
+## Foundation parity
+
+Foundation now reuses the same guarded polygon engine through `QS3DFOUNDATIONREBAR3D` while retaining separate Foundation ownership/stale/health metadata. True rectangles keep `RectangleLocalXY`; non-rectangular closed straight simple polygons use `PolygonGlobalXY`. See `docs/FOUNDATION-REBAR3D.md` for the Foundation-specific property, ownership, health and runtime contract.
+
+This is source parity for the supported simple-polygon subset, not proof that Slab/Foundation native bars have passed the exact-SHA licensed BricsCAD V25 matrix.
+
 ## Safety and release boundary
 
 The adapter preserves generated-handle ownership checks, destructive replacement refusal on wrong ownership/type, project snapshot rollback before CAD commit, batch bar limits, generated stale clearing and `geometry.rebar.slab.mesh` audit.
 
 This feature creates native reinforcement geometry only. It does not infer fabrication hooks, laps, anchorage, splice policy, bend radii or code-specific cutting rules. Polygonal bar segments must not be advertised as fabrication/BBS-qualified merely because native cylinders exist; the existing fabrication qualification gate remains authoritative.
 
-Curved/bulged polygon boundaries, holes/islands, multiple outer loops, arbitrary local-axis inference and Foundation native polygon integration are separate work and must remain fail-closed until explicitly implemented and reviewed.
+Curved/bulged polygon boundaries, holes/islands, multiple outer loops and arbitrary local-axis inference remain separate work for both Slab and Foundation and must remain fail-closed until explicitly implemented and reviewed. Exact-SHA native geometry/runtime qualification also remains open.
