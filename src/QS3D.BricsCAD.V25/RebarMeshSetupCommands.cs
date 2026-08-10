@@ -23,12 +23,12 @@ namespace QS3D.BricsCAD.V25
                 var selectedHandles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var matches = project.Elements
-                    .Where(x => (x.Category == ElementCategory.Slab || x.Category == ElementCategory.StructuralWall) && x.SourceHandles.Any(selectedHandles.Contains))
+                    .Where(x => (x.Category == ElementCategory.Slab || x.Category == ElementCategory.StructuralWall || x.Category == ElementCategory.Foundation) && x.SourceHandles.Any(selectedHandles.Contains))
                     .Take(3)
                     .ToList();
                 if (matches.Count != 1)
                 {
-                    document.Editor.WriteMessage("\nQS3D Rebar Mesh Setup: chọn đúng một Slab hoặc StructuralWall semantic source.");
+                    document.Editor.WriteMessage("\nQS3D Rebar Mesh Setup: chọn đúng một Slab, StructuralWall hoặc Foundation semantic source.");
                     return;
                 }
 

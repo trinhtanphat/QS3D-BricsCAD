@@ -14,7 +14,8 @@ namespace QS3D.Core.Diagnostics
             "GeneratedTieRebarHandles",
             "GeneratedBeamStirrupHandles",
             "GeneratedSlabMeshHandles",
-            "GeneratedWallMeshHandles"
+            "GeneratedWallMeshHandles",
+            "GeneratedFoundationMeshHandles"
         };
 
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)

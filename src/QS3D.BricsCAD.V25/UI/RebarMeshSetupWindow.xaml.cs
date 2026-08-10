@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Windows;
 using QS3D.Core.Domain;
 using QS3D.Core.Rebar;
@@ -13,44 +11,56 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly ProjectState _project;
         private readonly ProjectElement _element;
         private readonly Action _saved;
-        private readonly bool _slab;
+        private readonly MeshKeys _keys;
+
+        private sealed class MeshKeys
+        {
+            public string ContextLabel { get; set; } = string.Empty;
+            public string Direction1Label { get; set; } = string.Empty;
+            public string Direction2Label { get; set; } = string.Empty;
+            public string Direction1Key { get; set; } = string.Empty;
+            public string Direction2Key { get; set; } = string.Empty;
+            public string CoverKey { get; set; } = string.Empty;
+            public string FacesKey { get; set; } = string.Empty;
+            public string ClosestKey { get; set; } = string.Empty;
+            public string[] Faces { get; set; } = Array.Empty<string>();
+            public string DefaultDirection1 { get; set; } = string.Empty;
+            public string DefaultDirection2 { get; set; } = string.Empty;
+            public string DefaultCover { get; set; } = string.Empty;
+        }
 
         public RebarMeshSetupWindow(ProjectState project, ProjectElement element, Action saved)
         {
             _project = project ?? throw new ArgumentNullException(nameof(project));
             _element = element ?? throw new ArgumentNullException(nameof(element));
             _saved = saved ?? throw new ArgumentNullException(nameof(saved));
-            if (element.Category != ElementCategory.Slab && element.Category != ElementCategory.StructuralWall)
-                throw new ArgumentException("Rebar Mesh Setup only supports Slab or StructuralWall.", nameof(element));
-            _slab = element.Category == ElementCategory.Slab;
+            _keys = KeysFor(element.Category) ?? throw new ArgumentException("Rebar Mesh Setup only supports Slab, StructuralWall or Foundation.", nameof(element));
             InitializeComponent();
             Configure();
         }
 
         private void Configure()
         {
-            ContextText.Text = (_slab ? "Sàn" : "Vách BTCT") + " • " + _element.Id;
-            Direction1Label.Text = _slab ? "Phương X notation" : "Phương ngang notation";
-            Direction2Label.Text = _slab ? "Phương Y notation" : "Phương đứng notation";
-            Direction1Text.Text = Effective(_slab ? "RebarSlabXNotation" : "RebarWallHorizontalNotation");
-            Direction2Text.Text = Effective(_slab ? "RebarSlabYNotation" : "RebarWallVerticalNotation");
-            CoverText.Text = Effective(_slab ? "RebarSlabCoverM" : "RebarWallCoverM");
-            if (string.IsNullOrWhiteSpace(CoverText.Text)) CoverText.Text = Effective("RebarCoverM");
+            ContextText.Text = _keys.ContextLabel + " • " + _element.Id;
+            Direction1Label.Text = _keys.Direction1Label;
+            Direction2Label.Text = _keys.Direction2Label;
+            Direction1Text.Text = Effective(_keys.Direction1Key, _keys.DefaultDirection1);
+            Direction2Text.Text = Effective(_keys.Direction2Key, _keys.DefaultDirection2);
+            CoverText.Text = Effective(_keys.CoverKey, string.Empty);
+            if (string.IsNullOrWhiteSpace(CoverText.Text)) CoverText.Text = Effective("RebarCoverM", _keys.DefaultCover);
 
             FacesCombo.Items.Clear();
-            foreach (var value in (_slab ? new[] { "Bottom", "Top", "Both" } : new[] { "Near", "Far", "Both" })) FacesCombo.Items.Add(value);
-            var currentFaces = Effective(_slab ? "RebarSlabFaces" : "RebarWallFaces");
-            if (!string.IsNullOrWhiteSpace(currentFaces))
+            foreach (var value in _keys.Faces) FacesCombo.Items.Add(value);
+            FacesCombo.SelectedIndex = 0;
+            var currentFaces = Effective(_keys.FacesKey, _keys.Faces[0]);
+            for (var index = 0; index < FacesCombo.Items.Count; index++)
             {
-                for (var index = 0; index < FacesCombo.Items.Count; index++)
-                {
-                    if (!string.Equals(Convert.ToString(FacesCombo.Items[index], CultureInfo.InvariantCulture), currentFaces, StringComparison.OrdinalIgnoreCase)) continue;
-                    FacesCombo.SelectedIndex = index;
-                    break;
-                }
+                if (!string.Equals(Convert.ToString(FacesCombo.Items[index], CultureInfo.InvariantCulture), currentFaces, StringComparison.OrdinalIgnoreCase)) continue;
+                FacesCombo.SelectedIndex = index;
+                break;
             }
 
-            var closest = Effective(_slab ? "RebarSlabXClosestToFace" : "RebarWallHorizontalClosestToFace");
+            var closest = Effective(_keys.ClosestKey, "true");
             if (bool.TryParse(closest, out var boolValue)) ClosestToFaceCheck.IsChecked = boolValue;
             else if (closest == "1") ClosestToFaceCheck.IsChecked = true;
             else if (closest == "0") ClosestToFaceCheck.IsChecked = false;
@@ -61,10 +71,8 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                var first = ParseSingleDistribution(Direction1Text.Text, _slab ? "RebarSlabXNotation" : "RebarWallHorizontalNotation");
-                var second = ParseSingleDistribution(Direction2Text.Text, _slab ? "RebarSlabYNotation" : "RebarWallVerticalNotation");
-                if (Math.Abs(first.DiameterMm - second.DiameterMm) > 1e-9d)
-                    throw new InvalidOperationException("Native mesh hiện yêu cầu hai phương cùng đường kính. Không tự đổi diameter để tránh thay đổi thiết kế của người dùng.");
+                ParseSingleDistribution(Direction1Text.Text, _keys.Direction1Key);
+                ParseSingleDistribution(Direction2Text.Text, _keys.Direction2Key);
                 if (!double.TryParse((CoverText.Text ?? string.Empty).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var cover) || double.IsNaN(cover) || double.IsInfinity(cover) || cover < 0d)
                     throw new InvalidOperationException("Cover phải là số hữu hạn >= 0, dùng dấu chấm thập phân theo dữ liệu QS3D.");
                 if (!(FacesCombo.SelectedItem is string faces) || string.IsNullOrWhiteSpace(faces))
@@ -72,25 +80,14 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!ClosestToFaceCheck.IsChecked.HasValue)
                     throw new InvalidOperationException("Chọn rõ phương nào nằm gần mặt bê tông hơn.");
 
-                if (_slab)
-                {
-                    _element.SetProperty("RebarSlabXNotation", Direction1Text.Text.Trim());
-                    _element.SetProperty("RebarSlabYNotation", Direction2Text.Text.Trim());
-                    _element.SetProperty("RebarSlabCoverM", cover.ToString("R", CultureInfo.InvariantCulture));
-                    _element.SetProperty("RebarSlabFaces", faces.Trim());
-                    _element.SetProperty("RebarSlabXClosestToFace", ClosestToFaceCheck.IsChecked.Value ? "true" : "false");
-                }
-                else
-                {
-                    _element.SetProperty("RebarWallHorizontalNotation", Direction1Text.Text.Trim());
-                    _element.SetProperty("RebarWallVerticalNotation", Direction2Text.Text.Trim());
-                    _element.SetProperty("RebarWallCoverM", cover.ToString("R", CultureInfo.InvariantCulture));
-                    _element.SetProperty("RebarWallFaces", faces.Trim());
-                    _element.SetProperty("RebarWallHorizontalClosestToFace", ClosestToFaceCheck.IsChecked.Value ? "true" : "false");
-                }
+                _element.SetProperty(_keys.Direction1Key, Direction1Text.Text.Trim());
+                _element.SetProperty(_keys.Direction2Key, Direction2Text.Text.Trim());
+                _element.SetProperty(_keys.CoverKey, cover.ToString("R", CultureInfo.InvariantCulture));
+                _element.SetProperty(_keys.FacesKey, faces.Trim());
+                _element.SetProperty(_keys.ClosestKey, ClosestToFaceCheck.IsChecked.Value ? "true" : "false");
                 _project.Touch();
                 _saved();
-                ValidationText.Text = "Đã lưu thông số explicit. Generated rebar cũ (nếu có) đã được đánh dấu stale bởi semantic mutation và cần rebuild.";
+                ValidationText.Text = "Đã lưu thông số explicit. Hai phương có thể dùng diameter/count/spacing độc lập; generated mesh cũ (nếu có) đã stale và cần rebuild.";
                 Close();
             }
             catch (Exception ex)
@@ -112,12 +109,69 @@ namespace QS3D.BricsCAD.V25.UI
             return group;
         }
 
-        private string Effective(string key)
+        private string Effective(string key, string fallback)
         {
             if (_element.Properties.TryGetValue(key, out var own) && !string.IsNullOrWhiteSpace(own)) return own.Trim();
             var family = _project.FindFamily(_element.FamilyId);
             if (family != null && family.Properties.TryGetValue(key, out var inherited) && !string.IsNullOrWhiteSpace(inherited)) return inherited.Trim();
-            return string.Empty;
+            return fallback;
+        }
+
+        private static MeshKeys? KeysFor(ElementCategory category)
+        {
+            switch (category)
+            {
+                case ElementCategory.Slab:
+                    return new MeshKeys
+                    {
+                        ContextLabel = "Sàn",
+                        Direction1Label = "Phương X notation",
+                        Direction2Label = "Phương Y notation",
+                        Direction1Key = "RebarSlabXNotation",
+                        Direction2Key = "RebarSlabYNotation",
+                        CoverKey = "RebarSlabCoverM",
+                        FacesKey = "RebarSlabFaces",
+                        ClosestKey = "RebarSlabXClosestToFace",
+                        Faces = new[] { "Bottom", "Top", "Both" },
+                        DefaultDirection1 = "D12@200",
+                        DefaultDirection2 = "D12@200",
+                        DefaultCover = "0.025"
+                    };
+                case ElementCategory.StructuralWall:
+                    return new MeshKeys
+                    {
+                        ContextLabel = "Vách BTCT",
+                        Direction1Label = "Phương ngang notation",
+                        Direction2Label = "Phương đứng notation",
+                        Direction1Key = "RebarWallHorizontalNotation",
+                        Direction2Key = "RebarWallVerticalNotation",
+                        CoverKey = "RebarWallCoverM",
+                        FacesKey = "RebarWallFaces",
+                        ClosestKey = "RebarWallHorizontalClosestToFace",
+                        Faces = new[] { "Near", "Far", "Both" },
+                        DefaultDirection1 = "D12@200",
+                        DefaultDirection2 = "D12@200",
+                        DefaultCover = "0.025"
+                    };
+                case ElementCategory.Foundation:
+                    return new MeshKeys
+                    {
+                        ContextLabel = "Móng",
+                        Direction1Label = "Phương X notation",
+                        Direction2Label = "Phương Y notation",
+                        Direction1Key = "RebarFoundationXNotation",
+                        Direction2Key = "RebarFoundationYNotation",
+                        CoverKey = "RebarFoundationCoverM",
+                        FacesKey = "RebarFoundationFaces",
+                        ClosestKey = "RebarFoundationXClosestToFace",
+                        Faces = new[] { "Bottom", "Top", "Both" },
+                        DefaultDirection1 = "D16@200",
+                        DefaultDirection2 = "D16@200",
+                        DefaultCover = "0.05"
+                    };
+                default:
+                    return null;
+            }
         }
     }
 }

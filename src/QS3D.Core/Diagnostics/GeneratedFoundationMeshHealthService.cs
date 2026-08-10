@@ -6,10 +6,10 @@ using QS3D.Core.Domain;
 
 namespace QS3D.Core.Diagnostics
 {
-    public sealed class GeneratedSlabMeshHealthService
+    public sealed class GeneratedFoundationMeshHealthService
     {
-        private const string HandlesKey = "GeneratedSlabMeshHandles";
-        private const string CountKey = "GeneratedSlabMeshCount";
+        private const string HandlesKey = "GeneratedFoundationMeshHandles";
+        private const string CountKey = "GeneratedFoundationMeshCount";
 
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveSolidHandles = null)
         {
@@ -26,48 +26,48 @@ namespace QS3D.Core.Diagnostics
                     var handle = (item ?? string.Empty).Trim();
                     if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                     {
-                        issues.Add(new ModelHealthIssue("INVALID_SLAB_MESH_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
+                        issues.Add(new ModelHealthIssue("INVALID_FOUNDATION_MESH_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
                         continue;
                     }
                     if (!local.Add(handle))
                     {
-                        issues.Add(new ModelHealthIssue("DUPLICATE_SLAB_MESH_GENERATED_HANDLE", HealthSeverity.Error, "Một slab mesh handle bị lặp trong cùng element: " + handle, element.Id));
+                        issues.Add(new ModelHealthIssue("DUPLICATE_FOUNDATION_MESH_GENERATED_HANDLE", HealthSeverity.Error, "Một foundation mesh handle bị lặp trong cùng element: " + handle, element.Id));
                         continue;
                     }
                     validCount++;
                     var expectedOwner = element.Id + "/" + HandlesKey;
                     if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expectedOwner, StringComparison.OrdinalIgnoreCase))
-                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated slab mesh solid xung đột owner/project handle khác: " + owner, element.Id));
+                        issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated foundation mesh solid xung đột owner/project handle khác: " + owner, element.Id));
                     if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
-                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated slab mesh handle không được nằm trong SourceHandles.", element.Id));
+                        issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated foundation mesh handle không được nằm trong SourceHandles.", element.Id));
                     if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
-                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated slab mesh Solid3d: " + handle, element.Id));
+                        issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated foundation mesh Solid3d: " + handle, element.Id));
                 }
 
                 if (!element.Properties.TryGetValue(CountKey, out var countText) ||
                     !int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) || count < 0 || count != validCount)
-                    issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_COUNT_MISMATCH", HealthSeverity.Warning, CountKey + " không khớp số handle hợp lệ.", element.Id));
+                    issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_COUNT_MISMATCH", HealthSeverity.Warning, CountKey + " không khớp số handle hợp lệ.", element.Id));
 
-                ValidatePositive(element, "GeneratedSlabMeshXDiameterMm", "SLAB_MESH_X_DIAMETER_INVALID", issues);
-                ValidatePositive(element, "GeneratedSlabMeshYDiameterMm", "SLAB_MESH_Y_DIAMETER_INVALID", issues);
-                ValidatePositive(element, "GeneratedSlabMeshXActualSpacingM", "SLAB_MESH_X_SPACING_INVALID", issues);
-                ValidatePositive(element, "GeneratedSlabMeshYActualSpacingM", "SLAB_MESH_Y_SPACING_INVALID", issues);
-                ValidateNonNegative(element, "GeneratedSlabMeshCoverM", "SLAB_MESH_COVER_INVALID", issues);
+                ValidatePositive(element, "GeneratedFoundationMeshXDiameterMm", "FOUNDATION_MESH_X_DIAMETER_INVALID", issues);
+                ValidatePositive(element, "GeneratedFoundationMeshYDiameterMm", "FOUNDATION_MESH_Y_DIAMETER_INVALID", issues);
+                ValidatePositive(element, "GeneratedFoundationMeshXActualSpacingM", "FOUNDATION_MESH_X_SPACING_INVALID", issues);
+                ValidatePositive(element, "GeneratedFoundationMeshYActualSpacingM", "FOUNDATION_MESH_Y_SPACING_INVALID", issues);
+                ValidateNonNegative(element, "GeneratedFoundationMeshCoverM", "FOUNDATION_MESH_COVER_INVALID", issues);
 
-                if (!element.Properties.TryGetValue("GeneratedSlabMeshFaces", out var faces) ||
+                if (!element.Properties.TryGetValue("GeneratedFoundationMeshFaces", out var faces) ||
                     !(string.Equals(faces, "Bottom", StringComparison.OrdinalIgnoreCase) ||
                       string.Equals(faces, "Top", StringComparison.OrdinalIgnoreCase) ||
                       string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase)))
-                    issues.Add(new ModelHealthIssue("SLAB_MESH_FACES_INVALID", HealthSeverity.Warning, "GeneratedSlabMeshFaces phải là Bottom, Top hoặc Both.", element.Id));
+                    issues.Add(new ModelHealthIssue("FOUNDATION_MESH_FACES_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshFaces phải là Bottom, Top hoặc Both.", element.Id));
 
-                if (!element.Properties.TryGetValue("GeneratedSlabMeshMode", out var mode) || !string.Equals(mode, "SlabMeshXY", StringComparison.OrdinalIgnoreCase))
-                    issues.Add(new ModelHealthIssue("SLAB_MESH_MODE_INVALID", HealthSeverity.Warning, "GeneratedSlabMeshMode thiếu hoặc không hợp lệ.", element.Id));
+                if (!element.Properties.TryGetValue("GeneratedFoundationMeshMode", out var mode) || !string.Equals(mode, "FoundationMeshXY", StringComparison.OrdinalIgnoreCase))
+                    issues.Add(new ModelHealthIssue("FOUNDATION_MESH_MODE_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshMode thiếu hoặc không hợp lệ.", element.Id));
 
-                if (element.Category != ElementCategory.Slab)
-                    issues.Add(new ModelHealthIssue("SLAB_MESH_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated slab mesh metadata chỉ hợp lệ trên Slab element.", element.Id));
+                if (element.Category != ElementCategory.Foundation)
+                    issues.Add(new ModelHealthIssue("FOUNDATION_MESH_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated foundation mesh metadata chỉ hợp lệ trên Foundation element.", element.Id));
 
-                if (element.IsGeneratedSlabMeshStale())
-                    issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_STALE", HealthSeverity.Warning, "Generated slab mesh snapshot không còn khớp semantic/source hiện tại; rebuild slab mesh trước khi phát hành bản vẽ.", element.Id));
+                if (element.IsGeneratedFoundationMeshStale())
+                    issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_STALE", HealthSeverity.Warning, "Generated foundation mesh snapshot không còn khớp semantic/source hiện tại; rebuild lưới thép móng 3D trước khi phát hành bản vẽ.", element.Id));
             }
             return issues;
         }
@@ -104,9 +104,9 @@ namespace QS3D.Core.Diagnostics
                 ReserveProperty(owners, element, "GeneratedShapeRebarHandles");
                 ReserveProperty(owners, element, "GeneratedTieRebarHandles");
                 ReserveProperty(owners, element, "GeneratedBeamStirrupHandles");
-                ReserveProperty(owners, element, HandlesKey);
+                ReserveProperty(owners, element, "GeneratedSlabMeshHandles");
                 ReserveProperty(owners, element, "GeneratedWallMeshHandles");
-                ReserveProperty(owners, element, "GeneratedFoundationMeshHandles");
+                ReserveProperty(owners, element, HandlesKey);
             }
             return owners;
         }

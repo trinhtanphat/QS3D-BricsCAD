@@ -34,6 +34,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     AddProtected(handle, element.Id + "/SourceHandles", owners);
                 AddProtectedProperty(element, "GeneratedSolidHandle", owners);
                 AddProtectedProperty(element, "PhysicalOpeningCutSolidHandle", owners);
+                AddProtectedProperty(element, "GeneratedCurtainFrameHandles", owners);
             }
             foreach (var element in project.Elements)
             {
@@ -41,6 +42,9 @@ namespace QS3D.BricsCAD.V25.Cad
                 Add(element, "GeneratedShapeRebarHandles", owners);
                 Add(element, "GeneratedTieRebarHandles", owners);
                 Add(element, "GeneratedBeamStirrupHandles", owners);
+                Add(element, "GeneratedSlabMeshHandles", owners);
+                Add(element, "GeneratedWallMeshHandles", owners);
+                Add(element, "GeneratedFoundationMeshHandles", owners);
             }
             return new OwnershipIndex(owners);
         }

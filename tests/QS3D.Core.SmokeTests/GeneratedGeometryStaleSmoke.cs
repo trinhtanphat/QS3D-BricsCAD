@@ -28,6 +28,7 @@ namespace QS3D.Core.SmokeTests
             True(element.IsGeneratedBeamStirrupStale());
             True(element.IsGeneratedSlabMeshStale());
             True(element.IsGeneratedWallMeshStale());
+            True(element.IsGeneratedFoundationMeshStale());
             True(element.IsGeneratedCurtainFrameStale());
             True(element.IsGeneratedGeometryStale());
             Equal("Thickness changed", element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey]);
@@ -47,6 +48,7 @@ namespace QS3D.Core.SmokeTests
             True(element.IsGeneratedBeamStirrupStale());
             True(element.IsGeneratedSlabMeshStale());
             True(element.IsGeneratedWallMeshStale());
+            True(element.IsGeneratedFoundationMeshStale());
             True(element.IsGeneratedCurtainFrameStale());
             True(element.IsGeneratedGeometryStale());
 
@@ -56,8 +58,9 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedBeamStirrupHandles"] = "EF";
             element.Properties["GeneratedSlabMeshHandles"] = "FG";
             element.Properties["GeneratedWallMeshHandles"] = "GH";
+            element.Properties["GeneratedFoundationMeshHandles"] = "HI";
             True(element.IsGeneratedCurtainFrameStale());
-            element.Properties["GeneratedCurtainFrameHandles"] = "HI";
+            element.Properties["GeneratedCurtainFrameHandles"] = "IJ";
             False(element.IsGeneratedGeometryStale());
             False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStateKey));
         }
@@ -76,6 +79,7 @@ namespace QS3D.Core.SmokeTests
             True(element.IsGeneratedBeamStirrupStale());
             True(element.IsGeneratedSlabMeshStale());
             True(element.IsGeneratedWallMeshStale());
+            True(element.IsGeneratedFoundationMeshStale());
             True(element.IsGeneratedCurtainFrameStale());
 
             element.ClearGeneratedSolidStale();
@@ -84,6 +88,7 @@ namespace QS3D.Core.SmokeTests
             element.ClearGeneratedBeamStirrupStale();
             element.ClearGeneratedSlabMeshStale();
             element.ClearGeneratedWallMeshStale();
+            element.ClearGeneratedFoundationMeshStale();
             True(element.IsGeneratedCurtainFrameStale());
             element.ClearGeneratedCurtainFrameStale();
             False(element.IsGeneratedGeometryStale());
@@ -97,7 +102,7 @@ namespace QS3D.Core.SmokeTests
             SeedAllGeneratedOutputs(element);
             element.MarkGeneratedGeometryStale("source moved");
             var issues = new GeneratedGeometryStaleHealthService().Inspect(project);
-            Equal(8, issues.Count);
+            Equal(9, issues.Count);
             Contains(issues, "GENERATED_SOLID_STALE");
             Contains(issues, "REBAR_GENERATED_STALE");
             Contains(issues, "SHAPE_REBAR_GENERATED_STALE");
@@ -105,6 +110,7 @@ namespace QS3D.Core.SmokeTests
             Contains(issues, "BEAM_STIRRUP_GENERATED_STALE");
             Contains(issues, "SLAB_MESH_GENERATED_STALE");
             Contains(issues, "WALL_MESH_GENERATED_STALE");
+            Contains(issues, "FOUNDATION_MESH_GENERATED_STALE");
             Contains(issues, "CURTAIN_FRAME_GENERATED_STALE");
         }
 
@@ -125,7 +131,8 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedBeamStirrupHandles"] = "EE";
             element.Properties["GeneratedSlabMeshHandles"] = "FF";
             element.Properties["GeneratedWallMeshHandles"] = "GG";
-            element.Properties["GeneratedCurtainFrameHandles"] = "HH";
+            element.Properties["GeneratedFoundationMeshHandles"] = "HH";
+            element.Properties["GeneratedCurtainFrameHandles"] = "II";
         }
 
         private static void Contains(System.Collections.Generic.IReadOnlyList<ModelHealthIssue> issues, string code)

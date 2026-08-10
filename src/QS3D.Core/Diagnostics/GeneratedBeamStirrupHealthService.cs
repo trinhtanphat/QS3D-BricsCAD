@@ -71,6 +71,7 @@ namespace QS3D.Core.Diagnostics
                 foreach (var handle in element.SourceHandles) Reserve(owners, handle, element.Id + "/SourceHandles");
                 ReserveProperty(owners, element, "GeneratedSolidHandle");
                 ReserveProperty(owners, element, "PhysicalOpeningCutSolidHandle");
+                ReserveProperty(owners, element, "GeneratedCurtainFrameHandles");
             }
             foreach (var element in project.Elements)
             {
@@ -78,6 +79,9 @@ namespace QS3D.Core.Diagnostics
                 ReserveProperty(owners, element, "GeneratedShapeRebarHandles");
                 ReserveProperty(owners, element, "GeneratedTieRebarHandles");
                 ReserveProperty(owners, element, HandlesKey);
+                ReserveProperty(owners, element, "GeneratedSlabMeshHandles");
+                ReserveProperty(owners, element, "GeneratedWallMeshHandles");
+                ReserveProperty(owners, element, "GeneratedFoundationMeshHandles");
             }
             return owners;
         }

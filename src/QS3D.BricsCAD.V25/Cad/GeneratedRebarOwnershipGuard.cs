@@ -46,6 +46,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 Add(element, "GeneratedBeamStirrupHandles", owners);
                 Add(element, "GeneratedSlabMeshHandles", owners);
                 Add(element, "GeneratedWallMeshHandles", owners);
+                Add(element, "GeneratedFoundationMeshHandles", owners);
             }
             return new OwnershipIndex(owners);
         }
