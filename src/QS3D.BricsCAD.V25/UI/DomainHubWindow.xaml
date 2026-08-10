@@ -24,7 +24,8 @@
                     <Button Content="Phân tích giao tường L/T/X" Tag="QS3DWALLJUNCTIONS" Click="OnCommandClick"/>
                     <Button Content="Lỗ Mở Vách" Tag="QS3DOPENING" Click="OnCommandClick"/>
                     <Button Content="Cửa Đi" Tag="QS3DDOOR" Click="OnCommandClick"/>
-                    <Button Content="Liên kết Cửa/Lỗ với host" Tag="QS3DLINKHOST" Click="OnCommandClick"/>
+                    <Button Content="Tự tìm host cho Cửa/Lỗ" Tag="QS3DAUTOLINKHOSTS" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Liên kết Cửa/Lỗ với host thủ công" Tag="QS3DLINKHOST" Click="OnCommandClick"/>
                     <Button Content="Khoét Cửa/Lỗ vào solid host" Tag="QS3DCUTOPENINGS" Click="OnCommandClick"/>
                     <Button Content="Tạo / cập nhật HT_Phòng" Tag="QS3DFINISH" Click="OnCommandClick"/>
 
