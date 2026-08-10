@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -41,7 +42,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("regen-unknown", "Unknown target");
             var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
-            Throws<InvalidOperationException>(() => engine.RegenerateDirtySubset(project, new[] { "missing" }));
+            Throws<KeyNotFoundException>(() => engine.RegenerateDirtySubset(project, new[] { "missing" }));
         }
 
         private static void Equal(int expected, int actual)
