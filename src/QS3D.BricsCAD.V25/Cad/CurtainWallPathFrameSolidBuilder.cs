@@ -7,6 +7,7 @@ using Bricscad.EditorInput;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 
@@ -54,124 +55,145 @@ namespace QS3D.BricsCAD.V25.Cad
             var processed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var pending = new List<PendingUpdate>();
             var batchFrames = 0;
+            var rollback = ProjectStateSnapshot.Capture(project);
 
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            try
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                foreach (var id in ids)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var polyline = transaction.GetObject(id, OpenMode.ForRead, false) as Polyline;
-                    if (polyline == null || polyline.IsErased) continue;
-                    var sourceHandle = polyline.Handle.ToString();
-                    var matches = project.Elements
-                        .Where(x => x.Category == ElementCategory.GlassWall && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)))
-                        .Take(2)
-                        .ToList();
-                    if (matches.Count == 0) continue;
-                    if (matches.Count > 1) throw new InvalidOperationException("GlassWall source " + sourceHandle + " đang thuộc nhiều semantic element.");
-                    var element = matches[0];
-                    if (!processed.Add(element.Id)) throw new InvalidOperationException("GlassWall " + element.Id + " có nhiều source POLYLINE đang được chọn. Tách/capture từng source trước khi dựng curtain frame 3D.");
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    foreach (var id in ids)
+                    {
+                        var polyline = transaction.GetObject(id, OpenMode.ForRead, false) as Polyline;
+                        if (polyline == null || polyline.IsErased) continue;
+                        var sourceHandle = polyline.Handle.ToString();
+                        var matches = project.Elements
+                            .Where(x => x.Category == ElementCategory.GlassWall && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)))
+                            .Take(2)
+                            .ToList();
+                        if (matches.Count == 0) continue;
+                        if (matches.Count > 1) throw new InvalidOperationException("GlassWall source " + sourceHandle + " đang thuộc nhiều semantic element.");
+                        var element = matches[0];
+                        if (!processed.Add(element.Id)) throw new InvalidOperationException("GlassWall " + element.Id + " có nhiều source POLYLINE đang được chọn. Tách/capture từng source trước khi dựng curtain frame 3D.");
 
-                    var family = project.FindFamily(element.FamilyId);
-                    var sagittaM = ProjectNumber(project, "WallArcSagittaM", 0.002d, 1e-6d);
-                    var centerline = CadPolylinePathReader.ReadOpenWcsXy(document, polyline, sagittaM, element.Id + "/curtain path");
-                    var lengthM = CadGeometryGuard.Positive(CurtainPathFramePlanner.Length(centerline), element.Id + "/LengthM");
-                    var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
-                    var hostThicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.012d), element.Id + "/ThicknessM");
-                    var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                    var frameDepthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "CurtainFrameDepthM", 0.05d), element.Id + "/CurtainFrameDepthM");
-                    var input = new CurtainWallLayoutInput
-                    {
-                        LengthM = lengthM,
-                        HeightM = heightM,
-                        MaxPanelWidthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "CurtainMaxPanelWidthM", 1.2d), element.Id + "/CurtainMaxPanelWidthM"),
-                        MaxPanelHeightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "CurtainMaxPanelHeightM", 1.5d), element.Id + "/CurtainMaxPanelHeightM"),
-                        PerimeterFrameWidthM = NonNegative(CadGeometryGuard.Number(element, family, "CurtainPerimeterFrameWidthM", 0.05d), element.Id + "/CurtainPerimeterFrameWidthM"),
-                        MullionWidthM = NonNegative(CadGeometryGuard.Number(element, family, "CurtainMullionWidthM", 0.05d), element.Id + "/CurtainMullionWidthM"),
-                        TransomWidthM = NonNegative(CadGeometryGuard.Number(element, family, "CurtainTransomWidthM", 0.05d), element.Id + "/CurtainTransomWidthM")
-                    };
-                    var configFingerprint = CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
-                    {
-                        LengthM = lengthM,
-                        HeightM = heightM,
-                        BottomOffsetM = bottomOffsetM,
-                        MaxPanelWidthM = input.MaxPanelWidthM,
-                        MaxPanelHeightM = input.MaxPanelHeightM,
-                        PerimeterFrameWidthM = input.PerimeterFrameWidthM,
-                        MullionWidthM = input.MullionWidthM,
-                        TransomWidthM = input.TransomWidthM,
-                        FrameDepthM = frameDepthM
-                    });
-                    var detail = CurtainWallDetailPlanner.Plan(input);
-                    var baseFrames = detail.VerticalFrames.Concat(detail.HorizontalFrames).ToList();
-                    var openingRects = ReadLinkedOpenings(document, transaction, project, element, centerline, lengthM, heightM, hostThicknessM);
-                    var frames = CurtainFrameOpeningPlanner.Interrupt(baseFrames, openingRects).ToList();
-                    var pathPlan = CurtainPathFramePlanner.Plan(centerline, frames);
-                    var frameCount = pathPlan.Pieces.Count;
-                    if (frameCount > MaxFramesPerElement) throw new InvalidOperationException(element.Id + " cần " + frameCount + " curtain path frame fragment solids, vượt giới hạn native " + MaxFramesPerElement + ". Tăng panel size, giảm arc tessellation/opening hoặc chia vách.");
-                    if (batchFrames > MaxFramesPerBatch - frameCount) throw new InvalidOperationException("Curtain path frame batch vượt giới hạn " + MaxFramesPerBatch + " solid.");
-
-                    ErasePrevious(document, transaction, element, ownership);
-                    var baseZ = CadGeometryGuard.Add(polyline.Elevation, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/curtain path base Z");
-                    var update = new PendingUpdate
-                    {
-                        Element = element,
-                        Columns = detail.Layout.Columns,
-                        Rows = detail.Layout.Rows,
-                        BaseFrameCount = baseFrames.Count,
-                        OpeningCount = openingRects.Count,
-                        PathSegmentCount = pathPlan.PathSegmentCount,
-                        MappedFrameCount = frames.Count,
-                        FrameDepthM = frameDepthM,
-                        SourceLengthM = lengthM,
-                        HeightM = heightM,
-                        ConfigFingerprint = configFingerprint
-                    };
-
-                    foreach (var piece in pathPlan.Pieces)
-                    {
-                        Solid3d? solid = CreateFrame(document, piece, frameDepthM, baseZ, element.Id);
-                        try
+                        var family = project.FindFamily(element.FamilyId);
+                        var sagittaM = ProjectNumber(project, "WallArcSagittaM", 0.002d, 1e-6d);
+                        var centerline = CadPolylinePathReader.ReadOpenWcsXy(document, polyline, sagittaM, element.Id + "/curtain path");
+                        var lengthM = CadGeometryGuard.Positive(CurtainPathFramePlanner.Length(centerline), element.Id + "/LengthM");
+                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
+                        var hostThicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.012d), element.Id + "/ThicknessM");
+                        var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var frameDepthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "CurtainFrameDepthM", 0.05d), element.Id + "/CurtainFrameDepthM");
+                        var input = new CurtainWallLayoutInput
                         {
-                            solid.Layer = polyline.Layer;
-                            modelSpace.AppendEntity(solid);
-                            transaction.AddNewlyCreatedDBObject(solid, true);
-                            update.Handles.Add(solid.Handle.ToString());
-                            solid = null;
+                            LengthM = lengthM,
+                            HeightM = heightM,
+                            MaxPanelWidthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "CurtainMaxPanelWidthM", 1.2d), element.Id + "/CurtainMaxPanelWidthM"),
+                            MaxPanelHeightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "CurtainMaxPanelHeightM", 1.5d), element.Id + "/CurtainMaxPanelHeightM"),
+                            PerimeterFrameWidthM = NonNegative(CadGeometryGuard.Number(element, family, "CurtainPerimeterFrameWidthM", 0.05d), element.Id + "/CurtainPerimeterFrameWidthM"),
+                            MullionWidthM = NonNegative(CadGeometryGuard.Number(element, family, "CurtainMullionWidthM", 0.05d), element.Id + "/CurtainMullionWidthM"),
+                            TransomWidthM = NonNegative(CadGeometryGuard.Number(element, family, "CurtainTransomWidthM", 0.05d), element.Id + "/CurtainTransomWidthM")
+                        };
+                        var configFingerprint = CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
+                        {
+                            LengthM = lengthM,
+                            HeightM = heightM,
+                            BottomOffsetM = bottomOffsetM,
+                            MaxPanelWidthM = input.MaxPanelWidthM,
+                            MaxPanelHeightM = input.MaxPanelHeightM,
+                            PerimeterFrameWidthM = input.PerimeterFrameWidthM,
+                            MullionWidthM = input.MullionWidthM,
+                            TransomWidthM = input.TransomWidthM,
+                            FrameDepthM = frameDepthM
+                        });
+                        var detail = CurtainWallDetailPlanner.Plan(input);
+                        var baseFrames = detail.VerticalFrames.Concat(detail.HorizontalFrames).ToList();
+                        var openingRects = ReadLinkedOpenings(document, transaction, project, element, centerline, lengthM, heightM, hostThicknessM);
+                        var frames = CurtainFrameOpeningPlanner.Interrupt(baseFrames, openingRects).ToList();
+                        var pathPlan = CurtainPathFramePlanner.Plan(centerline, frames);
+                        var frameCount = pathPlan.Pieces.Count;
+                        if (frameCount > MaxFramesPerElement) throw new InvalidOperationException(element.Id + " cần " + frameCount + " curtain path frame fragment solids, vượt giới hạn native " + MaxFramesPerElement + ". Tăng panel size, giảm arc tessellation/opening hoặc chia vách.");
+                        if (batchFrames > MaxFramesPerBatch - frameCount) throw new InvalidOperationException("Curtain path frame batch vượt giới hạn " + MaxFramesPerBatch + " solid.");
+
+                        ErasePrevious(document, transaction, element, ownership);
+                        var baseZ = CadGeometryGuard.Add(polyline.Elevation, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/curtain path base Z");
+                        var update = new PendingUpdate
+                        {
+                            Element = element,
+                            Columns = detail.Layout.Columns,
+                            Rows = detail.Layout.Rows,
+                            BaseFrameCount = baseFrames.Count,
+                            OpeningCount = openingRects.Count,
+                            PathSegmentCount = pathPlan.PathSegmentCount,
+                            MappedFrameCount = frames.Count,
+                            FrameDepthM = frameDepthM,
+                            SourceLengthM = lengthM,
+                            HeightM = heightM,
+                            ConfigFingerprint = configFingerprint
+                        };
+
+                        foreach (var piece in pathPlan.Pieces)
+                        {
+                            Solid3d? solid = CreateFrame(document, piece, frameDepthM, baseZ, element.Id);
+                            try
+                            {
+                                solid.Layer = polyline.Layer;
+                                modelSpace.AppendEntity(solid);
+                                transaction.AddNewlyCreatedDBObject(solid, true);
+                                update.Handles.Add(solid.Handle.ToString());
+                                solid = null;
+                            }
+                            finally { solid?.Dispose(); }
                         }
-                        finally { solid?.Dispose(); }
+                        pending.Add(update);
+                        batchFrames = checked(batchFrames + update.Handles.Count);
                     }
-                    pending.Add(update);
-                    batchFrames = checked(batchFrames + update.Handles.Count);
+
+                    // Keep semantic ownership/fingerprint/audit publication inside the CAD rollback
+                    // window. If project publication fails, the transaction aborts; if CAD commit
+                    // fails after project mutation, the outer project snapshot restores semantic state.
+                    foreach (var update in pending) ApplyPendingUpdate(project, update);
+                    if (pending.Count > 0) project.Touch();
+                    transaction.Commit();
                 }
-                transaction.Commit();
+            }
+            catch (Exception operationError)
+            {
+                try { rollback.Restore(project); }
+                catch (Exception restoreError)
+                {
+                    throw new InvalidOperationException(
+                        "Curtain path-frame rebuild thất bại và project rollback không hoàn tất.",
+                        new AggregateException(operationError, restoreError));
+                }
+                throw;
             }
 
-            foreach (var update in pending)
-            {
-                update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
-                update.Element.Properties["GeneratedCurtainFrameCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedCurtainFrameBaseCount"] = update.BaseFrameCount.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedCurtainFrameOpeningCount"] = update.OpeningCount.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedCurtainFrameColumns"] = update.Columns.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedCurtainFrameRows"] = update.Rows.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedCurtainFrameDepthM"] = update.FrameDepthM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedCurtainFrameSourceLengthM"] = update.SourceLengthM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedCurtainFrameHeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedCurtainFrameConfigFingerprint"] = update.ConfigFingerprint;
-                update.Element.Properties["GeneratedCurtainFrameMode"] = update.OpeningCount > 0 ? OpeningAwareMode : Mode;
-                update.Element.Properties["GeneratedCurtainFrameSourceKind"] = "OpenPolyline";
-                update.Element.Properties["GeneratedCurtainFramePathSegmentCount"] = update.PathSegmentCount.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedCurtainFrameMappedFrameCount"] = update.MappedFrameCount.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["LengthM"] = update.SourceLengthM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.ClearGeneratedCurtainFrameStale();
-                AuditTrail.ForProject(project).Record("geometry.curtain.path.frames", update.Element.Id,
-                    update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " path frame fragments • base=" + update.BaseFrameCount.ToString(CultureInfo.InvariantCulture) + " • mapped=" + update.MappedFrameCount.ToString(CultureInfo.InvariantCulture) + " • segments=" + update.PathSegmentCount.ToString(CultureInfo.InvariantCulture) + " • openings=" + update.OpeningCount.ToString(CultureInfo.InvariantCulture));
-            }
-            if (pending.Count > 0) project.Touch();
             return new CurtainFrameBuildResult { Elements = pending.Count, Frames = pending.Sum(x => x.Handles.Count) };
+        }
+
+        private static void ApplyPendingUpdate(ProjectState project, PendingUpdate update)
+        {
+            update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
+            update.Element.Properties["GeneratedCurtainFrameCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedCurtainFrameBaseCount"] = update.BaseFrameCount.ToString(CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedCurtainFrameOpeningCount"] = update.OpeningCount.ToString(CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedCurtainFrameColumns"] = update.Columns.ToString(CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedCurtainFrameRows"] = update.Rows.ToString(CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedCurtainFrameDepthM"] = update.FrameDepthM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedCurtainFrameSourceLengthM"] = update.SourceLengthM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedCurtainFrameHeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedCurtainFrameConfigFingerprint"] = update.ConfigFingerprint;
+            update.Element.Properties["GeneratedCurtainFrameMode"] = update.OpeningCount > 0 ? OpeningAwareMode : Mode;
+            update.Element.Properties["GeneratedCurtainFrameSourceKind"] = "OpenPolyline";
+            update.Element.Properties["GeneratedCurtainFramePathSegmentCount"] = update.PathSegmentCount.ToString(CultureInfo.InvariantCulture);
+            update.Element.Properties["GeneratedCurtainFrameMappedFrameCount"] = update.MappedFrameCount.ToString(CultureInfo.InvariantCulture);
+            update.Element.Properties["LengthM"] = update.SourceLengthM.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.ClearGeneratedCurtainFrameStale();
+            AuditTrail.ForProject(project).Record("geometry.curtain.path.frames", update.Element.Id,
+                update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " path frame fragments • base=" + update.BaseFrameCount.ToString(CultureInfo.InvariantCulture) + " • mapped=" + update.MappedFrameCount.ToString(CultureInfo.InvariantCulture) + " • segments=" + update.PathSegmentCount.ToString(CultureInfo.InvariantCulture) + " • openings=" + update.OpeningCount.ToString(CultureInfo.InvariantCulture));
         }
 
         private static IReadOnlyList<CurtainOpeningRect> ReadLinkedOpenings(
