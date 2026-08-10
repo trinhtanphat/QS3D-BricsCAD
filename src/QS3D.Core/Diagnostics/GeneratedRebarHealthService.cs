@@ -22,7 +22,7 @@ namespace QS3D.Core.Diagnostics
             HandlesKey = "GeneratedRebarHandles",
             CountKey = "GeneratedRebarCount",
             CodePrefix = "REBAR",
-            DisplayName = "column rebar",
+            DisplayName = "column/beam longitudinal rebar",
             RequiresSingleDiameter = true
         };
 
@@ -85,6 +85,8 @@ namespace QS3D.Core.Diagnostics
             {
                 ReserveProperty(owners, element, ColumnSpec.HandlesKey);
                 ReserveProperty(owners, element, ShapeSpec.HandlesKey);
+                ReserveProperty(owners, element, "GeneratedTieRebarHandles");
+                ReserveProperty(owners, element, "GeneratedBeamStirrupHandles");
             }
             return owners;
         }
