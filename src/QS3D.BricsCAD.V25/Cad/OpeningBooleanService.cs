@@ -136,14 +136,14 @@ namespace QS3D.BricsCAD.V25.Cad
                         });
                     }
 
-                    var fingerprint = string.Join("|", prepared.Select(x => x.FingerprintPart));
+                    var fingerprint = HostFingerprint(hostLine, hostThicknessM, hostHeightM, hostBottomOffsetM) + "|" + string.Join("|", prepared.Select(x => x.FingerprintPart));
                     var currentSolidHandle = solidId.Handle.ToString();
                     if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolidHandle) &&
                         host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) &&
                         string.Equals(cutSolidHandle, currentSolidHandle, StringComparison.OrdinalIgnoreCase))
                     {
                         if (string.Equals(cutFingerprint, fingerprint, StringComparison.Ordinal)) continue;
-                        throw new InvalidOperationException("Host " + host.Id + " đã được khoét với opening-set/vị trí khác trên cùng generated solid. Hãy Build 3D lại host trước khi khoét lại.");
+                        throw new InvalidOperationException("Host " + host.Id + " đã được khoét nhưng host/opening geometry hoặc thông số đã thay đổi trên cùng generated solid. Hãy Build 3D lại host trước khi khoét lại.");
                     }
 
                     foreach (var item in prepared)
@@ -181,6 +181,20 @@ namespace QS3D.BricsCAD.V25.Cad
                 project.Touch();
             }
             return totalCuts;
+        }
+
+        private static string HostFingerprint(Line hostLine, double hostThicknessM, double hostHeightM, double hostBottomOffsetM)
+        {
+            return "HOST:" + hostLine.Handle.ToString() + ":" + PointToken(hostLine.StartPoint) + ":" + PointToken(hostLine.EndPoint) + ":" +
+                   NumberToken(hostThicknessM) + ":" + NumberToken(hostHeightM) + ":" + NumberToken(hostBottomOffsetM);
+        }
+
+        private static string PointToken(Point3d point) => NumberToken(point.X) + "," + NumberToken(point.Y) + "," + NumberToken(point.Z);
+
+        private static string NumberToken(double value)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidOperationException("Opening boolean fingerprint contains a non-finite value.");
+            return value.ToString("R", CultureInfo.InvariantCulture);
         }
 
         private static ObjectId ResolveSingle(Document document, Transaction transaction, IEnumerable<string> handles, Type? expectedType, string label)
