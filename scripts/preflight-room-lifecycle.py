@@ -34,8 +34,8 @@ if command.exists():
         "AutoRoomLifecycle.FindBySourceSignature", "AutoRoomLifecycle.MarkActive",
         "AutoRoomLifecycle.MarkStaleForSelection", "SyncExistingRoomFinishes",
         'audit.Record("RoomBoundaryStale"',
-        "RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance)",
-        "LINE, POLYLINE hoặc ARC plan-view",
+        "RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance, splineChord)",
+        "LINE, POLYLINE, ARC hoặc SPLINE plan-view",
     ):
         if needle not in text: errors.append("QS3DROOMAUTO lifecycle/rollback/planar-input wiring missing: " + needle)
     if "SourceHandles.Add" in text: errors.append("auto-room discovery must not claim boundary handles as semantic SourceHandles")
@@ -46,6 +46,7 @@ if reader.exists():
     for needle in (
         "planarityToleranceM", "referenceElevationM", "entity is Arc", "arc.EndAngle - arc.StartAngle",
         "BulgeArcTessellator.Tessellate", "normal +Z", "toàn bộ boundary đồng phẳng",
+        "entity is Spline", "splineChordM", "MaxSplineSegments", "GetPointAtDist",
     ):
         if needle not in text: errors.append("room boundary LINE/POLYLINE/ARC planarity guard missing: " + needle)
 
@@ -84,4 +85,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: auto-room planar LINE/POLYLINE/ARC input, provenance reuse, stale reconciliation, rollback, quantity exclusion, finish sync and regression guards are present.")
+print("PASS: auto-room planar LINE/POLYLINE/ARC/SPLINE input, provenance reuse, stale reconciliation, rollback, quantity exclusion, finish sync and regression guards are present.")
