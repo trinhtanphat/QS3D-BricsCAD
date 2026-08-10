@@ -149,7 +149,7 @@ namespace QS3D.Core.Export
                 Pair("name", !string.Equals(left.Name, right.Name, StringComparison.Ordinal)),
                 Pair("schemaVersion", left.SchemaVersion != right.SchemaVersion),
                 Pair("drawingFingerprint", !string.Equals(left.DrawingFingerprint, right.DrawingFingerprint, StringComparison.Ordinal)),
-                Pair("updatedUtc", !string.Equals(left.UpdatedUtcRaw, right.UpdatedUtcRaw, StringComparison.Ordinal)));
+                Pair("updatedUtc", left.UpdatedUtc != right.UpdatedUtc));
             AddChanged(InterchangeSnapshotObjectKind.Project, left.Id, fields, changes);
         }
 
@@ -170,7 +170,7 @@ namespace QS3D.Core.Export
             if (!IdEquals(left.FloorId, right.FloorId)) fields.Add("floorId");
             if (!IdEquals(left.ZoneId, right.ZoneId)) fields.Add("zoneId");
             if (!string.Equals(left.DrawingFingerprint, right.DrawingFingerprint, StringComparison.Ordinal)) fields.Add("drawingFingerprint");
-            if (!string.Equals(left.UpdatedUtcRaw, right.UpdatedUtcRaw, StringComparison.Ordinal)) fields.Add("updatedUtc");
+            if (left.UpdatedUtc != right.UpdatedUtc) fields.Add("updatedUtc");
             if (!string.Equals(left.SourceRefScope, right.SourceRefScope, StringComparison.Ordinal)) fields.Add("sourceRefScope");
             if (!SetEquals(left.SourceHandles, right.SourceHandles, StringComparer.OrdinalIgnoreCase)) fields.Add("sourceHandles");
             if (!SetEquals(left.Dependencies, right.Dependencies, StringComparer.OrdinalIgnoreCase)) fields.Add("dependencies");
