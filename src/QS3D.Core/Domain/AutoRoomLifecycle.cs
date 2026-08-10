@@ -146,6 +146,20 @@ namespace QS3D.Core.Domain
                 }
             }
 
+            if (previousFamily != null && !string.Equals(previousFamily.Id, family.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var previousProperty in previousFamily.Properties)
+                {
+                    if (currentFamilyKeys.Contains(previousProperty.Key)) continue;
+                    if (room.Properties.TryGetValue(previousProperty.Key, out var currentValue) &&
+                        string.Equals(currentValue, previousProperty.Value ?? string.Empty, StringComparison.Ordinal))
+                    {
+                        room.Properties.Remove(previousProperty.Key);
+                        changed++;
+                    }
+                }
+            }
+
             var staleSnapshots = project.Metadata
                 .Where(x => x.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 .Where(x => !currentFamilyKeys.Contains(x.Key.Substring(prefix.Length)))
