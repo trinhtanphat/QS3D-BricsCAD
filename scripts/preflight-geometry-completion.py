@@ -13,16 +13,21 @@ required = [
     "src/QS3D.Core/Rebar/RectangularRebarLayoutPlanner.cs",
     "src/QS3D.Core/Rebar/LinearRebarLayoutPlanner.cs",
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs",
     "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs",
+    "src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/OpeningBooleanCommands.cs",
     "src/QS3D.BricsCAD.V25/RebarGeometryCommands.cs",
+    "src/QS3D.BricsCAD.V25/RebarShapeGeometryCommands.cs",
     "src/QS3D.BricsCAD.V25/RebarHealthCommands.cs",
+    "src/QS3D.BricsCAD.V25/ShapeRebarHealthCommands.cs",
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
     "src/QS3D.BricsCAD.V25/Commands.cs",
     "src/QS3D.BricsCAD.V25/ModelReviewCommands.cs",
+    "src/QS3D.BricsCAD.V25/WallJunctionCommands.cs",
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml",
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs",
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs",
@@ -54,6 +59,13 @@ checks = {
     "src/QS3D.Core/Rebar/LinearRebarLayoutPlanner.cs": [
         "Specify exactly one of Count or SpacingMm", "MaxBars", "usableSpanM", "ActualSpacingM", "OffsetsM"
     ],
+    "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": [
+        "REBAR_GENERATED_OWNERSHIP_CONFLICT", "REBAR_GENERATED_SOLID_MISSING", "REBAR_GENERATED_COUNT_MISMATCH",
+        "GeneratedShapeRebarHandles", "InspectShape", "InspectAll", "SHAPE_REBAR"
+    ],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": [
+        "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "EnsureOwned", "ownership conflict", "Refusing destructive erase"
+    ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
         "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
         "GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
@@ -69,10 +81,11 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs": [
         "RectangularRebarLayoutPlanner.Plan", "CreateFrustum", "GeneratedRebarHandles", "RebarBarsAlongWidth", "RebarBarsAlongDepth",
-        "processedElements", "Refusing to orphan or overwrite rebar ownership"
+        "processedElements", "GeneratedRebarOwnershipGuard.Build(project)", "ownership.EnsureOwned", "Refusing destructive erase"
     ],
-    "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": [
-        "REBAR_GENERATED_OWNERSHIP_CONFLICT", "REBAR_GENERATED_SOLID_MISSING", "REBAR_GENERATED_COUNT_MISMATCH"
+    "src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs": [
+        "RebarShapePathBuilder.Build", "GeneratedShapeRebarHandles", "GeneratedRebarOwnershipGuard.Build(project)", "ownership.EnsureOwned",
+        "BooleanOperationType.BoolUnite", "MaxBarsPerBatch", "Refusing destructive erase"
     ],
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs": [
         "QS3DGLASSWALL", "QS3DWALLPIER", "AxisLeftOffsetM", "AxisRightOffsetM", "ThicknessM"
@@ -97,7 +110,8 @@ checks = {
         "isInherited", "instance override", "element.MarkDirty(ElementDirtyFlags.All)"
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
-        'Tag="QS3DGLASSWALL"', 'Tag="QS3DWALLPIER"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DREBAR3D"', 'Tag="QS3DREBARHEALTH"'
+        'Tag="QS3DGLASSWALL"', 'Tag="QS3DWALLPIER"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DWALLJUNCTIONS"',
+        'Tag="QS3DREBAR3D"', 'Tag="QS3DREBAR3DSHAPE"', 'Tag="QS3DREBARHEALTH"', 'Tag="QS3DREBARSHAPEHEALTH"'
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
         'new RibbonButtonSpec("Vách Kính", "QS3DGLASSWALL")', 'new RibbonButtonSpec("Trụ Tường", "QS3DWALLPIER")',
@@ -108,7 +122,8 @@ checks = {
         "WallSolidBuilder.BuildSelectedLineWalls(doc, project, category.Value)", "PolylineWallSolidBuilder.BuildSelected(doc, project, category.Value)"
     ],
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs": [
-        "StraightWallFootprint", "PolylineWallCorner", "FarOriginWallFootprint", "OpeningCutPlan", "RectangularRebarLayout", "GeneratedRebarHealth"
+        "StraightWallFootprint", "PolylineWallCorner", "FarOriginWallFootprint", "OpeningCutPlan", "RectangularRebarLayout", "GeneratedRebarHealth",
+        "InspectShape", "SHAPE_REBAR_GENERATED_SOLID_MISSING", "InspectAll"
     ],
     "tests/QS3D.Core.SmokeTests/LinearRebarLayoutSmoke.cs": [
         "CountDistributionIsSymmetric", "SpacingDistributionRoundsUpSafely", "AmbiguousModeIsRejected", "ExcessiveBarCountIsRejected"
@@ -140,7 +155,9 @@ commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
     text = path.read_text(encoding="utf-8")
     commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', text)
-for required_command in ("QS3DCUTOPENINGS", "QS3DREBAR3D", "QS3DREBARHEALTH", "QS3DBUILD3D", "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE"):
+for required_command in (
+    "QS3DCUTOPENINGS", "QS3DREBAR3D", "QS3DREBAR3DSHAPE", "QS3DREBARHEALTH", "QS3DREBARSHAPEHEALTH",
+    "QS3DBUILD3D", "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DWALLJUNCTIONS", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE"):
     if required_command not in commands:
         errors.append("missing command: " + required_command)
 if len(commands) != len(set(x.upper() for x in commands)):
@@ -152,4 +169,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: TKT line/polyline wall variants, safe LINE + straight-POLYLINE opening cuts, far-origin-safe footprint math, rectangular + linear rebar planning/health, typed Family editors, instance-override preservation and BLT-style Focus/Isolate workflow guards are present.")
+print("PASS: TKT line/polyline wall variants, safe LINE + straight-POLYLINE opening cuts, far-origin-safe footprint math, rectangular/linear/shape rebar ownership+health, wall-junction analysis, typed Family editors, instance-override preservation and BLT-style Focus/Isolate workflow guards are present.")
