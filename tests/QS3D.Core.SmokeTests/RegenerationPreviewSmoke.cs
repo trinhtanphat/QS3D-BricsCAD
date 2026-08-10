@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             PreviewRunsOnDetachedState();
             StalePreviewFailsBeforeLiveMutation();
+            ChangeVersionInvalidatesEquivalentPreview();
             FreshPreviewCanApplyWithoutNewHealthErrors();
         }
 
@@ -23,15 +24,18 @@ namespace QS3D.Core.SmokeTests
             var originalDirty = beam.Dirty;
             var originalUpdated = beam.UpdatedUtc;
             var projectUpdated = project.UpdatedUtc;
+            var projectVersion = project.ChangeVersion;
 
             var preview = new RegenerationPreviewService().Preview(project);
             True(preview.RegeneratedElementCount >= 1);
             True(preview.HasSemanticChanges);
+            Equal(projectVersion, preview.SourceChangeVersion);
             True(preview.Deltas.Any(x => x.ElementId == "B1" && x.Fields.Any(f => f.Field == "Quantity:NetVolumeM3")));
             True(!beam.Quantities.ContainsKey("NetVolumeM3"));
             Equal(originalDirty, beam.Dirty);
             Equal(originalUpdated, beam.UpdatedUtc);
             Equal(projectUpdated, project.UpdatedUtc);
+            Equal(projectVersion, project.ChangeVersion);
         }
 
         private static void StalePreviewFailsBeforeLiveMutation()
@@ -43,6 +47,18 @@ namespace QS3D.Core.SmokeTests
             beam.SetProperty("LengthM", "8");
             Throws<InvalidOperationException>(() => service.Apply(project, preview));
             True(!beam.Quantities.ContainsKey("NetVolumeM3"));
+        }
+
+        private static void ChangeVersionInvalidatesEquivalentPreview()
+        {
+            var project = Fixture();
+            var service = new RegenerationPreviewService();
+            var preview = service.Preview(project);
+            var oldVersion = preview.SourceChangeVersion;
+            project.Touch();
+            True(project.ChangeVersion > oldVersion);
+            Throws<InvalidOperationException>(() => service.Apply(project, preview));
+            True(!project.FindElement("B1")!.Quantities.ContainsKey("NetVolumeM3"));
         }
 
         private static void FreshPreviewCanApplyWithoutNewHealthErrors()
