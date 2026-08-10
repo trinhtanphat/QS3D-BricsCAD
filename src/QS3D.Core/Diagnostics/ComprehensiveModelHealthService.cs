@@ -17,11 +17,14 @@ namespace QS3D.Core.Diagnostics
             var seen = new HashSet<string>(StringComparer.Ordinal);
 
             Add(issues, seen, new ModelHealthService().Inspect(project, liveSourceHandles, liveGeneratedSolidHandles));
+            Add(issues, seen, new RoomFinishHealthService().Inspect(project));
             Add(issues, seen, new DependencyHealthService().Inspect(project));
+            Add(issues, seen, new LevelReferenceHealthService().Inspect(project));
             Add(issues, seen, new GeneratedHandleOwnershipHealthService().Inspect(project));
             Add(issues, seen, new GeneratedRebarOwnershipHealthService().Inspect(project));
             Add(issues, seen, new GeneratedGeometryStaleHealthService().Inspect(project));
             Add(issues, seen, new GeneratedRebarModeHealthService().Inspect(project));
+            Add(issues, seen, new RebarFabricationQualificationHealthService().Inspect(project));
             Add(issues, seen, new GeneratedRebarHealthService().InspectAll(project, liveGeneratedSolidHandles, liveGeneratedSolidHandles));
             Add(issues, seen, new GeneratedTieRebarHealthService().Inspect(project, liveGeneratedSolidHandles));
             Add(issues, seen, new GeneratedBeamStirrupHealthService().Inspect(project, liveGeneratedSolidHandles));

@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             CoversAllGeneratedOutputFamilies();
             CoversDependencyAndStaleDiagnostics();
+            CoversSemanticIntegrityFamilies();
         }
 
         private static void CoversAllGeneratedOutputFamilies()
@@ -60,6 +61,26 @@ namespace QS3D.Core.SmokeTests
             var issues = new ComprehensiveModelHealthService().Inspect(project, null, live);
             HasCode(issues, "DEPENDENCY_CYCLE");
             HasCode(issues, "GENERATED_SOLID_STALE");
+        }
+
+        private static void CoversSemanticIntegrityFamilies()
+        {
+            var project = Project("semantic");
+            project.Floors.Add(new FloorDefinition("L0", "Level 0", 0d));
+
+            var level = new ProjectElement("LEVEL-BAD", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
+            level.Properties[ProjectFloorService.TopLevelIdKey] = "L0";
+            project.Elements.Add(level);
+
+            var finish = new ProjectElement("FINISH-BAD", ElementCategory.WallFinish, string.Empty, string.Empty, string.Empty);
+            project.Elements.Add(finish);
+
+            project.Metadata[RebarFabricationQualificationHealthService.RequireQualificationMetadataKey] = "true";
+
+            var issues = new ComprehensiveModelHealthService().Inspect(project);
+            HasCode(issues, "TOP_LEVEL_REQUIRES_BOTTOM_LEVEL");
+            HasCode(issues, "UNLINKED_ROOM_FINISH");
+            HasCode(issues, "REBAR_FAB_OUTPUT_MISSING");
         }
 
         private static ProjectState Project(string suffix) => new ProjectState("health-" + suffix, "Health " + suffix);
