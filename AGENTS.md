@@ -19,7 +19,7 @@ Before starting substantive work, read in this order:
 3. `CI_POLICY.md`;
 4. fetch the latest `main`;
 5. `docs/REMOTE-AGENT-SCOPE.md` — **canonical remote/local execution boundary; remote agents must filter LOCAL_ONLY work out of their backlog instead of rechecking it**;
-6. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-1710.md` — **newest short canonical current-state delta for fast-moving source**;
+6. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-1824.md` — **newest short canonical current-state delta for fast-moving source**;
 7. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — broader current-source baseline/handoff retained for detail;
 8. `docs/IMPLEMENTATION-STATUS.md`;
 9. `docs/PLAN.md` and `docs/COMMANDS.md`;
@@ -96,7 +96,7 @@ When a remote agent reaches a new task that requires local-only access, leave th
 
 When a local agent finishes validation, commit only reusable source/scripts/docs and a sanitized text summary if useful; never commit proprietary BricsCAD DLLs, private fixtures, screenshots containing private drawings, signing secrets or raw machine evidence.
 
-When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10-1710.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
+When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10-1824.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
 
 ## GitHub Actions / release
 
