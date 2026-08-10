@@ -37,6 +37,7 @@ $packageDir = Join-Path $repoRoot "dist\QS3D-BricsCAD-V25"
 $packageZip = Join-Path $repoRoot "dist\QS3D-BricsCAD-V25.zip"
 $startedAt = [DateTime]::UtcNow
 $sourceBuildCompleted = $false
+$wpfSmokeCompleted = $false
 $runtimeSmokeCompleted = $false
 $packageCompleted = $false
 $signingQualified = $false
@@ -173,6 +174,13 @@ try {
             $env:BRICSCAD_V25_DIR = $oldBricsCadDir
         }
 
+        Invoke-QualificationStep "Offline WPF theme / Workspace / RightPanel smoke" {
+            & (Join-Path $PSScriptRoot "run-local-v25-wpf-smoke.ps1") `
+                -BricsCadDir $BricsCadDir `
+                -PluginPath $pluginDll
+        }
+        $wpfSmokeCompleted = $true
+
         if (-not $SkipRuntime) {
             Invoke-QualificationStep "Licensed V25 NETLOAD / Ribbon / Palette runtime probe" {
                 $runtimeArgs = @{
@@ -277,6 +285,7 @@ finally {
     $runtimeMetadata = Join-Path $runtimeArtifacts "runtime-metadata.json"
     $automatedGateStatus = if ($null -eq $fatal) { "PASS" } else { "FAIL" }
     $sourceBuildStatus = if ($sourceBuildCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
+    $wpfSmokeStatus = if ($wpfSmokeCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
     $runtimeSmokeStatus = if ($SkipRuntime) { "NOT_RUN" } elseif ($runtimeSmokeCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
     $packageStatus = if (-not $Package) { "NOT_REQUESTED" } elseif ($packageCompleted) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
     $signingStatus = if (-not $SignPackage) { "NOT_REQUESTED" } elseif ($signingQualified) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
@@ -286,6 +295,7 @@ finally {
         status = $automatedGateStatus
         automatedGateStatus = $automatedGateStatus
         sourceBuildStatus = $sourceBuildStatus
+        wpfSmokeStatus = $wpfSmokeStatus
         runtimeSmokeStatus = $runtimeSmokeStatus
         packageStatus = $packageStatus
         signingStatus = $signingStatus
@@ -327,13 +337,13 @@ if ($null -ne $fatal) {
 
 Write-Host ""
 if ($SkipRuntime) {
-    Write-Host "AUTOMATED SOURCE/BUILD GATES PASS for exact SHA $headSha; licensed V25 runtime smoke NOT RUN."
+    Write-Host "AUTOMATED SOURCE/BUILD + OFFLINE WPF GATES PASS for exact SHA $headSha; licensed V25 runtime smoke NOT RUN."
 }
 elseif ($signingQualified) {
-    Write-Host "AUTOMATED SOURCE/BUILD + LICENSED V25 RUNTIME + SIGNED/FINALIZED PACKAGE GATES PASS for exact SHA $headSha."
+    Write-Host "AUTOMATED SOURCE/BUILD + OFFLINE WPF + LICENSED V25 RUNTIME + SIGNED/FINALIZED PACKAGE GATES PASS for exact SHA $headSha."
 }
 else {
-    Write-Host "AUTOMATED SOURCE/BUILD + LICENSED V25 NETLOAD/RIBBON/PALETTE SMOKE PASS for exact SHA $headSha."
+    Write-Host "AUTOMATED SOURCE/BUILD + OFFLINE WPF + LICENSED V25 NETLOAD/RIBBON/PALETTE SMOKE PASS for exact SHA $headSha."
 }
 Write-Host "FULL INTERACTIVE/PRIVATE-DWG PRODUCT MATRIX: NOT RUN by this script."
 Write-Host "This does not replace the manual/private-DWG scenario checklist in docs/LOCAL-V25-QUALIFICATION.md."
