@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
+using QS3D.Core.Persistence;
 using QS3D.Core.Services;
 using QS3D.Core.Templates;
 using Teigha.Runtime;
@@ -36,11 +37,39 @@ namespace QS3D.BricsCAD.V25
             {
                 var dialog = new OpenFileDialog { Title = "Nạp QS3D Template", Filter = "QS3D Template (*.qstemplate)|*.qstemplate", CheckFileExists = true, Multiselect = false };
                 if (dialog.ShowDialog() != true) return;
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+
                 var store = new TemplateProfileStore();
                 var profile = store.Load(dialog.FileName);
-                var result = store.Apply(project, profile);
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                var confirmText = "Áp dụng template “" + profile.Name + "” vào project hiện tại?\n\n" +
+                                  "Family: " + profile.Families.Count + "\n" +
+                                  "Rule khối lượng: " + profile.QuantityRules.Count + "\n" +
+                                  "Layer mapping: " + profile.LayerMappings.Count + "\n\n" +
+                                  "QS3D sẽ regenerate thử trước khi chấp nhận thay đổi. File .qsdb sẽ chưa tự lưu.";
+                if (System.Windows.MessageBox.Show(confirmText, "QS3D — Nạp Template", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
+
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var rollback = ProjectStateSnapshot.Capture(project);
+                TemplateApplyResult result;
+                int regenerated;
+                try
+                {
+                    result = store.Apply(project, profile);
+                    regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                }
+                catch (Exception importError)
+                {
+                    try
+                    {
+                        rollback.Restore(project);
+                        PaletteCoordinator.RefreshProject();
+                    }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException("Template import failed and project rollback also failed.", new AggregateException(importError, restoreError));
+                    }
+                    throw;
+                }
+
                 PaletteCoordinator.RefreshProject();
                 var message = "Template " + profile.Name + ": family +" + result.FamiliesAdded + "/~" + result.FamiliesUpdated + " • rule +" + result.RulesAdded + "/~" + result.RulesUpdated + " • mapping " + result.LayerMappingsApplied + " • regen " + regenerated + ". Chưa tự lưu .qsdb.";
                 PaletteCoordinator.SetStatus(message);
