@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization;
-using System.Runtime.Serialization.Json;
-using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Export
@@ -76,70 +73,60 @@ namespace QS3D.Core.Export
             if (!validation.IsValid)
                 return new ProjectInterchangeImportPreviewResult(validation, string.Empty, targetProject.ProjectId, false, InterchangeDrawingFingerprintRelation.Unknown, 0, 0, 0, 0, false, Array.Empty<InterchangeImportPreviewItem>());
 
-            _ = ProjectInterchangeValidatedSnapshotReader.Read(json);
-            var manifest = ParseValidatedManifest(json);
-            var sourceProjectId = Required(manifest.Project == null ? null : manifest.Project.Id, "source project id");
+            var source = ProjectInterchangeValidatedSnapshotReader.Read(json);
+            var sourceProjectId = source.Project.Id;
             var sameProjectId = string.Equals(sourceProjectId, targetProject.ProjectId, StringComparison.OrdinalIgnoreCase);
-            var fingerprintRelation = CompareFingerprint(manifest.Project == null ? null : manifest.Project.DrawingFingerprint, targetProject.DrawingFingerprint);
+            var fingerprintRelation = CompareFingerprint(source.Project.DrawingFingerprint, targetProject.DrawingFingerprint);
             var targetZones = UniqueIndex(targetProject.Zones, x => x.Id, "target Zone");
             var targetFloors = UniqueIndex(targetProject.Floors, x => x.Id, "target Floor");
             var targetFamilies = UniqueIndex(targetProject.Families, x => x.Id, "target Family");
             var targetElements = UniqueIndex(targetProject.Elements, x => x.Id, "target element");
-            var items = new List<InterchangeImportPreviewItem>(Math.Min(MaxDetailedItems, validation.ZoneCount + validation.FloorCount + validation.FamilyCount + validation.ElementCount));
+            var items = new List<InterchangeImportPreviewItem>(Math.Min(MaxDetailedItems, source.Zones.Count + source.Floors.Count + source.Families.Count + source.Elements.Count));
             var total = 0;
             var newCount = 0;
             var policyCount = 0;
             var incompatibleCount = 0;
 
-            foreach (var zone in manifest.Zones ?? new List<IdentityContract>())
+            foreach (var zone in source.Zones)
+                AddSimple(InterchangeIdentityKind.Zone, zone.Id, targetZones.ContainsKey(zone.Id), items, ref total, ref newCount, ref policyCount);
+
+            foreach (var floor in source.Floors)
+                AddSimple(InterchangeIdentityKind.Floor, floor.Id, targetFloors.ContainsKey(floor.Id), items, ref total, ref newCount, ref policyCount);
+
+            foreach (var family in source.Families)
             {
-                var id = Required(zone == null ? null : zone.Id, "Zone id");
-                AddSimple(InterchangeIdentityKind.Zone, id, targetZones.ContainsKey(id), items, ref total, ref newCount, ref policyCount);
-            }
-            foreach (var floor in manifest.Floors ?? new List<IdentityContract>())
-            {
-                var id = Required(floor == null ? null : floor.Id, "Floor id");
-                AddSimple(InterchangeIdentityKind.Floor, id, targetFloors.ContainsKey(id), items, ref total, ref newCount, ref policyCount);
-            }
-            foreach (var family in manifest.Families ?? new List<CategorizedIdentityContract>())
-            {
-                if (family == null) throw new InvalidDataException("Validated interchange Family entry unexpectedly deserialized as null.");
-                var id = Required(family.Id, "Family id");
-                var sourceCategory = ParseCategory(family.Category, "Family " + id);
-                if (!targetFamilies.TryGetValue(id, out var existing))
+                if (!targetFamilies.TryGetValue(family.Id, out var existing))
                 {
-                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Family, id, InterchangeIdentityDisposition.New, "No target Family uses this semantic id.", sourceCategory.ToString()), items);
+                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Family, family.Id, InterchangeIdentityDisposition.New, "No target Family uses this semantic id.", family.Category.ToString()), items);
                     total++; newCount++;
                 }
-                else if (existing.Category != sourceCategory)
+                else if (existing.Category != family.Category)
                 {
-                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Family, id, InterchangeIdentityDisposition.ExistingIncompatible, "The target Family uses the same id with a different category; automatic merge must fail closed.", sourceCategory.ToString(), existing.Category.ToString()), items);
+                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Family, family.Id, InterchangeIdentityDisposition.ExistingIncompatible, "The target Family uses the same id with a different category; automatic merge must fail closed.", family.Category.ToString(), existing.Category.ToString()), items);
                     total++; incompatibleCount++;
                 }
                 else
                 {
-                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Family, id, InterchangeIdentityDisposition.ExistingNeedsPolicy, "The target already contains this Family id. Property/name merge semantics require an explicit import policy.", sourceCategory.ToString(), existing.Category.ToString()), items);
+                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Family, family.Id, InterchangeIdentityDisposition.ExistingNeedsPolicy, "The target already contains this Family id. Property/name merge semantics require an explicit import policy.", family.Category.ToString(), existing.Category.ToString()), items);
                     total++; policyCount++;
                 }
             }
-            foreach (var element in manifest.Elements ?? new List<CategorizedIdentityContract>())
+
+            foreach (var element in source.Elements)
             {
-                if (element == null) throw new InvalidDataException("Validated interchange element entry unexpectedly deserialized as null.");
-                var id = Required(element.Id, "element id");
-                var sourceCategory = ParseCategory(element.Category, "element " + id);
-                if (!targetElements.TryGetValue(id, out var existing))
+                if (!targetElements.TryGetValue(element.Id, out var existing))
                 {
-                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Element, id, InterchangeIdentityDisposition.New, "No target semantic element uses this id.", sourceCategory.ToString()), items);
+                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Element, element.Id, InterchangeIdentityDisposition.New, "No target semantic element uses this id.", element.Category.ToString()), items);
                     total++; newCount++;
                 }
-                else if (existing.Category != sourceCategory)
+                else if (existing.Category != element.Category)
                 {
-                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Element, id, InterchangeIdentityDisposition.ExistingIncompatible, "The target element uses the same id with a different category; automatic merge must fail closed.", sourceCategory.ToString(), existing.Category.ToString()), items);
+                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Element, element.Id, InterchangeIdentityDisposition.ExistingIncompatible, "The target element uses the same id with a different category; automatic merge must fail closed.", element.Category.ToString(), existing.Category.ToString()), items);
                     total++; incompatibleCount++;
                 }
                 else
                 {
-                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Element, id, InterchangeIdentityDisposition.ExistingNeedsPolicy, "The target already contains this semantic element id. Geometry/provenance/property merge semantics require an explicit import policy.", sourceCategory.ToString(), existing.Category.ToString()), items);
+                    AddDetail(new InterchangeImportPreviewItem(InterchangeIdentityKind.Element, element.Id, InterchangeIdentityDisposition.ExistingNeedsPolicy, "The target already contains this semantic element id. Geometry/provenance/property merge semantics require an explicit import policy.", element.Category.ToString(), existing.Category.ToString()), items);
                     total++; policyCount++;
                 }
             }
@@ -167,14 +154,6 @@ namespace QS3D.Core.Export
             return string.Equals(left, right, StringComparison.Ordinal) ? InterchangeDrawingFingerprintRelation.Match : InterchangeDrawingFingerprintRelation.Different;
         }
 
-        private static ElementCategory ParseCategory(string? raw, string label)
-        {
-            var canonical = Required(raw, label + " category");
-            if (!Enum.TryParse<ElementCategory>(canonical, false, out var category) || !Enum.IsDefined(typeof(ElementCategory), category))
-                throw new InvalidDataException("Validated interchange " + label + " contains an unsupported category.");
-            return category;
-        }
-
         private static Dictionary<string, T> UniqueIndex<T>(IEnumerable<T> source, Func<T, string> idSelector, string label) where T : class
         {
             var result = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
@@ -195,54 +174,6 @@ namespace QS3D.Core.Export
             if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("Required identity value is not canonical: " + label + ".");
             return raw;
-        }
-
-        private static ManifestContract ParseValidatedManifest(string json)
-        {
-            try
-            {
-                var serializer = new DataContractJsonSerializer(typeof(ManifestContract), new DataContractJsonSerializerSettings { MaxItemsInObjectGraph = 1000000, UseSimpleDictionaryFormat = true });
-                using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json), false))
-                {
-                    var result = serializer.ReadObject(stream) as ManifestContract;
-                    if (result == null) throw new InvalidDataException("Validated interchange snapshot did not deserialize into an import-preview manifest.");
-                    return result;
-                }
-            }
-            catch (Exception ex) when (ex is SerializationException || ex is FormatException || ex is InvalidCastException)
-            {
-                throw new InvalidDataException("Interchange validator passed but import-preview manifest parsing failed.", ex);
-            }
-        }
-
-        [DataContract]
-        private sealed class ManifestContract
-        {
-            [DataMember(Name = "project")] public ProjectContract? Project { get; set; }
-            [DataMember(Name = "zones")] public List<IdentityContract>? Zones { get; set; }
-            [DataMember(Name = "floors")] public List<IdentityContract>? Floors { get; set; }
-            [DataMember(Name = "families")] public List<CategorizedIdentityContract>? Families { get; set; }
-            [DataMember(Name = "elements")] public List<CategorizedIdentityContract>? Elements { get; set; }
-        }
-
-        [DataContract]
-        private sealed class ProjectContract
-        {
-            [DataMember(Name = "id")] public string? Id { get; set; }
-            [DataMember(Name = "drawingFingerprint")] public string? DrawingFingerprint { get; set; }
-        }
-
-        [DataContract]
-        private sealed class IdentityContract
-        {
-            [DataMember(Name = "id")] public string? Id { get; set; }
-        }
-
-        [DataContract]
-        private sealed class CategorizedIdentityContract
-        {
-            [DataMember(Name = "id")] public string? Id { get; set; }
-            [DataMember(Name = "category")] public string? Category { get; set; }
         }
     }
 }
