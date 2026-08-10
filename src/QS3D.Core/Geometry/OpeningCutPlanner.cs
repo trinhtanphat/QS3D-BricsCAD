@@ -44,6 +44,8 @@ namespace QS3D.Core.Geometry
             var halfWidth = input.OpeningWidthM / 2d;
             var start = input.CenterAlongHostM - halfWidth;
             var end = input.CenterAlongHostM + halfWidth;
+            Finite(start, nameof(start));
+            Finite(end, nameof(end));
             if (start < 0d || end > input.HostLengthM)
                 throw new InvalidOperationException("Opening width/position extends beyond the host wall length.");
 
@@ -55,10 +57,9 @@ namespace QS3D.Core.Geometry
             var cutterDepth = Add(input.HostThicknessM, Multiply(input.ClearanceM, 2d, "opening depth clearance"), "cutter depth");
             var cutterHeight = Add(input.OpeningHeightM, Multiply(input.ClearanceM, 2d, "opening vertical clearance"), "cutter height");
             var baseElevation = input.SillHeightM - input.ClearanceM;
-            var topElevation = Add(openingTop, input.ClearanceM, "cutter top");
-            var centerElevation = (baseElevation + topElevation) / 2d;
             Finite(baseElevation, nameof(baseElevation));
-            Finite(centerElevation, nameof(centerElevation));
+            var topElevation = Add(openingTop, input.ClearanceM, "cutter top");
+            var centerElevation = Midpoint(baseElevation, topElevation, "cutter center elevation");
 
             return new OpeningCutPlan
             {
@@ -72,6 +73,14 @@ namespace QS3D.Core.Geometry
                 CenterAlongHostM = input.CenterAlongHostM,
                 CenterElevationM = centerElevation
             };
+        }
+
+        private static double Midpoint(double a, double b, string label)
+        {
+            Finite(a, label); Finite(b, label);
+            var value = a + (b - a) / 2d;
+            if (double.IsNaN(value) || double.IsInfinity(value)) throw new OverflowException(label + " overflowed.");
+            return value;
         }
 
         private static double Add(double left, double right, string label)
