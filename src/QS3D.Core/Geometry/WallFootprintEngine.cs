@@ -31,7 +31,7 @@ namespace QS3D.Core.Geometry
                 End = end;
                 var dx = end.X - start.X;
                 var dy = end.Y - start.Y;
-                Length = Math.Sqrt(dx * dx + dy * dy);
+                Length = start.DistanceTo(end);
                 Dx = dx / Length;
                 Dy = dy / Length;
                 Nx = -Dy;
