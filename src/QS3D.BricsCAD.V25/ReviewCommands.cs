@@ -35,7 +35,9 @@ namespace QS3D.BricsCAD.V25
                 int solids;
                 if (IsTktWall(category.Value))
                 {
-                    solids = WallSolidBuilder.BuildSelectedLineWalls(doc, project, category.Value);
+                    solids = category.Value == ElementCategory.WallPier
+                        ? WallPierProfileSolidBuilder.BuildSelectedLinePiers(doc, project)
+                        : WallSolidBuilder.BuildSelectedLineWalls(doc, project, category.Value);
                     solids += PolylineWallSolidBuilder.BuildSelected(doc, project, category.Value);
                 }
                 else if (StructuralSolidBuilder.Supports(category.Value)) solids = StructuralSolidBuilder.BuildSelected(doc, project, category.Value);
@@ -164,9 +166,10 @@ namespace QS3D.BricsCAD.V25
                 case ElementCategory.Stair:
                 case ElementCategory.Earthwork:
                     return "Dùng closed POLYLINE làm footprint.";
+                case ElementCategory.WallPier:
+                    return "Dùng LINE cho profile Rectangular/Chamfered của Trụ Tường; open POLYLINE vẫn dùng footprint Tường KT.";
                 case ElementCategory.ArchitecturalWall:
                 case ElementCategory.GlassWall:
-                case ElementCategory.WallPier:
                     return "Dùng LINE hoặc open plan-view POLYLINE làm tim Tường KT; bulge được tessellate trước khi tạo footprint.";
                 default:
                     return "Source CAD hiện chưa có native solid adapter.";

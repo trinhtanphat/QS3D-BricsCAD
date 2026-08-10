@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
+using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Rebar;
 using Teigha.DatabaseServices;
@@ -55,6 +56,16 @@ namespace QS3D.BricsCAD.V25.Cad
                 .ToList();
             if (elements.Count == 0) return new BeamStirrupBuildResult();
 
+            var duplicateSelectedSource = elements
+                .SelectMany(element => element.SourceHandles
+                    .Where(selectedHandles.Contains)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(handle => new { Handle = handle, Element = element.Id }))
+                .GroupBy(x => x.Handle, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group.Select(x => x.Element).Distinct(StringComparer.OrdinalIgnoreCase).Take(2).Count() > 1);
+            if (duplicateSelectedSource != null)
+                throw new InvalidOperationException("Beam source " + duplicateSelectedSource.Key + " đang thuộc nhiều QS3D element; sửa semantic ownership trước khi dựng stirrup 3D.");
+
             var ownership = GeneratedRebarOwnershipGuard.Build(project);
             var pending = new List<PendingUpdate>();
             var batchCount = 0;
@@ -89,12 +100,12 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (endCoverM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupEndCoverM phải >= 0.");
                     var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
 
-                    var dx = CadGeometryGuard.Finite(source.EndPoint.X - source.StartPoint.X, element.Id + "/beam dx");
-                    var dy = CadGeometryGuard.Finite(source.EndPoint.Y - source.StartPoint.Y, element.Id + "/beam dy");
+                    var dx = CadGeometryGuard.Subtract(source.EndPoint.X, source.StartPoint.X, element.Id + "/beam dx");
+                    var dy = CadGeometryGuard.Subtract(source.EndPoint.Y, source.StartPoint.Y, element.Id + "/beam dy");
                     var lengthDrawing = CadGeometryGuard.Hypot(dx, dy, element.Id + "/beam length");
                     if (lengthDrawing <= 1e-9d) throw new InvalidOperationException("Beam LINE quá ngắn cho stirrup 3D: " + element.Id);
-                    var zDelta = CadGeometryGuard.Finite(source.EndPoint.Z - source.StartPoint.Z, element.Id + "/beam dz");
-                    var zTolerance = CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/stirrup planarity tolerance");
+                    var zDelta = CadGeometryGuard.Subtract(source.EndPoint.Z, source.StartPoint.Z, element.Id + "/beam dz");
+                    var zTolerance = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/stirrup planarity tolerance"), element.Id + "/stirrup planarity tolerance drawing units");
                     if (Math.Abs(zDelta) > zTolerance) throw new InvalidOperationException("Beam stirrup 3D hiện yêu cầu source LINE gần ngang (|ΔZ| <= 0.005 m): " + element.Id);
 
                     var layout = BeamStirrupLayoutPlanner.Plan(new BeamStirrupLayoutInput
@@ -109,8 +120,8 @@ namespace QS3D.BricsCAD.V25.Cad
                         SpacingMm = group.SpacingMm
                     });
                     if (layout.Count > MaxStirrupsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxStirrupsPerElement + " stirrup/element.");
+                    if (batchCount > MaxStirrupsPerBatch - layout.Count) throw new InvalidOperationException("Beam stirrup 3D vượt giới hạn " + MaxStirrupsPerBatch + " stirrup/batch.");
                     batchCount = checked(batchCount + layout.Count);
-                    if (batchCount > MaxStirrupsPerBatch) throw new InvalidOperationException("Beam stirrup 3D vượt giới hạn " + MaxStirrupsPerBatch + " stirrup/batch.");
 
                     ErasePrevious(document, transaction, element, ownership);
                     var update = new PendingUpdate
@@ -124,7 +135,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     var ux = dx / lengthDrawing;
                     var uy = dy / lengthDrawing;
                     var perpendicular = new Vector3d(-uy, ux, 0d);
-                    var axis = new Vector3d(ux, uy, 0d);
                     var midX = CadGeometryGuard.Midpoint(source.StartPoint.X, source.EndPoint.X, element.Id + "/beam mid X");
                     var midY = CadGeometryGuard.Midpoint(source.StartPoint.Y, source.EndPoint.Y, element.Id + "/beam mid Y");
                     var baseZ = CadGeometryGuard.Add(source.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, bottomM, element.Id + "/BottomOffsetM"), element.Id + "/beam base Z");
@@ -134,8 +144,8 @@ namespace QS3D.BricsCAD.V25.Cad
                     foreach (var stationM in layout.StationOffsetsM)
                     {
                         var station = CadGeometryGuard.ToDrawingUnits(document, stationM, element.Id + "/stirrup station");
-                        var deltaX = CadGeometryGuard.Finite(axis.X * station, element.Id + "/stirrup station X");
-                        var deltaY = CadGeometryGuard.Finite(axis.Y * station, element.Id + "/stirrup station Y");
+                        var deltaX = CadGeometryGuard.Multiply(ux, station, element.Id + "/stirrup station X");
+                        var deltaY = CadGeometryGuard.Multiply(uy, station, element.Id + "/stirrup station Y");
                         var center = new Point3d(
                             CadGeometryGuard.Add(midX, deltaX, element.Id + "/stirrup center X"),
                             CadGeometryGuard.Add(midY, deltaY, element.Id + "/stirrup center Y"),
@@ -165,6 +175,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["GeneratedBeamStirrupNotation"] = update.Notation;
                 update.Element.Properties["GeneratedBeamStirrupMode"] = "Beam.Line.RectangularClosedLoop";
                 update.Element.ClearGeneratedBeamStirrupStale();
+                AuditTrail.ForProject(project).Record("geometry.rebar.beam.stirrup", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " stirrups");
             }
 
             var count = pending.Sum(x => x.Handles.Count);
@@ -181,17 +192,24 @@ namespace QS3D.BricsCAD.V25.Cad
             Solid3d? result = null;
             try
             {
+                radius = CadGeometryGuard.Positive(radius, label + "/radius");
                 for (var index = 1; index < loop.Count; index++)
                 {
                     var start = World(document, center, horizontal, loop[index - 1], label + "/p" + (index - 1));
                     var end = World(document, center, horizontal, loop[index], label + "/p" + index);
-                    var vector = new Vector3d(end.X - start.X, end.Y - start.Y, end.Z - start.Z);
-                    var length = Hypot3(vector.X, vector.Y, vector.Z, label + "/segment length");
+                    var dx = CadGeometryGuard.Subtract(end.X, start.X, label + "/segment dx");
+                    var dy = CadGeometryGuard.Subtract(end.Y, start.Y, label + "/segment dy");
+                    var dz = CadGeometryGuard.Subtract(end.Z, start.Z, label + "/segment dz");
+                    var length = CadGeometryGuard.Hypot3(dx, dy, dz, label + "/segment length");
                     if (length <= 1e-9d) throw new InvalidOperationException("Beam stirrup chứa segment rỗng: " + label);
-                    var overlap = Math.Min(radius * .75d, length * .1d);
-                    var unit = new Vector3d(vector.X / length, vector.Y / length, vector.Z / length);
-                    var extendedStart = new Point3d(start.X - unit.X * overlap, start.Y - unit.Y * overlap, start.Z - unit.Z * overlap);
-                    var part = Cylinder(document, extendedStart, vector, length + overlap * 2d, radius, label + "/segment" + index);
+                    var overlap = Math.Min(CadGeometryGuard.Multiply(radius, .75d, label + "/overlap radius"), CadGeometryGuard.Multiply(length, .1d, label + "/overlap length"));
+                    var unit = new Vector3d(dx / length, dy / length, dz / length);
+                    var extendedStart = new Point3d(
+                        CadGeometryGuard.Subtract(start.X, CadGeometryGuard.Multiply(unit.X, overlap, label + "/overlap X"), label + "/extended X"),
+                        CadGeometryGuard.Subtract(start.Y, CadGeometryGuard.Multiply(unit.Y, overlap, label + "/overlap Y"), label + "/extended Y"),
+                        CadGeometryGuard.Subtract(start.Z, CadGeometryGuard.Multiply(unit.Z, overlap, label + "/overlap Z"), label + "/extended Z"));
+                    var extendedLength = CadGeometryGuard.Add(length, CadGeometryGuard.Multiply(overlap, 2d, label + "/double overlap"), label + "/extended length");
+                    var part = Cylinder(document, extendedStart, unit, extendedLength, radius, label + "/segment" + index);
                     if (result == null) { result = part; continue; }
                     try { result.BooleanOperation(BooleanOperationType.BoolUnite, part); }
                     finally { part.Dispose(); }
@@ -208,8 +226,8 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             var horizontalOffset = CadGeometryGuard.ToDrawingUnits(document, sectionPoint.X, label + "/horizontal");
             var verticalOffset = CadGeometryGuard.ToDrawingUnits(document, sectionPoint.Y, label + "/vertical");
-            var deltaX = CadGeometryGuard.Finite(horizontal.X * horizontalOffset, label + "/horizontal X");
-            var deltaY = CadGeometryGuard.Finite(horizontal.Y * horizontalOffset, label + "/horizontal Y");
+            var deltaX = CadGeometryGuard.Multiply(horizontal.X, horizontalOffset, label + "/horizontal X");
+            var deltaY = CadGeometryGuard.Multiply(horizontal.Y, horizontalOffset, label + "/horizontal Y");
             return new Point3d(
                 CadGeometryGuard.Add(center.X, deltaX, label + "/X"),
                 CadGeometryGuard.Add(center.Y, deltaY, label + "/Y"),
@@ -220,9 +238,12 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             length = CadGeometryGuard.Positive(length, label + "/length");
             radius = CadGeometryGuard.Positive(radius, label + "/radius");
-            var magnitude = Hypot3(direction.X, direction.Y, direction.Z, label + "/axis magnitude");
+            var magnitude = CadGeometryGuard.Hypot3(direction.X, direction.Y, direction.Z, label + "/axis magnitude");
             if (magnitude <= 1e-12d) throw new InvalidOperationException("Beam stirrup axis không hợp lệ: " + label);
             var unit = new Vector3d(direction.X / magnitude, direction.Y / magnitude, direction.Z / magnitude);
+            var startX = CadGeometryGuard.Finite(start.X, label + "/start X");
+            var startY = CadGeometryGuard.Finite(start.Y, label + "/start Y");
+            var startZ = CadGeometryGuard.Finite(start.Z, label + "/start Z");
             var solid = new Solid3d();
             try
             {
@@ -233,25 +254,12 @@ namespace QS3D.BricsCAD.V25.Cad
                 var rotationAxis = Vector3d.ZAxis.CrossProduct(unit);
                 if (rotationAxis.Length > 1e-12d) solid.TransformBy(Matrix3d.Rotation(angle, rotationAxis, Point3d.Origin));
                 else if (unit.Z < 0d) solid.TransformBy(Matrix3d.Rotation(Math.PI, Vector3d.XAxis, Point3d.Origin));
-                solid.TransformBy(Matrix3d.Displacement(new Vector3d(start.X, start.Y, start.Z)));
+                solid.TransformBy(Matrix3d.Displacement(new Vector3d(startX, startY, startZ)));
                 var complete = solid;
                 solid = null!;
                 return complete;
             }
             finally { solid?.Dispose(); }
-        }
-
-        private static double Hypot3(double x, double y, double z, string label)
-        {
-            x = Math.Abs(CadGeometryGuard.Finite(x, label + "/x"));
-            y = Math.Abs(CadGeometryGuard.Finite(y, label + "/y"));
-            z = Math.Abs(CadGeometryGuard.Finite(z, label + "/z"));
-            var maximum = Math.Max(x, Math.Max(y, z));
-            if (maximum <= 0d) return 0d;
-            var sx = x / maximum;
-            var sy = y / maximum;
-            var sz = z / maximum;
-            return CadGeometryGuard.Finite(maximum * Math.Sqrt(sx * sx + sy * sy + sz * sz), label);
         }
 
         private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)

@@ -33,7 +33,8 @@ if builder.is_file():
         "MaxStirrupsPerElement = 1200", "MaxStirrupsPerBatch = 4000",
         "GeneratedRebarOwnershipGuard.Build(project)", "ownership.EnsureOwned(handle, element, HandlesKey)",
         'HandlesKey = "GeneratedBeamStirrupHandles"', '"Beam.Line.RectangularClosedLoop"',
-        "CadGeometryGuard.Finite(axis.X * station", "BooleanOperationType.BoolUnite",
+        "duplicateSelectedSource", "CadGeometryGuard.Multiply(ux, station", "CadGeometryGuard.Hypot3",
+        "geometry.rebar.beam.stirrup", "MaxStirrupsPerBatch - layout.Count", "BooleanOperationType.BoolUnite",
     ):
         if needle not in text: errors.append("beam-stirrup builder missing: " + needle)
 
@@ -95,4 +96,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: Beam longitudinal/stirrup and column-tie UI parity, deterministic stirrup layout, cross-set ownership, health and dependent invalidation are present.")
+print("PASS: Beam longitudinal/stirrup and column-tie UI parity, deterministic stirrup layout, duplicate-source protection, finite transforms, cross-set ownership, health and dependent invalidation are present.")

@@ -24,11 +24,17 @@ namespace QS3D.Core.Domain
         public const string GeneratedShapeRebarStateKey = "QS3D.GeneratedShapeRebar.State";
         public const string GeneratedTieRebarStateKey = "QS3D.GeneratedTieRebar.State";
         public const string GeneratedBeamStirrupStateKey = "QS3D.GeneratedBeamStirrup.State";
+        public const string GeneratedSlabMeshStateKey = "QS3D.GeneratedSlabMesh.State";
+        public const string GeneratedWallMeshStateKey = "QS3D.GeneratedWallMesh.State";
+        public const string GeneratedCurtainFrameStateKey = "QS3D.GeneratedCurtainFrame.State";
         public const string GeneratedSolidStaleSnapshotKey = "QS3D.GeneratedSolid.StaleSnapshot";
         public const string GeneratedRebarStaleSnapshotKey = "QS3D.GeneratedRebar.StaleSnapshot";
         public const string GeneratedShapeRebarStaleSnapshotKey = "QS3D.GeneratedShapeRebar.StaleSnapshot";
         public const string GeneratedTieRebarStaleSnapshotKey = "QS3D.GeneratedTieRebar.StaleSnapshot";
         public const string GeneratedBeamStirrupStaleSnapshotKey = "QS3D.GeneratedBeamStirrup.StaleSnapshot";
+        public const string GeneratedSlabMeshStaleSnapshotKey = "QS3D.GeneratedSlabMesh.StaleSnapshot";
+        public const string GeneratedWallMeshStaleSnapshotKey = "QS3D.GeneratedWallMesh.StaleSnapshot";
+        public const string GeneratedCurtainFrameStaleSnapshotKey = "QS3D.GeneratedCurtainFrame.StaleSnapshot";
 
         private const string StaleValue = "stale";
         private const string GeneratedSolidHandleKey = "GeneratedSolidHandle";
@@ -36,6 +42,9 @@ namespace QS3D.Core.Domain
         private const string GeneratedShapeRebarHandlesKey = "GeneratedShapeRebarHandles";
         private const string GeneratedTieRebarHandlesKey = "GeneratedTieRebarHandles";
         private const string GeneratedBeamStirrupHandlesKey = "GeneratedBeamStirrupHandles";
+        private const string GeneratedSlabMeshHandlesKey = "GeneratedSlabMeshHandles";
+        private const string GeneratedWallMeshHandlesKey = "GeneratedWallMeshHandles";
+        private const string GeneratedCurtainFrameHandlesKey = "GeneratedCurtainFrameHandles";
 
         public ProjectElement(string id, ElementCategory category, string familyId, string floorId, string zoneId)
         {
@@ -109,6 +118,9 @@ namespace QS3D.Core.Domain
             marked |= MarkGeneratedOutputStale(GeneratedShapeRebarHandlesKey, GeneratedShapeRebarStateKey, GeneratedShapeRebarStaleSnapshotKey);
             marked |= MarkGeneratedOutputStale(GeneratedTieRebarHandlesKey, GeneratedTieRebarStateKey, GeneratedTieRebarStaleSnapshotKey);
             marked |= MarkGeneratedOutputStale(GeneratedBeamStirrupHandlesKey, GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey);
+            marked |= MarkGeneratedOutputStale(GeneratedSlabMeshHandlesKey, GeneratedSlabMeshStateKey, GeneratedSlabMeshStaleSnapshotKey);
+            marked |= MarkGeneratedOutputStale(GeneratedWallMeshHandlesKey, GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
+            marked |= MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
             if (!marked) return;
             Properties[GeneratedGeometryStateKey] = StaleValue;
             Properties[GeneratedGeometryStaleReasonKey] = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
@@ -122,7 +134,10 @@ namespace QS3D.Core.Domain
                 IsGeneratedRebarStale() ||
                 IsGeneratedShapeRebarStale() ||
                 IsGeneratedTieRebarStale() ||
-                IsGeneratedBeamStirrupStale();
+                IsGeneratedBeamStirrupStale() ||
+                IsGeneratedSlabMeshStale() ||
+                IsGeneratedWallMeshStale() ||
+                IsGeneratedCurtainFrameStale();
             if (!stale)
             {
                 Remove(GeneratedGeometryStateKey);
@@ -136,21 +151,39 @@ namespace QS3D.Core.Domain
         public bool IsGeneratedShapeRebarStale() => IsGeneratedOutputStale(GeneratedShapeRebarHandlesKey, GeneratedShapeRebarStateKey, GeneratedShapeRebarStaleSnapshotKey);
         public bool IsGeneratedTieRebarStale() => IsGeneratedOutputStale(GeneratedTieRebarHandlesKey, GeneratedTieRebarStateKey, GeneratedTieRebarStaleSnapshotKey);
         public bool IsGeneratedBeamStirrupStale() => IsGeneratedOutputStale(GeneratedBeamStirrupHandlesKey, GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey);
+        public bool IsGeneratedSlabMeshStale() => IsGeneratedOutputStale(GeneratedSlabMeshHandlesKey, GeneratedSlabMeshStateKey, GeneratedSlabMeshStaleSnapshotKey);
+        public bool IsGeneratedWallMeshStale() => IsGeneratedOutputStale(GeneratedWallMeshHandlesKey, GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
+        public bool IsGeneratedCurtainFrameStale() => IsGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
 
         public void ClearGeneratedSolidStale() => ClearGeneratedOutputStale(GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
         public void ClearGeneratedRebarStale() => ClearGeneratedOutputStale(GeneratedRebarStateKey, GeneratedRebarStaleSnapshotKey);
         public void ClearGeneratedShapeRebarStale() => ClearGeneratedOutputStale(GeneratedShapeRebarStateKey, GeneratedShapeRebarStaleSnapshotKey);
         public void ClearGeneratedTieRebarStale() => ClearGeneratedOutputStale(GeneratedTieRebarStateKey, GeneratedTieRebarStaleSnapshotKey);
         public void ClearGeneratedBeamStirrupStale() => ClearGeneratedOutputStale(GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey);
+        public void ClearGeneratedSlabMeshStale() => ClearGeneratedOutputStale(GeneratedSlabMeshStateKey, GeneratedSlabMeshStaleSnapshotKey);
+        public void ClearGeneratedWallMeshStale() => ClearGeneratedOutputStale(GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
+        public void ClearGeneratedCurtainFrameStale() => ClearGeneratedOutputStale(GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
 
         public void ClearGeneratedGeometryStale()
         {
-            Remove(GeneratedSolidStateKey); Remove(GeneratedSolidStaleSnapshotKey);
-            Remove(GeneratedRebarStateKey); Remove(GeneratedRebarStaleSnapshotKey);
-            Remove(GeneratedShapeRebarStateKey); Remove(GeneratedShapeRebarStaleSnapshotKey);
-            Remove(GeneratedTieRebarStateKey); Remove(GeneratedTieRebarStaleSnapshotKey);
-            Remove(GeneratedBeamStirrupStateKey); Remove(GeneratedBeamStirrupStaleSnapshotKey);
-            Remove(GeneratedGeometryStateKey); Remove(GeneratedGeometryStaleReasonKey);
+            Remove(GeneratedSolidStateKey);
+            Remove(GeneratedSolidStaleSnapshotKey);
+            Remove(GeneratedRebarStateKey);
+            Remove(GeneratedRebarStaleSnapshotKey);
+            Remove(GeneratedShapeRebarStateKey);
+            Remove(GeneratedShapeRebarStaleSnapshotKey);
+            Remove(GeneratedTieRebarStateKey);
+            Remove(GeneratedTieRebarStaleSnapshotKey);
+            Remove(GeneratedBeamStirrupStateKey);
+            Remove(GeneratedBeamStirrupStaleSnapshotKey);
+            Remove(GeneratedSlabMeshStateKey);
+            Remove(GeneratedSlabMeshStaleSnapshotKey);
+            Remove(GeneratedWallMeshStateKey);
+            Remove(GeneratedWallMeshStaleSnapshotKey);
+            Remove(GeneratedCurtainFrameStateKey);
+            Remove(GeneratedCurtainFrameStaleSnapshotKey);
+            Remove(GeneratedGeometryStateKey);
+            Remove(GeneratedGeometryStaleReasonKey);
         }
 
         internal void RestorePersistenceState(ElementDirtyFlags dirty, DateTime updatedUtc)
