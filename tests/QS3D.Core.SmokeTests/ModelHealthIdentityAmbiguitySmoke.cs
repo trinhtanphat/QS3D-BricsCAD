@@ -9,11 +9,13 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
-            ComprehensiveHealthReportsAmbiguityWithoutThrowing();
+            ModelHealthReportsAmbiguityWithoutThrowing();
+            ComprehensiveHealthPreservesReportAcrossProviderFailures();
+            DependencyHealthRejectsAmbiguousTargets();
             LevelHealthReportsDuplicateLevelReferencesWithoutPendingQualification();
         }
 
-        private static void ComprehensiveHealthReportsAmbiguityWithoutThrowing()
+        private static void ModelHealthReportsAmbiguityWithoutThrowing()
         {
             var project = CorruptProject();
             var issues = new ModelHealthService().Inspect(project);
@@ -33,6 +35,22 @@ namespace QS3D.Core.SmokeTests
             HasFor(issues, "AMBIGUOUS_ZONE", "D");
             HasFor(issues, "AMBIGUOUS_HOST", "D");
             HasFor(issues, "AMBIGUOUS_DEPENDENCY", "D");
+        }
+
+        private static void ComprehensiveHealthPreservesReportAcrossProviderFailures()
+        {
+            var issues = new ComprehensiveModelHealthService().Inspect(CorruptProject());
+            Has(issues, "NULL_ELEMENT");
+            Has(issues, "DUPLICATE_FAMILY_ID");
+            HasFor(issues, "AMBIGUOUS_HOST", "D");
+            HasFor(issues, "AMBIGUOUS_DEPENDENCY", "D");
+            HasFor(issues, "BOTTOM_LEVEL_REFERENCE_AMBIGUOUS", "D");
+        }
+
+        private static void DependencyHealthRejectsAmbiguousTargets()
+        {
+            var issues = new DependencyHealthService().Inspect(CorruptProject());
+            HasFor(issues, "DEPENDENCY_TARGET_AMBIGUOUS", "D");
         }
 
         private static void LevelHealthReportsDuplicateLevelReferencesWithoutPendingQualification()
