@@ -141,8 +141,9 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                var fingerprint = document.Database.FingerprintGuid;
-                if (!string.IsNullOrWhiteSpace(fingerprint)) return fingerprint.Trim();
+                // Avoid assuming a specific managed wrapper type for FINGERPRINTGUID across TD_Mgd builds.
+                var fingerprint = Convert.ToString(document.Database.FingerprintGuid)?.Trim();
+                if (!string.IsNullOrWhiteSpace(fingerprint)) return fingerprint;
             }
             catch (Exception)
             {
