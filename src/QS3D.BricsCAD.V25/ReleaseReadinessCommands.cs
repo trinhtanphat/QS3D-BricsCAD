@@ -41,9 +41,11 @@ namespace QS3D.BricsCAD.V25
                 issues.AddRange(new GeneratedBeamStirrupHealthService().Inspect(project, liveGenerated));
                 issues.AddRange(new GeneratedSlabMeshHealthService().Inspect(project, liveGenerated));
                 issues.AddRange(new GeneratedWallMeshHealthService().Inspect(project, liveGenerated));
+                issues.AddRange(new GeneratedFoundationMeshHealthService().Inspect(project, liveGenerated));
                 issues.AddRange(new GeneratedCurtainFrameHealthService().Inspect(project, liveGenerated));
                 issues.AddRange(CurtainWallFrameLiveStateService.Inspect(document, project));
                 issues.AddRange(new GeneratedGeometryStaleHealthService().Inspect(project));
+                issues.AddRange(new GeneratedRebarModeHealthService().Inspect(project));
                 issues.AddRange(BomReleaseGuardService.Inspect(project, liveGenerated));
                 issues = issues
                     .GroupBy(x => x.Code + "\n" + x.ElementId + "\n" + x.Message, StringComparer.Ordinal)
