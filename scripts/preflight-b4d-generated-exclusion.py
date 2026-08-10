@@ -18,11 +18,13 @@ if review.is_file():
     text = review.read_text(encoding="utf-8")
     for needle in (
         "CollectGeneratedHandles(project)",
-        "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)",
+        "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
         "snapshots.Where(x => !generatedHandles.Contains(x.Handle))",
     ):
         if needle not in text:
-            errors.append("ReviewCommands missing future-proof generated-source exclusion: " + needle)
+            errors.append("ReviewCommands missing canonical generated-source exclusion: " + needle)
+    if "property.Value.Split" in text[text.find("private static HashSet<string> CollectGeneratedHandles"):]:
+        errors.append("B4D must not duplicate owner-handle parsing after the Core policy exposes CollectOwnerHandles.")
 
 if adapter_policy.is_file():
     text = adapter_policy.read_text(encoding="utf-8")
@@ -45,6 +47,7 @@ if core_policy.is_file():
         'normalized.EndsWith("Handles"',
         "EnumerateOwnerHandles",
         "CollectOwnerHandles",
+        "TryFindOwner",
     ):
         if needle not in text:
             errors.append("Core GeneratedHandleOwnershipPolicy missing owner-slot contract: " + needle)
@@ -59,4 +62,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DB4D excludes generated owner-slot handles through the shared Core ownership contract; adapter code no longer duplicates classification semantics.")
+print("PASS: QS3DB4D excludes generated owner-slot handles using Core CollectOwnerHandles; selection and adapter code consume the same canonical classification/parsing contract.")
