@@ -7,10 +7,18 @@ errors = []
 
 required = [
     "src/QS3D.Core/Geometry/CurtainWallLayoutPlanner.cs",
+    "src/QS3D.Core/Geometry/CurtainWallDetailPlanner.cs",
     "src/QS3D.Core/Services/SemanticRegenerators.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs",
     "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs",
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedCurtainFrameOwnershipGuard.cs",
+    "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs",
+    "src/QS3D.BricsCAD.V25/CurtainWallFrameCommands.cs",
+    "src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs",
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
     "tests/QS3D.Core.SmokeTests/CurtainWallLayoutSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/CurtainWallDetailSmoke.cs",
     "tests/QS3D.Core.SmokeTests/CurtainWallRegeneratorSmoke.cs",
     "tests/QS3D.Core.SmokeTests/CurtainWallRegeneratorRegistration.cs",
     "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs",
@@ -38,6 +46,15 @@ checks = {
         "is not positive after frame deductions",
         "Value must be finite",
     ],
+    "src/QS3D.Core/Geometry/CurtainWallDetailPlanner.cs": [
+        "CurtainWallDetailPlanner",
+        "CurtainWallLayoutPlanner.Plan(input)",
+        "VerticalFrames",
+        "HorizontalFrames",
+        "Panels",
+        "MaxDetailSolids = 20000",
+        "panel area does not match the layout clear-glass area",
+    ],
     "src/QS3D.Core/Services/SemanticRegenerators.cs": [
         "element.Category == ElementCategory.GlassWall",
         "CurtainWallLayoutPlanner.Plan",
@@ -52,6 +69,12 @@ checks = {
         '"CurtainNetGlassAreaM2"',
         '"CurtainFrameFaceAreaM2"',
         "SubtractFloorZero(curtain.ClearGlassAreaM2, openingArea",
+    ],
+    "src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs": [
+        "CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT",
+        "CURTAIN_FRAME_GENERATED_SOLID_MISSING",
+        "CURTAIN_FRAME_GRID_COUNT_MISMATCH",
+        "element.IsGeneratedCurtainFrameStale()",
     ],
     "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs": [
         "case ElementCategory.GlassWall:",
@@ -73,7 +96,43 @@ checks = {
         'EnsureDefault(family, "CurtainPerimeterFrameWidthM", "0.05")',
         'EnsureDefault(family, "CurtainMullionWidthM", "0.05")',
         'EnsureDefault(family, "CurtainTransomWidthM", "0.05")',
+        'EnsureDefault(family, "CurtainFrameDepthM", "0.05")',
         'EnsureDefault(family, "CurtainFrameMaterial", "Nhôm")',
+    ],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedCurtainFrameOwnershipGuard.cs": [
+        'HandlesKey = "GeneratedCurtainFrameHandles"',
+        "EnsureOwned",
+        "Refusing destructive erase",
+        'ReserveProperty(owners, element, "GeneratedSlabMeshHandles")',
+        'ReserveProperty(owners, element, "GeneratedWallMeshHandles")',
+    ],
+    "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs": [
+        "CurtainWallDetailPlanner.Plan",
+        "MaxFramesPerElement = 4096",
+        "MaxFramesPerBatch = 8192",
+        "GeneratedCurtainFrameOwnershipGuard.Build(project)",
+        "ownership.EnsureOwned(handle, element)",
+        'GeneratedCurtainFrameMode"] = Mode',
+        "ClearGeneratedCurtainFrameStale",
+        "CreateBox",
+        "GetObject(ids[0], OpenMode.ForWrite",
+        "Refusing destructive erase",
+    ],
+    "src/QS3D.BricsCAD.V25/CurtainWallFrameCommands.cs": [
+        'CommandMethod("QS3DCURTAINFRAMES3D"',
+        "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls",
+    ],
+    "src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs": [
+        'CommandMethod("QS3DCURTAIN3D"',
+        "WallSolidBuilder.BuildSelectedLineWalls",
+        "PolylineWallSolidBuilder.BuildSelected",
+        "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls",
+    ],
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": [
+        'CommandMethod("QS3DBUILD3D"',
+        "category.Value == ElementCategory.GlassWall",
+        "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls",
+        "detailSolids = curtain.Frames",
     ],
     "tests/QS3D.Core.SmokeTests/CurtainWallLayoutSmoke.cs": [
         "UniformGridProducesStableQuantities",
@@ -83,6 +142,11 @@ checks = {
         "FrameFaceAreaM2",
         "16.3875d",
         "33d",
+    ],
+    "tests/QS3D.Core.SmokeTests/CurtainWallDetailSmoke.cs": [
+        "DetailGridMatchesClearGlassArea",
+        "SinglePanelKeepsOnlyPerimeterFrames",
+        "NativeDetailCapRejectsHugeGrid",
     ],
     "tests/QS3D.Core.SmokeTests/CurtainWallRegeneratorSmoke.cs": [
         "GlassWallProducesCurtainQuantitiesAndOpeningDeduction",
@@ -95,6 +159,7 @@ checks = {
     ],
     "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs": [
         "CurtainWallLayoutSmoke.Run();",
+        "CurtainWallDetailSmoke.Run();",
     ],
 }
 
@@ -123,4 +188,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: curtain-wall panel/frame planning, generic and dedicated GlassWall family defaults, opening-aware semantic quantities and deterministic smoke coverage are present without duplicate planner/registration APIs.")
+print("PASS: curtain-wall panel/frame planning, GlassWall defaults/quantities, guarded mullion/transom Solid3d ownership+health and both dedicated/common Build3D workflows are present without duplicate planner APIs.")
