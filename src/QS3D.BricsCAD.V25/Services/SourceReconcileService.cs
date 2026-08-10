@@ -59,7 +59,13 @@ namespace QS3D.BricsCAD.V25.Services
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
                     var invalidation = GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets);
-                    var units = CadUnitService.GetPolicy(document);
+                    if (!CadUnitService.TryGetPolicy(document, out var units, out var unitResolution))
+                        throw new InvalidOperationException("Drawing units are unresolved. Run QS3DUNITS before source reconcile.");
+                    DrawingUnitResolutionPolicy.BindQuantityUnit(
+                        project.Metadata,
+                        project.Elements.Count > 0,
+                        unitResolution.Unit,
+                        unitResolution.Source);
                     foreach (var target in targets)
                         RefreshSourceDerivedState(project, target.Element, target.Snapshot, units);
 

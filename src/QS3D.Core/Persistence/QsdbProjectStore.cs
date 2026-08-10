@@ -305,9 +305,10 @@ namespace QS3D.Core.Persistence
         private static void ValidateOptionalCanonicalValue(string? value, string label)
         {
             if (string.IsNullOrEmpty(value)) return;
-            if (string.IsNullOrWhiteSpace(value))
+            var canonical = value!;
+            if (string.IsNullOrWhiteSpace(canonical))
                 throw new InvalidDataException("QSDB " + label + " must not be whitespace.");
-            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+            if (!string.Equals(canonical, canonical.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + label + " must not contain leading/trailing whitespace.");
         }
 

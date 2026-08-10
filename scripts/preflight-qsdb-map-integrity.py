@@ -16,7 +16,7 @@ if store.is_file():
     for needle in (
         "if (target.ContainsKey(key))",
         "Duplicate QSDB map key",
-        "target[key] = Value(item, \"value\")",
+        "target[key] = RawValue(item, \"value\")",
     ):
         if needle not in text:
             errors.append("QsdbProjectStore missing duplicate-map guard: " + needle)

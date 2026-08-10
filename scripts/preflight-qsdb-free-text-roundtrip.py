@@ -20,7 +20,7 @@ if SOURCE.is_file():
         'Detail = RawValue(item, "detail")',
         'Actor = RawValue(item, "actor")',
         'CorrelationId = RawValue(item, "correlationId")',
-        'FamilyId =',
+        'new ProjectElement(Required(item, "id"), category, Value(item, "familyId")',
         'private static string Value(XElement element, string attribute) => element.Attribute(attribute)?.Value?.Trim() ?? string.Empty;',
     ):
         if token not in text:

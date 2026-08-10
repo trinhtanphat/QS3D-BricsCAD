@@ -82,6 +82,7 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Style="{StaticResource ProjectMetric}">
                                 <StackPanel>
@@ -100,12 +101,19 @@
                             </Border>
                             <Border Grid.Column="2" Style="{StaticResource ProjectMetric}">
                                 <StackPanel>
+                                    <TextBlock Text="DRAWING UNIT" Style="{StaticResource Caption}"/>
+                                    <TextBlock x:Name="UnitText" Text="—" FontWeight="SemiBold"
+                                               FontSize="12" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="3" Style="{StaticResource ProjectMetric}">
+                                <StackPanel>
                                     <TextBlock Text="FAMILY" Style="{StaticResource Caption}"/>
                                     <TextBlock x:Name="FamilyCountText" Text="0" FontWeight="SemiBold"
                                                FontSize="16" Foreground="{StaticResource AccentHoverBrush}" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="3" Style="{StaticResource ProjectMetric}">
+                            <Border Grid.Column="4" Style="{StaticResource ProjectMetric}">
                                 <StackPanel>
                                     <TextBlock Text="CẤU KIỆN" Style="{StaticResource Caption}"/>
                                     <TextBlock x:Name="ElementCountText" Text="0" FontWeight="SemiBold"
@@ -127,6 +135,7 @@
                             <Button Content="Family Manager" Tag="QS3DFAMILIES" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
                             <Button Content="Material Catalog" Tag="QS3DMATERIALS" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
                             <Button Content="Đồng bộ source CAD đã sửa" Tag="QS3DSYNCSOURCE" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Đơn vị bản vẽ / Drawing Unit" Tag="QS3DUNITS" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
                             <Button Content="Xuất Semantic Snapshot JSON" Tag="QS3DINTERCHANGEJSON" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Kiểm tra Semantic Snapshot JSON" Tag="QS3DINTERCHANGEVALIDATE" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Xuất bảng vật liệu" Tag="QS3DMATERIALXLSX" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
