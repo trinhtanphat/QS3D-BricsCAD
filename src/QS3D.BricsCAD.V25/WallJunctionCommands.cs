@@ -50,7 +50,7 @@ namespace QS3D.BricsCAD.V25
                 if (nodes.Count > 100) document.Editor.WriteMessage("\n  … output truncated; total nodes=" + nodes.Count.ToString(CultureInfo.InvariantCulture));
                 AuditTrail.ForProject(project).Record("wall.junction.analyze", string.Empty, summary + " • sourceSegments=" + segments.Count.ToString(CultureInfo.InvariantCulture));
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DWALLJUNCTIONS lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);

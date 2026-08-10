@@ -172,6 +172,8 @@ if geometry.exists():
     text = geometry.read_text(encoding="utf-8")
     if "as Solid3d" not in text: errors.append("generated geometry cleanup must only erase tracked Solid3d objects")
     if "CommitReplacement" not in text or "PrepareReplacement" not in text: errors.append("generated geometry must use two-phase CAD/metadata replacement")
+    for needle in ("ExtendedDataRegAppName", "GetXDataForApplication", "RequireMatchingOwnership", "GeneratedSolidOwnerProjectId", "GeneratedSolidOwnerElementId"):
+        if needle not in text: errors.append("generated geometry XData ownership guard missing: " + needle)
     prepare = text.split("public static void CommitReplacement", 1)[0]
     if "element.Properties.Remove" in prepare: errors.append("generated metadata must not mutate before CAD transaction commit")
 for rel in ("src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs", "src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs"):
@@ -185,7 +187,7 @@ for rel in ("src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs", "src/QS3D.BricsCAD.
 health = ROOT / "src/QS3D.Core/Diagnostics/ModelHealthService.cs"
 if health.exists():
     text = health.read_text(encoding="utf-8")
-    for needle in ("ValidateDimensions", "liveGeneratedSolidHandles", "GENERATED_SOLID_MISSING", "DUPLICATE_GENERATED_HANDLE", "GENERATED_HANDLE_IN_SOURCE"):
+    for needle in ("ValidateDimensions", "liveGeneratedSolidHandles", "GENERATED_SOLID_MISSING", "DUPLICATE_GENERATED_HANDLE", "GENERATED_HANDLE_IN_SOURCE", "GENERATED_OWNERSHIP_MISSING", "GENERATED_PROJECT_MISMATCH", "GENERATED_ELEMENT_MISMATCH"):
         if needle not in text: errors.append("Model Health integrity guard missing: " + needle)
 
 context = ROOT / "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs"
@@ -193,6 +195,7 @@ if context.exists():
     text = context.read_text(encoding="utf-8")
     if "Dictionary<Document, ProjectState>" not in text: errors.append("project cache must use Document identity so Save As cannot orphan in-memory project state")
     if "SyncDrawingIdentity" not in text: errors.append("project cache must synchronize drawing identity after Save As")
+    if "Database.FingerprintGuid" not in text or "drawing identity mismatch" not in text: errors.append("project cache must bind persisted Handles to the live DWG fingerprint and fail closed on mismatch")
     if "SafeFileStem" not in text: errors.append("unsaved drawing project path must sanitize the local filename")
     if "GetKey(Document" in text: errors.append("project cache must not key live documents by mutable document.Name")
 selection_sync = ROOT / "src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs"
