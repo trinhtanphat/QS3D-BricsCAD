@@ -2,6 +2,20 @@
 
 This note records source-level work completed after the earlier implementation-status snapshot. It intentionally separates repository implementation from licensed BricsCAD V25/private-DWG runtime proof.
 
+## Room / HT_Phòng lifecycle integrity
+
+- Room finish identity is centralized through `RoomFinishIdentityService`; duplicate canonical/legacy finish ownership fails closed across BQ, Material Usage and HT_Phòng Schedule instead of being counted twice.
+- Room provenance is centralized through `AutoRoomLifecycle.ResolveRoomReferenceId` and supports canonical `RoomSourceId`, legacy aliases and Room dependencies while rejecting conflicting Room ids.
+- `RoomFinishSynchronizationService` is the shared Room -> finish update contract used by `GenerateRoomFinishes` and `SyncExistingRoomFinishes`; the BricsCAD adapter no longer owns a second metric-copy implementation.
+- Existing legacy finish synchronization repairs `RoomSourceId`, keeps exactly one Room dependency, preserves unrelated dependencies and synchronizes Floor/Zone/DWG fingerprint.
+- `AreaM2`, `PerimeterM`, `HeightM`, `OpeningAreaM2` and `DoorWidthM` are copied from valid Room semantic data using invariant finite/non-negative parsing. If a Room metric disappears, the old finish metric is removed rather than retained, preventing stale opening/skirting deductions after topology or explicit semantic edits.
+- Both single-finish and batch-finish synchronization are project-state transactional. A parse/provenance/identity failure restores earlier mutations rather than leaving a half-synchronized project.
+- Stale AutoRoom cannot be used as a refresh source. A split/merge that creates a new Room does not guess that old finishes should move to the new Room; stale/orphan state remains visible for explicit repair/regeneration.
+- `RoomFinishHealthService`, `QS3DROOMFINISHHEALTH`, `QS3DHEALTHALL` and `BomReleaseGuardService` surface unlinked/orphan/wrong-parent/cross-scope/stale/conflicting/duplicate Room finish states.
+- Property-only legacy finishes can trace back through Room provenance to Room boundary/source handles for Locate/BOM traceability.
+
+Regression/static coverage now includes `RoomFinishSynchronizationSmoke`, single-sync atomic rollback, batch rollback after an earlier finish mutation, and duplicate Room-dependency repair.
+
 ## Curtain wall / openings
 
 - GlassWall LINE `QS3DBUILD3D` uses the same native curtain-frame overlay path as the dedicated curtain commands.
@@ -21,6 +35,15 @@ This note records source-level work completed after the earlier implementation-s
 - Auto-recognition no longer swallows failed captures. Each failed auto-apply is counted, written to the editor and recorded as a `recognition.skip` audit event.
 - B4D generated-output exclusion remains driven by the shared generated-owner policy rather than a hard-coded legacy output list.
 
+## Direct Draw P0 audit
+
+- `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWCOLUMN` and `QS3DDRAWSLAB` already use an atomic source -> semantic capture -> semantic regenerate -> native 3D builder path.
+- Failure cleanup discovers generated output through both semantic owner slots and owned CAD/XData, requires matching generated ownership before destructive erase, erases the newly-created source, restores the project snapshot and verifies no cleanup handles remain live.
+- Direct Draw is Model-Space-only and source path input is limited to a 5 mm planarity tolerance before native builders run.
+- Family/instance dimensions are validated as finite/positive where required; invalid existing Family values fail closed rather than being silently replaced.
+- Current source still requires a real rotated-UCS qualification before release. BricsCAD V25 exposes `Editor.CurrentUserCoordinateSystem` as a `Matrix3d`, while current source creation directly appends prompt coordinates. The audited implementation target is: keep prompt/planarity coordinates in current UCS, transform source entities to WCS/database coordinates before append, support planar rotated/translated UCS, and fail closed for tilted UCS until native builders are explicitly generalized/tested.
+- This UCS item remains a source/runtime blocker and must not be described as completed until the code change is merged and exercised in BricsCAD V25.
+
 ## Generated-output stale semantics
 
 - Generated host solid, longitudinal/shape/tie/stirrup rebar, slab mesh, wall mesh, foundation mesh and curtain frames use per-output stale snapshots.
@@ -34,6 +57,7 @@ This note records source-level work completed after the earlier implementation-s
 - Inherited Family consumers are dirtied/staled when a referenced material is renamed; true instance overrides remain unchanged.
 - A custom material cannot be deleted while any Family or Instance still references it.
 - Modeless Material Catalog and Level Picker windows are bound to the `Document` that opened them. Selection-mutating operations require that same DWG to be active, preventing cross-DWG edits after switching MDI tabs.
+- HT_Phòng Material Usage follows the same domain quantity precedence as Room Finish Schedule (`NetFinishAreaM2`/`SideAreaM2`, `BottomAreaM2`, `TopAreaM2`, `SkirtingLengthM`) rather than silently preferring a stale legacy `AreaM2`.
 
 ## Modeless multi-DWG safety
 
@@ -41,6 +65,14 @@ This note records source-level work completed after the earlier implementation-s
 - Rebar Mesh Setup re-resolves its semantic element by ID at save time, so a modeless window cannot mutate a detached `ProjectElement` after project reload/replacement.
 - Quantity, BBS, Revision, Door/Opening and Room-Finish review windows keep their locate/recalculate/export operations on the source DWG and fail closed when a different MDI document is active.
 - Static preflight contracts guard the drawing-affinity behavior so future UI refactors cannot silently restore cross-DWG mutations.
+
+## UI / HiDPI source hardening
+
+- The shared dark theme uses system Segoe UI, `UseLayoutRounding`, device-pixel snapping and display text formatting; no proprietary BLT assets/fonts are copied.
+- Keyboard focus is explicit for buttons and editors, and large Tree/List/DataGrid controls use recycling/row/column virtualization where supported.
+- The current premium-dark palette refinement preserved those focus/HiDPI/virtualization guards while increasing contrast and hierarchy.
+- Right-panel Layer/Xref data remains live BricsCAD data; layer color/lock state is read from the DWG instead of displaying a decorative fixed-color swatch as if it were native state.
+- `scripts/preflight-ui-hidpi.py` protects the source-level focus/virtualization/live-layer contract, but screenshot/DPI acceptance still requires a real V25 session.
 
 ## Generated handle ownership
 
@@ -71,13 +103,15 @@ This note records source-level work completed after the earlier implementation-s
 
 - Main GitHub Actions workflows remain manual-only (`workflow_dispatch`).
 - No GitHub Actions workflow was dispatched as part of this continue-all batch.
-- Source preflights were extended for curtain opening/live-state behavior, generated stale semantics, modeless document affinity, provenance-safe ownership, Build3D/recognition safety, project-context lifecycle and release-readiness.
-- `scripts/preflight-all.py` discovers the `preflight-*.py` contracts, including the newly added review-workflow and project-context gates.
+- Source preflights were extended for curtain opening/live-state behavior, generated stale semantics, modeless document affinity, provenance-safe ownership, Build3D/recognition safety, project-context lifecycle, Room/HT_Phòng integrity, schedule arithmetic, UI HiDPI/focus and release-readiness.
+- `scripts/preflight-all.py` discovers the `preflight-*.py` contracts.
+- The current remote source review does **not** claim a fresh local aggregate-preflight/Core build/V25 compile. The execution container previously could not resolve `github.com`; current final-head compile/runtime proof remains pending.
 
 ## Remaining gates that must not be claimed from remote source review alone
 
 - Exact compile against the installed BricsCAD V25 `BrxMgd.dll` / `TD_Mgd.dll` set.
 - Real NETLOAD/DemandLoad, Ribbon/palette interaction and V25 command execution.
+- Direct Draw rotated/translated UCS qualification after the source WCS-transform path is implemented; tilted/3D UCS remains unsupported until native builders are generalized and proven.
 - Private-DWG save/reopen, multi-DWG, opening/curtain, wall-junction, structure/BQ/BBS/rebar regression.
 - Unicode/HiDPI and screenshot-based UI parity review on real BricsCAD V25.
 - Production certificate possession/signing operation and production licensing/updater backend operations.
