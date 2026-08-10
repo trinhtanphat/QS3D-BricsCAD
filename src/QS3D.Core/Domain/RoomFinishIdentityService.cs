@@ -54,6 +54,21 @@ namespace QS3D.Core.Domain
             return distinct.Count == 1 ? distinct[0] : null;
         }
 
+        public static void ValidateProject(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            foreach (var finish in project.Elements
+                .Where(x => AutoRoomLifecycle.IsRoomFinishCategory(x.Category))
+                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, finish);
+                if (roomId.Length == 0) continue;
+                var room = project.FindElement(roomId);
+                if (room == null || room.Category != ElementCategory.Room) continue;
+                FindExisting(project, room, finish.Category);
+            }
+        }
+
         private static void EnsureFinishCategory(ElementCategory category)
         {
             if (!AutoRoomLifecycle.IsRoomFinishCategory(category))
