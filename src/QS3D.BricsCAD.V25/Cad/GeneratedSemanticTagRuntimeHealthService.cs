@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -98,7 +99,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var builtText = Property(element, GeneratedSemanticTagHealthService.TextKey);
             if (builtText.Length > 0)
             {
-                var expectedContents = SemanticTagBuilder.EncodePlainMText(builtText);
+                var expectedContents = EncodePlainMText(builtText);
                 if (!string.Equals(tag.Contents ?? string.Empty, expectedContents, StringComparison.Ordinal))
                 {
                     issues.Add(new ModelHealthIssue(
@@ -108,6 +109,27 @@ namespace QS3D.BricsCAD.V25.Cad
                         element.Id));
                 }
             }
+        }
+
+        private static string EncodePlainMText(string value)
+        {
+            var text = value ?? string.Empty;
+            var output = new StringBuilder(text.Length + 16);
+            for (var index = 0; index < text.Length; index++)
+            {
+                var ch = text[index];
+                if (ch == '\r')
+                {
+                    if (index + 1 < text.Length && text[index + 1] == '\n') index++;
+                    output.Append("\\P");
+                }
+                else if (ch == '\n') output.Append("\\P");
+                else if (ch == '\\') output.Append("\\\\");
+                else if (ch == '{') output.Append("\\{");
+                else if (ch == '}') output.Append("\\}");
+                else output.Append(ch);
+            }
+            return output.ToString();
         }
 
         private static void AddMissing(ProjectElement element, string handle, ICollection<ModelHealthIssue> issues)
