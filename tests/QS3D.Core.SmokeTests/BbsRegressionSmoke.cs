@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RebarWeightRejectsNonFiniteValues();
+            MalformedCompoundNotationRejected();
             ScheduleRejectsArithmeticOverflow();
             SpacingRejectsArithmeticOverflow();
             AggregateRejectsOverflow();
@@ -24,6 +25,14 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => RebarWeight.KilogramsPerMeter(double.NaN));
             Throws<ArgumentOutOfRangeException>(() => RebarWeight.TotalKilograms(16d, double.PositiveInfinity));
             Throws<OverflowException>(() => RebarWeight.KilogramsPerMeter(double.MaxValue));
+        }
+
+        private static void MalformedCompoundNotationRejected()
+        {
+            Throws<FormatException>(() => RebarNotationParser.Parse("2D10++2D12"));
+            Throws<FormatException>(() => RebarNotationParser.Parse("+2D10"));
+            Throws<FormatException>(() => RebarNotationParser.Parse("2D10+"));
+            Equal(2, RebarNotationParser.Parse("2D10+2D12").Count);
         }
 
         private static void ScheduleRejectsArithmeticOverflow()
