@@ -3,11 +3,38 @@ param(
     [Parameter(Mandatory = $true)][string]$PluginDll,
     [string]$Profile = "",
     [string]$ArtifactDir = "",
-    [int]$StartupTimeoutSeconds = 120
+    [ValidateRange(10, 900)][int]$StartupTimeoutSeconds = 120
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+function Read-Qs3dRuntimeMarker {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $marker = @{}
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $separator = $line.IndexOf('=')
+        if ($separator -le 0) { throw "Malformed runtime marker line: $line" }
+        $key = $line.Substring(0, $separator).Trim()
+        $value = $line.Substring($separator + 1).Trim()
+        if ($marker.ContainsKey($key)) { throw "Duplicate runtime marker key: $key" }
+        $marker[$key] = $value
+    }
+    return $marker
+}
+
+function Require-Qs3dMarkerValue {
+    param(
+        [Parameter(Mandatory = $true)]$Marker,
+        [Parameter(Mandatory = $true)][string]$Key,
+        [Parameter(Mandatory = $true)][string]$Expected
+    )
+    if (-not $Marker.ContainsKey($Key)) { throw "Runtime marker is missing '$Key'." }
+    if (-not [string]::Equals([string]$Marker[$Key], $Expected, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Runtime marker '$Key' expected '$Expected' but was '$($Marker[$Key])'."
+    }
+}
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw "BricsCAD V25 runtime test requires Windows."
@@ -87,12 +114,18 @@ try {
         throw "Timed out waiting for NETLOAD + QS3DRUNTIMEPROBE after $StartupTimeoutSeconds seconds."
     }
 
-    $resultText = Get-Content -LiteralPath $resultPath -Raw
-    if ($resultText -notmatch '(?m)^status=PASS\s*$') {
-        throw "Runtime probe did not report PASS. Result: $resultText"
-    }
-    if ($resultText -notmatch '(?m)^command=QS3DRUNTIMEPROBE\s*$') {
-        throw "Runtime marker did not prove the in-host QS3DRUNTIMEPROBE command executed."
+    $marker = Read-Qs3dRuntimeMarker -Path $resultPath
+    Require-Qs3dMarkerValue -Marker $marker -Key "status" -Expected "PASS"
+    Require-Qs3dMarkerValue -Marker $marker -Key "command" -Expected "QS3DRUNTIMEPROBE"
+    Require-Qs3dMarkerValue -Marker $marker -Key "process" -Expected "bricscad"
+    Require-Qs3dMarkerValue -Marker $marker -Key "is_64bit" -Expected "true"
+    Require-Qs3dMarkerValue -Marker $marker -Key "ribbon_ready" -Expected "true"
+    Require-Qs3dMarkerValue -Marker $marker -Key "palette_visible" -Expected "true"
+
+    if (-not $marker.ContainsKey("assembly")) { throw "Runtime marker is missing 'assembly'." }
+    $loadedAssembly = [IO.Path]::GetFullPath([string]$marker["assembly"])
+    if (-not [string]::Equals($loadedAssembly, $PluginDll, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Runtime marker came from a different plugin DLL. Expected '$PluginDll', loaded '$loadedAssembly'."
     }
 
     $windowDeadline = (Get-Date).AddSeconds(30)
@@ -161,6 +194,8 @@ public static class QS3DWin32Capture {
         profile = $Profile
         runner_user = [Environment]::UserName
         interactive = [Environment]::UserInteractive
+        ribbon_ready = $true
+        palette_visible = $true
     }
     $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 

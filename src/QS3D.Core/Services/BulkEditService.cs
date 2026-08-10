@@ -25,6 +25,7 @@ namespace QS3D.Core.Services
         public int AssignFamily(ProjectState project, IEnumerable<string> elementIds, string familyId)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             var family = project.FindFamily(familyId) ?? throw new KeyNotFoundException("Unknown family: " + familyId);
             var count = 0;
             foreach (var id in elementIds)

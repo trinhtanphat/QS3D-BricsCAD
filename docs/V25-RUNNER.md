@@ -21,7 +21,7 @@ Download the official BricsCAD V25 x64 MSI with the licensed Bricsys account use
 .\scripts\install-bricscad-v25.ps1 -MsiPath "D:\Installers\BricsCAD-V25.x.xx-x-en_US(x64).msi"
 ```
 
-The helper performs a quiet MSI installation only. Licensing is intentionally not automated or stored by this repository.
+The helper verifies SHA-256, requires a valid Authenticode signature from a Bricsys signer by default, and then performs a quiet MSI installation. When a trusted download source publishes an expected SHA-256, pass it explicitly with `-ExpectedSha256` for an additional integrity check. `-AllowUntrustedPublisher` exists only for an intentional offline/certificate-chain exception and should not be used to bypass an unknown installer. Licensing is intentionally not automated or stored by this repository.
 
 After installation:
 
@@ -61,18 +61,18 @@ Do **not** create repository files containing vendor DLLs, installers, or licens
 7. start real BricsCAD V25 and run a startup `.scr` file;
 8. execute `NETLOAD` against the newly built `QS3D.BricsCAD.V25.dll`;
 9. execute the in-host `QS3DRUNTIMEPROBE` command;
-10. require a `status=PASS` marker written from inside BricsCAD;
+10. require a `status=PASS` marker proving the expected plugin DLL is loaded in 64-bit BricsCAD and both QS3D ribbon and palette initialization succeeded;
 11. bring the BricsCAD window to the foreground and capture `bricscad-v25-qs3d.png`;
 12. upload the plugin DLLs and the complete runtime-evidence directory.
 
 The runtime evidence artifact contains, when successful:
 
-- `runtime-result.txt` — proves the plugin command executed inside BricsCAD;
+- `runtime-result.txt` — proves the expected plugin command executed inside BricsCAD and records the runtime invariants;
 - `runtime-metadata.json` — host/plugin version, SHA-256, runner and timing metadata;
 - `runtime.scr` — exact NETLOAD command script used for the test;
 - `bricscad-v25-qs3d.png` — screenshot of the real BricsCAD V25 window with QS3D requested visible.
 
-A build-only success is not a runtime success. Gate D is PASS only when the in-host marker and screenshot are both produced.
+A build-only success is not a runtime success. Gate D is PASS only when the in-host marker and screenshot are both produced and the marker validates the expected DLL, x64 host, ribbon, and palette state.
 
 ## Current status
 

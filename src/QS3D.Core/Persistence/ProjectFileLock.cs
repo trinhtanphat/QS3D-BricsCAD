@@ -21,9 +21,13 @@ namespace QS3D.Core.Persistence
         {
             if (string.IsNullOrWhiteSpace(projectPath)) throw new ArgumentException("Project path is required.", nameof(projectPath));
             var lockPath = Path.GetFullPath(projectPath) + ".lock";
+            var directory = Path.GetDirectoryName(lockPath);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+
+            FileStream? stream = null;
             try
             {
-                var stream = new FileStream(lockPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+                stream = new FileStream(lockPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
                 var payload = Encoding.UTF8.GetBytes("pid=" + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture) + "\nutc=" + DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
                 stream.Write(payload, 0, payload.Length);
                 stream.Flush();
@@ -31,7 +35,13 @@ namespace QS3D.Core.Persistence
             }
             catch (IOException ex)
             {
-                throw new InvalidOperationException("QS3D project is already opened by another writer: " + lockPath, ex);
+                stream?.Dispose();
+                throw new InvalidOperationException("Unable to acquire exclusive QS3D project write lock: " + lockPath, ex);
+            }
+            catch
+            {
+                stream?.Dispose();
+                throw;
             }
         }
 
@@ -41,7 +51,9 @@ namespace QS3D.Core.Persistence
             if (stream == null) return;
             _stream = null;
             stream.Dispose();
-            try { File.Delete(_lockPath); } catch (IOException) { }
+            try { File.Delete(_lockPath); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 }

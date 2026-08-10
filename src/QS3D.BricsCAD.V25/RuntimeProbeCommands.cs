@@ -21,8 +21,11 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                if (!Environment.Is64BitProcess) throw new InvalidOperationException("QS3D BricsCAD V25 runtime must be 64-bit.");
                 PaletteCoordinator.Show();
                 var ribbonReady = RibbonBootstrapper.TryInitialize();
+                if (!ribbonReady) throw new InvalidOperationException("QS3D ribbon initialization did not complete.");
+
                 var process = Process.GetCurrentProcess();
                 var assembly = typeof(RuntimeProbeCommands).Assembly;
                 var hostVersion = "unknown";
@@ -39,11 +42,11 @@ namespace QS3D.BricsCAD.V25
                     "process=" + process.ProcessName,
                     "host_file_version=" + hostVersion,
                     "clr=" + Environment.Version,
-                    "is_64bit=" + Environment.Is64BitProcess,
+                    "is_64bit=true",
                     "assembly=" + assembly.Location,
                     "assembly_version=" + (assembly.GetName().Version?.ToString() ?? "unknown"),
-                    "ribbon_ready=" + ribbonReady,
-                    "palette_requested=true"
+                    "ribbon_ready=true",
+                    "palette_visible=true"
                 });
 
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nQS3D runtime probe PASS. Marker: " + resultPath);

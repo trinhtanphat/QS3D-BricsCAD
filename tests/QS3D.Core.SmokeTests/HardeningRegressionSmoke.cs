@@ -1,7 +1,14 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Xml;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
+using QS3D.Core.Formulas;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using QS3D.Core.Services;
 
@@ -15,6 +22,12 @@ namespace QS3D.Core.SmokeTests
             RebarSpacingRequiresDistribution();
             ModelHealthReferenceIntegrity();
             FamilyChangeNotification();
+            FormulaEvaluatorIsConcurrent();
+            FormulaEvaluatorHasResourceGuards();
+            ProjectLockCreatesParentDirectory();
+            BulkEditRejectsNullIds();
+            QsdbRejectsDtd();
+            FailedRegenerationRemainsDirty();
         }
 
         private static void SemanticQuantityHardening()
@@ -95,6 +108,102 @@ namespace QS3D.Core.SmokeTests
             Equal("New Name", family.Name);
             Equal("Name", changed);
             Throws<ArgumentException>(() => family.Name = "   ");
+        }
+
+        private static void FormulaEvaluatorIsConcurrent()
+        {
+            var evaluator = new ExpressionEvaluator();
+            Parallel.For(0, 512, i =>
+            {
+                var value = i / 4d;
+                var variables = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase) { ["Value"] = value };
+                var actual = evaluator.Evaluate("round(max(Value*2, 3.14159), 2)", variables);
+                var expected = Math.Round(Math.Max(value * 2d, 3.14159d), 2);
+                Near(expected, actual);
+            });
+            Near(1002d, evaluator.Evaluate("1e3 + 2"));
+        }
+
+        private static void FormulaEvaluatorHasResourceGuards()
+        {
+            var evaluator = new ExpressionEvaluator();
+            Throws<InvalidOperationException>(() => evaluator.Evaluate(new string('1', 5000)));
+            var nested = new string('(', 80) + "1" + new string(')', 80);
+            Throws<InvalidOperationException>(() => evaluator.Evaluate(nested));
+            Throws<InvalidOperationException>(() => evaluator.Evaluate("round(1, 1e100)"));
+        }
+
+        private static void ProjectLockCreatesParentDirectory()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-lock-parent-" + Guid.NewGuid().ToString("N"));
+            var projectPath = Path.Combine(root, "nested", "project.qsdb");
+            var lockPath = projectPath + ".lock";
+            try
+            {
+                using (ProjectFileLock.Acquire(projectPath))
+                {
+                    True(Directory.Exists(Path.GetDirectoryName(projectPath)));
+                    True(File.Exists(lockPath));
+                }
+                True(!File.Exists(lockPath));
+            }
+            finally
+            {
+                try { if (Directory.Exists(root)) Directory.Delete(root, true); } catch { }
+            }
+        }
+
+        private static void BulkEditRejectsNullIds()
+        {
+            var project = new ProjectState("bulk-hardening", "Bulk Hardening");
+            var family = new ProjectFamily("room", "Room", ElementCategory.Room);
+            project.Families.Add(family);
+            Throws<ArgumentNullException>(() => new BulkEditService().AssignFamily(project, null!, family.Id));
+        }
+
+        private static void QsdbRejectsDtd()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-dtd-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                File.WriteAllText(path,
+                    "<!DOCTYPE qs3d [<!ENTITY injected \"bad\">]>" +
+                    "<qs3d schema=\"2\" projectId=\"p\" name=\"&injected;\" updatedUtc=\"2026-08-10T00:00:00.0000000Z\" drawingPath=\"\" drawingFingerprint=\"\" activeZoneId=\"\" activeFloorId=\"\">" +
+                    "<metadata/><zones/><floors/><families/><elements/></qs3d>", Encoding.UTF8);
+                var rejected = false;
+                try { new QsdbProjectStore().Load(path); }
+                catch (XmlException) { rejected = true; }
+                catch (InvalidDataException) { rejected = true; }
+                True(rejected);
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
+        }
+
+        private static void FailedRegenerationRemainsDirty()
+        {
+            var project = new ProjectState("regen-hardening", "Regeneration Hardening");
+            var element = new ProjectElement("Q1", ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
+            element.MarkClean(ElementDirtyFlags.All);
+            element.MarkDirty(ElementDirtyFlags.Quantity);
+            project.Elements.Add(element);
+            var engine = new RegenerationEngine(new DependencyGraph(), new IElementRegenerator[] { new ThrowingRegenerator() });
+            Throws<InvalidOperationException>(() => engine.RegenerateDirty(project));
+            True((element.Dirty & ElementDirtyFlags.Quantity) != 0);
+            True(element.Quantities.ContainsKey("Partial"));
+        }
+
+        private sealed class ThrowingRegenerator : IElementRegenerator
+        {
+            public bool CanRegenerate(ElementCategory category) => category == ElementCategory.CustomQuantity;
+
+            public void Regenerate(ProjectState project, ProjectElement element)
+            {
+                element.SetQuantity("Partial", 1d);
+                throw new InvalidOperationException("Intentional hardening smoke failure.");
+            }
         }
 
         private static ProjectState NewProject()

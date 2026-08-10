@@ -10,6 +10,8 @@ namespace QS3D.Core.Persistence
 {
     public sealed class QsdbProjectStore
     {
+        private const long MaxProjectFileBytes = 64L * 1024L * 1024L;
+
         public void Save(ProjectState project, string path)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -18,7 +20,7 @@ namespace QS3D.Core.Persistence
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-            var tempPath = fullPath + ".tmp";
+            var tempPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             var backupPath = fullPath + ".bak";
 
             project.SchemaVersion = ProjectState.CurrentSchemaVersion;
@@ -39,8 +41,7 @@ namespace QS3D.Core.Persistence
                     catch (PlatformNotSupportedException)
                     {
                         File.Copy(fullPath, backupPath, true);
-                        File.Delete(fullPath);
-                        File.Move(tempPath, fullPath);
+                        File.Copy(tempPath, fullPath, true);
                     }
                 }
                 else
@@ -57,7 +58,7 @@ namespace QS3D.Core.Persistence
         public ProjectState Load(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
-            var document = XDocument.Load(path, LoadOptions.None);
+            var document = LoadDocument(path);
             ProjectSchemaMigrator.MigrateToCurrent(document);
             var root = document.Root ?? throw new InvalidDataException("QSDB has no root element.");
 
@@ -167,9 +168,30 @@ namespace QS3D.Core.Persistence
                     new XElement("quantities", x.Quantities.OrderBy(q => q.Key, StringComparer.OrdinalIgnoreCase).Select(q => new XElement("q", new XAttribute("name", q.Key), new XAttribute("value", F(q.Value))))))))));
         }
 
+        private static XDocument LoadDocument(string path)
+        {
+            var fullPath = Path.GetFullPath(path);
+            var fileInfo = new FileInfo(fullPath);
+            if (fileInfo.Length > MaxProjectFileBytes)
+                throw new InvalidDataException("QSDB project exceeds the maximum supported file size of 64 MiB.");
+
+            var settings = new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                MaxCharactersInDocument = MaxProjectFileBytes
+            };
+
+            using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var reader = XmlReader.Create(stream, settings))
+            {
+                return XDocument.Load(reader, LoadOptions.None);
+            }
+        }
+
         private static void ValidateSerializedFile(string path)
         {
-            var document = XDocument.Load(path, LoadOptions.None);
+            var document = LoadDocument(path);
             var root = document.Root ?? throw new InvalidDataException("Serialized QSDB has no root element.");
             if (!string.Equals(root.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Serialized QSDB root is invalid.");
             var schema = Int(root.Attribute("schema")?.Value, 0);

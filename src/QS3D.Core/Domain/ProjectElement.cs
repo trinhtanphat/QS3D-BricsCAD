@@ -68,7 +68,7 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Quantity name is required.", nameof(name));
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value));
             Quantities[name.Trim()] = value;
-            MarkClean(ElementDirtyFlags.Quantity);
+            UpdatedUtc = DateTime.UtcNow;
         }
 
         internal void RestorePersistenceState(ElementDirtyFlags dirty, DateTime updatedUtc)
