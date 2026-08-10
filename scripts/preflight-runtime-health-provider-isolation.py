@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,7 +14,7 @@ for path in (SERVICE, COMMANDS):
 
 if SERVICE.is_file():
     text = SERVICE.read_text(encoding="utf-8")
-    for token in (
+    current_provider_tokens = (
         "InspectGeneratedSolidOwnership(document, project)",
         '"GeneratedSolidOwnershipRuntimeHealth"',
         "GeneratedGridAnnotationRuntimeHealthService.Inspect(document, project)",
@@ -24,6 +25,8 @@ if SERVICE.is_file():
         '"GeneratedSemanticElementTableRuntimeHealthService"',
         "DoorOpeningNativeTableBuilder.Inspect(document, project)",
         '"DoorOpeningNativeTableBuilder"',
+        "RoomFinishNativeTableBuilder.Inspect(document, project)",
+        '"RoomFinishNativeTableBuilder"',
         "private static void AddProviderSafely(",
         "Func<IReadOnlyList<ModelHealthIssue>> provider",
         "catch (System.Exception ex) when (IsRecoverableDiagnosticFailure(ex))",
@@ -33,7 +36,8 @@ if SERVICE.is_file():
         "!(exception is StackOverflowException)",
         "!(exception is AccessViolationException)",
         "return issues.AsReadOnly();",
-    ):
+    )
+    for token in current_provider_tokens:
         if token not in text:
             errors.append("GeneratedSolidRuntimeHealthService.cs missing provider-isolation token: " + token)
 
@@ -42,9 +46,25 @@ if SERVICE.is_file():
     tag = text.find('"GeneratedSemanticTagRuntimeHealthService"', grid)
     table = text.find('"GeneratedSemanticElementTableRuntimeHealthService"', tag)
     door_opening = text.find('"DoorOpeningNativeTableBuilder"', table)
-    result = text.find("return issues.AsReadOnly();", door_opening)
-    if min(solid, grid, tag, table, door_opening, result) < 0 or not solid < grid < tag < table < door_opening < result:
-        errors.append("Runtime health providers must be invoked independently before the aggregate returns, including semantic and authoritative Door/Opening native tables.")
+    room_finish = text.find('"RoomFinishNativeTableBuilder"', door_opening)
+    result = text.find("return issues.AsReadOnly();", room_finish)
+    if min(solid, grid, tag, table, door_opening, room_finish, result) < 0 or not solid < grid < tag < table < door_opening < room_finish < result:
+        errors.append("Current native runtime health providers must be invoked independently before the aggregate returns.")
+
+    # Future-proof the contract: every service-level Foo.Inspect(document, project)
+    # provider call must stay inside the AddProviderSafely lambda form. A new direct
+    # issues.AddRange(Foo.Inspect(...)) (or equivalent) must fail this gate even if
+    # the provider was added after this preflight was written.
+    all_inspect_calls = re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\.Inspect\(document, project\)", text)
+    safe_lambda_calls = re.findall(r"\(\)\s*=>\s*([A-Za-z_][A-Za-z0-9_]*)\.Inspect\(document, project\)", text)
+    if sorted(all_inspect_calls) != sorted(safe_lambda_calls):
+        errors.append(
+            "Every native Foo.Inspect(document, project) provider must be invoked through an AddProviderSafely lambda. "
+            "all=" + repr(sorted(all_inspect_calls)) + ", safe=" + repr(sorted(safe_lambda_calls)))
+
+    provider_invocations = text.count("AddProviderSafely(") - 1  # exclude the method declaration itself
+    if provider_invocations < 6:
+        errors.append("Expected at least six isolated native runtime health providers; found %d." % provider_invocations)
 
     if "catch (System.Exception ex)\n" in text:
         errors.append("Runtime health provider isolation must not use an unfiltered broad System.Exception catch.")
@@ -63,4 +83,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: generated-solid, Grid annotation, Semantic Tag, Semantic Element Table and Door/Opening native Table health providers are isolated so one recoverable provider failure becomes a diagnostic instead of aborting the whole QS3DHEALTH runtime report; fatal runtime failures still bubble.")
+print("PASS: all current native runtime-health providers are isolated, future Foo.Inspect(document, project) providers cannot bypass AddProviderSafely unnoticed, recoverable provider failures become diagnostics, and fatal runtime failures still bubble.")
