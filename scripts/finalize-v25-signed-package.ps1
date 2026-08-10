@@ -35,6 +35,18 @@ function Assert-AuthenticodeSigner {
     if ($actualSigner -ne $ExpectedSigner) { throw "$Label signer mismatch. Expected $ExpectedSigner, got $actualSigner." }
 }
 
+function Read-PluginAssemblyVersion {
+    param([string]$Path)
+    try {
+        $version = [Reflection.AssemblyName]::GetAssemblyName($Path).Version
+        if (-not $version) { throw 'assembly version is missing' }
+        return $version
+    }
+    catch {
+        throw "QS3D plugin assembly version is unreadable: $($_.Exception.Message)"
+    }
+}
+
 $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
 $zip = [IO.Path]::GetFullPath($PackageZip)
 $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
@@ -46,11 +58,20 @@ foreach ($name in $SignedPayloadNames) {
     Assert-AuthenticodeSigner -Path $path -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name)
 }
 
+$metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+if (-not $metadata.PSObject.Properties['version']) { throw 'PACKAGE-METADATA is missing version.' }
+try { $metadataVersion = [Version]::Parse([string]$metadata.version) }
+catch { throw "PACKAGE-METADATA version is invalid: $($metadata.version)" }
+$signedPluginVersion = Read-PluginAssemblyVersion -Path (Join-Path $package 'QS3D.BricsCAD.V25.dll')
+if ($metadataVersion -ne $signedPluginVersion) {
+    throw "PACKAGE-METADATA version $metadataVersion does not match signed QS3D plugin assembly version $signedPluginVersion."
+}
+
 if (-not $PSCmdlet.ShouldProcess($zip, 'Finalize signed QS3D V25 package and rebuild ZIP')) { return }
 
-$metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
 $metadata | Add-Member -NotePropertyName signedExecutablePayload -NotePropertyValue @($SignedPayloadNames) -Force
 $metadata | Add-Member -NotePropertyName signedPayloadSignerThumbprint -NotePropertyValue $expectedSigner -Force
+$metadata | Add-Member -NotePropertyName signedPluginAssemblyVersion -NotePropertyValue $signedPluginVersion.ToString() -Force
 $metadata | Add-Member -NotePropertyName signedPackageFinalizedUtc -NotePropertyValue ([DateTime]::UtcNow.ToString('o')) -Force
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
@@ -79,5 +100,6 @@ Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -Compressi
 
 Write-Host "FINALIZED: $zip"
 Write-Host "Signer: $expectedSigner"
+Write-Host "Signed plugin version: $($signedPluginVersion.ToString())"
 Write-Host "Signed executable payloads: $($SignedPayloadNames.Count)"
 Write-Host "ZIP SHA256: $((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant())"
