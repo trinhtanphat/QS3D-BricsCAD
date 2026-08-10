@@ -84,8 +84,9 @@ namespace QS3D.Core.Domain
                 var elementId = (element.Id ?? string.Empty).Trim();
                 if (elementId.Length == 0)
                     throw new InvalidOperationException("Project contains an element with a blank semantic id.");
-                if (!elements.TryAdd(elementId, element))
+                if (elements.ContainsKey(elementId))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
+                elements.Add(elementId, element);
             }
             return elements;
         }

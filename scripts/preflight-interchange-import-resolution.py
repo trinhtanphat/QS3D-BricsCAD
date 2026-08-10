@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,12 +19,10 @@ if PLANNER.is_file():
     for token in (
         "private const int MaxPlanItems = 50000",
         "ProjectInterchangeValidatedSnapshotReader.Read(json)",
-        "InterchangeExistingIdentityAction.Unspecified",
         "InterchangeImportResolutionAction.Unresolved",
         "InterchangeImportResolutionAction.BlockedIncompatible",
         "InterchangeProjectIdPolicy.RequireMatch",
         "InterchangeDrawingFingerprintPolicy.RequireMatch",
-        "InterchangeSourceHandlePolicy.PreserveAsProvenanceOnly",
         "InterchangeGeneratedOutputResetPolicy.ClearOwnershipAndRequireRebuild",
         "import planning has no implicit collision/provenance default",
         "keeping existing generated/native ownership is not an allowed plan",
@@ -32,6 +31,14 @@ if PLANNER.is_file():
         ".ToList().AsReadOnly()",
     ):
         if token not in text: errors.append("ProjectInterchangeImportResolutionPlanner.cs missing fail-closed policy token: " + token)
+
+    for enum_name, member in (
+        ("InterchangeExistingIdentityAction", r"Unspecified\s*=\s*0"),
+        ("InterchangeSourceHandlePolicy", r"PreserveAsProvenanceOnly\s*=\s*2"),
+    ):
+        pattern = r"enum\s+" + re.escape(enum_name) + r"\s*\{[^}]*\b" + member
+        if not re.search(pattern, text, re.DOTALL):
+            errors.append("ProjectInterchangeImportResolutionPlanner.cs missing fail-closed enum contract: " + enum_name)
 
     for token in (
         "targetProject.Zones.Add(",
