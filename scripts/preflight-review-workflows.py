@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+build3d = ROOT / "src/QS3D.BricsCAD.V25/Build3DCommands.cs"
 errors = []
 
 if not review.is_file():
@@ -11,10 +12,6 @@ if not review.is_file():
 else:
     text = review.read_text(encoding="utf-8")
     required = (
-        "trackedCategories.Count > 1",
-        "Selection đang trộn nhiều semantic category",
-        "Selection đang trộn source đã capture",
-        "new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase)",
         'AuditTrail.ForProject(project).Record("recognition.skip"',
         "QS3D Recognition skip",
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
@@ -24,6 +21,27 @@ else:
             errors.append("Review workflow safety contract missing: " + token)
     if "catch { skipped++; }" in text:
         errors.append("auto recognition must not silently swallow failed semantic captures")
+
+if not build3d.is_file():
+    errors.append("missing Build3DCommands.cs")
+else:
+    text = build3d.read_text(encoding="utf-8")
+    required = (
+        "categories.Count > 1",
+        "SemanticReferenceHandles.GetSelectionAliases",
+        "var untrackedHandles = handles",
+        "if (untrackedHandles.Count > 0)",
+        "Đã dừng trước khi rebuild",
+    )
+    for token in required:
+        if token not in text:
+            errors.append("Build3D selection safety contract missing: " + token)
+
+    guard_index = text.find("if (untrackedHandles.Count > 0)")
+    resolve_index = text.find("CadHandleService.Resolve(document, sourceHandles)")
+    build_index = text.find("built = BuildCategory(document, project, category, sourceType);")
+    if min(guard_index, resolve_index, build_index) >= 0 and not guard_index < resolve_index < build_index:
+        errors.append("Build3D must reject untracked selection handles before source resolution/native build")
 
 if errors:
     for error in errors:

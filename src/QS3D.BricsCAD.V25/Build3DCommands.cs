@@ -51,6 +51,20 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
+                var semanticSelectionAliases = new HashSet<string>(
+                    selectedElements.SelectMany(SemanticReferenceHandles.GetSelectionAliases),
+                    StringComparer.OrdinalIgnoreCase);
+                var untrackedHandles = handles
+                    .Where(x => !semanticSelectionAliases.Contains(x))
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (untrackedHandles.Count > 0)
+                {
+                    Write(document, "QS3DBUILD3D: selection có CAD object chưa thuộc source/boundary/generated-host của cấu kiện semantic (" +
+                        string.Join(", ", untrackedHandles) + "). Đã dừng trước khi rebuild; capture hoặc bỏ các object này khỏi selection.");
+                    return;
+                }
+
                 var unsupported = selectedElements
                     .Where(x => !NativeBuildCapability.Supports(x.Category))
                     .Select(x => x.Category)

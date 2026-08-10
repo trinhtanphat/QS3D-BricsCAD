@@ -12,6 +12,8 @@ else:
     text = COMMAND.read_text(encoding="utf-8")
     required = (
         "using QS3D.Core.Persistence;",
+        "SemanticReferenceHandles.GetSelectionAliases",
+        "if (untrackedHandles.Count > 0)",
         "var semanticRollback = ProjectStateSnapshot.Capture(project);",
         "var ownershipBefore = CaptureGeneratedSolidHandles(project, elementIds);",
         "if (GeneratedSolidHandlesMatch(project, ownershipBefore))",
@@ -35,11 +37,15 @@ else:
     build_index = text.find("built = BuildCategory(document, project, category, sourceType);")
     restore_index = text.find("semanticRollback.Restore(project);")
     ownership_guard_index = text.find("if (GeneratedSolidHandlesMatch(project, ownershipBefore))")
+    untracked_guard_index = text.find("if (untrackedHandles.Count > 0)")
+    source_resolve_index = text.find("CadHandleService.Resolve(document, sourceHandles)")
     if min(snapshot_index, regen_index, build_index, restore_index, ownership_guard_index) >= 0:
         if not snapshot_index < regen_index < build_index:
             errors.append("Build3D snapshot must be captured before regeneration/native build")
         if not ownership_guard_index < restore_index:
             errors.append("Build3D semantic restore must remain guarded by unchanged generated ownership")
+    if min(untracked_guard_index, source_resolve_index, build_index) >= 0 and not untracked_guard_index < source_resolve_index < build_index:
+        errors.append("Build3D must reject untracked selection handles before source resolution/native build")
 
 if errors:
     for error in errors:
