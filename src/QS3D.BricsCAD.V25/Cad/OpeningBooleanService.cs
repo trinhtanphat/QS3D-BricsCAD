@@ -6,6 +6,7 @@ using Bricscad.ApplicationServices;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 
@@ -72,91 +73,117 @@ namespace QS3D.BricsCAD.V25.Cad
 
             var pending = new List<PendingHostUpdate>();
             var totalCuts = 0;
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var cadCommitted = false;
+            try
             {
-                foreach (var group in linked)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var host = project.FindElement(group.Key) ?? throw new InvalidOperationException("Opening host not found: " + group.Key);
-                    if (!IsSupportedHost(host.Category)) continue;
-                    if (!host.Properties.TryGetValue("GeneratedSolidHandle", out var generatedHandle) || string.IsNullOrWhiteSpace(generatedHandle)) continue;
-
-                    var solidId = ResolveSingle(document, transaction, new[] { generatedHandle }, typeof(Solid3d), "generated host solid " + host.Id);
-                    if (solidId.IsNull) continue;
-                    var hostSourceId = ResolveSingle(document, transaction, host.SourceHandles, null, "host source " + host.Id);
-                    if (hostSourceId.IsNull) continue;
-                    var hostSolid = transaction.GetObject(solidId, OpenMode.ForWrite, false) as Solid3d;
-                    var hostSource = transaction.GetObject(hostSourceId, OpenMode.ForRead, false) as Entity;
-                    if (hostSolid == null || hostSource == null || hostSolid.IsErased || hostSource.IsErased) continue;
-
-                    var currentSolidHandle = solidId.Handle.ToString();
-                    GeneratedGeometryService.RequireMatchingOwnership(hostSolid, project, host, "boolean-cut generated host solid " + currentSolidHandle);
-                    var family = project.FindFamily(host.FamilyId);
-                    var hostThicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "ThicknessM", 0.2d), host.Id + "/ThicknessM");
-                    var hostHeightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "HeightM", 3.6d), host.Id + "/HeightM");
-                    var hostBottomOffsetM = CadGeometryGuard.Number(host, family, "BottomOffsetM", 0d);
-                    var openings = group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                        .Select(x => ReadOpening(document, transaction, project, x))
-                        .ToList();
-
-                    PreparedHost prepared;
-                    if (hostSource is Line hostLine)
+                    foreach (var group in linked)
                     {
-                        prepared = PrepareLineHost(document, host, hostLine, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
-                    }
-                    else if (hostSource is Polyline hostPolyline && IsPolylineHost(host.Category))
-                    {
-                        prepared = PreparePolylineHost(document, host, hostPolyline, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
-                    }
-                    else
-                    {
-                        continue;
-                    }
+                        var host = project.FindElement(group.Key) ?? throw new InvalidOperationException("Opening host not found: " + group.Key);
+                        if (!IsSupportedHost(host.Category)) continue;
+                        if (!host.Properties.TryGetValue("GeneratedSolidHandle", out var generatedHandle) || string.IsNullOrWhiteSpace(generatedHandle)) continue;
 
-                    var fingerprint = prepared.FingerprintPrefix + "|" + string.Join("|", prepared.Cuts.Select(x => x.FingerprintPart));
-                    if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolidHandle) &&
-                        host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) &&
-                        string.Equals(cutSolidHandle, currentSolidHandle, StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (string.Equals(cutFingerprint, fingerprint, StringComparison.Ordinal)) continue;
-                        throw new InvalidOperationException("Host " + host.Id + " đã được khoét nhưng host/opening geometry hoặc thông số đã thay đổi trên cùng generated solid. Hãy Build 3D lại host trước khi khoét lại.");
-                    }
+                        var solidId = ResolveSingle(document, transaction, new[] { generatedHandle }, typeof(Solid3d), "generated host solid " + host.Id);
+                        if (solidId.IsNull) continue;
+                        var hostSourceId = ResolveSingle(document, transaction, host.SourceHandles, null, "host source " + host.Id);
+                        if (hostSourceId.IsNull) continue;
+                        var hostSolid = transaction.GetObject(solidId, OpenMode.ForWrite, false) as Solid3d;
+                        var hostSource = transaction.GetObject(hostSourceId, OpenMode.ForRead, false) as Entity;
+                        if (hostSolid == null || hostSource == null || hostSolid.IsErased || hostSource.IsErased) continue;
 
-                    foreach (var item in prepared.Cuts)
-                    {
-                        var cutterWidth = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterWidthM, item.Opening.Id + "/cutter width");
-                        var cutterDepth = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterDepthM, item.Opening.Id + "/cutter depth");
-                        var cutterHeight = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterHeightM, item.Opening.Id + "/cutter height");
-                        using (var cutter = new Solid3d())
+                        var currentSolidHandle = solidId.Handle.ToString();
+                        GeneratedGeometryService.RequireMatchingOwnership(hostSolid, project, host, "boolean-cut generated host solid " + currentSolidHandle);
+                        var family = project.FindFamily(host.FamilyId);
+                        var hostThicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "ThicknessM", 0.2d), host.Id + "/ThicknessM");
+                        var hostHeightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "HeightM", 3.6d), host.Id + "/HeightM");
+                        var hostBottomOffsetM = CadGeometryGuard.Number(host, family, "BottomOffsetM", 0d);
+                        var openings = group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                            .Select(x => ReadOpening(document, transaction, project, x))
+                            .ToList();
+
+                        PreparedHost prepared;
+                        if (hostSource is Line hostLine)
                         {
-                            cutter.SetDatabaseDefaults(document.Database);
-                            cutter.CreateBox(cutterWidth, cutterDepth, cutterHeight);
-                            cutter.TransformBy(Matrix3d.Displacement(new Vector3d(-cutterWidth / 2d, -cutterDepth / 2d, -cutterHeight / 2d)));
-                            cutter.TransformBy(Matrix3d.Rotation(item.Angle, Vector3d.ZAxis, Point3d.Origin));
-                            cutter.TransformBy(Matrix3d.Displacement(new Vector3d(item.Target.X, item.Target.Y, item.Target.Z)));
-                            hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
+                            prepared = PrepareLineHost(document, host, hostLine, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
                         }
-                        totalCuts++;
+                        else if (hostSource is Polyline hostPolyline && IsPolylineHost(host.Category))
+                        {
+                            prepared = PreparePolylineHost(document, host, hostPolyline, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
+                        }
+                        else
+                        {
+                            continue;
+                        }
+
+                        var fingerprint = prepared.FingerprintPrefix + "|" + string.Join("|", prepared.Cuts.Select(x => x.FingerprintPart));
+                        if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolidHandle) &&
+                            host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) &&
+                            string.Equals(cutSolidHandle, currentSolidHandle, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (string.Equals(cutFingerprint, fingerprint, StringComparison.Ordinal)) continue;
+                            throw new InvalidOperationException("Host " + host.Id + " đã được khoét nhưng host/opening geometry hoặc thông số đã thay đổi trên cùng generated solid. Hãy Build 3D lại host trước khi khoét lại.");
+                        }
+
+                        foreach (var item in prepared.Cuts)
+                        {
+                            var cutterWidth = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterWidthM, item.Opening.Id + "/cutter width");
+                            var cutterDepth = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterDepthM, item.Opening.Id + "/cutter depth");
+                            var cutterHeight = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterHeightM, item.Opening.Id + "/cutter height");
+                            using (var cutter = new Solid3d())
+                            {
+                                cutter.SetDatabaseDefaults(document.Database);
+                                cutter.CreateBox(cutterWidth, cutterDepth, cutterHeight);
+                                cutter.TransformBy(Matrix3d.Displacement(new Vector3d(-cutterWidth / 2d, -cutterDepth / 2d, -cutterHeight / 2d)));
+                                cutter.TransformBy(Matrix3d.Rotation(item.Angle, Vector3d.ZAxis, Point3d.Origin));
+                                cutter.TransformBy(Matrix3d.Displacement(new Vector3d(item.Target.X, item.Target.Y, item.Target.Z)));
+                                hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
+                            }
+                            totalCuts++;
+                        }
+
+                        pending.Add(new PendingHostUpdate { Host = host, SolidHandle = currentSolidHandle, Fingerprint = fingerprint, OpeningCount = prepared.Cuts.Count });
                     }
 
-                    pending.Add(new PendingHostUpdate { Host = host, SolidHandle = currentSolidHandle, Fingerprint = fingerprint, OpeningCount = prepared.Cuts.Count });
+                    foreach (var update in pending) CommitSemanticUpdate(project, update);
+                    if (pending.Count > 0) project.Touch();
+                    transaction.Commit();
+                    cadCommitted = true;
                 }
-                transaction.Commit();
+            }
+            catch (Exception operationError)
+            {
+                if (!cadCommitted)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Physical opening boolean failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                }
+                throw;
             }
 
-            foreach (var update in pending)
-            {
-                update.Host.Properties["PhysicalOpeningCutSolidHandle"] = update.SolidHandle;
-                update.Host.Properties["PhysicalOpeningCutFingerprint"] = update.Fingerprint;
-                update.Host.Properties["PhysicalOpeningCutCount"] = update.OpeningCount.ToString(CultureInfo.InvariantCulture);
-                AuditTrail.ForProject(project).Record("geometry.opening.boolean", update.Host.Id, update.OpeningCount.ToString(CultureInfo.InvariantCulture) + " opening(s) • solid " + update.SolidHandle);
-            }
-            if (pending.Count > 0)
-            {
-                document.Editor.Regen();
-                project.Touch();
-            }
+            if (pending.Count > 0) TryRegen(document);
             return totalCuts;
+        }
+
+        private static void CommitSemanticUpdate(ProjectState project, PendingHostUpdate update)
+        {
+            update.Host.Properties["PhysicalOpeningCutSolidHandle"] = update.SolidHandle;
+            update.Host.Properties["PhysicalOpeningCutFingerprint"] = update.Fingerprint;
+            update.Host.Properties["PhysicalOpeningCutCount"] = update.OpeningCount.ToString(CultureInfo.InvariantCulture);
+            AuditTrail.ForProject(project).Record("geometry.opening.boolean", update.Host.Id, update.OpeningCount.ToString(CultureInfo.InvariantCulture) + " opening(s) • solid " + update.SolidHandle);
+        }
+
+        private static void TryRegen(Document document)
+        {
+            try { document.Editor.Regen(); }
+            catch { }
         }
 
         private static HashSet<string>? NormalizeRequestedOpenings(ProjectState project, IReadOnlyCollection<string>? openingIds)
