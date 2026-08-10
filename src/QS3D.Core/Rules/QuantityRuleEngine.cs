@@ -30,6 +30,7 @@ namespace QS3D.Core.Rules
 
     public sealed class QuantityRuleEngine
     {
+        private const string ProvenancePrefix = "Rule:";
         private readonly ExpressionEvaluator _evaluator = new ExpressionEvaluator();
 
         public void Apply(ProjectElement element, QuantityRule rule, IReadOnlyDictionary<string, double> variables)
@@ -41,7 +42,7 @@ namespace QS3D.Core.Rules
 
             var result = _evaluator.Evaluate(rule.Expression, variables);
             element.SetQuantity(rule.OutputName, result);
-            element.Properties["Rule:" + rule.OutputName] = rule.Id + "@" + rule.Version;
+            element.Properties[ProvenancePrefix + rule.OutputName] = rule.Id + "@" + rule.Version;
         }
 
         public int ApplyMatching(ProjectState project, ProjectElement element)
@@ -53,15 +54,61 @@ namespace QS3D.Core.Rules
                 .Where(x => x.Category == element.Category)
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            if (rules.Count == 0) return 0;
+            ValidateOutputs(rules, element.Category);
+
+            var activeOutputs = new HashSet<string>(rules.Select(x => x.OutputName), StringComparer.OrdinalIgnoreCase);
+            var staleOutputs = GetStaleManagedOutputs(element, activeOutputs);
+            if (rules.Count == 0)
+            {
+                CleanupStaleOutputs(element, staleOutputs);
+                return staleOutputs.Count;
+            }
 
             var variables = BuildVariables(project, element);
+            foreach (var stale in staleOutputs) variables.Remove(stale);
+
+            var staged = new List<KeyValuePair<QuantityRule, double>>(rules.Count);
             foreach (var rule in rules)
             {
-                Apply(element, rule, variables);
-                if (element.Quantities.TryGetValue(rule.OutputName, out var value)) variables[rule.OutputName] = value;
+                var value = _evaluator.Evaluate(rule.Expression, variables);
+                staged.Add(new KeyValuePair<QuantityRule, double>(rule, value));
+                variables[rule.OutputName] = value;
             }
-            return rules.Count;
+
+            CleanupStaleOutputs(element, staleOutputs);
+            foreach (var item in staged)
+            {
+                element.SetQuantity(item.Key.OutputName, item.Value);
+                element.Properties[ProvenancePrefix + item.Key.OutputName] = item.Key.Id + "@" + item.Key.Version;
+            }
+            return rules.Count + staleOutputs.Count;
+        }
+
+        private static void ValidateOutputs(IReadOnlyList<QuantityRule> rules, ElementCategory category)
+        {
+            var duplicate = rules.GroupBy(x => x.OutputName, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicate != null) throw new InvalidOperationException("Multiple quantity rules target " + category + "/" + duplicate.Key + ".");
+        }
+
+        private static List<string> GetStaleManagedOutputs(ProjectElement element, ISet<string> activeOutputs)
+        {
+            var result = new List<string>();
+            foreach (var key in element.Properties.Keys.Where(x => x.StartsWith(ProvenancePrefix, StringComparison.OrdinalIgnoreCase)).ToArray())
+            {
+                var output = key.Substring(ProvenancePrefix.Length).Trim();
+                if (output.Length == 0 || activeOutputs.Contains(output)) continue;
+                if (!result.Contains(output, StringComparer.OrdinalIgnoreCase)) result.Add(output);
+            }
+            return result;
+        }
+
+        private static void CleanupStaleOutputs(ProjectElement element, IEnumerable<string> staleOutputs)
+        {
+            foreach (var output in staleOutputs)
+            {
+                element.Quantities.Remove(output);
+                element.Properties.Remove(ProvenancePrefix + output);
+            }
         }
 
         private static Dictionary<string, double> BuildVariables(ProjectState project, ProjectElement element)
@@ -70,7 +117,11 @@ namespace QS3D.Core.Rules
             var family = project.FindFamily(element.FamilyId);
             if (family != null) AddNumeric(family.Properties, variables);
             AddNumeric(element.Properties, variables);
-            foreach (var quantity in element.Quantities) variables[quantity.Key] = quantity.Value;
+            foreach (var quantity in element.Quantities)
+            {
+                if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value)) throw new InvalidOperationException("Rule variable quantity is not finite: " + element.Id + "/" + quantity.Key);
+                variables[quantity.Key] = quantity.Value;
+            }
             if (!variables.ContainsKey("Count")) variables["Count"] = 1d;
             return variables;
         }

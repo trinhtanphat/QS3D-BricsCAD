@@ -27,6 +27,27 @@ namespace QS3D.Core.Templates
         public const string VisibleBqColumnsKey = "QS3D.BqVisibleColumns";
         private const long MaxTemplateFileBytes = 8L * 1024L * 1024L;
 
+        private sealed class FamilyApplyPlan
+        {
+            public FamilyApplyPlan(ProjectFamily source, ProjectFamily? existing)
+            {
+                Source = source;
+                Existing = existing;
+                PreviousProperties = existing == null
+                    ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    : new Dictionary<string, string>(existing.Properties, StringComparer.OrdinalIgnoreCase);
+                Changed = existing == null ||
+                          !string.Equals(existing.Name, source.Name, StringComparison.Ordinal) ||
+                          existing.Category != source.Category ||
+                          !SameMap(existing.Properties, source.Properties);
+            }
+
+            public ProjectFamily Source { get; }
+            public ProjectFamily? Existing { get; }
+            public IDictionary<string, string> PreviousProperties { get; }
+            public bool Changed { get; }
+        }
+
         public TemplateProfile ExportProject(ProjectState project, string id, string name)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -54,46 +75,52 @@ namespace QS3D.Core.Templates
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             Validate(profile);
+            var familyPlans = ValidateApply(project, profile);
 
             var result = new TemplateApplyResult();
-            var changedFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var changedCategories = new HashSet<ElementCategory>();
 
-            foreach (var source in profile.Families)
+            foreach (var plan in familyPlans)
             {
-                var existing = project.FindFamily(source.Id);
-                if (existing == null)
+                if (!plan.Changed) continue;
+                var target = plan.Existing;
+                if (target == null)
                 {
-                    existing = new ProjectFamily(source.Id, source.Name, source.Category);
-                    foreach (var property in source.Properties) existing.Properties[property.Key] = property.Value;
-                    project.Families.Add(existing);
+                    target = new ProjectFamily(plan.Source.Id, plan.Source.Name, plan.Source.Category);
+                    foreach (var property in plan.Source.Properties) target.Properties[property.Key] = property.Value;
+                    project.Families.Add(target);
                     result.FamiliesAdded++;
-                    changedFamilies.Add(existing.Id);
-                    continue;
+                }
+                else
+                {
+                    target.Name = plan.Source.Name;
+                    target.Category = plan.Source.Category;
+                    target.Properties.Clear();
+                    foreach (var property in plan.Source.Properties) target.Properties[property.Key] = property.Value;
+                    result.FamiliesUpdated++;
                 }
 
-                if (existing.Category != source.Category && project.Elements.Any(x => string.Equals(x.FamilyId, existing.Id, StringComparison.OrdinalIgnoreCase)))
-                    throw new InvalidOperationException("Template cannot change category of in-use family " + existing.Id + ".");
-
-                var changed = !string.Equals(existing.Name, source.Name, StringComparison.Ordinal) || existing.Category != source.Category || !SameMap(existing.Properties, source.Properties);
-                if (!changed) continue;
-                existing.Name = source.Name;
-                existing.Category = source.Category;
-                existing.Properties.Clear();
-                foreach (var property in source.Properties) existing.Properties[property.Key] = property.Value;
-                result.FamiliesUpdated++;
-                changedFamilies.Add(existing.Id);
+                PropagateFamilyDefaults(project, plan.Source, plan.PreviousProperties, affected);
             }
 
             foreach (var source in profile.QuantityRules)
             {
                 var existing = project.FindQuantityRule(source.Id);
-                var same = existing != null && existing.Category == source.Category && string.Equals(existing.OutputName, source.OutputName, StringComparison.OrdinalIgnoreCase) && string.Equals(existing.Expression, source.Expression, StringComparison.Ordinal) && string.Equals(existing.Version, source.Version, StringComparison.Ordinal);
+                var same = existing != null && existing.Category == source.Category &&
+                           string.Equals(existing.OutputName, source.OutputName, StringComparison.OrdinalIgnoreCase) &&
+                           string.Equals(existing.Expression, source.Expression, StringComparison.Ordinal) &&
+                           string.Equals(existing.Version, source.Version, StringComparison.Ordinal);
                 if (same) continue;
-                var collision = project.QuantityRules.FirstOrDefault(x => !string.Equals(x.Id, source.Id, StringComparison.OrdinalIgnoreCase) && x.Category == source.Category && string.Equals(x.OutputName, source.OutputName, StringComparison.OrdinalIgnoreCase));
-                if (collision != null) throw new InvalidOperationException("Template rule output conflicts with project rule " + collision.Id + ".");
-                if (existing != null) { project.QuantityRules.Remove(existing); result.RulesUpdated++; }
+
+                if (existing != null)
+                {
+                    changedCategories.Add(existing.Category);
+                    project.QuantityRules.Remove(existing);
+                    result.RulesUpdated++;
+                }
                 else result.RulesAdded++;
+
                 project.QuantityRules.Add(new QuantityRule(source.Id, source.Category, source.OutputName, source.Expression, source.Version));
                 changedCategories.Add(source.Category);
             }
@@ -108,13 +135,13 @@ namespace QS3D.Core.Templates
             var visibleColumns = profile.VisibleBqColumns.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             if (visibleColumns.Length > 0) project.Metadata[VisibleBqColumnsKey] = string.Join("|", visibleColumns);
 
-            var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                if (!changedFamilies.Contains(element.FamilyId) && !changedCategories.Contains(element.Category)) continue;
-                element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
+                if (!changedCategories.Contains(element.Category)) continue;
+                element.MarkDirty(ElementDirtyFlags.Quantity);
                 affected.Add(element.Id);
             }
+
             result.AffectedElements = affected.Count;
             project.Touch();
             AuditTrail.ForProject(project).Record("template.apply", string.Empty, profile.Id + " • families +" + result.FamiliesAdded + "/~" + result.FamiliesUpdated + " • rules +" + result.RulesAdded + "/~" + result.RulesUpdated + " • mappings " + result.LayerMappingsApplied);
@@ -154,7 +181,12 @@ namespace QS3D.Core.Templates
             {
                 if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category)) throw new InvalidDataException("Invalid template family category.");
                 var family = new ProjectFamily(Required(item, "id"), Required(item, "name"), category);
-                foreach (var property in item.Element("properties")?.Elements("p") ?? Enumerable.Empty<XElement>()) family.Properties[Required(property, "name")] = Value(property, "value");
+                foreach (var property in item.Element("properties")?.Elements("p") ?? Enumerable.Empty<XElement>())
+                {
+                    var propertyName = Required(property, "name");
+                    if (family.Properties.ContainsKey(propertyName)) throw new InvalidDataException("Duplicate template family property: " + family.Id + "/" + propertyName);
+                    family.Properties[propertyName] = Value(property, "value");
+                }
                 profile.Families.Add(family);
             }
             foreach (var item in root.Element("rules")?.Elements("rule") ?? Enumerable.Empty<XElement>())
@@ -162,10 +194,69 @@ namespace QS3D.Core.Templates
                 if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category)) throw new InvalidDataException("Invalid template rule category.");
                 profile.QuantityRules.Add(new QuantityRule(Required(item, "id"), category, Required(item, "output"), Required(item, "expression"), Required(item, "version")));
             }
-            foreach (var item in root.Element("layerMappings")?.Elements("map") ?? Enumerable.Empty<XElement>()) profile.LayerMappings[Required(item, "pattern")] = Required(item, "category");
+            foreach (var item in root.Element("layerMappings")?.Elements("map") ?? Enumerable.Empty<XElement>())
+            {
+                var pattern = Required(item, "pattern");
+                if (profile.LayerMappings.ContainsKey(pattern)) throw new InvalidDataException("Duplicate template layer mapping: " + pattern);
+                profile.LayerMappings.Add(pattern, Required(item, "category"));
+            }
             foreach (var item in root.Element("bqColumns")?.Elements("column") ?? Enumerable.Empty<XElement>()) profile.VisibleBqColumns.Add(Required(item, "name"));
             Validate(profile);
             return profile;
+        }
+
+        private static IReadOnlyList<FamilyApplyPlan> ValidateApply(ProjectState project, TemplateProfile profile)
+        {
+            var duplicateProjectFamily = project.Families.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicateProjectFamily != null) throw new InvalidOperationException("Project contains duplicate family id: " + duplicateProjectFamily.Key);
+            var duplicateProjectRule = project.QuantityRules.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicateProjectRule != null) throw new InvalidOperationException("Project contains duplicate quantity rule id: " + duplicateProjectRule.Key);
+
+            var plans = new List<FamilyApplyPlan>(profile.Families.Count);
+            foreach (var source in profile.Families)
+            {
+                var existing = project.FindFamily(source.Id);
+                if (existing != null && existing.Category != source.Category && project.Elements.Any(x => string.Equals(x.FamilyId, existing.Id, StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidOperationException("Template cannot change category of in-use family " + existing.Id + ".");
+                plans.Add(new FamilyApplyPlan(source, existing));
+            }
+
+            var projectedRules = new Dictionary<string, QuantityRule>(StringComparer.OrdinalIgnoreCase);
+            foreach (var rule in project.QuantityRules) projectedRules.Add(rule.Id, rule);
+            foreach (var source in profile.QuantityRules) projectedRules[source.Id] = source;
+            var duplicateOutput = projectedRules.Values.GroupBy(x => x.Category + "\u001f" + x.OutputName, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicateOutput != null) throw new InvalidOperationException("Template would create multiple project rules for the same category/output: " + duplicateOutput.Key);
+            return plans;
+        }
+
+        private static void PropagateFamilyDefaults(ProjectState project, ProjectFamily source, IDictionary<string, string> previousProperties, ISet<string> affected)
+        {
+            foreach (var element in project.Elements.Where(x => string.Equals(x.FamilyId, source.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                var changed = false;
+                foreach (var oldProperty in previousProperties)
+                {
+                    if (source.Properties.ContainsKey(oldProperty.Key)) continue;
+                    if (!element.Properties.TryGetValue(oldProperty.Key, out var current) || !string.Equals(current, oldProperty.Value ?? string.Empty, StringComparison.Ordinal)) continue;
+                    element.Properties.Remove(oldProperty.Key);
+                    changed = true;
+                }
+
+                foreach (var property in source.Properties)
+                {
+                    var hasCurrent = element.Properties.TryGetValue(property.Key, out var current);
+                    var inherited = previousProperties.TryGetValue(property.Key, out var previous) && hasCurrent && string.Equals(current, previous ?? string.Empty, StringComparison.Ordinal);
+                    if (hasCurrent && !inherited) continue;
+                    var next = property.Value ?? string.Empty;
+                    if (hasCurrent && string.Equals(current, next, StringComparison.Ordinal)) continue;
+                    element.Properties[property.Key] = next;
+                    changed = true;
+                }
+
+                if (!changed) continue;
+                element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
+                affected.Add(element.Id);
+            }
         }
 
         private static XDocument Serialize(TemplateProfile profile) => new XDocument(
@@ -193,6 +284,8 @@ namespace QS3D.Core.Templates
 
         private static void Validate(TemplateProfile profile)
         {
+            if (profile.Families.Any(x => x == null)) throw new InvalidDataException("Template family list cannot contain null entries.");
+            if (profile.QuantityRules.Any(x => x == null)) throw new InvalidDataException("Template rule list cannot contain null entries.");
             var duplicateFamily = profile.Families.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFamily != null) throw new InvalidDataException("Duplicate template family id: " + duplicateFamily.Key);
             var duplicateRule = profile.QuantityRules.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
