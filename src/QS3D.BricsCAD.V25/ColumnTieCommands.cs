@@ -17,19 +17,43 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var count = ColumnTieSolidBuilder.BuildSelected(document, project);
-                PaletteCoordinator.RefreshProject();
                 var message = count == 0
                     ? "Tie 3D: chọn Column semantic có closed rectangle POLYLINE; khai báo RebarTieDiameterMm/RebarTieSpacingMm nếu cần override."
                     : "Tie 3D: đã tạo/cập nhật " + count + " đai cột.";
+                FinalizeUi(document, message);
+            }
+            catch (Exception ex)
+            {
+                Report(document, "QS3DREBARTIES3D lỗi: " + ex.Message);
+            }
+        }
+
+        private static void FinalizeUi(Document document, string message)
+        {
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                document.Editor.Regen();
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                var message = "QS3DREBARTIES3D lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
             }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); }
+            catch { }
+            TryWriteMessage(document, "\nQS3D " + message);
+        }
+
+        private static void TryWriteMessage(Document document, string message)
+        {
+            try { document.Editor.WriteMessage(message); }
+            catch { }
         }
     }
 }
