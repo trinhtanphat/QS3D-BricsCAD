@@ -6,8 +6,8 @@ This review records the source-level completion batch applied directly to `main`
 
 - Core/domain contracts used by the UI and geometry adapters.
 - Main WPF workspace, Family/property inspector, semantic tree, selected-object review, Ribbon and Full Domain Hub.
-- Tường KT, Cửa/Lỗ mở, native wall geometry, physical opening boolean workflow and current rebar geometry path.
-- Static geometry-completion preflight and documentation/status consistency.
+- Tường KT, Cửa/Lỗ mở, Room Auto, native wall geometry, physical opening boolean workflow and current rebar geometry path.
+- Static geometry/full-domain preflight and documentation/status consistency.
 - Concurrent `main` activity was re-read before writes; stale SHA writes were allowed to fail rather than force-overwriting newer work.
 
 ## Completed in this batch
@@ -28,6 +28,13 @@ This review records the source-level completion batch applied directly to `main`
 - Updated `QS3DBUILD3D` so the active/selected Tường Gạch, Vách Kính or Trụ Tường category is passed end-to-end into the correct native builder rather than only accepting ArchitecturalWall.
 - Kept the current Vách Kính/Trụ Tường native path intentionally generic: it is a Tường KT centerline extrusion, not a claim of full curtain-wall framing/panel semantics or specialized pier profiles.
 
+### Room Auto completion preserved and guarded
+
+- Preserved the concurrent direct planar ARC adapter added while this review was in progress.
+- `QS3DROOMAUTO` now accepts planar LINE/POLYLINE/ARC source networks; direct ARC and polyline bulges are tessellated before Core topology discovery.
+- ARC/POLYLINE plan-view normal and cross-source elevation tolerance are validated so mixed-Z/non-planar boundaries are not silently flattened.
+- `scripts/preflight-full-domain.py` now guards the ARC adapter, planarity checks and command wiring in addition to the existing Room Auto lifecycle/rollback/performance contracts.
+
 ### Cửa/Lỗ mở and rebar integration
 
 - Preserved the newer physical opening boolean implementation already merged concurrently: cutter preparation happens before mutation and the idempotence fingerprint includes live host/opening geometry, so moving an opening cannot be silently treated as an already-applied cut.
@@ -43,6 +50,7 @@ This review records the source-level completion batch applied directly to `main`
 ### Regression/documentation guards
 
 - `scripts/preflight-geometry-completion.py` now requires the Tường KT variant commands, workspace wiring, Ribbon/Hub buttons, category-aware wall builders and `QS3DBUILD3D` category forwarding.
+- `scripts/preflight-full-domain.py` now requires direct planar ARC Room Auto + planarity wiring.
 - README, command reference, implementation status, master plan and UI specification were refreshed to distinguish implemented source paths from runtime-verified behavior.
 
 ## Preserved concurrent fixes
@@ -51,7 +59,8 @@ During the review, `main` advanced several times. The batch deliberately preserv
 
 - position/host-aware opening-cut fingerprints;
 - rectangular column rebar geometry and generated-bar ownership health checks;
-- Room Auto lifecycle/topology hardening;
+- Room Auto lifecycle/topology hardening plus direct planar ARC support;
+- far-origin wall/opening numeric stability guards;
 - geometry-completion preflight/CI wiring.
 
 No force update was used to overwrite these changes.
@@ -64,6 +73,7 @@ No force update was used to overwrite these changes.
 4. Wall-to-wall joins/T-junction cleanup, freeform/closed-loop profiles and more advanced level/elevation constraints.
 5. Generalized Door/Opening booleans for curved/polyline hosts beyond the current compatible LINE-host path.
 6. General rebar authoring beyond rectangular-column longitudinal bars.
-7. Transient highlight/isolate/section-box UX proven against BricsCAD V25.
+7. SPLINE/native non-planar room-boundary support only if product requirements justify it; direct planar ARC is already implemented in source.
+8. Transient highlight/isolate/section-box UX proven against BricsCAD V25.
 
 GitHub Actions remain manual-only. This review updates source and static guards but does not dispatch CI or substitute for licensed BricsCAD V25 runtime proof.
