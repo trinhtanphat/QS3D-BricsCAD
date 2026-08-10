@@ -1,5 +1,5 @@
 using System;
-using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -12,8 +12,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             ValidSnapshotStillPreviews();
-            PaddedIdentityFailsBeforePreview();
-            MissingTimezoneFailsBeforePreview();
+            PaddedIdentityReturnsInvalidPreview();
+            MissingTimezoneReturnsInvalidPreview();
         }
 
         private static void ValidSnapshotStillPreviews()
@@ -24,18 +24,22 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("ProjectInterchangeImportPreviewCanonicalSmoke: canonical snapshot did not produce a valid preview.");
         }
 
-        private static void PaddedIdentityFailsBeforePreview()
+        private static void PaddedIdentityReturnsInvalidPreview()
         {
             var target = new ProjectState("TARGET", "Target");
             var json = Json().Replace("\"id\":\"SOURCE\"", "\"id\":\" SOURCE \"");
-            Throws<InvalidDataException>(() => ProjectInterchangeImportPreview.Plan(target, json));
+            var result = ProjectInterchangeImportPreview.Plan(target, json);
+            if (result.Validation.IsValid || !result.Validation.Issues.Any(x => x.Code == "ID_NON_CANONICAL") || result.TotalIdentityCount != 0)
+                throw new InvalidOperationException("ProjectInterchangeImportPreviewCanonicalSmoke: padded identity was not rejected by preview validation.");
         }
 
-        private static void MissingTimezoneFailsBeforePreview()
+        private static void MissingTimezoneReturnsInvalidPreview()
         {
             var target = new ProjectState("TARGET", "Target");
             var json = Json().Replace("2026-08-10T10:00:00.0000000Z", "2026-08-10T10:00:00.0000000");
-            Throws<InvalidDataException>(() => ProjectInterchangeImportPreview.Plan(target, json));
+            var result = ProjectInterchangeImportPreview.Plan(target, json);
+            if (result.Validation.IsValid || !result.Validation.Issues.Any(x => x.Code == "TIMESTAMP_NOT_UTC") || result.TotalIdentityCount != 0)
+                throw new InvalidOperationException("ProjectInterchangeImportPreviewCanonicalSmoke: timezone-less timestamp was not rejected by preview validation.");
         }
 
         private static string Json()
@@ -51,13 +55,6 @@ namespace QS3D.Core.SmokeTests
             element.SourceHandles.Add("AA");
             source.Elements.Add(element);
             return ProjectInterchangeJsonExporter.Build(source);
-        }
-
-        private static void Throws<T>(Action action) where T : Exception
-        {
-            try { action(); }
-            catch (T) { return; }
-            throw new InvalidOperationException("ProjectInterchangeImportPreviewCanonicalSmoke expected " + typeof(T).Name + ".");
         }
     }
 }
