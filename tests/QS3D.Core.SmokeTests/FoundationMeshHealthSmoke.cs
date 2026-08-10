@@ -11,8 +11,9 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             HealthyFoundation();
-            DetectsWrongCategoryAndStaleState();
+            DetectsWrongCategoryAndStaleSnapshot();
             DetectsCrossKeyOwnershipConflict();
+            ClearsFoundationStaleIndependently();
         }
 
         private static void HealthyFoundation()
@@ -23,17 +24,20 @@ namespace QS3D.Core.SmokeTests
             var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA", "BB" };
             var issues = new GeneratedFoundationMeshHealthService().Inspect(project, live);
             Require(!issues.Any(x => x.Severity == HealthSeverity.Error), "healthy foundation mesh produced an error");
+            Require(!issues.Any(x => x.Code == "FOUNDATION_MESH_GENERATED_STALE"), "fresh foundation mesh should not be stale");
         }
 
-        private static void DetectsWrongCategoryAndStaleState()
+        private static void DetectsWrongCategoryAndStaleSnapshot()
         {
             var project = new ProjectState("P", "P");
             var slab = MeshElement("S1", ElementCategory.Slab, "AA", "1");
-            slab.Dirty = ElementDirtyFlags.Geometry;
+            slab.MarkDirty(ElementDirtyFlags.Properties);
             project.Elements.Add(slab);
-            var issues = new GeneratedFoundationMeshHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" });
+            var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" };
+            var issues = new GeneratedFoundationMeshHealthService().Inspect(project, live);
             Require(issues.Any(x => x.Code == "FOUNDATION_MESH_CATEGORY_MISMATCH"), "category mismatch not detected");
-            Require(issues.Any(x => x.Code == "FOUNDATION_MESH_GENERATED_STALE"), "dirty foundation mesh not detected");
+            Require(issues.Any(x => x.Code == "FOUNDATION_MESH_GENERATED_STALE"), "foundation stale snapshot not detected");
+            Require(new GeneratedGeometryStaleHealthService().Inspect(project).Any(x => x.Code == "FOUNDATION_MESH_GENERATED_STALE"), "aggregate stale health missed foundation mesh");
         }
 
         private static void DetectsCrossKeyOwnershipConflict()
@@ -43,7 +47,17 @@ namespace QS3D.Core.SmokeTests
             foundation.Properties["GeneratedSlabMeshHandles"] = "AA";
             project.Elements.Add(foundation);
             var issues = new GeneratedFoundationMeshHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" });
-            Require(issues.Any(x => x.Code == "FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT"), "cross-key ownership conflict not detected");
+            Require(issues.Any(x => x.Code == "FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT"), "foundation health missed cross-key ownership conflict");
+            Require(new GeneratedRebarOwnershipHealthService().Inspect(project).Any(x => x.Code == "REBAR_GENERATED_CROSS_KEY_OWNERSHIP_CONFLICT"), "global rebar ownership health missed foundation conflict");
+        }
+
+        private static void ClearsFoundationStaleIndependently()
+        {
+            var foundation = MeshElement("F1", ElementCategory.Foundation, "AA", "1");
+            foundation.MarkDirty(ElementDirtyFlags.Geometry);
+            Require(foundation.IsGeneratedFoundationMeshStale(), "foundation mesh should become stale after semantic geometry mutation");
+            foundation.ClearGeneratedFoundationMeshStale();
+            Require(!foundation.IsGeneratedFoundationMeshStale(), "foundation stale state should clear after successful rebuild");
         }
 
         private static ProjectElement MeshElement(string id, ElementCategory category, string handles, string count)
@@ -52,10 +66,10 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedFoundationMeshHandles"] = handles;
             element.Properties["GeneratedFoundationMeshCount"] = count;
             element.Properties["GeneratedFoundationMeshXDiameterMm"] = "16";
-            element.Properties["GeneratedFoundationMeshYDiameterMm"] = "16";
+            element.Properties["GeneratedFoundationMeshYDiameterMm"] = "12";
             element.Properties["GeneratedFoundationMeshCoverM"] = "0.05";
             element.Properties["GeneratedFoundationMeshXActualSpacingM"] = "0.2";
-            element.Properties["GeneratedFoundationMeshYActualSpacingM"] = "0.2";
+            element.Properties["GeneratedFoundationMeshYActualSpacingM"] = "0.15";
             element.Properties["GeneratedFoundationMeshFaces"] = "Bottom";
             element.Properties["GeneratedFoundationMeshMode"] = "FoundationMeshXY";
             return element;
