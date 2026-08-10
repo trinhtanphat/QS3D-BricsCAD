@@ -15,14 +15,31 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnCommandClick(object sender, RoutedEventArgs e)
         {
             if (!(sender is Button button) || !(button.Tag is string command) || string.IsNullOrWhiteSpace(command)) return;
+            var normalizedCommand = command.Trim();
             var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (document == null)
             {
                 StatusText.Text = "Không có drawing BricsCAD đang active.";
                 return;
             }
-            StatusText.Text = "Gửi lệnh: " + command;
-            document.SendStringToExecute(command.Trim() + " ", true, false, false);
+
+            try
+            {
+                document.SendStringToExecute(normalizedCommand + " ", true, false, false);
+                StatusText.Text = "Đã gửi lệnh " + normalizedCommand + " sang " + DrawingLabel(document) + ".";
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = "Không thể gửi lệnh " + normalizedCommand + ": " + ex.Message;
+            }
+        }
+
+        private static string DrawingLabel(Document document)
+        {
+            var name = document.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) return "bản vẽ chưa lưu";
+            try { return System.IO.Path.GetFileName(name); }
+            catch { return name; }
         }
     }
 }
