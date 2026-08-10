@@ -25,10 +25,11 @@ This matters because a signed plugin can still load a modified dependency DLL, a
 5. `SHA256SUMS.txt` validates packaged payload paths and hashes.
 6. Both DLLs and install/update/uninstall scripts have valid Authenticode signatures from `ExpectedSignerThumbprint`.
 7. All signature checks finish before the downloaded installer script is executed.
-8. Installed-version downgrade protection remains enabled; same-version repair requires the explicit switch.
-9. BricsCAD must be closed before replacement; the installer keeps staging/backup rollback and never lowers `SECURELOAD`.
+8. Installed-version downgrade protection reconciles the installed plugin assembly version with `PACKAGE-METADATA.json` before comparing versions. A mismatched installed DLL/metadata state fails closed instead of silently treating the installation as `0.0.0.0`; same-version repair still requires the explicit switch.
+9. The downloaded manifest/package version is bound to the Authenticode-verified plugin assembly version, preventing metadata-only replay/downgrade substitution.
+10. BricsCAD must be closed before replacement; the installer keeps staging/backup rollback and never lowers `SECURELOAD`.
 
-These checks close the supply-chain cases where a compromised package origin combines a legitimate signed plugin with a modified Core DLL or PowerShell script.
+These checks close the supply-chain cases where a compromised package origin combines a legitimate signed plugin with a modified Core DLL or PowerShell script, and prevent damaged/missing local metadata from weakening the downgrade decision while an installed plugin is still present.
 
 ## Production packaging sequence
 
@@ -36,11 +37,13 @@ These checks close the supply-chain cases where a compromised package origin com
 2. Authenticode-sign all five executable payload files in that staging directory using `scripts/sign-v25.ps1` and the production code-signing certificate.
 3. Run `scripts/finalize-v25-signed-package.ps1 -ExpectedSignerThumbprint <thumbprint>`.
    - verifies all five signatures;
+   - binds metadata version to the signed plugin assembly version;
    - records the signed executable payload and signer in `PACKAGE-METADATA.json`;
    - rebuilds `SHA256SUMS.txt` after signing;
    - recreates `QS3D-BricsCAD-V25.zip` from the signed staging directory.
 4. Run `scripts/new-v25-update-manifest.ps1`.
    - verifies all five staging signatures;
+   - binds the release version to the signed plugin assembly;
    - reads the actual ZIP and requires its executable payload + package metadata to match staging byte-for-byte;
    - verifies the signatures again from the ZIP payload itself before emitting the manifest.
 5. Publish the finalized ZIP and generated manifest to the approved HTTPS origin.
@@ -49,7 +52,19 @@ Do not modify or sign executable payload files after finalization without finali
 
 ## Manual installer
 
-`install-v25-autoload.ps1 -RequireSigned` now applies the same executable-payload rule. With `-ExpectedSignerThumbprint`, all five executable files must have that signer before anything is copied to the install directory.
+`install-v25-autoload.ps1 -RequireSigned` applies the same executable-payload rule. With `-ExpectedSignerThumbprint`, all five executable files must have that signer before anything is copied to the install directory. DemandLoad registry state and payload replacement are snapshotted/rolled back together on failure.
+
+## Safe uninstall
+
+`uninstall-v25-autoload.ps1` validates a destructive file cleanup **before** it touches DemandLoad registration:
+
+- normal deletion is limited to the canonical `%LOCALAPPDATA%\QS3D\...` tree;
+- an existing target directory must contain both `QS3D.BricsCAD.V25.dll` and `PACKAGE-METADATA.json`;
+- metadata must identify `product = QS3D` and `target = BricsCAD V25 x64`;
+- a custom path or an intentionally damaged/migrated installation requires explicit `-Force` after the operator verifies the path;
+- `-KeepFiles` removes only the selected DemandLoad registration and does not require a file-deletion identity check.
+
+This prevents a typo or overly broad path from turning the uninstaller's recursive delete into unrelated LocalAppData data loss.
 
 ## Runtime limits
 

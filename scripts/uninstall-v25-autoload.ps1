@@ -10,8 +10,45 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Assert-InstallDirectorySafeToRemove {
+    param([string]$Directory, [switch]$ForceDelete)
+
+    $installFull = [IO.Path]::GetFullPath($Directory)
+    if (-not (Test-Path -LiteralPath $installFull -PathType Container)) { return $installFull }
+
+    $qs3dRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'QS3D')).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $isDefaultScope = $installFull.StartsWith($qs3dRoot, [StringComparison]::OrdinalIgnoreCase)
+    if (-not $isDefaultScope -and -not $ForceDelete) {
+        throw 'Refusing to remove a custom install directory outside the QS3D LocalAppData scope. Use -Force only after verifying the path.'
+    }
+
+    if (-not $ForceDelete) {
+        $metadataPath = Join-Path $installFull 'PACKAGE-METADATA.json'
+        $pluginPath = Join-Path $installFull 'QS3D.BricsCAD.V25.dll'
+        if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf) -or -not (Test-Path -LiteralPath $pluginPath -PathType Leaf)) {
+            throw 'Refusing recursive removal because the target does not contain the QS3D package identity files. Use -Force only after verifying the path.'
+        }
+        try {
+            $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+            if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V25 x64') {
+                throw 'package identity does not match QS3D / BricsCAD V25 x64'
+            }
+        }
+        catch {
+            throw "Refusing recursive removal because PACKAGE-METADATA.json is not a valid QS3D V25 identity marker: $($_.Exception.Message)"
+        }
+    }
+
+    return $installFull
+}
+
 if (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {
     throw 'Close all BricsCAD processes before uninstalling QS3D.'
+}
+
+$installFull = $null
+if (-not $KeepFiles) {
+    $installFull = Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory -ForceDelete:$Force
 }
 
 $root = 'HKCU:\Software\Bricsys\BricsCAD'
@@ -30,14 +67,8 @@ if (Test-Path -LiteralPath $root) {
     }
 }
 
-if (-not $KeepFiles) {
-    $installFull = [IO.Path]::GetFullPath($InstallDirectory)
-    $localRoot = [IO.Path]::GetFullPath($env:LOCALAPPDATA).TrimEnd('\') + '\'
-    $isDefaultScope = $installFull.StartsWith($localRoot, [StringComparison]::OrdinalIgnoreCase) -and $installFull.IndexOf('\QS3D\', [StringComparison]::OrdinalIgnoreCase) -ge 0
-    if (-not $isDefaultScope -and -not $Force) {
-        throw 'Refusing to remove a custom install directory outside the QS3D LocalAppData scope. Use -Force only after verifying the path.'
-    }
-    if ((Test-Path -LiteralPath $installFull) -and $PSCmdlet.ShouldProcess($installFull, 'Remove QS3D installed files')) {
+if (-not $KeepFiles -and (Test-Path -LiteralPath $installFull)) {
+    if ($PSCmdlet.ShouldProcess($installFull, 'Remove QS3D installed files')) {
         Remove-Item -LiteralPath $installFull -Recurse -Force
     }
 }

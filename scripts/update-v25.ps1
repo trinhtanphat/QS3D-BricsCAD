@@ -65,16 +65,44 @@ function Require-ManifestProperty {
 
 function Read-InstalledVersion {
     param([string]$Directory)
+
     $metadataPath = Join-Path $Directory 'PACKAGE-METADATA.json'
-    if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { return [Version]'0.0.0.0' }
-    try {
-        $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-        if (-not $metadata.PSObject.Properties['version']) { return [Version]'0.0.0.0' }
-        return [Version]::Parse([string]$metadata.version)
+    $pluginPath = Join-Path $Directory 'QS3D.BricsCAD.V25.dll'
+    $hasMetadata = Test-Path -LiteralPath $metadataPath -PathType Leaf
+    $hasPlugin = Test-Path -LiteralPath $pluginPath -PathType Leaf
+    if (-not $hasMetadata -and -not $hasPlugin) { return [Version]'0.0.0.0' }
+
+    $metadataVersion = $null
+    if ($hasMetadata) {
+        try {
+            $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+            if (-not $metadata.PSObject.Properties['version']) {
+                throw 'version property is missing'
+            }
+            $metadataVersion = [Version]::Parse([string]$metadata.version)
+        }
+        catch {
+            throw "Installed PACKAGE-METADATA.json has an invalid version: $($_.Exception.Message)"
+        }
     }
-    catch {
-        throw "Installed PACKAGE-METADATA.json has an invalid version: $($_.Exception.Message)"
+
+    $pluginVersion = $null
+    if ($hasPlugin) {
+        try {
+            $pluginVersion = [Reflection.AssemblyName]::GetAssemblyName($pluginPath).Version
+            if (-not $pluginVersion) { throw 'assembly version is missing' }
+        }
+        catch {
+            throw "Installed QS3D plugin assembly version is unreadable: $($_.Exception.Message)"
+        }
     }
+
+    if ($metadataVersion -and $pluginVersion -and $metadataVersion -ne $pluginVersion) {
+        throw "Installed package metadata version $metadataVersion does not match installed plugin assembly version $pluginVersion. Refusing update until installed state is repaired."
+    }
+    if ($pluginVersion) { return $pluginVersion }
+    if ($metadataVersion) { return $metadataVersion }
+    throw 'Installed QS3D state does not expose a readable version.'
 }
 
 function Read-SignedPluginVersion {
