@@ -17,7 +17,7 @@ namespace QS3D.Core.Diagnostics
             public bool RequiresSingleDiameter { get; set; }
         }
 
-        private static readonly HandleSetSpec ColumnSpec = new HandleSetSpec
+        private static readonly HandleSetSpec LongitudinalSpec = new HandleSetSpec
         {
             HandlesKey = "GeneratedRebarHandles",
             CountKey = "GeneratedRebarCount",
@@ -35,15 +35,16 @@ namespace QS3D.Core.Diagnostics
             RequiresSingleDiameter = false
         };
 
-        public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveColumnSolidHandles = null)
+        public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveLongitudinalSolidHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
             var owners = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                InspectSet(element, ColumnSpec, liveColumnSolidHandles, owners, issues);
+                InspectSet(element, LongitudinalSpec, liveLongitudinalSolidHandles, owners, issues);
                 InspectSet(element, ShapeSpec, null, owners, issues);
+                InspectLongitudinalMode(element, issues);
             }
             return issues;
         }
@@ -58,15 +59,16 @@ namespace QS3D.Core.Diagnostics
             return issues;
         }
 
-        public IReadOnlyList<ModelHealthIssue> InspectAll(ProjectState project, ISet<string>? liveColumnSolidHandles, ISet<string>? liveShapeSolidHandles)
+        public IReadOnlyList<ModelHealthIssue> InspectAll(ProjectState project, ISet<string>? liveLongitudinalSolidHandles, ISet<string>? liveShapeSolidHandles)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
             var owners = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                InspectSet(element, ColumnSpec, liveColumnSolidHandles, owners, issues);
+                InspectSet(element, LongitudinalSpec, liveLongitudinalSolidHandles, owners, issues);
                 InspectSet(element, ShapeSpec, liveShapeSolidHandles, owners, issues);
+                InspectLongitudinalMode(element, issues);
             }
             return issues;
         }
@@ -83,10 +85,11 @@ namespace QS3D.Core.Diagnostics
             }
             foreach (var element in project.Elements)
             {
-                ReserveProperty(owners, element, ColumnSpec.HandlesKey);
+                ReserveProperty(owners, element, LongitudinalSpec.HandlesKey);
                 ReserveProperty(owners, element, ShapeSpec.HandlesKey);
                 ReserveProperty(owners, element, "GeneratedTieRebarHandles");
                 ReserveProperty(owners, element, "GeneratedBeamStirrupHandles");
+                ReserveProperty(owners, element, "GeneratedRebarMatHandles");
             }
             return owners;
         }
@@ -145,6 +148,25 @@ namespace QS3D.Core.Diagnostics
                  !double.TryParse(diameterText, NumberStyles.Float, CultureInfo.InvariantCulture, out var diameter) ||
                  double.IsNaN(diameter) || double.IsInfinity(diameter) || diameter <= 0d))
                 issues.Add(new ModelHealthIssue("REBAR_GENERATED_DIAMETER_INVALID", HealthSeverity.Warning, "GeneratedRebarDiameterMm thiếu hoặc không hợp lệ.", element.Id));
+        }
+
+        private static void InspectLongitudinalMode(ProjectElement element, List<ModelHealthIssue> issues)
+        {
+            if (!element.Properties.TryGetValue(LongitudinalSpec.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            if (!element.Properties.TryGetValue("GeneratedRebarMode", out var mode) || string.IsNullOrWhiteSpace(mode))
+            {
+                issues.Add(new ModelHealthIssue("REBAR_GENERATED_MODE_MISSING", HealthSeverity.Warning, "Thiếu GeneratedRebarMode cho generated longitudinal rebar.", element.Id));
+                return;
+            }
+            var valid = string.Equals(mode, "ColumnVerticalBars", StringComparison.OrdinalIgnoreCase)
+                ? element.Category == ElementCategory.Column
+                : string.Equals(mode, "BeamLongitudinalBars", StringComparison.OrdinalIgnoreCase)
+                    ? element.Category == ElementCategory.Beam
+                    : false;
+            if (!valid)
+                issues.Add(new ModelHealthIssue("REBAR_GENERATED_MODE_CATEGORY_MISMATCH", HealthSeverity.Error, "GeneratedRebarMode không khớp category Column/Beam: " + mode, element.Id));
+            if (element.Dirty != ElementDirtyFlags.None)
+                issues.Add(new ModelHealthIssue("REBAR_GENERATED_STALE", HealthSeverity.Warning, "Element đang dirty nhưng vẫn còn generated longitudinal rebar; rebuild trước khi phát hành bản vẽ.", element.Id));
         }
 
         private static IEnumerable<string> SplitHandles(string raw) =>
