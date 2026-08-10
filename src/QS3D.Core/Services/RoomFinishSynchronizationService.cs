@@ -40,23 +40,14 @@ namespace QS3D.Core.Services
                 {
                     var finish = RoomFinishIdentityService.FindExisting(project, room, category);
                     if (finish == null) continue;
-                    Synchronize(project, room, finish);
+                    SynchronizeCore(project, room, finish);
                     synchronized.Add(finish);
                 }
                 return synchronized.AsReadOnly();
             }
             catch (Exception operationError)
             {
-                try
-                {
-                    rollback.Restore(project);
-                }
-                catch (Exception restoreError)
-                {
-                    throw new InvalidOperationException(
-                        "Room finish synchronization failed and project rollback also failed.",
-                        new AggregateException(operationError, restoreError));
-                }
+                RestoreOrThrow(project, rollback, operationError, "Room finish batch synchronization");
                 throw;
             }
         }
@@ -64,10 +55,23 @@ namespace QS3D.Core.Services
         public static void Synchronize(ProjectState project, ProjectElement room, ProjectElement finish)
         {
             ValidateRoom(project, room);
-            if (finish == null) throw new ArgumentNullException(nameof(finish));
-            if (!AutoRoomLifecycle.IsRoomFinishCategory(finish.Category))
-                throw new ArgumentException("Target element must be an HT_Phòng finish.", nameof(finish));
-            EnsureOwned(project, finish, nameof(finish));
+            ValidateFinish(project, finish);
+            var rollback = ProjectStateSnapshot.Capture(project);
+            try
+            {
+                SynchronizeCore(project, room, finish);
+            }
+            catch (Exception operationError)
+            {
+                RestoreOrThrow(project, rollback, operationError, "Room finish synchronization");
+                throw;
+            }
+        }
+
+        private static void SynchronizeCore(ProjectState project, ProjectElement room, ProjectElement finish)
+        {
+            ValidateRoom(project, room);
+            ValidateFinish(project, finish);
 
             var linkedRoomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, finish);
             if (linkedRoomId.Length > 0 && !string.Equals(linkedRoomId, room.Id, StringComparison.OrdinalIgnoreCase))
@@ -98,11 +102,33 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException("Cannot synchronize HT_Phòng from stale AutoRoom " + room.Id + ".");
         }
 
+        private static void ValidateFinish(ProjectState project, ProjectElement finish)
+        {
+            if (finish == null) throw new ArgumentNullException(nameof(finish));
+            if (!AutoRoomLifecycle.IsRoomFinishCategory(finish.Category))
+                throw new ArgumentException("Target element must be an HT_Phòng finish.", nameof(finish));
+            EnsureOwned(project, finish, nameof(finish));
+        }
+
         private static void EnsureOwned(ProjectState project, ProjectElement element, string parameterName)
         {
             var owned = project.FindElement(element.Id);
             if (!ReferenceEquals(owned, element))
                 throw new ArgumentException("Element must be the ProjectElement instance owned by the supplied project: " + element.Id + ".", parameterName);
+        }
+
+        private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError, string operation)
+        {
+            try
+            {
+                rollback.Restore(project);
+            }
+            catch (Exception restoreError)
+            {
+                throw new InvalidOperationException(
+                    operation + " failed and project rollback also failed.",
+                    new AggregateException(operationError, restoreError));
+            }
         }
 
         private static void ReplaceMetric(ProjectElement room, ProjectElement finish, string key)
