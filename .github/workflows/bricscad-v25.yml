@@ -26,22 +26,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Preflight
+      - name: Generic source guard
         run: python scripts/preflight.py
-      - name: Full-domain and release preflight
-        run: python scripts/preflight-full-domain.py
-      - name: Auto-room lifecycle preflight
-        run: python scripts/preflight-room-lifecycle.py
-      - name: Geometry completion preflight
-        run: python scripts/preflight-geometry-completion.py
-      - name: Direct room curve-source preflight
-        run: python scripts/preflight-room-curve-sources.py
-      - name: Wall junction source preflight
-        run: python scripts/preflight-wall-junctions.py
-      - name: Safe opening auto-host preflight
-        run: python scripts/preflight-auto-host.py
-      - name: Native section-review preflight
-        run: python scripts/preflight-section-review.py
+      - name: All discovered feature source guards
+        run: python scripts/preflight-all.py
       - name: Build core
         run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
       - name: Smoke tests

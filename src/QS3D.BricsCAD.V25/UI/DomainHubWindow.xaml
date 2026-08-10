@@ -63,6 +63,7 @@
                     <Button Content="Tạo đai dầm 3D" Tag="QS3DREBARSTIRRUP3D" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra đai dầm 3D" Tag="QS3DREBARSTIRRUPHEALTH" Click="OnCommandClick"/>
                     <Button Content="Tạo cốt thép 3D theo BBS shape" Tag="QS3DREBAR3DSHAPE" Click="OnCommandClick"/>
+                    <Button Content="Kiểm tra toàn bộ cốt thép 3D" Tag="QS3DREBARHEALTHALL" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra solid cốt thép cột/dầm" Tag="QS3DREBARHEALTH" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra solid cốt thép shape" Tag="QS3DREBARSHAPEHEALTH" Click="OnCommandClick"/>
                     <Button Content="Xem bảng cốt thép" Tag="QS3DBBSVIEW" Click="OnCommandClick"/>
@@ -80,7 +81,8 @@
                     <Button Content="So sánh với mốc" Tag="QS3DREVDIFF" Click="OnCommandClick"/>
 
                     <TextBlock Text="KIỂM TRA" Style="{StaticResource SectionLabel}" Margin="0,14,0,4"/>
-                    <Button Content="Kiểm tra sức khỏe mô hình" Tag="QS3DHEALTH" Click="OnCommandClick"/>
+                    <Button Content="Kiểm tra sức khỏe toàn diện" Tag="QS3DHEALTHALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Kiểm tra sức khỏe cơ bản" Tag="QS3DHEALTH" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra runtime V25" Tag="QS3DRUNTIMEPROBE" Click="OnCommandClick"/>
                 </StackPanel>
             </Grid>

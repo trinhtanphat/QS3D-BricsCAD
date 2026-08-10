@@ -14,22 +14,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Preflight source guard
+      - name: Generic source guard
         run: python scripts/preflight.py
-      - name: Full-domain and release source guard
-        run: python scripts/preflight-full-domain.py
-      - name: Auto-room lifecycle source guard
-        run: python scripts/preflight-room-lifecycle.py
-      - name: Geometry completion source guard
-        run: python scripts/preflight-geometry-completion.py
-      - name: Direct room curve-source guard
-        run: python scripts/preflight-room-curve-sources.py
-      - name: Wall junction source guard
-        run: python scripts/preflight-wall-junctions.py
-      - name: Safe opening auto-host source guard
-        run: python scripts/preflight-auto-host.py
-      - name: Native section-review source guard
-        run: python scripts/preflight-section-review.py
+      - name: All discovered feature source guards
+        run: python scripts/preflight-all.py
       - name: Validate release PowerShell syntax
         shell: pwsh
         run: |
