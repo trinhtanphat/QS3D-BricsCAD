@@ -82,7 +82,20 @@ required = {
         "QS3DDRAWFOUNDATION",
         "BricsCAD V25 x64 .NET plugin",
         "QS3DBUILD3D",
-        "Door / Opening Direct Draw is not included",
+        "Door / Opening Direct Draw extension",
+        "QS3DDRAWDOOR",
+        "QS3DDRAWOPENING",
+        "docs/DIRECT-DRAW-OPENINGS.md",
+        "Physical boolean remains explicit",
+    ],
+    "src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs": [
+        'CommandMethod("QS3DDRAWDOOR"',
+        'CommandMethod("QS3DDRAWOPENING"',
+    ],
+    "scripts/preflight-direct-draw-openings.py": [
+        "QS3DDRAWDOOR",
+        "QS3DDRAWOPENING",
+        "never invokes global physical cutting",
     ],
 }
 
@@ -104,6 +117,7 @@ if command_root.is_dir():
 for name in (
     "QS3DDRAWWALL", "QS3DDRAWGLASSWALL", "QS3DDRAWWALLPIER", "QS3DDRAWBEAM",
     "QS3DDRAWSTRUCTWALL", "QS3DDRAWCOLUMN", "QS3DDRAWSLAB", "QS3DDRAWFOUNDATION",
+    "QS3DDRAWDOOR", "QS3DDRAWOPENING",
 ):
     if commands.count(name) != 1:
         errors.append(name + " must be declared exactly once, found " + str(commands.count(name)))
@@ -122,9 +136,9 @@ if source.is_file():
     if text.count("element.SetProperty(") < 11:
         errors.append("Direct Draw P1 parameter writes must flow through canonical ProjectElement.SetProperty dirty/stale semantics")
     if text.count("RequireModelSpace(document);") < 4:
-        errors.append("Every Direct Draw P1 command must fail closed outside Model Space")
+        errors.append("Every Direct Draw P1 native command must fail closed outside Model Space")
     if text.count('element.SetProperty("BottomOffsetM"') < 4:
-        errors.append("All Direct Draw P1 commands must persist source-relative BottomOffsetM through ProjectElement.SetProperty")
+        errors.append("All Direct Draw P1 native commands must persist source-relative BottomOffsetM through ProjectElement.SetProperty")
     if "Sửa Family trước khi Direct Draw." not in text or "if (!(value > 0d))" not in text:
         errors.append("Direct Draw P1 must fail closed on invalid configured Family numerics instead of silently substituting fallback values")
     if "CadHandleService.GetLiveHandles(document, new[] { generatedHandle })" not in text:
@@ -132,7 +146,7 @@ if source.is_file():
     if "CadGeometryGuard.Finite(points[index].X" not in text or "CadGeometryGuard.Finite(points[index].Y" not in text:
         errors.append("Direct Draw P1 POLYLINE persistence must finite-check every X/Y coordinate")
     if 'CommandMethod("QS3DDRAWOPENING"' in text or 'CommandMethod("QS3DDRAWDOOR"' in text:
-        errors.append("Door/Opening Direct Draw must not be introduced without explicit host/link/boolean authoring contract")
+        errors.append("Door/Opening Direct Draw belongs in the separate host-aware DirectDrawOpeningCommands lifecycle, not the native P1 builder wrapper")
 
     create = text.find("sourceId = createSource();")
     capture = text.find("SemanticCaptureService.Capture(document, category)")
@@ -163,4 +177,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw P1 compiles its project snapshot rollback contract and is BricsCAD-hosted, Model-Space/unit-aware, uses source-relative canonical SetProperty writes, finite-checks persisted paths, re-checks active DWG before QS3DBUILD3D, verifies live native output, performs ownership-scoped CAD cleanup before semantic restore, and keeps post-commit UI failures non-destructive without guessed Door/Opening authoring.")
+print("PASS: Native Direct Draw P1 compiles its project snapshot rollback contract, reuses canonical QS3DBUILD3D and preserves ownership-safe lifecycle invariants; the separately implemented Door/Opening Direct Draw extension is present, uniquely registered, host-aware and guarded by its dedicated preflight with physical boolean kept explicit.")
