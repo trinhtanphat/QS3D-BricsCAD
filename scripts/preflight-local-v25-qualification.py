@@ -31,12 +31,43 @@ if runner.is_file():
         "manualScenarioChecklist",
         "Working tree is dirty. Qualification must run against an exact reproducible SHA.",
         "This does not replace the manual/private-DWG scenario checklist",
+        "[switch]$SignPackage",
+        "SigningCertThumbprint",
+        "TimestampUrl",
+        "sign-v25.ps1",
+        "verify-v25-signatures.ps1",
+        "finalize-v25-signed-package.ps1",
+        "-Confirm:$false",
+        "signingRequested",
+        "signingQualified",
+        "signerThumbprint",
+        "packageZipSha256",
+        "Signed release qualification requires the real licensed V25 runtime gate.",
     )
     for needle in required:
         if needle not in text:
             errors.append("local V25 runner missing fail-closed token: " + needle)
     if "-SkipRuntime" not in text:
         errors.append("local V25 runner must expose explicit runtime-skip state for diagnostics")
+
+    package_pos = text.find('"package-v25.ps1"')
+    sign_pos = text.find('"sign-v25.ps1"')
+    verify_pos = text.find('"verify-v25-signatures.ps1"')
+    finalize_pos = text.find('"finalize-v25-signed-package.ps1"')
+    if min(package_pos, sign_pos, verify_pos, finalize_pos) < 0:
+        errors.append("local V25 signing flow is incomplete")
+    elif not package_pos < sign_pos < verify_pos < finalize_pos:
+        errors.append("local V25 signing flow must be package -> sign -> verify -> finalize")
+
+    forbidden = (
+        ".pfx",
+        "SigningPassword",
+        "CertificatePassword",
+        "PfxPassword",
+    )
+    for needle in forbidden:
+        if needle.lower() in text.lower():
+            errors.append("local V25 runner must not accept or reference persisted private-key material/passwords: " + needle)
 
 if runbook.is_file():
     text = runbook.read_text(encoding="utf-8")
@@ -57,6 +88,14 @@ if runbook.is_file():
         if needle not in text:
             errors.append("local V25 runbook missing scenario/evidence token: " + needle)
 
+    for stale in (
+        "scripts\\local-v25-qualification.ps1",
+        "-RunRuntime",
+        "-BuildPackage",
+    ):
+        if stale in text:
+            errors.append("local V25 runbook contains stale/non-canonical runner syntax: " + stale)
+
 if agents.is_file():
     text = agents.read_text(encoding="utf-8")
     if "docs/LOCAL-V25-QUALIFICATION.md" not in text:
@@ -76,4 +115,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: local V25 work is exact-SHA/clean-tree gated, runs source/Core/adapter/runtime checks, records local evidence outside Git, and hands interactive/private-DWG scenarios to local-capable agents without weakening manual-only CI policy.")
+print("PASS: local V25 work is exact-SHA/clean-tree gated, runs source/Core/adapter/runtime checks, optionally signs/verifies/finalizes the exact package with a Windows-store certificate plus HTTPS timestamp, records evidence outside Git, and hands interactive/private-DWG scenarios to local-capable agents without weakening manual-only CI policy.")
