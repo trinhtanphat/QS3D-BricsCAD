@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25
                 var issues = new List<ModelHealthIssue>();
                 issues.AddRange(new ModelHealthService().Inspect(project, liveSources, liveGenerated));
                 issues.AddRange(new DependencyHealthService().Inspect(project));
+                issues.AddRange(new LevelReferenceHealthService().Inspect(project));
                 issues.AddRange(new SafeGeneratedHandleOwnershipHealthService().Inspect(project));
                 issues.AddRange(new GeneratedRebarHealthService().InspectAll(project, liveGenerated, liveGenerated));
                 issues.AddRange(new GeneratedTieRebarHealthService().Inspect(project, liveGenerated));
