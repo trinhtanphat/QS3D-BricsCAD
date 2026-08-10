@@ -86,7 +86,7 @@ namespace QS3D.BricsCAD.V25
                             }
                             planned.Add(new PlannedLink { Opening = opening, HostId = result.HostElementId, GapM = result.GapM });
                         }
-                        catch (Exception ex)
+                        catch (System.Exception ex)
                         {
                             invalid++;
                             document.Editor.WriteMessage("\n  " + opening.Id + ": bỏ qua — " + ex.Message);
@@ -119,7 +119,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(summary);
                 document.Editor.WriteMessage("\nQS3D " + summary + ". Chạy QS3DCUTOPENINGS khi muốn áp physical boolean.");
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DAUTOLINKHOSTS lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);

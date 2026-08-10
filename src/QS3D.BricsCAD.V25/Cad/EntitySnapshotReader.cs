@@ -9,6 +9,8 @@ namespace QS3D.BricsCAD.V25.Cad
 {
     internal static class EntitySnapshotReader
     {
+        private const int MaxCurrentSpaceEntities = 250000;
+
         public static IReadOnlyList<EntitySnapshot> ReadCurrentSelection(Document document) => ReadSelection(document, true);
         public static IReadOnlyList<EntitySnapshot> ReadImpliedSelection(Document document) => ReadSelection(document, false);
 
@@ -20,7 +22,14 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 var space = transaction.GetObject(document.Database.CurrentSpaceId, OpenMode.ForRead, false) as BlockTableRecord;
                 if (space != null)
-                    foreach (ObjectId id in space) AddSnapshot(transaction, id, result);
+                {
+                    var scanned = 0;
+                    foreach (ObjectId id in space)
+                    {
+                        if (scanned++ >= MaxCurrentSpaceEntities) throw new InvalidOperationException("QS3DB4D Current Space exceeds the guarded limit of " + MaxCurrentSpaceEntities + " entities.");
+                        try { AddSnapshot(transaction, id, result); } catch { }
+                    }
+                }
                 transaction.Commit();
             }
             return result;

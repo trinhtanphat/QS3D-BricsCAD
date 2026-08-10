@@ -26,10 +26,13 @@ namespace QS3D.Core.SmokeTests
             FamilyChangeNotification();
             FormulaEvaluatorIsConcurrent();
             FormulaEvaluatorHasResourceGuards();
+            FormulaRoundingAndSmallDivisor();
             ProjectLockCreatesParentDirectory();
             BulkEditRejectsNullIds();
+            BulkEditInvalidatesGeneratedGeometry();
             QsdbRejectsDtd();
             FailedRegenerationRemainsDirty();
+            GeometryDirtyStateIsPreserved();
         }
 
         private static void SemanticQuantityHardening()
@@ -154,6 +157,14 @@ namespace QS3D.Core.SmokeTests
             True(issues.Any(x => x.Code == "GENERATED_HANDLE_IN_SOURCE" && x.ElementId == "W-GEN"));
             True(issues.Any(x => x.Code == "GENERATED_SOLID_MISSING" && x.ElementId == "W-GEN"));
             True(issues.Any(x => x.Code == "DUPLICATE_GENERATED_HANDLE" && x.ElementId == "B-GEN"));
+            True(issues.Any(x => x.Code == "GENERATED_OWNERSHIP_MISSING" && x.ElementId == "W-GEN"));
+
+            beam.Properties["GeneratedSolidOwnershipVersion"] = "1";
+            beam.Properties["GeneratedSolidOwnerProjectId"] = "another-project";
+            beam.Properties["GeneratedSolidOwnerElementId"] = "another-element";
+            issues = new ModelHealthService().Inspect(project, null, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "FF" });
+            True(issues.Any(x => x.Code == "GENERATED_PROJECT_MISMATCH" && x.ElementId == "B-GEN"));
+            True(issues.Any(x => x.Code == "GENERATED_ELEMENT_MISMATCH" && x.ElementId == "B-GEN"));
         }
 
         private static void FamilyChangeNotification()
@@ -190,6 +201,16 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => evaluator.Evaluate("round(1, 1e100)"));
         }
 
+        private static void FormulaRoundingAndSmallDivisor()
+        {
+            var evaluator = new ExpressionEvaluator();
+            Near(3d, evaluator.Evaluate("round(2.5)"));
+            Near(-3d, evaluator.Evaluate("round(-2.5)"));
+            Near(3d, evaluator.Evaluate("round(2.5, 0)"));
+            True(Math.Abs(evaluator.Evaluate("1 / 1e-16") / 1e16d - 1d) < 1e-12d);
+            Throws<InvalidOperationException>(() => evaluator.Evaluate("1 / 0"));
+        }
+
         private static void ProjectLockCreatesParentDirectory()
         {
             var root = Path.Combine(Path.GetTempPath(), "qs3d-lock-parent-" + Guid.NewGuid().ToString("N"));
@@ -216,6 +237,28 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("room", "Room", ElementCategory.Room);
             project.Families.Add(family);
             Throws<ArgumentNullException>(() => new BulkEditService().AssignFamily(project, null!, family.Id));
+        }
+
+        private static void BulkEditInvalidatesGeneratedGeometry()
+        {
+            var project = NewProject();
+            var beam = new ProjectElement("B-BULK", ElementCategory.Beam, "beam", "f", "z");
+            beam.Properties["HeightM"] = "0.5";
+            beam.Properties["Material"] = "C30";
+            beam.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(beam);
+            var service = new BulkEditService();
+
+            Equal(1, service.SetProperty(project, new[] { beam }, "HeightM", "0.6").Count);
+            True((beam.Dirty & ElementDirtyFlags.Geometry) != 0);
+            beam.MarkClean(ElementDirtyFlags.All);
+
+            Equal(1, service.SetProperty(project, new[] { beam }, "Material", "C40").Count);
+            True((beam.Dirty & ElementDirtyFlags.Geometry) == 0);
+            beam.MarkClean(ElementDirtyFlags.All);
+
+            Equal(1, service.MultiplyNumericProperty(project, new[] { beam }, "HeightM", 2d).Count);
+            True((beam.Dirty & ElementDirtyFlags.Geometry) != 0);
         }
 
         private static void QsdbRejectsDtd()
@@ -250,6 +293,26 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => engine.RegenerateDirty(project));
             True((element.Dirty & ElementDirtyFlags.Quantity) != 0);
             True(element.Quantities.ContainsKey("Partial"));
+        }
+
+        private static void GeometryDirtyStateIsPreserved()
+        {
+            var project = NewProject();
+            var beam = new ProjectElement("B-GEOMETRY", ElementCategory.Beam, "beam", "f", "z");
+            beam.Properties["LengthM"] = "2";
+            beam.Properties["WidthM"] = "0.3";
+            beam.Properties["HeightM"] = "0.5";
+            beam.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(beam);
+
+            beam.SetProperty("HeightM", "0.6");
+            True((beam.Dirty & ElementDirtyFlags.Geometry) != 0);
+            var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
+            Equal(1, engine.RegenerateDirty(project));
+            Equal(ElementDirtyFlags.Geometry, beam.Dirty);
+            Equal(0, engine.RegenerateDirty(project));
+            beam.MarkClean(ElementDirtyFlags.Geometry);
+            Equal(ElementDirtyFlags.None, beam.Dirty);
         }
 
         private sealed class ThrowingRegenerator : IElementRegenerator

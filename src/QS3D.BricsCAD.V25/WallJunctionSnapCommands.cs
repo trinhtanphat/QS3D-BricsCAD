@@ -357,7 +357,7 @@ namespace QS3D.BricsCAD.V25
         private static void Guard(Document document, string operation, Action action)
         {
             try { action(); }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = operation + " lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);
