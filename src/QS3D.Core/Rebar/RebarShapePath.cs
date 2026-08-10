@@ -73,7 +73,7 @@ namespace QS3D.Core.Rebar
         {
             if (string.IsNullOrWhiteSpace(text)) return new List<double>();
             var values = new List<double>();
-            foreach (var token in Split(text))
+            foreach (var token in Split(text!))
             {
                 if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value <= 0d) throw new FormatException(label + " contains an invalid positive number: " + token);
                 values.Add(value);
@@ -84,7 +84,7 @@ namespace QS3D.Core.Rebar
         {
             if (string.IsNullOrWhiteSpace(text)) return Array.Empty<double>();
             var values = new List<double>();
-            foreach (var token in Split(text))
+            foreach (var token in Split(text!))
             {
                 if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || Math.Abs(value) > 180d) throw new FormatException("RebarShapeTurnsDeg contains an invalid turn angle: " + token);
                 values.Add(value);
@@ -98,7 +98,7 @@ namespace QS3D.Core.Rebar
             var tolerance = Math.Max(1e-6d, cuttingLengthM * 1e-6d);
             if (Math.Abs(total - cuttingLengthM) > tolerance) throw new InvalidOperationException("RebarShapeLegsM total " + total.ToString("R", CultureInfo.InvariantCulture) + " m does not match BBS cutting length " + cuttingLengthM.ToString("R", CultureInfo.InvariantCulture) + " m.");
         }
-        private static string Normalize(string? code) => string.IsNullOrWhiteSpace(code) ? "00" : code.Trim().ToUpperInvariant();
+        private static string Normalize(string? code) => string.IsNullOrWhiteSpace(code) ? "00" : code!.Trim().ToUpperInvariant();
         private static bool IsStraight(string code) => code == "00" || code == "0" || code == "STRAIGHT";
         private static double AddFinite(double left, double right, string label) { var result = left + right; if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " overflowed."); return result; }
     }

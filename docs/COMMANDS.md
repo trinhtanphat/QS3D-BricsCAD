@@ -68,7 +68,9 @@ Common boolean fields use a checkbox, mode/material/classification-like fields u
 ## Recognition, quantity and rebar
 
 - `QS3DRECOGNIZE`, `QS3DRECOGNIZEAUTO` — deterministic recognition + review/auto-accept.
-- `QS3DBQ` — quantity summary, filtering/grouping/Locate/XLSX.
+- `QS3DB4D` — bounded scan of the active Current Space. It reads curve/closed-area/Region/Hatch/Solid3d metrics, excludes QS3D-generated mass/rebar geometry, auto-applies only high-confidence recognition and leaves ambiguous results for review.
+- `QS3DBQ`, `QS3DED2` — quantity summary, filtering/grouping/Locate/XLSX. Export rows include stable QS3D Element IDs, hexadecimal CAD handles and the owning DWG fingerprint.
+- `QS3DEXCELLOCATE` — read a chosen workbook row, reject a fingerprint that differs from the active DWG, then select/zoom the resolved entities. Legacy BLT `$<decimal handle>` rows remain readable but require typing `YES` because those workbooks carry no fingerprint.
 - `QS3DBBSVIEW` — BBS review/Locate window.
 - `QS3DBBS` — BBS XLSX export.
 - `QS3DBBSCSV` — UTF-8 CSV export with spreadsheet formula-injection guards.
