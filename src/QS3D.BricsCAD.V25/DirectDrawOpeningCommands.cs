@@ -76,77 +76,74 @@ namespace QS3D.BricsCAD.V25
             double sillM,
             double clearanceM)
         {
+            EnsureActive(document, "Direct Draw " + label);
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
+            var sourceId = ObjectId.Null;
             var sourceHandle = string.Empty;
+            ProjectElement? createdElement = null;
+            var hostId = string.Empty;
+            var regeneratedBeforeLink = 0;
+            var regeneratedAfterLink = 0;
+
             try
             {
-                var sourceId = CreateLine(document, start, end);
+                sourceId = CreateLine(document, start, end);
+                if (sourceId.IsNull || !sourceId.IsValid) throw new InvalidOperationException("Không tạo được CAD source cho Direct Draw " + label + ".");
                 sourceHandle = sourceId.Handle.ToString();
                 document.Editor.SetImpliedSelection(new[] { sourceId });
 
                 var captured = SemanticCaptureService.Capture(document, category);
                 if (captured != 1) throw new InvalidOperationException("Direct Draw " + label + " cần capture đúng một semantic element, nhận được " + captured + ".");
 
-                var element = project.Elements.SingleOrDefault(x =>
+                createdElement = project.Elements.SingleOrDefault(x =>
                     x.Category == category && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)));
-                if (element == null) throw new InvalidOperationException("Không tìm thấy semantic " + label + " vừa tạo cho source " + sourceHandle + ".");
+                if (createdElement == null) throw new InvalidOperationException("Không tìm thấy semantic " + label + " vừa tạo cho source " + sourceHandle + ".");
 
-                element.Properties["WidthM"] = widthM.ToString("R", CultureInfo.InvariantCulture);
-                element.Properties["HeightM"] = heightM.ToString("R", CultureInfo.InvariantCulture);
-                element.Properties["SillHeightM"] = sillM.ToString("R", CultureInfo.InvariantCulture);
-                element.Properties["BottomOffsetM"] = sillM.ToString("R", CultureInfo.InvariantCulture);
-                element.Properties["BooleanClearanceM"] = clearanceM.ToString("R", CultureInfo.InvariantCulture);
-                element.MarkDirty(ElementDirtyFlags.Properties);
+                createdElement.SetProperty("WidthM", widthM.ToString("R", CultureInfo.InvariantCulture));
+                createdElement.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
+                createdElement.SetProperty("SillHeightM", sillM.ToString("R", CultureInfo.InvariantCulture));
+                createdElement.SetProperty("BottomOffsetM", sillM.ToString("R", CultureInfo.InvariantCulture));
+                createdElement.SetProperty("BooleanClearanceM", clearanceM.ToString("R", CultureInfo.InvariantCulture));
 
-                var regeneratedBeforeLink = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                regeneratedBeforeLink = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
-                // QS3DAUTOLINKHOSTS is selection-scoped. Keep only this new source selected so the
-                // established elevation/scope/ambiguity matcher cannot mutate unrelated openings.
+                // AutoHostLinkCommands resolves the active document internally. Re-check immediately
+                // before delegating and scope implied selection to this newly-created source only.
+                EnsureActive(document, "Direct Draw " + label + " / QS3DAUTOLINKHOSTS");
                 document.Editor.SetImpliedSelection(new[] { sourceId });
                 new AutoHostLinkCommands().AutoLinkHosts();
 
-                if (!element.Properties.TryGetValue("HostWallId", out var hostId) || string.IsNullOrWhiteSpace(hostId))
+                if (!createdElement.Properties.TryGetValue("HostWallId", out hostId) || string.IsNullOrWhiteSpace(hostId))
                     throw new InvalidOperationException(label + " chưa tìm được host duy nhất trong phạm vi Auto Host; operation được rollback để không tạo opening mồ côi.");
 
                 // AutoHostLinkCommands intentionally catches command-surface errors. Re-run the
-                // deterministic semantic engine here so a link/regeneration failure propagates into
-                // this command's outer snapshot rollback instead of looking like a successful authoring commit.
-                var regeneratedAfterLink = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-
+                // deterministic semantic engine so a link/regeneration failure propagates here.
+                regeneratedAfterLink = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 project.Touch();
-                PaletteCoordinator.RefreshProject();
-                document.Editor.SetImpliedSelection(new[] { sourceId });
-                document.Editor.Regen();
-                var status = label + ": width=" + widthM.ToString("0.###", CultureInfo.InvariantCulture) +
-                    " m • host=" + hostId + " • regen=" + (regeneratedBeforeLink + regeneratedAfterLink) +
-                    ". Semantic + Auto Host hoàn tất; dùng QS3DCUTOPENINGS khi muốn khoét physical host.";
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
             }
             catch (Exception operationError)
             {
-                Exception? restoreError = null;
                 Exception? cleanupError = null;
+                Exception? restoreError = null;
+                try { EraseSource(document, sourceId, sourceHandle); }
+                catch (Exception ex) { cleanupError = ex; }
                 try { rollback.Restore(project); }
                 catch (Exception ex) { restoreError = ex; }
-                try
-                {
-                    if (!string.IsNullOrWhiteSpace(sourceHandle)) EraseSource(document, sourceHandle);
-                }
-                catch (Exception ex) { cleanupError = ex; }
                 try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
                 catch { }
 
-                if (restoreError != null || cleanupError != null)
+                if (cleanupError != null || restoreError != null)
                 {
                     var errors = new List<Exception> { operationError };
-                    if (restoreError != null) errors.Add(restoreError);
                     if (cleanupError != null) errors.Add(cleanupError);
+                    if (restoreError != null) errors.Add(restoreError);
                     throw new InvalidOperationException("Direct Draw " + label + " thất bại và rollback không hoàn tất đầy đủ.", new AggregateException(errors));
                 }
                 throw;
             }
+
+            FinalizeUi(document, label, sourceId, widthM, hostId, regeneratedBeforeLink + regeneratedAfterLink);
         }
 
         private static IReadOnlyList<Point3d>? AcquireTwoPoints(Document document, string label)
@@ -184,6 +181,7 @@ namespace QS3D.BricsCAD.V25
 
         private static ObjectId CreateLine(Document document, Point3d start, Point3d end)
         {
+            ValidatePlanView(document, new[] { start, end }, "Opening LINE");
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
@@ -198,24 +196,46 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void EraseSource(Document document, string handle)
+        private static void EraseSource(Document document, ObjectId sourceId, string sourceHandle)
         {
-            var normalized = (handle ?? string.Empty).Trim();
-            if (normalized.Length == 0) return;
-            var ids = CadHandleService.Resolve(document, new[] { normalized });
+            if (sourceId.IsNull || !sourceId.IsValid)
+            {
+                if (string.IsNullOrWhiteSpace(sourceHandle)) return;
+                throw new InvalidOperationException("Rollback mất ObjectId của source " + sourceHandle + "; từ chối erase theo textual handle để tránh xóa nhầm CAD.");
+            }
+
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
-                foreach (var id in ids)
-                {
-                    var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
-                    if (entity == null) throw new InvalidOperationException("Rollback source " + normalized + " không còn là Entity hợp lệ.");
-                    if (!entity.IsErased) entity.Erase(true);
-                }
+                var entity = transaction.GetObject(sourceId, OpenMode.ForWrite, true) as Entity;
+                if (entity == null) throw new InvalidOperationException("Rollback source " + sourceHandle + " không còn là Entity hợp lệ.");
+                if (!entity.IsErased) entity.Erase(true);
                 transaction.Commit();
             }
-            if (CadHandleService.GetLiveHandles(document, new[] { normalized }).Count > 0)
-                throw new InvalidOperationException("Rollback còn source CAD chưa xóa: " + normalized + ".");
+
+            var handle = string.IsNullOrWhiteSpace(sourceHandle) ? sourceId.Handle.ToString() : sourceHandle.Trim();
+            if (CadHandleService.GetLiveHandles(document, new[] { handle }).Count > 0)
+                throw new InvalidOperationException("Rollback còn source CAD chưa xóa: " + handle + ".");
+        }
+
+        private static void FinalizeUi(Document document, string label, ObjectId sourceId, double widthM, string hostId, int regenerated)
+        {
+            var status = label + ": width=" + widthM.ToString("0.###", CultureInfo.InvariantCulture) +
+                " m • host=" + hostId + " • regen=" + regenerated +
+                ". Semantic + Auto Host hoàn tất; dùng QS3DCUTOPENINGS khi muốn khoét physical host.";
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                if (!sourceId.IsNull && sourceId.IsValid) document.Editor.SetImpliedSelection(new[] { sourceId });
+                document.Editor.Regen();
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\nQS3D " + status);
+            }
+            catch (Exception ex)
+            {
+                try { document.Editor.WriteMessage("\nQS3D " + status + " UI sync warning: " + ex.Message); }
+                catch { }
+            }
         }
 
         private static double? PromptPositiveMeters(Editor editor, string label, double defaultValue)
@@ -307,6 +327,12 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Direct Draw Cửa/Lỗ mở hiện chỉ hỗ trợ Model Space; chuyển sang Model rồi chạy lại.");
                 transaction.Commit();
             }
+        }
+
+        private static void EnsureActive(Document document, string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(operation + " yêu cầu đúng DWG đã bắt đầu lệnh vẫn là bản vẽ active.");
         }
 
         private static void Guard(Document document, string operation, Action action)
