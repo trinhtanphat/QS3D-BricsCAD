@@ -12,10 +12,12 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class FloorLevelWindow : Window
     {
+        private readonly Document _document;
         private bool _loading;
 
-        public FloorLevelWindow()
+        public FloorLevelWindow(Document document)
         {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             InitializeComponent();
             Loaded += (_, __) => RefreshAll();
         }
@@ -30,12 +32,10 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnActivateClick(object sender, RoutedEventArgs e)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
                 if (!(FloorList.SelectedItem is FloorDefinition floor)) throw new InvalidOperationException("Chọn một tầng trước khi đặt active.");
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 if (!string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
                 {
                     project.ActiveFloorId = floor.Id;
@@ -51,13 +51,12 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnAssignClick(object sender, RoutedEventArgs e)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
+                EnsureBoundDrawingIsActive("gán tầng cho selection");
                 if (!(FloorList.SelectedItem is FloorDefinition floor)) throw new InvalidOperationException("Chọn một tầng trước khi gán.");
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var elements = SemanticSelectionResolver.ResolveImplied(document, project).ToList();
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var elements = SemanticSelectionResolver.ResolveImplied(_document, project).ToList();
                 if (elements.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
 
                 var changed = 0;
@@ -80,12 +79,11 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnInspectSelectionClick(object sender, RoutedEventArgs e)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var elements = SemanticSelectionResolver.ResolveImplied(document, project);
+                EnsureBoundDrawingIsActive("kiểm tra selection");
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var elements = SemanticSelectionResolver.ResolveImplied(_document, project);
                 SelectionCountText.Text = elements.Count.ToString(CultureInfo.InvariantCulture);
                 var floors = elements.GroupBy(x => x.FloorId, StringComparer.OrdinalIgnoreCase)
                     .Select(x => (project.Floors.FirstOrDefault(f => string.Equals(f.Id, x.Key, StringComparison.OrdinalIgnoreCase))?.Name ?? x.Key) + ": " + x.Count())
@@ -97,11 +95,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshAll()
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var previous = (FloorList.SelectedItem as FloorDefinition)?.Id;
                 var floors = project.Floors.OrderBy(x => x.ElevationM).ThenBy(x => x.Name).ToList();
                 _loading = true;
@@ -114,6 +110,7 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 finally { _loading = false; }
                 RefreshLabels();
+                Title = "QS3D • Level Picker • " + DrawingLabel(_document);
                 if (floors.Count == 0) SetStatus("Project chưa có tầng. Tạo tầng trong Project Setup trước khi dùng Level Picker.");
             }
             catch (Exception ex) { SetStatus("Đọc Floor/Level lỗi: " + ex.Message); }
@@ -121,18 +118,35 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshLabels()
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var project = ProjectContextCoordinator.GetOrCreate(_document);
             var active = project.Floors.FirstOrDefault(x => string.Equals(x.Id, project.ActiveFloorId, StringComparison.OrdinalIgnoreCase));
             var selected = FloorList.SelectedItem as FloorDefinition;
             ActiveFloorText.Text = active == null ? "—" : active.Name + " • " + active.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m";
             SelectedFloorText.Text = selected == null ? "—" : selected.Name + " • " + selected.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m";
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+            {
+                SelectionCountText.Text = "—";
+                return;
+            }
             try
             {
-                SelectionCountText.Text = SemanticSelectionResolver.ResolveImplied(document, project).Count.ToString(CultureInfo.InvariantCulture);
+                SelectionCountText.Text = SemanticSelectionResolver.ResolveImplied(_document, project).Count.ToString(CultureInfo.InvariantCulture);
             }
             catch { SelectionCountText.Text = "!"; }
+        }
+
+        private void EnsureBoundDrawingIsActive(string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Level Picker trước khi " + operation + ".");
+        }
+
+        private static string DrawingLabel(Document document)
+        {
+            var name = document.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
+            try { return System.IO.Path.GetFileName(name); }
+            catch { return name; }
         }
 
         private void SetStatus(string text)
