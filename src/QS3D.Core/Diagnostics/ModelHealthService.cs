@@ -67,7 +67,7 @@ namespace QS3D.Core.Diagnostics
                 ValidateHost(project, element, issues);
                 ValidateDependencies(project, element, issues);
                 ValidateDimensions(element, issues);
-                ValidateGeneratedGeometry(element, liveGeneratedSolidHandles, generatedHandles, issues);
+                ValidateGeneratedGeometry(project, element, liveGeneratedSolidHandles, generatedHandles, issues);
                 if (RequiresMaterial(element.Category) && !HasMaterial(project, element)) issues.Add(new ModelHealthIssue("MISSING_MATERIAL", HealthSeverity.Warning, "Cấu kiện chưa có vật liệu.", element.Id));
                 ValidateRebar(element, issues);
 
@@ -164,7 +164,7 @@ namespace QS3D.Core.Diagnostics
             }
         }
 
-        private static void ValidateGeneratedGeometry(ProjectElement element, ISet<string>? liveGeneratedSolidHandles, IDictionary<string, string> owners, ICollection<ModelHealthIssue> issues)
+        private static void ValidateGeneratedGeometry(ProjectState project, ProjectElement element, ISet<string>? liveGeneratedSolidHandles, IDictionary<string, string> owners, ICollection<ModelHealthIssue> issues)
         {
             if (!element.Properties.TryGetValue("GeneratedSolidHandle", out var rawHandle)) return;
             var handle = (rawHandle ?? string.Empty).Trim();
@@ -185,6 +185,21 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISSING", HealthSeverity.Warning, "GeneratedSolidCategory bị thiếu hoặc không hợp lệ.", element.Id));
             else if (generatedCategory != element.Category)
                 issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISMATCH", HealthSeverity.Error, "GeneratedSolidCategory không khớp category semantic: " + generatedCategory + " ≠ " + element.Category + ".", element.Id));
+
+            var hasVersion = element.Properties.TryGetValue("GeneratedSolidOwnershipVersion", out var ownershipVersion) && !string.IsNullOrWhiteSpace(ownershipVersion);
+            var hasProjectOwner = element.Properties.TryGetValue("GeneratedSolidOwnerProjectId", out var ownerProjectId) && !string.IsNullOrWhiteSpace(ownerProjectId);
+            var hasElementOwner = element.Properties.TryGetValue("GeneratedSolidOwnerElementId", out var ownerElementId) && !string.IsNullOrWhiteSpace(ownerElementId);
+            if (!hasVersion || !hasProjectOwner || !hasElementOwner)
+                issues.Add(new ModelHealthIssue("GENERATED_OWNERSHIP_MISSING", HealthSeverity.Warning, "Generated solid is missing a QS3D ownership marker and cannot be replaced automatically.", element.Id));
+            else
+            {
+                if (!string.Equals(ownershipVersion!.Trim(), "1", StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("GENERATED_OWNERSHIP_VERSION", HealthSeverity.Error, "Generated solid ownership version is not supported: " + ownershipVersion + ".", element.Id));
+                if (!string.Equals(ownerProjectId!.Trim(), project.ProjectId, StringComparison.OrdinalIgnoreCase))
+                    issues.Add(new ModelHealthIssue("GENERATED_PROJECT_MISMATCH", HealthSeverity.Error, "Generated solid does not belong to the current project.", element.Id));
+                if (!string.Equals(ownerElementId!.Trim(), element.Id, StringComparison.OrdinalIgnoreCase))
+                    issues.Add(new ModelHealthIssue("GENERATED_ELEMENT_MISMATCH", HealthSeverity.Error, "Generated solid ownership does not match the current semantic element.", element.Id));
+            }
 
             if (liveGeneratedSolidHandles != null && !liveGeneratedSolidHandles.Contains(handle))
                 issues.Add(new ModelHealthIssue("GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy Solid3d đã được QS3D tạo hoặc handle hiện trỏ tới đối tượng không phải Solid3d.", element.Id));
