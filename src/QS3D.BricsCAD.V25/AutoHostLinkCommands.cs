@@ -7,6 +7,7 @@ using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Persistence;
 using QS3D.Core.Services;
 using Teigha.DatabaseServices;
 using Teigha.Runtime;
@@ -98,21 +99,41 @@ namespace QS3D.BricsCAD.V25
                 var service = new HostLinkService();
                 var linked = 0;
                 var unchanged = 0;
-                foreach (var item in planned)
+                var regenerated = 0;
+                if (planned.Count > 0)
                 {
-                    var existing = item.Opening.Properties.TryGetValue("HostWallId", out var hostId) ? hostId : string.Empty;
-                    if (string.Equals(existing?.Trim(), item.HostId, StringComparison.OrdinalIgnoreCase))
+                    var rollback = ProjectStateSnapshot.Capture(project);
+                    try
                     {
-                        unchanged++;
-                        continue;
+                        foreach (var item in planned)
+                        {
+                            var existing = item.Opening.Properties.TryGetValue("HostWallId", out var hostId) ? hostId : string.Empty;
+                            if (string.Equals(existing?.Trim(), item.HostId, StringComparison.OrdinalIgnoreCase))
+                            {
+                                unchanged++;
+                                continue;
+                            }
+                            service.LinkOpening(project, item.Opening.Id, item.HostId);
+                            item.Opening.Properties["AutoHostGapM"] = item.GapM.ToString("R", CultureInfo.InvariantCulture);
+                            item.Opening.Properties["AutoHostMatched"] = "true";
+                            linked++;
+                        }
+
+                        regenerated = linked > 0 ? Regenerate(project) : 0;
                     }
-                    service.LinkOpening(project, item.Opening.Id, item.HostId);
-                    item.Opening.Properties["AutoHostGapM"] = item.GapM.ToString("R", CultureInfo.InvariantCulture);
-                    item.Opening.Properties["AutoHostMatched"] = "true";
-                    linked++;
+                    catch (System.Exception operationError)
+                    {
+                        try { rollback.Restore(project); }
+                        catch (System.Exception restoreError)
+                        {
+                            throw new InvalidOperationException(
+                                "Auto Host batch failed and project rollback also failed.",
+                                new AggregateException(operationError, restoreError));
+                        }
+                        throw;
+                    }
                 }
 
-                var regenerated = linked > 0 ? Regenerate(project) : 0;
                 PaletteCoordinator.RefreshProject();
                 var summary = "Auto Host: linked=" + linked + " • unchanged=" + unchanged + " • ambiguous=" + ambiguous + " • unmatched=" + unmatched + " • invalid=" + invalid;
                 if (regenerated > 0) summary += " • regen=" + regenerated;
