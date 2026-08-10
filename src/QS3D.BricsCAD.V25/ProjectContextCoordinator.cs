@@ -44,6 +44,25 @@ namespace QS3D.BricsCAD.V25
             return project;
         }
 
+        public static bool TryGetReadOnly(Document document, out ProjectState project)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (Projects.TryGetValue(document, out var existing))
+            {
+                ValidateDrawingIdentityReadOnly(existing, document);
+                project = existing;
+                return true;
+            }
+
+            project = null;
+            if (!TryGetExistingProjectPath(document, out var path)) return false;
+            if (!File.Exists(path) && !File.Exists(path + ".bak")) return false;
+
+            project = LoadProject(path);
+            ValidateDrawingIdentityReadOnly(project, document);
+            return true;
+        }
+
         public static string Save(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -112,6 +131,23 @@ namespace QS3D.BricsCAD.V25
             return Path.ChangeExtension(drawing, ".qsdb");
         }
 
+        private static bool TryGetExistingProjectPath(Document document, out string path)
+        {
+            path = string.Empty;
+            var drawing = document.Name;
+            if (string.IsNullOrWhiteSpace(drawing) || !Path.IsPathRooted(drawing)) return false;
+            try
+            {
+                path = Path.ChangeExtension(drawing, ".qsdb");
+                return !string.IsNullOrWhiteSpace(path);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            {
+                path = string.Empty;
+                return false;
+            }
+        }
+
         private static ProjectState LoadProject(string path)
         {
             var loaded = Store.LoadWithBackupFallback(path);
@@ -139,14 +175,43 @@ namespace QS3D.BricsCAD.V25
             }
 
             if (!string.Equals(storedFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(
-                    "QS3D drawing identity mismatch. The .qsdb belongs to a different DWG fingerprint. " +
-                    "Move/recover the matching sidecar or explicitly reconcile the project before using CAD Handles. " +
-                    "Stored=" + storedFingerprint + ", current=" + fingerprint + ".");
+                ThrowDrawingIdentityMismatch(storedFingerprint, fingerprint);
 
             if (SameDrawingName(storedPath, drawing)) return;
             project.DrawingPath = drawing;
             project.Touch();
+        }
+
+        private static void ValidateDrawingIdentityReadOnly(ProjectState project, Document document)
+        {
+            var drawing = document.Name ?? string.Empty;
+            var fingerprint = GetDrawingFingerprint(document, drawing);
+            var storedPath = project.DrawingPath ?? string.Empty;
+            var storedFingerprint = project.DrawingFingerprint ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(storedFingerprint))
+            {
+                if (!string.IsNullOrWhiteSpace(storedPath) && !SameDrawingName(storedPath, drawing))
+                    ThrowDrawingIdentityMismatch("<legacy-empty>", fingerprint);
+                return;
+            }
+
+            if (string.Equals(storedPath, storedFingerprint, StringComparison.OrdinalIgnoreCase))
+            {
+                if (SameDrawingName(storedPath, drawing)) return;
+                ThrowDrawingIdentityMismatch(storedFingerprint, fingerprint);
+            }
+
+            if (!string.Equals(storedFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase))
+                ThrowDrawingIdentityMismatch(storedFingerprint, fingerprint);
+        }
+
+        private static void ThrowDrawingIdentityMismatch(string storedFingerprint, string currentFingerprint)
+        {
+            throw new InvalidOperationException(
+                "QS3D drawing identity mismatch. The .qsdb belongs to a different DWG fingerprint. " +
+                "Move/recover the matching sidecar or explicitly reconcile the project before using CAD Handles. " +
+                "Stored=" + storedFingerprint + ", current=" + currentFingerprint + ".");
         }
 
         private static string GetDrawingFingerprint(Document document, string drawing)
