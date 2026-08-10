@@ -21,6 +21,7 @@ namespace QS3D.Core.Services
             "GeneratedBeamStirrupHandles",
             "GeneratedSlabMeshHandles",
             "GeneratedWallMeshHandles",
+            "GeneratedFoundationMeshHandles",
             "GeneratedCurtainFrameHandles"
         };
 
