@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Rebar
@@ -19,6 +20,9 @@ namespace QS3D.Core.Rebar
         public double HookAllowanceM { get; set; }
         public double WastePercent { get; set; }
         public int? CountOverride { get; set; }
+        public string FabricationStatus { get; set; } = string.Empty;
+        public string FabricationStandardCode { get; set; } = string.Empty;
+        public string FabricationDetailingRevision { get; set; } = string.Empty;
     }
 
     public sealed class RebarScheduleRow
@@ -35,6 +39,9 @@ namespace QS3D.Core.Rebar
         public double NetWeightKg { get; set; }
         public double WastePercent { get; set; }
         public double TotalWeightKg { get; set; }
+        public string FabricationStatus { get; set; } = string.Empty;
+        public string FabricationStandardCode { get; set; } = string.Empty;
+        public string FabricationDetailingRevision { get; set; } = string.Empty;
     }
 
     public static class RebarScheduleBuilder
@@ -67,6 +74,9 @@ namespace QS3D.Core.Rebar
             cuttingLength = RebarMath.Add(cuttingLength, input.HookAllowanceM, "cutting + hook allowance");
             if (cuttingLength <= 0d) throw new InvalidOperationException("Rebar cutting length must be greater than zero.");
             var baseMark = string.IsNullOrWhiteSpace(input.BarMark) ? (string.IsNullOrWhiteSpace(input.ElementId) ? "BAR" : input.ElementId) : input.BarMark.Trim();
+            var fabricationStatus = Normalize(input.FabricationStatus);
+            var fabricationStandardCode = Normalize(input.FabricationStandardCode);
+            var fabricationDetailingRevision = Normalize(input.FabricationDetailingRevision);
 
             for (var index = 0; index < groups.Count; index++)
             {
@@ -90,7 +100,10 @@ namespace QS3D.Core.Rebar
                     UnitWeightKgM = unitWeight,
                     NetWeightKg = netWeight,
                     WastePercent = input.WastePercent,
-                    TotalWeightKg = totalWeight
+                    TotalWeightKg = totalWeight,
+                    FabricationStatus = fabricationStatus,
+                    FabricationStandardCode = fabricationStandardCode,
+                    FabricationDetailingRevision = fabricationDetailingRevision
                 });
             }
         }
@@ -127,6 +140,7 @@ namespace QS3D.Core.Rebar
             throw new InvalidOperationException("Rebar quantity cannot be inferred. Provide count notation, spacing + distribution length, or CountOverride.");
         }
 
+        private static string Normalize(string value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
         private static void EnsureFiniteNonNegative(double value, string name) => RebarMath.NonNegative(value, name);
     }
 
@@ -151,7 +165,10 @@ namespace QS3D.Core.Rebar
                     AnchorLengthM = Number(element, "RebarAnchorLengthM"),
                     HookAllowanceM = Number(element, "RebarHookAllowanceM"),
                     WastePercent = Number(element, "RebarWastePercent"),
-                    CountOverride = Integer(element, "RebarCount")
+                    CountOverride = Integer(element, "RebarCount"),
+                    FabricationStatus = Text(element, RebarFabricationQualificationHealthService.StatusPropertyKey, string.Empty),
+                    FabricationStandardCode = Text(element, RebarFabricationQualificationHealthService.StandardCodePropertyKey, string.Empty),
+                    FabricationDetailingRevision = Text(element, RebarFabricationQualificationHealthService.DetailingRevisionPropertyKey, string.Empty)
                 });
             }
             return RebarScheduleBuilder.Build(inputs);
