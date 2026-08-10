@@ -23,7 +23,10 @@ checks = {
         "ElementCategory.Skirting", "ElementCategory.WallFinish", "ElementCategory.CeilingFinish",
         "AutoRoomLifecycle.IsExcludedFromQuantity(project, element)", "ProjectMaterialCatalog.GetAll(project)",
         '"ParentRoomId"', '"SourceRoomId"', '"GeneratedFromRoomId"', '"RoomId"',
-        '"NetFinishAreaM2"', '"SkirtingLengthM"', '"TopAreaM2"', '"BottomAreaM2"',
+        'var roomKey = roomId.Length > 0 ? roomId : "(unlinked)"',
+        'FirstQuantity(element, "NetFinishAreaM2", "SideAreaM2", "AreaM2")',
+        'FirstQuantity(element, "SkirtingLengthM", "InnerPerimeterM", "PerimeterM", "LengthM")',
+        'FirstQuantity(element, "TopAreaM2", "AreaM2")', 'FirstQuantity(element, "BottomAreaM2", "AreaM2")',
         "PrimaryQuantity", "ElementIds", "RoomIds", "must be finite and non-negative",
     ],
     required[1]: [
@@ -35,8 +38,9 @@ checks = {
         "RoomFinishXlsxExporter.Export", "SaveFileDialog", "HT-Phong.xlsx",
     ],
     required[3]: [
-        "GroupsAreaAndLengthFinishesByRoom", "FamilyMaterialAndInstanceOverrideSplitRows", "UnlinkedFinishRemainsSchedulable",
-        "Phòng 101", "30d", "14d", "(chưa liên kết phòng)",
+        "GroupsAreaAndLengthFinishesByRoom", "FamilyMaterialAndInstanceOverrideSplitRows",
+        "SameRoomLabelsRemainSeparateByStableId", "PreferredQuantityDoesNotEvaluateUnusedLegacyFallbacks",
+        "UnlinkedFinishRemainsSchedulable", "room-2", "double.NaN", "Phòng 101", "30d", "14d", "(chưa liên kết phòng)",
     ],
     required[4]: ["RoomFinishScheduleSmoke.Run();"],
     required[5]: ["RoomFinishXlsxExporter.Export", "xl/worksheets/sheet1.xml", "Loại hoàn thiện", "Phòng 101", ">30<"],
@@ -58,4 +62,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: room-finish schedule covers floor/waterproof/skirting/wall/ceiling finishes, room linkage fallbacks, material inheritance and real XLSX export.")
+print("PASS: room-finish schedule keeps stable room identity, lazy quantity fallbacks, material inheritance and real XLSX export.")
