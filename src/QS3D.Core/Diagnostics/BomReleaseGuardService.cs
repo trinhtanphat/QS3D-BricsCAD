@@ -14,7 +14,23 @@ namespace QS3D.Core.Diagnostics
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
             issues.AddRange(new RoomFinishHealthService().Inspect(project));
-            var included = project.Elements.Where(x => !AutoRoomLifecycle.IsExcludedFromQuantity(project, x)).ToList();
+
+            var included = new List<ProjectElement>();
+            foreach (var element in project.Elements)
+            {
+                try
+                {
+                    if (!AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) included.Add(element);
+                }
+                catch (Exception ex)
+                {
+                    issues.Add(new ModelHealthIssue(
+                        "BOM_EXCLUSION_FAILED",
+                        HealthSeverity.Error,
+                        "Không thể quyết định an toàn cấu kiện có được đưa vào BQ hay không: " + ex.Message,
+                        element.Id));
+                }
+            }
 
             if (included.Count == 0)
                 issues.Add(new ModelHealthIssue("BOM_EMPTY", HealthSeverity.Warning, "Project chưa có semantic element đủ điều kiện để phát hành bảng khối lượng."));
@@ -35,9 +51,16 @@ namespace QS3D.Core.Diagnostics
                         issues.Add(new ModelHealthIssue("BOM_QUANTITY_NONFINITE", HealthSeverity.Error, "Quantity " + quantity.Key + " không phải số hữu hạn.", element.Id));
                 }
 
-                var traceHandles = SourceHandleResolver.Resolve(project, new[] { element.Id });
-                if (traceHandles.Count == 0)
-                    issues.Add(new ModelHealthIssue("BOM_TRACEABILITY_MISSING", HealthSeverity.Warning, "Dòng khối lượng không truy vết được về CAD Handle nguồn/generated.", element.Id));
+                try
+                {
+                    var traceHandles = SourceHandleResolver.Resolve(project, new[] { element.Id });
+                    if (traceHandles.Count == 0)
+                        issues.Add(new ModelHealthIssue("BOM_TRACEABILITY_MISSING", HealthSeverity.Warning, "Dòng khối lượng không truy vết được về CAD Handle nguồn/generated.", element.Id));
+                }
+                catch (Exception ex)
+                {
+                    issues.Add(new ModelHealthIssue("BOM_TRACEABILITY_FAILED", HealthSeverity.Error, "Không thể dựng provenance Handle an toàn: " + ex.Message, element.Id));
+                }
 
                 if (liveGeneratedHandles != null)
                     foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element))
