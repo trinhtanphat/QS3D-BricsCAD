@@ -28,7 +28,7 @@ if store.is_file():
         "File.Replace(temp, path, backup, true);",
         "catch (IOException)",
         "catch (UnauthorizedAccessException)",
-        "TryDelete(temp)",
+        "TryDelete(temp!)",
     ):
         if needle not in text: errors.append("UserUiLayoutStore missing fail-safe/atomic contract: " + needle)
     for forbidden in (".qsdb", "ProjectContextCoordinator", "ProjectState", "project.Metadata"):
@@ -37,9 +37,10 @@ if store.is_file():
 if palette.is_file():
     text = palette.read_text(encoding="utf-8")
     for needle in (
+        "using WpfSize = System.Windows.Size;",
         "var layout = UserUiLayoutStore.Get();",
-        "_workspace.DeviceIndependentSize = new Size(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);",
-        "_right.DeviceIndependentSize = new Size(layout.RightPaletteWidth, layout.RightPaletteHeight);",
+        "_workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);",
+        "_right.DeviceIndependentSize = new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight);",
         "PersistPaletteLayout();",
         "UserUiLayoutStore.Update(layout =>",
     ):

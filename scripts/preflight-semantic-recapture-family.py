@@ -12,10 +12,11 @@ if not service.is_file():
 else:
     text = service.read_text(encoding="utf-8")
     required = (
-        "family = project.FindFamily(element.FamilyId);",
-        "if (family == null || family.Category != category)",
+        "var existingFamily = project.FindFamily(element.FamilyId);",
+        "if (existingFamily == null || existingFamily.Category != category)",
         "family = ResolveFamily(project, category);",
         "element.FamilyId = family.Id;",
+        "else family = existingFamily;",
     )
     for token in required:
         if token not in text:
