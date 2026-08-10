@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using QS3D.Core.Domain;
+using QS3D.Core.Geometry;
 
 namespace QS3D.Core.Services
 {
@@ -43,6 +44,39 @@ namespace QS3D.Core.Services
             element.SetQuantity("NetWallAreaM2", netArea);
             element.SetQuantity("GrossVolumeM3", grossVolume);
             element.SetQuantity("NetVolumeM3", netVolume);
+
+            if (element.Category == ElementCategory.GlassWall)
+            {
+                var curtain = CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
+                {
+                    LengthM = length,
+                    HeightM = height,
+                    MaxPanelWidthM = SemanticNumber.Get(element, "CurtainMaxPanelWidthM", 1.2d),
+                    MaxPanelHeightM = SemanticNumber.Get(element, "CurtainMaxPanelHeightM", 1.5d),
+                    PerimeterFrameWidthM = SemanticNumber.Get(element, "CurtainPerimeterFrameWidthM", 0.05d),
+                    MullionWidthM = SemanticNumber.Get(element, "CurtainMullionWidthM", 0.05d),
+                    TransomWidthM = SemanticNumber.Get(element, "CurtainTransomWidthM", 0.05d)
+                });
+                var netGlassAreaM2 = QuantityMath.SubtractFloorZero(curtain.ClearGlassAreaM2, openingArea, element.Id + "/curtain net glass area");
+
+                element.SetQuantity("CurtainPanelColumns", curtain.Columns);
+                element.SetQuantity("CurtainPanelRows", curtain.Rows);
+                element.SetQuantity("CurtainPanelCount", curtain.PanelCount);
+                element.SetQuantity("CurtainBayWidthM", curtain.BayWidthM);
+                element.SetQuantity("CurtainBayHeightM", curtain.BayHeightM);
+                element.SetQuantity("CurtainMinClearPanelWidthM", curtain.MinimumClearPanelWidthM);
+                element.SetQuantity("CurtainMaxClearPanelWidthM", curtain.MaximumClearPanelWidthM);
+                element.SetQuantity("CurtainMinClearPanelHeightM", curtain.MinimumClearPanelHeightM);
+                element.SetQuantity("CurtainMaxClearPanelHeightM", curtain.MaximumClearPanelHeightM);
+                element.SetQuantity("CurtainVerticalFrameCount", curtain.VerticalFrameCount);
+                element.SetQuantity("CurtainHorizontalFrameCount", curtain.HorizontalFrameCount);
+                element.SetQuantity("CurtainVerticalFrameLengthM", curtain.VerticalFrameLengthM);
+                element.SetQuantity("CurtainHorizontalFrameLengthM", curtain.HorizontalFrameLengthM);
+                element.SetQuantity("CurtainFrameLengthM", curtain.TotalFrameLengthM);
+                element.SetQuantity("CurtainClearGlassAreaM2", curtain.ClearGlassAreaM2);
+                element.SetQuantity("CurtainNetGlassAreaM2", netGlassAreaM2);
+                element.SetQuantity("CurtainFrameFaceAreaM2", curtain.FrameFaceAreaM2);
+            }
         }
 
         private static double LinkedOpeningArea(ProjectState project, ProjectElement wall)
