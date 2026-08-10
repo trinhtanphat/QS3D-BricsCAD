@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Ribbon;
 using Teigha.Runtime;
@@ -25,31 +26,31 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.Show();
                 var ribbonReady = RibbonBootstrapper.TryInitialize();
                 if (!ribbonReady) throw new InvalidOperationException("QS3D ribbon initialization did not complete.");
+                if (!PaletteCoordinator.IsWorkspaceVisible) throw new InvalidOperationException("QS3D workspace palette is not visible after initialization.");
+                if (!PaletteCoordinator.IsRightPanelVisible) throw new InvalidOperationException("QS3D drawing/layer palette is not visible after initialization.");
 
                 var process = Process.GetCurrentProcess();
                 var assembly = typeof(RuntimeProbeCommands).Assembly;
                 var hostVersion = "unknown";
                 try { hostVersion = process.MainModule?.FileVersionInfo?.FileVersion ?? "unknown"; } catch { }
 
-                var directory = Path.GetDirectoryName(resultPath);
-                if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-
-                File.WriteAllLines(resultPath, new[]
+                WriteMarkerAtomic(resultPath, new[]
                 {
                     "status=PASS",
                     "command=QS3DRUNTIMEPROBE",
                     "utc=" + DateTime.UtcNow.ToString("O"),
-                    "process=" + process.ProcessName,
-                    "host_file_version=" + hostVersion,
-                    "clr=" + Environment.Version,
+                    "process=" + OneLine(process.ProcessName),
+                    "host_file_version=" + OneLine(hostVersion),
+                    "clr=" + OneLine(Environment.Version.ToString()),
                     "is_64bit=true",
-                    "assembly=" + assembly.Location,
-                    "assembly_version=" + (assembly.GetName().Version?.ToString() ?? "unknown"),
+                    "assembly=" + OneLine(assembly.Location),
+                    "assembly_version=" + OneLine(assembly.GetName().Version?.ToString() ?? "unknown"),
                     "ribbon_ready=true",
-                    "palette_visible=true"
+                    "palette_visible=true",
+                    "right_palette_visible=true"
                 });
 
-                Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nQS3D runtime probe PASS. Marker: " + resultPath);
+                Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nQS3D runtime probe PASS. Marker: " + Path.GetFullPath(resultPath));
             }
             catch (Exception ex)
             {
@@ -63,17 +64,51 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                var directory = Path.GetDirectoryName(resultPath);
-                if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-                File.WriteAllLines(resultPath, new[]
+                WriteMarkerAtomic(resultPath, new[]
                 {
                     "status=FAIL",
                     "command=QS3DRUNTIMEPROBE",
                     "utc=" + DateTime.UtcNow.ToString("O"),
-                    "error=" + error.GetType().FullName + ": " + error.Message
+                    "error=" + OneLine(error.GetType().FullName + ": " + error.Message)
                 });
             }
             catch { }
         }
+
+        private static void WriteMarkerAtomic(string resultPath, string[] lines)
+        {
+            if (string.IsNullOrWhiteSpace(resultPath)) throw new ArgumentException("Runtime result path is required.", nameof(resultPath));
+            if (lines == null) throw new ArgumentNullException(nameof(lines));
+            var fullPath = Path.GetFullPath(resultPath);
+            var directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+            var tempPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            var backupPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".replace.bak";
+            try
+            {
+                using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+                {
+                    foreach (var line in lines) writer.WriteLine(OneLine(line));
+                    writer.Flush();
+                    stream.Flush(true);
+                }
+
+                if (!File.Exists(fullPath)) File.Move(tempPath, fullPath);
+                else
+                {
+                    File.Replace(tempPath, fullPath, backupPath, true);
+                    TryDelete(backupPath);
+                }
+            }
+            finally
+            {
+                TryDelete(tempPath);
+                TryDelete(backupPath);
+            }
+        }
+
+        private static string OneLine(string value) => (value ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ');
+        private static void TryDelete(string path) { try { if (File.Exists(path)) File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
 }

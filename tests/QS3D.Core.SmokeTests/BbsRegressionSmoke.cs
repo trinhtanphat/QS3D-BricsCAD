@@ -1,6 +1,8 @@
 using System;
+using System.IO;
 using System.Linq;
 using QS3D.Core.Domain;
+using QS3D.Core.Export;
 using QS3D.Core.Rebar;
 
 namespace QS3D.Core.SmokeTests
@@ -14,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             SpacingRejectsArithmeticOverflow();
             AggregateRejectsOverflow();
             CuttingLengthFallbackIsLazy();
+            CsvRejectsInvalidRowsBeforeReplace();
         }
 
         private static void RebarWeightRejectsNonFiniteValues()
@@ -65,6 +68,29 @@ namespace QS3D.Core.SmokeTests
             var rows = ProjectRebarScheduleBuilder.Build(project);
             Equal(1, rows.Count);
             Near(2d, rows.Single().CuttingLengthM);
+        }
+
+        private static void CsvRejectsInvalidRowsBeforeReplace()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-csv-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "bbs.csv");
+            try
+            {
+                File.WriteAllText(path, "ORIGINAL");
+                var invalid = new RebarScheduleRow
+                {
+                    ElementId = "E1", BarMark = "B1", ShapeCode = "00", Notation = "1D16",
+                    DiameterMm = 16d, Quantity = 0, CuttingLengthM = 2d, TotalLengthM = 2d,
+                    UnitWeightKgM = RebarWeight.KilogramsPerMeter(16d), NetWeightKg = 3.16d, WastePercent = 0d, TotalWeightKg = 3.16d
+                };
+                Throws<ArgumentOutOfRangeException>(() => RebarCsvExporter.Export(path, new[] { invalid }));
+                Equal("ORIGINAL", File.ReadAllText(path));
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
         }
 
         private static void Near(double expected, double actual)

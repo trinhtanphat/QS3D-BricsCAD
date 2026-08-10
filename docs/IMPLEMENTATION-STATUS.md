@@ -23,12 +23,13 @@
 - HT_Phòng semantic generation for floor finish, waterproofing, skirting, wall finish and ceiling finish.
 - live Xref/Layer listing, controls, selection inspection and handle-based Locate/select.
 - semantic BQ groups by stable Floor/Family IDs, supports filtering/Locate/XLSX, has a real recalculate callback, and persists visible-column preferences in project metadata.
-- deterministic rebar notation/BBS calculation; `QS3DBBS` exports XLSX, `QS3DBBSVIEW` opens review/Locate UI, and `QS3DBBSCSV` exports UTF-8 CSV with spreadsheet formula-injection and non-finite-number guards.
+- deterministic rebar notation/BBS calculation; `QS3DBBS` exports XLSX, `QS3DBBSVIEW` opens review/Locate UI, and `QS3DBBSCSV` exports UTF-8 CSV with spreadsheet formula-injection, control-character and non-finite-number guards.
 - revision snapshot persistence (`.qsrev`) plus `QS3DREVBASE` / `QS3DREVDIFF` wiring to the revision comparison UI.
 - deterministic recognition core is wired to `QS3DRECOGNIZE` review UI and `QS3DRECOGNIZEAUTO`; auto mode only applies high-confidence/margin results, rejects ambiguous mappings/invalid confidence and refuses semantic category collisions.
 - project/company layer mappings can override recognition deterministically before fallback heuristics.
 - `.qstemplate` import/export is implemented for Families, QuantityRules, layer mappings and BQ column layout. Template files use size/DTD guards, validated temp writes and `.bak` replacement. Import marks affected elements dirty, regenerates deterministically, records audit provenance, and deliberately does not auto-save `.qsdb` before review.
 - generic Family properties can carry material/classification codes, so company classification data round-trips through templates without hard-coding a vendor classification schema.
+- V25 runtime probe source verifies actual palette visibility rather than treating command dispatch alone as UI success.
 - V25 release packaging generates a command manifest from `CommandMethod` declarations, package metadata, SHA-256 hashes for every shipped payload, installer/uninstaller helpers and a release ZIP while excluding BricsCAD-owned runtime assemblies.
 - per-user BricsCAD V25 DemandLoad installer source is implemented with `OnCommand` default / optional `OnStartup`, command registration, payload hash verification, optional Authenticode enforcement, staged file replacement, `-WhatIf`/confirmation semantics and safe uninstall. It intentionally does not weaken BricsCAD security settings.
 - expanded generic and full-domain/release preflight guards cover schema/persistence, command uniqueness, generated geometry, full-domain quantities, BBS CSV safety, DemandLoad wiring and PowerShell syntax.
@@ -37,7 +38,8 @@
 ## Verified in GitHub-hosted CI
 
 - Full-domain integration gates were run repeatedly while concurrent hardening was merged; the final PR #1 integration gate passed generic preflight, full-domain preflight, Core Release build and the complete deterministic smoke suite before merge.
-- Release-candidate run `31346731964` passed generic preflight, full-domain/release preflight, PowerShell AST parsing for package/install/uninstall scripts, Core Release build and the complete deterministic smoke suite on the V25 release-tooling branch.
+- Release-candidate run `31346731964` passed generic preflight, full-domain/release preflight, PowerShell AST parsing for package/install/uninstall scripts, Core Release build and the complete deterministic smoke suite.
+- Integrated release-tree run `31346906413` repeated those checks after merging the Audit/Template UI work and also passed generic preflight, full-domain/release preflight, PowerShell parsing, Core Release build and the complete deterministic smoke suite.
 - These GitHub-hosted checks validate repository/Core/release-script logic only; they are not substitutes for BricsCAD V25 plugin/runtime execution.
 
 ## Gate C blocker

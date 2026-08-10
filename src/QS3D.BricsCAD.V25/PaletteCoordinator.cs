@@ -16,6 +16,9 @@ namespace QS3D.BricsCAD.V25
         private static WorkspacePanel? _workspacePanel;
         private static RightPanel? _rightPanel;
 
+        public static bool IsWorkspaceVisible => _workspace != null && _workspace.Visible;
+        public static bool IsRightPanelVisible => _right != null && _right.Visible;
+
         public static void EnsureCreated()
         {
             if (_workspace != null && _right != null) return;
