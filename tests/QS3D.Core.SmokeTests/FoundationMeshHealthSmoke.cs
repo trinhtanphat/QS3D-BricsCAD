@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             DetectsWrongCategoryAndStaleSnapshot();
             DetectsCrossKeyOwnershipConflict();
             ClearsFoundationStaleIndependently();
+            DedicatedModeHealthReadsFoundationSlot();
         }
 
         private static void HealthyFoundation()
@@ -58,6 +59,19 @@ namespace QS3D.Core.SmokeTests
             Require(foundation.IsGeneratedFoundationMeshStale(), "foundation mesh should become stale after semantic geometry mutation");
             foundation.ClearGeneratedFoundationMeshStale();
             Require(!foundation.IsGeneratedFoundationMeshStale(), "foundation stale state should clear after successful rebuild");
+        }
+
+        private static void DedicatedModeHealthReadsFoundationSlot()
+        {
+            var project = new ProjectState("P", "P");
+            var foundation = MeshElement("F1", ElementCategory.Foundation, "AA", "1");
+            project.Elements.Add(foundation);
+            var issues = new GeneratedRebarModeHealthService().Inspect(project);
+            Require(!issues.Any(x => x.Severity == HealthSeverity.Error || x.Code == "GENERATED_REBAR_MODE_METADATA_INVALID"), "healthy FoundationMeshXY dedicated mode should pass mode health");
+
+            foundation.Category = ElementCategory.Slab;
+            issues = new GeneratedRebarModeHealthService().Inspect(project);
+            Require(issues.Any(x => x.Code == "GENERATED_REBAR_MODE_CATEGORY_MISMATCH"), "dedicated FoundationMeshXY mode/category mismatch not detected");
         }
 
         private static ProjectElement MeshElement(string id, ElementCategory category, string handles, string count)
