@@ -73,15 +73,18 @@ if CURVED.is_file():
         "storedIds.SequenceEqual(openingIds, StringComparer.OrdinalIgnoreCase)",
         "OpeningIds = openingIds",
         "PhysicalOpeningCutTargetState.Write(update.Host, update.OpeningIds);",
+        "foreach (var update in pending) CommitSemanticUpdate(project, update);",
     ):
         if token not in text:
             errors.append("curved physical-cut exact target-state missing: " + token)
 
     boolean_pos = text.find("hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);")
-    write_pos = text.find("PhysicalOpeningCutTargetState.Write(update.Host, update.OpeningIds);")
-    commit_pos = text.find("transaction.Commit();")
-    if min(boolean_pos, write_pos, commit_pos) < 0 or not (boolean_pos < write_pos < commit_pos):
-        errors.append("curved cut target-state must be persisted before the CAD transaction commit")
+    semantic_commit_call = text.find("foreach (var update in pending) CommitSemanticUpdate(project, update);")
+    cad_commit_pos = text.find("transaction.Commit();", semantic_commit_call)
+    helper_pos = text.find("private static void CommitSemanticUpdate(ProjectState project, PendingHostUpdate update)")
+    write_pos = text.find("PhysicalOpeningCutTargetState.Write(update.Host, update.OpeningIds);", helper_pos)
+    if min(boolean_pos, semantic_commit_call, cad_commit_pos, helper_pos, write_pos) < 0 or not (boolean_pos < semantic_commit_call < cad_commit_pos and helper_pos < write_pos):
+        errors.append("curved cut must invoke semantic target-state persistence before CAD commit, and CommitSemanticUpdate must write exact opening ids")
 
 for path, label in ((AUTO, "auto host"), (MANUAL, "manual host")):
     if path.is_file():
