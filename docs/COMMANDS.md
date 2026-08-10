@@ -76,8 +76,13 @@ Common boolean fields use a checkbox, mode/material/classification-like fields u
 - `QS3DREBARHEALTH` — verify generated column-bar ownership/handle/count state.
 - `QS3DREBAR3DSHAPE` — generate supported BBS-shape-driven 3D bars. Source supports straight and configured L/U/Z/custom leg/turn paths; shape metadata and total cutting length are validated before geometry mutation.
 - `QS3DREBARSHAPEHEALTH` — verify generated shape-bar ownership/handle state.
+- `QS3DBEAMSTIRRUP3D` — generate rectangular beam-stirrup loop solids along supported horizontal Beam `LINE` source. Distribution is driven by deterministic beam-stirrup planning using count or spacing plus section/end cover and diameter. Generated handles use dedicated ownership metadata; batch/element counts are bounded.
+- `QS3DBEAMSTIRRUPHEALTH` — review generated beam-stirrup handles/ownership/live-solid state and Locate affected solids.
+- `QS3DREBARTIES3D` — generate rectangular column tie loop solids for supported Column semantic elements with closed 4-vertex rectangular POLYLINE source. Tie diameter, count/spacing and cover/clearance inputs are validated before native geometry mutation.
+- `QS3DREBARTIEHEALTH` — review generated column tie ownership/live-solid state and Locate affected solids.
+- Beam stirrup and column tie loops currently use guarded segmented-cylinder geometry. They do **not** invent fabrication hooks, bend radii or code-specific anchorage where explicit dimensions are absent.
 
-See [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for shape metadata and current geometric limits.
+See [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for shape/stirrup/tie metadata and current geometric limits.
 
 ## Review / viewport
 
@@ -98,7 +103,7 @@ See [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for shape metadata and curren
 
 ## UI entry points
 
-The main palette, Ribbon and Full Domain Hub expose the major product flows consistently: Room Auto, Tường KT, Giao tường + review-gated snap cleanup, Auto/Manual Door-Opening host linking, physical cuts, Build 3D, Focus/Isolate/Section Box, BQ/BBS, column rebar, shape rebar, health checks and revision tools. The goal is to minimize command-line memorization while preserving explicit commands for power users and test harnesses.
+The main palette, Ribbon and Full Domain Hub expose the major product flows consistently: Room Auto, Tường KT, Giao tường + review-gated snap cleanup, Auto/Manual Door-Opening host linking, physical cuts, Build 3D, Focus/Isolate/Section Box, BQ/BBS, column longitudinal rebar, BBS-shape rebar, beam stirrups, column ties, health checks and revision tools. The goal is to minimize command-line memorization while preserving explicit commands for power users and test harnesses.
 
 ## Packaging and autoload
 
