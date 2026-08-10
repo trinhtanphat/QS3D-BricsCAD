@@ -1,0 +1,30 @@
+name: QS3D Beam Stirrup Bend Gate
+
+on:
+  push:
+    branches:
+      - ci/beam-stirrup-bends2-20260810
+
+jobs:
+  integration:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Remove temporary trigger before release-policy checks
+        shell: pwsh
+        run: Remove-Item .github/workflows/beam-stirrup-bends-ci.yml -Force
+      - name: Run every repository preflight
+        shell: pwsh
+        run: |
+          Get-ChildItem scripts -Filter 'preflight*.py' | Sort-Object Name | ForEach-Object {
+            Write-Host "=== $($_.Name) ==="
+            python $_.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic Core smoke suite
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
