@@ -12,8 +12,10 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             PreviewIsReadOnlyAndClassifiesChanges();
+            ProvenanceOnlyStaleOutputIsRemoved();
             StaleElementPreviewFailsBeforeMutation();
             ProjectPreviewAppliesAtomicallyFromFreshState();
+            HealthGuardedProjectApplyReturnsRegressionDiff();
             ForeignElementInstanceFailsClosed();
         }
 
@@ -36,6 +38,19 @@ namespace QS3D.Core.SmokeTests
             Near(9d, element.Quantities["OldManaged"]);
             Equal("old@1", element.Properties["Rule:OldManaged"]);
             Equal(originalUpdated, element.UpdatedUtc);
+        }
+
+        private static void ProvenanceOnlyStaleOutputIsRemoved()
+        {
+            var project = Fixture();
+            var element = project.FindElement("E1")!;
+            element.Properties["Rule:Ghost"] = "old@1";
+            var preview = new QuantityRulePreviewService().PreviewElement(project, element);
+            var ghost = preview.Changes.Single(x => x.OutputName == "Ghost");
+            Equal(QuantityRulePreviewChangeKind.Removed, ghost.Kind);
+            True(!ghost.BeforeValue.HasValue && !ghost.AfterValue.HasValue);
+            Equal("old@1", ghost.BeforeProvenance);
+            Equal(string.Empty, ghost.AfterProvenance);
         }
 
         private static void StaleElementPreviewFailsBeforeMutation()
@@ -71,6 +86,17 @@ namespace QS3D.Core.SmokeTests
             Near(12d, project.FindElement("E2")!.Quantities["Cost"]);
             Equal("cost@1", project.FindElement("E1")!.Properties["Rule:Cost"]);
             Equal("cost@1", project.FindElement("E2")!.Properties["Rule:Cost"]);
+        }
+
+        private static void HealthGuardedProjectApplyReturnsRegressionDiff()
+        {
+            var project = Fixture();
+            var service = new QuantityRulePreviewService();
+            var preview = service.PreviewProject(project);
+            var result = service.ApplyProjectWithHealthGuard(project, preview);
+            True(result.AppliedOperationCount >= 1);
+            Equal(0, result.HealthDiff.NewErrorCount);
+            Near(6d, project.FindElement("E1")!.Quantities["Cost"]);
         }
 
         private static void ForeignElementInstanceFailsClosed()
