@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -36,7 +37,8 @@ namespace QS3D.BricsCAD.V25.UI
                     Name = System.IO.Path.GetFileName(doc.Name),
                     Path = doc.Name,
                     Kind = "MODEL",
-                    IsLocked = false,
+                    LockState = "—",
+                    InstanceText = "—",
                     IsXref = false
                 });
                 foreach (var item in DrawingCatalogReader.ReadReferences(doc))
@@ -45,7 +47,8 @@ namespace QS3D.BricsCAD.V25.UI
                         Name = item.Name,
                         Path = item.Path,
                         Kind = "XREF",
-                        IsLocked = false,
+                        LockState = item.LockState,
+                        InstanceText = item.InstanceCount.ToString(CultureInfo.InvariantCulture),
                         IsXref = true
                     });
                 if (selectedDrawing != null && DrawingList != null)
@@ -191,12 +194,43 @@ namespace QS3D.BricsCAD.V25.UI
                 var count = LayerVisibilityService.SetLocked(doc, names, locked);
                 _viewModel.Status = (locked ? "Đã khóa " : "Đã mở khóa ") + count + " layer";
                 RefreshLayers();
+                RefreshDrawingsOnly();
             }
             catch (Exception ex)
             {
                 _viewModel.Status = ex.Message;
                 RefreshLayers();
+                RefreshDrawingsOnly();
             }
+        }
+
+        private void RefreshDrawingsOnly()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            var selectedDrawing = DrawingList?.SelectedItem as DrawingItemViewModel;
+            _viewModel.Drawings.Clear();
+            _viewModel.Drawings.Add(new DrawingItemViewModel
+            {
+                Name = System.IO.Path.GetFileName(doc.Name),
+                Path = doc.Name,
+                Kind = "MODEL",
+                LockState = "—",
+                InstanceText = "—",
+                IsXref = false
+            });
+            foreach (var item in DrawingCatalogReader.ReadReferences(doc))
+                _viewModel.Drawings.Add(new DrawingItemViewModel
+                {
+                    Name = item.Name,
+                    Path = item.Path,
+                    Kind = "XREF",
+                    LockState = item.LockState,
+                    InstanceText = item.InstanceCount.ToString(CultureInfo.InvariantCulture),
+                    IsXref = true
+                });
+            if (selectedDrawing != null && DrawingList != null)
+                DrawingList.SelectedItem = _viewModel.Drawings.FirstOrDefault(x => x.IsXref == selectedDrawing.IsXref && string.Equals(x.Name, selectedDrawing.Name, StringComparison.OrdinalIgnoreCase));
         }
 
         private void OnAttachXrefClick(object sender, RoutedEventArgs e) => Send("_XATTACH");
