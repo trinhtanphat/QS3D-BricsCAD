@@ -50,6 +50,18 @@ if not errors:
         if needle not in i:
             errors.append("remap append importer missing atomic/ownership/rewrite contract: " + needle)
 
+    # Planner preview and executor must recognize the exact same conservative ID/ref suffix set.
+    reference_suffixes = ["Id", "Ids", "Ref", "Refs", "RefId", "RefIds"]
+    for suffix in reference_suffixes:
+        planner_needle = f'trimmedKey.EndsWith("{suffix}", StringComparison.OrdinalIgnoreCase)'
+        importer_needle = f'k.EndsWith("{suffix}", StringComparison.OrdinalIgnoreCase)'
+        if planner_needle not in p:
+            errors.append("remap planner opaque-reference policy missing suffix: " + suffix)
+        if importer_needle not in i:
+            errors.append("remap executor opaque-reference policy missing suffix: " + suffix)
+    if "sourceElementIds.Contains(value.Trim())" in p:
+        errors.append("remap planner must not hide unknown ID/ref-like properties just because their value is outside the source Element set")
+
     # Re-plan must happen before snapshot capture/mutation, not just rely on an old UI preview.
     if i.index("var plan = Plan(target, json);") > i.index("ProjectStateSnapshot.Capture(target)"):
         errors.append("Import As New must re-plan against current target before mutation snapshot")
@@ -108,4 +120,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New re-plans immediately before semantic mutation, rewrites only registered relations, strips incoming native ownership, preserves all existing target identities, and rolls back semantic state on failure.")
+print("Import As New re-plans immediately before semantic mutation, keeps planner/executor opaque-reference policy aligned, rewrites only registered relations, strips incoming native ownership, preserves all existing target identities, and rolls back semantic state on failure.")
