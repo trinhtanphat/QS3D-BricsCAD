@@ -1,7 +1,9 @@
 using System;
 using System.IO;
 using System.Linq;
+using QS3D.Core.Audit;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rules;
 using QS3D.Core.Services;
 using QS3D.Core.Templates;
@@ -15,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             TemplateApplyPreflightIsAtomic();
             TemplateFamilyDefaultsRespectOverrides();
             TemplateParserRejectsDuplicateMappings();
+            ProjectSnapshotRestoresTemplateRollbackState();
             RuleOutputsAreCleanedWhenRulesChange();
             RuleEvaluationIsAtomic();
             DuplicateRuleOutputsAreRejected();
@@ -72,6 +75,46 @@ namespace QS3D.Core.SmokeTests
                 Throws<InvalidDataException>(() => new TemplateProfileStore().Load(path));
             }
             finally { DeleteDirectory(directory); }
+        }
+
+        private static void ProjectSnapshotRestoresTemplateRollbackState()
+        {
+            var project = NewBeamProject();
+            project.Name = "Before";
+            project.Metadata["Custom"] = "before";
+            project.QuantityRules.Add(new QuantityRule("r", ElementCategory.Beam, "RuleQ", "1", "1"));
+            project.AuditEvents.Add(new AuditEvent { Action = "before", ElementId = "B1", Detail = "original", Utc = DateTime.UtcNow });
+            var element = project.Elements.Single();
+            element.Quantities["NetVolumeM3"] = .3d;
+            element.MarkClean(ElementDirtyFlags.All);
+            var expectedDirty = element.Dirty;
+            var expectedUpdated = element.UpdatedUtc;
+            var snapshot = ProjectStateSnapshot.Capture(project);
+
+            project.Name = "After";
+            project.FindFamily("beam")!.Name = "Mutated";
+            project.FindFamily("beam")!.Properties["WidthM"] = "9";
+            element.Properties["WidthM"] = "9";
+            element.Quantities["NetVolumeM3"] = 99d;
+            element.MarkDirty(ElementDirtyFlags.All);
+            project.QuantityRules.Clear();
+            project.Metadata["Custom"] = "after";
+            project.AuditEvents.Clear();
+            project.Elements.Add(new ProjectElement("EXTRA", ElementCategory.Room, string.Empty, "f", "z"));
+
+            snapshot.Restore(project);
+            Equal("Before", project.Name);
+            Equal("Beam", project.FindFamily("beam")!.Name);
+            Equal("0.3", project.FindFamily("beam")!.Properties["WidthM"]);
+            Equal(1, project.Elements.Count);
+            Equal("0.3", project.FindElement("B1")!.Properties["WidthM"]);
+            Near(.3d, project.FindElement("B1")!.Quantities["NetVolumeM3"]);
+            Equal(expectedDirty, project.FindElement("B1")!.Dirty);
+            Equal(expectedUpdated, project.FindElement("B1")!.UpdatedUtc);
+            Equal(1, project.QuantityRules.Count);
+            Equal("before", project.Metadata["Custom"]);
+            Equal(1, project.AuditEvents.Count);
+            Equal("before", project.AuditEvents.Single().Action);
         }
 
         private static void RuleOutputsAreCleanedWhenRulesChange()
