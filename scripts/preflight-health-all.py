@@ -17,6 +17,7 @@ services = [
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedFoundationMeshHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs",
+    ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarModeHealthService.cs",
 ]
 for path in [command] + services:
@@ -42,6 +43,7 @@ if command.is_file():
         "new GeneratedFoundationMeshHealthService().Inspect",
         "new GeneratedCurtainFrameHealthService().Inspect",
         "new GeneratedRebarOwnershipHealthService().Inspect",
+        "new GeneratedHandleOwnershipHealthService().Inspect",
         "new GeneratedRebarModeHealthService().Inspect",
         'PropertyHandles(project, "GeneratedSolidHandle")',
         'PropertyHandles(project, "GeneratedRebarHandles")',
@@ -74,4 +76,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: full model/generated/rebar/curtain health aggregation covers longitudinal, shape, tie, stirrup, slab mesh, wall mesh, foundation mesh, curtain frames, cross-family ownership, mode semantics, dedupe and Locate wiring.")
+print("PASS: full model/generated/rebar/curtain health aggregation covers longitudinal, shape, tie, stirrup, slab mesh, wall mesh, foundation mesh, curtain frames, rebar-specific and generic ownership, mode semantics, dedupe and Locate wiring.")
