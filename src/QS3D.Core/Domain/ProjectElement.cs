@@ -59,8 +59,11 @@ namespace QS3D.Core.Domain
         public void SetProperty(string name, string value)
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Property name is required.", nameof(name));
-            Properties[name.Trim()] = value ?? string.Empty;
-            MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
+            var normalized = name.Trim();
+            Properties[normalized] = value ?? string.Empty;
+            var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
+            if (ElementGeometryPolicy.AffectsGeneratedGeometry(Category, normalized)) flags |= ElementDirtyFlags.Geometry;
+            MarkDirty(flags);
         }
 
         public void SetQuantity(string name, double value)
