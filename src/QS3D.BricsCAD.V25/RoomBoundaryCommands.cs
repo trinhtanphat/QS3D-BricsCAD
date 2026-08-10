@@ -8,6 +8,7 @@ using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Persistence;
 using QS3D.Core.Services;
 using Teigha.Runtime;
 
@@ -40,55 +41,72 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var family = ResolveRoomFamily(project);
-                var audit = AuditTrail.ForProject(project);
-                var created = 0;
-                var updated = 0;
-                foreach (var boundary in boundaries)
+                var rollback = ProjectStateSnapshot.Capture(project);
+                try
                 {
-                    var id = "ROOMAUTO-" + StableToken(boundary.Key);
-                    var element = project.FindElement(id);
-                    var isNew = element == null;
-                    if (element == null)
+                    var family = ResolveRoomFamily(project);
+                    var audit = AuditTrail.ForProject(project);
+                    var created = 0;
+                    var updated = 0;
+                    foreach (var boundary in boundaries)
                     {
-                        element = new ProjectElement(id, ElementCategory.Room, family.Id, project.ActiveFloorId, project.ActiveZoneId);
-                        project.Elements.Add(element);
-                        created++;
-                    }
-                    else
-                    {
-                        if (element.Category != ElementCategory.Room) throw new InvalidOperationException("Boundary id collision with non-room semantic element: " + id);
-                        updated++;
+                        var id = "ROOMAUTO-" + StableToken(boundary.Key);
+                        var element = project.FindElement(id);
+                        var isNew = element == null;
+                        if (element == null)
+                        {
+                            element = new ProjectElement(id, ElementCategory.Room, family.Id, project.ActiveFloorId, project.ActiveZoneId);
+                            project.Elements.Add(element);
+                            created++;
+                        }
+                        else
+                        {
+                            if (element.Category != ElementCategory.Room) throw new InvalidOperationException("Boundary id collision with non-room semantic element: " + id);
+                            updated++;
+                        }
+
+                        element.Category = ElementCategory.Room;
+                        element.FamilyId = family.Id;
+                        element.FloorId = project.ActiveFloorId;
+                        element.ZoneId = project.ActiveZoneId;
+                        element.DrawingFingerprint = project.DrawingFingerprint;
+                        element.Properties["BoundaryMode"] = "AutoNetwork";
+                        element.Properties["BoundaryKey"] = boundary.Key;
+                        element.Properties["BoundarySourceHandles"] = string.Join(";", boundary.SourceIds);
+                        element.Properties["BoundaryVertexCount"] = boundary.Vertices.Count.ToString(CultureInfo.InvariantCulture);
+                        element.Properties["BoundaryArcSagittaM"] = arcSagitta.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["AreaM2"] = boundary.Area.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["PerimeterM"] = boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture);
+                        foreach (var property in family.Properties)
+                            if (!element.Properties.ContainsKey(property.Key)) element.Properties[property.Key] = property.Value;
+                        element.MarkDirty(ElementDirtyFlags.All);
+                        audit.Record(isNew ? "RoomBoundaryCreate" : "RoomBoundaryUpdate", element.Id,
+                            "area=" + boundary.Area.ToString("R", CultureInfo.InvariantCulture) +
+                            ";perimeter=" + boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture) +
+                            ";sources=" + boundary.SourceIds.Count.ToString(CultureInfo.InvariantCulture) +
+                            ";arcSagitta=" + arcSagitta.ToString("R", CultureInfo.InvariantCulture));
                     }
 
-                    element.Category = ElementCategory.Room;
-                    element.FamilyId = family.Id;
-                    element.FloorId = project.ActiveFloorId;
-                    element.ZoneId = project.ActiveZoneId;
-                    element.DrawingFingerprint = project.DrawingFingerprint;
-                    element.Properties["BoundaryMode"] = "AutoNetwork";
-                    element.Properties["BoundaryKey"] = boundary.Key;
-                    element.Properties["BoundarySourceHandles"] = string.Join(";", boundary.SourceIds);
-                    element.Properties["BoundaryVertexCount"] = boundary.Vertices.Count.ToString(CultureInfo.InvariantCulture);
-                    element.Properties["BoundaryArcSagittaM"] = arcSagitta.ToString("R", CultureInfo.InvariantCulture);
-                    element.Properties["AreaM2"] = boundary.Area.ToString("R", CultureInfo.InvariantCulture);
-                    element.Properties["PerimeterM"] = boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture);
-                    foreach (var property in family.Properties)
-                        if (!element.Properties.ContainsKey(property.Key)) element.Properties[property.Key] = property.Value;
-                    element.MarkDirty(ElementDirtyFlags.All);
-                    audit.Record(isNew ? "RoomBoundaryCreate" : "RoomBoundaryUpdate", element.Id,
-                        "area=" + boundary.Area.ToString("R", CultureInfo.InvariantCulture) +
-                        ";perimeter=" + boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture) +
-                        ";sources=" + boundary.SourceIds.Count.ToString(CultureInfo.InvariantCulture) +
-                        ";arcSagitta=" + arcSagitta.ToString("R", CultureInfo.InvariantCulture));
+                    var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                    project.Touch();
+                    PaletteCoordinator.RefreshProject();
+                    var message = "Room Auto: " + boundaries.Count + " face • mới " + created + " • cập nhật " + updated + " • regenerate " + regenerated + ".";
+                    PaletteCoordinator.SetStatus(message);
+                    document.Editor.WriteMessage("\nQS3D " + message);
                 }
-
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                project.Touch();
-                PaletteCoordinator.RefreshProject();
-                var message = "Room Auto: " + boundaries.Count + " face • mới " + created + " • cập nhật " + updated + " • regenerate " + regenerated + ".";
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                catch (Exception operationError)
+                {
+                    try
+                    {
+                        rollback.Restore(project);
+                        PaletteCoordinator.RefreshProject();
+                    }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException("QS3DROOMAUTO failed and project rollback also failed.", new AggregateException(operationError, restoreError));
+                    }
+                    throw;
+                }
             }
             catch (Exception ex)
             {

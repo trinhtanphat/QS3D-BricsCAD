@@ -63,6 +63,10 @@ if room_engine.exists():
     for needle in ("CollectPairCuts", "FindBridges", "NextFaceVertex", "BuildBoundaryKey", "MaxInputSegments", "MaxSubdividedEdges"):
         if needle not in text: errors.append("room boundary graph guard missing: " + needle)
     if "signedArea > minimumArea" not in text: errors.append("room boundary discovery must keep only positive bounded faces above minimum area")
+    if "var stack = new Stack<int>();" not in text or "void Visit(" in text:
+        errors.append("room boundary bridge detection must remain iterative so large graphs cannot overflow the call stack")
+    if "BuildSourceLookup" not in text or "IReadOnlyDictionary<string, ISet<string>> sourceLookup" not in text:
+        errors.append("room boundary source evidence lookup must avoid scanning all edges during each face step")
 
 bulge = ROOT / "src/QS3D.Core/Geometry/BulgeArcTessellator.cs"
 if bulge.exists():
@@ -82,6 +86,8 @@ if room_command.exists():
     for needle in ('BoundaryMode"] = "AutoNetwork"', "BoundarySourceHandles", "BoundaryArcSagittaM", "RoomBoundaryArcSagittaM", "AuditTrail.ForProject", "RegeneratorCatalog.CreateDefault"):
         if needle not in text: errors.append("QS3DROOMAUTO workflow missing: " + needle)
     if "SourceHandles.Add" in text: errors.append("auto-room discovery must not claim wall/source handles as Room semantic ownership")
+    if "ProjectStateSnapshot.Capture(project)" not in text or "rollback.Restore(project)" not in text:
+        errors.append("QS3DROOMAUTO must rollback semantic/audit changes when regeneration fails")
 
 room_hub = ROOT / "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml"
 if room_hub.exists() and 'Tag="QS3DROOMAUTO"' not in room_hub.read_text(encoding="utf-8"):
@@ -101,7 +107,7 @@ if completion.exists():
 room_smoke = ROOT / "tests/QS3D.Core.SmokeTests/RoomBoundaryRegressionSmoke.cs"
 if room_smoke.exists():
     text = room_smoke.read_text(encoding="utf-8")
-    for needle in ("RectangleBoundary();", "TjunctionCreatesAdjacentRooms();", "EndpointToleranceClosesGap();", "DanglingBridgeIsIgnored();", "BulgeSemicircleTessellation();", "BulgeDirectionMirrors();", "CurvedRoomBoundary();", "InvalidCoordinatesRejected();", "InvalidBulgeToleranceRejected();"):
+    for needle in ("RectangleBoundary();", "TjunctionCreatesAdjacentRooms();", "EndpointToleranceClosesGap();", "DanglingBridgeIsIgnored();", "LongDanglingChainIsIgnored();", "DuplicateSegmentsKeepSourceEvidence();", "BulgeSemicircleTessellation();", "BulgeDirectionMirrors();", "CurvedRoomBoundary();", "InvalidCoordinatesRejected();", "InvalidBulgeToleranceRejected();"):
         if needle not in text: errors.append("room boundary regression coverage missing: " + needle)
 
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
@@ -134,4 +140,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: full-domain files, unique commands, structural quantities/native mass adapters, BBS CSV safety, planar/curved room discovery UI wiring, DemandLoad packaging/install guards and regression registration are present.")
+print("PASS: full-domain files, unique commands, structural quantities/native mass adapters, BBS CSV safety, planar/curved room discovery performance/rollback/UI wiring, DemandLoad packaging/install guards and regression registration are present.")

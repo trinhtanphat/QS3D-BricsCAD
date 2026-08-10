@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             TjunctionCreatesAdjacentRooms();
             EndpointToleranceClosesGap();
             DanglingBridgeIsIgnored();
+            LongDanglingChainIsIgnored();
+            DuplicateSegmentsKeepSourceEvidence();
             BulgeSemicircleTessellation();
             BulgeDirectionMirrors();
             CurvedRoomBoundary();
@@ -64,6 +66,33 @@ namespace QS3D.Core.SmokeTests
             Equal(1, boundaries.Count);
             Near(12d, boundaries[0].Area);
             Near(14d, boundaries[0].Perimeter);
+        }
+
+        private static void LongDanglingChainIsIgnored()
+        {
+            var segments = new List<BoundarySegment>
+            {
+                S(0, 0, 4, 0), S(4, 0, 4, 3), S(4, 3, 0, 3), S(0, 3, 0, 0)
+            };
+            for (var index = 0; index < 1024; index++) segments.Add(S(4 + index, 0, 5 + index, 0));
+
+            var boundaries = new RoomBoundaryEngine().Discover(segments);
+            Equal(1, boundaries.Count);
+            Near(12d, boundaries[0].Area);
+            Near(14d, boundaries[0].Perimeter);
+        }
+
+        private static void DuplicateSegmentsKeepSourceEvidence()
+        {
+            var boundaries = new RoomBoundaryEngine().Discover(new[]
+            {
+                S(0, 0, 4, 0, "B1"), S(4, 0, 0, 0, "B2"),
+                S(4, 0, 4, 3, "R"), S(4, 3, 0, 3, "T"), S(0, 3, 0, 0, "L")
+            });
+            Equal(1, boundaries.Count);
+            Equal(5, boundaries[0].SourceIds.Count);
+            True(boundaries[0].SourceIds.Contains("B1"));
+            True(boundaries[0].SourceIds.Contains("B2"));
         }
 
         private static void BulgeSemicircleTessellation()

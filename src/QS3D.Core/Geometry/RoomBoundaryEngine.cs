@@ -90,6 +90,7 @@ namespace QS3D.Core.Geometry
             if (cyclicEdges.Count < 3) return Array.Empty<RoomBoundary>();
 
             var adjacency = BuildAdjacency(graph.Vertices, cyclicEdges);
+            var sourceLookup = BuildSourceLookup(cyclicEdges);
             var visited = new HashSet<string>(StringComparer.Ordinal);
             var result = new List<RoomBoundary>();
             var seenKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -109,7 +110,7 @@ namespace QS3D.Core.Geometry
                 if (visited.Contains(startKey)) return;
 
                 var cycle = new List<int>();
-                var edgeSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var boundarySources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var a = startA;
                 var b = startB;
                 var closed = false;
@@ -121,7 +122,7 @@ namespace QS3D.Core.Geometry
                     if (visited.Contains(key)) break;
                     visited.Add(key);
                     cycle.Add(a);
-                    AddSources(a, b, cyclicEdges, edgeSources);
+                    AddSources(a, b, sourceLookup, boundarySources);
 
                     var next = NextFaceVertex(a, b, adjacency);
                     if (next < 0) break;
@@ -141,7 +142,7 @@ namespace QS3D.Core.Geometry
                 result.Add(new RoomBoundary(
                     boundaryKey,
                     points.AsReadOnly(),
-                    edgeSources.Where(x => !string.IsNullOrWhiteSpace(x)).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly(),
+                    boundarySources.Where(x => !string.IsNullOrWhiteSpace(x)).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly(),
                     signedArea,
                     perimeter));
             }
@@ -239,10 +240,10 @@ namespace QS3D.Core.Geometry
             {
                 var a = edgeVertices[i, 0]; var b = edgeVertices[i, 1];
                 if (a == b) continue;
-                if (a > b) { var temp = a; a = b; b = temp; }
-                var key = a.ToString(CultureInfo.InvariantCulture) + ":" + b.ToString(CultureInfo.InvariantCulture);
+                var key = UndirectedKey(a, b);
                 if (!edgeMap.TryGetValue(key, out var edge))
                 {
+                    if (a > b) { var temp = a; a = b; b = temp; }
                     edge = new Edge(a, b);
                     edgeMap[key] = edge;
                 }
@@ -261,30 +262,54 @@ namespace QS3D.Core.Geometry
                 adjacency[edges[i].A].Add(Tuple.Create(edges[i].B, i));
                 adjacency[edges[i].B].Add(Tuple.Create(edges[i].A, i));
             }
+
             var discovery = Enumerable.Repeat(-1, vertexCount).ToArray();
             var low = new int[vertexCount];
+            var parentVertex = Enumerable.Repeat(-1, vertexCount).ToArray();
+            var parentEdge = Enumerable.Repeat(-1, vertexCount).ToArray();
+            var nextNeighbor = new int[vertexCount];
             var time = 0;
             var bridges = new HashSet<int>();
+            var stack = new Stack<int>();
 
-            for (var root = 0; root < vertexCount; root++) if (discovery[root] < 0) Visit(root, -1);
-            return bridges;
-
-            void Visit(int vertex, int parentEdge)
+            for (var root = 0; root < vertexCount; root++)
             {
-                discovery[vertex] = low[vertex] = time++;
-                foreach (var item in adjacency[vertex])
+                if (discovery[root] >= 0) continue;
+                discovery[root] = low[root] = time++;
+                stack.Push(root);
+
+                while (stack.Count > 0)
                 {
-                    var neighbor = item.Item1; var edgeIndex = item.Item2;
-                    if (edgeIndex == parentEdge) continue;
-                    if (discovery[neighbor] < 0)
+                    var vertex = stack.Peek();
+                    if (nextNeighbor[vertex] < adjacency[vertex].Count)
                     {
-                        Visit(neighbor, edgeIndex);
-                        low[vertex] = Math.Min(low[vertex], low[neighbor]);
-                        if (low[neighbor] > discovery[vertex]) bridges.Add(edgeIndex);
+                        var item = adjacency[vertex][nextNeighbor[vertex]++];
+                        var neighbor = item.Item1;
+                        var edgeIndex = item.Item2;
+                        if (edgeIndex == parentEdge[vertex]) continue;
+
+                        if (discovery[neighbor] < 0)
+                        {
+                            parentVertex[neighbor] = vertex;
+                            parentEdge[neighbor] = edgeIndex;
+                            discovery[neighbor] = low[neighbor] = time++;
+                            stack.Push(neighbor);
+                        }
+                        else
+                        {
+                            low[vertex] = Math.Min(low[vertex], discovery[neighbor]);
+                        }
+                        continue;
                     }
-                    else low[vertex] = Math.Min(low[vertex], discovery[neighbor]);
+
+                    stack.Pop();
+                    var parent = parentVertex[vertex];
+                    if (parent < 0) continue;
+                    low[parent] = Math.Min(low[parent], low[vertex]);
+                    if (low[vertex] > discovery[parent]) bridges.Add(parentEdge[vertex]);
                 }
             }
+            return bridges;
         }
 
         private static IReadOnlyList<int>[] BuildAdjacency(IReadOnlyList<Point2> vertices, IReadOnlyList<Edge> edges)
@@ -318,14 +343,17 @@ namespace QS3D.Core.Geometry
             return neighbors[(reverseIndex - 1 + neighbors.Count) % neighbors.Count];
         }
 
-        private static void AddSources(int a, int b, IReadOnlyList<Edge> edges, ISet<string> target)
+        private static IReadOnlyDictionary<string, ISet<string>> BuildSourceLookup(IEnumerable<Edge> edges)
         {
-            foreach (var edge in edges)
-            {
-                if (!((edge.A == a && edge.B == b) || (edge.A == b && edge.B == a))) continue;
-                foreach (var source in edge.SourceIds) target.Add(source);
-                return;
-            }
+            var result = new Dictionary<string, ISet<string>>(StringComparer.Ordinal);
+            foreach (var edge in edges) result[UndirectedKey(edge.A, edge.B)] = edge.SourceIds;
+            return result;
+        }
+
+        private static void AddSources(int a, int b, IReadOnlyDictionary<string, ISet<string>> sourceLookup, ISet<string> target)
+        {
+            if (!sourceLookup.TryGetValue(UndirectedKey(a, b), out var sources)) return;
+            foreach (var source in sources) target.Add(source);
         }
 
         private static string BuildBoundaryKey(IReadOnlyList<Point2> points, double tolerance)
@@ -358,6 +386,11 @@ namespace QS3D.Core.Geometry
         }
 
         private static string DirectedKey(int a, int b) => a.ToString(CultureInfo.InvariantCulture) + ">" + b.ToString(CultureInfo.InvariantCulture);
+        private static string UndirectedKey(int a, int b)
+        {
+            if (a > b) { var temp = a; a = b; b = temp; }
+            return a.ToString(CultureInfo.InvariantCulture) + ":" + b.ToString(CultureInfo.InvariantCulture);
+        }
         private static double Cross(double ax, double ay, double bx, double by) => ax * by - ay * bx;
         private static double Clamp01(double value) => value < 0d ? 0d : value > 1d ? 1d : value;
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
