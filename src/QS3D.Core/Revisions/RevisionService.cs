@@ -49,6 +49,7 @@ namespace QS3D.Core.Revisions
             var snapshot = new RevisionSnapshot { Id = revisionId ?? string.Empty, CreatedUtc = DateTime.UtcNow };
             foreach (var element in project.Elements)
             {
+                if (element == null || string.IsNullOrWhiteSpace(element.Id)) throw new InvalidOperationException("Revision capture encountered an element without id.");
                 var item = new RevisionElementSnapshot
                 {
                     ElementId = element.Id,
@@ -58,8 +59,10 @@ namespace QS3D.Core.Revisions
                     ZoneId = element.ZoneId
                 };
                 foreach (var property in element.Properties) item.Properties[property.Key] = property.Value ?? string.Empty;
-                foreach (var quantity in element.Quantities) item.Quantities[quantity.Key] = quantity.Value;
-                foreach (var handle in element.SourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).OrderBy(x => x, StringComparer.OrdinalIgnoreCase)) item.SourceHandles.Add(handle);
+                foreach (var quantity in element.Quantities)
+                    item.Quantities[quantity.Key] = RevisionMath.Finite(quantity.Value, element.Id + "/" + quantity.Key);
+                foreach (var handle in element.SourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                    item.SourceHandles.Add(handle);
                 snapshot.Elements.Add(item);
             }
             return snapshot;
@@ -70,8 +73,8 @@ namespace QS3D.Core.Revisions
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
             var result = new List<RevisionDelta>();
-            var left = before.Elements.ToDictionary(x => x.ElementId, StringComparer.OrdinalIgnoreCase);
-            var right = after.Elements.ToDictionary(x => x.ElementId, StringComparer.OrdinalIgnoreCase);
+            var left = Index(before, "before");
+            var right = Index(after, "after");
 
             foreach (var id in left.Keys.Except(right.Keys, StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 result.Add(new RevisionDelta { ElementId = id, Change = "Removed" });
@@ -81,15 +84,28 @@ namespace QS3D.Core.Revisions
             foreach (var id in left.Keys.Intersect(right.Keys, StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
             {
                 var delta = new RevisionDelta { ElementId = id, Change = "Changed" };
-                var a = left[id]; var b = right[id];
+                var a = left[id];
+                var b = right[id];
                 Add(delta, "Category", a.Category, b.Category);
                 Add(delta, "FamilyId", a.FamilyId, b.FamilyId);
                 Add(delta, "FloorId", a.FloorId, b.FloorId);
                 Add(delta, "ZoneId", a.ZoneId, b.ZoneId);
                 Add(delta, "SourceHandles", string.Join(",", a.SourceHandles), string.Join(",", b.SourceHandles));
                 CompareProperties(delta, a.Properties, b.Properties);
-                CompareQuantities(delta, a.Quantities, b.Quantities);
+                CompareQuantities(delta, a.Quantities, b.Quantities, id);
                 if (delta.Fields.Count > 0) result.Add(delta);
+            }
+            return result;
+        }
+
+        private static Dictionary<string, RevisionElementSnapshot> Index(RevisionSnapshot snapshot, string label)
+        {
+            var result = new Dictionary<string, RevisionElementSnapshot>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in snapshot.Elements)
+            {
+                if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
+                if (result.ContainsKey(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains duplicate element id: " + element.ElementId);
+                result.Add(element.ElementId, element);
             }
             return result;
         }
@@ -100,20 +116,24 @@ namespace QS3D.Core.Revisions
             keys.UnionWith(after.Keys);
             foreach (var key in keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
             {
-                before.TryGetValue(key, out var a); after.TryGetValue(key, out var b);
+                before.TryGetValue(key, out var a);
+                after.TryGetValue(key, out var b);
                 Add(delta, "Property:" + key, a ?? string.Empty, b ?? string.Empty);
             }
         }
 
-        private static void CompareQuantities(RevisionDelta delta, IDictionary<string, double> before, IDictionary<string, double> after)
+        private static void CompareQuantities(RevisionDelta delta, IDictionary<string, double> before, IDictionary<string, double> after, string elementId)
         {
             var keys = new HashSet<string>(before.Keys, StringComparer.OrdinalIgnoreCase);
             keys.UnionWith(after.Keys);
             foreach (var key in keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
             {
-                var hasA = before.TryGetValue(key, out var a); var hasB = after.TryGetValue(key, out var b);
-                if (hasA && hasB && Math.Abs(a - b) <= QuantityTolerance) continue;
-                Add(delta, "Quantity:" + key, hasA ? F(a) : string.Empty, hasB ? F(b) : string.Empty);
+                var hasA = before.TryGetValue(key, out var a);
+                var hasB = after.TryGetValue(key, out var b);
+                if (hasA) a = RevisionMath.Finite(a, elementId + "/" + key + "/before");
+                if (hasB) b = RevisionMath.Finite(b, elementId + "/" + key + "/after");
+                if (hasA && hasB && Math.Abs(RevisionMath.Subtract(a, b, elementId + "/" + key)) <= QuantityTolerance) continue;
+                Add(delta, "Quantity:" + key, hasA ? F(a, elementId + "/" + key + "/before") : string.Empty, hasB ? F(b, elementId + "/" + key + "/after") : string.Empty);
             }
         }
 
@@ -123,6 +143,6 @@ namespace QS3D.Core.Revisions
             delta.Fields.Add(new RevisionFieldDelta { Field = field, Before = before ?? string.Empty, After = after ?? string.Empty });
         }
 
-        private static string F(double value) => value.ToString("R", CultureInfo.InvariantCulture);
+        private static string F(double value, string label) => RevisionMath.Finite(value, label).ToString("R", CultureInfo.InvariantCulture);
     }
 }

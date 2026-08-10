@@ -12,8 +12,8 @@ namespace QS3D.Core.Revisions
         public string Change { get; set; } = string.Empty;
         public double Before { get; set; }
         public double After { get; set; }
-        public double Delta => After - Before;
-        public double? PercentChange => Math.Abs(Before) < 1e-12 ? (double?)null : Delta / Math.Abs(Before) * 100d;
+        public double Delta => RevisionMath.Subtract(After, Before, ElementId + "/" + QuantityName);
+        public double? PercentChange => Math.Abs(RevisionMath.Finite(Before, ElementId + "/" + QuantityName + "/Before")) < 1e-12 ? (double?)null : RevisionMath.Percent(Delta, Before, ElementId + "/" + QuantityName);
     }
 
     public sealed class QuantityRevisionSummary
@@ -21,7 +21,7 @@ namespace QS3D.Core.Revisions
         public string QuantityName { get; set; } = string.Empty;
         public double Before { get; set; }
         public double After { get; set; }
-        public double Delta => After - Before;
+        public double Delta => RevisionMath.Subtract(After, Before, QuantityName);
     }
 
     public sealed class QuantityRevisionReport
@@ -30,8 +30,8 @@ namespace QS3D.Core.Revisions
         {
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
-            var left = before.Elements.ToDictionary(x => x.ElementId, StringComparer.OrdinalIgnoreCase);
-            var right = after.Elements.ToDictionary(x => x.ElementId, StringComparer.OrdinalIgnoreCase);
+            var left = Index(before, "before");
+            var right = Index(after, "after");
             var rows = new List<QuantityRevisionRow>();
             foreach (var id in left.Keys.Union(right.Keys, StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
             {
@@ -40,9 +40,10 @@ namespace QS3D.Core.Revisions
                 if (names.Count == 0 && (a == null || b == null)) rows.Add(new QuantityRevisionRow { ElementId = id, Category = b?.Category ?? a?.Category ?? string.Empty, Change = a == null ? "Added" : "Removed" });
                 foreach (var name in names)
                 {
-                    var beforeValue = a != null && a.Quantities.TryGetValue(name, out var av) ? av : 0d;
-                    var afterValue = b != null && b.Quantities.TryGetValue(name, out var bv) ? bv : 0d;
-                    if (a != null && b != null && Math.Abs(beforeValue - afterValue) <= 1e-9) continue;
+                    var beforeValue = a != null && a.Quantities.TryGetValue(name, out var av) ? RevisionMath.Finite(av, id + "/" + name + "/before") : 0d;
+                    var afterValue = b != null && b.Quantities.TryGetValue(name, out var bv) ? RevisionMath.Finite(bv, id + "/" + name + "/after") : 0d;
+                    var delta = RevisionMath.Subtract(afterValue, beforeValue, id + "/" + name);
+                    if (a != null && b != null && Math.Abs(delta) <= 1e-9) continue;
                     rows.Add(new QuantityRevisionRow { ElementId = id, Category = b?.Category ?? a?.Category ?? string.Empty, QuantityName = name, Change = a == null ? "Added" : b == null ? "Removed" : "Changed", Before = beforeValue, After = afterValue });
                 }
             }
@@ -52,9 +53,31 @@ namespace QS3D.Core.Revisions
         public IReadOnlyList<QuantityRevisionSummary> Summarize(IEnumerable<QuantityRevisionRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            return rows.Where(x => !string.IsNullOrWhiteSpace(x.QuantityName)).GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase)
-                .Select(x => new QuantityRevisionSummary { QuantityName = x.Key, Before = x.Sum(y => y.Before), After = x.Sum(y => y.After) })
-                .OrderBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).ToList();
+            var result = new List<QuantityRevisionSummary>();
+            foreach (var group in rows.Where(x => x != null && !string.IsNullOrWhiteSpace(x.QuantityName)).GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var before = 0d;
+                var after = 0d;
+                foreach (var row in group)
+                {
+                    before = RevisionMath.Add(before, row.Before, group.Key + "/Before");
+                    after = RevisionMath.Add(after, row.After, group.Key + "/After");
+                }
+                result.Add(new QuantityRevisionSummary { QuantityName = group.Key, Before = before, After = after });
+            }
+            return result;
+        }
+
+        private static Dictionary<string, RevisionElementSnapshot> Index(RevisionSnapshot snapshot, string label)
+        {
+            var result = new Dictionary<string, RevisionElementSnapshot>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in snapshot.Elements)
+            {
+                if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
+                if (result.ContainsKey(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains duplicate element id: " + element.ElementId);
+                result.Add(element.ElementId, element);
+            }
+            return result;
         }
     }
 }

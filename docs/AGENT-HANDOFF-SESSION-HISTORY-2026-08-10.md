@@ -3,11 +3,11 @@
 **Audit date:** 2026-08-10 (UTC+7)  
 **Repository:** `trinhtanphat/QS3D-BricsCAD`  
 **Source-of-truth branch:** `main`  
-**Code history reconciled in this review through:** `9f82b2d7c5ded4b6bc749b4dc319423aa3604f76` (`fix(recognition): prevent token false positives and guard unlink`)  
-**Important preceding hardening commits reviewed:** `7daf2595dbe318dce1ae4f39b0102a1128227a67`, `dc28dc8f69bf037709ca82a371efcb7349462b26`, `659fa8f07def68ac4257ccadd78c54e77b20b802`, `db4e5dd2ae2d4cf64450be8906fc0d50b3636a3d`  
+**Code history reconciled in this review through:** `c987b34ce4eb1d15fd6928913571f521624ae0c7` (`fix(cad): reject erased handles in selection and health`)  
+**Important preceding hardening commits reviewed:** `93539132851ac2cbc89d7050203743224b8bf967`, `9f82b2d7c5ded4b6bc749b4dc319423aa3604f76`, `7daf2595dbe318dce1ae4f39b0102a1128227a67`, `dc28dc8f69bf037709ca82a371efcb7349462b26`, `659fa8f07def68ac4257ccadd78c54e77b20b802`, `db4e5dd2ae2d4cf64450be8906fc0d50b3636a3d`  
 **Purpose:** preserve the complete important context from the current ChatGPT development session and relevant recovered QS3D/BLT3D history so another agent can continue without rediscovering requirements, repeating mistakes, overwriting concurrent work, or making false runtime claims.
 
-> **Concurrency note:** this repository is actively modified by multiple agents. During creation of this handoff, `main` advanced several times. Every concurrent code commit detected through `9f82b2d...` was read and incorporated into this canonical version. Do not interpret the reconciliation SHA as “forever latest main”; fetch `main` again before work and inspect commits newer than it.
+> **Concurrency note:** this repository is actively modified by multiple agents. During creation of this handoff, `main` advanced several times. Every concurrent code commit detected through `c987b34...` was read and incorporated into this canonical version. Do not interpret the reconciliation SHA as “forever latest main”; fetch `main` again before work and inspect commits newer than it. Commits created after this cutoff are new project history, not omitted history from this review.
 
 ---
 
@@ -47,7 +47,9 @@ Conversation/history was reconciled against real GitHub source instead of trusti
 - migration/family/takeoff/persistence hardening `659fa8f...`;
 - Model Health required-dimension hardening `dc28dc8...`;
 - finite/overflow-safe reporting hardening `7daf259...`;
-- Recognition token-boundary + host-unlink safety regression `9f82b2d...`.
+- Recognition token-boundary + host-unlink safety regression `9f82b2d...`;
+- Generated Solid3d ownership/liveness Health hardening `9353913...`;
+- erased-handle rejection / live Entity validation `c987b34...`.
 
 Where an old branch/chat state disagrees with current source, **current `main` wins**. Historical branch-only work is called out separately below.
 
@@ -314,14 +316,34 @@ This complements `659fa8f` boundary validation: invalid values are rejected both
 
 ### 9.5 `9f82b2d...` — Recognition token boundaries + safe host unlink
 
-This commit fixed two subtle Core logic bugs and added `LogicRegressionSmoke.cs`:
+- Recognition no longer uses arbitrary substring containment for terms. Because Vietnamese `Dầm` normalizes to `dam`, text such as `DAMAGE` must not be scored as Beam merely for containing `dam`; matching uses normalized whole token/term boundaries.
+- valid examples such as `KC-DAM` / `Dầm chính` still recognize Beam at high confidence;
+- `HostLinkService.UnlinkOpening` validates target really is Door/WallOpening before removing host/dependency state;
+- `LogicRegressionSmoke.cs` covers both behaviors.
 
-- Recognition used to test terms with raw substring containment. Because Vietnamese `Dầm` normalizes to `dam`, a layer/text such as `DAMAGE` could accidentally contain `dam` and be scored as Beam. `BestTerm` now uses whole normalized token/term boundaries (`ContainsTerm`) rather than arbitrary substring matches.
-- Valid examples such as `KC-DAM` / `Dầm chính` still recognize Beam at high confidence, while false-positive strings such as `DAMAGE` are rejected.
-- `HostLinkService.UnlinkOpening` now calls the same opening-category guard used by linking, so it refuses to mutate/remove `HostWallId` on a non-Door/non-WallOpening element.
-- `LogicRegressionSmoke` explicitly covers both token-boundary recognition and non-opening unlink rejection.
+Future Recognition changes must preserve token semantics.
 
-Future Recognition changes must preserve token semantics; do not regress to substring matching for short normalized Vietnamese terms.
+### 9.6 `9353913...` — generated Solid3d ownership/liveness Health
+
+- `CadHandleService.GetLiveSolidHandles` resolves handles and confirms current live non-erased `Solid3d` objects;
+- `QS3DHEALTH` separates semantic source handles from `GeneratedSolidHandle` values;
+- invalid/non-hex generated handle is an error;
+- duplicate generated-handle ownership across semantic elements is an error;
+- generated handle appearing in `SourceHandles` is an error;
+- generated category missing/mismatched is surfaced;
+- missing/non-Solid3d generated object yields `GENERATED_SOLID_MISSING`;
+- Health Locate can select the generated solid for generated-geometry issues.
+
+### 9.7 `c987b34...` — reject erased CAD handles
+
+This commit tightened the boundary between “a handle can be parsed/resolved” and “it refers to a currently valid selectable entity”:
+
+- `CadHandleService.Resolve` now opens resolved objects as `Entity` and rejects erased/non-Entity targets instead of considering an ObjectId sufficient;
+- selection and Model Health live-handle sets therefore stop treating erased entities as live source geometry;
+- generated liveness continues to verify actual `Solid3d` type, not merely any Entity;
+- preflight now explicitly requires Entity-open + `!IsErased`, `GetLiveSolidHandles`/`Solid3d`, generated-health contracts and related regression hooks.
+
+Future handle utilities must preserve this rule: **parseable ObjectId ≠ live selectable semantic source**.
 
 ---
 
@@ -374,7 +396,7 @@ Older branches discussed other schema-version ideas. Do not revive an old “v3�
 
 `QS3DBUILD3D` routes architectural walls to `WallSolidBuilder` and supported structural categories to `StructuralSolidBuilder`; current flow focuses native 3D on Tường KT, Dầm, Sàn, Cột, Vách BTCT and Móng.
 
-### 10.5 Tường KT / host / openings
+### 10.5 Tường KT / host / openings / generated geometry
 
 - semantic Tường KT capture;
 - selected plan LINE → native `Solid3d` wall path;
@@ -383,7 +405,9 @@ Older branches discussed other schema-version ideas. Do not revive an old “v3�
 - stale generated handles should not erase unrelated entities;
 - Door/Opening host linking provides deterministic host quantity deduction;
 - re-hosting dirties old/new dependencies;
-- post-`9f82b2d`, unlink validates element category **before** removing host/dependency state.
+- unlink validates category before host-link mutation;
+- Model Health checks generated Solid3d handle format, ownership, category consistency, source/generated separation and liveness;
+- live source resolution rejects erased/non-Entity targets after `c987b34`.
 
 Semantic opening deduction is not yet equivalent to physical boolean subtraction of opening solids from host solids.
 
@@ -400,10 +424,10 @@ Semantic generation exists for floor finish, waterproofing, skirting, wall finis
 - fallback snapshot takeoff can use live `INSUNITS` instead of hard-coded mm;
 - unsupported/undefined units should surface explicit fallback warning;
 - real `.xlsx` export with header/filter/freeze behavior;
-- `659fa8f` rejects negative/non-finite raw snapshot metrics;
-- `7daf259` rejects non-finite/overflowing report inputs/totals through guarded aggregation.
+- raw snapshot metrics reject negative/non-finite values;
+- report aggregation rejects non-finite/overflowing inputs/totals.
 
-A historical full-domain branch temporarily added `Thép (kg)` and changed a tested range from `A1:P2` to `A1:Q2`; that found a real stale-test bug. Inspect the **current** exporter/tests before assuming that experimental column shape is active today.
+A historical full-domain branch temporarily added `Thép (kg)` and changed a tested range from `A1:P2` to `A1:Q2`; that found a real stale-test bug. Inspect the **current** exporter/tests before assuming that experimental shape is active today.
 
 ### 10.8 Rebar / BBS
 
@@ -428,14 +452,14 @@ Current `RecognitionEngine` is deterministic/rule-based:
 - entity-type compatibility;
 - Vietnamese diacritic normalization (`đ`→`d`, combining marks removed);
 - scoring approximately layer `+0.62`, text `+0.28`, compatible type `+0.10`;
-- **whole normalized token/term boundary matching** after `9f82b2d`, preventing short-term substring false positives such as `dam` inside `damage`;
+- whole normalized token/term boundary matching, preventing short-term substring false positives such as `dam` inside `damage`;
 - review when confidence low or top-candidate margin narrow;
 - batch auto-accept defaults near confidence `0.92`, margin `0.15`;
 - default rules for Beam, Slab, Column, StructuralWall, ArchitecturalWall, Opening, Door, Room, Foundation, Stair, Railing, Earthwork.
 
 Adapter exposes `QS3DRECOGNIZE` / `QS3DRECOGNIZEAUTO`; Recognition UI shows Handle, Entity, Layer, suggestion, confidence, margin, review flag/evidence and Apply/Locate.
 
-Recognition remains **suggestion + review**, not silent AI authority. AI may assist later but should not become the authoritative quantity engine.
+Recognition remains **suggestion + review**, not silent AI authority.
 
 ### 10.10 Revision
 
@@ -454,12 +478,14 @@ Adapter exposes `QS3DREVBASE` / `QS3DREVDIFF`; Revision UI shows Before/After/De
 
 Current Health path includes:
 
-- reference/handle/dependency integrity;
+- source reference/handle/dependency integrity;
 - structural material inheritance;
 - rebar definition/distribution/length validation;
-- post-`dc28dc8` category-specific required-dimension validation with `MISSING_DIMENSION` / `INVALID_DIMENSION`.
+- category-specific required-dimension validation (`MISSING_DIMENSION` / `INVALID_DIMENSION`);
+- generated Solid3d handle/ownership/category/source-separation/liveness validation;
+- erased CAD objects rejected from the live-source set.
 
-Do not weaken Health to make incomplete data look valid.
+Do not weaken Health to make incomplete/stale semantic/native geometry look valid.
 
 ### 10.12 Xref / Layer / selection
 
@@ -468,12 +494,12 @@ Do not weaken Health to make incomplete data look valid.
 - row selection can synchronize implied CAD selection;
 - active-document filtering matters in multi-document sessions;
 - `Gỡ Xref` means detach, not delete external source file;
-- handle-based Locate/select;
+- handle-based Locate/select rejects erased/non-Entity targets;
 - Save-As/document identity and active-DWG synchronization explicitly hardened in `db4e5dd...`.
 
 ### 10.13 Family assignment/inheritance
 
-Post-`659fa8f`, family reassignment refreshes inherited family defaults **without overwriting explicit instance overrides**. This is a regression/preflight expectation.
+Family reassignment refreshes inherited family defaults **without overwriting explicit instance overrides**. This is a regression/preflight expectation.
 
 ### 10.14 Runtime probe
 
@@ -546,7 +572,9 @@ These are branch-history evidence. Map `head_sha` before relying on one for a cu
 - required semantic dimension Health regressions;
 - non-finite/overflow-safe report aggregation;
 - Recognition false-positive regression (`DAMAGE` must not match normalized `dam` Beam term);
-- Host unlink mutation guard (non-opening element must be rejected without modifying host metadata).
+- Host unlink mutation guard;
+- generated Solid3d ownership/liveness/category/source-separation Health checks;
+- erased CAD handles must not be accepted as live/selectable source objects.
 
 Do not “fix CI” by disabling nullable, broad-suppressing compiler issues or weakening assertions merely to get green.
 
@@ -590,17 +618,18 @@ BricsCAD proprietary assemblies/private fixtures stay outside Git.
 9. Test Xref selection sync, Move/Reload/Detach; source file must not be deleted.
 10. Capture Tường KT LINE in mm and at least one supported non-mm drawing; build/update 3D and verify dimensions/location.
 11. Rebuild same source; exactly one current generated solid should remain.
-12. Force invalid source/dimension; old valid geometry/project metadata must remain consistent.
-13. Test `QS3DBUILD3D` for supported Dầm/Sàn/Cột/Vách BTCT/Móng source forms.
-14. Test Door/Opening host linking/unlinking and semantic quantity deduction; non-opening unlink must fail without mutation.
-15. Generate HT_Phòng; finish-only untracking must never erase CAD geometry.
-16. Edit family dimensions/reassignment; verify inherited defaults vs explicit instance overrides; run BQ `Tính lại`.
-17. Export BQ XLSX/BBS XLSX; inspect values, finite totals, units, headers, filters/freeze panes.
-18. Run Recognition on confident/ambiguous and false-positive token cases; verify Apply/Locate.
-19. Capture revision baseline, modify data, run `QS3DREVDIFF`; verify Before/After/Delta/Locate.
-20. Run Model Health with missing/NaN/negative semantic dimensions and stale data.
-21. Exercise undo/redo around generated native geometry where supported.
-22. Only then update runtime status docs/screenshots with exact host version + SHA + evidence.
+12. Delete/erase/replace generated/source objects and verify Health/Locate never treats erased handles as live, and catches generated missing/non-Solid3d/duplicate/category/source-ownership problems.
+13. Force invalid source/dimension; old valid geometry/project metadata must remain consistent.
+14. Test `QS3DBUILD3D` for supported Dầm/Sàn/Cột/Vách BTCT/Móng source forms.
+15. Test Door/Opening host linking/unlinking and semantic deduction; non-opening unlink must fail without mutation.
+16. Generate HT_Phòng; finish-only untracking must never erase CAD geometry.
+17. Edit family dimensions/reassignment; verify inherited defaults vs explicit instance overrides; run BQ `Tính lại`.
+18. Export BQ XLSX/BBS XLSX; inspect values, finite totals, units, headers, filters/freeze panes.
+19. Run Recognition on confident/ambiguous/false-positive token cases; verify Apply/Locate.
+20. Capture revision baseline, modify data, run `QS3DREVDIFF`; verify Before/After/Delta/Locate.
+21. Run Model Health with missing/NaN/negative dimensions and stale/erased source/generated handles.
+22. Exercise undo/redo around generated native geometry where supported.
+23. Only then update runtime status docs/screenshots with exact host version + SHA + evidence.
 
 Never commit proprietary DLLs, private DWGs or sensitive customer screenshots.
 
@@ -663,7 +692,7 @@ Read `AGENTS.md` and `CI_POLICY.md` first.
 2. Review current files; do not blindly resurrect old branch files.
 3. Strengthen deterministic Core/tests/preflight without auto-CI triggers.
 4. Finish domain behavior before adding Ribbon buttons.
-5. Preserve source/generated-handle separation and transaction safety.
+5. Preserve source/generated-handle separation, generated ownership/liveness checks, erased-handle rejection and transaction safety.
 6. Preserve Recognition token-boundary matching and confidence/review behavior.
 7. Preserve host-link/unlink category guards.
 8. Improve Revision/BQ/BBS/reporting consistency/recovery.
@@ -704,13 +733,14 @@ Read `AGENTS.md` and `CI_POLICY.md` first.
 - [ ] Recognition is confidence/review based and token-boundary safe.
 - [ ] Rebar/BBS deterministic; physical rebar geometry is separate.
 - [ ] Revision preserves meaningful before/after quantities + Locate.
-- [ ] Model Health exposes bad semantic data and required dimensions.
+- [ ] Model Health exposes bad semantic dimensions and stale/misowned generated geometry.
 - [ ] Save As / multi-document identity must not lose project state.
 - [ ] Legacy migrated elements must not appear clean with stale quantities.
 - [ ] Family reassignment preserves explicit overrides while refreshing inherited defaults.
 - [ ] Non-finite/invalid persisted/takeoff/report values must be rejected.
 - [ ] Host unlink must not mutate non-opening elements.
-- [ ] Generated geometry is transaction-safe and separate from source handles.
+- [ ] Generated geometry is transaction-safe, has one semantic owner and stays separate from source handles.
+- [ ] Erased/non-Entity CAD objects must not count as live semantic source handles.
 - [ ] Xref detach does not delete source file.
 - [ ] Finish untracking does not erase CAD geometry.
 - [ ] Undefined units are never silently presented as known units.
@@ -728,7 +758,7 @@ Read `AGENTS.md` and `CI_POLICY.md` first.
 1. Read AGENTS.md
 2. Read CI_POLICY.md
 3. Fetch latest main
-4. Inspect commits newer than 9f82b2d7c5ded4b6bc749b4dc319423aa3604f76
+4. Inspect commits newer than c987b34ce4eb1d15fd6928913571f521624ae0c7
 5. Read docs/IMPLEMENTATION-STATUS.md
 6. Read docs/REVIEW-2026-08-10.md
 7. Read this handoff
@@ -751,7 +781,7 @@ If BricsCAD behavior cannot be proven from source, leave an explicit runtime gat
 - targeted prior project-history retrievals: **2**;
 - current GitHub source audit/reconciliation performed after history review;
 - concurrent `main` races were detected by post-commit verification rather than ignored;
-- every detected concurrent code commit through `9f82b2d...` was read and incorporated into this canonical handoff.
+- every detected concurrent code commit through `c987b34...` was read and incorporated into this canonical handoff.
 
 ### Mainline hardening commits reconciled
 
@@ -760,6 +790,8 @@ If BricsCAD behavior cannot be proven from source, leave an explicit runtime gat
 - `dc28dc8f69bf037709ca82a371efcb7349462b26` — category-specific Model Health dimension validation.
 - `7daf2595dbe318dce1ae4f39b0102a1128227a67` — finite/overflow-safe quantity report aggregation.
 - `9f82b2d7c5ded4b6bc749b4dc319423aa3604f76` — Recognition token-boundary false-positive fix + safe host unlink.
+- `93539132851ac2cbc89d7050203743224b8bf967` — generated Solid3d ownership/category/liveness Health validation.
+- `c987b34ce4eb1d15fd6928913571f521624ae0c7` — live Entity validation / erased-handle rejection.
 
 ### High-value current files
 
@@ -777,6 +809,7 @@ If BricsCAD behavior cannot be proven from source, leave an explicit runtime gat
 - `src/QS3D.BricsCAD.V25/RuntimeProbeCommands.cs`
 - `src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs`
 - `src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs`
+- `src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs`
 - `src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs`
 - `src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs`
 - `src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs`
@@ -816,7 +849,7 @@ If BricsCAD behavior cannot be proven from source, leave an explicit runtime gat
 
 The product intent is stable: build a **real BricsCAD V25 quantity/BIM workflow plugin**, visually and operationally familiar to the supplied BLT3D reference, while remaining an original clean-room implementation.
 
-The project is already much more than a UI mockup: current source contains semantic project data, hardened persistence/recovery/migration, fixed-point regeneration, structural categories, Tường KT/HT_Phòng/Cửa workflows, BQ/XLSX, deterministic BBS, Recognition, Revision, Model Health, Xref/layer/selection integration, native generated-geometry infrastructure, Save-As/document synchronization, family-inheritance safeguards, required-dimension validation, finite-safe reporting, token-safe Recognition and host-link mutation guards.
+The project is already much more than a UI mockup: current source contains semantic project data, hardened persistence/recovery/migration, fixed-point regeneration, structural categories, Tường KT/HT_Phòng/Cửa workflows, BQ/XLSX, deterministic BBS, Recognition, Revision, Model Health, Xref/layer/selection integration, native generated-geometry infrastructure, Save-As/document synchronization, family-inheritance safeguards, required-dimension validation, finite-safe reporting, token-safe Recognition, host-link mutation guards, generated Solid3d ownership/liveness checks and erased-handle rejection.
 
 The next major truth gate is a **current-main compile + NETLOAD + interactive validation on a real licensed BricsCAD V25 Windows environment**, followed by fixes based on what that host actually reports.
 
