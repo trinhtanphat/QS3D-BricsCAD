@@ -11,11 +11,17 @@ namespace QS3D.Core.Diagnostics
     {
         private const string HandlesKey = "GeneratedCurtainFrameHandles";
 
+        private sealed class OwnershipIndex
+        {
+            public Dictionary<string, string> Owners { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            public HashSet<string> Conflicts { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveSolidHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = BuildOwnershipIndex(project);
+            var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
@@ -36,7 +42,9 @@ namespace QS3D.Core.Diagnostics
                     }
                     validCount++;
                     var expected = element.Id + "/" + HandlesKey;
-                    if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expected, StringComparison.OrdinalIgnoreCase))
+                    if (ownership.Conflicts.Contains(handle))
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated curtain frame handle đang được nhiều project slot/element cùng claim: " + handle, element.Id));
+                    else if (ownership.Owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expected, StringComparison.OrdinalIgnoreCase))
                         issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated curtain frame xung đột owner/project handle khác: " + owner, element.Id));
                     if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated curtain frame handle không được nằm trong SourceHandles.", element.Id));
@@ -150,30 +158,35 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, "Curtain frame geometry không còn khớp " + currentKey + " hiện tại; rebuild curtain frames.", element.Id));
         }
 
-        private static Dictionary<string, string> BuildOwnershipIndex(ProjectState project)
+        private static OwnershipIndex BuildOwnershipIndex(ProjectState project)
         {
-            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var ownership = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
-                foreach (var handle in element.SourceHandles) Reserve(owners, handle, element.Id + "/SourceHandles");
+                foreach (var handle in element.SourceHandles) Reserve(ownership, handle, element.Id + "/SourceHandles");
                 foreach (var key in new[] { "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles", "GeneratedSlabMeshHandles", "GeneratedWallMeshHandles", HandlesKey })
-                    ReserveProperty(owners, element, key);
+                    ReserveProperty(ownership, element, key);
             }
-            return owners;
+            return ownership;
         }
 
-        private static void ReserveProperty(Dictionary<string, string> owners, ProjectElement element, string key)
+        private static void ReserveProperty(OwnershipIndex ownership, ProjectElement element, string key)
         {
             if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
-                Reserve(owners, handle, element.Id + "/" + key);
+                Reserve(ownership, handle, element.Id + "/" + key);
         }
 
-        private static void Reserve(Dictionary<string, string> owners, string? handle, string token)
+        private static void Reserve(OwnershipIndex ownership, string? handle, string token)
         {
             var normalized = (handle ?? string.Empty).Trim();
-            if (normalized.Length == 0 || owners.ContainsKey(normalized)) return;
-            owners[normalized] = token;
+            if (normalized.Length == 0) return;
+            if (ownership.Owners.TryGetValue(normalized, out var existing))
+            {
+                if (!string.Equals(existing, token, StringComparison.OrdinalIgnoreCase)) ownership.Conflicts.Add(normalized);
+                return;
+            }
+            ownership.Owners[normalized] = token;
         }
     }
 }
