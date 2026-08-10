@@ -126,6 +126,8 @@
                             <Button Content="Khu vực / Zone" Tag="QS3DZONES" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
                             <Button Content="Family Manager" Tag="QS3DFAMILIES" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
                             <Button Content="Material Catalog" Tag="QS3DMATERIALS" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Đồng bộ source CAD đã sửa" Tag="QS3DSYNCSOURCE" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Xuất Semantic Snapshot JSON" Tag="QS3DINTERCHANGEJSON" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Xuất bảng vật liệu" Tag="QS3DMATERIALXLSX" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Xuất Template" Tag="QS3DTEMPLATEEXPORT" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Nạp Template" Tag="QS3DTEMPLATEIMPORT" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
