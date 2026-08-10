@@ -17,7 +17,7 @@ namespace QS3D.BricsCAD.V25
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var result = FoundationMeshSolidBuilder.BuildSelected(document, project);
                 var message = result.Bars == 0
-                    ? "Foundation Rebar 3D: chọn Foundation semantic có closed rectangle POLYLINE + RebarFoundationXNotation/RebarFoundationYNotation."
+                    ? "Foundation Rebar 3D: chọn Foundation semantic có closed straight plan-view POLYLINE + RebarFoundationXNotation/RebarFoundationYNotation. Rectangle giữ local X/Y; polygon dùng drawing X/Y."
                     : "Foundation Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh cho " + result.Elements + " móng.";
                 FinalizeUi(document, message);
             }
