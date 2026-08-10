@@ -38,27 +38,20 @@ for label, (relative, semantic_call) in families.items():
             errors.append(label + ": missing generated replacement contract: " + token)
 
     semantic = text.find(semantic_call)
+    touch = text.find("project.Touch()", semantic if semantic >= 0 else 0)
     commit = text.find("transaction.Commit();", semantic if semantic >= 0 else 0)
     flag = text.find("cadCommitted = true", commit if commit >= 0 else 0)
     restore = text.find("rollback.Restore(project)", flag if flag >= 0 else 0)
-    if min(semantic, commit, flag, restore) < 0:
-        errors.append(label + ": cannot resolve semantic/CAD/rollback ordering")
-    elif not semantic < commit < flag < restore:
-        errors.append(label + ": generated semantic ownership must advance before CAD commit and rollback must remain reachable after failed pre-commit work")
+    if min(semantic, touch, commit, flag, restore) < 0:
+        errors.append(label + ": cannot resolve semantic/touch/CAD/rollback ordering")
+    elif not semantic < touch < commit < flag < restore:
+        errors.append(label + ": generated ownership/revision must advance before CAD commit and rollback must remain reachable after failed pre-commit work")
 
     if commit >= 0 and semantic_call in text[commit + len("transaction.Commit();"):]:
         errors.append(label + ": generated semantic ownership is still mutated after CAD commit")
+    if "Editor.Regen(" in text:
+        errors.append(label + ": native generated-rebar builder must remain UI-free; Regen belongs to the command post-commit boundary")
 
-    if label != "BBS shape":
-        touch = text.find("project.Touch()", semantic if semantic >= 0 else 0)
-        if touch < 0 or commit < 0 or touch > commit:
-            errors.append(label + ": project.Touch must occur before CAD commit so revision state rolls back with generated ownership")
-        if "Editor.Regen(" in text:
-            errors.append(label + ": native generated-rebar builder must remain UI-free; Regen belongs to the command post-commit boundary")
-
-# Shape ownership/count/mode/stale state is already atomic and has its own focused gate.
-# Its legacy best-effort viewport refresh remains explicitly non-fatal inside the builder;
-# command-level UI/audit isolation is guarded below so it cannot turn a completed build into a false operation failure.
 commands = {
     "column longitudinal": "src/QS3D.BricsCAD.V25/RebarGeometryCommands.cs",
     "beam longitudinal": "src/QS3D.BricsCAD.V25/BeamRebarCommands.cs",
@@ -86,4 +79,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: generated Column/Beam/Slab/Wall/Foundation/Stirrup/Tie/Shape rebar ownership advances while CAD is rollback-capable, pre-commit failures restore project state, and command-level UI synchronization cannot turn committed geometry into a false failure.")
+print("PASS: all eight generated rebar families advance ownership/revision while CAD is rollback-capable, pre-commit failures restore project state, native builders stay UI-free, and command-level UI synchronization cannot turn committed geometry into a false failure.")

@@ -115,6 +115,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
 
                     foreach (var item in pending) CommitSemanticUpdate(item);
+                    if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
@@ -135,11 +136,6 @@ namespace QS3D.BricsCAD.V25.Cad
             }
 
             var bars = pending.Sum(x => x.Handles.Count);
-            if (bars > 0)
-            {
-                project.Touch();
-                try { document.Editor.Regen(); } catch { }
-            }
             return new ShapeRebarBuildResult { Elements = pending.Count, Bars = bars };
         }
 
