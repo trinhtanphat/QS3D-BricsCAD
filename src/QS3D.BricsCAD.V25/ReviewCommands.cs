@@ -193,7 +193,7 @@ namespace QS3D.BricsCAD.V25
                 case ElementCategory.Earthwork:
                     return "Dùng closed POLYLINE làm footprint.";
                 case ElementCategory.WallPier:
-                    return "Dùng LINE cho profile Rectangular/Chamfered của Trụ Tường; open POLYLINE vẫn dùng footprint Tường KT.";
+                    return "Dùng LINE hoặc open POLYLINE plan-view cho profile Rectangular/Chamfered của Trụ Tường; bulge được tessellate và bend nội bộ giữ miter/bevel guard.";
                 case ElementCategory.GlassWall:
                     return "Dùng LINE để dựng host kính + mullion/transom frame; open POLYLINE vẫn dựng generic host GlassWall.";
                 case ElementCategory.ArchitecturalWall:
