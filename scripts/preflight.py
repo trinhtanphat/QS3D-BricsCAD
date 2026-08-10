@@ -172,12 +172,21 @@ if geometry.exists():
     if "CommitReplacement" not in text or "PrepareReplacement" not in text: errors.append("generated geometry must use two-phase CAD/metadata replacement")
     prepare = text.split("public static void CommitReplacement", 1)[0]
     if "element.Properties.Remove" in prepare: errors.append("generated metadata must not mutate before CAD transaction commit")
+
+geometry_guard = ROOT / "src/QS3D.BricsCAD.V25/Cad/CadGeometryGuard.cs"
+if not geometry_guard.exists():
+    errors.append("central CAD geometry guard missing")
+else:
+    text = geometry_guard.read_text(encoding="utf-8")
+    for needle in ("public static double Finite", "public static double Positive", "double.IsNaN", "double.IsInfinity", "public static double Hypot", "public static double Midpoint", "public static double Add"):
+        if needle not in text: errors.append("central CAD geometry guard incomplete: " + needle)
 for rel in ("src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs", "src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs"):
     path = ROOT / rel
     if path.exists():
         text = path.read_text(encoding="utf-8")
         if "transaction.Commit();" not in text or "CommitReplacement" not in text: errors.append(rel + ": two-phase generated geometry commit missing")
-        if "double.IsNaN" not in text or "double.IsInfinity" not in text: errors.append(rel + ": non-finite dimension guard missing")
+        for needle in ("CadGeometryGuard.Finite", "CadGeometryGuard.Positive", "CadGeometryGuard.Hypot"):
+            if needle not in text: errors.append(rel + ": centralized non-finite dimension guard missing: " + needle)
 
 health = ROOT / "src/QS3D.Core/Diagnostics/ModelHealthService.cs"
 if health.exists():
@@ -250,4 +259,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, manual CI, proprietary-file guard, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, manual CI, proprietary-file guard, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, centralized finite-safe two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences and installer verification are present.")
