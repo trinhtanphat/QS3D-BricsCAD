@@ -191,16 +191,16 @@ namespace QS3D.BricsCAD.V25.Cad
         private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element)
         {
             if (!element.Properties.TryGetValue("GeneratedRebarHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) return;
-            foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 var ids = CadHandleService.Resolve(document, new[] { handle });
-                if (ids.Count != 1) continue;
-                try
-                {
-                    var solid = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Solid3d;
-                    if (solid != null && !solid.IsErased) solid.Erase();
-                }
-                catch { }
+                if (ids.Count == 0) continue;
+                if (ids.Count > 1) throw new InvalidOperationException("Generated rebar handle " + handle + " resolves to multiple live CAD objects.");
+                var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
+                if (entity == null || entity.IsErased) continue;
+                var solid = entity as Solid3d;
+                if (solid == null) throw new InvalidOperationException("Generated rebar handle " + handle + " is live but is not a Solid3d. Refusing to orphan or overwrite rebar ownership.");
+                solid.Erase();
             }
         }
 
