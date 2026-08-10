@@ -6,13 +6,15 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILDER = ROOT / "src/QS3D.BricsCAD.V25/Cad/GridAnnotationBuilder.cs"
 COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/GridAnnotationCommands.cs"
 HEALTH = ROOT / "src/QS3D.Core/Diagnostics/GeneratedGridAnnotationHealthService.cs"
+RUNTIME_HEALTH = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedGridAnnotationRuntimeHealthService.cs"
+RUNTIME_AGGREGATOR = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedSolidRuntimeHealthService.cs"
 COMPREHENSIVE = ROOT / "src/QS3D.Core/Diagnostics/ComprehensiveModelHealthService.cs"
 POLICY = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedGridAnnotationHealthSmoke.cs"
 DOC = ROOT / "docs/GRID-NATIVE-ANNOTATION.md"
 errors = []
 
-for path in (BUILDER, COMMANDS, HEALTH, COMPREHENSIVE, POLICY, SMOKE, DOC):
+for path in (BUILDER, COMMANDS, HEALTH, RUNTIME_HEALTH, RUNTIME_AGGREGATOR, COMPREHENSIVE, POLICY, SMOKE, DOC):
     if not path.is_file():
         errors.append("missing Grid annotation contract file: " + str(path.relative_to(ROOT)))
 
@@ -76,6 +78,28 @@ if HEALTH.is_file():
         if token not in text:
             errors.append("GeneratedGridAnnotationHealthService.cs missing token: " + token)
 
+if RUNTIME_HEALTH.is_file():
+    text = RUNTIME_HEALTH.read_text(encoding="utf-8")
+    for token in (
+        'GeneratedGridAnnotationHandles',
+        'GRID_ANNOTATION_CAD_MISSING',
+        'GRID_ANNOTATION_CAD_TYPE_MISMATCH',
+        'GRID_ANNOTATION_CAD_OWNERSHIP_MISMATCH',
+        'GRID_ANNOTATION_CAD_TEXT_STALE',
+        'GeneratedGeometryService.HasMatchingOwnership(',
+        'entity is Line',
+        'entity is Circle',
+        'entity is DBText',
+        'GridNamingService.GridLabelKey',
+    ):
+        if token not in text:
+            errors.append("GeneratedGridAnnotationRuntimeHealthService.cs missing token: " + token)
+
+if RUNTIME_AGGREGATOR.is_file():
+    text = RUNTIME_AGGREGATOR.read_text(encoding="utf-8")
+    if 'GeneratedGridAnnotationRuntimeHealthService.Inspect(document, project)' not in text:
+        errors.append("GeneratedSolidRuntimeHealthService.cs must aggregate live Grid annotation health into QS3DHEALTH")
+
 if COMPREHENSIVE.is_file():
     text = COMPREHENSIVE.read_text(encoding="utf-8")
     for token in (
@@ -109,6 +133,7 @@ if DOC.is_file():
         'QS3DGRIDANNOTATEALL',
         'GeneratedGridAnnotationHandles',
         'GeneratedGridAnnotationHealthService',
+        'GeneratedGridAnnotationRuntimeHealthService',
         'ComprehensiveModelHealthService',
         'XData',
         'LOCAL_ONLY',
@@ -123,4 +148,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: native Grid annotation has explicit semantic labels, generated ownership, replacement guards, health integration and cross-layer rollback; runtime remains separately qualified.")
+print("PASS: native Grid annotation has explicit semantic labels, generated ownership, replacement guards, persisted + live health integration and cross-layer rollback; runtime remains separately qualified.")
