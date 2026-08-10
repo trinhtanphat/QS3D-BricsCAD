@@ -17,6 +17,7 @@ namespace QS3D.Core.Reporting
 
             foreach (var element in project.Elements)
             {
+                if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
                 var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
                 var familyName = families.TryGetValue(element.FamilyId, out var family) ? family.Name : element.FamilyId;
                 var category = element.Category.ToString();

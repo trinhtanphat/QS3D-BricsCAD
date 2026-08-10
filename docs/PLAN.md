@@ -15,19 +15,21 @@
 - persisted revision baseline/diff workflow using `.qsrev`;
 - deterministic recognition review + confident auto-apply, with project layer mappings overriding fallback heuristics;
 - `.qstemplate` company-standard import/export for Families, QuantityRules, layer mappings, BQ columns and generic material/classification properties;
-- deterministic planar room-boundary engine: intersection/T-junction subdivision, endpoint snapping, dangling-bridge removal, bounded-face traversal, stable boundary keys and Area/Perimeter calculation;
-- `QS3DROOMAUTO` accepts selected LINE/POLYLINE networks, including polyline bulges. Bulged arcs are tessellated in metric Core geometry with configurable maximum sagitta before face discovery, while boundary source handles remain provenance instead of duplicate semantic ownership;
-- Room Auto is exposed through command line, Ribbon and Full Domain Hub;
+- deterministic planar room-boundary engine with iterative bridge detection/source lookup: intersection/T-junction subdivision, endpoint snapping, dangling-bridge removal, bounded-face traversal, stable boundary keys and Area/Perimeter calculation;
+- `QS3DROOMAUTO` accepts selected LINE/POLYLINE networks including polyline bulges; bulges are tessellated in metric Core geometry with configurable maximum sagitta before face discovery;
+- Room Auto lifecycle is non-destructive and quantity-safe: same normalized source provenance reuses the existing Room, topology split/merge marks superseded Rooms `Stale`, stale Rooms/direct dependents are excluded from BQ, and audit records remain available for review/recovery;
+- Room Auto boundary provenance is resolved by the adapter without claiming duplicate semantic `SourceHandles`; HT_Phòng can target auto Rooms from their full boundary selection and existing finish semantics are synchronized on room updates;
+- Room Auto is exposed through command line, Ribbon and Full Domain Hub and the entire semantic operation is protected by project snapshot rollback if update/regeneration fails;
 - V25 release package + per-user DemandLoad install/uninstall source with hashes/signature policy and proprietary-runtime exclusion;
 - manual-only GitHub Actions and V25 self-hosted NETLOAD/runtime/screenshot harness.
 
 ## Next validation gates
 
 1. Static/source preflight on the newest head.
-2. Core Release build + deterministic smoke suite for the newest room-boundary/bulge head when explicitly run; earlier green runs do not automatically validate later commits.
+2. Core Release build + deterministic smoke suite for the newest Room Auto lifecycle head when explicitly run; earlier green runs do not automatically validate later commits.
 3. Licensed Windows BricsCAD V25 compile on `[self-hosted, windows, x64, bricscad-v25]`.
 4. `NETLOAD`/DemandLoad and command/Ribbon/palette regression, including `QS3DROOMAUTO`, recognition/template/revision/BBS/domain/audit workflows.
-5. Private sample DWG regression: wall/room/auto-room/opening/finish/structural/takeoff/BQ/BBS/template/save/reopen, including curved polyline boundaries.
+5. Private sample DWG regression: wall/room/auto-room/opening/finish/structural/takeoff/BQ/BBS/template/save/reopen, including curved boundaries and Room Auto split/merge/reuse cases.
 6. Visual regression at 100/125/150/200% DPI with Vietnamese Unicode.
 7. Performance/multi-DWG open-activate-SaveAs-close corpus plus large planar boundary-network corpus.
 8. Only after these gates are green, consider automatic PR CI/release-candidate automation.

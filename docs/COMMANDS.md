@@ -12,6 +12,8 @@
 - `QS3DROOM`, `QS3DWALL`, `QS3DOPENING`, `QS3DDOOR`.
 - `QS3DROOMAUTO` — discover bounded room faces from selected LINE/POLYLINE networks. Straight segments and polyline bulges are converted to metric planar segments; bulges are tessellated deterministically before the Core engine splits intersections/T-junctions, snaps endpoints, removes dangling bridges and calculates room area/perimeter.
 - Room Auto project metadata: `RoomBoundaryToleranceM` (default `0.005`), `RoomBoundaryMinimumAreaM2` (default `0.5`), `RoomBoundaryArcSagittaM` (default `0.002`).
+- Room Auto lifecycle: a changed boundary with the same normalized source-handle set reuses the existing Room record; a topology split/merge marks superseded auto Rooms `Stale` instead of deleting them. Stale Rooms and direct dependents are excluded from BQ while remaining in `.qsdb` for audit/recovery.
+- `QS3DFINISH` can resolve Room Auto through boundary provenance. For an auto Room, select the full boundary source set so a shared wall does not accidentally target both adjacent rooms; existing room finishes are synchronized when the Room Auto geometry is updated.
 - `QS3DBEAM`, `QS3DSLAB`, `QS3DCOLUMN`, `QS3DSTRUCTWALL`, `QS3DFOUNDATION`.
 - `QS3DSTAIR`, `QS3DRAILING`, `QS3DEARTHWORK`.
 - `QS3DFINISH` — generate room finish semantics.

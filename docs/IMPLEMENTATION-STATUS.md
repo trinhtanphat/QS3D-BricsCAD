@@ -16,9 +16,11 @@
 - semantic regeneration arithmetic is guarded against non-finite values/overflow before derived quantities are committed.
 - `QS3DREGEN` is available explicitly; BQ, BBS and Refresh regenerate dirty deterministic semantic quantities before consuming them.
 - semantic capture for Room, Tường KT, Opening, Door, structural categories and custom takeoff.
-- deterministic planar room-boundary discovery source: `RoomBoundaryEngine` subdivides segment intersections/T-junctions, snaps near endpoints, removes graph bridges/dangling edges, traverses bounded faces and returns stable keys, area, perimeter and provenance.
+- deterministic planar room-boundary discovery source: `RoomBoundaryEngine` subdivides segment intersections/T-junctions, snaps near endpoints, removes graph bridges/dangling edges, traverses bounded faces and returns stable keys, area, perimeter and provenance. Bridge discovery is iterative and per-edge source evidence uses a lookup instead of rescanning the full edge list during face traversal.
 - `BulgeArcTessellator` converts polyline bulges into metric straight-segment approximations using the CAD bulge included-angle relation, configurable maximum sagitta, finite-value guards and a bounded segment count.
-- `QS3DROOMAUTO` accepts selected LINE/POLYLINE networks including bulged polyline segments, converts drawing units to meters, stores boundary provenance without taking duplicate `SourceHandles` ownership, writes audit events, regenerates Room quantities, and is exposed in Ribbon + Full Domain Hub. `RoomBoundaryArcSagittaM` defaults to 0.002 m; network tolerance/minimum area remain configurable project metadata.
+- `QS3DROOMAUTO` accepts selected LINE/POLYLINE networks including bulged polyline segments, converts drawing units to meters, stores boundary provenance without taking duplicate `SourceHandles` ownership, writes audit events, regenerates Room quantities, and is exposed in Ribbon + Full Domain Hub. The operation captures a project snapshot and rolls back semantic/audit mutations if the update/regeneration pipeline fails.
+- Room Auto lifecycle is non-destructive: normalized source-handle provenance is stored as a signature, existing Rooms are reused when their source set remains the same after geometry edits, and topology split/merge marks superseded auto Rooms `Stale` instead of deleting them. Stale Rooms and direct dependents are excluded from project BQ while remaining in `.qsdb` for review/recovery.
+- adapter reference-handle resolution supports normal `SourceHandles`, Room Auto `BoundarySourceHandles` and generated-solid fallback. HT_Phòng can resolve an auto Room when the full boundary selection is present, preventing a single shared wall from accidentally targeting both adjacent Rooms. Existing finish semantics are synchronized when an active Room Auto geometry changes.
 - Quick Takeoff deterministic Length/Area/Volume/Count path and drawing-unit conversion from BricsCAD `INSUNITS` rather than a hard-coded millimeter fallback.
 - deterministic structural quantity regeneration for Beam, Slab, Column, StructuralWall, Foundation, Stair, Railing and Earthwork.
 - BricsCAD semantic capture commands and Ribbon/Domain Hub actions for Dầm/Sàn/Cột/Vách BTCT/Móng/Cầu thang/Lan can/Đào đất.
@@ -26,7 +28,7 @@
 - host linking supports Door/Opening deduction, safe re-host dirty propagation and persisted audit events for link/unlink operations.
 - HT_Phòng semantic generation for floor finish, waterproofing, skirting, wall finish and ceiling finish.
 - live Xref/Layer listing, controls, selection inspection and handle-based Locate/select.
-- semantic BQ groups by stable Floor/Family IDs, supports filtering/Locate/XLSX, has a real recalculate callback, and persists visible-column preferences in project metadata.
+- semantic BQ groups by stable Floor/Family IDs, supports filtering/Locate/XLSX, has a real recalculate callback, persists visible-column preferences, and excludes stale auto-room records/direct dependent finishes.
 - deterministic rebar notation/BBS calculation; `QS3DBBS` exports XLSX, `QS3DBBSVIEW` opens review/Locate UI, and `QS3DBBSCSV` exports UTF-8 CSV with spreadsheet formula-injection, control-character, row and non-finite-number guards plus atomic replacement.
 - revision snapshot persistence (`.qsrev`) plus `QS3DREVBASE` / `QS3DREVDIFF` wiring to the revision comparison UI.
 - deterministic recognition core is wired to `QS3DRECOGNIZE` review UI and `QS3DRECOGNIZEAUTO`; auto mode only applies high-confidence/margin results, rejects ambiguous mappings/invalid confidence and refuses semantic category collisions.
@@ -36,7 +38,7 @@
 - V25 runtime probe source verifies actual palette visibility rather than treating command dispatch alone as UI success.
 - V25 release packaging generates a command manifest from `CommandMethod` declarations, package metadata, SHA-256 hashes for shipped payloads, installer/uninstaller helpers and a release ZIP while excluding BricsCAD-owned runtime assemblies.
 - per-user BricsCAD V25 DemandLoad installer source is implemented with OnCommand default / optional OnStartup, command registration, payload hash verification, optional Authenticode enforcement, staged file replacement, `-WhatIf`/confirmation semantics and safe uninstall. It intentionally does not weaken BricsCAD security settings.
-- expanded generic and full-domain/release preflight guards cover schema/persistence, command uniqueness, generated geometry, full-domain quantities, BBS CSV safety, planar/curved room discovery + UI wiring, DemandLoad wiring and PowerShell syntax.
+- expanded generic and full-domain/release preflight guards cover schema/persistence, command uniqueness, generated geometry, full-domain quantities, BBS CSV safety, stable planar/curved Room Auto discovery/lifecycle/rollback/UI wiring, DemandLoad wiring and PowerShell syntax.
 - `main` GitHub Actions workflows remain `workflow_dispatch` only.
 
 ## Verified in GitHub-hosted CI
@@ -44,7 +46,7 @@
 - Full-domain integration gates were run repeatedly while concurrent hardening was merged; the final PR #1 integration gate passed generic preflight, full-domain preflight, Core Release build and the complete deterministic smoke suite before merge.
 - Release-candidate run `31346731964` passed generic preflight, full-domain/release preflight, PowerShell AST parsing for package/install/uninstall scripts, Core Release build and the complete deterministic smoke suite.
 - Integrated release-tree run `31346906413` repeated those checks after merging the Audit/Template UI work and also passed generic preflight, full-domain/release preflight, PowerShell parsing, Core Release build and the complete deterministic smoke suite.
-- Those runs predate the newest room-boundary/bulge source batches; these newest heads must not be called CI-verified until a later explicitly approved run covers them.
+- Those runs predate the newest Room Auto boundary/lifecycle source batches; these newest heads must not be called CI-verified until a later explicitly approved run covers them.
 - GitHub-hosted checks validate repository/Core/release-script logic only; they are not substitutes for BricsCAD V25 plugin/runtime execution.
 
 ## Gate C blocker

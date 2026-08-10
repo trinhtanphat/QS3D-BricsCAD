@@ -30,6 +30,8 @@ jobs:
         run: python scripts/preflight.py
       - name: Full-domain and release preflight
         run: python scripts/preflight-full-domain.py
+      - name: Auto-room lifecycle preflight
+        run: python scripts/preflight-room-lifecycle.py
       - name: Build core
         run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
       - name: Smoke tests

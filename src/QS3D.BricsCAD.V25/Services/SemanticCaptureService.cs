@@ -12,6 +12,15 @@ namespace QS3D.BricsCAD.V25.Services
 {
     internal static class SemanticCaptureService
     {
+        private static readonly ElementCategory[] RoomFinishCategories =
+        {
+            ElementCategory.FloorFinish,
+            ElementCategory.Waterproofing,
+            ElementCategory.Skirting,
+            ElementCategory.WallFinish,
+            ElementCategory.CeilingFinish
+        };
+
         public static int Capture(Document document, ElementCategory category)
         {
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
@@ -50,26 +59,75 @@ namespace QS3D.BricsCAD.V25.Services
 
         public static int GenerateRoomFinishes(Document document)
         {
+            if (document == null) throw new ArgumentNullException(nameof(document));
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
             var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
             var project = ProjectContextCoordinator.GetOrCreate(document);
-            var rooms = project.Elements.Where(x => x.Category == ElementCategory.Room && x.SourceHandles.Any(handles.Contains)).ToList();
+            var rooms = project.Elements
+                .Where(x => x.Category == ElementCategory.Room && !AutoRoomLifecycle.IsStaleAutoRoom(x) && SemanticReferenceHandles.Intersects(x, handles))
+                .ToList();
             var created = 0;
             foreach (var room in rooms)
             {
-                foreach (var category in new[] { ElementCategory.FloorFinish, ElementCategory.Waterproofing, ElementCategory.Skirting, ElementCategory.WallFinish, ElementCategory.CeilingFinish })
+                foreach (var category in RoomFinishCategories)
                 {
                     var id = room.Id + "-" + category;
                     var finish = project.FindElement(id);
                     if (finish == null)
                     {
-                        var family = ResolveFamily(project, category); finish = new ProjectElement(id, category, family.Id, room.FloorId, room.ZoneId); finish.DependsOn.Add(room.Id); project.Elements.Add(finish); created++;
+                        var family = ResolveFamily(project, category);
+                        finish = new ProjectElement(id, category, family.Id, room.FloorId, room.ZoneId);
+                        finish.DependsOn.Add(room.Id);
+                        project.Elements.Add(finish);
+                        created++;
                     }
-                    Copy(room, finish, "AreaM2"); Copy(room, finish, "PerimeterM"); Copy(room, finish, "HeightM"); Copy(room, finish, "OpeningAreaM2"); Copy(room, finish, "DoorWidthM");
-                    finish.MarkDirty(ElementDirtyFlags.All); Regenerate(project, finish);
+                    else if (finish.Category != category)
+                        throw new InvalidOperationException("Room finish id collision with category " + finish.Category + ": " + id);
+                    EnsureRoomDependency(finish, room.Id);
+                    SyncFinishFromRoom(room, finish);
+                    Regenerate(project, finish);
                 }
             }
-            project.Touch(); return created;
+            if (rooms.Count > 0) project.Touch();
+            return created;
+        }
+
+        public static int SyncExistingRoomFinishes(ProjectState project, ProjectElement room)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (room == null) throw new ArgumentNullException(nameof(room));
+            if (room.Category != ElementCategory.Room) throw new ArgumentException("Source element must be a Room.", nameof(room));
+            var updated = 0;
+            foreach (var category in RoomFinishCategories)
+            {
+                var finish = project.FindElement(room.Id + "-" + category) ?? project.Elements.FirstOrDefault(x =>
+                    x.Category == category && x.DependsOn.Any(d => string.Equals(d, room.Id, StringComparison.OrdinalIgnoreCase)));
+                if (finish == null) continue;
+                EnsureRoomDependency(finish, room.Id);
+                SyncFinishFromRoom(room, finish);
+                Regenerate(project, finish);
+                updated++;
+            }
+            if (updated > 0) project.Touch();
+            return updated;
+        }
+
+        private static void SyncFinishFromRoom(ProjectElement room, ProjectElement finish)
+        {
+            finish.FloorId = room.FloorId;
+            finish.ZoneId = room.ZoneId;
+            finish.Properties["RoomSourceId"] = room.Id;
+            Copy(room, finish, "AreaM2");
+            Copy(room, finish, "PerimeterM");
+            Copy(room, finish, "HeightM");
+            Copy(room, finish, "OpeningAreaM2");
+            Copy(room, finish, "DoorWidthM");
+            finish.MarkDirty(ElementDirtyFlags.All);
+        }
+
+        private static void EnsureRoomDependency(ProjectElement finish, string roomId)
+        {
+            if (!finish.DependsOn.Any(x => string.Equals(x, roomId, StringComparison.OrdinalIgnoreCase))) finish.DependsOn.Add(roomId);
         }
 
         private static ProjectFamily ResolveFamily(ProjectState project, ElementCategory category)
