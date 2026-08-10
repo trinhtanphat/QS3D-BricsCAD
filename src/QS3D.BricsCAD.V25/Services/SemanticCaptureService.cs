@@ -255,23 +255,32 @@ namespace QS3D.BricsCAD.V25.Services
                 case ElementCategory.ArchitecturalWall:
                     family.Properties["ThicknessM"] = "0.2";
                     family.Properties["HeightM"] = "3.6";
+                    family.Properties["AxisLeftOffsetM"] = "0";
+                    family.Properties["AxisRightOffsetM"] = "0";
                     family.Properties["Material"] = "Gạch";
                     break;
                 case ElementCategory.GlassWall:
                     family.Properties["ThicknessM"] = "0.012";
                     family.Properties["HeightM"] = "3.6";
+                    family.Properties["AxisLeftOffsetM"] = "0";
+                    family.Properties["AxisRightOffsetM"] = "0";
                     family.Properties["Material"] = "Kính";
                     family.Properties["CurtainMaxPanelWidthM"] = "1.2";
                     family.Properties["CurtainMaxPanelHeightM"] = "1.5";
                     family.Properties["CurtainPerimeterFrameWidthM"] = "0.05";
                     family.Properties["CurtainMullionWidthM"] = "0.05";
                     family.Properties["CurtainTransomWidthM"] = "0.05";
+                    family.Properties["CurtainFrameDepthM"] = "0.05";
                     family.Properties["CurtainFrameMaterial"] = "Nhôm";
                     break;
                 case ElementCategory.WallPier:
                     family.Properties["ThicknessM"] = "0.2";
                     family.Properties["HeightM"] = "3.6";
+                    family.Properties["AxisLeftOffsetM"] = "0";
+                    family.Properties["AxisRightOffsetM"] = "0";
                     family.Properties["Material"] = "Gạch";
+                    family.Properties["WallPierProfileMode"] = "Rectangular";
+                    family.Properties["WallPierChamferM"] = "0.02";
                     break;
                 case ElementCategory.StructuralWall: family.Properties["ThicknessM"] = "0.2"; family.Properties["HeightM"] = "3.6"; family.Properties["Material"] = "Bê tông"; break;
                 case ElementCategory.Beam: family.Properties["WidthM"] = "0.3"; family.Properties["HeightM"] = "0.5"; family.Properties["Material"] = "Bê tông"; break;
