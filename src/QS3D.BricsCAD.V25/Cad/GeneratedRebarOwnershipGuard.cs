@@ -29,9 +29,6 @@ namespace QS3D.BricsCAD.V25.Cad
             if (project == null) throw new ArgumentNullException(nameof(project));
             var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            // Reserve semantic/source and host-generated geometry before indexing any
-            // destructive rebar ownership. Corrupted rebar metadata must never make a
-            // source entity or generated host solid eligible for erase.
             foreach (var element in project.Elements)
             {
                 foreach (var handle in element.SourceHandles)
@@ -44,6 +41,7 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 Add(element, "GeneratedRebarHandles", owners);
                 Add(element, "GeneratedShapeRebarHandles", owners);
+                Add(element, "GeneratedStirrupRebarHandles", owners);
             }
             return new OwnershipIndex(owners);
         }
