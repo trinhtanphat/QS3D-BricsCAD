@@ -5,10 +5,11 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.Core/Rules/QuantityRulePreviewService.cs"
 ENGINE = ROOT / "src/QS3D.Core/Rules/QuantityRuleEngine.cs"
+HEALTH = ROOT / "src/QS3D.Core/Diagnostics/ModelHealthBaselineService.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/QuantityRulePreviewSmoke.cs"
 errors = []
 
-for path in (SOURCE, ENGINE, SMOKE):
+for path in (SOURCE, ENGINE, HEALTH, SMOKE):
     if not path.is_file():
         errors.append("missing quantity-rule preview contract file: " + str(path.relative_to(ROOT)))
 
@@ -20,6 +21,12 @@ if SOURCE.is_file():
         "ProjectStateSnapshot.CreateDetachedCopy(project)",
         "public int ApplyElement",
         "public int ApplyProject",
+        "public QuantityRuleGuardedApplyResult ApplyProjectWithHealthGuard",
+        "new ModelHealthBaselineService()",
+        "health.CaptureSemantic(project)",
+        "health.Compare(before, after)",
+        "if (diff.NewErrorCount > 0)",
+        "project state was rolled back",
         "Quantity-rule preview is stale",
         "ProjectStateSnapshot.Capture(project)",
         "snapshot.Restore(project)",
@@ -27,6 +34,8 @@ if SOURCE.is_file():
         "QuantityRulePreviewChangeKind.Added",
         "QuantityRulePreviewChangeKind.Changed",
         "QuantityRulePreviewChangeKind.Removed",
+        "var beforeManaged = beforeHasValue || beforeRule.Length > 0;",
+        "var afterManaged = afterHasValue || afterRule.Length > 0;",
         "BeforeProvenance",
         "AfterProvenance",
     ):
@@ -42,15 +51,23 @@ if ENGINE.is_file():
         if token not in text:
             errors.append("QuantityRuleEngine lost staged-before-mutation contract required by preview/apply: " + token)
 
+if HEALTH.is_file() and "public ModelHealthBaselineDiff Compare" not in HEALTH.read_text(encoding="utf-8"):
+    errors.append("Quantity-rule health guard requires deterministic health baseline comparison.")
+
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
         "PreviewIsReadOnlyAndClassifiesChanges();",
+        "ProvenanceOnlyStaleOutputIsRemoved();",
         "StaleElementPreviewFailsBeforeMutation();",
         "ProjectPreviewAppliesAtomicallyFromFreshState();",
+        "HealthGuardedProjectApplyReturnsRegressionDiff();",
         "ForeignElementInstanceFailsClosed();",
         "Rule:OldManaged",
+        "Rule:Ghost",
         "QuantityRulePreviewChangeKind.Removed",
+        "ApplyProjectWithHealthGuard",
+        "HealthDiff.NewErrorCount",
         "[ModuleInitializer]",
     ):
         if token not in text:
@@ -63,4 +80,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: quantity rules support detached element/project previews, explicit add/change/remove deltas with provenance, stale-preview rejection, exact project ownership, and snapshot rollback for guarded batch apply.")
+print("PASS: quantity rules support detached element/project previews, add/change/remove deltas with provenance, stale-preview rejection, exact project ownership, atomic batch apply, and rollback when a guarded apply introduces new Model Health errors.")
