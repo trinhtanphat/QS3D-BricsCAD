@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             BasicBomGuard();
             RoomFinishProvenanceReachesReleaseGuard();
             ProvenanceConflictDoesNotCrashReleaseGuard();
+            NullSemanticEntryBlocksReleaseWithoutCrashing();
         }
 
         private static void BasicBomGuard()
@@ -89,6 +90,16 @@ namespace QS3D.Core.SmokeTests
             Has(issues, "ROOM_PROVENANCE_CONFLICT");
             Has(issues, "BOM_EXCLUSION_FAILED");
             Has(issues, "BOM_REPORT_FAILED");
+        }
+
+        private static void NullSemanticEntryBlocksReleaseWithoutCrashing()
+        {
+            var project = new ProjectState("bom-null", "BOM null guard");
+            project.Elements.Add(null!);
+            var issues = BomReleaseGuardService.Inspect(project);
+            Has(issues, "BOM_NULL_ELEMENT");
+            if (!issues.Any(x => x.Code == "BOM_NULL_ELEMENT" && x.Severity == HealthSeverity.Error))
+                throw new Exception("Null semantic BOM entry must be an Error-level release blocker.");
         }
 
         private static void Empty(IReadOnlyList<ModelHealthIssue> issues)
