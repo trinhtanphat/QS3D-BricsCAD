@@ -45,7 +45,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnApplyClick(object sender, RoutedEventArgs e) => Apply(Grid.SelectedItems.Cast<RecognitionResult>().ToList());
         private void OnGridDoubleClick(object sender, MouseButtonEventArgs e) { if (Grid.SelectedItem is RecognitionResult row) Apply(new[] { row }); }
-        private void OnApplyConfidentClick(object sender, RoutedEventArgs e) => Apply(_rows.Where(x => x.TopCandidate != null && x.Confidence >= .92d && x.Margin >= .15d).ToList());
+        private void OnApplyConfidentClick(object sender, RoutedEventArgs e) => Apply(_rows.Where(x => x.TopCandidate != null && x.Confidence >= .92d && x.Margin >= .15d && x.IsCaptureReady).ToList());
 
         private void Apply(IEnumerable<RecognitionResult> rows)
         {

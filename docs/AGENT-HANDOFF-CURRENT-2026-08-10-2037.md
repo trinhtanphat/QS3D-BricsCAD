@@ -2,6 +2,26 @@
 
 This is the short canonical delta for agents continuing from current `main`. Current source wins over older handoff/history text.
 
+## Superseding review delta — 2026-08-10 23:10 UTC+7
+
+This section is newer than the historical status paragraphs below and supersedes them where they conflict with current source.
+
+A broad source review of the fast-moving `main` re-checked repository policy, current open product gaps, recent commits, the two stale-but-substantive draft PRs #165/#173, persistence/quantity safety, modeless UI lifetime work and smoke-test discoverability. The review deliberately reused validated source slices instead of blindly merging stale branch history or overwriting concurrent commits.
+
+Three concrete correctness regressions were selected for the request-scoped integration batch:
+
+1. **DWG ↔ QSDB persistence lifecycle.** Pending in-memory semantic mutations are tracked by monotonic `ProjectState.ChangeVersion`. Successful native DWG Save/SaveAs can persist pending state to the matching `.qsdb`; close with pending semantic state requires an explicit Save/Discard/Cancel choice; sidecar-save failure vetoes close and attempts a detached LocalAppData recovery copy. Snapshot/QSDB failure rollback restores both timestamp and change version. Lifecycle handlers are detached before project context is forgotten. The source implementation landed concurrently on `main`; this review batch retains/extends its missing regression coverage instead of duplicating the winning source commit.
+2. **Drawing-unit / B4D quantity safety.** Undefined or unsupported `INSUNITS` no longer silently becomes millimeter for unit-dependent recognition/capture/BQ/ED2/reconcile. `QS3DUNITS` provides an explicit persisted project override only when native `INSUNITS` is unavailable; known native units remain authoritative. Existing semantic quantities are bound to their effective capture unit and mismatches fail closed instead of being silently rescaled.
+3. **Proxy/BRC capture safety and smoke compile regression.** Metricless `ProxyEntity` candidates remain visible for review but are excluded from auto-accept/capture until a finite positive category-appropriate primary metric exists. `AtomicFileCommitFallbackSmoke` also restores the missing `System.Linq` import required by its `.Any()` assertion.
+
+The unit state is surfaced in Project Tools together with a `QS3DUNITS` launcher. New smoke/static guards cover persistence stamps/change-version rollback, save lifecycle, drawing-unit resolution and ProxyEntity capture eligibility. Existing concurrent Project Tools commands and smoke registrations from newer `main` are preserved.
+
+The source slices reused from draft PR #173 had prior branch evidence of Core smoke PASS, aggregate preflight 232/232 PASS, BricsCAD V25 x64 Release compile with 0 warnings/0 errors, and offline WPF checks PASS. The source slices reused from draft PR #165 had prior branch evidence of aggregate preflight 221/221 PASS, Core smoke PASS, BricsCAD V25 x64 Release compile with 0 warnings/0 errors, and offline WPF checks PASS. **Those are branch results, not a claim that the newly integrated exact `main` commit has been executed in CI or licensed BricsCAD.** GitHub Actions remain undispatched because the owner requested review/fix/commit/push, not CI/build/release. Exact-SHA interactive Save/SaveAs/Close, NETLOAD/DemandLoad and native V25 behavior remain LOCAL_ONLY.
+
+Current Interchange source is also newer than the older paragraph below: `QS3DINTERCHANGEIMPORT` routes explicit append/KeepTarget/guarded Element replacement policy slices; `QS3DINTERCHANGEUSESOURCECATALOG` provides a separate guarded Zone/Floor/Family source-semantic replacement slice; and source-handle provenance has a provenance-only path. These still do not imply arbitrary rename/remap, native source-handle ownership adoption or automatic physical rebuild/cut.
+
+Current documentation/model-health source is newer as well: authoritative native BBS Table source has landed, and deterministic Core semantic saved-view/sheet planning has landed. Native Layout/Viewport/title-block materialization and exact visual/runtime qualification remain separate LOCAL_ONLY/product work.
+
 ## Owner commit policy
 
 The owner explicitly requires **request-scoped commit batching**. Treat one owner request / `continue all` as the default coherent commit unit: accumulate related source, regression/static guards, docs and handoff, review them together, then commit. Do not create file-by-file or tiny-fix commit chains. Split only for genuinely independent/revertable risk, an already-independent PR (prefer squash), or conflict-safe integration forced by concurrent `main` movement. Never force-push newer agent work away.
