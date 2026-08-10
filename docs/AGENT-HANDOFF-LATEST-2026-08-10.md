@@ -3,6 +3,7 @@
 **Audit/update date:** 2026-08-10 (UTC+7)  
 **Repository:** `trinhtanphat/QS3D-BricsCAD`  
 **Canonical branch:** `main`  
+**Full-repository hardening merge:** `f02401b08d2e4f521fac2a9135420f6ea31dc684` (`fix(core): transactional capture and shared generated ownership`)  
 **Foundation/rebar source reconciliation merge:** `df43d67286a2b972f7787961b0c11ed5e3529ae6` (`feat(rebar): finalize Foundation mesh integration`)  
 **Historical exhaustive session audit:** `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md`  
 
@@ -45,7 +46,7 @@ fetch latest main
 
 Never reset or force-push `main` backwards.
 
-GitHub Actions/release workflows remain **manual-only**. `continue all`, source review, merge, docs update or release-preparation text **does not authorize workflow dispatch**. This Foundation audit did **not** dispatch Actions.
+GitHub Actions/release workflows remain **manual-only**. `continue all`, source review, merge, docs update or release-preparation text **does not authorize workflow dispatch**. The Foundation integration and full-repository hardening audit did **not** dispatch Actions.
 
 ---
 
@@ -66,6 +67,19 @@ Current source includes:
 - revision baseline/diff persistence.
 
 QuantityRules are project data, support dependency ordering and reject invalid/circular state rather than partially mutating outputs.
+
+### Transactional semantic capture / finish integrity
+
+Current `SemanticCaptureService` uses `ProjectStateSnapshot` as an operation-level rollback boundary:
+
+- single recognition/manual `CaptureSnapshot` snapshots the complete project before semantic mutation;
+- multi-selection capture snapshots once before the batch so a later failure cannot leave earlier selected items committed;
+- QS3D-generated owner handles are rejected **before** adding/updating a semantic element;
+- conversion/regeneration failure restores Zones/Floors/Families/Elements/Rules/Audit/Metadata/timestamps;
+- if rollback itself fails, the original operation error and rollback error are preserved together;
+- `GenerateRoomFinishes` and `SyncExistingRoomFinishes` use the same rollback pattern so HT_PHÒNG cannot remain partially synchronized after a failed finish regenerator.
+
+This is an in-memory/project-state transaction boundary. It does not replace the separate guarded CAD transactions used by native geometry builders.
 
 ---
 
@@ -88,7 +102,7 @@ Current source has semantic + guarded native paths for:
 
 `QS3DROOMAUTO` supports guarded plan-view LINE/POLYLINE/ARC/SPLINE boundary discovery with deterministic snapping/intersection/T-junction handling, bridge removal, bounded-face traversal, stable provenance and non-destructive stale/reuse lifecycle.
 
-HT_PHÒNG semantics include floor/waterproofing/skirting/wall/ceiling finish workflows. Boundary provenance must not become duplicate semantic ownership of wall source handles.
+HT_PHÒNG semantics include floor/waterproofing/skirting/wall/ceiling finish workflows. Boundary provenance must not become duplicate semantic ownership of wall source handles. Finish generation/synchronization is now operation-atomic at project-state level as described above.
 
 ### Door / Opening
 
@@ -123,7 +137,7 @@ Current reporting includes:
 - stable element/drawing references in current exports;
 - Door/Opening and other schedule work added concurrently on `main`.
 
-Recognition is deterministic/rule-based with review, confidence/margin handling, semantic collision rejection and project/company layer mappings. Whole-space B4D/recognition code must continue to exclude generated geometry families rather than recapturing generated solids as new semantic source CAD.
+Recognition is deterministic/rule-based with review, confidence/margin handling, semantic collision rejection and project/company layer mappings. Whole-space `QS3DB4D` excludes generated owner-slot handles through the shared ownership policy rather than a generated-family list. Recognition/B4D application still enters through guarded `CaptureSnapshot`, so generated output is rejected a second time before semantic mutation if a future scanner regression ever reaches apply.
 
 ---
 
@@ -165,23 +179,33 @@ Detailed contract: `docs/FOUNDATION-REBAR3D.md`.
 
 ### Mesh Setup
 
-`QS3DREBARMESHSETUP` now supports:
+`QS3DREBARMESHSETUP` supports:
 
 - Slab;
 - StructuralWall;
 - Foundation.
 
-The setup UI validates **explicit user input** only. It does not recommend structural reinforcement. A previous artificial same-diameter restriction was removed: direction 1 and direction 2 may use independent diameter/count/spacing because the native planners support that contract.
+The setup UI validates **explicit user input** only. It does not recommend structural reinforcement. Direction 1 and direction 2 may use independent diameter/count/spacing because the native planners support that contract.
 
 ### Beam consistency fix
 
-Beam longitudinal native geometry now uses the same **5 mm near-horizontal planarity tolerance** as Beam Stirrup. This avoids the previous inconsistent state where the same slightly noisy Beam LINE could pass stirrup generation but fail longitudinal generation.
+Beam longitudinal native geometry uses the same **5 mm near-horizontal planarity tolerance** as Beam Stirrup. This avoids the previous inconsistent state where the same slightly noisy Beam LINE could pass stirrup generation but fail longitudinal generation.
 
 ---
 
 ## 7. Generated ownership, invalidation and stale lifecycle
 
-Generated rebar ownership is fail-closed. Before destructive replacement, a handle must be owned by the exact element/property family. Cross-element/cross-family handle conflicts are rejected rather than erased.
+Generated ownership is fail-closed. Core `GeneratedHandleOwnershipPolicy` is the single classification contract:
+
+- `PhysicalOpeningCutSolidHandle` is an owner slot;
+- every `Generated*Handle` / `Generated*Handles` property is an owner slot;
+- provenance/reference keys such as `HostHandle` are not owner slots;
+- `RebarHandleKeys` / `IsRebarOwnerSlot` retain the explicit destructive rebar-family contract needed by rebar guards/invalidation;
+- `EnumerateOwnerHandles` performs shared normalized parsing;
+- `CollectOwnerHandles` builds the project-wide live-output set;
+- `TryFindOwner` rejects ambiguous claims across different elements **or different owner slots** before semantic capture.
+
+The adapter `GeneratedHandleOwnershipPolicy` is only a facade delegating to Core. Do not reintroduce separate classification logic in the adapter.
 
 Current rebar-generated ownership families include:
 
@@ -193,9 +217,11 @@ Current rebar-generated ownership families include:
 - `GeneratedWallMeshHandles`;
 - `GeneratedFoundationMeshHandles`.
 
+Selection resolution, B4D exclusion, safe ownership health, BOM live-generated validation, semantic capture and Release Readiness consume the shared owner contract. This is intentionally future-family-safe for a new `Generated*Handle(s)` owner slot.
+
 Host geometry rebuild through `GeneratedDependentGeometryInvalidator` invalidates/erases owned dependent rebar sets, including Foundation Mesh, and preserves the current Curtain generated-frame lifecycle.
 
-`ProjectElement` now tracks per-output stale snapshots for **nine generated output families**:
+`ProjectElement` tracks per-output stale snapshots for **nine generated output families**:
 
 1. generated host solid;
 2. longitudinal rebar;
@@ -215,18 +241,11 @@ A semantic/source mutation marks only existing generated outputs stale. Replacin
 
 `QS3DREBARHEALTHALL` includes longitudinal, shape, ties, stirrups, Slab mesh, Wall mesh and Foundation mesh plus cross-family ownership checks.
 
-`QS3DHEALTHALL` aggregates:
+`QS3DHEALTHALL` aggregates semantic/model health, dependency/generated stale health, rebar family health, Curtain-frame health, ownership and generated rebar mode/category checks with dedupe + Locate.
 
-- semantic/model health;
-- generated stale health;
-- rebar family health;
-- Curtain-frame health;
-- rebar-specific cross-key ownership;
-- generic generated-handle ownership (`GeneratedHandleOwnershipHealthService` from concurrent `main`);
-- generated rebar mode/category metadata checks;
-- dedupe + Locate.
+`QS3DRELEASECHECK` preserves the newest concurrent **Dependency Health** and additionally consumes shared generated-owner enumeration for live CAD/Locate, Foundation Mesh health, Curtain live-state, stale state, generated-rebar mode semantics and BOM release guards. A future generated owner family therefore enters release liveness without adding another property parser.
 
-`GeneratedRebarModeHealthService` was corrected so Slab/Wall/Foundation mesh validation reads their **dedicated handle and mode slots** rather than incorrectly depending on `GeneratedRebarHandles`.
+`GeneratedRebarModeHealthService` validates Slab/Wall/Foundation mesh through their dedicated handle and mode slots rather than incorrectly depending on `GeneratedRebarHandles`.
 
 Foundation health command: `QS3DFOUNDATIONREBARHEALTH`.
 
@@ -254,32 +273,38 @@ Current source exposes the main rebar/health workflow through:
 - Mesh Setup;
 - Health All / Rebar Health All.
 
-Foundation Mesh and Foundation Health are present beside Slab/Wall mesh. Concurrent `main` also contains current Release Readiness, Door schedule and Curtain tools; preserve those entries when editing Ribbon/Hub files.
+Foundation Mesh and Foundation Health are present beside Slab/Wall mesh. Concurrent `main` also contains current Release Readiness, Door schedule, project tools, secure updater/signing and Curtain tools; preserve those entries and workflows when editing shared files.
 
 ---
 
 ## 11. Static/smoke regression source
 
-Foundation integration added/extended source gates for:
+Current audit source includes/extends gates for:
 
 - Foundation native source/ownership/health/UI contracts;
-- generated stale snapshots;
-- unified Rebar Health All;
-- full Health All;
-- mode/category health;
-- Foundation-specific smoke registration;
-- nine-family generated stale regression;
-- generated-output snapshot health regression.
+- generated stale snapshots and generated-owner slot policy;
+- unified Rebar Health All / full Health All / Release Readiness;
+- dependency health;
+- dynamic semantic selection with a future unknown `Generated*Handles` family;
+- B4D generated-source exclusion through the Core owner policy;
+- generated owner compilation/enumeration;
+- BOM liveness for a future generated owner family;
+- transactional single/multi semantic capture;
+- generated-output rejection before semantic mutation;
+- HT_PHÒNG generation/synchronization rollback;
+- Foundation-specific and generated-output smoke source.
 
-`preflight-all.py` auto-discovers `preflight-*.py`, so no separate Foundation workflow was added.
+`preflight-all.py` auto-discovers `preflight-*.py`, so the new capture-safety gate requires no workflow change.
 
-**Important validation boundary:** during this audit these new/modified preflight scripts and Core smoke tests were added/reconciled in source, but were **not executed in this chat**, and GitHub Actions were **not dispatched**.
+**Important validation boundary:** the execution container for this audit could not resolve `github.com`, so it could not clone the branch and did **not** execute `dotnet build`, Core smoke tests or aggregate Python preflights. GitHub Actions were **not dispatched**. These are implemented regression sources/static contracts, not a claim of a current green run.
+
+Detailed audit rationale: `docs/FULL-REPO-AUDIT-2026-08-10.md`.
 
 ---
 
 ## 12. V25 runtime / release boundary
 
-The repository contains current package/DemandLoad/runtime-probe/release-readiness source. Concurrent `main` also added synthetic sample/release preparation work.
+The repository contains current package/DemandLoad/runtime-probe/release-readiness source plus concurrent secure updater/signing/release preparation work.
 
 Historical green GitHub runs certify only their exact older snapshots. They do not certify the current `main`.
 
@@ -291,6 +316,7 @@ For the current source, still required before claiming V25 runtime completion:
 - DemandLoad/NETLOAD on licensed BricsCAD V25;
 - command/Ribbon/palette smoke regression;
 - private-DWG regression for geometry, ownership, save/reopen/multi-DWG behavior;
+- failed-capture/finish rollback regression with representative semantic inputs;
 - Foundation/Slab/Wall rebar native geometry verification in real drawing units;
 - Unicode/HiDPI/screenshot comparison on the real runtime.
 
@@ -318,12 +344,13 @@ Major remaining runtime/product gaps include:
 
 ## 14. Next-agent checklist
 
-1. Read `AGENTS.md`, `CI_POLICY.md` and this handoff.
-2. Fetch current `main`; do not assume `df43d672...` is still HEAD.
-3. Inspect commits newer than `df43d672...` before touching shared Ribbon/Hub/Health/release files.
-4. Never reintroduce a second Slab/Foundation mesh math engine; reuse/generalize current planners.
-5. Preserve independent mesh direction inputs.
-6. Preserve per-output stale snapshots and fail-closed generated ownership.
-7. Do not infer BBS fabrication data from native mesh geometry without explicit semantic inputs.
-8. Do not run Actions unless the user explicitly authorizes CI/workflow execution.
-9. Do not call current native paths runtime-verified without a licensed V25 build/NETLOAD/private-DWG proof.
+1. Read `AGENTS.md`, `CI_POLICY.md`, this handoff and `docs/FULL-REPO-AUDIT-2026-08-10.md`.
+2. Fetch current `main`; do not assume `f02401b...` is still HEAD.
+3. Inspect commits newer than `f02401b...` before touching shared ownership/Health/release/installer/updater/Ribbon/Hub files.
+4. Preserve one Core generated-owner classification contract; adapter code must delegate rather than fork it.
+5. Preserve transactional semantic capture and HT_PHÒNG rollback; generated owner handles must be rejected before semantic mutation.
+6. Never reintroduce a second Slab/Foundation mesh math engine; reuse/generalize current planners.
+7. Preserve independent mesh direction inputs and per-output stale snapshots.
+8. Do not infer BBS fabrication data from native mesh geometry without explicit semantic inputs.
+9. Do not run Actions unless the user explicitly authorizes CI/workflow execution.
+10. Do not call current native paths runtime-verified without a licensed V25 build/NETLOAD/private-DWG proof.
