@@ -18,7 +18,8 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                RequireSupportedContext(document);
+                RequireModelSpace(document);
+                RequireSupportedUcs(document);
                 var point = document.Editor.GetPoint("\nChọn điểm đặt QS3D Door / Opening Schedule Table: ");
                 if (point.Status != PromptStatus.OK) return;
                 var world = point.Value.TransformBy(document.Editor.CurrentUserCoordinateSystem);
@@ -36,10 +37,10 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                RequireSupportedContext(document);
+                RequireModelSpace(document);
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var handle = DoorOpeningNativeTableBuilder.Build(document, project, DoorOpeningNativeTableBuilder.StoredPosition(project));
-                FinalizeUi(document, "Door/Opening Table: đã refresh native Table " + handle + ".");
+                FinalizeUi(document, "Door/Opening Table: đã refresh native Table " + handle + " tại WCS position đã lưu.");
             }
             catch (Exception ex) { Report(document, "QS3DDOOROPENINGTABLEREFRESH lỗi: " + ex.Message); }
         }
@@ -80,10 +81,14 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex) { Report(document, "QS3DDOOROPENINGTABLEHEALTH lỗi: " + ex.Message); }
         }
 
-        private static void RequireSupportedContext(Document document)
+        private static void RequireModelSpace(Document document)
         {
             if (!document.Database.TileMode)
                 throw new InvalidOperationException("Door/Opening Table P0 chỉ hỗ trợ ModelSpace.");
+        }
+
+        private static void RequireSupportedUcs(Document document)
+        {
             var coordinateSystem = document.Editor.CurrentUserCoordinateSystem.CoordinateSystem3d;
             var zAxis = coordinateSystem.Zaxis;
             var length = zAxis.Length;
@@ -93,7 +98,7 @@ namespace QS3D.BricsCAD.V25
             var y = zAxis.Y / length;
             var z = zAxis.Z / length;
             if (Math.Abs(x) > UcsAxisTolerance || Math.Abs(y) > UcsAxisTolerance || Math.Abs(z - 1d) > UcsAxisTolerance)
-                throw new InvalidOperationException("Door/Opening Table P0 chỉ hỗ trợ UCS có mặt phẳng XY song song WCS XY.");
+                throw new InvalidOperationException("Door/Opening Table P0 chỉ hỗ trợ UCS có mặt phẳng XY song song WCS XY khi chọn điểm đặt mới.");
         }
 
         private static void FinalizeUi(Document document, string message)
