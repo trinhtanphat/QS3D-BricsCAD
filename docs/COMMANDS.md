@@ -11,7 +11,7 @@ Updated for the integrated source baseline on 2026-08-10. These names are **Bric
 - `QS3DSCHEDULES` — open the drawing-bound Schedule Hub for BQ, Room Finish, Material, Curtain, Door/Opening and rebar schedules/exports.
 - `QS3DZONES` — Zone Manager: CRUD/active Zone/semantic assignment.
 - `QS3DLEVELS` — Floor/Level project editor.
-- `QS3DFAMILIES` — Family Manager: create/duplicate/rename/delete/properties/assignment while preserving true instance overrides.
+- `QS3DFAMILIES` — Family Manager: create/duplicate/rename/delete/properties/assignment while preserving true instance overrides. The **TẠO MỚI** Ribbon and Full Domain Hub expose it as the canonical Family / Type launcher before Direct Draw.
 - `QS3DMATERIALS` — Material Catalog.
 - `QS3DSAVE`, `QS3DRELOAD`, `QS3DREFRESH`, `QS3DREGEN` — persistence and deterministic regeneration.
 - `QS3DINSPECT` — inspect current/prompted CAD selection and synchronize the Workspace.
@@ -35,6 +35,8 @@ Typed controls include finite-number/text fields, boolean checkbox and editable 
 ## Direct Draw / Tạo mới
 
 Direct Draw is the authoring path for **new geometry inside BricsCAD**. It creates a real BricsCAD source entity, captures it into the normal QS3D semantic model and reuses established semantic/native workflows. Legacy capture commands remain the path for CAD that was already drawn.
+
+Use `QS3DFAMILIES` first when a different compatible Family / Type should become active. Direct Draw then consumes that active Family and prompts/validates the key instance values needed by the command.
 
 ### P0
 
@@ -61,9 +63,13 @@ P1 also runs in Model Space, uses the same 5 mm unit-aware plan-view tolerance, 
 
 Door/Opening Direct Draw is Model-Space/unit-aware, rejects explicitly invalid Family numerics, uses canonical `SetProperty()` writes, rechecks the active DWG around nested Auto Host, and rolls an unmatched/ambiguous new opening back instead of leaving an orphan source/semantic object.
 
-**Physical boolean remains explicit.** `QS3DDRAWDOOR` / `QS3DDRAWOPENING` do not automatically call the global `QS3DCUTOPENINGS` path, because that service can process other linked openings grouped by the same host. Review the Host/dimensions/sill/clearance first, then run `QS3DCUTOPENINGS` intentionally when host Solid3d mutation is wanted.
+**Physical boolean remains explicit.** The newly created source stays selected after successful authoring, so the safer follow-up is `QS3DCUTSELECTEDOPENINGS`, which resolves only selected Door/WallOpening semantic targets. `QS3DCUTOPENINGS` remains the broader all-linked operation. Neither is silently auto-invoked by Direct Draw.
 
-Ribbon **TẠO MỚI** and the Full Domain Hub expose the current Direct Draw set. See `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md`, `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md` and `docs/DIRECT-DRAW-OPENINGS.md` for exact source/runtime boundaries.
+### Planar UCS contract
+
+P0, guarded P1 and Door/Opening Direct Draw share the current source-level UCS contract: point prompts stay in the active UCS; translated/in-plane-rotated UCS is allowed; persisted LINE/POLYLINE source geometry is transformed through `Editor.CurrentUserCoordinateSystem` before Model Space append; tilted/3D UCS is rejected before source creation. The user's UCS is not reset or mutated. See `docs/DIRECT-DRAW-UCS.md`. Exact World/translated/30°/45°/90° behavior still requires licensed V25 runtime qualification on the final SHA.
+
+Ribbon **TẠO MỚI** and the Full Domain Hub expose Family / Type plus the current Direct Draw set and selected-opening cut. See `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md`, `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md`, `docs/DIRECT-DRAW-OPENINGS.md` and `docs/DIRECT-DRAW-UCS.md` for exact source/runtime boundaries.
 
 ## Room and finish workflow
 
@@ -95,7 +101,8 @@ Physical L/T/X multi-owner wall-solid union/reconciliation is not implemented by
 - `QS3DDRAWDOOR` — author a new Door LINE directly and require verified Auto Host.
 - `QS3DAUTOLINKHOSTS` — safe automatic host matching using compatibility, surface gap, Floor/Zone, ambiguity and elevation gates. It does not silently cut the host.
 - `QS3DLINKHOST` — explicit manual host link.
-- `QS3DCUTOPENINGS` — guarded physical cuts on supported straight/open-polyline host paths according to current source support; keep this an explicit mutation step after Direct Draw.
+- `QS3DCUTSELECTEDOPENINGS` — resolve the current CAD/semantic selection to a deduplicated Door/WallOpening target set and physically cut only that requested subset. Every selected target/host is prevalidated before native mutation; stale generated hosts fail closed. Same-fingerprint reruns are idempotent; a different cut state on the same already-cut generated host requires host rebuild first.
+- `QS3DCUTOPENINGS` — guarded broader physical cut for all currently linked openings on supported hosts; keep this an explicit mutation step after Direct Draw/capture.
 - `QS3DCUTOPENINGSCURVED` — dedicated curved/bulged open-POLYLINE host path; plans/fingerprints before `BoolSubtract` and keeps identical reruns idempotent.
 - `QS3DDOORSCHEDULE` — drawing-bound Door/Opening schedule with host provenance.
 - `QS3DDOORXLSX` — Door/Opening XLSX export.
@@ -118,7 +125,7 @@ Curtain destructive and health ownership indexes use the shared generated-owner 
 
 - `QS3DBEAM`, `QS3DSLAB`, `QS3DCOLUMN`, `QS3DSTRUCTWALL`, `QS3DFOUNDATION`.
 - `QS3DSTAIR`, `QS3DRAILING`, `QS3DEARTHWORK`.
-- `QS3DTAKEOFF` — Quick Takeoff with drawing-unit conversion.
+- `QS3DTAKEOFF` — Quick Takeoff with drawing unit conversion.
 
 Native source conventions include LINE for supported linear structure and closed POLYLINE for supported footprint-based structure. Exact behavior remains part of the V25 runtime gate.
 
@@ -206,4 +213,4 @@ Destructive rebar/tie/curtain guards use the shared generated ownership policy s
 - `COMMANDS.txt` is generated directly from current source `[CommandMethod]` declarations, so new commands do not rely on a manually maintained release manifest.
 - GitHub Actions remain manual-only. `release-v25.yml` additionally requires explicit `confirm_release=RELEASE` before publication.
 
-See [`REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`](REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md), [`DIRECT-DRAW-P0-IMPLEMENTATION.md`](DIRECT-DRAW-P0-IMPLEMENTATION.md), [`DIRECT-DRAW-P1-IMPLEMENTATION.md`](DIRECT-DRAW-P1-IMPLEMENTATION.md), [`DIRECT-DRAW-OPENINGS.md`](DIRECT-DRAW-OPENINGS.md) and [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for current boundaries.
+See [`REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`](REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md), [`DIRECT-DRAW-P0-IMPLEMENTATION.md`](DIRECT-DRAW-P0-IMPLEMENTATION.md), [`DIRECT-DRAW-P1-IMPLEMENTATION.md`](DIRECT-DRAW-P1-IMPLEMENTATION.md), [`DIRECT-DRAW-OPENINGS.md`](DIRECT-DRAW-OPENINGS.md), [`DIRECT-DRAW-UCS.md`](DIRECT-DRAW-UCS.md), [`CURTAIN-PATH-FRAMES.md`](CURTAIN-PATH-FRAMES.md) and [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for current boundaries.
