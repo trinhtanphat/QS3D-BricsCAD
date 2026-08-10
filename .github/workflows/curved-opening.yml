@@ -1,0 +1,29 @@
+name: QS3D Curved Opening Gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Generic preflight
+        run: python scripts/preflight.py
+      - name: Geometry preflight
+        run: python scripts/preflight-geometry-completion.py
+      - name: Curved opening preflight
+        run: python scripts/preflight-curved-opening-cut.py
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Deterministic smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
