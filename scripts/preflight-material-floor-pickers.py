@@ -52,6 +52,9 @@ checks = {
         "Cannot delete the active floor",
         "Reassign them before deletion",
         "Value must be finite",
+        "ReferenceEquals(owned, element)",
+        "Element does not belong to the project instance",
+        "Project contains duplicate semantic element id",
     ],
     "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs": [
         "selected.Contains(handle)", '"GeneratedSolidHandle"', '"PhysicalOpeningCutSolidHandle"',
@@ -106,7 +109,7 @@ checks = {
     "tests/QS3D.Core.SmokeTests/ProjectMaterialCatalogRegistration.cs": ["ProjectMaterialCatalogSmoke.Run();"],
     "tests/QS3D.Core.SmokeTests/ProjectFloorServiceSmoke.cs": [
         "CreateUpdateAssignAndDelete", "ElevationChangeMarksGeneratedGeometryStale", "DeleteGuardsActiveAndReferencedFloors",
-        "RejectsDuplicateNamesAndInvalidElevation", "ProjectFloorService.Assign", "IsGeneratedSolidStale()",
+        "RejectsDuplicateNamesAndInvalidElevation", "RejectsDetachedSameIdElements", "ProjectFloorService.Assign", "IsGeneratedSolidStale()",
     ],
     "tests/QS3D.Core.SmokeTests/ProjectFloorServiceRegistration.cs": ["ProjectFloorServiceSmoke.Run();"],
     "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipSmoke.cs": [
@@ -152,4 +155,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: persisted material catalog, inherited/reference-safe rename+delete, selection-scoped ownership, document-bound material picker, and Core-backed floor CRUD/active/assignment semantics are present.")
+print("PASS: persisted material catalog, inherited/reference-safe rename+delete, selection-scoped ownership, document-bound material picker, and Core-backed floor CRUD/active/assignment semantics with project-instance membership guards are present.")
