@@ -36,15 +36,34 @@ This UI spec describes interfaces **hosted by the QS3D BricsCAD V25 plugin**. Br
 11. Vách Kính keeps semantic/quantity controls separate from native host/frame state: the Curtain Hub may build one backing host plus dedicated frame overlays, but it must not imply that Door/Opening cuts already trim mullions/transoms when they do not.
 12. Generated rebar UI must expose dedicated slab/wall mesh workflows without reusing labels that suggest generic longitudinal bars; unified health should be the easiest route for a user who does not know which generated family is stale.
 13. Ribbon, Workspace, Full Domain Hub and focused hubs/extensions should expose the same **major** workflows while keeping the main Workspace compact rather than duplicating every expert command everywhere.
+14. Workspace keyboard/context actions must reuse the same guarded handlers as visible buttons. They must not create a second raw `SendStringToExecute` path with different selection or mutation semantics.
+
+## Workspace fast interaction contract
+
+The main Workspace currently exposes these source-level shortcuts:
+
+- `Ctrl+S` → existing QS3D Save handler;
+- `Ctrl+F` → focus/select-all in Family search;
+- `Ctrl+B` → existing BQ handler;
+- `F5` → existing Workspace/CAD refresh handler;
+- `Delete` → delete the selected Family **only while keyboard focus is inside the Family list**.
+
+Right-click on a Family row selects that row first, then exposes: **Nhân bản Family**, **Xóa Family**, **Bóc đối tượng CAD đang chọn**, **Vẽ / Cập nhật 3D**.
+
+Right-click in selected-object review exposes the existing **Focus**, **Cô lập**, **Khôi phục cô lập**, **Định vị / Zoom chọn** and **Mặt bằng** handlers.
+
+These context/keyboard surfaces are workflow accelerators only. Existing validation, active-DWG state, Family/category selection, CAD selection restoration and command handlers remain authoritative.
 
 ## Visual language
 
 - compact Segoe UI CAD density;
-- neutral dark surfaces with blue accent, visible 1px separators and red destructive actions;
+- neutral dark surfaces with blue accent, visible separators and red destructive actions;
 - short button labels in narrow palettes, with tooltips carrying the longer explanation;
 - `WrapPanel` or responsive wrapping where action rows could otherwise clip;
 - vector/native icons are preferred; Unicode placeholder icons such as the current reset glyph are acceptable only during source-development, not as the final commercial icon set;
 - list/table virtualization where possible;
+- explicit keyboard-focus states;
+- `UseLayoutRounding`, device-pixel snapping and display text formatting for HiDPI source hardening;
 - explicit empty/error/status states instead of fake sample data;
 - generated/runtime-gated actions should communicate unsupported source or stale/rebuild requirements instead of silently no-oping.
 
@@ -59,6 +78,7 @@ Implemented in source:
 - **Family / Type** vs **Đối tượng / Instance** scope, instance override preservation and reset-to-Family action;
 - semantic-reference selection matching with ambiguous-instance protection;
 - live selected-CAD review with Locate/Zoom, Focus, Cô lập and Khôi phục;
+- Workspace Family/inspection right-click actions and `Ctrl+S`, `Ctrl+F`, `Ctrl+B`, `F5`, focus-scoped `Delete` shortcuts routed through existing handlers;
 - workspace wall helper actions: Giao tường, Snap xem, Snap áp;
 - workspace Auto Host action for Door/Opening host matching without automatic physical cut;
 - HT_Phòng actions;
@@ -66,23 +86,25 @@ Implemented in source:
 - Ribbon/Hub exposure for Tường KT, **Vách Kính Hub / Curtain 3D / frame health**, wall snap, Auto/Manual Host, straight/curved Door/Opening cuts, review commands and Full Health;
 - generated-rebar UI for column/beam longitudinal bars, BBS shape, beam stirrups, column ties, **Slab X/Y mesh** and **StructuralWall horizontal/vertical mesh**, including dedicated health commands and `QS3DREBARHEALTHALL`;
 - Curtain Hub Family controls for panel width/height, perimeter/mullion/transom widths, frame material and native frame depth; LINE GlassWall can keep a backing host and build dedicated frame overlays without replacing opening-host ownership;
+- live right-palette Layer color/lock state from the actual DWG rather than decorative sample state;
+- premium dark theme source guards for focus, HiDPI layout rounding and recycling/row/column virtualization;
 - BQ, BBS, recognition, revision, template, audit, Model Health and Full Health windows/workflows;
-- static BLT workspace preflight verifies key XAML well-formedness and Ribbon/Hub entry-point parity, while dedicated curtain/mesh/health preflights protect the focused workflows.
+- static BLT workspace, Workspace-interaction and HiDPI preflights verify key source contracts, while dedicated curtain/mesh/health preflights protect focused workflows.
 
 ## Remaining UI/product parity work
 
 Source parity is not the same as visual/runtime parity. Remaining work after licensed V25 screenshots/testing should prioritize:
 
 - real V25 Ribbon grouping, commercial icon set and spacing instead of the current dense text-first buttons;
-- context menus for Family/element/wall/door/curtain/rebar actions and faster keyboard workflows;
+- specialized context menus for wall/door/curtain/rebar expert actions where they materially reduce clicks; do not duplicate the generic Workspace actions already implemented;
 - section-box and deeper transient review workflows proven against V25;
 - richer material/catalog/classification pickers and searchable project-level catalogs beyond the current semantic Floor/Level selector and editable choices;
 - disabled-state/compatibility messaging for Vẽ 3D, Curtain 3D, Snap áp and straight/curved Khoét Cửa/Lỗ before a user attempts an unsupported operation;
 - curtain opening-aware frame visualization so users do not mistake backing-host cuts for completed mullion/transom interruption;
 - persisted splitter/palette widths if V25 hosting allows it safely;
-- large-list virtualization/performance proof;
+- large-list performance proof on representative projects even though source virtualization is enabled;
 - accessibility/focus order and high-DPI clipping fixes from real screenshots.
 
 ## Visual acceptance gate
 
-A design render is only a target. Before release, screenshots must come from a compiled V25 **plugin** at 100%, 125%, 150% and 200% scaling and be compared against the approved layout for panel widths, wrapping/clipping, Family/Instance/Floor-Level scope, typed controls, Curtain Hub/Geometry Extensions, selected/hover/disabled/error state, Vietnamese Unicode, command discoverability and native viewport preservation.
+A design render is only a target. Before release, screenshots must come from a compiled V25 **plugin** at 100%, 125%, 150% and 200% scaling and be compared against the approved layout for panel widths, wrapping/clipping, Family/Instance/Floor-Level scope, typed controls, context menus/shortcuts, Curtain Hub/Geometry Extensions, selected/hover/disabled/error state, Vietnamese Unicode, command discoverability and native viewport preservation.
