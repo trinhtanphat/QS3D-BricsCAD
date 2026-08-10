@@ -71,7 +71,7 @@ if re.search(r'(?i)SECURELOAD\s*[=:]|setvar[^\n]*SECURELOAD', installer):
     errors.append("V25 installer must not lower SECURELOAD")
 
 uninstaller = (ROOT / "scripts/uninstall-v25-autoload.ps1").read_text(encoding="utf-8")
-for needle in ("Applications\\QS3D", "Get-Process -Name bricscad", "SupportsShouldProcess", "LocalAppData"):
+for needle in ("Applications\\QS3D", "Get-Process -Name bricscad", "SupportsShouldProcess", "LOCALAPPDATA"):
     if needle not in uninstaller: errors.append("V25 DemandLoad uninstaller guard missing: " + needle)
 
 for workflow_name in ("ci.yml", "bricscad-v25.yml"):
