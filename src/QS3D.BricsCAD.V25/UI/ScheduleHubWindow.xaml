@@ -14,14 +14,14 @@
         </Border>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="16">
-                <TextBlock Text="PROJECT SNAPSHOT" Style="{StaticResource SectionLabel}"/>
+                <TextBlock Text="SCHEDULE-SAFE SNAPSHOT" Style="{StaticResource SectionLabel}"/>
                 <Border Background="{StaticResource Bg1Brush}" Padding="12" Margin="0,0,0,14">
                     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0"><TextBlock Text="Cấu kiện" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="ElementCountText" Text="0" FontSize="20" FontWeight="SemiBold"/></StackPanel>
+                        <StackPanel Grid.Column="0"><TextBlock Text="Cấu kiện BQ" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="ElementCountText" Text="0" FontSize="20" FontWeight="SemiBold"/></StackPanel>
                         <StackPanel Grid.Column="1"><TextBlock Text="HT_Phòng" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="FinishCountText" Text="0" FontSize="20" FontWeight="SemiBold"/></StackPanel>
                         <StackPanel Grid.Column="2"><TextBlock Text="Door / Opening" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="DoorCountText" Text="0" FontSize="20" FontWeight="SemiBold"/></StackPanel>
                         <StackPanel Grid.Column="3"><TextBlock Text="GlassWall" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="CurtainCountText" Text="0" FontSize="20" FontWeight="SemiBold"/></StackPanel>
-                        <StackPanel Grid.Column="4"><TextBlock Text="Material refs" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="MaterialCountText" Text="0" FontSize="20" FontWeight="SemiBold"/></StackPanel>
+                        <StackPanel Grid.Column="4"><TextBlock Text="Vật liệu dùng" Foreground="{StaticResource MutedBrush}"/><TextBlock x:Name="MaterialCountText" Text="0" FontSize="20" FontWeight="SemiBold"/></StackPanel>
                     </Grid>
                 </Border>
 
@@ -61,7 +61,7 @@
                     <Button Content="BBS" Tag="QS3DBBS" Click="OnCommandClick"/>
                     <Button Content="BBS CSV" Tag="QS3DBBSCSV" Click="OnCommandClick"/>
                 </UniformGrid>
-                <TextBlock Text="Schedule Hub khóa theo bản vẽ đã mở; khi chuyển sang DWG khác, command sẽ bị từ chối cho tới khi kích hoạt lại đúng bản vẽ." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,10,0,0"/>
+                <TextBlock Text="Các badge dùng cùng builder/validation với schedule &amp; export. Hub khóa theo bản vẽ đã mở; khi chuyển sang DWG khác, snapshot cũ được giữ và command bị từ chối cho tới khi kích hoạt lại đúng bản vẽ." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,10,0,0"/>
             </StackPanel>
         </ScrollViewer>
         <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="10" BorderThickness="0,1,0,0"><TextBlock x:Name="StatusText" Text="Sẵn sàng" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/></Border>
