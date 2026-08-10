@@ -103,9 +103,19 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnHealthClick(object sender, RoutedEventArgs e) => Send("QS3DHEALTH");
         private void OnSaveClick(object sender, RoutedEventArgs e) => Send("QS3DSAVE");
         private void OnRefreshClick(object sender, RoutedEventArgs e) { RefreshProject(); PaletteCoordinator.RefreshCad(); }
-        private void OnLocateSelectedClick(object sender, RoutedEventArgs e) { var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null || _inspection.Count == 0) return; var count = Cad.CadHandleService.Select(doc, _inspection.Select(x => x.Handle)); SetStatus("Đã chọn lại " + count + " đối tượng CAD."); if (count > 0) Send("QS3DZOOMSELECTED"); }
+        private void OnLocateSelectedClick(object sender, RoutedEventArgs e) { var count = SelectInspection(); SetStatus("Đã chọn lại " + count + " đối tượng CAD."); if (count > 0) Send("QS3DZOOMSELECTED"); }
+        private void OnFocusSelectedClick(object sender, RoutedEventArgs e) { var count = SelectInspection(); if (count <= 0) { SetStatus("Chưa có đối tượng để Focus."); return; } SetStatus("Focus " + count + " đối tượng."); Send("QS3DFOCUS"); }
+        private void OnIsolateSelectedClick(object sender, RoutedEventArgs e) { var count = SelectInspection(); if (count <= 0) { SetStatus("Chưa có đối tượng để Cô lập."); return; } SetStatus("Cô lập " + count + " đối tượng."); Send("QS3DISOLATE"); }
+        private void OnUnisolateClick(object sender, RoutedEventArgs e) { SetStatus("Khôi phục đối tượng đã cô lập."); Send("QS3DUNISOLATE"); }
         private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e) { if (_loadingContext) return; _viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily); }
         private void OnFamilySearchChanged(object sender, TextChangedEventArgs e) => ApplyFamilyFilter();
+
+        private int SelectInspection()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null || _inspection.Count == 0) return 0;
+            return Cad.CadHandleService.Select(doc, _inspection.Select(x => x.Handle));
+        }
 
         private void ApplyFamilyFilter()
         {
