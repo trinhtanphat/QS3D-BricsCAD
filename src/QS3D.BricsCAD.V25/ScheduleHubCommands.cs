@@ -14,7 +14,9 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                Application.ShowModelessWindow(IntPtr.Zero, new ScheduleHubWindow(document), true);
+                var window = new ScheduleHubWindow(document);
+                DocumentBoundWindowLifetime.Attach(window, document);
+                Application.ShowModelessWindow(IntPtr.Zero, window, true);
                 PaletteCoordinator.SetStatus("Schedule Hub: BQ • vật liệu • curtain • cửa/lỗ • cốt thép • khóa theo bản vẽ.");
             }
             catch (System.Exception ex)
