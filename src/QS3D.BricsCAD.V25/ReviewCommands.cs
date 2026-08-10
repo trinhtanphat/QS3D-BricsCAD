@@ -137,23 +137,8 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
-        private static HashSet<string> CollectGeneratedHandles(ProjectState project)
-        {
-            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in project.Elements)
-            {
-                foreach (var property in element.Properties)
-                {
-                    if (!GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key) || string.IsNullOrWhiteSpace(property.Value)) continue;
-                    foreach (var handle in property.Value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
-                    {
-                        var normalized = handle.Trim();
-                        if (normalized.Length > 0) result.Add(normalized);
-                    }
-                }
-            }
-            return result;
-        }
+        private static HashSet<string> CollectGeneratedHandles(ProjectState project) =>
+            new HashSet<string>(GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project), StringComparer.OrdinalIgnoreCase);
 
         private static string GeometryHint(ElementCategory category)
         {
