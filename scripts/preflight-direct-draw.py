@@ -8,15 +8,22 @@ errors = []
 
 required = {
     "src/QS3D.BricsCAD.V25/DirectDrawCommands.cs": [
+        'using QS3D.Core.Persistence;',
         'CommandMethod("QS3DDRAWWALL"',
         'CommandMethod("QS3DDRAWBEAM"',
         'CommandMethod("QS3DDRAWCOLUMN"',
         'CommandMethod("QS3DDRAWSLAB"',
         "SemanticCaptureService.Capture(document, category)",
         "ProjectStateSnapshot.Capture(project)",
-        "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
+        "ProjectElement? createdElement",
+        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(createdElement)",
+        "EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles)",
+        "GeneratedGeometryService.RequireMatchingOwnership",
         "rollback.Restore(project)",
-        "EraseHandles(document, cleanupHandles)",
+        "FinalizeUi(document",
+        "EnsureActive(document",
+        "ValidatePlanView(document, points, label)",
+        "PlanarityToleranceM = .005d",
         "WallSolidBuilder.BuildSelectedLineWalls",
         "PolylineWallSolidBuilder.BuildSelected",
         "StructuralSolidBuilder.BuildSelected",
@@ -117,21 +124,42 @@ if source.is_file():
         "new WallFootprintEngine()",
         "CreateBox(",
         "CreateExtrudedSolid(",
+        "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
+        "EraseHandles(document",
+        "priorGenerated.Contains(handle)",
+        "Math.Abs(points[index].Z - z) > 1e-6d",
     )
     for token in forbidden:
         if token in text:
-            errors.append("DirectDrawCommands must reuse established builders instead of duplicating native geometry: " + token)
+            errors.append("DirectDrawCommands contains unsafe/duplicated legacy behavior: " + token)
+
     create = text.find("sourceId = createSource();")
     capture = text.find("SemanticCaptureService.Capture(document, category)")
     build = text.find("BuildSelected(document, project, category)")
-    restore = text.find("rollback.Restore(project)")
-    erase = text.find("EraseHandles(document, cleanupHandles)")
-    if min(create, capture, build, restore, erase) < 0:
-        errors.append("Direct Draw transaction/rollback ordering tokens are incomplete")
-    elif not (create < capture < build < restore < erase):
-        errors.append("Direct Draw must create source -> capture -> build, then restore semantic state before CAD cleanup")
-    if "priorGenerated.Contains(handle)" not in text:
-        errors.append("Direct Draw rollback must preserve generated handles that existed before the operation")
+    catch_pos = text.find("catch (Exception operationError)")
+    cleanup_call = text.find("EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles)", catch_pos)
+    restore_call = text.find("rollback.Restore(project)", catch_pos)
+    finalize_call = text.find("FinalizeUi(document", catch_pos)
+    if min(create, capture, build, catch_pos, cleanup_call, restore_call, finalize_call) < 0:
+        errors.append("Direct Draw transaction/rollback/UI ordering tokens are incomplete")
+    else:
+        if not (create < capture < build < catch_pos):
+            errors.append("Direct Draw must create source -> capture -> native build before its rollback boundary")
+        if cleanup_call > restore_call:
+            errors.append("Direct Draw must clean scoped CAD while semantic ownership metadata is still available, before project restore")
+        if finalize_call < restore_call:
+            errors.append("Direct Draw UI/View3D sync must stay outside the atomic model mutation/rollback block")
+
+    cleanup_start = text.find("private static void EraseDirectDrawCad(")
+    cleanup_end = text.find("private static void FinalizeUi(", cleanup_start)
+    if cleanup_start < 0 or cleanup_end < 0:
+        errors.append("Direct Draw ownership-scoped CAD rollback helper is missing")
+    else:
+        cleanup_body = text[cleanup_start:cleanup_end]
+        if "catch { }" in cleanup_body:
+            errors.append("Direct Draw CAD rollback must not swallow per-entity erase failures")
+        if "GeneratedGeometryService.RequireMatchingOwnership" not in cleanup_body:
+            errors.append("Direct Draw generated CAD rollback must verify QS3D XData ownership before erase")
 
 print("QS3D Direct Draw P0 preflight")
 if errors:
@@ -139,4 +167,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Wall/Beam/Column/Slab Direct Draw preserves legacy capture, rolls back semantic/CAD state, reuses guarded builders, rejects sloped LINE flattening and is exposed in Ribbon/Domain Hub.")
+print("PASS: Direct Draw preserves legacy capture, uses persistence snapshots, scopes CAD rollback to the new semantic owner with ownership verification, keeps UI sync outside the atomic mutation boundary, reuses guarded builders, rejects sloped LINE flattening and remains exposed in Ribbon/Domain Hub.")
