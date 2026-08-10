@@ -15,7 +15,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void FamilyDefaultsDriveTieQuantity()
         {
-            var family = new ProjectFamily("F", ElementCategory.Column, "Column-400x500");
+            var family = new ProjectFamily("F", "Column-400x500", ElementCategory.Column);
             family.Properties["WidthM"] = "0.4";
             family.Properties["DepthM"] = "0.5";
             family.Properties["HeightM"] = "3";
@@ -30,7 +30,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void InstanceOverridesWin()
         {
-            var family = new ProjectFamily("F", ElementCategory.Column, "Column");
+            var family = new ProjectFamily("F", "Column", ElementCategory.Column);
             family.Properties["WidthM"] = "0.4";
             family.Properties["DepthM"] = "0.4";
             family.Properties["HeightM"] = "2";
