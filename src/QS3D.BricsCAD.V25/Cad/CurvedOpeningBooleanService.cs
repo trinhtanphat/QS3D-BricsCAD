@@ -186,8 +186,9 @@ namespace QS3D.BricsCAD.V25.Cad
         private static Solid3d BuildCutter(Document document, double hostElevationDrawing, double hostBottomOffsetM, IReadOnlyList<Point2> polygonM, double heightM, double baseElevationM, string label)
         {
             if (polygonM == null || polygonM.Count < 3) throw new InvalidOperationException("Curved opening cutter footprint is invalid: " + label);
+            var localBaseM = CadGeometryGuard.Add(hostBottomOffsetM, baseElevationM, label + "/cutter local base");
             var baseZ = CadGeometryGuard.Add(hostElevationDrawing,
-                CadGeometryGuard.ToDrawingUnits(document, hostBottomOffsetM + baseElevationM, label + "/cutter base"), label + "/cutter world base");
+                CadGeometryGuard.ToDrawingUnits(document, localBaseM, label + "/cutter base"), label + "/cutter world base");
             var height = CadGeometryGuard.ToDrawingUnits(document, heightM, label + "/cutter height");
             using (var boundary = new Polyline())
             {
