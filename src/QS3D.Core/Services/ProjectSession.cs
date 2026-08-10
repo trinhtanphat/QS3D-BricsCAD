@@ -15,12 +15,12 @@ namespace QS3D.Core.Services
             Project = project ?? throw new ArgumentNullException(nameof(project));
             Path = string.IsNullOrWhiteSpace(path) ? throw new ArgumentException("Project path is required.", nameof(path)) : System.IO.Path.GetFullPath(path);
             _store = store ?? new QsdbProjectStore();
-            Audit = new AuditTrail();
+            Audit = AuditTrail.ForProject(Project);
         }
 
         public ProjectState Project { get; private set; }
         public string Path { get; }
-        public AuditTrail Audit { get; }
+        public AuditTrail Audit { get; private set; }
         public bool HasWriteLock => _lock != null;
 
         public void AcquireWriteLock() => _lock = _lock ?? ProjectFileLock.Acquire(Path);
@@ -28,14 +28,31 @@ namespace QS3D.Core.Services
         public void Save()
         {
             if (_lock == null) throw new InvalidOperationException("Acquire the project write lock before saving.");
-            _store.Save(Project, Path);
+            var snapshot = ProjectStateSnapshot.Capture(Project);
             Audit.Record("PROJECT_SAVE", string.Empty, Path);
+            try
+            {
+                _store.Save(Project, Path);
+            }
+            catch (Exception saveError)
+            {
+                try
+                {
+                    snapshot.Restore(Project);
+                }
+                catch (Exception rollbackError)
+                {
+                    throw new AggregateException("Project save failed and in-memory audit rollback also failed.", saveError, rollbackError);
+                }
+                throw;
+            }
         }
 
         public void Reload()
         {
             if (_lock == null) throw new InvalidOperationException("Acquire the project write lock before reloading.");
             Project = _store.Load(Path);
+            Audit = AuditTrail.ForProject(Project);
             Audit.Record("PROJECT_RELOAD", string.Empty, Path);
         }
 
