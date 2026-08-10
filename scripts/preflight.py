@@ -264,7 +264,7 @@ snapshot_reader = ROOT / "src/QS3D.BricsCAD.V25/Cad/EntitySnapshotReader.cs"
 if review_commands.exists() and snapshot_reader.exists():
     review_text = review_commands.read_text(encoding="utf-8")
     snapshot_text = snapshot_reader.read_text(encoding="utf-8")
-    for needle in ("QS3DB4D", "ReadCurrentSpace", "CollectGeneratedHandles(project)", "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)"):
+    for needle in ("QS3DB4D", "ReadCurrentSpace", "CollectGeneratedHandles(project)", "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)"):
         if needle not in review_text: errors.append("B4D generated-source exclusion missing: " + needle)
     for needle in ("ReadCurrentSpace", "MaxCurrentSpaceEntities"):
         if needle not in snapshot_text: errors.append("B4D bounded whole-Current-Space scan missing: " + needle)
@@ -292,4 +292,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, manual CI, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, future-proof B4D generated-source exclusion and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, manual CI, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, canonical B4D generated-source exclusion and installer verification are present.")
