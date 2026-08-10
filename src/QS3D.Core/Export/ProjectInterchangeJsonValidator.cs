@@ -206,7 +206,7 @@ namespace QS3D.Core.Export
             ValidateRequiredString(project.Name, MaxNameLength, "PROJECT_NAME_EMPTY", "PROJECT_NAME_TOO_LONG", "$.project.name", issues);
             if (project.SchemaVersion <= 0)
                 issues.Error("PROJECT_SCHEMA", "Project schemaVersion must be positive.", "$.project.schemaVersion");
-            ValidateOptionalString(project.DrawingFingerprint, MaxNameLength, "PROJECT_FINGERPRINT_TOO_LONG", "$.project.drawingFingerprint", issues);
+            ValidateOptionalCanonicalString(project.DrawingFingerprint, MaxNameLength, "PROJECT_FINGERPRINT_TOO_LONG", "$.project.drawingFingerprint", issues);
             ValidateTimestamp(project.UpdatedUtc, "$.project.updatedUtc", issues);
         }
 
@@ -314,7 +314,7 @@ namespace QS3D.Core.Export
                 var hasCategory = TryCategory(element.Category, out var category);
                 if (!hasCategory) issues.Error("ELEMENT_CATEGORY", "Unknown element category: " + (element.Category ?? string.Empty), path + ".category");
 
-                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                var familyId = NormalizeOptionalId(element.FamilyId, path + ".familyId", issues);
                 if (familyId.Length > 0)
                 {
                     if (!families.TryGetValue(familyId, out var family))
@@ -325,10 +325,10 @@ namespace QS3D.Core.Export
 
                 ValidateReference(element.FloorId, floors, "FLOOR_REF_MISSING", path + ".floorId", issues);
                 ValidateReference(element.ZoneId, zones, "ZONE_REF_MISSING", path + ".zoneId", issues);
-                ValidateOptionalString(element.DrawingFingerprint, MaxNameLength, "ELEMENT_FINGERPRINT_TOO_LONG", path + ".drawingFingerprint", issues);
+                ValidateOptionalCanonicalString(element.DrawingFingerprint, MaxNameLength, "ELEMENT_FINGERPRINT_TOO_LONG", path + ".drawingFingerprint", issues);
                 ValidateTimestamp(element.UpdatedUtc, path + ".updatedUtc", issues);
 
-                if (!string.Equals((element.SourceRefScope ?? string.Empty).Trim(), "drawing-local", StringComparison.Ordinal))
+                if (!string.Equals(element.SourceRefScope ?? string.Empty, "drawing-local", StringComparison.Ordinal))
                     issues.Error("SOURCE_SCOPE", "sourceRefScope must be exactly 'drawing-local'; source handles are provenance only and are not import authority.", path + ".sourceRefScope");
 
                 if (element.SourceHandles == null) issues.Error("SOURCE_HANDLES_MISSING", "sourceHandles array is required, even when empty.", path + ".sourceHandles");
@@ -344,13 +344,8 @@ namespace QS3D.Core.Export
 
         private static void ValidateReference(string? raw, ISet<string> known, string code, string path, IssueCollector issues)
         {
-            var id = (raw ?? string.Empty).Trim();
+            var id = NormalizeOptionalId(raw, path, issues);
             if (id.Length == 0) return;
-            if (id.Length > MaxIdLength)
-            {
-                issues.Error("ID_TOO_LONG", "Reference id exceeds " + MaxIdLength.ToString(CultureInfo.InvariantCulture) + " characters.", path);
-                return;
-            }
             if (!known.Contains(id)) issues.Error(code, "Reference target does not exist: " + id, path);
         }
 
@@ -360,11 +355,16 @@ namespace QS3D.Core.Export
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < handles.Count; i++)
             {
-                var handle = (handles[i] ?? string.Empty).Trim();
+                var raw = handles[i] ?? string.Empty;
+                var handle = raw.Trim();
                 var itemPath = path + "[" + i.ToString(CultureInfo.InvariantCulture) + "]";
                 if (handle.Length == 0) issues.Error("SOURCE_HANDLE_EMPTY", "Source handle cannot be empty when present.", itemPath);
-                else if (handle.Length > MaxSourceHandleLength) issues.Error("SOURCE_HANDLE_TOO_LONG", "Source handle is too long.", itemPath);
-                else if (!seen.Add(handle)) issues.Error("SOURCE_HANDLE_DUPLICATE", "Duplicate source handle within one element: " + handle, itemPath);
+                else
+                {
+                    if (!string.Equals(raw, handle, StringComparison.Ordinal)) issues.Error("SOURCE_HANDLE_NON_CANONICAL", "Source handle must not contain leading/trailing whitespace.", itemPath);
+                    if (handle.Length > MaxSourceHandleLength) issues.Error("SOURCE_HANDLE_TOO_LONG", "Source handle is too long.", itemPath);
+                    else if (!seen.Add(handle)) issues.Error("SOURCE_HANDLE_DUPLICATE", "Duplicate source handle within one element: " + handle, itemPath);
+                }
             }
         }
 
@@ -382,13 +382,16 @@ namespace QS3D.Core.Export
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (var d = 0; d < dependencies.Count; d++)
                 {
-                    var dependency = (dependencies[d] ?? string.Empty).Trim();
+                    var raw = dependencies[d] ?? string.Empty;
+                    var dependency = raw.Trim();
                     var itemPath = path + "[" + d.ToString(CultureInfo.InvariantCulture) + "]";
                     if (dependency.Length == 0)
                     {
                         issues.Error("DEPENDENCY_EMPTY", "Dependency id cannot be empty.", itemPath);
                         continue;
                     }
+                    if (!string.Equals(raw, dependency, StringComparison.Ordinal))
+                        issues.Error("DEPENDENCY_NON_CANONICAL", "Dependency id must not contain leading/trailing whitespace.", itemPath);
                     if (dependency.Length > MaxIdLength)
                     {
                         issues.Error("ID_TOO_LONG", "Dependency id is too long.", itemPath);
@@ -455,12 +458,19 @@ namespace QS3D.Core.Export
         private static void ValidateProperties(IDictionary<string, string>? properties, string path, IssueCollector issues)
         {
             if (properties == null) return;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in properties)
             {
-                var key = (pair.Key ?? string.Empty).Trim();
+                var rawKey = pair.Key ?? string.Empty;
+                var key = rawKey.Trim();
                 if (key.Length == 0) issues.Error("PROPERTY_KEY_EMPTY", "Property key cannot be empty.", path);
-                else if (key.Length > MaxPropertyKeyLength) issues.Error("PROPERTY_KEY_TOO_LONG", "Property key is too long: " + key, path);
-                else if (IsGeneratedRuntimeProperty(key)) issues.Error("GENERATED_RUNTIME_PROPERTY", "Interchange snapshot must not carry generated/native ownership runtime property: " + key, path + "." + key);
+                else
+                {
+                    if (!string.Equals(rawKey, key, StringComparison.Ordinal)) issues.Error("PROPERTY_KEY_NON_CANONICAL", "Property key must not contain leading/trailing whitespace.", path + "." + key);
+                    if (!seen.Add(key)) issues.Error("PROPERTY_KEY_DUPLICATE", "Property key is ambiguous under case-insensitive semantics: " + key, path + "." + key);
+                    if (key.Length > MaxPropertyKeyLength) issues.Error("PROPERTY_KEY_TOO_LONG", "Property key is too long: " + key, path);
+                    else if (IsGeneratedRuntimeProperty(key)) issues.Error("GENERATED_RUNTIME_PROPERTY", "Interchange snapshot must not carry generated/native ownership runtime property: " + key, path + "." + key);
+                }
                 if ((pair.Value ?? string.Empty).Length > MaxPropertyValueLength)
                     issues.Error("PROPERTY_VALUE_TOO_LONG", "Property value exceeds guarded interchange length: " + key, path + "." + key);
             }
@@ -478,25 +488,54 @@ namespace QS3D.Core.Export
         private static void ValidateQuantities(IDictionary<string, double>? quantities, string path, IssueCollector issues)
         {
             if (quantities == null) return;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in quantities)
             {
-                var key = (pair.Key ?? string.Empty).Trim();
+                var rawKey = pair.Key ?? string.Empty;
+                var key = rawKey.Trim();
                 if (key.Length == 0) issues.Error("QUANTITY_KEY_EMPTY", "Quantity key cannot be empty.", path);
-                else if (key.Length > MaxPropertyKeyLength) issues.Error("QUANTITY_KEY_TOO_LONG", "Quantity key is too long: " + key, path);
+                else
+                {
+                    if (!string.Equals(rawKey, key, StringComparison.Ordinal)) issues.Error("QUANTITY_KEY_NON_CANONICAL", "Quantity key must not contain leading/trailing whitespace.", path + "." + key);
+                    if (!seen.Add(key)) issues.Error("QUANTITY_KEY_DUPLICATE", "Quantity key is ambiguous under case-insensitive semantics: " + key, path + "." + key);
+                    if (key.Length > MaxPropertyKeyLength) issues.Error("QUANTITY_KEY_TOO_LONG", "Quantity key is too long: " + key, path);
+                }
                 if (!Finite(pair.Value)) issues.Error("QUANTITY_NONFINITE", "Quantity must be finite: " + key, path + "." + key);
             }
         }
 
         private static bool TryCategory(string? value, out ElementCategory category)
         {
-            return Enum.TryParse((value ?? string.Empty).Trim(), false, out category) && Enum.IsDefined(typeof(ElementCategory), category);
+            var raw = value ?? string.Empty;
+            return raw.Length > 0 && string.Equals(raw, raw.Trim(), StringComparison.Ordinal) &&
+                   Enum.TryParse(raw, false, out category) && Enum.IsDefined(typeof(ElementCategory), category);
         }
 
         private static string NormalizeId(string? value, string path, IssueCollector issues)
         {
-            var id = (value ?? string.Empty).Trim();
+            var raw = value ?? string.Empty;
+            var id = raw.Trim();
             if (id.Length == 0) issues.Error("ID_EMPTY", "ID is required.", path);
-            else if (id.Length > MaxIdLength) issues.Error("ID_TOO_LONG", "ID exceeds " + MaxIdLength.ToString(CultureInfo.InvariantCulture) + " characters.", path);
+            else
+            {
+                if (!string.Equals(raw, id, StringComparison.Ordinal)) issues.Error("ID_NON_CANONICAL", "ID must not contain leading/trailing whitespace.", path);
+                if (id.Length > MaxIdLength) issues.Error("ID_TOO_LONG", "ID exceeds " + MaxIdLength.ToString(CultureInfo.InvariantCulture) + " characters.", path);
+            }
+            return id;
+        }
+
+        private static string NormalizeOptionalId(string? value, string path, IssueCollector issues)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Length == 0) return string.Empty;
+            var id = raw.Trim();
+            if (id.Length == 0)
+            {
+                issues.Error("ID_NON_CANONICAL", "Optional reference id must be empty or a non-whitespace canonical id.", path);
+                return string.Empty;
+            }
+            if (!string.Equals(raw, id, StringComparison.Ordinal)) issues.Error("ID_NON_CANONICAL", "Reference id must not contain leading/trailing whitespace.", path);
+            if (id.Length > MaxIdLength) issues.Error("ID_TOO_LONG", "Reference id exceeds " + MaxIdLength.ToString(CultureInfo.InvariantCulture) + " characters.", path);
             return id;
         }
 
@@ -512,24 +551,40 @@ namespace QS3D.Core.Export
             if (raw.Length > maxLength) issues.Error(tooLongCode, "Value exceeds " + maxLength.ToString(CultureInfo.InvariantCulture) + " characters.", path);
         }
 
-        private static void ValidateOptionalString(string? value, int maxLength, string code, string path, IssueCollector issues)
+        private static void ValidateOptionalCanonicalString(string? value, int maxLength, string code, string path, IssueCollector issues)
         {
-            if ((value ?? string.Empty).Length > maxLength) issues.Error(code, "Value exceeds " + maxLength.ToString(CultureInfo.InvariantCulture) + " characters.", path);
+            var raw = value ?? string.Empty;
+            if (raw.Length > maxLength) issues.Error(code, "Value exceeds " + maxLength.ToString(CultureInfo.InvariantCulture) + " characters.", path);
+            if (raw.Length > 0 && (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal) || string.IsNullOrWhiteSpace(raw)))
+                issues.Error("VALUE_NON_CANONICAL", "Optional structural value must be empty or free of leading/trailing whitespace.", path);
         }
 
-        private static void ValidateTimestamp(string? raw, string path, IssueCollector issues)
+        private static void ValidateTimestamp(string? value, string path, IssueCollector issues)
         {
+            var raw = value ?? string.Empty;
             if (string.IsNullOrWhiteSpace(raw))
             {
                 issues.Warning("TIMESTAMP_MISSING", "UTC timestamp is missing; review provenance before any future import.", path);
                 return;
             }
-            if (!DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+            if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
             {
-                issues.Error("TIMESTAMP_INVALID", "Timestamp is not an ISO-8601 round-trip value.", path);
+                issues.Error("TIMESTAMP_INVALID", "Timestamp must not contain leading/trailing whitespace.", path);
                 return;
             }
-            if (parsed.Kind != DateTimeKind.Utc) issues.Warning("TIMESTAMP_NOT_UTC", "Timestamp is valid but not explicitly UTC.", path);
+            if (!HasExplicitUtcOffset(raw) || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+            {
+                issues.Error("TIMESTAMP_NOT_UTC", "Timestamp must include an explicit Z or numeric timezone offset.", path);
+            }
+        }
+
+        private static bool HasExplicitUtcOffset(string value)
+        {
+            if (value.EndsWith("Z", StringComparison.OrdinalIgnoreCase)) return true;
+            var timeSeparator = value.IndexOf('T');
+            if (timeSeparator < 0) return false;
+            var offsetSeparator = Math.Max(value.LastIndexOf('+'), value.LastIndexOf('-'));
+            return offsetSeparator > timeSeparator;
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
