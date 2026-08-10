@@ -31,6 +31,10 @@ checks = {
         "DeleteCustom",
         "ReferencedMaterialNames",
         "RenameReferences",
+        "inheritedMaterialFamilies",
+        "inheritedFrameFamilies",
+        "RenameElementReference",
+        "element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity)",
         "is still referenced by a Family or Instance and cannot be deleted",
         "Convert.ToBase64String",
         "Convert.FromBase64String",
@@ -60,6 +64,8 @@ checks = {
         'Click="OnApplyClick"',
     ],
     "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs": [
+        "_document = document",
+        "ReferenceEquals",
         "ProjectMaterialCatalog.UpsertCustom",
         "ProjectMaterialCatalog.DeleteCustom",
         "SemanticSelectionResolver.ResolveImplied",
@@ -71,7 +77,7 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/MaterialCatalogCommands.cs": [
         'CommandMethod("QS3DMATERIALS"',
-        "new MaterialCatalogWindow()",
+        "new MaterialCatalogWindow(document)",
         "ShowModelessWindow",
     ],
     "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml": [
@@ -98,7 +104,12 @@ checks = {
     "tests/QS3D.Core.SmokeTests/ProjectMaterialCatalogSmoke.cs": [
         "CustomRoundTripAndUpdate",
         "ReferencedMaterialsAreDiscovered",
+        "RenamePropagatesReferencesAndStaleState",
+        "RenameStalesInheritedConsumersButPreservesOverrides",
+        "ReferencedMaterialCannotBeDeleted",
         "RejectsDuplicateBuiltInAndCorruptStorage",
+        "inherited.IsGeneratedSolidStale()",
+        "overridden.IsGeneratedSolidStale()",
     ],
     "tests/QS3D.Core.SmokeTests/ProjectMaterialCatalogRegistration.cs": [
         "ProjectMaterialCatalogSmoke.Run();",
@@ -129,4 +140,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: persisted material catalog, reference-safe rename/delete, ownership-safe semantic selection, material assignment and semantic floor/active-level pickers are present.")
+print("PASS: persisted material catalog, inherited/reference-safe rename+delete, ownership-safe semantic selection, material assignment and semantic floor/active-level pickers are present.")
