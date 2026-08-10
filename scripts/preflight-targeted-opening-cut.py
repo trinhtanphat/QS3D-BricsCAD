@@ -15,7 +15,7 @@ required = {
         "Target element is not Door/WallOpening",
         "Target opening is not linked to a host",
         "PhysicalOpeningCutFingerprint",
-        "Hãy Build 3D lại host trước khi khoét lại.",
+        "Hãy Build 3D lại host trước khi khoét tiếp.",
     ],
     "src/QS3D.BricsCAD.V25/OpeningBooleanCommands.cs": [
         'CommandMethod("QS3DCUTOPENINGS"',
@@ -106,4 +106,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: legacy all-linked cut remains available, selected Door/WallOpening ids are validated before mutation and cut through a targeted overload, UI exposes the safer subset path, host fingerprint idempotency remains fail-closed, and Direct Draw does not silently mutate host solids.")
+print("PASS: legacy all-linked cut remains available, selected Door/WallOpening ids are validated before mutation and cut through a targeted overload, UI exposes the safer subset path, accumulated host state remains fail-closed, and Direct Draw does not silently mutate host solids.")
