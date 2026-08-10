@@ -133,8 +133,14 @@ namespace QS3D.BricsCAD.V25.Cad
             widthM = CadGeometryGuard.Positive(widthM, element.Id + "/3D width");
             heightM = CadGeometryGuard.Positive(heightM, element.Id + "/3D height");
             var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-            var dx = CadGeometryGuard.Finite(line.EndPoint.X - line.StartPoint.X, element.Id + "/dx");
-            var dy = CadGeometryGuard.Finite(line.EndPoint.Y - line.StartPoint.Y, element.Id + "/dy");
+            var dx = CadGeometryGuard.Subtract(line.EndPoint.X, line.StartPoint.X, element.Id + "/dx");
+            var dy = CadGeometryGuard.Subtract(line.EndPoint.Y, line.StartPoint.Y, element.Id + "/dy");
+            var dz = CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z, element.Id + "/dz");
+            var planTolerance = CadGeometryGuard.Positive(
+                CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/line planarity tolerance"),
+                element.Id + "/line planarity tolerance drawing units");
+            if (Math.Abs(dz) > planTolerance)
+                throw new InvalidOperationException(category + " source LINE hiện yêu cầu gần ngang (|ΔZ| <= 0.005 m): " + element.Id);
             var length = CadGeometryGuard.Hypot(dx, dy, element.Id + "/source length");
             if (length <= 1e-6) throw new InvalidOperationException("Structural LINE quá ngắn: " + element.Id);
 
