@@ -37,7 +37,10 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 if (requested == InstanceScope && _selectedElement == null)
                 {
                     Status = "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance.";
-                    requested = FamilyScope;
+                    if (_selectedPropertyScope != FamilyScope) _selectedPropertyScope = FamilyScope;
+                    OnChanged(nameof(SelectedPropertyScope));
+                    LoadCurrentProperties();
+                    return;
                 }
                 if (_selectedPropertyScope == requested) return;
                 _selectedPropertyScope = requested;
