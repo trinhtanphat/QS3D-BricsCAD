@@ -1,6 +1,7 @@
 using System;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
+using QS3D.Core.Persistence;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -11,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             SnapshotIsDeterministicAndUsesStableIds();
             GeneratedOwnershipIsExcluded();
             NumericContractFailsClosed();
+            DetachedCopyDoesNotMutateLiveProject();
         }
 
         private static void SnapshotIsDeterministicAndUsesStableIds()
@@ -59,6 +61,32 @@ namespace QS3D.Core.SmokeTests
             try { ProjectInterchangeJsonExporter.Build(project); }
             catch (System.IO.InvalidDataException) { failed = true; }
             if (!failed) throw new Exception("Non-finite interchange quantities must fail closed.");
+        }
+
+        private static void DetachedCopyDoesNotMutateLiveProject()
+        {
+            var live = BuildFixture();
+            live.Metadata["Contract"] = "live";
+            var liveElement = live.FindElement("E-001")!;
+            var originalUpdatedUtc = live.UpdatedUtc;
+            var originalElementUpdatedUtc = liveElement.UpdatedUtc;
+
+            var detached = ProjectStateSnapshot.CreateDetachedCopy(live);
+            var detachedElement = detached.FindElement("E-001")!;
+            if (ReferenceEquals(live, detached) || ReferenceEquals(liveElement, detachedElement))
+                throw new Exception("Detached interchange state must not share mutable project/element instances with the live project.");
+
+            detached.Name = "Detached";
+            detached.Metadata["Contract"] = "detached";
+            detachedElement.SetProperty("Mark", "DETACHED");
+            detachedElement.SetQuantity("VolumeM3", 9.5d);
+
+            if (!string.Equals(live.Name, "Interchange Smoke", StringComparison.Ordinal)) throw new Exception("Detached project mutation leaked into live project name.");
+            if (!string.Equals(live.Metadata["Contract"], "live", StringComparison.Ordinal)) throw new Exception("Detached project mutation leaked into live metadata.");
+            if (!string.Equals(liveElement.Properties["Mark"], "B-01", StringComparison.Ordinal)) throw new Exception("Detached element property mutation leaked into live project.");
+            if (Math.Abs(liveElement.Quantities["VolumeM3"] - 1.25d) > 1e-12) throw new Exception("Detached quantity mutation leaked into live project.");
+            if (live.UpdatedUtc != originalUpdatedUtc || liveElement.UpdatedUtc != originalElementUpdatedUtc)
+                throw new Exception("Detached mutation changed live project timestamps.");
         }
 
         private static ProjectState BuildFixture()
