@@ -31,6 +31,10 @@ contracts = {
         "guard": "EnsureActive",
         "handlers": ["OnSaveClick", "OnRecalculateClick", "OnCommandClick"],
     },
+    "src/QS3D.BricsCAD.V25/UI/RebarMeshSetupWindow.xaml.cs": {
+        "guard": "EnsureActive",
+        "handlers": ["OnSave"],
+    },
 }
 
 for relative, contract in contracts.items():
@@ -45,6 +49,11 @@ for relative, contract in contracts.items():
     if relative.endswith("CurtainWallWindow.xaml.cs"):
         if "private readonly Document _document" not in text or "CurtainWallWindow(Document document)" not in text:
             errors.append(relative + " must be constructed with and retain its source drawing")
+    if relative.endswith("RebarMeshSetupWindow.xaml.cs"):
+        if "private readonly Document _document" not in text or "RebarMeshSetupWindow(Document document" not in text:
+            errors.append(relative + " must be constructed with and retain its source drawing")
+        if "project.FindElement(_element.Id)" not in text:
+            errors.append(relative + " must re-resolve its semantic target before saving")
     for handler in contract["handlers"]:
         match = re.search(r"private\s+void\s+" + re.escape(handler) + r"\s*\([^)]*\)\s*\{", text)
         if not match:
@@ -75,10 +84,16 @@ if not curtain_hub.is_file():
 elif "new CurtainWallWindow(document)" not in curtain_hub.read_text(encoding="utf-8"):
     errors.append("Curtain Wall Hub must pass the source drawing into its modeless editor")
 
+mesh_command = ROOT / "src/QS3D.BricsCAD.V25/RebarMeshSetupCommands.cs"
+if not mesh_command.is_file():
+    errors.append("missing RebarMeshSetupCommands.cs")
+elif "new RebarMeshSetupWindow(document, project, element" not in mesh_command.read_text(encoding="utf-8"):
+    errors.append("Rebar Mesh Setup command must pass the source drawing into its modeless editor")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: modeless Floor/Zone/Family/Material/Curtain editors require their bound DWG to be active before every project or CAD mutation/export action.")
+print("PASS: modeless Floor/Zone/Family/Material/Curtain/Rebar Mesh editors are bound to their source DWG and guard project/CAD mutation.")
