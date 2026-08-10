@@ -41,11 +41,10 @@ else:
         if token not in text:
             errors.append("Health All missing documentation Locate contract: " + token)
 
-    tag_pos = text.find('normalized.Contains("SEMANTIC_TAG")')
-    grid_pos = text.find('normalized.Contains("GRID_ANNOTATION")')
+    locate_call_pos = text.find("var handles = LocateHandles(element, issue.Code).ToArray();")
     fallback_pos = text.find("SourceHandleResolver.Resolve(project, new[] { element.Id })")
-    if min(tag_pos, grid_pos, fallback_pos) >= 0 and not (tag_pos < fallback_pos and grid_pos < fallback_pos):
-        errors.append("Generated Semantic Tag/Grid annotation Locate must be resolved before source-handle fallback")
+    if min(locate_call_pos, fallback_pos) >= 0 and not locate_call_pos < fallback_pos:
+        errors.append("Generated artifact Locate must run before source-handle fallback")
 
     read_only_pos = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
     health_pos = text.find("GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project)")
