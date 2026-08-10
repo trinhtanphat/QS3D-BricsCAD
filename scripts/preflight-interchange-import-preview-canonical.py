@@ -38,8 +38,10 @@ if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
         "ValidSnapshotStillPreviews();",
-        "PaddedIdentityFailsBeforePreview();",
-        "MissingTimezoneFailsBeforePreview();",
+        "PaddedIdentityReturnsInvalidPreview();",
+        "MissingTimezoneReturnsInvalidPreview();",
+        'x.Code == "ID_NON_CANONICAL"',
+        'x.Code == "TIMESTAMP_NOT_UTC"',
         "ProjectInterchangeImportPreview.Plan",
     ):
         if token not in text:
@@ -51,4 +53,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: interchange preview consumes the canonical typed snapshot directly and cannot diverge through a second manifest parser or silent identity trimming.")
+print("PASS: interchange preview consumes the canonical typed snapshot directly, while validator-invalid identities/timestamps return an invalid preview instead of diverging at apply time.")
