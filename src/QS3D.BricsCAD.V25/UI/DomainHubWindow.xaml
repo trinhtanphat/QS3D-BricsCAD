@@ -19,10 +19,14 @@
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="TẠO MỚI / DIRECT DRAW" Style="{StaticResource SectionLabel}"/>
                     <Button Content="Vẽ Tường trực tiếp" Tag="QS3DDRAWWALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Vẽ Vách Kính trực tiếp" Tag="QS3DDRAWGLASSWALL" Click="OnCommandClick"/>
+                    <Button Content="Vẽ Trụ Tường trực tiếp" Tag="QS3DDRAWWALLPIER" Click="OnCommandClick"/>
                     <Button Content="Vẽ Dầm trực tiếp" Tag="QS3DDRAWBEAM" Click="OnCommandClick"/>
                     <Button Content="Vẽ Cột trực tiếp" Tag="QS3DDRAWCOLUMN" Click="OnCommandClick"/>
                     <Button Content="Vẽ Sàn trực tiếp" Tag="QS3DDRAWSLAB" Click="OnCommandClick"/>
-                    <TextBlock Text="Direct Draw tạo CAD source thật → semantic QS3D → native 3D trong cùng workflow. Capture/Bóc chọn bên dưới vẫn dùng cho CAD đã vẽ sẵn." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+                    <Button Content="Vẽ Vách BTCT trực tiếp" Tag="QS3DDRAWSTRUCTWALL" Click="OnCommandClick"/>
+                    <Button Content="Vẽ Móng trực tiếp" Tag="QS3DDRAWFOUNDATION" Click="OnCommandClick"/>
+                    <TextBlock Text="Direct Draw tạo CAD source thật → semantic QS3D → native 3D trong cùng workflow. P1 hiện có Vách Kính, Trụ Tường, Vách BTCT và Móng; Capture/Bóc chọn bên dưới vẫn dùng cho CAD đã vẽ sẵn." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
 
                     <TextBlock Text="TƯỜNG KT / CỬA / HT_PHÒNG" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
                     <Button Content="Tường Gạch" Tag="QS3DWALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
