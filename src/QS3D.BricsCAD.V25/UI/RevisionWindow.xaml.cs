@@ -23,6 +23,7 @@ namespace QS3D.BricsCAD.V25.UI
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _locate = locate;
             InitializeComponent();
+            DocumentBoundWindowLifetime.Attach(this, _document);
             Grid.ItemsSource = _rows;
             Header.Text = before.Id + " → " + after.Id;
             var summary = new QuantityRevisionReport().Summarize(_rows);
