@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Services
@@ -27,6 +28,7 @@ namespace QS3D.Core.Services
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             wall.MarkDirty(ElementDirtyFlags.Quantity);
             project.Touch();
+            AuditTrail.ForProject(project).Record("host.link", opening.Id, (string.IsNullOrWhiteSpace(previousHost) ? "" : previousHost + " → ") + wall.Id);
         }
 
         public void UnlinkOpening(ProjectState project, string openingId)
@@ -39,6 +41,7 @@ namespace QS3D.Core.Services
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             if (!string.IsNullOrWhiteSpace(hostId)) project.FindElement(hostId)?.MarkDirty(ElementDirtyFlags.Quantity);
             project.Touch();
+            AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
         }
 
         private static bool IsWall(ElementCategory category) =>

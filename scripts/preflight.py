@@ -9,21 +9,25 @@ errors = []
 
 required = [
     "Directory.Build.props", "README.md", "AGENTS.md", "CI_POLICY.md",
-    "src/QS3D.Core/QS3D.Core.csproj", "src/QS3D.Core/Persistence/QsdbProjectStore.cs",
-    "src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs", "src/QS3D.Core/Services/RegenerationEngine.cs",
+    "src/QS3D.Core/QS3D.Core.csproj", "src/QS3D.Core/Domain/ProjectState.cs",
+    "src/QS3D.Core/Persistence/QsdbProjectStore.cs", "src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs",
+    "src/QS3D.Core/Audit/AuditTrail.cs", "src/QS3D.Core/Rules/QuantityRuleEngine.cs",
+    "src/QS3D.Core/Services/RegenerationEngine.cs", "src/QS3D.Core/Services/HostLinkService.cs",
     "src/QS3D.Core/Services/BulkEditService.cs", "src/QS3D.Core/Services/WallQuantityCalculator.cs",
+    "src/QS3D.Core/Recognition/ProjectRecognitionService.cs", "src/QS3D.Core/Templates/TemplateProfileStore.cs",
     "src/QS3D.Core/Takeoff/QuantityEngine.cs", "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs",
     "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj", "src/QS3D.BricsCAD.V25/Commands.cs",
-    "src/QS3D.BricsCAD.V25/ReviewCommands.cs", "src/QS3D.BricsCAD.V25/ViewportCommands.cs",
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs", "src/QS3D.BricsCAD.V25/TemplateCommands.cs", "src/QS3D.BricsCAD.V25/ViewportCommands.cs",
     "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs", "src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs",
     "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs", "src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs", "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs", "src/QS3D.BricsCAD.V25/Cad/XrefService.cs",
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml", "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml",
     "src/QS3D.BricsCAD.V25/UI/Theme.xaml", "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml",
-    "src/QS3D.BricsCAD.V25/UI/RecognitionWindow.xaml", "src/QS3D.BricsCAD.V25/UI/RevisionWindow.xaml",
+    "src/QS3D.BricsCAD.V25/UI/RecognitionWindow.xaml", "src/QS3D.BricsCAD.V25/UI/RevisionWindow.xaml", "src/QS3D.BricsCAD.V25/UI/RebarScheduleWindow.xaml",
     "tests/QS3D.Core.SmokeTests/HardeningRegressionSmoke.cs", "tests/QS3D.Core.SmokeTests/ContinuationRegressionSmoke.cs",
-    "scripts/install-bricscad-v25.ps1", ".github/workflows/ci.yml", ".github/workflows/bricscad-v25.yml"
+    "tests/QS3D.Core.SmokeTests/WorkflowPersistenceSmoke.cs", "scripts/install-bricscad-v25.ps1",
+    ".github/workflows/ci.yml", ".github/workflows/bricscad-v25.yml"
 ]
 for rel in required:
     if not (ROOT / rel).exists(): errors.append("missing required file: " + rel)
@@ -64,6 +68,13 @@ for xaml in ROOT.rglob("*.xaml"):
     for handler in set(re.findall(r'\b(?:Click|TextChanged|SelectionChanged|SelectedItemChanged|Checked|Unchecked|MouseDoubleClick)="([A-Za-z_][A-Za-z0-9_]*)"', xt)):
         if not re.search(r"\b" + re.escape(handler) + r"\s*\(", ct): errors.append(f"{xaml.relative_to(ROOT)}: missing code-behind handler {handler}")
 
+project_state = ROOT / "src/QS3D.Core/Domain/ProjectState.cs"
+if project_state.exists():
+    text = project_state.read_text(encoding="utf-8")
+    if "CurrentSchemaVersion = 3" not in text: errors.append("QSDB schema v3 is required for persisted rules/audit")
+    if "IList<QuantityRule> QuantityRules" not in text: errors.append("project quantity-rule catalog missing")
+    if "IList<AuditEvent> AuditEvents" not in text: errors.append("project audit catalog missing")
+
 store = ROOT / "src/QS3D.Core/Persistence/QsdbProjectStore.cs"
 if store.exists():
     text = store.read_text(encoding="utf-8")
@@ -77,6 +88,10 @@ if store.exists():
         "AtomicFileCommit.ReplaceWithBackup": "QSDB atomic replacement/recovery helper missing",
         "double.IsNaN(quantity.Value)": "QSDB non-finite quantity validation missing",
         "double.IsNaN(floor.ElevationM)": "QSDB non-finite floor validation missing",
+        'new XElement("rules"': "QSDB quantity-rule persistence missing",
+        'new XElement("audit"': "QSDB audit persistence missing",
+        "project.QuantityRules.Add": "QSDB quantity-rule deserialization missing",
+        "project.AuditEvents.Add": "QSDB audit deserialization missing",
     }.items():
         if needle not in text: errors.append(message)
 
@@ -85,6 +100,38 @@ if migrator.exists():
     text = migrator.read_text(encoding="utf-8")
     if "ElementDirtyFlags.All" not in text or 'element.SetAttributeValue("updatedUtc", LegacyUpdatedUtc)' not in text:
         errors.append("legacy QSDB elements must migrate dirty and require deterministic regeneration")
+    if "MigrateV2ToV3" not in text: errors.append("QSDB v2 to v3 migration missing")
+
+regen = ROOT / "src/QS3D.Core/Services/RegenerationEngine.cs"
+if regen.exists() and "ApplyMatching(project, element)" not in regen.read_text(encoding="utf-8"):
+    errors.append("project quantity rules are not integrated into regeneration")
+rules = ROOT / "src/QS3D.Core/Rules/QuantityRuleEngine.cs"
+if rules.exists() and "ApplyMatching(ProjectState project" not in rules.read_text(encoding="utf-8"):
+    errors.append("quantity rule auto-application missing")
+host = ROOT / "src/QS3D.Core/Services/HostLinkService.cs"
+if host.exists() and "AuditTrail.ForProject(project)" not in host.read_text(encoding="utf-8"):
+    errors.append("host link/unlink audit provenance missing")
+
+template = ROOT / "src/QS3D.Core/Templates/TemplateProfileStore.cs"
+if template.exists():
+    text = template.read_text(encoding="utf-8")
+    for needle in ("MaxTemplateFileBytes", "DtdProcessing.Prohibit", "AtomicFileCommit.ReplaceWithBackup", "ExportProject", "Apply(ProjectState project", "LayerMappingPrefix", "VisibleBqColumnsKey"):
+        if needle not in text: errors.append("template persistence/apply hardening missing: " + needle)
+recognition = ROOT / "src/QS3D.Core/Recognition/ProjectRecognitionService.cs"
+if recognition.exists():
+    text = recognition.read_text(encoding="utf-8")
+    if "Confidence = 0.99d" not in text or "LayerMappingPrefix" not in text: errors.append("project layer recognition override missing")
+review_commands = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+if review_commands.exists():
+    text = review_commands.read_text(encoding="utf-8")
+    if "new ProjectRecognitionService().SuggestBatch(project, snapshots)" not in text: errors.append("Recognition UI does not consume project layer mappings")
+    if "AuditTrail.ForProject(project)" not in text: errors.append("recognition/revision audit wiring missing")
+template_commands = ROOT / "src/QS3D.BricsCAD.V25/TemplateCommands.cs"
+if template_commands.exists():
+    text = template_commands.read_text(encoding="utf-8")
+    for command in ("QS3DTEMPLATEEXPORT", "QS3DTEMPLATEIMPORT"):
+        if command not in text: errors.append("template command missing: " + command)
+    if "Chưa tự lưu .qsdb" not in text: errors.append("template import must remain reviewable before explicit project save")
 
 bulk = ROOT / "src/QS3D.Core/Services/BulkEditService.cs"
 if bulk.exists():
@@ -109,6 +156,14 @@ if continuation.exists():
     text = continuation.read_text(encoding="utf-8")
     for needle in ("LegacyMigrationMarksElementsDirty();", "FamilyAssignmentRefreshesInheritedDefaults();", "QsdbRejectsNonFiniteStateBeforeReplace();", "LegacyWallCalculatorRejectsNonFiniteValues();", "QuantityEngineRejectsInvalidSnapshotMetrics();"):
         if needle not in text: errors.append("continuation regression coverage missing: " + needle)
+workflow_smoke = ROOT / "tests/QS3D.Core.SmokeTests/WorkflowPersistenceSmoke.cs"
+if workflow_smoke.exists():
+    text = workflow_smoke.read_text(encoding="utf-8")
+    for needle in ("SchemaV2MigratesToV3", "RuleAuditRoundTrip", "RuleDrivenRegeneration", "TemplateRoundTripApply", "ProjectLayerMappingWins"):
+        if needle not in text: errors.append("workflow persistence regression missing: " + needle)
+registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
+if registration.exists() and "WorkflowPersistenceSmoke.Run();" not in registration.read_text(encoding="utf-8"):
+    errors.append("workflow persistence smoke is not registered")
 
 units = ROOT / "src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs"
 if units.exists():
@@ -177,11 +232,20 @@ if theme.exists():
 
 quantity = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs"
 commands = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
-if quantity.exists() and "_recalculate" not in quantity.read_text(encoding="utf-8"): errors.append("BQ Tính lại must have a real recalculation callback")
+if quantity.exists():
+    text = quantity.read_text(encoding="utf-8")
+    if "_recalculate" not in text: errors.append("BQ Tính lại must have a real recalculation callback")
+    if "VisibleBqColumnsKey" not in text or "PersistColumnPreferences" not in text: errors.append("BQ visible columns must round-trip through project metadata")
 if commands.exists():
     text = commands.read_text(encoding="utf-8")
     if "new QuantitySummaryWindow(rows, locate, recalculate)" not in text: errors.append("BQ command does not wire recalculation callback")
     if "CadUnitService.GetDrawingUnit(doc)" not in text: errors.append("BQ snapshot fallback still assumes millimeters")
+
+ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
+if ribbon.exists():
+    text = ribbon.read_text(encoding="utf-8")
+    for command in ("QS3DTEMPLATEEXPORT", "QS3DTEMPLATEIMPORT", "QS3DRECOGNIZE", "QS3DRECOGNIZEAUTO", "QS3DBBSVIEW", "QS3DREVBASE", "QS3DREVDIFF"):
+        if command not in text: errors.append("Ribbon workflow entry missing: " + command)
 
 installer = ROOT / "scripts/install-bricscad-v25.ps1"
 if installer.exists():
@@ -195,4 +259,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, manual CI, proprietary-file guard, QSDB migration/persistence hardening, units, two-phase 3D geometry, document lifecycle, active-document selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, manual CI, proprietary-file guard, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences and installer verification are present.")

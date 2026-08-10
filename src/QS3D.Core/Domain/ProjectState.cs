@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using QS3D.Core.Audit;
+using QS3D.Core.Rules;
 
 namespace QS3D.Core.Domain
 {
@@ -16,10 +18,27 @@ namespace QS3D.Core.Domain
 
     public sealed class FloorDefinition
     {
-        public FloorDefinition(string id, string name, double elevationM) { Id = Require(id, nameof(id)); Name = Require(name, nameof(name)); ElevationM = elevationM; }
+        private double _elevationM;
+
+        public FloorDefinition(string id, string name, double elevationM)
+        {
+            Id = Require(id, nameof(id));
+            Name = Require(name, nameof(name));
+            ElevationM = elevationM;
+        }
+
         public string Id { get; }
         public string Name { get; set; }
-        public double ElevationM { get; set; }
+        public double ElevationM
+        {
+            get => _elevationM;
+            set
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Floor elevation must be finite.");
+                _elevationM = value;
+            }
+        }
+
         private static string Require(string value, string name) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Value is required.", name) : value.Trim();
     }
 
@@ -48,6 +67,7 @@ namespace QS3D.Core.Domain
                 OnPropertyChanged();
             }
         }
+
         public ElementCategory Category
         {
             get => _category;
@@ -58,6 +78,7 @@ namespace QS3D.Core.Domain
                 OnPropertyChanged();
             }
         }
+
         public IDictionary<string, string> Properties { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -67,7 +88,7 @@ namespace QS3D.Core.Domain
 
     public sealed class ProjectState
     {
-        public const int CurrentSchemaVersion = 2;
+        public const int CurrentSchemaVersion = 3;
 
         public ProjectState(string projectId, string name)
         {
@@ -77,6 +98,8 @@ namespace QS3D.Core.Domain
             Floors = new List<FloorDefinition>();
             Families = new List<ProjectFamily>();
             Elements = new List<ProjectElement>();
+            QuantityRules = new List<QuantityRule>();
+            AuditEvents = new List<AuditEvent>();
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -92,10 +115,13 @@ namespace QS3D.Core.Domain
         public IList<FloorDefinition> Floors { get; }
         public IList<ProjectFamily> Families { get; }
         public IList<ProjectElement> Elements { get; }
+        public IList<QuantityRule> QuantityRules { get; }
+        public IList<AuditEvent> AuditEvents { get; }
         public IDictionary<string, string> Metadata { get; }
 
         public ProjectElement? FindElement(string id) => Elements.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
         public ProjectFamily? FindFamily(string id) => Families.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+        public QuantityRule? FindQuantityRule(string id) => QuantityRules.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
 
         public void Touch() => UpdatedUtc = DateTime.UtcNow;
     }
