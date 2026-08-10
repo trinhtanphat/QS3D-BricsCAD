@@ -35,19 +35,21 @@ namespace QS3D.BricsCAD.V25
 
                 var v25Runtime = Major(brxAssembly) == 25 && Major(tdAssembly) == 25;
                 var x64Runtime = Environment.Is64BitProcess;
-                var packageVersionMatches = string.IsNullOrWhiteSpace(metadata.Version) ||
-                    string.Equals(NormalizeVersion(metadata.Version), NormalizeVersion(pluginVersion), StringComparison.OrdinalIgnoreCase);
+                var packageVersionMatches = string.IsNullOrWhiteSpace(metadata.AssemblyVersion) ||
+                    string.Equals(NormalizeVersion(metadata.AssemblyVersion), NormalizeVersion(pluginVersion), StringComparison.OrdinalIgnoreCase);
                 var packageSigned = string.Equals(metadata.SignatureStatus, "Valid", StringComparison.OrdinalIgnoreCase) ||
                     !string.IsNullOrWhiteSpace(metadata.SignerThumbprint);
 
                 document.Editor.WriteMessage("\nQS3D Runtime Check");
-                document.Editor.WriteMessage("\n  Plugin: " + pluginVersion + " • Core: " + coreVersion);
+                document.Editor.WriteMessage("\n  Plugin assembly: " + pluginVersion + " • Core assembly: " + coreVersion);
+                if (!string.IsNullOrWhiteSpace(metadata.ProductVersion))
+                    document.Editor.WriteMessage("\n  Product version: " + metadata.ProductVersion);
                 document.Editor.WriteMessage("\n  BrxMgd: " + brxVersion + " • TD_Mgd: " + tdVersion);
                 document.Editor.WriteMessage("\n  Runtime: " + (v25Runtime ? "V25" : "NOT V25") + " • " + (x64Runtime ? "x64" : "NOT x64"));
                 document.Editor.WriteMessage("\n  Project: " + project.Elements.Count + " element(s) • " + project.Families.Count + " family/families");
                 if (File.Exists(metadataPath))
                 {
-                    document.Editor.WriteMessage("\n  Package metadata: " + (packageVersionMatches ? "version OK" : "VERSION MISMATCH") +
+                    document.Editor.WriteMessage("\n  Package metadata: " + (packageVersionMatches ? "assembly version OK" : "ASSEMBLY VERSION MISMATCH") +
                         " • signature=" + (packageSigned ? "signed" : "unsigned/not recorded"));
                     if (!string.IsNullOrWhiteSpace(metadata.SignerThumbprint))
                         document.Editor.WriteMessage("\n  Signer thumbprint: " + metadata.SignerThumbprint);
@@ -71,7 +73,8 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class PackageMetadata
         {
-            public string Version { get; set; } = string.Empty;
+            public string ProductVersion { get; set; } = string.Empty;
+            public string AssemblyVersion { get; set; } = string.Empty;
             public string SignatureStatus { get; set; } = string.Empty;
             public string SignerThumbprint { get; set; } = string.Empty;
         }
@@ -82,7 +85,8 @@ namespace QS3D.BricsCAD.V25
             var text = File.ReadAllText(path);
             return new PackageMetadata
             {
-                Version = JsonString(text, "version"),
+                ProductVersion = JsonString(text, "productVersion"),
+                AssemblyVersion = JsonString(text, "version"),
                 SignatureStatus = JsonString(text, "pluginSignatureStatus"),
                 SignerThumbprint = FirstNonEmpty(
                     JsonString(text, "signedPayloadSignerThumbprint"),
@@ -109,7 +113,7 @@ namespace QS3D.BricsCAD.V25
 
         private static string NormalizeVersion(string value)
         {
-            if (!Version.TryParse(value, out var version)) return value.Trim();
+            if (!Version.TryParse(value, out var version) || version == null) return value.Trim();
             return version.Major + "." + version.Minor + "." + Math.Max(0, version.Build);
         }
     }
