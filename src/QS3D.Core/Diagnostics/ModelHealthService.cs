@@ -26,7 +26,7 @@ namespace QS3D.Core.Diagnostics
 
     public sealed class ModelHealthService
     {
-        public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveHandles = null)
+        public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveHandles = null, ISet<string>? liveGeneratedSolidHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
@@ -43,6 +43,7 @@ namespace QS3D.Core.Diagnostics
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var handles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var generatedHandles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var floorIds = new HashSet<string>(project.Floors.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             var zoneIds = new HashSet<string>(project.Zones.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
 
@@ -66,6 +67,7 @@ namespace QS3D.Core.Diagnostics
                 ValidateHost(project, element, issues);
                 ValidateDependencies(project, element, issues);
                 ValidateDimensions(element, issues);
+                ValidateGeneratedGeometry(element, liveGeneratedSolidHandles, generatedHandles, issues);
                 if (RequiresMaterial(element.Category) && !HasMaterial(project, element)) issues.Add(new ModelHealthIssue("MISSING_MATERIAL", HealthSeverity.Warning, "Cấu kiện chưa có vật liệu.", element.Id));
                 ValidateRebar(element, issues);
 
@@ -160,6 +162,32 @@ namespace QS3D.Core.Diagnostics
                     RequirePositive(element, issues, "HeightM");
                     break;
             }
+        }
+
+        private static void ValidateGeneratedGeometry(ProjectElement element, ISet<string>? liveGeneratedSolidHandles, IDictionary<string, string> owners, ICollection<ModelHealthIssue> issues)
+        {
+            if (!element.Properties.TryGetValue("GeneratedSolidHandle", out var rawHandle)) return;
+            var handle = (rawHandle ?? string.Empty).Trim();
+            if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+            {
+                issues.Add(new ModelHealthIssue("INVALID_GENERATED_HANDLE", HealthSeverity.Error, "GeneratedSolidHandle không hợp lệ.", element.Id));
+                return;
+            }
+
+            if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, element.Id, StringComparison.OrdinalIgnoreCase))
+                issues.Add(new ModelHealthIssue("DUPLICATE_GENERATED_HANDLE", HealthSeverity.Error, "Generated solid đang được nhiều element nhận sở hữu; element khác: " + owner, element.Id));
+            else owners[handle] = element.Id;
+
+            if (element.SourceHandles.Any(x => string.Equals(x?.Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                issues.Add(new ModelHealthIssue("GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "GeneratedSolidHandle không được nằm trong SourceHandles.", element.Id));
+
+            if (!element.Properties.TryGetValue("GeneratedSolidCategory", out var rawCategory) || !Enum.TryParse(rawCategory, true, out ElementCategory generatedCategory))
+                issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISSING", HealthSeverity.Warning, "GeneratedSolidCategory bị thiếu hoặc không hợp lệ.", element.Id));
+            else if (generatedCategory != element.Category)
+                issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISMATCH", HealthSeverity.Error, "GeneratedSolidCategory không khớp category semantic: " + generatedCategory + " ≠ " + element.Category + ".", element.Id));
+
+            if (liveGeneratedSolidHandles != null && !liveGeneratedSolidHandles.Contains(handle))
+                issues.Add(new ModelHealthIssue("GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy Solid3d đã được QS3D tạo hoặc handle hiện trỏ tới đối tượng không phải Solid3d.", element.Id));
         }
 
         private static void RequirePositive(ProjectElement element, ICollection<ModelHealthIssue> issues, string key)

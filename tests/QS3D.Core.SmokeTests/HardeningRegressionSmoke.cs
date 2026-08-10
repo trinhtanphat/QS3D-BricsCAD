@@ -22,6 +22,7 @@ namespace QS3D.Core.SmokeTests
             RebarSpacingRequiresDistribution();
             ModelHealthReferenceIntegrity();
             ModelHealthDimensionIntegrity();
+            ModelHealthGeneratedGeometryIntegrity();
             FamilyChangeNotification();
             FormulaEvaluatorIsConcurrent();
             FormulaEvaluatorHasResourceGuards();
@@ -126,6 +127,33 @@ namespace QS3D.Core.SmokeTests
             True(issues.Any(x => x.Code == "INVALID_DIMENSION" && x.ElementId == "B-DIM" && x.Message.Contains("HeightM")));
             True(issues.Any(x => x.Code == "MISSING_DIMENSION" && x.ElementId == "S-DIM" && x.Message.Contains("ThicknessM")));
             True(!issues.Any(x => (x.Code == "MISSING_DIMENSION" || x.Code == "INVALID_DIMENSION") && x.ElementId == "F-DIM"));
+        }
+
+        private static void ModelHealthGeneratedGeometryIntegrity()
+        {
+            var project = NewProject();
+            var wall = new ProjectElement("W-GEN", ElementCategory.ArchitecturalWall, "wall", "f", "z");
+            wall.Properties["LengthM"] = "3";
+            wall.Properties["HeightM"] = "3";
+            wall.Properties["ThicknessM"] = "0.2";
+            wall.Properties["GeneratedSolidHandle"] = "FF";
+            wall.Properties["GeneratedSolidCategory"] = "Beam";
+            wall.SourceHandles.Add("FF");
+            project.Elements.Add(wall);
+
+            var beam = new ProjectElement("B-GEN", ElementCategory.Beam, "beam", "f", "z");
+            beam.Properties["LengthM"] = "4";
+            beam.Properties["WidthM"] = "0.3";
+            beam.Properties["HeightM"] = "0.5";
+            beam.Properties["GeneratedSolidHandle"] = "FF";
+            beam.Properties["GeneratedSolidCategory"] = "Beam";
+            project.Elements.Add(beam);
+
+            var issues = new ModelHealthService().Inspect(project, null, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            True(issues.Any(x => x.Code == "GENERATED_CATEGORY_MISMATCH" && x.ElementId == "W-GEN"));
+            True(issues.Any(x => x.Code == "GENERATED_HANDLE_IN_SOURCE" && x.ElementId == "W-GEN"));
+            True(issues.Any(x => x.Code == "GENERATED_SOLID_MISSING" && x.ElementId == "W-GEN"));
+            True(issues.Any(x => x.Code == "DUPLICATE_GENERATED_HANDLE" && x.ElementId == "B-GEN"));
         }
 
         private static void FamilyChangeNotification()

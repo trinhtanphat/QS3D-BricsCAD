@@ -184,17 +184,26 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DHEALTH", () =>
             {
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
-                var handles = project.Elements.SelectMany(x => x.SourceHandles).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                var live = Cad.CadHandleService.GetLiveHandles(doc, handles);
-                var issues = new ModelHealthService().Inspect(project, live);
+                var sourceHandles = project.Elements.SelectMany(x => x.SourceHandles).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                var generatedHandles = project.Elements
+                    .Select(x => x.Properties.TryGetValue("GeneratedSolidHandle", out var handle) ? handle : string.Empty)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var liveSources = Cad.CadHandleService.GetLiveHandles(doc, sourceHandles);
+                var liveGeneratedSolids = Cad.CadHandleService.GetLiveSolidHandles(doc, generatedHandles);
+                var issues = new ModelHealthService().Inspect(project, liveSources, liveGeneratedSolids);
                 var summary = new HealthSummary(issues);
                 var text = "Model Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(text); doc.Editor.WriteMessage("\nQS3D " + text);
                 var window = new ModelHealthWindow(issues, issue =>
                 {
                     var element = project.FindElement(issue.ElementId); if (element == null) return;
-                    var count = Cad.CadHandleService.Select(doc, element.SourceHandles);
-                    PaletteCoordinator.SetStatus("Health Locate " + element.Id + " • " + count + " CAD object");
+                    IEnumerable<string> locateHandles = element.SourceHandles;
+                    if (issue.Code.IndexOf("GENERATED", StringComparison.OrdinalIgnoreCase) >= 0 && element.Properties.TryGetValue("GeneratedSolidHandle", out var generated) && !string.IsNullOrWhiteSpace(generated))
+                        locateHandles = new[] { generated };
+                    var count = Cad.CadHandleService.Select(doc, locateHandles);
+                    PaletteCoordinator.SetStatus("Health Định vị " + element.Id + " • " + count + " đối tượng CAD");
                 });
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
             });

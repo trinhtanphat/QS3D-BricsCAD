@@ -11,6 +11,7 @@ namespace QS3D.BricsCAD.V25.Cad
         public static IReadOnlyList<ObjectId> Resolve(Document document, IEnumerable<string> handles)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
+            if (handles == null) throw new ArgumentNullException(nameof(handles));
             var result = new List<ObjectId>();
             foreach (var text in handles)
             {
@@ -27,6 +28,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         public static int Select(Document document, IEnumerable<string> handles)
         {
+            if (document == null) throw new ArgumentNullException(nameof(document));
             var ids = Resolve(document, handles);
             document.Editor.SetImpliedSelection(new List<ObjectId>(ids).ToArray());
             return ids.Count;
@@ -34,10 +36,32 @@ namespace QS3D.BricsCAD.V25.Cad
 
         public static ISet<string> GetLiveHandles(Document document, IEnumerable<string> handles)
         {
+            if (document == null) throw new ArgumentNullException(nameof(document));
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var id in Resolve(document, handles))
             {
                 try { result.Add(id.Handle.ToString()); } catch { }
+            }
+            return result;
+        }
+
+        public static ISet<string> GetLiveSolidHandles(Document document, IEnumerable<string> handles)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ids = Resolve(document, handles);
+            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                foreach (var id in ids)
+                {
+                    try
+                    {
+                        var solid = transaction.GetObject(id, OpenMode.ForRead, false) as Solid3d;
+                        if (solid != null && !solid.IsErased) result.Add(id.Handle.ToString());
+                    }
+                    catch { }
+                }
+                transaction.Commit();
             }
             return result;
         }
