@@ -40,21 +40,24 @@ namespace QS3D.BricsCAD.V25.Cad
             if (document == null) throw new ArgumentNullException(nameof(document));
             var editor = document.Editor;
             var selection = editor.SelectImplied();
+            var restoreInteractiveSelection = false;
             if (selection.Status != PromptStatus.OK || selection.Value == null)
             {
                 if (!promptIfEmpty) return Array.Empty<EntitySnapshot>();
                 var prompt = editor.GetSelection();
                 if (prompt.Status != PromptStatus.OK || prompt.Value == null) return Array.Empty<EntitySnapshot>();
                 selection = prompt;
+                restoreInteractiveSelection = true;
             }
 
             var objectIds = selection.Value.GetObjectIds();
             if (objectIds.Length == 0) return Array.Empty<EntitySnapshot>();
 
-            // GetSelection() is an interactive selection, not a persistent PICKFIRST set. Native
-            // QS3D builders consume SelectImplied(), so restore the exact source ids before returning.
-            // This keeps the capture -> edit Family/Instance -> QS3DBUILD3D workflow deterministic.
-            editor.SetImpliedSelection(objectIds);
+            // GetSelection() is interactive and is not guaranteed to become the persistent PICKFIRST set.
+            // Restore only that interactive result so native QS3D builders consuming SelectImplied() see the
+            // same source ids. Never call SetImpliedSelection while merely reading an existing implied
+            // selection: doing so from ImpliedSelectionChanged can recursively generate more selection events.
+            if (restoreInteractiveSelection) editor.SetImpliedSelection(objectIds);
 
             var result = new List<EntitySnapshot>();
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())

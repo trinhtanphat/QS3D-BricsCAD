@@ -51,15 +51,37 @@ Fixed contract:
 
 Wall Build3D dispatch used `.Single()` after validation that rejected only `> 1` source types. The zero-source-type state is now rejected explicitly before native dispatch with an actionable Health/Locate message.
 
-### Regression guard
+### P0 — centralized native build capability
 
-`scripts/preflight-build3d-canonical.py` now locks:
+Native category support is now centralized in `Cad/NativeBuildCapability.cs` and consumed by both canonical Build3D and Workspace compatibility checks. This prevents UI/command capability drift when a category is added or removed from native support.
+
+### P0 — cross-layer generated host replacement atomicity
+
+The canonical generated host builders no longer commit CAD first and semantic generated-handle ownership afterward. The following families now capture a deep `ProjectStateSnapshot`, apply generated semantic ownership while the BricsCAD transaction is still rollback-capable, commit CAD only after semantic mutation succeeds, and restore project state when the CAD transaction does not commit:
+
+- LINE ArchitecturalWall/GlassWall host replacement;
+- open-POLYLINE ArchitecturalWall/GlassWall/WallPier replacement;
+- specialized LINE WallPier profile replacement;
+- structural native replacement for Beam, Slab, Column, StructuralWall, Foundation, Stair, Railing and Earthwork.
+
+This specifically closes the old split-brain window where a new `Solid3d` could survive a successful DB transaction while `GeneratedSolidHandle`/semantic ownership failed to advance. It deliberately does **not** claim whole-command atomicity for multi-transaction orchestrators such as Curtain host + frame generation.
+
+### P0 — physical opening prevalidation
+
+Selected physical opening cuts now prevalidate their selected hosts/readiness and fail closed before starting destructive cut work when the selected set is not safe to process as a unit. This reduces partial physical-cut risk without pretending separate host transactions are one global transaction.
+
+### Regression guards
+
+`scripts/preflight-build3d-canonical.py` locks:
 
 - exactly one canonical `QS3DBUILD3D` owner;
+- centralized `NativeBuildCapability` consumption rather than duplicate category tables;
 - one valid wall source type before `.Single()` dispatch;
 - deterministic WallPier LINE/profile vs POLYLINE routing;
 - no Curtain detail transaction piggybacking into canonical Build3D;
 - post-commit UI synchronization remaining non-fatal.
+
+Generated replacement atomicity is additionally guarded across the four canonical host builder families by dedicated `preflight-generated-replacement-atomic*.py` gates. `preflight-all.py` discovers feature gates by filename, so these checks participate automatically when aggregate preflight is explicitly run.
 
 ## P0 — remaining sell-ready blockers
 
@@ -79,32 +101,19 @@ Must be completed on the exact release SHA in licensed interactive BricsCAD V25 
 
 This is a runtime gate, not a source-code TODO that should be faked by mocks.
 
-### 2. Cross-layer CAD + semantic replacement journal
+### 2. Curtain orchestration transaction boundary
 
-Several native builders correctly use one BricsCAD transaction for their CAD batch and then commit semantic generated-handle ownership after the CAD transaction succeeds. A rare exception during the semantic ownership phase can still leave committed CAD whose semantic metadata did not fully advance.
-
-Required production contract:
-
-1. precompute and validate the full replacement plan;
-2. journal previous owner handles/properties;
-3. commit CAD replacement;
-4. commit semantic replacement metadata;
-5. on semantic failure, ownership-safely erase only newly created generated entities and restore previous live entities/metadata where possible;
-6. fail closed if old/new ownership cannot be proven.
-
-Do not solve this by broad `ProjectStateSnapshot.Restore()` alone after a CAD commit; that can create orphan generated geometry.
-
-### 3. Curtain orchestration transaction boundary
-
-`QS3DCURTAIN3D` intentionally composes host generation and frame-overlay generation, and LINE/path builders have separate native transaction families. It needs an explicit orchestration journal before claiming whole-command atomicity.
+`QS3DCURTAIN3D` intentionally composes host generation and frame-overlay generation, and LINE/path builders have separate native transaction families. Each host replacement family is now cross-layer atomic on its own, but the overall Curtain command still needs an explicit orchestration journal/shared native transaction design before claiming whole-command atomicity.
 
 Until then:
 
 - source/builders must continue fail-closed on foreign ownership;
+- semantic/rule validation must happen before the first native mutation;
 - Release Readiness must surface stale/inconsistent frame state;
-- canonical `QS3DBUILD3D` must not absorb Curtain frame transactions.
+- canonical `QS3DBUILD3D` must not absorb Curtain frame transactions;
+- documentation must not describe host+frame generation as all-or-nothing.
 
-### 4. Commercial license enforcement wiring
+### 3. Commercial license enforcement wiring
 
 Core already verifies signed offline licenses with public-key-only RSA-SHA256 logic and deterministic smoke/preflight coverage. The BricsCAD adapter startup currently does not enforce or activate that license.
 
@@ -120,7 +129,7 @@ Before paid distribution, explicitly choose:
 
 Only after those product decisions should adapter command gating/startup enforcement be wired. Private signing/license keys must never be committed.
 
-### 5. Production signing and publisher trust
+### 4. Production signing and publisher trust
 
 The preview build is unsigned. Production release requires:
 
@@ -133,7 +142,7 @@ The preview build is unsigned. Production release requires:
 
 ### Direct Draw
 
-Source coverage is broad, but runtime acceptance must prove every Direct Draw family creates a real DWG source, semantic owner and expected native result with no partial state after cancellation/failure.
+Source coverage is broad, including planar-UCS support across the P0/P1/opening authoring families, but runtime acceptance must prove every Direct Draw family creates a real DWG source, semantic owner and expected native result with no partial state after cancellation/failure.
 
 Future Direct Draw candidates should be driven by real customer workflow, not command-count parity. Stair/Railing/Earthwork should not get guessed geometry merely to increase coverage.
 
@@ -145,7 +154,7 @@ Still not claimed complete:
 
 - fabrication-grade panel-by-panel backing glass ownership/boolean model;
 - runtime validation of path-frame solids on representative curved/bulged DWGs;
-- whole-command host+frame rollback journal.
+- whole-command host+frame rollback journal/shared transaction contract.
 
 ### Wall junctions
 

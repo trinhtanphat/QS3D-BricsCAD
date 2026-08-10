@@ -6,6 +6,7 @@ using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 
@@ -46,152 +47,173 @@ namespace QS3D.BricsCAD.V25.Cad
 
             var pending = new List<PendingUpdate>();
             var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var cadCommitted = false;
+            try
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                foreach (var id in selectedIds)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var polyline = transaction.GetObject(id, OpenMode.ForRead, false) as Polyline;
-                    if (polyline == null) continue;
-                    if (polyline.Closed) throw new InvalidOperationException("Tường KT centerline POLYLINE phải open. Closed wall loops cần tách thành các wall centerline trước khi Build 3D.");
-                    if (polyline.NumberOfVertices < 2) continue;
-
-                    var handle = polyline.Handle.ToString();
-                    var matches = project.Elements
-                        .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
-                        .Take(2)
-                        .ToList();
-                    if (matches.Count == 0) continue;
-                    if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + handle + " đang thuộc nhiều QS3D wall element.");
-                    var element = matches[0];
-                    if (!processedElements.Add(element.Id)) throw new InvalidOperationException("Wall element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
-
-                    var family = project.FindFamily(element.FamilyId);
-                    var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.2d), element.Id + "/ThicknessM");
-                    var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
-                    var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                    var miterLimit = ProjectNumber(project, "WallMiterLimit", 4d, 1d);
-                    var sagittaM = ProjectNumber(project, "WallArcSagittaM", 0.002d, 1e-6d);
-                    var centerline = ReadCenterline(document, polyline, sagittaM);
-
-                    IReadOnlyList<Point2> polygon;
-                    double centerlineLengthM;
-                    double footprintAreaM2;
-                    double footprintPerimeterM;
-                    double grossVolumeM3;
-                    double lateralAreaM2;
-                    bool usedBevelJoin;
-                    var wallPierMode = WallPierProfileMode.Rectangular;
-                    var wallPierChamferM = 0d;
-                    if (category == ElementCategory.WallPier)
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    foreach (var id in selectedIds)
                     {
-                        wallPierMode = ResolveWallPierMode(element, family);
-                        wallPierChamferM = wallPierMode == WallPierProfileMode.Chamfered
-                            ? CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WallPierChamferM", 0.02d), element.Id + "/WallPierChamferM")
-                            : 0d;
-                        var pathProfile = WallPierPathProfilePlanner.Plan(new WallPierPathProfileInput
+                        var polyline = transaction.GetObject(id, OpenMode.ForRead, false) as Polyline;
+                        if (polyline == null) continue;
+                        if (polyline.Closed) throw new InvalidOperationException("Tường KT centerline POLYLINE phải open. Closed wall loops cần tách thành các wall centerline trước khi Build 3D.");
+                        if (polyline.NumberOfVertices < 2) continue;
+
+                        var handle = polyline.Handle.ToString();
+                        var matches = project.Elements
+                            .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
+                            .Take(2)
+                            .ToList();
+                        if (matches.Count == 0) continue;
+                        if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + handle + " đang thuộc nhiều QS3D wall element.");
+                        var element = matches[0];
+                        if (!processedElements.Add(element.Id)) throw new InvalidOperationException("Wall element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
+
+                        var family = project.FindFamily(element.FamilyId);
+                        var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.2d), element.Id + "/ThicknessM");
+                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
+                        var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var miterLimit = ProjectNumber(project, "WallMiterLimit", 4d, 1d);
+                        var sagittaM = ProjectNumber(project, "WallArcSagittaM", 0.002d, 1e-6d);
+                        var centerline = ReadCenterline(document, polyline, sagittaM);
+
+                        IReadOnlyList<Point2> polygon;
+                        double centerlineLengthM;
+                        double footprintAreaM2;
+                        double footprintPerimeterM;
+                        double grossVolumeM3;
+                        double lateralAreaM2;
+                        bool usedBevelJoin;
+                        var wallPierMode = WallPierProfileMode.Rectangular;
+                        var wallPierChamferM = 0d;
+                        if (category == ElementCategory.WallPier)
                         {
-                            Centerline = centerline,
-                            ThicknessM = thicknessM,
-                            HeightM = heightM,
-                            Mode = wallPierMode,
-                            ChamferM = wallPierChamferM,
-                            MiterLimit = miterLimit,
-                            Tolerance = 1e-8d
-                        });
-                        polygon = pathProfile.Polygon;
-                        centerlineLengthM = pathProfile.CenterlineLengthM;
-                        footprintAreaM2 = pathProfile.FootprintAreaM2;
-                        footprintPerimeterM = pathProfile.FootprintPerimeterM;
-                        grossVolumeM3 = pathProfile.VolumeM3;
-                        lateralAreaM2 = pathProfile.LateralAreaM2;
-                        usedBevelJoin = pathProfile.UsedBevelJoin;
-                    }
-                    else
-                    {
-                        var footprint = new WallFootprintEngine().Build(centerline, thicknessM, miterLimit, 1e-8d);
-                        polygon = footprint.Polygon;
-                        centerlineLengthM = footprint.CenterlineLength;
-                        footprintAreaM2 = footprint.Area;
-                        footprintPerimeterM = footprint.Perimeter;
-                        grossVolumeM3 = footprintAreaM2 * heightM;
-                        lateralAreaM2 = footprintPerimeterM * heightM;
-                        usedBevelJoin = footprint.UsedBevelJoin;
-                    }
-
-                    var profile = new Polyline();
-                    Region? region = null;
-                    var solid = new Solid3d();
-                    try
-                    {
-                        for (var vertex = 0; vertex < polygon.Count; vertex++)
-                        {
-                            var point = polygon[vertex];
-                            profile.AddVertexAt(vertex, new Point2d(
-                                CadGeometryGuard.ToDrawingUnits(document, point.X, element.Id + "/footprint X"),
-                                CadGeometryGuard.ToDrawingUnits(document, point.Y, element.Id + "/footprint Y")), 0d, 0d, 0d);
+                            wallPierMode = ResolveWallPierMode(element, family);
+                            wallPierChamferM = wallPierMode == WallPierProfileMode.Chamfered
+                                ? CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WallPierChamferM", 0.02d), element.Id + "/WallPierChamferM")
+                                : 0d;
+                            var pathProfile = WallPierPathProfilePlanner.Plan(new WallPierPathProfileInput
+                            {
+                                Centerline = centerline,
+                                ThicknessM = thicknessM,
+                                HeightM = heightM,
+                                Mode = wallPierMode,
+                                ChamferM = wallPierChamferM,
+                                MiterLimit = miterLimit,
+                                Tolerance = 1e-8d
+                            });
+                            polygon = pathProfile.Polygon;
+                            centerlineLengthM = pathProfile.CenterlineLengthM;
+                            footprintAreaM2 = pathProfile.FootprintAreaM2;
+                            footprintPerimeterM = pathProfile.FootprintPerimeterM;
+                            grossVolumeM3 = pathProfile.VolumeM3;
+                            lateralAreaM2 = pathProfile.LateralAreaM2;
+                            usedBevelJoin = pathProfile.UsedBevelJoin;
                         }
-                        profile.Closed = true;
-                        profile.Elevation = CadGeometryGuard.Add(polyline.Elevation, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/profile elevation");
-
-                        var curves = new DBObjectCollection { profile };
-                        var regions = Region.CreateFromCurves(curves);
-                        if (regions == null || regions.Count != 1 || !(regions[0] is Region generatedRegion))
-                            throw new InvalidOperationException("Không thể tạo một Region hợp lệ từ wall footprint " + element.Id + ".");
-                        region = generatedRegion;
-
-                        var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/HeightM"), element.Id + "/Height drawing units");
-                        solid.SetDatabaseDefaults(document.Database);
-                        solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), new SweepOptions());
-                        solid.Layer = polyline.Layer;
-
-                        var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
-                        modelSpace.AppendEntity(solid);
-                        transaction.AddNewlyCreatedDBObject(solid, true);
-                        GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category);
-                        pending.Add(new PendingUpdate
+                        else
                         {
-                            Element = element,
-                            PreviousHandle = previousHandle,
-                            GeneratedHandle = solid.Handle.ToString(),
-                            LengthM = centerlineLengthM,
-                            FootprintAreaM2 = footprintAreaM2,
-                            ThicknessM = thicknessM,
-                            HeightM = heightM,
-                            UsedBevelJoin = usedBevelJoin,
-                            IsWallPierPathProfile = category == ElementCategory.WallPier,
-                            WallPierMode = wallPierMode,
-                            WallPierChamferM = wallPierChamferM,
-                            WallPierPerimeterM = footprintPerimeterM,
-                            WallPierGrossVolumeM3 = grossVolumeM3,
-                            WallPierLateralAreaM2 = lateralAreaM2
-                        });
+                            var footprint = new WallFootprintEngine().Build(centerline, thicknessM, miterLimit, 1e-8d);
+                            polygon = footprint.Polygon;
+                            centerlineLengthM = footprint.CenterlineLength;
+                            footprintAreaM2 = footprint.Area;
+                            footprintPerimeterM = footprint.Perimeter;
+                            grossVolumeM3 = footprintAreaM2 * heightM;
+                            lateralAreaM2 = footprintPerimeterM * heightM;
+                            usedBevelJoin = footprint.UsedBevelJoin;
+                        }
+
+                        var profile = new Polyline();
+                        Region? region = null;
+                        var solid = new Solid3d();
+                        try
+                        {
+                            for (var vertex = 0; vertex < polygon.Count; vertex++)
+                            {
+                                var point = polygon[vertex];
+                                profile.AddVertexAt(vertex, new Point2d(
+                                    CadGeometryGuard.ToDrawingUnits(document, point.X, element.Id + "/footprint X"),
+                                    CadGeometryGuard.ToDrawingUnits(document, point.Y, element.Id + "/footprint Y")), 0d, 0d, 0d);
+                            }
+                            profile.Closed = true;
+                            profile.Elevation = CadGeometryGuard.Add(polyline.Elevation, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/profile elevation");
+
+                            var curves = new DBObjectCollection { profile };
+                            var regions = Region.CreateFromCurves(curves);
+                            if (regions == null || regions.Count != 1 || !(regions[0] is Region generatedRegion))
+                                throw new InvalidOperationException("Không thể tạo một Region hợp lệ từ wall footprint " + element.Id + ".");
+                            region = generatedRegion;
+
+                            var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/HeightM"), element.Id + "/Height drawing units");
+                            solid.SetDatabaseDefaults(document.Database);
+                            solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), new SweepOptions());
+                            solid.Layer = polyline.Layer;
+
+                            var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
+                            modelSpace.AppendEntity(solid);
+                            transaction.AddNewlyCreatedDBObject(solid, true);
+                            GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category);
+                            pending.Add(new PendingUpdate
+                            {
+                                Element = element,
+                                PreviousHandle = previousHandle,
+                                GeneratedHandle = solid.Handle.ToString(),
+                                LengthM = centerlineLengthM,
+                                FootprintAreaM2 = footprintAreaM2,
+                                ThicknessM = thicknessM,
+                                HeightM = heightM,
+                                UsedBevelJoin = usedBevelJoin,
+                                IsWallPierPathProfile = category == ElementCategory.WallPier,
+                                WallPierMode = wallPierMode,
+                                WallPierChamferM = wallPierChamferM,
+                                WallPierPerimeterM = footprintPerimeterM,
+                                WallPierGrossVolumeM3 = grossVolumeM3,
+                                WallPierLateralAreaM2 = lateralAreaM2
+                            });
+                        }
+                        catch
+                        {
+                            solid.Dispose();
+                            throw;
+                        }
+                        finally
+                        {
+                            region?.Dispose();
+                            profile.Dispose();
+                        }
                     }
-                    catch
+
+                    foreach (var update in pending)
                     {
-                        solid.Dispose();
-                        throw;
+                        GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category);
+                        update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.Properties["FootprintAreaM2"] = update.FootprintAreaM2.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.Properties["HeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
+                        update.Element.Properties["WallJoinMode"] = update.UsedBevelJoin ? "Miter+BevelFallback" : "Miter";
+                        if (update.IsWallPierPathProfile) CommitWallPierPathSnapshot(update);
                     }
-                    finally
+
+                    transaction.Commit();
+                    cadCommitted = true;
+                }
+            }
+            catch (Exception operationError)
+            {
+                if (!cadCommitted)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
                     {
-                        region?.Dispose();
-                        profile.Dispose();
+                        throw new InvalidOperationException(
+                            "Polyline wall replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
                     }
                 }
-                transaction.Commit();
-            }
-
-            foreach (var update in pending)
-            {
-                GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category);
-                update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["FootprintAreaM2"] = update.FootprintAreaM2.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["HeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["WallJoinMode"] = update.UsedBevelJoin ? "Miter+BevelFallback" : "Miter";
-                if (update.IsWallPierPathProfile) CommitWallPierPathSnapshot(update);
+                throw;
             }
 
             if (pending.Count > 0)
