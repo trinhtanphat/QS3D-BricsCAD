@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             DisabledQualificationDoesNotBlockOrdinaryProjects();
+            ExplicitFalseQualificationDoesNotBlockOrdinaryProjects();
+            InvalidQualificationSwitchFailsClosed();
             EnabledQualificationFailsClosedWithoutEvidence();
             GeneratedRebarRequiresElementApprovalAndBinding();
             MismatchedElementEvidenceIsRejected();
@@ -23,6 +25,28 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject("FAB0");
             Equal(0, Inspect(project).Count);
+        }
+
+        private static void ExplicitFalseQualificationDoesNotBlockOrdinaryProjects()
+        {
+            foreach (var value in new[] { "false", "NO", "0" })
+            {
+                var project = NewProject("FAB-FALSE-" + value);
+                project.Metadata[RebarFabricationQualificationHealthService.RequireQualificationMetadataKey] = value;
+                Equal(0, Inspect(project).Count);
+            }
+        }
+
+        private static void InvalidQualificationSwitchFailsClosed()
+        {
+            var project = NewProject("FAB-INVALID");
+            project.Metadata[RebarFabricationQualificationHealthService.RequireQualificationMetadataKey] = "maybe";
+            project.Elements.Add(null!);
+            var issues = Inspect(project);
+            HasCode(issues, "REBAR_FAB_REQUIREMENT_INVALID");
+            HasCode(issues, "REBAR_FAB_STANDARD_MISSING");
+            HasCode(issues, "REBAR_FAB_REVISION_MISSING");
+            HasCode(issues, "REBAR_FAB_OUTPUT_MISSING");
         }
 
         private static void EnabledQualificationFailsClosedWithoutEvidence()
