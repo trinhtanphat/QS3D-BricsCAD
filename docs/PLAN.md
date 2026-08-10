@@ -12,7 +12,7 @@ Updated 2026-08-10 for the current `main` source baseline.
 - category-aware **Bóc chọn** flow in the workspace so model capture no longer depends on memorizing command names;
 - Room / Tường Gạch / Vách Kính / Trụ Tường / Opening / Door / HT_Phòng semantic capture and quantity workflows;
 - Beam / Slab / Column / StructuralWall / Foundation / Stair / Railing / Earthwork deterministic quantity paths;
-- native ArchitecturalWall source paths from LINE and open POLYLINE centerlines using deterministic wall footprint generation, guarded miter/bevel joining and bulge tessellation;
+- native Tường KT source paths for Tường Gạch, Vách Kính and Trụ Tường from LINE and open POLYLINE centerlines using deterministic wall footprint generation, guarded miter/bevel joining and bulge tessellation;
 - native structural Solid3d source paths isolated behind the V25 adapter and two-phase generated-geometry replacement;
 - Door/Opening host linking plus guarded physical boolean subtraction for compatible generated LINE-host solids, with live host/opening geometry included in the idempotence fingerprint;
 - rectangular-column longitudinal rebar 3D source path built from deterministic rebar layout planning, plus generated-bar ownership health diagnostics;
@@ -28,7 +28,7 @@ Updated 2026-08-10 for the current `main` source baseline.
 - Room Auto boundary provenance is resolved by the adapter without claiming duplicate semantic `SourceHandles`; HT_Phòng can target auto Rooms from their full boundary selection and existing finish semantics are synchronized on room updates;
 - Tường KT/Cửa/physical-cut/rebar-3D workflows are exposed consistently through commands, the main palette, Ribbon and Full Domain Hub;
 - V25 release package + per-user DemandLoad install/uninstall source with hashes/signature policy and proprietary-runtime exclusion;
-- generic/full-domain/room-lifecycle/geometry-completion static preflights plus deterministic Core smoke coverage;
+- generic/full-domain/room-lifecycle/geometry-completion static preflights plus deterministic Core smoke coverage, including end-to-end guards for all three Tường KT native 3D variants;
 - manual-only GitHub Actions and V25 self-hosted NETLOAD/runtime/screenshot harness.
 
 ## Next validation gates
@@ -36,15 +36,15 @@ Updated 2026-08-10 for the current `main` source baseline.
 1. Run all static/source preflights on the newest head when an explicitly approved validation run is requested.
 2. Core Release build + deterministic smoke suite on the newest geometry/Room/UI head. Earlier green runs do not automatically validate later commits.
 3. Licensed Windows BricsCAD V25 compile on `[self-hosted, windows, x64, bricscad-v25]`.
-4. `NETLOAD`/DemandLoad and command/Ribbon/palette regression, including `QS3DROOMAUTO`, `QS3DCUTOPENINGS`, `QS3DREBAR3D`, Vách Kính/Trụ Tường capture, recognition/template/revision/BBS/domain/audit workflows.
-5. Private sample DWG regression: wall LINE/polyline/curved centerlines, room/auto-room/opening/finish/structural/takeoff/BQ/BBS/rebar/template/save/reopen, including Room Auto split/merge/reuse and moved-opening rebuild/re-cut cases.
+4. `NETLOAD`/DemandLoad and command/Ribbon/palette regression, including `QS3DROOMAUTO`, `QS3DCUTOPENINGS`, `QS3DREBAR3D`, Tường Gạch/Vách Kính/Trụ Tường capture + `QS3DBUILD3D`, recognition/template/revision/BBS/domain/audit workflows.
+5. Private sample DWG regression: Tường KT LINE/open-POLYLINE/curved centerlines for all three variants, room/auto-room/opening/finish/structural/takeoff/BQ/BBS/rebar/template/save/reopen, including Room Auto split/merge/reuse and moved-opening rebuild/re-cut cases.
 6. Visual regression at 100/125/150/200% DPI with Vietnamese Unicode and narrow/wide palette sizes.
 7. Performance/multi-DWG open-activate-SaveAs-close corpus plus large planar boundary-network and large BQ/rebar corpus.
 8. Only after these gates are green, consider automatic PR CI/release-candidate automation.
 
 ## Runtime/product completion still remaining
 
-- production-grade Vách Kính and Trụ Tường native 3D profiles/material/display behavior beyond their current semantic capture path;
+- production-grade Vách Kính curtain-wall framing/panel semantics and specialized Trụ Tường profiles/material/display behavior beyond the current generic Tường KT centerline extrusion path;
 - wall-to-wall automatic joins/T-junction cleanup, closed-loop/freeform wall profiles and complex elevation/level constraints beyond the current guarded centerline extrusion path;
 - generalized physical opening/door cutting beyond compatible generated LINE-host solids, including curved/polyline hosts and edit/rebuild UX proven on V25;
 - V25/private-DWG proof and performance tuning of automatic room-boundary discovery; optional direct ARC/SPLINE source support beyond LINE/POLYLINE inputs;
