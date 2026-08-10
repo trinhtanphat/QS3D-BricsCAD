@@ -233,8 +233,8 @@ namespace QS3D.BricsCAD.V25
                 "\nQS3D Grid Auto: planner đã sắp " + ordered.Count.ToString(CultureInfo.InvariantCulture) +
                 " Grid từ " + firstId + " đến " + lastId + ". Axis start→end quyết định chiều tăng nhãn.");
 
-            var confirm = editor.GetKeywords("\nÁp dụng auto-number theo thứ tự này? [Yes/No] <Yes>: ", "Yes No");
-            if (confirm.Status == PromptStatus.None) return true;
+            var confirm = editor.GetKeywords("\nÁp dụng auto-number theo thứ tự này? [Yes/No] <No>: ", "Yes No");
+            if (confirm.Status == PromptStatus.None) return false;
             return confirm.Status == PromptStatus.OK && string.Equals(confirm.StringResult, "Yes", StringComparison.OrdinalIgnoreCase);
         }
 
