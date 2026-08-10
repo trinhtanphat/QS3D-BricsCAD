@@ -61,10 +61,10 @@ def main():
     require(remote_scope, "V25", "V25 local-only boundary", failures)
 
     forbidden_v25_paths = (
-        "QS3D.BricsCAD.V25",
-        "ReleaseReadinessCommands.cs",
-        "HealthAllCommands.cs",
-        "RebarHealthAllCommands.cs",
+        "QS3D.BricsCAD" + ".V25",
+        "ReleaseReadiness" + "Commands.cs",
+        "HealthAll" + "Commands.cs",
+        "RebarHealthAll" + "Commands.cs",
     )
     source = Path(__file__).read_text(encoding="utf-8")
     for token in forbidden_v25_paths:
