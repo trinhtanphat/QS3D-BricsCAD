@@ -21,6 +21,8 @@ namespace QS3D.Core.SmokeTests
             SpacingNearIntegerDoesNotAddPhantomBar();
             DecimalNotationIsInvariantAndRoundTrips();
             AggregateRejectsOverflow();
+            ProjectScheduleRejectsNullSemanticEntry();
+            ProjectScheduleRejectsDuplicateSemanticIdentity();
             CuttingLengthFallbackIsLazy();
             FabricationProvenanceFlowsToExports();
             CsvRejectsInvalidRowsBeforeReplace();
@@ -105,6 +107,30 @@ namespace QS3D.Core.SmokeTests
                 new RebarScheduleInput { ElementId = "Q1", Notation = "2147483647D1", CuttingLengthM = 1d },
                 new RebarScheduleInput { ElementId = "Q2", Notation = "1D1", CuttingLengthM = 1d }
             }));
+        }
+
+        private static void ProjectScheduleRejectsNullSemanticEntry()
+        {
+            var project = new ProjectState("bbs-null", "BBS Null");
+            project.Elements.Add(ScheduledElement("B1"));
+            project.Elements.Add(null!);
+            Throws<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
+        }
+
+        private static void ProjectScheduleRejectsDuplicateSemanticIdentity()
+        {
+            var project = new ProjectState("bbs-duplicate", "BBS Duplicate");
+            project.Elements.Add(ScheduledElement("B1"));
+            project.Elements.Add(new ProjectElement("b1", ElementCategory.Room, string.Empty, string.Empty, string.Empty));
+            Throws<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
+        }
+
+        private static ProjectElement ScheduledElement(string id)
+        {
+            var element = new ProjectElement(id, ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
+            element.Properties["RebarNotation"] = "1D16";
+            element.Properties["RebarCuttingLengthM"] = "2";
+            return element;
         }
 
         private static void CuttingLengthFallbackIsLazy()
