@@ -57,19 +57,48 @@ namespace QS3D.BricsCAD.V25
                 var batch = new ProjectRecognitionService().SuggestBatch(project, snapshots); var applied = 0; var skipped = 0;
                 Action<RecognitionResult> apply = result =>
                 {
-                    var candidate = result.TopCandidate; if (candidate == null) return;
-                    var collision = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, result.Handle);
+                    var expectedCandidate = result.TopCandidate; if (expectedCandidate == null) return;
+                    if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, doc))
+                        throw new InvalidOperationException("Recognition Apply: hãy kích hoạt lại đúng bản vẽ nguồn trước khi áp dụng.");
+
+                    var liveSnapshots = EntitySnapshotReader.ReadHandles(doc, new[] { result.Handle });
+                    if (liveSnapshots.Count != 1)
+                        throw new InvalidOperationException("Recognition Apply: CAD handle " + result.Handle + " không còn tồn tại. Hãy chạy lại Recognition.");
+
+                    var currentProject = ProjectContextCoordinator.GetOrCreate(doc);
+                    var refreshed = new ProjectRecognitionService().Suggest(currentProject, liveSnapshots[0]);
+                    var candidate = refreshed.TopCandidate
+                        ?? throw new InvalidOperationException("Recognition Apply: đối tượng " + result.Handle + " không còn candidate hợp lệ. Hãy chạy lại Recognition.");
+                    if (candidate.Category != expectedCandidate.Category)
+                        throw new InvalidOperationException("Recognition Apply: kết quả của " + result.Handle + " đã đổi từ " + expectedCandidate.Category + " sang " + candidate.Category + ". Hãy chạy lại Recognition trước khi áp dụng.");
+                    if (!refreshed.IsCaptureReady)
+                        throw new InvalidOperationException("Recognition Apply: CAD handle " + result.Handle + " hiện không đủ điều kiện capture: " + refreshed.CaptureReadinessReason);
+
+                    var collision = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(currentProject, result.Handle);
                     if (collision != null && collision.Category == candidate.Category) collision = null;
                     if (collision != null) throw new InvalidOperationException("CAD handle " + result.Handle + " đã thuộc " + collision.Category + ".");
-                    if (!SemanticCaptureService.CaptureSnapshot(doc, result.Snapshot, candidate.Category)) return;
-                    var captured = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, result.Handle);
+                    if (!SemanticCaptureService.CaptureSnapshot(doc, refreshed.Snapshot, candidate.Category)) return;
+                    var captured = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(currentProject, result.Handle);
                     if (captured == null || captured.Category != candidate.Category)
                         throw new InvalidOperationException("Recognition capture did not produce one matching semantic owner for CAD handle " + result.Handle + ".");
                     applied++;
-                    AuditTrail.ForProject(project).Record("recognition.apply", captured.Id, candidate.RuleId + " • confidence " + candidate.Confidence.ToString("0.000") + " • " + candidate.EvidenceText);
-                    PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Nhận dạng → " + candidate.Category + " • " + result.Handle);
+                    AuditTrail.ForProject(currentProject).Record("recognition.apply", captured.Id, candidate.RuleId + " • confidence " + candidate.Confidence.ToString("0.000") + " • " + candidate.EvidenceText);
+                    try
+                    {
+                        PaletteCoordinator.RefreshProject();
+                        PaletteCoordinator.SetStatus("Nhận dạng → " + candidate.Category + " • " + result.Handle);
+                    }
+                    catch (System.Exception uiError)
+                    {
+                        doc.Editor.WriteMessage("\nQS3D Recognition " + result.Handle + " đã commit; UI refresh warning: " + uiError.Message);
+                    }
                 };
-                Action<RecognitionResult> locate = result => { var count = CadHandleService.Select(doc, new[] { result.Handle }); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
+                Action<RecognitionResult> locate = result =>
+                {
+                    var count = CadHandleService.Select(doc, new[] { result.Handle });
+                    if (count == 0) throw new InvalidOperationException("Recognition Locate: CAD handle " + result.Handle + " không còn tồn tại. Hãy chạy lại Recognition.");
+                    doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                };
                 if (autoApply)
                 {
                     foreach (var result in batch.AutoAccepted)
@@ -78,7 +107,7 @@ namespace QS3D.BricsCAD.V25
                         catch (System.Exception ex)
                         {
                             skipped++;
-                            AuditTrail.ForProject(project).Record("recognition.skip", result.Handle, ex.Message);
+                            AuditTrail.ForProject(ProjectContextCoordinator.GetOrCreate(doc)).Record("recognition.skip", result.Handle, ex.Message);
                             doc.Editor.WriteMessage("\nQS3D Recognition skip " + result.Handle + ": " + ex.Message);
                         }
                     }
