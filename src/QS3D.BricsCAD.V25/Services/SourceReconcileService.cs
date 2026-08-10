@@ -168,7 +168,7 @@ namespace QS3D.BricsCAD.V25.Services
                 var pending = project.Elements.Count(x => affectedIds.Contains(x.Id) && HasSemanticDirty(x));
                 if (pending == 0) return total;
 
-                var regenerated = engine.RegenerateDirty(project);
+                var regenerated = engine.RegenerateDirtySubset(project, affectedIds);
                 total += regenerated;
 
                 var remaining = project.Elements.Count(x => affectedIds.Contains(x.Id) && HasSemanticDirty(x));
