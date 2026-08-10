@@ -111,15 +111,25 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var target = FindRequired(project, familyId);
-            var projectIds = new HashSet<string>(project.Elements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+
+            var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var projectElement in project.Elements)
+            {
+                if (projectElement == null) continue;
+                if (projectElements.ContainsKey(projectElement.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElement.Id);
+                projectElements[projectElement.Id] = projectElement;
+            }
+
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
                 if (element == null) continue;
-                if (!projectIds.Contains(element.Id)) throw new InvalidOperationException("Element does not belong to the project: " + element.Id);
-                if (element.Category != target.Category)
-                    throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + element.Id + " category " + element.Category + ".");
-                unique[element.Id] = element;
+                if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
+                    throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
+                if (owned.Category != target.Category)
+                    throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + owned.Id + " category " + owned.Category + ".");
+                unique[owned.Id] = owned;
             }
 
             var changed = 0;
