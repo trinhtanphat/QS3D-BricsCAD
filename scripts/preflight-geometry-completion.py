@@ -10,6 +10,7 @@ required = [
     "src/QS3D.Core/Geometry/WallFootprintEngine.cs",
     "src/QS3D.Core/Geometry/OpeningCutPlanner.cs",
     "src/QS3D.Core/Rebar/RectangularRebarLayoutPlanner.cs",
+    "src/QS3D.Core/Rebar/LinearRebarLayoutPlanner.cs",
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs",
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs",
@@ -27,6 +28,7 @@ required = [
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs",
     "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/LinearRebarLayoutSmoke.cs",
 ]
 for relative in required:
     if not (ROOT / relative).is_file():
@@ -41,6 +43,9 @@ checks = {
     ],
     "src/QS3D.Core/Rebar/RectangularRebarLayoutPlanner.cs": [
         "BarsAlongWidth", "BarsAlongDepth", "CoverM", "DiameterMm", "no usable reinforcement envelope"
+    ],
+    "src/QS3D.Core/Rebar/LinearRebarLayoutPlanner.cs": [
+        "Specify exactly one of Count or SpacingMm", "MaxBars", "usableSpanM", "ActualSpacingM", "OffsetsM"
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
         "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
@@ -90,6 +95,9 @@ checks = {
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs": [
         "StraightWallFootprint", "PolylineWallCorner", "FarOriginWallFootprint", "OpeningCutPlan", "RectangularRebarLayout", "GeneratedRebarHealth"
     ],
+    "tests/QS3D.Core.SmokeTests/LinearRebarLayoutSmoke.cs": [
+        "CountDistributionIsSymmetric", "SpacingDistributionRoundsUpSafely", "AmbiguousModeIsRejected", "ExcessiveBarCountIsRejected"
+    ],
 }
 for relative, needles in checks.items():
     path = ROOT / relative
@@ -101,8 +109,12 @@ for relative, needles in checks.items():
             errors.append(relative + " missing guard/token: " + needle)
 
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
-if registration.is_file() and "GeometryCompletionSmoke.Run();" not in registration.read_text(encoding="utf-8"):
-    errors.append("GeometryCompletionSmoke is not registered")
+if registration.is_file():
+    registration_text = registration.read_text(encoding="utf-8")
+    if "GeometryCompletionSmoke.Run();" not in registration_text:
+        errors.append("GeometryCompletionSmoke is not registered")
+    if "LinearRebarLayoutSmoke.Run();" not in registration_text:
+        errors.append("LinearRebarLayoutSmoke is not registered")
 
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
@@ -120,4 +132,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: TKT line/polyline wall variants, compatible opening hosts, far-origin-safe footprint math, unified/fail-safe rectangular rebar geometry health and BLT-style UI workflow guards are present.")
+print("PASS: TKT line/polyline wall variants, compatible opening hosts, far-origin-safe footprint math, rectangular + linear rebar planning/health and BLT-style UI workflow guards are present.")
