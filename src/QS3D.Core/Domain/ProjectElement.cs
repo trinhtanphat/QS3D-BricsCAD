@@ -111,12 +111,21 @@ namespace QS3D.Core.Domain
             Properties[GeneratedGeometryStaleReasonKey] = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
         }
 
-        public bool IsGeneratedGeometryStale() =>
-            IsGeneratedSolidStale() ||
-            IsGeneratedRebarStale() ||
-            IsGeneratedShapeRebarStale() ||
-            IsGeneratedTieRebarStale() ||
-            IsGeneratedBeamStirrupStale();
+        public bool IsGeneratedGeometryStale()
+        {
+            var stale =
+                IsGeneratedSolidStale() ||
+                IsGeneratedRebarStale() ||
+                IsGeneratedShapeRebarStale() ||
+                IsGeneratedTieRebarStale() ||
+                IsGeneratedBeamStirrupStale();
+            if (!stale)
+            {
+                Remove(GeneratedGeometryStateKey);
+                Remove(GeneratedGeometryStaleReasonKey);
+            }
+            return stale;
+        }
 
         public bool IsGeneratedSolidStale() => IsGeneratedOutputStale(GeneratedSolidHandleKey, GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
         public bool IsGeneratedRebarStale() => IsGeneratedOutputStale(GeneratedRebarHandlesKey, GeneratedRebarStateKey, GeneratedRebarStaleSnapshotKey);
@@ -164,9 +173,15 @@ namespace QS3D.Core.Domain
         private bool IsGeneratedOutputStale(string outputKey, string stateKey, string snapshotKey)
         {
             if (!Properties.TryGetValue(stateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.OrdinalIgnoreCase)) return false;
-            if (!Properties.TryGetValue(snapshotKey, out var snapshot) || string.IsNullOrWhiteSpace(snapshot)) return false;
-            if (!Properties.TryGetValue(outputKey, out var current) || string.IsNullOrWhiteSpace(current)) return false;
-            return string.Equals(snapshot.Trim(), current.Trim(), StringComparison.OrdinalIgnoreCase);
+            if (!Properties.TryGetValue(snapshotKey, out var snapshot) || string.IsNullOrWhiteSpace(snapshot) ||
+                !Properties.TryGetValue(outputKey, out var current) || string.IsNullOrWhiteSpace(current) ||
+                !string.Equals(snapshot.Trim(), current.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                Remove(stateKey);
+                Remove(snapshotKey);
+                return false;
+            }
+            return true;
         }
 
         private void ClearGeneratedOutputStale(string stateKey, string snapshotKey)
