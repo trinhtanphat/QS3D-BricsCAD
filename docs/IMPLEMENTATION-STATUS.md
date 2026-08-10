@@ -18,7 +18,7 @@
 - Family edits update values that still inherit the previous Family value while preserving true instance overrides. Opening the inspector no longer dirties the project just by rebinding the Family name.
 - semantic selection synchronization uses the shared `SemanticReferenceHandles` resolver, including Auto Room boundary provenance and generated-solid fallback; ambiguous multi-element matches do not silently open Instance editing.
 - selected-object review exposes Locate/Zoom, transient highlight, `QS3DFOCUS`, `QS3DISOLATE` and `QS3DUNISOLATE`.
-- the primary Workspace now exposes **Giao tường**, **Snap xem**, **Snap áp** and **Auto Host** beside the main Family/modeling actions; Ribbon and Full Domain Hub expose the same advanced wall/host/review/rebar workflows.
+- the primary Workspace exposes **Giao tường**, **Snap xem**, **Snap áp** and **Auto Host** beside the main Family/modeling actions; Ribbon and Full Domain Hub expose the same advanced wall/host/review/rebar workflows, including Beam longitudinal/stirrups, Column ties, Slab/Foundation mats and unified Rebar Health All.
 
 ### Room / finishes
 
@@ -50,26 +50,34 @@
 ### Rebar
 
 - deterministic notation/BBS calculation plus XLSX/UTF-8 CSV export and review/Locate UI.
-- `QS3DREBAR3D` generates guarded rectangular-column longitudinal bars; ownership, protected semantic/generated handles, generated handles and count mismatches are health-checked before destructive replacement.
-- linear rebar distribution planning supports count/spacing modes with bounded bar counts and deterministic offsets.
+- `QS3DREBAR3D` generates guarded rectangular-column longitudinal bars using `GeneratedRebarHandles`; destructive replacement is ownership-protected.
+- `BeamLongitudinalRebarPlanner` + `QS3DBEAMREBAR3D` provide deterministic top/bottom longitudinal bars for supported horizontal Beam `LINE` sources. Explicit layer counts are supported; ambiguous compound placement is rejected. Per-element/batch generation is bounded and previous generated bars require ownership proof before erase.
+- `BeamStirrupLayoutPlanner` + `QS3DREBARSTIRRUP3D` generate bounded rectangular Beam stirrup loops with dedicated metadata/health/ownership.
+- `ColumnTieLayoutPlanner` + `QS3DREBARTIES3D` generate bounded rectangular Column tie loops with dedicated metadata/health/ownership and quantity support.
+- linear rebar distribution planning supports count/spacing modes with bounded bar counts and deterministic offsets. `RectangularRebarLayoutPlanner` now caps requested perimeter bars before allocation and rejects non-finite interpolation deltas.
 - BBS-shape geometry source includes `RebarShapePath` + `ProjectRebarShapePlanner` and `QS3DREBAR3DSHAPE`. Supported source paths include straight and configured L/U/Z/custom leg/turn definitions; cutting-length consistency and distribution placement are validated before native geometry mutation.
 - shape-generated bars use separate ownership metadata and `QS3DREBARSHAPEHEALTH`; destructive replacement refuses ambiguous/protected ownership.
+- `OrthogonalRebarMatPlanner` + `QS3DREBARMAT3D` add deterministic X/Y reinforcement mats for supported rectangular Slab/Foundation footprints. X/Y direction notation uses spacing groups, `RebarMatFaces` selects Bottom/Top/Both, crossing layers are vertically separated by radii and top/bottom overlap is rejected. Native mutation is capped at 1,200 bars/element and 4,000 bars/batch.
+- Rebar Mat uses dedicated `GeneratedRebarMat*` metadata, participates in generated-dependent invalidation and cross-set ownership checks, and has `QS3DREBARMATHEALTH`.
+- `QS3DREBARHEALTHALL` now actually aggregates Column/Beam longitudinal, BBS shape, Column ties, Beam stirrups and Slab/Foundation mat health/Locate paths. Longitudinal health is mode/category-aware and flags dirty generated geometry as stale.
+- Beam longitudinal and Orthogonal Mat Core regression sources are explicitly registered with ModuleInitializers so they execute with the deterministic smoke suite.
 
 ### Packaging / guards
 
 - V25 release packaging produces command manifest, metadata, hashes and DemandLoad install/uninstall helpers while excluding BricsCAD-owned runtime assemblies.
 - per-user DemandLoad installer supports hash verification, optional Authenticode enforcement, `-WhatIf`/confirmation semantics and does not lower `SECURELOAD`.
+- signing source now includes signing/verification PowerShell helpers and static signing preflight; actual production certificates/signing remain release-environment concerns.
 - generic/full-domain/geometry/room-curve/advanced-geometry static preflights cover command uniqueness, geometry/rebar safety, Room Auto lifecycle, wall junction analysis + review-gated snap apply, straight-polyline opening cuts, safe Auto Host matching/elevation/ambiguity separation, Family/Instance inspector contracts, semantic selection sync and key XAML well-formedness.
+- `scripts/preflight-rebar-mat.py` guards Mat planner/builder/ownership/invalidation/health contracts. `scripts/preflight-session-final-audit.py` reconciles the session-promised Beam/Mat features, UI command parity, smoke registration, duplicate commands and manual-only workflow policy.
 - `scripts/preflight-blt-workspace.py` specifically guards typed Family/Instance controls, reset override, semantic selection sync, Workspace/Ribbon/Hub Giao tường + Snap Preview/Apply + Auto Host + review entry-point parity and key XAML well-formedness.
-- both manual-only workflows include the safe Auto Host source preflight; no workflow was dispatched as part of these source changes.
-- `main` GitHub Actions workflows remain `workflow_dispatch` only.
+- workflows remain `workflow_dispatch` only. The new Rebar Mat source gate is also manual-only; no workflow was dispatched as part of this source audit.
 
 ## Verified in earlier GitHub-hosted CI
 
 - Earlier full-domain integration gates passed generic/full-domain preflights, Core Release build and deterministic smoke suites.
 - Release-candidate run `31346731964` passed generic/full-domain/release preflight, PowerShell AST parsing, Core Release build and the then-current deterministic smoke suite.
 - Integrated release-tree run `31346906413` repeated those checks after Audit/Template UI integration.
-- These runs **predate** the newest Room ARC/SPLINE lifecycle hardening, wall-junction/snap/polyline-opening/Auto-Host work, BBS-shape rebar, review commands and Family/Instance UI batches. The current head must not be described as CI-verified until a later explicitly approved run covers it.
+- These runs **predate** the newest Room ARC/SPLINE lifecycle hardening, wall-junction/snap/polyline-opening/Auto-Host work, expanded rebar geometry/health, Rebar Mat, review commands and Family/Instance UI batches. The current head must not be described as CI-verified until a later explicitly approved run covers it.
 
 ## Gate C blocker
 
@@ -78,14 +86,14 @@ Historical V25 integration probe run `31341184031` remained queued because no ma
 ## Runtime/product work still remaining
 
 - compile the newest adapter against the exact installed V25 `BrxMgd.dll` / `TD_Mgd.dll`, then real DemandLoad/NETLOAD command/Ribbon/palette regression;
-- private-DWG and save/reopen/multi-DWG regression for Room Auto, wall centerlines/snap cleanup, Auto Host, straight-polyline opening cuts, structure, BQ/BBS and both rebar geometry paths;
+- private-DWG and save/reopen/multi-DWG regression for Room Auto, wall centerlines/snap cleanup, Auto Host, straight-polyline opening cuts, structure, BQ/BBS and all generated rebar paths;
 - real V25 validation of Family/Instance scope, typed controls, Focus/Isolate/restore and Unicode/HiDPI behavior;
 - production-grade Vách Kính curtain-wall framing/panels and specialized Trụ Tường profiles/material presentation beyond the generic Tường KT extrusion;
 - physical wall-solid reconciliation/union at L/T/X/Multi junctions remains product work even though guarded **source centerline endpoint snap cleanup** is now implemented;
 - generalized opening booleans for curved/bulged polyline wall hosts and complex corner-crossing cases;
-- broader rebar authoring/editing for beam/slab/wall bars, stirrups, hooks/bend radii and richer shape manipulation beyond the current deterministic source paths;
+- generalized clipped/polygonal Slab/Foundation rebar mats beyond the current safe rectangular adapter, plus broader structural rebar authoring for walls, multi-zone beam reinforcement, fabrication hooks/bend radii/anchorage and richer editing/manipulation;
 - transient section-box and deeper isolate/highlight UX proven on V25;
 - commercial icon/Ribbon grouping/context-menu/DPI polish based on real screenshots;
-- Authenticode production signing, signed updater and optional commercial licensing/backend.
+- production certificate provisioning, signed updater and optional commercial licensing/backend.
 
 The project deliberately distinguishes **implemented source paths** from behavior that requires licensed BricsCAD V25/private-DWG/runtime proof.
