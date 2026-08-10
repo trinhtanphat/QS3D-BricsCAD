@@ -53,6 +53,7 @@ namespace QS3D.Core.SmokeTests
             SelectionStateSmoke.Run();
             BulkEditCanonicalizationSmoke.Run();
             RegenerationAtomicitySmoke.Run();
+            HostLinkCanonicalizationSmoke.Run();
         }
     }
 }
