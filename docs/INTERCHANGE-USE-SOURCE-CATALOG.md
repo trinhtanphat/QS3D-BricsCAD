@@ -24,7 +24,16 @@ For a planner-approved colliding identity:
 - Floor: source name and `ElevationM` replace target values.
 - Family: source name and portable Family properties replace target values; category remains the already-validated same category.
 
-Existing Element collisions are not edited by this policy. Their source handles, drawing fingerprint and portable semantic state remain target-owned.
+Family properties are not replaced with a raw `Properties.Clear()`. The adapter routes replacement through `ProjectFamilyService` semantics:
+
+- a Family property removed by the source is removed from member Elements only when their instance value still equals the previous inherited Family value;
+- a changed/new Family property propagates to member Elements that were inheriting the old/default value;
+- true Element-level overrides remain untouched;
+- removed inherited values are processed before new values are propagated, while the previous Family values are still available for inheritance detection.
+
+All existing members of a replaced Family are already in the generated-output invalidation closure before those semantic updates occur.
+
+Existing Element collisions are not edited by this policy. Their source handles, drawing fingerprint and portable semantic state remain target-owned, except for inheritance-aware Family defaults that they had not overridden.
 
 ## Affected generated-output closure
 
@@ -47,14 +56,14 @@ The guarded apply path:
 3. captures `ProjectStateSnapshot`;
 4. opens the BricsCAD CAD transaction;
 5. prepares `GeneratedDependentGeometryInvalidator` while old target ownership metadata is still available;
-6. applies catalog add/replacement and appends planner-approved new Elements;
+6. applies catalog add/replacement with inheritance-aware Family propagation and appends planner-approved new Elements;
 7. marks the affected existing closure dirty;
 8. clears invalidated generated owner metadata;
 9. re-validates the combined semantic project/dependency graph;
 10. records audit/provenance summary and touches the project;
 11. commits the CAD transaction.
 
-A pre-commit failure aborts the native transaction and restores the semantic snapshot. Post-commit UI refresh is best-effort only.
+A pre-commit failure aborts the native transaction and restores the semantic snapshot, including Family definitions and propagated member values. Post-commit UI refresh is best-effort only.
 
 ## Rebuild remains explicit
 
