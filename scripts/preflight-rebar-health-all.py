@@ -14,6 +14,7 @@ required = {
     "foundation_service": ROOT / "src/QS3D.Core/Diagnostics/GeneratedFoundationMeshHealthService.cs",
     "general_service": ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs",
     "ownership_service": ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs",
+    "ownership_policy": ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs",
     "ribbon": ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs",
     "geometry_hub": ROOT / "src/QS3D.BricsCAD.V25/UI/GeometryExtensionsWindow.xaml",
     "rebar_hub": ROOT / "src/QS3D.BricsCAD.V25/UI/Rebar3DHubWindow.xaml",
@@ -45,9 +46,17 @@ checks = {
         'code.IndexOf("FOUNDATION_MESH"',
     ],
     "ownership_service": [
-        '"GeneratedRebarHandles"', '"GeneratedShapeRebarHandles"', '"GeneratedTieRebarHandles"',
-        '"GeneratedBeamStirrupHandles"', '"GeneratedSlabMeshHandles"', '"GeneratedWallMeshHandles"', '"GeneratedFoundationMeshHandles"',
+        'GeneratedHandleOwnershipPolicy.RebarHandleKeys',
+        'REBAR_GENERATED_CROSS_KEY_OWNERSHIP_CONFLICT',
     ],
+    "ownership_policy": [
+        'RebarHandleKeys', 'GeneratedRebarHandles', 'GeneratedShapeRebarHandles', 'GeneratedTieRebarHandles',
+        'GeneratedBeamStirrupHandles', 'GeneratedSlabMeshHandles', 'GeneratedWallMeshHandles', 'GeneratedFoundationMeshHandles',
+    ],
+    "stirrup_service": ['GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)'],
+    "tie_service": ['GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)'],
+    "slab_service": ['GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)'],
+    "wall_service": ['GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)'],
     "ribbon": ['"QS3DREBARHEALTHALL"', '"QS3DSLABREBARHEALTH"', '"QS3DWALLREBARHEALTH"', '"QS3DFOUNDATIONREBARHEALTH"'],
     "geometry_hub": ['Tag="QS3DREBARHEALTHALL"', 'Tag="QS3DSLABREBARHEALTH"', 'Tag="QS3DWALLREBARHEALTH"'],
     "rebar_hub": ['Tag="QS3DREBARHEALTHALL"', 'Tag="QS3DFOUNDATIONREBARHEALTH"'],
@@ -65,4 +74,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: unified rebar health covers longitudinal, BBS shape, column tie, beam stirrup, slab mesh, wall mesh and foundation mesh generated families with cross-family ownership and UI exposure.")
+print("PASS: unified rebar health covers longitudinal, BBS shape, column tie, beam stirrup, slab mesh, wall mesh and foundation mesh with shared policy-driven ownership and UI exposure.")
