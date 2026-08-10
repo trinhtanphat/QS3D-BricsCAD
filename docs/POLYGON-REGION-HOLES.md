@@ -2,68 +2,48 @@
 
 Updated: 2026-08-10 (UTC+7)
 
-`PolygonRegionScanlineClipper` extends the existing simple-polygon scanline foundation from one outer loop to **one simple outer loop plus zero or more simple holes**.
+`PolygonRegionScanlineClipper` extends the simple-polygon scanline foundation from one outer loop to **one simple outer loop plus zero or more simple holes**. `PolygonalSlabMeshPlanner` now consumes that region model and applies its existing cover + bar-radius boundary-clearance contract to every outer/hole edge.
 
-This is a CAD-independent topology/scanline layer. It does not yet mean Slab/Foundation native holes, openings, islands or multi-loop reinforcement are complete.
+This is CAD-independent Core geometry/rebar planning. It does not mean Slab/Foundation native hole extraction, ownership, islands or multi-loop reinforcement are complete.
 
-## Region model
+## Region model and validation
 
-A `PolygonRegion2` contains:
+A `PolygonRegion2` contains one normalized simple outer polygon, zero or more normalized simple hole polygons and a read-only boundary-loop list. Loop winding is not topology authority.
 
-- one normalized simple outer polygon;
-- zero or more normalized simple hole polygons;
-- a read-only boundary-loop list for later boundary-clearance consumers.
+The region fails closed when the outer/hole polygons are invalid, limits are exceeded, a hole leaves/touches the outer boundary, holes touch/intersect, or one hole contains another. Nested holes are rejected because they introduce an island and require an explicit multi-region topology contract.
 
-Loop winding is not used as ownership/topology authority. Clockwise and counter-clockwise loops are both accepted after geometric validation.
+## Scanline + mesh semantics
 
-## Validation
+`PolygonRegionScanlineClipper.Clip(...)` clips the outer polygon and subtracts all hole interiors. `PolygonalSlabMeshPlanner` then evaluates capsule clearance around **every loop edge** using the direction-specific `cover + bar radius` value before emitting a bar segment.
 
-The region fails closed when:
+For a scanline crossing a hole, one distributed scanline can become two or more physical bar placements. This preserves the existing count semantics: `XCount` / `YCount` describe distributed scanlines, not final physical segment count. Concavity and holes may increase `PolygonalSlabMeshLayout.Count` without changing the requested distribution count.
 
-- the outer loop or any hole is invalid under `PolygonScanlineClipper.NormalizeAndValidate`;
-- more than 256 holes are supplied;
-- total vertices exceed 16384;
-- a hole is outside the outer polygon;
-- a hole touches/intersects the outer boundary;
-- holes touch/intersect each other;
-- one hole contains another hole.
+The existing bounds remain authoritative: region hole/vertex/scan-segment limits plus the polygon mesh bar and forbidden-interval limits all fail closed instead of truncating geometry.
 
-Nested holes are rejected because a hole-inside-hole introduces an **island**. Islands need an explicit multi-region topology model rather than treating winding order as an implicit Boolean operation.
+## Still open before native hole-aware reinforcement
 
-## Scanline semantics
+Core planning now covers hole topology, scanline subtraction and boundary clearance. Native Slab/Foundation wiring still requires a reviewed source/ownership contract:
 
-`Clip(region, axis, coordinate)` first clips the outer polygon, then subtracts every hole interval. Output segments remain finite, positive-length and ordered along the scan axis.
+1. source metadata identifying outer loop vs hole loops without trusting selection order accidentally;
+2. native V25 POLYLINE/bulged-loop extraction and loop association;
+3. ownership/replacement/stale/health behavior for source holes;
+4. source reconcile when a hole is edited/deleted/replaced;
+5. save/reopen, undo and multi-DWG behavior;
+6. exact-SHA licensed BricsCAD V25 geometry proof.
 
-For a 10 × 10 outer square with a 2 × 2 central hole, a scanline through the hole returns two usable segments instead of one.
-
-The result is bounded to 4096 scan segments per scanline.
-
-## What remains before hole-aware reinforcement
-
-This source slice deliberately stops at topology + interior clipping. `PolygonalSlabMeshPlanner` currently owns cover + bar-radius capsule clearance around its single footprint boundary. A hole-aware mesh must extend that same clearance contract to **every hole boundary**, not merely remove the mathematical hole interior.
-
-Therefore remote/native agents must not wire `PolygonRegionScanlineClipper` directly to native Slab/Foundation rebar and call it complete until all of these are implemented:
-
-1. cover + bar-radius clearance around outer and hole boundaries;
-2. bounded bar-segment growth on concave/hole scanlines;
-3. source metadata identifying outer loop vs hole loops without trusting selection order accidentally;
-4. native V25 POLYLINE extraction and loop association;
-5. ownership/replacement/stale/health behavior for source holes;
-6. save/reopen and source-reconcile behavior when a hole is edited/deleted/replaced;
-7. exact-SHA licensed BricsCAD V25 geometry proof.
+Do not pass arbitrary selected loops into the Core planner and call the native workflow complete. Drawing-local source ownership and loop identity must remain deterministic and fail closed.
 
 ## Multiple outer loops / islands
 
-Multiple disconnected outer loops are not represented by `PolygonRegion2`. Do not fake them as holes or concatenate vertices.
-
-A future multi-region model should explicitly represent a bounded collection of independent regions, each with its own outer loop and holes, then define whether one semantic Slab/Foundation may own multiple disconnected source regions. That ownership decision affects generated-handle replacement and quantities, so it must be reviewed separately.
+Multiple disconnected outer loops are not represented by `PolygonRegion2`. Do not fake them as holes or concatenate vertices. A future multi-region model must explicitly represent independent regions and define whether one semantic Slab/Foundation may own multiple disconnected source regions, because that decision affects generated ownership and quantities.
 
 ## Source checks
 
 ```text
 python scripts/preflight-polygon-region-holes.py
+python scripts/preflight-polygonal-slab-holes.py
 ```
 
-`PolygonRegionScanlineSmoke` covers horizontal/vertical hole subtraction and fail-closed outside, touching, overlapping and nested-hole cases.
+`PolygonRegionScanlineSmoke` covers topology/scanline behavior. `PolygonalSlabMeshHolesSmoke` covers hole-aware cover + radius trimming, distributed-scanline semantics, elevation stability and invalid-hole rejection.
 
-Current status: **REMOTE_DONE for one-outer-loop + holes topology/scanline Core only**. Hole-aware mesh clearance/native integration remains open; native runtime proof remains `LOCAL_ONLY`.
+Current status: **REMOTE_DONE for one-outer-loop + holes topology and Core mesh planning**. Native source-loop integration/runtime proof remains `LOCAL_ONLY`.
