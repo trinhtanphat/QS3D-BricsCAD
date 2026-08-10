@@ -20,19 +20,23 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
-                var columnHandles = Collect(project, "GeneratedRebarHandles");
+                var longitudinalHandles = Collect(project, "GeneratedRebarHandles");
                 var shapeHandles = Collect(project, "GeneratedShapeRebarHandles");
                 var tieHandles = Collect(project, "GeneratedTieRebarHandles");
                 var stirrupHandles = Collect(project, "GeneratedBeamStirrupHandles");
-                var liveColumn = CadHandleService.GetLiveSolidHandles(document, columnHandles);
+                var matHandles = Collect(project, RebarMatSolidBuilder.HandlesKey);
+                var liveLongitudinal = CadHandleService.GetLiveSolidHandles(document, longitudinalHandles);
                 var liveShape = CadHandleService.GetLiveSolidHandles(document, shapeHandles);
                 var liveTie = CadHandleService.GetLiveSolidHandles(document, tieHandles);
                 var liveStirrup = CadHandleService.GetLiveSolidHandles(document, stirrupHandles);
+                var liveMat = CadHandleService.GetLiveSolidHandles(document, matHandles);
 
                 var issues = new List<ModelHealthIssue>();
-                issues.AddRange(new GeneratedRebarHealthService().InspectAll(project, liveColumn, liveShape));
+                issues.AddRange(new GeneratedRebarHealthService().InspectAll(project, liveLongitudinal, liveShape));
                 issues.AddRange(new GeneratedTieRebarHealthService().Inspect(project, liveTie));
                 issues.AddRange(new GeneratedBeamStirrupHealthService().Inspect(project, liveStirrup));
+                issues.AddRange(new GeneratedRebarMatHealthService().Inspect(project, liveMat));
+                issues.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
                 var summary = new HealthSummary(issues);
                 var message = "Rebar Health All: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
@@ -63,8 +67,16 @@ namespace QS3D.BricsCAD.V25
         private static IEnumerable<string> HandlesForIssue(ProjectElement element, string code)
         {
             if (code.IndexOf("BEAM_STIRRUP", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedBeamStirrupHandles");
+            if (code.IndexOf("REBAR_MAT", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, RebarMatSolidBuilder.HandlesKey);
             if (code.IndexOf("TIE_REBAR", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedTieRebarHandles");
             if (code.IndexOf("SHAPE_REBAR", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedShapeRebarHandles");
+            if (code.IndexOf("CROSS_KEY", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Parse(element, "GeneratedRebarHandles")
+                    .Concat(Parse(element, "GeneratedShapeRebarHandles"))
+                    .Concat(Parse(element, "GeneratedTieRebarHandles"))
+                    .Concat(Parse(element, "GeneratedBeamStirrupHandles"))
+                    .Concat(Parse(element, RebarMatSolidBuilder.HandlesKey))
+                    .Distinct(StringComparer.OrdinalIgnoreCase);
             return Parse(element, "GeneratedRebarHandles");
         }
 
