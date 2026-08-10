@@ -16,6 +16,20 @@ jobs:
           python-version: "3.12"
       - name: Preflight source guard
         run: python scripts/preflight.py
+      - name: Full-domain and release source guard
+        run: python scripts/preflight-full-domain.py
+      - name: Validate release PowerShell syntax
+        shell: pwsh
+        run: |
+          foreach ($script in @('scripts/package-v25.ps1', 'scripts/install-v25-autoload.ps1', 'scripts/uninstall-v25-autoload.ps1')) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | Format-Table -AutoSize | Out-String | Write-Host
+              throw "PowerShell parse failure: $script"
+            }
+          }
 
   core:
     needs: preflight
