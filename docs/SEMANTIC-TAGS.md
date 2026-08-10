@@ -9,6 +9,7 @@ QS3D now has a guarded P0 native documentation slice that turns the existing Cor
 ```text
 QS3DTAG
 QS3DTAGREFRESH
+QS3DTAGREMOVE
 ```
 
 ### `QS3DTAG`
@@ -26,6 +27,16 @@ The text height resolves from Instance/Family `SemanticTagTextHeightM`, default 
 Select the same authoritative source again. QS3D re-renders the template against current semantic state and replaces the tag at the stored drawing-local WCS point/rotation. It does not invent a new placement.
 
 If a tag has not been placed yet, refresh fails closed and tells the user to run `QS3DTAG` first.
+
+### `QS3DTAGREMOVE`
+
+Explicitly erases the generated semantic-tag `MText` and clears all `GeneratedSemanticTag*` ownership/render/placement metadata for its semantic owner.
+
+The user may select either the generated tag itself or the authoritative semantic source. If the selected generated object belongs to another generated slot, removal is refused. Every live tag handle must resolve through the canonical `GeneratedSemanticTagHandles` owner slot, must still be `MText`, and must pass native QS3D XData ownership verification before destructive erase.
+
+Removal is transactional: native erase, metadata clear, audit and project revision are committed together; a pre-commit failure restores the project snapshot and aborts the CAD transaction. A missing native tag handle may be treated as already absent after ownership metadata is validated, allowing stale semantic tag metadata to be cleaned without pretending another CAD object was erased.
+
+`QS3DUNTRACK` intentionally remains a different operation: semantic untrack preserves CAD geometry by contract. It does not silently call `QS3DTAGREMOVE`. If the user wants the generated tag physically erased before detaching semantic ownership, run `QS3DTAGREMOVE` first and then `QS3DUNTRACK`.
 
 ## Template contract
 
@@ -53,7 +64,7 @@ GeneratedSemanticTagHandles
 
 Current P0 writes one MText handle but uses a plural owner slot so later reviewed leader/secondary entities can extend the same lifecycle without inventing a competing ownership store.
 
-Replacement is fail-closed:
+Replacement/removal is fail-closed:
 
 - `GeneratedHandleOwnershipIndex` must resolve the old handle to the same semantic element and canonical `GeneratedSemanticTagHandles` slot;
 - the live old entity must be `MText`;
@@ -61,7 +72,8 @@ Replacement is fail-closed:
 - wrong/missing ownership never authorizes destructive erase;
 - tag template/render/text-height validation occurs before destructive replacement;
 - semantic generated-handle/template/text/owner/position metadata, audit and project revision advance while the CAD transaction is still rollback-capable;
-- if the operation fails before CAD commit, the CAD transaction aborts and `ProjectStateSnapshot` restores semantic state;
+- explicit remove clears all `GeneratedSemanticTag*` metadata only inside the same rollback-capable native transaction;
+- if an operation fails before CAD commit, the CAD transaction aborts and `ProjectStateSnapshot` restores semantic state;
 - viewport/Palette refresh is command-level best-effort after the operation boundary.
 
 Persisted metadata includes:
@@ -97,7 +109,7 @@ Tilted/3D UCS is rejected rather than creating an ambiguously oriented tag.
 - text height;
 - drawing-local position scope and finite X/Y/Z.
 
-A semantic element is **not required** to have a tag. Health starts only when generated tag ownership exists.
+A semantic element is **not required** to have a tag. Health starts only when generated tag ownership exists. After a successful `QS3DTAGREMOVE`, tag ownership metadata no longer exists and the element is again in the optional/no-tag state.
 
 P0 persisted health does not yet prove the live CAD handle is an MText after save/reopen. Exact live-entity/XData/content verification belongs to the licensed V25 runtime matrix or a future dedicated native tag health command.
 
@@ -105,7 +117,7 @@ P0 persisted health does not yet prove the live CAD handle is an MText after sav
 
 Source is implemented and statically guarded, but the following remain open:
 
-- exact-SHA licensed BricsCAD V25 placement/refresh/save-reopen/Undo/runtime qualification;
+- exact-SHA licensed BricsCAD V25 placement/refresh/remove/save-reopen/Undo/runtime qualification;
 - native MLeader / leader geometry;
 - automatic associative reposition when source geometry moves;
 - batch auto-placement / collision avoidance;

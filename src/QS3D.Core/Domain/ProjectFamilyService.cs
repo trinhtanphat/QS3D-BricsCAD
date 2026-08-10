@@ -12,6 +12,12 @@ namespace QS3D.Core.Domain
 
     public static class ProjectFamilyService
     {
+        private sealed class PendingFamilyAssignment
+        {
+            public ProjectElement Element { get; set; } = null!;
+            public ProjectFamily? PreviousFamily { get; set; }
+        }
+
         private const int MaxFamilies = 10000;
         private const int MaxNameLength = 160;
         private const int MaxPropertyKeyLength = 120;
@@ -63,10 +69,11 @@ namespace QS3D.Core.Domain
             var hadPrevious = family.Properties.TryGetValue(normalizedKey, out var previousRaw);
             var previous = previousRaw ?? string.Empty;
             if (hadPrevious && string.Equals(previous, normalizedValue, StringComparison.Ordinal)) return new FamilyPropertyUpdateResult();
+            var members = ResolveFamilyMembers(project, family.Id);
 
             family.Properties[normalizedKey] = normalizedValue;
             var result = new FamilyPropertyUpdateResult();
-            foreach (var element in project.Elements.Where(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)))
+            foreach (var element in members)
             {
                 var hasInstance = element.Properties.TryGetValue(normalizedKey, out var instanceRaw);
                 var instance = instanceRaw ?? string.Empty;
@@ -88,9 +95,11 @@ namespace QS3D.Core.Domain
             var normalizedKey = Required(key, nameof(key), MaxPropertyKeyLength);
             if (!family.Properties.TryGetValue(normalizedKey, out var previousRaw)) return new FamilyPropertyUpdateResult();
             var previous = previousRaw ?? string.Empty;
+            var members = ResolveFamilyMembers(project, family.Id);
+
             family.Properties.Remove(normalizedKey);
             var result = new FamilyPropertyUpdateResult();
-            foreach (var element in project.Elements.Where(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)))
+            foreach (var element in members)
             {
                 if (!element.Properties.TryGetValue(normalizedKey, out var instanceRaw)) continue;
                 var instance = instanceRaw ?? string.Empty;
@@ -111,32 +120,20 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var target = FindRequired(project, familyId);
+            var owned = ResolveOwnedElements(project, elements, target);
+            var pending = new List<PendingFamilyAssignment>();
 
-            var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var projectElement in project.Elements)
-            {
-                if (projectElement == null) continue;
-                if (projectElements.ContainsKey(projectElement.Id))
-                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElement.Id);
-                projectElements[projectElement.Id] = projectElement;
-            }
-
-            var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in elements)
-            {
-                if (element == null) continue;
-                if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
-                    throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
-                if (owned.Category != target.Category)
-                    throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + owned.Id + " category " + owned.Category + ".");
-                unique[owned.Id] = owned;
-            }
-
-            var changed = 0;
-            foreach (var element in unique.Values)
+            foreach (var element in owned)
             {
                 if (string.Equals(element.FamilyId, target.Id, StringComparison.OrdinalIgnoreCase)) continue;
-                var previous = project.FindFamily(element.FamilyId);
+                var previous = string.IsNullOrWhiteSpace(element.FamilyId) ? null : project.FindFamily(element.FamilyId);
+                pending.Add(new PendingFamilyAssignment { Element = element, PreviousFamily = previous });
+            }
+
+            foreach (var item in pending)
+            {
+                var element = item.Element;
+                var previous = item.PreviousFamily;
                 if (previous != null)
                 {
                     foreach (var pair in previous.Properties)
@@ -149,10 +146,9 @@ namespace QS3D.Core.Domain
                 foreach (var pair in target.Properties)
                     if (!element.Properties.ContainsKey(pair.Key)) element.Properties[pair.Key] = pair.Value;
                 element.MarkDirty(ElementDirtyFlags.All);
-                changed++;
             }
-            if (changed > 0) project.Touch();
-            return changed;
+            if (pending.Count > 0) project.Touch();
+            return pending.Count;
         }
 
         public static bool Delete(ProjectState project, string familyId)
@@ -174,6 +170,44 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             var family = FindRequired(project, familyId);
             return project.Elements.Count(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static IReadOnlyList<ProjectElement> ResolveFamilyMembers(ProjectState project, string familyId)
+        {
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var result = new List<ProjectElement>();
+            foreach (var element in project.Elements)
+            {
+                if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (!ids.Add(element.Id)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id);
+                if (string.Equals(element.FamilyId, familyId, StringComparison.OrdinalIgnoreCase)) result.Add(element);
+            }
+            result.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Id, right.Id));
+            return result.AsReadOnly();
+        }
+
+        private static IReadOnlyList<ProjectElement> ResolveOwnedElements(ProjectState project, IEnumerable<ProjectElement> elements, ProjectFamily target)
+        {
+            var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var projectElement in project.Elements)
+            {
+                if (projectElement == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (projectElements.ContainsKey(projectElement.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElement.Id);
+                projectElements[projectElement.Id] = projectElement;
+            }
+
+            var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in elements)
+            {
+                if (element == null) continue;
+                if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
+                    throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
+                if (owned.Category != target.Category)
+                    throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + owned.Id + " category " + owned.Category + ".");
+                unique[owned.Id] = owned;
+            }
+            return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
         private static ProjectFamily FindRequired(ProjectState project, string id)
