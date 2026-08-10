@@ -21,7 +21,7 @@ namespace QS3D.Core.Services
             if (previousHost.Length > 0 && relationshipChanged)
             {
                 previousHostElement = project.FindElement(previousHost);
-                EnsureCanLeavePhysicalCutHost(opening, previousHostElement, previousHost, "re-host");
+                EnsureCanLeavePhysicalCutHost(project, opening, previousHostElement, previousHost, "re-host");
             }
 
             if (previousHost.Length > 0 && relationshipChanged)
@@ -51,7 +51,7 @@ namespace QS3D.Core.Services
             var hostId = opening.Properties.TryGetValue("HostWallId", out var value) ? (value ?? string.Empty).Trim() : string.Empty;
             var host = hostId.Length > 0 ? project.FindElement(hostId) : null;
             if (hostId.Length > 0)
-                EnsureCanLeavePhysicalCutHost(opening, host, hostId, "unlink");
+                EnsureCanLeavePhysicalCutHost(project, opening, host, hostId, "unlink");
 
             opening.Properties.Remove("HostWallId");
             var dependencyRemoved = RemoveDependencies(opening, hostId) > 0;
@@ -67,7 +67,7 @@ namespace QS3D.Core.Services
             AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
         }
 
-        private static void EnsureCanLeavePhysicalCutHost(ProjectElement opening, ProjectElement? host, string hostId, string operation)
+        private static void EnsureCanLeavePhysicalCutHost(ProjectState project, ProjectElement opening, ProjectElement? host, string hostId, string operation)
         {
             if (host == null) return;
 
@@ -83,9 +83,9 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException(
                     "Host " + hostId + " has orphan physical opening target-state. Rebuild its 3D geometry before " + operation + " of opening " + opening.Id + ".");
 
-            // Legacy/curved physical cuts may have been created before the exact opening-id target
-            // state was persisted. We cannot prove that this opening is not baked into the host solid,
-            // so changing HostWallId must fail closed rather than leaving an irreversible hole behind.
+            // Legacy physical cuts may have been created before the exact opening-id target state was
+            // persisted. We cannot prove that this opening is not baked into the host solid, so changing
+            // HostWallId must fail closed rather than leaving an irreversible hole behind.
             if (!hasTargets)
                 throw new InvalidOperationException(
                     "Host " + hostId + " has a physical opening cut without exact target-state. Rebuild its 3D geometry before " + operation + " of opening " + opening.Id + ".");
@@ -93,6 +93,10 @@ namespace QS3D.Core.Services
             if (!PhysicalOpeningCutTargetStateCodec.TryRead(host, out var targetIds))
                 throw new InvalidOperationException(
                     "Host " + hostId + " physical opening target-state is unavailable. Rebuild its 3D geometry before " + operation + ".");
+
+            // Validate the whole target set before trusting absence of this particular opening. A stale
+            // or partially corrupt target-set must not be used as evidence that leaving the host is safe.
+            PhysicalOpeningCutTargetStateCodec.Resolve(project, host, targetIds);
             if (!targetIds.Any(x => string.Equals(x, opening.Id, StringComparison.OrdinalIgnoreCase))) return;
 
             throw new InvalidOperationException(
