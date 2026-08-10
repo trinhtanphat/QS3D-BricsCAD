@@ -11,13 +11,22 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
 
-            var byId = new HashSet<string>(project.Elements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+            var elements = project.Elements.Where(x => x != null).ToList();
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in elements)
+            {
+                if (!counts.TryGetValue(element.Id, out var count)) count = 0;
+                counts[element.Id] = count + 1;
+            }
+            var duplicateIds = new HashSet<string>(counts.Where(x => x.Value > 1).Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
+            var uniqueIds = new HashSet<string>(counts.Where(x => x.Value == 1).Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
             var graph = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
             var selfReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ambiguousTargets = new List<KeyValuePair<string, string>>();
 
-            foreach (var element in project.Elements)
+            foreach (var element in elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
-                if (graph.ContainsKey(element.Id)) continue;
+                if (duplicateIds.Contains(element.Id) || graph.ContainsKey(element.Id)) continue;
                 var dependencies = new List<string>();
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var raw in element.DependsOn)
@@ -29,13 +38,30 @@ namespace QS3D.Core.Diagnostics
                         selfReferences.Add(element.Id);
                         continue;
                     }
-                    if (byId.Contains(dependencyId)) dependencies.Add(dependencyId);
+                    if (duplicateIds.Contains(dependencyId))
+                    {
+                        ambiguousTargets.Add(new KeyValuePair<string, string>(element.Id, dependencyId));
+                        continue;
+                    }
+                    if (uniqueIds.Contains(dependencyId)) dependencies.Add(dependencyId);
                 }
+                dependencies.Sort(StringComparer.OrdinalIgnoreCase);
                 graph[element.Id] = dependencies.ToArray();
             }
 
             var cycleMembers = FindCycleMembers(graph);
             var issues = new List<ModelHealthIssue>();
+            foreach (var pair in ambiguousTargets
+                .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Value, StringComparer.OrdinalIgnoreCase))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "DEPENDENCY_TARGET_AMBIGUOUS",
+                    HealthSeverity.Error,
+                    "Dependency trỏ tới mã semantic element bị trùng: " + pair.Value + ". Không thể xác định cạnh graph an toàn.",
+                    pair.Key));
+            }
+
             foreach (var elementId in selfReferences.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 issues.Add(new ModelHealthIssue(
                     "DEPENDENCY_SELF_REFERENCE",

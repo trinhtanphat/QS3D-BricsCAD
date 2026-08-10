@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             AssignmentMarksGeneratedGeometryStale();
             AssignmentRejectsSpoofedSameIdElement();
             DeleteGuardsActiveAndReferencedZones();
+            CorruptElementCollectionFailsClosed();
             RejectsDuplicateNames();
         }
 
@@ -73,6 +74,24 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("e", ElementCategory.Slab, "fam", "floor", z1.Id);
             project.Elements.Add(element);
             Throws<InvalidOperationException>(() => ProjectZoneService.Delete(project, z1.Id));
+        }
+
+        private static void CorruptElementCollectionFailsClosed()
+        {
+            var project = new ProjectState("p-corrupt", "Zone atomicity");
+            var z1 = ProjectZoneService.Create(project, "z1", "Khu A");
+            var z2 = ProjectZoneService.Create(project, "z2", "Khu B");
+            project.Elements.Add(null);
+
+            Throws<InvalidOperationException>(() => ProjectZoneService.Update(project, z2.Id, "Khu B mới"));
+            if (z2.Name != "Khu B") throw new Exception("Rejected zone update must not partially mutate the zone name.");
+
+            Throws<InvalidOperationException>(() => ProjectZoneService.ReferenceCount(project, z2.Id));
+            Throws<InvalidOperationException>(() => ProjectZoneService.Delete(project, z2.Id));
+            if (!ReferenceEquals(project.FindZone(z2.Id), z2)) throw new Exception("Rejected zone delete must leave the zone owned by the project.");
+
+            Throws<InvalidOperationException>(() => ProjectZoneService.Assign(project, z2.Id, Array.Empty<ProjectElement>()));
+            if (project.ActiveZoneId != z1.Id) throw new Exception("Rejected zone operations must not change the active zone.");
         }
 
         private static void RejectsDuplicateNames()

@@ -32,8 +32,13 @@ namespace QS3D.Core.Domain
             var normalizedName = Required(name, nameof(name), MaxNameLength);
             EnsureUniqueName(project, normalizedName, zone.Id);
             if (string.Equals(zone.Name, normalizedName, StringComparison.Ordinal)) return zone;
+
+            var referencedElements = ResolveProjectElements(project)
+                .Where(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
             zone.Name = normalizedName;
-            foreach (var element in project.Elements.Where(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)))
+            foreach (var element in referencedElements)
                 element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             project.Touch();
             return zone;
@@ -54,14 +59,8 @@ namespace QS3D.Core.Domain
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var zone = FindRequired(project, zoneId);
 
-            var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var projectElement in project.Elements)
-            {
-                if (projectElement == null) continue;
-                if (projectElements.ContainsKey(projectElement.Id))
-                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElement.Id);
-                projectElements[projectElement.Id] = projectElement;
-            }
+            var projectElements = ResolveProjectElements(project)
+                .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
@@ -90,7 +89,8 @@ namespace QS3D.Core.Domain
             var zone = FindRequired(project, zoneId);
             if (string.Equals(project.ActiveZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active zone. Activate another zone first.");
-            var references = project.Elements.Count(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase));
+            var references = ResolveProjectElements(project)
+                .Count(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase));
             if (references > 0)
                 throw new InvalidOperationException("Zone '" + zone.Name + "' is referenced by " + references + " semantic element(s). Reassign them before deletion.");
             var removed = project.Zones.Remove(zone);
@@ -102,13 +102,32 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var zone = FindRequired(project, zoneId);
-            return project.Elements.Count(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase));
+            return ResolveProjectElements(project)
+                .Count(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase));
         }
 
         private static ZoneDefinition FindRequired(ProjectState project, string id)
         {
             var normalized = Required(id, nameof(id), 64);
             return project.FindZone(normalized) ?? throw new InvalidOperationException("Zone not found: " + normalized);
+        }
+
+        private static IReadOnlyList<ProjectElement> ResolveProjectElements(ProjectState project)
+        {
+            var resolved = new List<ProjectElement>(project.Elements.Count);
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project element collection contains a null entry.");
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("Project element collection contains an element with a blank semantic id.");
+                if (!seenIds.Add(elementId))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
+                resolved.Add(element);
+            }
+            return resolved;
         }
 
         private static void EnsureUniqueName(ProjectState project, string name, string exceptId)

@@ -29,25 +29,25 @@ namespace QS3D.Core.Diagnostics
             var issues = new List<ModelHealthIssue>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
 
-            Add(issues, seen, new ModelHealthService().Inspect(project, liveSourceHandles, liveGeneratedSolidHandles));
-            Add(issues, seen, new RoomFinishHealthService().Inspect(project));
-            Add(issues, seen, new DependencyHealthService().Inspect(project));
-            Add(issues, seen, new LevelReferenceHealthService().Inspect(project));
-            Add(issues, seen, new GridNamingHealthService().Inspect(project));
-            Add(issues, seen, new GeneratedGridAnnotationHealthService().Inspect(project));
-            Add(issues, seen, new GeneratedSemanticTagHealthService().Inspect(project));
-            Add(issues, seen, new GeneratedHandleOwnershipHealthService().Inspect(project));
-            Add(issues, seen, new GeneratedRebarOwnershipHealthService().Inspect(project));
-            Add(issues, seen, new GeneratedGeometryStaleHealthService().Inspect(project));
-            Add(issues, seen, new GeneratedRebarModeHealthService().Inspect(project));
-            Add(issues, seen, new RebarFabricationQualificationHealthService().Inspect(project));
-            Add(issues, seen, new GeneratedRebarHealthService().InspectAll(project, liveGeneratedSolidHandles, liveGeneratedSolidHandles));
-            Add(issues, seen, new GeneratedTieRebarHealthService().Inspect(project, liveGeneratedSolidHandles));
-            Add(issues, seen, new GeneratedBeamStirrupHealthService().Inspect(project, liveGeneratedSolidHandles));
-            Add(issues, seen, new GeneratedSlabMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
-            Add(issues, seen, new GeneratedWallMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
-            Add(issues, seen, new GeneratedFoundationMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
-            Add(issues, seen, new GeneratedCurtainFrameHealthService().Inspect(project, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "ModelHealthService", () => new ModelHealthService().Inspect(project, liveSourceHandles, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "RoomFinishHealthService", () => new RoomFinishHealthService().Inspect(project));
+            AddSafely(issues, seen, "DependencyHealthService", () => new DependencyHealthService().Inspect(project));
+            AddSafely(issues, seen, "LevelReferenceHealthService", () => new LevelReferenceHealthService().Inspect(project));
+            AddSafely(issues, seen, "GridNamingHealthService", () => new GridNamingHealthService().Inspect(project));
+            AddSafely(issues, seen, "GeneratedGridAnnotationHealthService", () => new GeneratedGridAnnotationHealthService().Inspect(project));
+            AddSafely(issues, seen, "GeneratedSemanticTagHealthService", () => new GeneratedSemanticTagHealthService().Inspect(project));
+            AddSafely(issues, seen, "GeneratedHandleOwnershipHealthService", () => new GeneratedHandleOwnershipHealthService().Inspect(project));
+            AddSafely(issues, seen, "GeneratedRebarOwnershipHealthService", () => new GeneratedRebarOwnershipHealthService().Inspect(project));
+            AddSafely(issues, seen, "GeneratedGeometryStaleHealthService", () => new GeneratedGeometryStaleHealthService().Inspect(project));
+            AddSafely(issues, seen, "GeneratedRebarModeHealthService", () => new GeneratedRebarModeHealthService().Inspect(project));
+            AddSafely(issues, seen, "RebarFabricationQualificationHealthService", () => new RebarFabricationQualificationHealthService().Inspect(project));
+            AddSafely(issues, seen, "GeneratedRebarHealthService", () => new GeneratedRebarHealthService().InspectAll(project, liveGeneratedSolidHandles, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedTieRebarHealthService", () => new GeneratedTieRebarHealthService().Inspect(project, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedBeamStirrupHealthService", () => new GeneratedBeamStirrupHealthService().Inspect(project, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedSlabMeshHealthService", () => new GeneratedSlabMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedWallMeshHealthService", () => new GeneratedWallMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedFoundationMeshHealthService", () => new GeneratedFoundationMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedCurtainFrameHealthService", () => new GeneratedCurtainFrameHealthService().Inspect(project, liveGeneratedSolidHandles));
 
             return issues.AsReadOnly();
         }
@@ -61,6 +61,38 @@ namespace QS3D.Core.Diagnostics
             foreach (var token in GeneratedOutputCodeTokens)
                 if (code.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0) return true;
             return false;
+        }
+
+        private static void AddSafely(
+            ICollection<ModelHealthIssue> target,
+            ISet<string> seen,
+            string providerName,
+            Func<IEnumerable<ModelHealthIssue>> provider)
+        {
+            try
+            {
+                Add(target, seen, provider());
+            }
+            catch (Exception ex) when (IsDiagnosticDataFailure(ex))
+            {
+                Add(target, seen, new[]
+                {
+                    new ModelHealthIssue(
+                        "HEALTH_PROVIDER_FAILED",
+                        HealthSeverity.Error,
+                        providerName + " không thể hoàn tất chẩn đoán do project state không hợp lệ: " + ex.Message)
+                });
+            }
+        }
+
+        private static bool IsDiagnosticDataFailure(Exception exception)
+        {
+            return exception is InvalidOperationException ||
+                   exception is ArgumentException ||
+                   exception is FormatException ||
+                   exception is OverflowException ||
+                   exception is KeyNotFoundException ||
+                   exception is NullReferenceException;
         }
 
         private static void Add(
