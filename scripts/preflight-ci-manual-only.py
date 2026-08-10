@@ -7,6 +7,31 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 errors = []
 
+
+def collect_job_blocks(lines):
+    jobs_index = next((i for i, line in enumerate(lines) if re.match(r"^jobs\s*:\s*(?:#.*)?$", line)), None)
+    if jobs_index is None:
+        return []
+    blocks = []
+    current_name = None
+    current_lines = []
+    for line in lines[jobs_index + 1:]:
+        if line.strip() and not line.startswith((" ", "\t", "#")):
+            break
+        match = re.match(r"^\s{2}([A-Za-z0-9_-]+)\s*:\s*(?:#.*)?$", line)
+        if match:
+            if current_name is not None:
+                blocks.append((current_name, current_lines))
+            current_name = match.group(1)
+            current_lines = []
+            continue
+        if current_name is not None:
+            current_lines.append(line)
+    if current_name is not None:
+        blocks.append((current_name, current_lines))
+    return blocks
+
+
 if not WORKFLOWS.is_dir():
     errors.append("missing .github/workflows directory")
 else:
@@ -54,13 +79,25 @@ else:
             if re.search(rf"(?m)^\s{{2}}{re.escape(trigger)}\s*:", trigger_block):
                 errors.append(f"{path.name}: forbidden trigger in on: block: {trigger}")
 
-        if "github.event_name == 'workflow_dispatch'" not in text:
-            errors.append(f"{path.name}: every executable workflow must hard-guard jobs to workflow_dispatch event")
+        job_blocks = collect_job_blocks(lines)
+        if not job_blocks:
+            errors.append(f"{path.name}: jobs: must contain at least one executable job")
+        for job_name, job_lines in job_blocks:
+            job_block = "\n".join(job_lines)
+            manual_guard = re.search(
+                r"(?m)^\s{4}if\s*:\s*.*github\.event_name\s*==\s*'workflow_dispatch'",
+                job_block,
+            )
+            if not manual_guard:
+                errors.append(f"{path.name}/{job_name}: job must hard-guard github.event_name == 'workflow_dispatch'")
 
         if path.name == "release-v25.yml":
             for token in ("confirm_release", "inputs.confirm_release == 'RELEASE'", "contents: write"):
                 if token not in text:
                     errors.append("release-v25.yml missing explicit manual publish guard: " + token)
+            release_job = next((block for name, block in job_blocks if name == "release"), None)
+            if release_job is None or "inputs.confirm_release == 'RELEASE'" not in "\n".join(release_job):
+                errors.append("release-v25.yml/release: publish job must require inputs.confirm_release == 'RELEASE'")
 
 policy = (ROOT / "CI_POLICY.md").read_text(encoding="utf-8") if (ROOT / "CI_POLICY.md").is_file() else ""
 for token in ("workflow_dispatch", "manual-only", "explicitly requests", "MANUAL-BUILD-RELEASE"):
@@ -78,4 +115,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: every GitHub Actions workflow is workflow_dispatch-only, job-guarded to the manual event, and release publication requires explicit RELEASE confirmation.")
+print("PASS: every GitHub Actions workflow is workflow_dispatch-only, every job is independently hard-guarded to the manual event, and release publication requires explicit RELEASE confirmation.")

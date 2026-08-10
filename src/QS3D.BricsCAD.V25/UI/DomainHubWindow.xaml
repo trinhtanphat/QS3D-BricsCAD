@@ -29,9 +29,12 @@
                     <Button Content="Áp snap đã xem trước" Tag="QS3DWALLSNAPAPPLY" Click="OnCommandClick"/>
                     <Button Content="Lỗ Mở Vách" Tag="QS3DOPENING" Click="OnCommandClick"/>
                     <Button Content="Cửa Đi" Tag="QS3DDOOR" Click="OnCommandClick"/>
+                    <Button Content="Bảng Cửa / Lỗ mở" Tag="QS3DDOORSCHEDULE" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Xuất Cửa / Lỗ mở XLSX" Tag="QS3DDOORXLSX" Click="OnCommandClick"/>
                     <Button Content="Tự tìm host cho Cửa/Lỗ" Tag="QS3DAUTOLINKHOSTS" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
                     <Button Content="Liên kết Cửa/Lỗ với host thủ công" Tag="QS3DLINKHOST" Click="OnCommandClick"/>
                     <Button Content="Khoét Cửa/Lỗ vào solid host" Tag="QS3DCUTOPENINGS" Click="OnCommandClick"/>
+                    <Button Content="Khoét Cửa/Lỗ trên host cong" Tag="QS3DCUTOPENINGSCURVED" Click="OnCommandClick"/>
                     <Button Content="Tạo / cập nhật HT_Phòng" Tag="QS3DFINISH" Click="OnCommandClick"/>
 
                     <TextBlock Text="MÔ HÌNH / KẾT CẤU" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
@@ -45,7 +48,7 @@
                     <Button Content="Lan can" Tag="QS3DRAILING" Click="OnCommandClick"/>
                     <Button Content="Đào đất" Tag="QS3DEARTHWORK" Click="OnCommandClick"/>
                     <Button Content="Tạo / cập nhật 3D từ đối tượng chọn" Tag="QS3DBUILD3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
-                    <TextBlock Text="Tường KT hỗ trợ LINE hoặc open POLYLINE tim tường (kể cả bulge). Vách Kính LINE có backing host + frame overlay chuyên dụng; open/curved POLYLINE hiện chỉ dựng host. Wall Snap chỉ apply LINE/open straight POLYLINE đã capture và bắt buộc Preview trước. Kết cấu dùng LINE/closed POLYLINE theo loại. Phòng Auto nhận LINE/POLYLINE/ARC/SPLINE plan-view." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+                    <TextBlock Text="Tường KT hỗ trợ LINE hoặc open POLYLINE tim tường (kể cả bulge). Vách Kính LINE có backing host + frame overlay opening-aware; open/curved POLYLINE hiện chỉ dựng host. Wall Snap chỉ apply LINE/open straight POLYLINE đã capture và bắt buộc Preview trước. Kết cấu dùng LINE/closed POLYLINE theo loại. Phòng Auto nhận LINE/POLYLINE/ARC/SPLINE plan-view." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
 
                     <TextBlock Text="DỰ ÁN &amp; TEMPLATE" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
                     <Button Content="Lưu project QS3D" Tag="QS3DSAVE" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
@@ -59,6 +62,8 @@
                     <Button Content="Tự áp dụng kết quả chắc chắn" Tag="QS3DRECOGNIZEAUTO" Click="OnCommandClick"/>
 
                     <TextBlock Text="CỐT THÉP / KHỐI LƯỢNG" Style="{StaticResource SectionLabel}" Margin="0,14,0,4"/>
+                    <Button Content="Bảng Cửa / Lỗ mở" Tag="QS3DDOORSCHEDULE" Click="OnCommandClick"/>
+                    <Button Content="Xuất Cửa / Lỗ mở XLSX" Tag="QS3DDOORXLSX" Click="OnCommandClick"/>
                     <Button Content="Tạo / cập nhật cốt thép cột 3D" Tag="QS3DREBAR3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
                     <Button Content="Tạo đai cột 3D" Tag="QS3DREBARTIES3D" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra đai cột 3D" Tag="QS3DREBARTIEHEALTH" Click="OnCommandClick"/>
@@ -88,7 +93,8 @@
                     <Button Content="So sánh với mốc" Tag="QS3DREVDIFF" Click="OnCommandClick"/>
 
                     <TextBlock Text="KIỂM TRA" Style="{StaticResource SectionLabel}" Margin="0,14,0,4"/>
-                    <Button Content="Kiểm tra sức khỏe toàn diện" Tag="QS3DHEALTHALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Release Readiness" Tag="QS3DRELEASECHECK" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Kiểm tra sức khỏe toàn diện" Tag="QS3DHEALTHALL" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra sức khỏe cơ bản" Tag="QS3DHEALTH" Click="OnCommandClick"/>
                     <Button Content="Kiểm tra runtime V25" Tag="QS3DRUNTIMEPROBE" Click="OnCommandClick"/>
                 </StackPanel>
