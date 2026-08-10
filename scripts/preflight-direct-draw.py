@@ -30,14 +30,23 @@ required = {
         "PromptFiniteMeters",
         "FamilyNumber",
         "FamilyFiniteNumber",
-        'element.Properties["ThicknessM"]',
-        'element.Properties["WidthM"]',
-        'element.Properties["DepthM"]',
-        'element.Properties["HeightM"]',
-        'element.Properties["BottomOffsetM"]',
+        'element.SetProperty("ThicknessM"',
+        'element.SetProperty("WidthM"',
+        'element.SetProperty("DepthM"',
+        'element.SetProperty("HeightM"',
+        'element.SetProperty("BottomOffsetM"',
         "AllowNone = points.Count >= minimumPoints",
         "PlanarityToleranceM = 0.005d",
         "CadGeometryGuard.ToMeters(document, deltaDrawingUnits",
+        "CadGeometryGuard.Finite(points[index].X",
+        "CadGeometryGuard.Finite(points[index].Y",
+        "CadGeometryGuard.Multiply(width, 0.5d",
+        "CadGeometryGuard.Multiply(depth, 0.5d",
+        "CadGeometryGuard.Finite(center.X",
+        "CadGeometryGuard.Finite(center.Y",
+        "CadGeometryGuard.Finite(center.Z",
+        "CadGeometryGuard.Subtract(centerX, halfWidth",
+        "CadGeometryGuard.Add(centerX, halfWidth",
         "RequireModelSpace(document)",
         "document.Database.CurrentSpaceId.Equals(modelSpaceId)",
         "CadHandleService.GetLiveHandles(document, normalized)",
@@ -187,10 +196,21 @@ if source.is_file():
         errors.append("Every P0 Direct Draw command must fail closed outside Model Space")
     if "Math.Abs(points[index].Z - z) > 1e-6d" in text:
         errors.append("Direct Draw planarity must be unit-aware rather than using raw drawing-unit tolerance")
-    if text.count('element.Properties["BottomOffsetM"]') < 4:
-        errors.append("All P0 Direct Draw commands must persist the prompted base elevation/offset")
+    if text.count('element.SetProperty("BottomOffsetM"') < 4:
+        errors.append("All P0 Direct Draw commands must persist prompted base elevation through ProjectElement.SetProperty")
+    if text.count("element.SetProperty(") < 12:
+        errors.append("P0 Direct Draw parameter writes must flow through canonical ProjectElement.SetProperty dirty/stale semantics")
+    for key in ("ThicknessM", "WidthM", "DepthM", "HeightM", "BottomOffsetM"):
+        if 'element.Properties["' + key + '"]' in text:
+            errors.append("Direct Draw must not bypass ProjectElement.SetProperty for geometry parameter " + key)
     if text.count("PromptPositiveMeters(document.Editor") < 7:
         errors.append("P0 Direct Draw must prompt key positive dimensions instead of silently using all Family defaults")
+    if "CadGeometryGuard.Multiply(width, 0.5d" not in text or "CadGeometryGuard.Multiply(depth, 0.5d" not in text:
+        errors.append("Direct Draw Column footprint must compute half-dimensions with finite-safe CAD arithmetic")
+    if "CadGeometryGuard.Finite(center.X" not in text or "CadGeometryGuard.Finite(center.Y" not in text or "CadGeometryGuard.Finite(center.Z" not in text:
+        errors.append("Direct Draw Column footprint must finite-check insertion coordinates before offset arithmetic")
+    if "CadGeometryGuard.Finite(points[index].X" not in text or "CadGeometryGuard.Finite(points[index].Y" not in text:
+        errors.append("Direct Draw POLYLINE creation must finite-check vertex coordinates before persistence")
     erase_body = text.split("private static void EraseHandles", 1)[-1].split("private static Document? Active", 1)[0]
     if "catch { }" in erase_body or "catch{}" in erase_body.replace(" ", ""):
         errors.append("Direct Draw CAD rollback must not swallow per-entity erase failures")
@@ -229,4 +249,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw prompts BLT-style P0 dimensions, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and QS3DBUILD3D/Workspace resolve semantic/generated selections back to complete live source batches before rebuilding.")
+print("PASS: Direct Draw prompts BLT-style P0 dimensions through canonical SetProperty dirty/stale semantics, finite-checks persisted authoring coordinates, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and rebuild paths resolve semantic/generated selection to complete live source batches.")
