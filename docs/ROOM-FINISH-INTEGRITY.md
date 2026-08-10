@@ -22,7 +22,7 @@ Canonical id mới dùng `RoomFinishIdentityService.CanonicalId(roomId, category
 4. reject canonical finish đang trỏ sang Room khác;
 5. reject nhiều finish cùng Room + Category thay vì tạo/giữ duplicate.
 
-`SemanticCaptureService.GenerateRoomFinishes` và `SyncExistingRoomFinishes` không tự viết lại identity rule; cả hai gọi Core service này.
+`SemanticCaptureService.GenerateRoomFinishes` và `SyncExistingRoomFinishes` không tự viết lại identity rule; cả hai dùng Core identity/synchronization services.
 
 ## 2. Room provenance
 
@@ -39,7 +39,21 @@ Nhiều Room id khác nhau trên cùng finish là conflict và fail closed.
 
 Property-only legacy finish vẫn truy vết CAD được: `SourceHandleResolver` đi từ finish -> resolved Room -> Room boundary/source/generated handle graph.
 
-## 3. Quantity exclusion
+## 3. Room -> finish synchronization
+
+`RoomFinishSynchronizationService` là nguồn sự thật cho lifecycle update/re-activate của HT_Phòng.
+
+- Chỉ nhận đúng `ProjectElement` Room/finish thuộc chính `ProjectState`; same-id object từ project khác bị từ chối.
+- Stale AutoRoom không được dùng để refresh finish.
+- Existing legacy finish được repair `RoomSourceId` canonical và bổ sung `DependsOn(room.Id)` nếu thiếu.
+- `FloorId`, `ZoneId` và `DrawingFingerprint` của finish được đồng bộ theo Room.
+- Các source metric đồng bộ gồm `AreaM2`, `PerimeterM`, `HeightM`, `OpeningAreaM2`, `DoorWidthM`.
+- Metric được chuẩn hóa thành invariant finite non-negative number; dữ liệu invalid fail closed.
+- Quan trọng: nếu Room không còn metric đó ở cả Properties lẫn Quantities, key tương ứng **bị xóa khỏi finish** thay vì giữ giá trị cũ. Điều này ngăn `WallFinish` tiếp tục trừ `OpeningAreaM2` cũ hoặc `Skirting` tiếp tục trừ `DoorWidthM` cũ sau topology/door update.
+- `GenerateRoomFinishes` và `SyncExistingRoomFinishes` đều đi qua service chung rồi regenerate finish.
+- `QS3DROOMAUTO` re-use/re-activate đúng Room sẽ sync finish hiện hữu trước project regeneration. Nếu topology split/merge sinh Room mới và Room cũ thành stale, QS3D không tự đoán chuyển finish sang Room mới; finish cũ tiếp tục bị exclusion/Health bắt cho tới khi người dùng xác nhận/generate theo Room mới.
+
+## 4. Quantity exclusion
 
 Room-linked finish bị loại khỏi quantity nếu:
 
@@ -50,7 +64,7 @@ Room-linked finish bị loại khỏi quantity nếu:
 
 Finish thật sự chưa có Room provenance vẫn được giữ trong HT_Phòng schedule dưới nhãn `(chưa liên kết phòng)`, nhưng Health tạo warning để repair trước release.
 
-## 4. Duplicate fail-closed
+## 5. Duplicate fail-closed
 
 `RoomFinishIdentityService.ValidateProject(project)` chạy trước:
 
@@ -60,7 +74,7 @@ Finish thật sự chưa có Room provenance vẫn được giữ trong HT_Phòn
 
 Vì vậy canonical + legacy duplicate hoặc hai legacy finish cùng Room + Category không được cộng đôi. BQ, Material Usage và HT_Phòng Schedule đều từ chối build cho đến khi duplicate được repair.
 
-## 5. Health / repair diagnostics
+## 6. Health / repair diagnostics
 
 `RoomFinishHealthService` surfacing các code:
 
@@ -74,7 +88,7 @@ Vì vậy canonical + legacy duplicate hoặc hai legacy finish cùng Room + Cat
 
 Command `QS3DROOMFINISHHEALTH` mở review modeless và Locate qua dependency-aware source handle resolution. `QS3DHEALTHALL` cũng aggregate cùng diagnostics.
 
-## 6. Release integrity
+## 7. Release integrity
 
 `BomReleaseGuardService` nhận Room Finish Health trước khi dựng release set.
 
@@ -85,7 +99,7 @@ Command `QS3DROOMFINISHHEALTH` mở review modeless và Locate qua dependency-aw
 
 Runtime/private-DWG Gate C/D vẫn là bước riêng; static/Core integrity không thay cho compile/NETLOAD/Boolean/Undo/DPI validation trên BricsCAD V25 thật.
 
-## 7. Validation guards
+## 8. Validation guards
 
 Các source guards liên quan:
 
@@ -101,6 +115,7 @@ Core smoke liên quan:
 
 - `AutoRoomLifecycleSmoke`
 - `RoomFinishIdentitySmoke`
+- `RoomFinishSynchronizationSmoke`
 - `RoomFinishHealthSmoke`
 - `RoomFinishScheduleSmoke`
 - `MaterialUsageScheduleSmoke`
