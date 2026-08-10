@@ -83,7 +83,7 @@ namespace QS3D.Core.Reporting
                 row.TopAreaM2 = QuantityReportMath.Add(row.TopAreaM2,
                     element.Category == ElementCategory.CeilingFinish ? QFirst(element, "TopAreaM2", "AreaM2") : Q(element, "TopAreaM2"),
                     element.Id + "/TopAreaM2");
-                row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, Q(element, "OtherAreaM2"), element.Id + "/OtherAreaM2");
+                row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, QFirst(element, "OtherAreaM2", "MeasuredSurfaceAreaM2"), element.Id + "/OtherAreaM2");
             }
 
             return order.Select(x => rows[x]).ToList();

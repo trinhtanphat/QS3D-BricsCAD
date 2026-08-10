@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             LinkedOpeningReport();
             DetailRowsPreserveOneElementProvenance();
+            MeasuredSolidMassOverridesDefaultPrismVolume();
             PreferredBqQuantityDoesNotEvaluateUnusedFallbacks();
             WallFinishPrefersRegeneratedNetArea();
         }
@@ -58,6 +59,28 @@ namespace QS3D.Core.SmokeTests
             catch (System.Collections.Generic.KeyNotFoundException) { }
             try { ProjectQuantityReportBuilder.Group(project, new[] { " " }); throw new Exception("Blank ED2 element id must fail closed."); }
             catch (ArgumentException) { }
+        }
+
+        private static void MeasuredSolidMassOverridesDefaultPrismVolume()
+        {
+            var project = new ProjectState("solid-mass", "Measured Solid");
+            project.Floors.Add(new FloorDefinition("f", "Tầng", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            var family = new ProjectFamily("slab", "Sàn", ElementCategory.Slab);
+            project.Families.Add(family);
+            var slab = new ProjectElement("S1", ElementCategory.Slab, family.Id, "f", "z");
+            slab.Properties["AreaM2"] = "20";
+            slab.Properties["ThicknessM"] = "0.12";
+            slab.Properties[MeasuredSolidQuantityPolicy.VolumeProperty] = "1.75";
+            slab.Properties[MeasuredSolidQuantityPolicy.SurfaceAreaProperty] = "55";
+            project.Elements.Add(slab);
+
+            var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+            if (regenerated != 1 || Math.Abs(slab.Quantities["GrossVolumeM3"] - 1.75d) > 1e-12 || Math.Abs(slab.Quantities["NetVolumeM3"] - 1.75d) > 1e-12)
+                throw new Exception("Measured Solid3d volume must override the default Area × Thickness prism estimate.");
+            var report = ProjectQuantityReportBuilder.Group(project).Single();
+            if (Math.Abs(report.GrossConcreteM3 - 1.75d) > 1e-12 || Math.Abs(report.NetConcreteM3 - 1.75d) > 1e-12 || Math.Abs(report.OtherAreaM2 - 55d) > 1e-12)
+                throw new Exception("Measured Solid3d volume/surface area did not reach the BQ report.");
         }
 
         private static void LinkedOpeningReport()

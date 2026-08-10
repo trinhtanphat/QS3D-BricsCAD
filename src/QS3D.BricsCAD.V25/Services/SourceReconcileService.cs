@@ -255,8 +255,17 @@ namespace QS3D.BricsCAD.V25.Services
                 RemoveSourceMetric(element, "PerimeterM");
             }
 
+            if (snapshot.SurfaceAreaDrawingUnitsSquared.HasValue)
+                element.SetProperty(MeasuredSolidQuantityPolicy.SurfaceAreaProperty, units.AreaToSquareMeters(RequireFiniteNonNegative(snapshot.SurfaceAreaDrawingUnitsSquared.Value, element.Id + "/SurfaceArea")).ToString("R", CultureInfo.InvariantCulture));
+            else element.Properties.Remove(MeasuredSolidQuantityPolicy.SurfaceAreaProperty);
+
             if (snapshot.VolumeDrawingUnitsCubed.HasValue)
-                element.SetProperty("VolumeM3", units.VolumeToCubicMeters(RequireFiniteNonNegative(snapshot.VolumeDrawingUnitsCubed.Value, element.Id + "/Volume")).ToString("R", CultureInfo.InvariantCulture));
+                element.SetProperty(MeasuredSolidQuantityPolicy.VolumeProperty, units.VolumeToCubicMeters(RequireFiniteNonNegative(snapshot.VolumeDrawingUnitsCubed.Value, element.Id + "/Volume")).ToString("R", CultureInfo.InvariantCulture));
+            else element.Properties.Remove(MeasuredSolidQuantityPolicy.VolumeProperty);
+            element.Properties.Remove("VolumeM3");
+            if (snapshot.SurfaceAreaDrawingUnitsSquared.HasValue || snapshot.VolumeDrawingUnitsCubed.HasValue)
+                element.SetProperty("CAD.SolidMetricSource", "Solid3d.MassProperties");
+            else element.Properties.Remove("CAD.SolidMetricSource");
 
             foreach (var pair in snapshot.Metadata)
             {

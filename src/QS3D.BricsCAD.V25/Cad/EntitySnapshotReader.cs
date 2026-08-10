@@ -100,7 +100,7 @@ namespace QS3D.BricsCAD.V25.Cad
             }
             if (entity is Solid3d solid)
             {
-                try { var area = Math.Abs(solid.Area); if (!double.IsNaN(area) && !double.IsInfinity(area)) snapshot.AreaDrawingUnitsSquared = area; } catch { }
+                try { var area = Math.Abs(solid.Area); if (!double.IsNaN(area) && !double.IsInfinity(area)) snapshot.SurfaceAreaDrawingUnitsSquared = area; } catch { }
                 try { var volume = Math.Abs(solid.MassProperties.Volume); if (!double.IsNaN(volume) && !double.IsInfinity(volume)) snapshot.VolumeDrawingUnitsCubed = volume; } catch { }
             }
         }

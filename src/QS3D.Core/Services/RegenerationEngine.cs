@@ -153,6 +153,7 @@ namespace QS3D.Core.Services
                         selected.Regenerate(project, element);
                         handled = true;
                     }
+                    if (MeasuredSolidQuantityPolicy.Apply(element)) handled = true;
                     if (_ruleEngine.ApplyMatching(project, element) > 0) handled = true;
                     if (!handled) continue;
 

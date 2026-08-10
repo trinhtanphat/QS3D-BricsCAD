@@ -133,7 +133,7 @@ Native source conventions include LINE for supported linear structure and closed
 
 - `QS3DRECOGNIZE` — deterministic recognition + review.
 - `QS3DRECOGNIZEAUTO` — auto-apply only sufficiently confident recognition.
-- `QS3DB4D` — bounded Current Space scan. It reads supported CAD metrics and excludes every generated owner-slot handle through the shared generated ownership policy, preventing QS3D output from being re-ingested as source CAD when generated families evolve.
+- `QS3DB4D` — bounded Current Space scan. It rejects layer/text matches whose CAD entity type is incompatible, excludes every generated owner-slot handle through the shared ownership policy, and keeps planar area separate from `Solid3d` total surface area. For recognized material solids, native mass-properties volume is authoritative over default prism estimates.
 - `QS3DBQ` — quantity summary/filter/group/Locate/XLSX.
 - `QS3DED2` — choose `Selection`, active `Floor`, active `Zone` or `All`; regenerate that semantic scope, then export `CHI_TIET` (one element per row) and Zone-aware `TONG_HOP` in one workbook.
 - `QS3DEXCELLOCATE` — locate a `CHI_TIET`/QS3D workbook row only when Element ID, CAD Handle and DWG fingerprint provenance agree with the active project and every Handle still resolves. Legacy BLT `$decimal` Handle rows are the only no-fingerprint path and require explicit `YES`; failures preserve the current CAD selection.

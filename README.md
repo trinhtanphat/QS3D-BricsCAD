@@ -98,7 +98,7 @@ Beam stirrups can use explicitly configured bend-radius/hook-tail parameters. Fa
 
 - BQ grouping/filtering/Locate and one-sheet XLSX review. `QS3DED2` applies `Selection/Floor/Zone/All` before aggregation, writes one-element-per-row `CHI_TIET` plus Zone-aware `TONG_HOP`, and `QS3DEXCELLOCATE` validates Element ID ↔ Handle ↔ DWG fingerprint before changing CAD selection.
 - Quick Takeoff with drawing-unit conversion.
-- `QS3DB4D` bounded Current Space scan with high-confidence recognition/review.
+- `QS3DB4D` bounded Current Space scan with high-confidence recognition/review. Entity type is a mandatory compatibility gate (for example DBText on `A-WALL` cannot become a wall), and `Solid3d.MassProperties` volume/total-surface metrics remain distinct from planar footprint area.
 - B4D excludes generated output via canonical Core `CollectOwnerHandles(project)`, so owner classification, parsing and dedupe remain one source of truth as generated families evolve.
 - BBS review/XLSX/UTF-8 CSV.
 - Document-bound Schedule Hub for BQ, Room Finish, Material, Curtain, Door/Opening and rebar schedule/export workflows.
