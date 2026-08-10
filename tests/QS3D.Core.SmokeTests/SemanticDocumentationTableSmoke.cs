@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
 
@@ -13,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             DuplicateElementIdsFailClosed();
             DuplicateHeadersFailClosed();
             GeneratedOwnershipPropertiesRemainBlocked();
+            OutputSnapshotsAreDefensivelyImmutable();
         }
 
         private static void ExplicitOrderAndTemplatesArePreserved()
@@ -94,6 +96,26 @@ namespace QS3D.Core.SmokeTests
                 "Schedule",
                 new[] { element.Id },
                 new[] { new SemanticDocumentationColumn("Native", "{P:GeneratedSolidHandle}") }));
+        }
+
+        private static void OutputSnapshotsAreDefensivelyImmutable()
+        {
+            var sourceCells = new List<string> { "A" };
+            var row = new SemanticDocumentationRow("E-1", sourceCells);
+            sourceCells[0] = "MUTATED";
+            Equal("A", row.Cells[0]);
+            Throws<NotSupportedException>(() => ((IList<string>)row.Cells)[0] = "MUTATED");
+
+            var sourceHeaders = new List<string> { "Header" };
+            var sourceRows = new List<SemanticDocumentationRow> { row };
+            var table = new SemanticDocumentationTable("Schedule", sourceHeaders, sourceRows);
+            sourceHeaders[0] = "MUTATED";
+            sourceRows.Clear();
+            Equal("Header", table.Headers[0]);
+            Equal(1, table.Rows.Count);
+            Equal("E-1", table.Rows[0].ElementId);
+            Throws<NotSupportedException>(() => ((IList<string>)table.Headers)[0] = "MUTATED");
+            Throws<NotSupportedException>(() => ((IList<SemanticDocumentationRow>)table.Rows).Clear());
         }
 
         private static ProjectElement Element(ProjectState project, string id, ElementCategory category, string mark, double length)
