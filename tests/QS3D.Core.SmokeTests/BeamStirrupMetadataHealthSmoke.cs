@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             AdvancedSnapshotIsAccepted();
             LengthMismatchIsReported();
             HookModeMismatchIsReported();
+            MissingAdvancedModeIsReported();
         }
 
         private static void LegacySnapshotRemainsCompatible()
@@ -58,6 +59,16 @@ namespace QS3D.Core.SmokeTests
             SeedAdvanced(element, "AA", 1, 1d, .02d, 0d, 0d, "Beam.Line.RectangularHookedPath");
             project.Elements.Add(element);
             True(new GeneratedBeamStirrupHealthService().Inspect(project).Any(x => x.Code == "BEAM_STIRRUP_GENERATED_MODE_MISMATCH"));
+        }
+
+        private static void MissingAdvancedModeIsReported()
+        {
+            var project = Project("MODE");
+            var element = Beam("B5");
+            SeedAdvanced(element, "AA", 1, 1d, .02d, 0d, 0d, "Beam.Line.RectangularRoundedLoop");
+            element.Properties.Remove("GeneratedBeamStirrupMode");
+            project.Elements.Add(element);
+            True(new GeneratedBeamStirrupHealthService().Inspect(project).Any(x => x.Code == "BEAM_STIRRUP_GENERATED_MODE_INVALID"));
         }
 
         private static void SeedAdvanced(ProjectElement element, string handles, int count, double centerline, double bend, double hook, double angle, string mode)
