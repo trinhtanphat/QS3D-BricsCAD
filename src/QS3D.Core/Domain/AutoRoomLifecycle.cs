@@ -116,6 +116,7 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (activeRoomIds == null) throw new ArgumentNullException(nameof(activeRoomIds));
             if (selectedSourceHandles == null) throw new ArgumentNullException(nameof(selectedSourceHandles));
+            if (utcNow.Kind != DateTimeKind.Utc) throw new ArgumentException("utcNow must have DateTimeKind.Utc.", nameof(utcNow));
             var selected = new HashSet<string>(selectedSourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
             var rooms = ResolveProjectElements(project)
                 .Where(IsAutoRoom)
@@ -130,7 +131,7 @@ namespace QS3D.Core.Domain
                 var handles = SourceSignature(room).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
                 if (handles.Length == 0 || !handles.All(selected.Contains)) continue;
                 room.Properties[BoundaryStateKey] = BoundaryStateStale;
-                room.Properties["BoundaryStaleUtc"] = utcNow.ToUniversalTime().ToString("O");
+                room.Properties["BoundaryStaleUtc"] = utcNow.ToString("O");
                 room.Properties["BoundaryStaleReason"] = "TopologyChanged";
                 room.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
                 stale.Add(room);
@@ -153,6 +154,13 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (room == null) throw new ArgumentNullException(nameof(room));
             if (family == null) throw new ArgumentNullException(nameof(family));
+
+            var ownedRoom = project.FindElement(room.Id) ?? throw new InvalidOperationException("Room does not belong to the project: " + room.Id);
+            if (!ReferenceEquals(ownedRoom, room))
+                throw new InvalidOperationException("Room instance does not belong to the project: " + room.Id);
+            var ownedFamily = project.FindFamily(family.Id) ?? throw new InvalidOperationException("Family does not belong to the project: " + family.Id);
+            if (!ReferenceEquals(ownedFamily, family))
+                throw new InvalidOperationException("Family instance does not belong to the project: " + family.Id);
             if (room.Category != ElementCategory.Room || family.Category != ElementCategory.Room)
                 throw new InvalidOperationException("Auto-room family synchronization requires Room category values.");
 
