@@ -80,6 +80,17 @@ namespace QS3D.BricsCAD.V25.UI
             project.Families.Remove(family); if (project.Metadata.TryGetValue("ActiveFamilyId", out var id) && string.Equals(id, family.Id, StringComparison.OrdinalIgnoreCase)) project.Metadata.Remove("ActiveFamilyId"); project.Touch(); RefreshProject(); SetStatus("Đã xóa Family.");
         }
 
+        private void OnCaptureSelectedClick(object sender, RoutedEventArgs e)
+        {
+            var family = FamilyList.SelectedItem as ProjectFamily;
+            var category = _categoryFilter ?? family?.Category;
+            if (!category.HasValue) { SetStatus("Chọn một nhóm mô hình hoặc Family trước khi bóc đối tượng CAD."); return; }
+            if (family != null && family.Category == category.Value) _viewModel.SetActiveFamily(family);
+            var command = CommandFor(category);
+            SetStatus("Bóc từ chọn → " + category.Value);
+            Send(command);
+        }
+
         private void OnView3DClick(object sender, RoutedEventArgs e) { var family = FamilyList.SelectedItem as ProjectFamily; _viewModel.SetActiveFamily(family); SetStatus("Vẽ/Cập nhật 3D: " + (family?.Name ?? "chưa chọn Family")); Send("QS3DBUILD3D"); }
         private void OnViewModel3DClick(object sender, RoutedEventArgs e) => Send("QS3DVIEW3D");
         private void OnOrbitClick(object sender, RoutedEventArgs e) => Send("QS3DORBIT");
@@ -104,7 +115,30 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static string CommandFor(ElementCategory? category)
         {
-            switch (category) { case ElementCategory.ArchitecturalWall: return "QS3DWALL"; case ElementCategory.StructuralWall: return "QS3DSTRUCTWALL"; case ElementCategory.Room: return "QS3DROOM"; case ElementCategory.Door: return "QS3DDOOR"; case ElementCategory.WallOpening: return "QS3DOPENING"; case ElementCategory.Beam: return "QS3DBEAM"; case ElementCategory.Slab: return "QS3DSLAB"; case ElementCategory.Column: return "QS3DCOLUMN"; case ElementCategory.Foundation: return "QS3DFOUNDATION"; case ElementCategory.Stair: return "QS3DSTAIR"; case ElementCategory.Railing: return "QS3DRAILING"; case ElementCategory.Earthwork: return "QS3DEARTHWORK"; default: return "QS3DTAKEOFF"; }
+            switch (category)
+            {
+                case ElementCategory.ArchitecturalWall: return "QS3DWALL";
+                case ElementCategory.GlassWall: return "QS3DGLASSWALL";
+                case ElementCategory.WallPier: return "QS3DWALLPIER";
+                case ElementCategory.StructuralWall: return "QS3DSTRUCTWALL";
+                case ElementCategory.Room: return "QS3DROOM";
+                case ElementCategory.Door: return "QS3DDOOR";
+                case ElementCategory.WallOpening: return "QS3DOPENING";
+                case ElementCategory.Beam: return "QS3DBEAM";
+                case ElementCategory.Slab: return "QS3DSLAB";
+                case ElementCategory.Column: return "QS3DCOLUMN";
+                case ElementCategory.Foundation: return "QS3DFOUNDATION";
+                case ElementCategory.Stair: return "QS3DSTAIR";
+                case ElementCategory.Railing: return "QS3DRAILING";
+                case ElementCategory.Earthwork: return "QS3DEARTHWORK";
+                case ElementCategory.FloorFinish:
+                case ElementCategory.Waterproofing:
+                case ElementCategory.Skirting:
+                case ElementCategory.WallFinish:
+                case ElementCategory.CeilingFinish:
+                    return "QS3DFINISH";
+                default: return "QS3DTAKEOFF";
+            }
         }
         private static void Send(string command) => Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + " ", true, false, false);
     }
