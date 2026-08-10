@@ -13,7 +13,7 @@ Updated for the integrated source baseline on 2026-08-10. These names are **Bric
 - `QS3DLEVELS` — Floor/Level project editor.
 - `QS3DFAMILIES` — Family Manager: create/duplicate/rename/delete/properties/assignment while preserving true instance overrides. The **TẠO MỚI** Ribbon and Full Domain Hub expose it as the canonical Family / Type launcher before Direct Draw.
 - `QS3DMATERIALS` — Material Catalog.
-- `QS3DSAVE`, `QS3DRELOAD`, `QS3DREFRESH`, `QS3DREGEN` — persistence and deterministic regeneration.
+- `QS3DSAVE`, `QS3DRELOAD`, `QS3DREFRESH`, `QS3DREGEN` — persistence and deterministic regeneration. A successful native DWG Save/SaveAs also writes pending semantic changes to the matching `.qsdb`. Closing with pending QS3D changes requires an explicit Save/Discard/Cancel choice; QS3D never silently saves after the user chooses to discard.
 - `QS3DINSPECT` — inspect current/prompted CAD selection and synchronize the Workspace.
 - `QS3DHEALTH` — basic Model Health.
 - `QS3DHEALTHALL` — aggregate semantic/source/generated/live-solid/stale/rebar/curtain health.

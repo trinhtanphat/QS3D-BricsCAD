@@ -143,7 +143,7 @@ if DOC.is_file():
         "QS3DINTERCHANGEVALIDATE",
         "READ-ONLY / NOT IMPORTED",
         "does **not** claim",
-        "ID collision resolution",
+        "KeepTarget",
         "current-DWG source-handle rebinding",
         "preflight-interchange-validation.py",
     ):

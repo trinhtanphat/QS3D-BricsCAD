@@ -193,8 +193,10 @@ namespace QS3D.Core.SmokeTests
                 project.Metadata[string.Empty] = "invalid";
                 Throws<InvalidDataException>(() => store.Save(project, path));
                 Equal(original, File.ReadAllText(path));
-                project.Metadata.Remove(string.Empty); project.Zones.Single().Name = string.Empty;
-                Throws<InvalidDataException>(() => store.Save(project, path));
+                project.Metadata.Remove(string.Empty);
+                var zone = project.Zones.Single(); var originalZoneName = zone.Name;
+                Throws<ArgumentException>(() => zone.Name = string.Empty);
+                Equal(originalZoneName, zone.Name);
                 Equal(original, File.ReadAllText(path));
 
                 var revisionPath = Path.Combine(directory, "baseline.qsrev");
