@@ -22,8 +22,33 @@ namespace QS3D.Core.Domain
                 throw new ArgumentException("Source element must be a Room.", nameof(room));
             EnsureFinishCategory(category);
 
+            var elements = ResolveProjectElements(project);
+            return FindExistingCore(project, elements, room, category);
+        }
+
+        public static void ValidateProject(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var elements = ResolveProjectElements(project);
+            foreach (var finish in elements.Values
+                .Where(x => AutoRoomLifecycle.IsRoomFinishCategory(x.Category))
+                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, finish);
+                if (roomId.Length == 0) continue;
+                if (!elements.TryGetValue(roomId, out var room) || room.Category != ElementCategory.Room) continue;
+                FindExistingCore(project, elements, room, finish.Category);
+            }
+        }
+
+        private static ProjectElement? FindExistingCore(
+            ProjectState project,
+            IReadOnlyDictionary<string, ProjectElement> elements,
+            ProjectElement room,
+            ElementCategory category)
+        {
             var canonicalId = CanonicalId(room.Id, category);
-            var canonical = project.FindElement(canonicalId);
+            elements.TryGetValue(canonicalId, out var canonical);
             if (canonical != null && canonical.Category != category)
                 throw new InvalidOperationException("Room finish id collision with category " + canonical.Category + ": " + canonicalId);
 
@@ -36,7 +61,7 @@ namespace QS3D.Core.Domain
                 matches.Add(canonical);
             }
 
-            foreach (var candidate in project.Elements
+            foreach (var candidate in elements.Values
                 .Where(x => x.Category == category && !string.Equals(x.Id, canonicalId, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
@@ -44,29 +69,25 @@ namespace QS3D.Core.Domain
                 if (string.Equals(linkedRoomId, room.Id, StringComparison.OrdinalIgnoreCase)) matches.Add(candidate);
             }
 
-            var distinct = matches
-                .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                .Select(x => x.First())
-                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            if (distinct.Count > 1)
-                throw new InvalidOperationException("Multiple " + category + " finishes reference Room " + room.Id + ": " + string.Join(", ", distinct.Select(x => x.Id)));
-            return distinct.Count == 1 ? distinct[0] : null;
+            if (matches.Count > 1)
+                throw new InvalidOperationException("Multiple " + category + " finishes reference Room " + room.Id + ": " + string.Join(", ", matches.Select(x => x.Id)));
+            return matches.Count == 1 ? matches[0] : null;
         }
 
-        public static void ValidateProject(ProjectState project)
+        private static IReadOnlyDictionary<string, ProjectElement> ResolveProjectElements(ProjectState project)
         {
-            if (project == null) throw new ArgumentNullException(nameof(project));
-            foreach (var finish in project.Elements
-                .Where(x => AutoRoomLifecycle.IsRoomFinishCategory(x.Category))
-                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            var elements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
             {
-                var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, finish);
-                if (roomId.Length == 0) continue;
-                var room = project.FindElement(roomId);
-                if (room == null || room.Category != ElementCategory.Room) continue;
-                FindExisting(project, room, finish.Category);
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("Project contains an element with a blank semantic id.");
+                if (!elements.TryAdd(elementId, element))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
             }
+            return elements;
         }
 
         private static void EnsureFinishCategory(ElementCategory category)
