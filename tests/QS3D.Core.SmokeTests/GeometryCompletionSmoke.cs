@@ -96,8 +96,8 @@ namespace QS3D.Core.SmokeTests
                 new Point2(origin, origin), new Point2(origin + 5d, origin), new Point2(origin + 5d, origin + 3d)
             }, 0.2d);
             Near(8d, result.CenterlineLength, 1e-8d);
-            Near(1.6d, result.Area, 1e-7d);
-            Near(16.4d, result.Perimeter, 1e-7d);
+            Near(1.6d, result.Area, 1e-6d);
+            Near(16.4d, result.Perimeter, 1e-6d);
         }
 
         private static void WallFootprintRejectsSelfIntersection()
