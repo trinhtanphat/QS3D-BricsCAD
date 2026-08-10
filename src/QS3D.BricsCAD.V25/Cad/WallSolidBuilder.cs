@@ -42,6 +42,9 @@ namespace QS3D.BricsCAD.V25.Cad
             var sourceIds = selection.Value.GetObjectIds();
             if (sourceIds.Length == 0) return 0;
 
+            // This LINE builder is often called immediately before the open-POLYLINE builder.
+            // Validate the whole logical wall batch before either builder is allowed to commit,
+            // otherwise a mixed selection could commit LINE solids and then fail on POLYLINE.
             if (ValidateSourceBatch(document, sourceIds) != SourceBatchKind.Line) return 0;
 
             var pending = new List<PendingUpdate>();
@@ -128,6 +131,9 @@ namespace QS3D.BricsCAD.V25.Cad
                         }
                     }
 
+                    // Commit semantic ownership while the CAD transaction is still rollback-capable.
+                    // If this phase fails, the transaction is aborted and the project snapshot is
+                    // restored, so a new Solid3d can never survive without matching semantic state.
                     foreach (var update in pending)
                     {
                         GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category);
