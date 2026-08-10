@@ -59,7 +59,7 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
                 if (issues.Count > 50) document.Editor.WriteMessage("\n  … health output truncated.");
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DSLABREBARHEALTH lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);

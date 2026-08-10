@@ -17,7 +17,7 @@ namespace QS3D.BricsCAD.V25
                 var window = new Rebar3DHubWindow();
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 document.Editor.WriteMessage("\nQS3DREBARHUB lỗi: " + ex.Message);
                 PaletteCoordinator.SetStatus("QS3DREBARHUB lỗi: " + ex.Message);

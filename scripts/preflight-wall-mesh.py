@@ -11,6 +11,8 @@ required = [
     "tests/QS3D.Core.SmokeTests/WallMeshRegressionSmoke.cs",
     "src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs",
     "src/QS3D.BricsCAD.V25/StructuralWallMeshCommands.cs",
 ]
 for rel in required:
@@ -35,14 +37,26 @@ builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs"
 if builder.is_file():
     text = builder.read_text(encoding="utf-8")
     for needle in (
-        "ElementCategory.StructuralWall", "RectangularWallMeshPlanner.Plan", 'HandlesKey = "GeneratedRebarHandles"',
+        "ElementCategory.StructuralWall", "RectangularWallMeshPlanner.Plan", 'HandlesKey = "GeneratedWallMeshHandles"',
         'Mode = "StructuralWallMesh"', "GeneratedRebarOwnershipGuard.Build(project)",
-        "ownership.EnsureOwned(handle, element, HandlesKey)", "EnsureWallMeshOwnsGenericRebarSlot",
+        "ownership.EnsureOwned(handle, element, HandlesKey)",
         "MaxBarsPerBatch = 12000", "RebarWallHorizontalNotation", "RebarWallVerticalNotation",
         "RebarWallCoverM", "RebarWallFaces", "RebarWallHorizontalClosestToFace",
-        '"GeneratedRebarMode"] = Mode', "CreateFrustum", "source LINE gần ngang",
+        '"GeneratedWallMeshMode"] = Mode', "CreateFrustum", "source LINE gần ngang",
     ):
         if needle not in text: errors.append("native StructuralWall mesh builder missing: " + needle)
+
+ownership_guard = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
+if ownership_guard.is_file() and 'Add(element, "GeneratedWallMeshHandles", owners)' not in ownership_guard.read_text(encoding="utf-8"):
+    errors.append("wall-mesh handles are missing from cross-set generated ownership")
+
+invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
+if invalidator.is_file() and 'Remove(element, "GeneratedWallMeshHandles")' not in invalidator.read_text(encoding="utf-8"):
+    errors.append("wall-mesh handles are not invalidated with dependent generated geometry")
+
+ownership_health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs"
+if ownership_health.is_file() and '"GeneratedWallMeshHandles"' not in ownership_health.read_text(encoding="utf-8"):
+    errors.append("wall-mesh handles are missing from cross-family ownership health")
 
 command = ROOT / "src/QS3D.BricsCAD.V25/StructuralWallMeshCommands.cs"
 if command.is_file():

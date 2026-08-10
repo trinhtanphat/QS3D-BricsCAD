@@ -61,7 +61,16 @@ namespace QS3D.Core.Geometry
         public double FrameFaceAreaM2 { get; }
         public double VerticalFrameLengthM { get; }
         public double HorizontalFrameLengthM { get; }
-        public double TotalFrameLengthM => Add(VerticalFrameLengthM, HorizontalFrameLengthM, "curtain total frame length");
+        public double TotalFrameLengthM
+        {
+            get
+            {
+                var result = VerticalFrameLengthM + HorizontalFrameLengthM;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Curtain total frame length overflowed.");
+                return result;
+            }
+        }
     }
 
     public static class CurtainWallLayoutPlanner
@@ -154,8 +163,8 @@ namespace QS3D.Core.Geometry
             return new ClearMetrics
             {
                 TotalClearM = totalClearM,
-                MinimumClearM = Math.Min(edgeClearM, interiorClearM),
-                MaximumClearM = Math.Max(edgeClearM, interiorClearM)
+                MinimumClearM = divisions <= 2 ? edgeClearM : Math.Min(edgeClearM, interiorClearM),
+                MaximumClearM = divisions <= 2 ? edgeClearM : Math.Max(edgeClearM, interiorClearM)
             };
         }
 

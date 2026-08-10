@@ -15,7 +15,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnCommandClick(object sender, RoutedEventArgs e)
         {
             if (!(sender is Button button) || !(button.Tag is string command) || string.IsNullOrWhiteSpace(command)) return;
-            var document = Application.DocumentManager.MdiActiveDocument;
+            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (document == null)
             {
                 StatusText.Text = "Không có drawing BricsCAD đang active.";
