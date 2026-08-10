@@ -56,14 +56,24 @@ if paths["command"].is_file():
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
         "Cad.CadHandleService.GetLiveSolidHandles(doc, generatedHandles)",
         "new ComprehensiveModelHealthService().Inspect(project, liveSources, liveGeneratedSolids)",
-        "ComprehensiveModelHealthService.TargetsGeneratedOutput(issue)",
+        "var generatedTarget = ComprehensiveModelHealthService.TargetsGeneratedOutput(issue);",
         "GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element)",
+        "if (count == 0 && generatedTarget)",
+        "SourceHandleResolver.Resolve(project, new[] { element.Id })",
+        "usedSourceFallback = count > 0",
+        'usedSourceFallback ? " • nguồn semantic" : string.Empty',
     ):
         if token not in text:
-            errors.append("Commands.cs missing comprehensive-health token: " + token)
+            errors.append("Commands.cs missing comprehensive-health locate token: " + token)
     health = text[text.find('CommandMethod("QS3DHEALTH"'):text.find('CommandMethod("QS3DLOCATE"')]
     if 'issue.Code.IndexOf("GENERATED"' in health:
         errors.append("QS3DHEALTH locate still guesses generated issue ownership from the literal GENERATED substring.")
+    first_select = health.find("var count = Cad.CadHandleService.Select(doc, locateHandles);")
+    fallback_guard = health.find("if (count == 0 && generatedTarget)")
+    fallback_resolve = health.find("SourceHandleResolver.Resolve(project, new[] { element.Id })")
+    status = health.find('PaletteCoordinator.SetStatus("Health Định vị')
+    if first_select < 0 or fallback_guard < first_select or fallback_resolve < fallback_guard or status < fallback_resolve:
+        errors.append("QS3DHEALTH must try generated CAD first, fall back to semantic/source handles only on zero live generated matches, then report status.")
     if "ParseGeneratedRebarHandles" in text:
         errors.append("Commands.cs still contains the legacy single-slot generated rebar health helper.")
     if 'TryGetValue("GeneratedSolidHandle", out var handle)' in health:
@@ -99,4 +109,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: QS3DHEALTH comprehensive Core health includes semantic/generated diagnostics and classifies generated-subsystem issues for generated CAD locate without literal-code guessing in the command.")
+print("PASS: QS3DHEALTH classifies generated-subsystem issues, tries generated CAD first, and falls back to semantic/source CAD without clearing PICKFIRST when both targets are unavailable.")
