@@ -20,21 +20,6 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                var rows = MaterialUsageScheduleBuilder.Build(project);
-                if (rows.Count == 0)
-                {
-                    const string empty = "Material XLSX: project chưa có material usage để xuất.";
-                    PaletteCoordinator.SetStatus(empty);
-                    document.Editor.WriteMessage("\nQS3D " + empty);
-                    return;
-                }
-
-                var materials = rows.Select(x => x.MaterialName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-                var elements = 0;
-                foreach (var row in rows) elements = QuantityReportMath.AddCount(elements, row.ElementCount);
-
                 var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
                 var dialog = new SaveFileDialog
                 {
@@ -46,6 +31,21 @@ namespace QS3D.BricsCAD.V25
                     FileName = drawingName + "-Vat-Lieu.xlsx"
                 };
                 if (dialog.ShowDialog() != true) return;
+
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                var rows = MaterialUsageScheduleBuilder.Build(project);
+                if (rows.Count == 0)
+                {
+                    const string empty = "Material XLSX: project chưa có material usage để xuất.";
+                    Report(document, empty);
+                    return;
+                }
+
+                var materials = rows.Select(x => x.MaterialName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                var elements = 0;
+                foreach (var row in rows) elements = QuantityReportMath.AddCount(elements, row.ElementCount);
+
                 MaterialUsageXlsxExporter.Export(dialog.FileName, rows);
 
                 var status = "Material XLSX: " + rows.Count + " nhóm • " + materials + " vật liệu • " + elements + " lượt cấu kiện/component.";
@@ -53,9 +53,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
-                var status = "QS3DMATERIALXLSX lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\n" + status);
+                Report(document, "QS3DMATERIALXLSX lỗi: " + ex.Message);
             }
         }
 
@@ -77,6 +75,12 @@ namespace QS3D.BricsCAD.V25
                     // Export has already committed; UI reporting is best effort only.
                 }
             }
+        }
+
+        private static void Report(Document document, string status)
+        {
+            try { PaletteCoordinator.SetStatus(status); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + status); } catch { }
         }
     }
 }
