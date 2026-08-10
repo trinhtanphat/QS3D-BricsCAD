@@ -12,17 +12,20 @@ namespace QS3D.Core.Services
     {
         internal RegenerationPreview(
             string projectId,
+            long sourceChangeVersion,
             int regeneratedElementCount,
             IEnumerable<RevisionDelta> deltas,
             ModelHealthBaselineDiff healthDiff)
         {
             ProjectId = projectId ?? string.Empty;
+            SourceChangeVersion = sourceChangeVersion;
             RegeneratedElementCount = regeneratedElementCount;
             Deltas = (deltas ?? Enumerable.Empty<RevisionDelta>()).ToList().AsReadOnly();
             HealthDiff = healthDiff ?? throw new ArgumentNullException(nameof(healthDiff));
         }
 
         public string ProjectId { get; }
+        public long SourceChangeVersion { get; }
         public int RegeneratedElementCount { get; }
         public IReadOnlyList<RevisionDelta> Deltas { get; }
         public ModelHealthBaselineDiff HealthDiff { get; }
@@ -49,6 +52,7 @@ namespace QS3D.Core.Services
         public RegenerationPreview Preview(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            var sourceChangeVersion = project.ChangeVersion;
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var revisions = new RevisionService();
             var health = new ModelHealthBaselineService();
@@ -61,6 +65,7 @@ namespace QS3D.Core.Services
             var afterHealth = health.CaptureSemantic(detached);
             return new RegenerationPreview(
                 project.ProjectId,
+                sourceChangeVersion,
                 count,
                 revisions.Compare(beforeRevision, afterRevision),
                 health.Compare(beforeHealth, afterHealth));
@@ -72,6 +77,8 @@ namespace QS3D.Core.Services
             if (preview == null) throw new ArgumentNullException(nameof(preview));
             if (!string.Equals(project.ProjectId, preview.ProjectId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Regeneration preview belongs to a different project.");
+            if (preview.SourceChangeVersion != project.ChangeVersion)
+                throw new InvalidOperationException("Regeneration preview is stale because the project changed after preview; recompute before applying.");
 
             var current = Preview(project);
             if (!Equivalent(preview, current))
@@ -106,6 +113,7 @@ namespace QS3D.Core.Services
         private static bool Equivalent(RegenerationPreview left, RegenerationPreview right)
         {
             if (!string.Equals(left.ProjectId, right.ProjectId, StringComparison.Ordinal) ||
+                left.SourceChangeVersion != right.SourceChangeVersion ||
                 left.RegeneratedElementCount != right.RegeneratedElementCount ||
                 left.Deltas.Count != right.Deltas.Count ||
                 !HealthEquivalent(left.HealthDiff, right.HealthDiff))
