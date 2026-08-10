@@ -79,13 +79,24 @@ namespace QS3D.Core.Diagnostics
                 CompareCurrent(element, "HeightM", storedHeight, "CURTAIN_FRAME_HEIGHT_STALE", issues);
                 ValidateConfigFingerprint(project, element, storedLength, storedHeight, storedDepth, issues);
 
-                if (!element.Properties.TryGetValue("GeneratedCurtainFrameMode", out var mode) ||
-                    !(string.Equals(mode, "LineFrameOverlay", StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "LineFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase)))
+                var mode = element.Properties.TryGetValue("GeneratedCurtainFrameMode", out var modeRaw) ? (modeRaw ?? string.Empty).Trim() : string.Empty;
+                var lineMode = string.Equals(mode, "LineFrameOverlay", StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "LineFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase);
+                var pathMode = string.Equals(mode, "PathFrameOverlay", StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "PathFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase);
+                var openingAware = string.Equals(mode, "LineFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "PathFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase);
+                if (!lineMode && !pathMode)
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_MODE_INVALID", HealthSeverity.Warning, "GeneratedCurtainFrameMode thiếu hoặc không hợp lệ.", element.Id));
-                else if (openingCount > 0 && !string.Equals(mode, "LineFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase))
+                else if (openingCount > 0 && !openingAware)
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_OPENING_MODE_MISMATCH", HealthSeverity.Warning, "Curtain frame có linked opening nhưng metadata chưa ở opening-aware mode; rebuild curtain frames.", element.Id));
-                else if (openingCount == 0 && string.Equals(mode, "LineFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase))
+                else if (openingCount == 0 && openingAware)
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_OPENING_MODE_MISMATCH", HealthSeverity.Warning, "Curtain frame opening-aware mode không khớp GeneratedCurtainFrameOpeningCount=0; rebuild curtain frames.", element.Id));
+
+                if (pathMode)
+                {
+                    OptionalInteger(element, "GeneratedCurtainFramePathSegmentCount", false, issues, "CURTAIN_FRAME_PATH_SEGMENTS_INVALID");
+                    OptionalInteger(element, "GeneratedCurtainFrameMappedFrameCount", true, issues, "CURTAIN_FRAME_MAPPED_COUNT_INVALID");
+                    if (!element.Properties.TryGetValue("GeneratedCurtainFrameSourceKind", out var sourceKind) || !string.Equals((sourceKind ?? string.Empty).Trim(), "OpenPolyline", StringComparison.OrdinalIgnoreCase))
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_PATH_SOURCE_KIND_INVALID", HealthSeverity.Warning, "Path curtain frame cần GeneratedCurtainFrameSourceKind=OpenPolyline; rebuild curtain frames.", element.Id));
+                }
 
                 if (element.Category != ElementCategory.GlassWall)
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated curtain frame metadata chỉ hợp lệ trên GlassWall element.", element.Id));
