@@ -10,6 +10,9 @@ GENERIC = ADAPTER / "Cad/SemanticElementTableBuilder.cs"
 GENERIC_COMMANDS = ADAPTER / "SemanticElementTableCommands.cs"
 AGGREGATOR = ADAPTER / "Cad/GeneratedSolidRuntimeHealthService.cs"
 RELEASE = ADAPTER / "ReleaseReadinessCommands.cs"
+HUB = ADAPTER / "UI/ScheduleHubWindow.xaml"
+HUB_CODE = ADAPTER / "UI/ScheduleHubWindow.xaml.cs"
+INTERCHANGE = ROOT / "src/QS3D.Core/Export/ProjectInterchangeJsonExporter.cs"
 
 artifacts = {
     "door": {
@@ -20,6 +23,7 @@ artifacts = {
         "prefix": "GeneratedDoorOpeningTable",
         "provider": "DoorOpeningNativeTableBuilder.Inspect(document, project)",
         "health_prefix": '"DOOR_OPENING_" + x.Code',
+        "hub_command": "QS3DDOOROPENINGTABLE",
         "command_names": [
             "QS3DDOOROPENINGTABLE", "QS3DDOOROPENINGTABLEREFRESH",
             "QS3DDOOROPENINGTABLEREMOVE", "QS3DDOOROPENINGTABLEHEALTH",
@@ -33,6 +37,7 @@ artifacts = {
         "prefix": "GeneratedRoomFinishTable",
         "provider": "RoomFinishNativeTableBuilder.Inspect(document, project)",
         "health_prefix": '"ROOM_FINISH_" + x.Code',
+        "hub_command": "QS3DFINISHTABLE",
         "command_names": [
             "QS3DFINISHTABLE", "QS3DFINISHTABLEREFRESH",
             "QS3DFINISHTABLEREMOVE", "QS3DFINISHTABLEHEALTH",
@@ -46,6 +51,7 @@ artifacts = {
         "prefix": "GeneratedMaterialUsageTable",
         "provider": "MaterialUsageNativeTableBuilder.Inspect(document, project)",
         "health_prefix": '"MATERIAL_USAGE_" + x.Code',
+        "hub_command": "QS3DMATERIALTABLE",
         "command_names": [
             "QS3DMATERIALTABLE", "QS3DMATERIALTABLEREFRESH",
             "QS3DMATERIALTABLEREMOVE", "QS3DMATERIALTABLEHEALTH",
@@ -57,6 +63,8 @@ generic_identity = {
     "document_id": "SemanticElementSchedule",
     "kind": "SemanticElementTable",
     "prefix": "GeneratedSemanticElementTable",
+    "provider": "GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project)",
+    "hub_command": "QS3DELEMENTTABLE",
     "command_names": [
         "QS3DELEMENTTABLE", "QS3DELEMENTTABLEREFRESH",
         "QS3DELEMENTTABLEREMOVE", "QS3DELEMENTTABLEHEALTH",
@@ -64,7 +72,7 @@ generic_identity = {
 }
 
 errors = []
-required_paths = [SHARED, GENERIC, GENERIC_COMMANDS, AGGREGATOR, RELEASE]
+required_paths = [SHARED, GENERIC, GENERIC_COMMANDS, AGGREGATOR, RELEASE, HUB, HUB_CODE, INTERCHANGE]
 required_paths += [x[k] for x in artifacts.values() for k in ("builder", "commands")]
 for path in required_paths:
     if not path.is_file():
@@ -158,20 +166,45 @@ if AGGREGATOR.is_file():
     text = AGGREGATOR.read_text(encoding="utf-8")
     if "AddProviderSafely(" not in text:
         errors.append("runtime health aggregator lost fail-isolated provider wrapper")
-    if "GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project)" not in text:
-        errors.append("runtime health aggregator missing generic semantic Table provider")
-    for artifact in artifacts.values():
-        if artifact["provider"] not in text:
-            errors.append("runtime health aggregator missing provider: " + artifact["provider"])
-        provider_pos = text.find(artifact["provider"])
+    providers = [generic_identity["provider"]] + [artifact["provider"] for artifact in artifacts.values()]
+    for provider in providers:
+        if provider not in text:
+            errors.append("runtime health aggregator missing provider: " + provider)
+            continue
+        provider_pos = text.find(provider)
         safe_pos = text.rfind("AddProviderSafely(", 0, provider_pos)
-        if provider_pos >= 0 and safe_pos < 0:
-            errors.append("runtime health provider is not fail-isolated: " + artifact["provider"])
+        if safe_pos < 0:
+            errors.append("runtime health provider is not fail-isolated: " + provider)
 
 if RELEASE.is_file():
     text = RELEASE.read_text(encoding="utf-8")
     if "GeneratedSolidRuntimeHealthService.Inspect(document, project)" not in text:
         errors.append("QS3DRELEASECHECK must consume the shared native runtime-health aggregator")
+
+if HUB.is_file():
+    text = HUB.read_text(encoding="utf-8")
+    hub_commands = [generic_identity["hub_command"]] + [artifact["hub_command"] for artifact in artifacts.values()]
+    for command in hub_commands:
+        if ('Tag="' + command + '"') not in text:
+            errors.append("Schedule Hub missing native Table launcher: " + command)
+if HUB_CODE.is_file():
+    text = HUB_CODE.read_text(encoding="utf-8")
+    for token in ("OnCommandClick", 'SendStringToExecute(command + " ", true, false, false)'):
+        if token not in text:
+            errors.append("Schedule Hub lost generic command dispatch token: " + token)
+
+if INTERCHANGE.is_file():
+    text = INTERCHANGE.read_text(encoding="utf-8")
+    if "project.Metadata" in text:
+        errors.append("portable Semantic Snapshot must not serialize ProjectState.Metadata; drawing-local native Table handles/positions are not portable")
+    for token in (
+        "GeneratedHandleOwnershipPolicy.IsOwnerSlot(normalized)",
+        'normalized.StartsWith("Generated"',
+        'normalized.StartsWith("QS3D.Generated"',
+        'normalized.StartsWith("PhysicalOpeningCut"',
+    ):
+        if token not in text:
+            errors.append("Semantic Snapshot exporter lost generated/native property scrub token: " + token)
 
 if errors:
     for error in errors:
@@ -179,4 +212,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: generic, Door/Opening, Room Finish and Material Usage native Tables have unique commands/artifact identities/metadata prefixes, project-level QS3DDOC ownership, namespaced specialized diagnostics, fail-isolated runtime providers and Release Check integration.")
+print("PASS: generic, Door/Opening, Room Finish and Material Usage native Tables have unique commands/artifact identities/metadata prefixes, project-level QS3DDOC ownership, namespaced diagnostics, fail-isolated runtime/Release wiring, Schedule Hub launchers and non-portable metadata exclusion from Semantic Snapshot interchange.")
