@@ -52,6 +52,7 @@ namespace QS3D.BricsCAD.V25.Cad
             RemoveFromSourceHandles(element, generatedHandle);
             element.Properties[HandleKey] = generatedHandle.Trim();
             element.Properties[CategoryKey] = category.ToString();
+            element.ClearGeneratedSolidStale();
         }
 
         private static void RemoveFromSourceHandles(ProjectElement element, string? handle)
