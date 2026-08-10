@@ -76,6 +76,7 @@ namespace QS3D.Core.Export
             if (!validation.IsValid)
                 return new ProjectInterchangeImportPreviewResult(validation, string.Empty, targetProject.ProjectId, false, InterchangeDrawingFingerprintRelation.Unknown, 0, 0, 0, 0, false, Array.Empty<InterchangeImportPreviewItem>());
 
+            _ = ProjectInterchangeValidatedSnapshotReader.Read(json);
             var manifest = ParseValidatedManifest(json);
             var sourceProjectId = Required(manifest.Project == null ? null : manifest.Project.Id, "source project id");
             var sameProjectId = string.Equals(sourceProjectId, targetProject.ProjectId, StringComparison.OrdinalIgnoreCase);
@@ -160,15 +161,16 @@ namespace QS3D.Core.Export
 
         private static InterchangeDrawingFingerprintRelation CompareFingerprint(string? source, string? target)
         {
-            var left = (source ?? string.Empty).Trim();
-            var right = (target ?? string.Empty).Trim();
+            var left = source ?? string.Empty;
+            var right = target ?? string.Empty;
             if (left.Length == 0 || right.Length == 0) return InterchangeDrawingFingerprintRelation.Unknown;
             return string.Equals(left, right, StringComparison.Ordinal) ? InterchangeDrawingFingerprintRelation.Match : InterchangeDrawingFingerprintRelation.Different;
         }
 
         private static ElementCategory ParseCategory(string? raw, string label)
         {
-            if (!Enum.TryParse<ElementCategory>((raw ?? string.Empty).Trim(), false, out var category) || !Enum.IsDefined(typeof(ElementCategory), category))
+            var canonical = Required(raw, label + " category");
+            if (!Enum.TryParse<ElementCategory>(canonical, false, out var category) || !Enum.IsDefined(typeof(ElementCategory), category))
                 throw new InvalidDataException("Validated interchange " + label + " contains an unsupported category.");
             return category;
         }
@@ -188,8 +190,11 @@ namespace QS3D.Core.Export
 
         private static string Required(string? value, string label)
         {
-            if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("Required identity value is empty: " + label + ".");
-            return value!.Trim();
+            var raw = value ?? string.Empty;
+            if (raw.Length == 0 || string.IsNullOrWhiteSpace(raw)) throw new InvalidDataException("Required identity value is empty: " + label + ".");
+            if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Required identity value is not canonical: " + label + ".");
+            return raw;
         }
 
         private static ManifestContract ParseValidatedManifest(string json)
