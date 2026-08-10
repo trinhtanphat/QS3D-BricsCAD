@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
+using Application = Bricscad.ApplicationServices.Application;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -12,10 +13,12 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class CurtainWallWindow : Window
     {
+        private readonly Document _document;
         private bool _loading;
 
-        public CurtainWallWindow()
+        public CurtainWallWindow(Document document)
         {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             InitializeComponent();
             Loaded += (_, __) => RefreshAll();
         }
@@ -31,10 +34,10 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnSaveClick(object sender, RoutedEventArgs e)
         {
-            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (document == null || !(FamilyCombo.SelectedItem is ProjectFamily family)) return;
             try
             {
+                EnsureActive("lưu Family Vách Kính");
+                if (!(FamilyCombo.SelectedItem is ProjectFamily family)) return;
                 var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["ThicknessM"] = Positive(ThicknessBox.Text, "Bề dày kính").ToString("R", CultureInfo.InvariantCulture),
@@ -49,7 +52,7 @@ namespace QS3D.BricsCAD.V25.UI
                     ["CurtainFrameMaterial"] = Required(FrameMaterialBox.Text, "Vật liệu khung")
                 };
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var inherited = 0;
                 var overrides = 0;
                 foreach (var pair in values)
@@ -66,11 +69,10 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnRecalculateClick(object sender, RoutedEventArgs e)
         {
-            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                EnsureActive("tính lại Vách Kính");
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 foreach (var element in project.Elements.Where(x => x.Category == ElementCategory.GlassWall))
                     element.MarkDirty(ElementDirtyFlags.Quantity);
                 var count = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
@@ -84,29 +86,35 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnCommandClick(object sender, RoutedEventArgs e)
         {
             if (!(sender is Button button) || !(button.Tag is string command) || string.IsNullOrWhiteSpace(command)) return;
-            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
-            SetStatus("Chạy " + command + "…");
-            document.SendStringToExecute(command + " ", true, false, false);
+            try
+            {
+                EnsureActive("chạy " + command);
+                SetStatus("Chạy " + command + "…");
+                _document.SendStringToExecute(command + " ", true, false, false);
+            }
+            catch (Exception ex) { SetStatus("Chạy " + command + " lỗi: " + ex.Message); }
         }
 
         private void RefreshAll()
         {
-            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
-            var project = ProjectContextCoordinator.GetOrCreate(document);
-            var selectedId = (FamilyCombo.SelectedItem as ProjectFamily)?.Id;
-            var families = project.Families.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Name).ToList();
-            _loading = true;
             try
             {
-                FamilyCombo.ItemsSource = families;
-                FamilyCombo.SelectedItem = families.FirstOrDefault(x => string.Equals(x.Id, selectedId, StringComparison.OrdinalIgnoreCase)) ?? families.FirstOrDefault();
-                LoadSelectedFamily();
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var selectedId = (FamilyCombo.SelectedItem as ProjectFamily)?.Id;
+                var families = project.Families.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Name).ToList();
+                _loading = true;
+                try
+                {
+                    FamilyCombo.ItemsSource = families;
+                    FamilyCombo.SelectedItem = families.FirstOrDefault(x => string.Equals(x.Id, selectedId, StringComparison.OrdinalIgnoreCase)) ?? families.FirstOrDefault();
+                    LoadSelectedFamily();
+                }
+                finally { _loading = false; }
+                RefreshSummary();
+                Title = "QS3D • Vách Kính • " + DrawingLabel(_document);
+                SetStatus(families.Count == 0 ? "Chưa có Family Vách Kính. Chọn đối tượng CAD rồi bấm “Bóc Vách Kính”." : "Đã nạp " + families.Count + " Family Vách Kính.");
             }
-            finally { _loading = false; }
-            RefreshSummary();
-            SetStatus(families.Count == 0 ? "Chưa có Family Vách Kính. Chọn đối tượng CAD rồi bấm “Bóc Vách Kính”." : "Đã nạp " + families.Count + " Family Vách Kính.");
+            catch (Exception ex) { SetStatus("Đọc Vách Kính lỗi: " + ex.Message); }
         }
 
         private void LoadSelectedFamily()
@@ -130,9 +138,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshSummary()
         {
-            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var project = ProjectContextCoordinator.GetOrCreate(_document);
             var family = FamilyCombo.SelectedItem as ProjectFamily;
             var elements = project.Elements.Where(x => x.Category == ElementCategory.GlassWall && (family == null || string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase))).ToList();
             WallCountText.Text = elements.Count.ToString(CultureInfo.InvariantCulture);
@@ -215,6 +221,20 @@ namespace QS3D.BricsCAD.V25.UI
             var value = Q(element, key);
             if (value > int.MaxValue) return int.MaxValue;
             return (int)Math.Round(value);
+        }
+
+        private void EnsureActive(string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Vách Kính Hub trước khi " + operation + ".");
+        }
+
+        private static string DrawingLabel(Document document)
+        {
+            var name = document.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
+            try { return System.IO.Path.GetFileName(name); }
+            catch { return name; }
         }
 
         private void SetStatus(string text)
