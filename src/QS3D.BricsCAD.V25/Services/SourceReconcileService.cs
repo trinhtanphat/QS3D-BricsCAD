@@ -137,39 +137,57 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static IReadOnlyList<ProjectElement> ExpandInvalidationTargets(ProjectState project, IEnumerable<ProjectElement> sourceTargets)
         {
-            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in sourceTargets)
+            var graph = new DependencyGraph();
+            graph.Rebuild(project.Elements);
+
+            var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
             {
-                result[element.Id] = element;
-                AddOpeningHost(project, element, result);
+                if (byId.ContainsKey(element.Id))
+                    throw new InvalidOperationException("Source reconcile cannot resolve duplicate semantic element id: " + element.Id + ".");
+                byId.Add(element.Id, element);
             }
 
-            var expanded = true;
-            while (expanded)
+            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            var queue = new Queue<ProjectElement>();
+            foreach (var element in sourceTargets)
+                EnqueueInvalidationTarget(element, result, queue);
+
+            while (queue.Count > 0)
             {
-                expanded = false;
-                foreach (var candidate in project.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+                var current = queue.Dequeue();
+                EnqueueOpeningHost(current, byId, result, queue);
+
+                foreach (var dependentId in graph.GetDirectDependents(current.Id))
                 {
-                    if (result.ContainsKey(candidate.Id)) continue;
-                    if (!candidate.DependsOn.Any(result.ContainsKey)) continue;
-                    result[candidate.Id] = candidate;
-                    AddOpeningHost(project, candidate, result);
-                    expanded = true;
+                    if (!byId.TryGetValue(dependentId, out var dependent))
+                        throw new InvalidOperationException("Source reconcile dependency graph returned missing semantic element " + dependentId + ".");
+                    EnqueueInvalidationTarget(dependent, result, queue);
                 }
             }
 
             return result.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
-        private static void AddOpeningHost(ProjectState project, ProjectElement element, IDictionary<string, ProjectElement> result)
+        private static void EnqueueInvalidationTarget(ProjectElement element, IDictionary<string, ProjectElement> result, Queue<ProjectElement> queue)
+        {
+            if (result.ContainsKey(element.Id)) return;
+            result.Add(element.Id, element);
+            queue.Enqueue(element);
+        }
+
+        private static void EnqueueOpeningHost(
+            ProjectElement element,
+            IReadOnlyDictionary<string, ProjectElement> byId,
+            IDictionary<string, ProjectElement> result,
+            Queue<ProjectElement> queue)
         {
             if (element.Category != ElementCategory.Door && element.Category != ElementCategory.WallOpening) return;
             if (!element.Properties.TryGetValue("HostWallId", out var hostId) || string.IsNullOrWhiteSpace(hostId)) return;
             var normalizedHostId = hostId.Trim();
-            var host = project.FindElement(normalizedHostId);
-            if (host == null)
+            if (!byId.TryGetValue(normalizedHostId, out var host))
                 throw new InvalidOperationException("Opening " + element.Id + " references missing host " + hostId + ". Repair host linkage before source reconcile.");
-            result[host.Id] = host;
+            EnqueueInvalidationTarget(host, result, queue);
         }
 
         private static int RegenerateAffectedToStable(ProjectState project, IReadOnlyList<ProjectElement> affected)
