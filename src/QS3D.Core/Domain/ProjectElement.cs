@@ -122,9 +122,13 @@ namespace QS3D.Core.Domain
             marked |= MarkGeneratedOutputStale(GeneratedWallMeshHandlesKey, GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
             marked |= MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
             if (!marked) return;
-            Properties[GeneratedGeometryStateKey] = StaleValue;
-            Properties[GeneratedGeometryStaleReasonKey] = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
-            UpdatedUtc = DateTime.UtcNow;
+            SetAggregateStaleReason(reason);
+        }
+
+        public void MarkGeneratedCurtainFrameStale(string reason)
+        {
+            if (!MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey)) return;
+            SetAggregateStaleReason(reason);
         }
 
         public bool IsGeneratedGeometryStale()
@@ -222,6 +226,13 @@ namespace QS3D.Core.Domain
             return string.Join(";", raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+        }
+
+        private void SetAggregateStaleReason(string reason)
+        {
+            Properties[GeneratedGeometryStateKey] = StaleValue;
+            Properties[GeneratedGeometryStaleReasonKey] = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
+            UpdatedUtc = DateTime.UtcNow;
         }
 
         private void ClearGeneratedOutputStale(string stateKey, string snapshotKey)
