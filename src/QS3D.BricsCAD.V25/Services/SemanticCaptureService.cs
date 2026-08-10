@@ -8,7 +8,9 @@ using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
 using QS3D.Core.Persistence;
+using QS3D.Core.Recognition;
 using QS3D.Core.Services;
+using QS3D.Core.Units;
 
 namespace QS3D.BricsCAD.V25.Services
 {
@@ -53,6 +55,15 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static bool CaptureSnapshotCore(Document document, ProjectState project, EntitySnapshot snapshot, ElementCategory category)
         {
+            EntitySnapshotCaptureEligibility.EnsureReady(snapshot, category);
+            if (!CadUnitService.TryGetPolicy(document, out var units, out var unitResolution))
+                throw new InvalidOperationException("Drawing units are unresolved. Run QS3DUNITS before semantic capture.");
+            DrawingUnitResolutionPolicy.BindQuantityUnit(
+                project.Metadata,
+                project.Elements.Count > 0,
+                unitResolution.Unit,
+                unitResolution.Source);
+
             if (GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle, out var generatedOwner, out var generatedSlot))
                 throw new InvalidOperationException("CAD handle " + snapshot.Handle + " là output do QS3D sinh từ " + generatedOwner!.Id + " (" + generatedSlot + ") và không thể dùng làm semantic source. Hãy chọn CAD source gốc.");
 
@@ -83,10 +94,6 @@ namespace QS3D.BricsCAD.V25.Services
             foreach (var key in element.Properties.Keys.Where(x => x.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase)).ToList()) element.Properties.Remove(key);
             foreach (var item in snapshot.Metadata) element.Properties["CAD." + item.Key] = item.Value ?? string.Empty;
 
-            var units = CadUnitService.GetPolicy(document);
-            project.Metadata["QS3D.DrawingUnit"] = CadUnitService.Describe(document);
-            if (CadUnitService.IsAssumedMillimeter(document)) project.Metadata["QS3D.DrawingUnitAssumption"] = "INSUNITS unsupported/undefined; assumed Millimeter";
-            else project.Metadata.Remove("QS3D.DrawingUnitAssumption");
             ReplaceSourceMetric(element, "LengthM", snapshot.LengthDrawingUnits.HasValue ? units.ToMeters(snapshot.LengthDrawingUnits.Value) : (double?)null);
             ReplaceSourceMetric(element, "AreaM2", snapshot.AreaDrawingUnitsSquared.HasValue ? units.AreaToSquareMeters(snapshot.AreaDrawingUnitsSquared.Value) : (double?)null);
             ReplaceSourceMetric(element, MeasuredSolidQuantityPolicy.SurfaceAreaProperty, snapshot.SurfaceAreaDrawingUnitsSquared.HasValue ? units.AreaToSquareMeters(snapshot.SurfaceAreaDrawingUnitsSquared.Value) : (double?)null);
