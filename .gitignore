@@ -3,6 +3,7 @@
 bin/
 obj/
 TestResults/
+dist/
 *.user
 *.suo
 *.nupkg

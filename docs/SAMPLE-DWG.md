@@ -1,12 +1,6 @@
 # Supplied DWG regression sample (not committed)
 
-Local review target supplied by the project owner:
-
-- File: `260808.SHOP XAY TUONG_NHA NOI TRU.dwg`
-- Size: approximately 22 MiB
-- DWG signature: `AC1021`
-- Format family: AutoCAD 2007/2008/2009 DWG
-- Embedded producer metadata contains AutoCAD 2021 and BricsCAD/Open Design Alliance markers.
+Local review targets supplied by the project owner include a private villa practice DWG and `DGKL.xlsx`. Their absolute local paths and bytes are deliberately not stored in the repository.
 
 The drawing is treated as a private regression fixture. The repository only stores the expected test workflow, not the drawing bytes.
 
@@ -15,7 +9,8 @@ Runtime checks planned against this sample:
 1. Open DWG in licensed BricsCAD V25.
 2. `NETLOAD` QS3D plugin.
 3. `QS3D` palettes render without covering the native viewport.
-4. Selection → `QS3DINSPECT` reads handle/type/layer/curve length and closed-polyline area.
-5. `QS3DBQ` groups the current selection and exports `.xlsx`.
-6. Reopen exported workbook in Excel/LibreOffice and verify headers/numeric values.
-7. Repeat after switching drawings to catch stale document references.
+4. `QS3DB4D` scans Current Space and leaves ambiguous categories in Recognition review.
+5. Selection → `QS3DINSPECT` reads handle/type/layer/curve length and closed-polyline area.
+6. `QS3DBQ`/`QS3DED2` exports `.xlsx` with QS3D Element IDs and CAD handles.
+7. `QS3DEXCELLOCATE` reads an export row and selects/zooms the same entities; separately verify the private legacy workbook decimal-handle conversion in read-only mode.
+8. Repeat after switching drawings to catch stale document references.

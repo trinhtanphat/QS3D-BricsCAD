@@ -26,6 +26,7 @@ namespace QS3D.Core.SmokeTests
 
         private static int Main()
         {
+            SmokeTestRegistration.RunAll();
             Test("PolylineMetrics rectangle", PolylineRectangle);
             Test("UnitScale mm length", UnitScaleLength);
             Test("ProjectUnitPolicy", ProjectUnitPolicyTest);

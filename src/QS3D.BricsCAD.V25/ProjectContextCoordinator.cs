@@ -133,7 +133,7 @@ namespace QS3D.BricsCAD.V25
 
         private static string SafeFileStem(string? value)
         {
-            var stem = string.IsNullOrWhiteSpace(value) ? "Untitled" : value.Trim();
+            var stem = string.IsNullOrWhiteSpace(value) ? "Untitled" : value!.Trim();
             foreach (var invalid in Path.GetInvalidFileNameChars()) stem = stem.Replace(invalid, '_');
             return string.IsNullOrWhiteSpace(stem) ? "Untitled" : stem;
         }
