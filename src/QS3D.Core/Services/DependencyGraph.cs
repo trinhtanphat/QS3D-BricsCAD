@@ -19,20 +19,30 @@ namespace QS3D.Core.Services
         public void Rebuild(IEnumerable<ProjectElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            _dependents.Clear();
+
+            var next = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
                 if (element == null) throw new InvalidOperationException("Dependency graph cannot contain a null semantic element.");
+                if (!elementIds.Add(element.Id))
+                    throw new InvalidOperationException("Dependency graph contains duplicate semantic element id: " + element.Id);
+
                 foreach (var source in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)))
                 {
-                    if (!_dependents.TryGetValue(source, out var set))
+                    var normalizedSource = source.Trim();
+                    if (!next.TryGetValue(normalizedSource, out var set))
                     {
                         set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        _dependents[source] = set;
+                        next[normalizedSource] = set;
                     }
                     set.Add(element.Id);
                 }
             }
+
+            _dependents.Clear();
+            foreach (var entry in next)
+                _dependents[entry.Key] = entry.Value;
         }
 
         public IReadOnlyList<string> GetDependentsTransitive(string sourceId)
