@@ -1,7 +1,7 @@
 <Window x:Class="QS3D.BricsCAD.V25.UI.MaterialCatalogWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="QS3D • Vật liệu" Width="760" Height="680"
+        Title="QS3D • Vật liệu" Width="780" Height="700"
         WindowStartupLocation="CenterOwner" Background="#17191C">
     <Window.Resources>
         <ResourceDictionary>
@@ -17,9 +17,12 @@
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel>
                     <TextBlock Text="MATERIAL CATALOG" FontSize="19" FontWeight="Bold"/>
-                    <TextBlock Text="Built-in + vật liệu tùy chỉnh của project • áp dụng theo CAD selection" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/>
+                    <TextBlock Text="Built-in + vật liệu tùy chỉnh • semantic assignment • material usage XLSX" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/>
                 </StackPanel>
-                <Button Grid.Column="1" Content="Làm mới" Click="OnRefreshClick" Margin="8,0,0,0"/>
+                <WrapPanel Grid.Column="1">
+                    <Button Content="Xuất bảng vật liệu" Style="{StaticResource AccentButton}" Click="OnExportClick"/>
+                    <Button Content="Làm mới" Click="OnRefreshClick" Margin="8,0,0,0"/>
+                </WrapPanel>
             </Grid>
         </Border>
 
@@ -64,7 +67,7 @@
                     <ComboBoxItem Content="Khung Vách Kính (CurtainFrameMaterial)" Tag="CurtainFrameMaterial"/>
                 </ComboBox>
                 <Button Content="Áp dụng material đang chọn" Style="{StaticResource AccentButton}" Click="OnApplyClick"/>
-                <TextBlock Text="Selection có thể là source CAD hoặc generated QS3D object. Nếu một handle bị nhiều semantic element claim, QS3D sẽ từ chối thay vì sửa mơ hồ." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                <TextBlock Text="Selection có thể là source CAD hoặc generated QS3D object. Nếu một selected handle bị nhiều semantic element claim, QS3D sẽ từ chối thay vì sửa mơ hồ. Bảng vật liệu kế thừa Family khi Instance chưa override và tách riêng CurtainFrameMaterial." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
             </StackPanel>
         </Grid>
 
