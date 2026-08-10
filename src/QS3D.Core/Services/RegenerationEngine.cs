@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rules;
 
 namespace QS3D.Core.Services
@@ -63,7 +64,7 @@ namespace QS3D.Core.Services
         public int RegenerateDirty(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            return Regenerate(project, project.Elements, project.Elements.Count);
+            return RegenerateTransactional(project, project.Elements, project.Elements.Count);
         }
 
         public int RegenerateDirtySubset(ProjectState project, IEnumerable<string> elementIds)
@@ -82,18 +83,40 @@ namespace QS3D.Core.Services
                 if (!byId.ContainsKey(id)) throw new KeyNotFoundException("Unknown regeneration target: " + id);
 
             var targets = project.Elements.Where(x => ids.Contains(x.Id)).ToList();
-            return Regenerate(project, targets, targets.Count);
+            return RegenerateTransactional(project, targets, targets.Count);
         }
 
-        private int Regenerate(ProjectState project, IReadOnlyList<ProjectElement> candidates, int passBasis)
+        private int RegenerateTransactional(ProjectState project, IEnumerable<ProjectElement> candidates, int passBasis)
         {
+            var snapshot = ProjectStateSnapshot.Capture(project);
+            try
+            {
+                return Regenerate(project, candidates, passBasis);
+            }
+            catch (Exception regenerationError)
+            {
+                try
+                {
+                    snapshot.Restore(project);
+                }
+                catch (Exception rollbackError)
+                {
+                    throw new AggregateException("Semantic regeneration failed and project rollback also failed.", regenerationError, rollbackError);
+                }
+                throw;
+            }
+        }
+
+        private int Regenerate(ProjectState project, IEnumerable<ProjectElement> candidates, int passBasis)
+        {
+            var candidateList = candidates?.ToList() ?? throw new ArgumentNullException(nameof(candidates));
             var total = 0;
             var maxPasses = Math.Max(2, passBasis * 2 + 2);
 
             for (var pass = 0; pass < maxPasses; pass++)
             {
                 _graph.Rebuild(project.Elements);
-                var dirty = _graph.TopologicalDirtyOrder(candidates);
+                var dirty = _graph.TopologicalDirtyOrder(candidateList);
                 if (dirty.Count == 0) break;
                 var progress = 0;
 
