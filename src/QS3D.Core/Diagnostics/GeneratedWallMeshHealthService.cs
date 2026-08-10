@@ -66,8 +66,8 @@ namespace QS3D.Core.Diagnostics
                 if (element.Category != ElementCategory.StructuralWall)
                     issues.Add(new ModelHealthIssue("WALL_MESH_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated wall mesh metadata chỉ hợp lệ trên StructuralWall element.", element.Id));
 
-                if (element.Dirty != ElementDirtyFlags.None)
-                    issues.Add(new ModelHealthIssue("WALL_MESH_GENERATED_STALE", HealthSeverity.Warning, "StructuralWall đang dirty nhưng vẫn còn generated wall mesh; rebuild/health-check trước khi phát hành bản vẽ.", element.Id));
+                if (element.IsGeneratedWallMeshStale())
+                    issues.Add(new ModelHealthIssue("WALL_MESH_GENERATED_STALE", HealthSeverity.Warning, "Generated wall mesh snapshot không còn khớp semantic/source hiện tại; rebuild wall mesh trước khi phát hành bản vẽ.", element.Id));
             }
             return issues;
         }
