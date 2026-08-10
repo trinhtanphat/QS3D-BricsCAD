@@ -7,6 +7,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPORTER = ROOT / "scripts/export-local-v25-sanitized-summary.py"
+TEMPLATE = ROOT / "docs/LOCAL-V25-RESULT-TEMPLATE.md"
 errors = []
 
 if not EXPORTER.is_file():
@@ -23,6 +24,23 @@ else:
     ):
         if needle not in text:
             errors.append("sanitized evidence exporter missing contract token: " + needle)
+
+if not TEMPLATE.is_file():
+    errors.append("missing docs/LOCAL-V25-RESULT-TEMPLATE.md")
+else:
+    template_text = TEMPLATE.read_text(encoding="utf-8")
+    for needle in (
+        "docs/LOCAL-V25-QUALIFICATION.md",
+        "docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md",
+        "export-local-v25-sanitized-summary.py",
+        "qualification-summary.md",
+        "no install path",
+        "NOT IMPLEMENTED",
+        "NOT QUALIFIED",
+        "GitHub Actions remain manual-only",
+    ):
+        if needle not in template_text:
+            errors.append("sanitized V25 result template missing handoff token: " + needle)
 
 if not errors:
     fixture = {
