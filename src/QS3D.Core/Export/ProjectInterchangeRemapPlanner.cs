@@ -90,8 +90,8 @@ namespace QS3D.Core.Export
                 target.Floors.Select(x => new NamedIdentity(x.Id, x.Name))));
             items.AddRange(PlanNamedIdentities(
                 InterchangeRemapIdentityKind.Family,
-                source.Families.Select(x => new NamedIdentity(x.Id, x.Name)),
-                target.Families.Select(x => new NamedIdentity(x.Id, x.Name))));
+                source.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString())),
+                target.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString()))));
             items.AddRange(PlanElements(source, target));
 
             var zoneMap = BuildMap(items, InterchangeRemapIdentityKind.Zone);
@@ -194,17 +194,19 @@ namespace QS3D.Core.Export
             var existing = target.ToList();
             var occupiedIds = new HashSet<string>(existing.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             foreach (var item in incoming) occupiedIds.Add(item.Id);
-            var occupiedNames = new HashSet<string>(existing.Select(x => x.Name), StringComparer.OrdinalIgnoreCase);
-            foreach (var item in incoming) occupiedNames.Add(item.Name);
+            var occupiedNames = new HashSet<string>(existing.Select(x => NameKey(x.NameScope, x.Name)), StringComparer.OrdinalIgnoreCase);
+            foreach (var item in incoming) occupiedNames.Add(NameKey(item.NameScope, item.Name));
 
             foreach (var sourceItem in incoming)
             {
                 var idCollision = existing.Any(x => string.Equals(x.Id, sourceItem.Id, StringComparison.OrdinalIgnoreCase));
-                var nameCollision = existing.Any(x => string.Equals(x.Name, sourceItem.Name, StringComparison.OrdinalIgnoreCase));
+                var nameCollision = existing.Any(x =>
+                    string.Equals(x.NameScope, sourceItem.NameScope, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(x.Name, sourceItem.Name, StringComparison.OrdinalIgnoreCase));
                 var targetId = idCollision ? NextId(sourceItem.Id, occupiedIds) : sourceItem.Id;
-                var targetName = nameCollision ? NextName(sourceItem.Name, occupiedNames) : sourceItem.Name;
+                var targetName = nameCollision ? NextName(sourceItem.Name, sourceItem.NameScope, occupiedNames) : sourceItem.Name;
                 occupiedIds.Add(targetId);
-                occupiedNames.Add(targetName);
+                occupiedNames.Add(NameKey(sourceItem.NameScope, targetName));
 
                 yield return new ProjectInterchangeRemapItem
                 {
@@ -302,16 +304,19 @@ namespace QS3D.Core.Export
             throw new InvalidOperationException("Unable to allocate a collision-free semantic import ID for " + sourceId + ".");
         }
 
-        private static string NextName(string sourceName, ISet<string> occupied)
+        private static string NextName(string sourceName, string nameScope, ISet<string> occupied)
         {
             for (var suffix = 1; suffix < 1000000; suffix++)
             {
                 var marker = suffix == 1 ? " (Imported)" : " (Imported " + suffix + ")";
                 var candidate = AppendBounded(sourceName, marker, MaxNameLength);
-                if (!occupied.Contains(candidate)) return candidate;
+                if (!occupied.Contains(NameKey(nameScope, candidate))) return candidate;
             }
             throw new InvalidOperationException("Unable to allocate a collision-free semantic import name for " + sourceName + ".");
         }
+
+        private static string NameKey(string nameScope, string name) =>
+            (nameScope ?? string.Empty).Trim() + "\u001f" + (name ?? string.Empty).Trim();
 
         private static string AppendBounded(string value, string suffix, int maxLength)
         {
@@ -331,14 +336,16 @@ namespace QS3D.Core.Export
 
         private sealed class NamedIdentity
         {
-            public NamedIdentity(string id, string name)
+            public NamedIdentity(string id, string name, string nameScope = "")
             {
                 Id = id ?? string.Empty;
                 Name = name ?? string.Empty;
+                NameScope = nameScope ?? string.Empty;
             }
 
             public string Id { get; }
             public string Name { get; }
+            public string NameScope { get; }
         }
     }
 }
