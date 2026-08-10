@@ -5,7 +5,6 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
-using Teigha.DatabaseServices;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -69,9 +68,7 @@ namespace QS3D.BricsCAD.V25
             }
 
             if (handles.Count == 0) return;
-            var ids = CadHandleService.Resolve(document, handles);
-            if (ids.Count == 0) return;
-            document.Editor.SetImpliedSelection(ids.Where(x => !x.IsNull && x.IsValid && !x.IsErased).ToArray());
+            CadHandleService.SelectIfAny(document, handles);
         }
     }
 }
