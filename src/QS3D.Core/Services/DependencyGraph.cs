@@ -55,24 +55,26 @@ namespace QS3D.Core.Services
 
         public IReadOnlyList<string> GetDependentsTransitive(string sourceId)
         {
-            if (string.IsNullOrWhiteSpace(sourceId)) return Array.Empty<string>();
+            var normalizedSourceId = (sourceId ?? string.Empty).Trim();
+            if (normalizedSourceId.Length == 0) return Array.Empty<string>();
+
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var queue = new Queue<string>();
-            queue.Enqueue(sourceId);
-            seen.Add(sourceId);
+            queue.Enqueue(normalizedSourceId);
+            seen.Add(normalizedSourceId);
             while (queue.Count > 0)
             {
                 var current = queue.Dequeue();
                 if (!_dependents.TryGetValue(current, out var next)) continue;
-                foreach (var id in next)
+                foreach (var id in next.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 {
                     if (!seen.Add(id)) continue;
                     result.Add(id);
                     queue.Enqueue(id);
                 }
             }
-            return result;
+            return result.AsReadOnly();
         }
 
         public IReadOnlyList<ProjectElement> TopologicalDirtyOrder(IEnumerable<ProjectElement> elements)
