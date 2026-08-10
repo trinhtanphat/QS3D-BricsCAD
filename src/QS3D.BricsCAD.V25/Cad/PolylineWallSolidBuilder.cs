@@ -23,6 +23,12 @@ namespace QS3D.BricsCAD.V25.Cad
             public double ThicknessM { get; set; }
             public double HeightM { get; set; }
             public bool UsedBevelJoin { get; set; }
+            public bool IsWallPierPathProfile { get; set; }
+            public WallPierProfileMode WallPierMode { get; set; }
+            public double WallPierChamferM { get; set; }
+            public double WallPierPerimeterM { get; set; }
+            public double WallPierGrossVolumeM3 { get; set; }
+            public double WallPierLateralAreaM2 { get; set; }
         }
 
         public static int BuildSelected(Document document, ProjectState project) =>
@@ -69,16 +75,60 @@ namespace QS3D.BricsCAD.V25.Cad
                     var miterLimit = ProjectNumber(project, "WallMiterLimit", 4d, 1d);
                     var sagittaM = ProjectNumber(project, "WallArcSagittaM", 0.002d, 1e-6d);
                     var centerline = ReadCenterline(document, polyline, sagittaM);
-                    var footprint = new WallFootprintEngine().Build(centerline, thicknessM, miterLimit, 1e-8d);
+
+                    IReadOnlyList<Point2> polygon;
+                    double centerlineLengthM;
+                    double footprintAreaM2;
+                    double footprintPerimeterM;
+                    double grossVolumeM3;
+                    double lateralAreaM2;
+                    bool usedBevelJoin;
+                    var wallPierMode = WallPierProfileMode.Rectangular;
+                    var wallPierChamferM = 0d;
+                    if (category == ElementCategory.WallPier)
+                    {
+                        wallPierMode = ResolveWallPierMode(element, family);
+                        wallPierChamferM = wallPierMode == WallPierProfileMode.Chamfered
+                            ? CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WallPierChamferM", 0.02d), element.Id + "/WallPierChamferM")
+                            : 0d;
+                        var pathProfile = WallPierPathProfilePlanner.Plan(new WallPierPathProfileInput
+                        {
+                            Centerline = centerline,
+                            ThicknessM = thicknessM,
+                            HeightM = heightM,
+                            Mode = wallPierMode,
+                            ChamferM = wallPierChamferM,
+                            MiterLimit = miterLimit,
+                            Tolerance = 1e-8d
+                        });
+                        polygon = pathProfile.Polygon;
+                        centerlineLengthM = pathProfile.CenterlineLengthM;
+                        footprintAreaM2 = pathProfile.FootprintAreaM2;
+                        footprintPerimeterM = pathProfile.FootprintPerimeterM;
+                        grossVolumeM3 = pathProfile.VolumeM3;
+                        lateralAreaM2 = pathProfile.LateralAreaM2;
+                        usedBevelJoin = pathProfile.UsedBevelJoin;
+                    }
+                    else
+                    {
+                        var footprint = new WallFootprintEngine().Build(centerline, thicknessM, miterLimit, 1e-8d);
+                        polygon = footprint.Polygon;
+                        centerlineLengthM = footprint.CenterlineLength;
+                        footprintAreaM2 = footprint.Area;
+                        footprintPerimeterM = footprint.Perimeter;
+                        grossVolumeM3 = footprintAreaM2 * heightM;
+                        lateralAreaM2 = footprintPerimeterM * heightM;
+                        usedBevelJoin = footprint.UsedBevelJoin;
+                    }
 
                     var profile = new Polyline();
                     Region? region = null;
                     var solid = new Solid3d();
                     try
                     {
-                        for (var vertex = 0; vertex < footprint.Polygon.Count; vertex++)
+                        for (var vertex = 0; vertex < polygon.Count; vertex++)
                         {
-                            var point = footprint.Polygon[vertex];
+                            var point = polygon[vertex];
                             profile.AddVertexAt(vertex, new Point2d(
                                 CadGeometryGuard.ToDrawingUnits(document, point.X, element.Id + "/footprint X"),
                                 CadGeometryGuard.ToDrawingUnits(document, point.Y, element.Id + "/footprint Y")), 0d, 0d, 0d);
@@ -106,11 +156,17 @@ namespace QS3D.BricsCAD.V25.Cad
                             Element = element,
                             PreviousHandle = previousHandle,
                             GeneratedHandle = solid.Handle.ToString(),
-                            LengthM = footprint.CenterlineLength,
-                            FootprintAreaM2 = footprint.Area,
+                            LengthM = centerlineLengthM,
+                            FootprintAreaM2 = footprintAreaM2,
                             ThicknessM = thicknessM,
                             HeightM = heightM,
-                            UsedBevelJoin = footprint.UsedBevelJoin
+                            UsedBevelJoin = usedBevelJoin,
+                            IsWallPierPathProfile = category == ElementCategory.WallPier,
+                            WallPierMode = wallPierMode,
+                            WallPierChamferM = wallPierChamferM,
+                            WallPierPerimeterM = footprintPerimeterM,
+                            WallPierGrossVolumeM3 = grossVolumeM3,
+                            WallPierLateralAreaM2 = lateralAreaM2
                         });
                     }
                     catch
@@ -135,6 +191,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["HeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["WallJoinMode"] = update.UsedBevelJoin ? "Miter+BevelFallback" : "Miter";
+                if (update.IsWallPierPathProfile) CommitWallPierPathSnapshot(update);
             }
 
             if (pending.Count > 0)
@@ -143,6 +200,36 @@ namespace QS3D.BricsCAD.V25.Cad
                 project.Touch();
             }
             return pending.Count;
+        }
+
+        private static void CommitWallPierPathSnapshot(PendingUpdate update)
+        {
+            var properties = update.Element.Properties;
+            properties["WallPierPathProfileKind"] = "OpenPolyline";
+            properties["WallPierPathProfileMode"] = update.WallPierMode.ToString();
+            properties["WallPierPathProfileChamferM"] = update.WallPierChamferM.ToString("R", CultureInfo.InvariantCulture);
+            properties["WallPierPathProfileCenterlineLengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
+            properties["WallPierPathProfileThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
+            properties["WallPierPathProfileHeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
+            properties["WallPierPathProfileAreaM2"] = update.FootprintAreaM2.ToString("R", CultureInfo.InvariantCulture);
+            properties["WallPierPathProfilePerimeterM"] = update.WallPierPerimeterM.ToString("R", CultureInfo.InvariantCulture);
+            properties["WallPierPathProfileGrossVolumeM3"] = update.WallPierGrossVolumeM3.ToString("R", CultureInfo.InvariantCulture);
+            properties["WallPierPathProfileLateralAreaM2"] = update.WallPierLateralAreaM2.ToString("R", CultureInfo.InvariantCulture);
+            update.Element.MarkDirty(ElementDirtyFlags.Quantity);
+        }
+
+        private static WallPierProfileMode ResolveWallPierMode(ProjectElement element, ProjectFamily? family)
+        {
+            var raw = Text(element, family, "WallPierProfileMode", "Rectangular");
+            if (Enum.TryParse(raw, true, out WallPierProfileMode mode)) return mode;
+            throw new InvalidOperationException(element.Id + "/WallPierProfileMode không hợp lệ: " + raw);
+        }
+
+        private static string Text(ProjectElement element, ProjectFamily? family, string key, string fallback)
+        {
+            if (element.Properties.TryGetValue(key, out var own) && !string.IsNullOrWhiteSpace(own)) return own.Trim();
+            if (family != null && family.Properties.TryGetValue(key, out var inherited) && !string.IsNullOrWhiteSpace(inherited)) return inherited.Trim();
+            return fallback;
         }
 
         private static IReadOnlyList<Point2> ReadCenterline(Document document, Polyline polyline, double maximumSagittaM)
