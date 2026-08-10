@@ -10,14 +10,21 @@ service = ROOT / "src/QS3D.BricsCAD.V25/Services/SourceReconcileService.cs"
 command = ROOT / "src/QS3D.BricsCAD.V25/SourceReconcileCommands.cs"
 ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/ProjectRibbonAugmenter.cs"
 engine = ROOT / "src/QS3D.Core/Services/RegenerationEngine.cs"
-smoke = ROOT / "tests/QS3D.Core.SmokeTests/RegenerationSubsetSmoke.cs"
+ownership_index = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipIndex.cs"
+regen_smoke = ROOT / "tests/QS3D.Core.SmokeTests/RegenerationSubsetSmoke.cs"
+ownership_smoke = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedHandleOwnershipIndexSmoke.cs"
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 doc = ROOT / "docs/SOURCE-EDIT-WORKFLOW.md"
 
 checks = {
     service: [
         "EntitySnapshotReader.ReadCurrentSelection(document)",
-        "GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle, out var generatedOwner, out var generatedSlot)",
+        "var generatedOwners = GeneratedHandleOwnershipIndex.Build(project);",
+        "var sourceOwners = BuildSourceOwnerIndex(project);",
+        "generatedOwners.TryFindOwner(snapshot.Handle, out var generatedOwner, out var generatedSlot)",
+        "sourceOwners.TryGetValue(snapshot.Handle, out var matches)",
+        "BuildSourceOwnerIndex(ProjectState project)",
+        "new Dictionary<string, List<ProjectElement>>(StringComparer.OrdinalIgnoreCase)",
         "is QS3D-generated output owned by",
         "Select the authoritative source CAD instead.",
         "Source reconcile P0 requires exactly one authoritative source handle per semantic element",
@@ -66,7 +73,16 @@ checks = {
         "var targets = project.Elements.Where(x => ids.Contains(x.Id)).ToList();",
         "return Regenerate(project, targets, targets.Count);",
     ],
-    smoke: [
+    ownership_index: [
+        "public sealed class GeneratedHandleOwnershipIndex",
+        "public static GeneratedHandleOwnershipIndex Build(ProjectState project)",
+        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
+        "GeneratedHandleOwnershipPolicy.AreSameLogicalOwnerSlots",
+        "Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase)",
+        "public bool TryFindOwner(string handle, out ProjectElement? owner, out string propertyKey)",
+        "if (entry.Ambiguity != null) throw new InvalidOperationException(entry.Ambiguity);",
+    ],
+    regen_smoke: [
         "RegeneratesOnlyRequestedElements",
         "RejectsUnknownTarget",
         "engine.RegenerateDirtySubset(project, new[] { selected.Id })",
@@ -74,7 +90,17 @@ checks = {
         'True(!unrelated.Quantities.ContainsKey("Count"))',
         "Throws<KeyNotFoundException>",
     ],
-    registration: ["RegenerationSubsetSmoke.Run();"],
+    ownership_smoke: [
+        "ResolvesCaseInsensitiveTrimmedHandle",
+        "SameLogicalAliasOnSameOwnerIsAllowed",
+        "DifferentOwnersFailClosed",
+        "DifferentLogicalSlotsOnSameOwnerFailClosed",
+        "BuiltIndexIsMembershipSnapshot",
+    ],
+    registration: [
+        "RegenerationSubsetSmoke.Run();",
+        "GeneratedHandleOwnershipIndexSmoke.Run();",
+    ],
     doc: [
         "`QS3DSYNCSOURCE`",
         "native BricsCAD source edits",
@@ -105,8 +131,21 @@ if service.is_file():
     restore = text.find("rollback.Restore(project)", flag)
     if min(prepare, refresh, regen, metadata, touch, commit, flag, restore) < 0 or not (prepare < refresh < regen < metadata < touch < commit < flag < restore):
         errors.append("Source reconcile must invalidate CAD -> refresh authoritative semantic state -> converge regeneration -> commit generated metadata/revision -> CAD commit, with project restore only on pre-commit failure")
+
+    resolve_start = text.find("private static List<Target> ResolveTargets")
+    resolve_end = text.find("private static Dictionary<string, List<ProjectElement>> BuildSourceOwnerIndex", resolve_start)
+    resolve = text[resolve_start:resolve_end] if resolve_start >= 0 and resolve_end > resolve_start else ""
+    generated_build = resolve.find("GeneratedHandleOwnershipIndex.Build(project)")
+    source_build = resolve.find("BuildSourceOwnerIndex(project)")
+    selection_loop = resolve.find("foreach (var snapshot in snapshots)")
+    if min(generated_build, source_build, selection_loop) < 0 or not (generated_build < selection_loop and source_build < selection_loop):
+        errors.append("Source reconcile ownership indexes must be built once before the selected-snapshot loop")
+    if "GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle" in resolve:
+        errors.append("Source reconcile must not rescan the whole project for generated ownership on every selected handle")
+    if ".Where(x => x.SourceHandles.Any" in resolve:
+        errors.append("Source reconcile must not rescan all project elements for source ownership on every selected handle")
     if "GeneratedHandleOwnershipLookupStatus" in text:
-        errors.append("Source reconcile must use the canonical boolean GeneratedHandleOwnershipPolicy.TryFindOwner contract; GeneratedHandleOwnershipLookupStatus is not part of the current Core API")
+        errors.append("GeneratedHandleOwnershipLookupStatus is not part of the current Core ownership API")
     if "engine.RegenerateDirty(project)" in text:
         errors.append("Source reconcile must regenerate only the affected semantic closure, not unrelated dirty project elements")
     if "new Build3DCommands" in text or "QS3DBUILD3D" in text or "SendStringToExecute" in text:
@@ -127,4 +166,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE reconciles only tracked authoritative source CAD, rejects generated/ambiguous/untracked selection through the canonical boolean generated-owner lookup, expands linked-host/DependsOn invalidation closure, removes generated dependents ownership-safely, refreshes source-derived semantic state, regenerates only the affected semantic closure to stability, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
+print("PASS: QS3DSYNCSOURCE builds generated/source ownership indexes once per operation, preserves ambiguous/untracked fail-closed behavior, expands linked-host/DependsOn invalidation closure, removes generated dependents ownership-safely, refreshes source-derived semantic state, regenerates only the affected semantic closure to stability, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
