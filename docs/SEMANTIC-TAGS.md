@@ -10,6 +10,7 @@ QS3D now has a guarded P0 native documentation slice that turns the existing Cor
 QS3DTAG
 QS3DTAGREFRESH
 QS3DTAGREMOVE
+QS3DTAGHEALTH
 ```
 
 ### `QS3DTAG`
@@ -37,6 +38,12 @@ The user may select either the generated tag itself or the authoritative semanti
 Removal is transactional: native erase, metadata clear, audit and project revision are committed together; a pre-commit failure restores the project snapshot and aborts the CAD transaction. A missing native tag handle may be treated as already absent after ownership metadata is validated, allowing stale semantic tag metadata to be cleaned without pretending another CAD object was erased.
 
 `QS3DUNTRACK` intentionally remains a different operation: semantic untrack preserves CAD geometry by contract. It does not silently call `QS3DTAGREMOVE`. If the user wants the generated tag physically erased before detaching semantic ownership, run `QS3DTAGREMOVE` first and then `QS3DUNTRACK`.
+
+### `QS3DTAGHEALTH`
+
+Runs the persisted Core tag health plus the V25-side read-only live CAD inspection for generated semantic tags. It reports missing handles, wrong entity type, QS3D XData ownership mismatch, MText content drift, text-height drift, drawing-local WCS position/rotation drift and normal drift. The command never repairs or erases CAD; it only reports and can locate live tag handles for review.
+
+The normal runtime health aggregator also includes this live semantic-tag inspection, so `QS3DHEALTH`/`QS3DHEALTHALL` see the same native integrity problems. `QS3DRELEASECHECK` consumes that runtime aggregator too, making live generated Solid3d/Grid annotation/Semantic Tag problems release blockers without claiming the separate licensed V25 qualification gate has been executed.
 
 ## Template contract
 
@@ -99,7 +106,7 @@ Tilted/3D UCS is rejected rather than creating an ambiguously oriented tag.
 
 ## Health
 
-`GeneratedSemanticTagHealthService` is part of `ComprehensiveModelHealthService` / normal Health and Release paths. It checks persisted tag metadata without mutating the model:
+`GeneratedSemanticTagHealthService` is part of `ComprehensiveModelHealthService` / normal semantic health paths. It checks persisted tag metadata without mutating the model:
 
 - generated handle syntax/duplicates/source-handle leakage;
 - owner project/element/version;
@@ -109,9 +116,11 @@ Tilted/3D UCS is rejected rather than creating an ambiguously oriented tag.
 - text height;
 - drawing-local position scope and finite X/Y/Z.
 
+`GeneratedSemanticTagRuntimeHealthService` adds V25-side read-only validation of the live CAD entity referenced by that metadata. It checks live existence/type, XData ownership, encoded MText content, text height, drawing-local WCS placement/rotation and +Z normal. It never repairs or erases mismatched CAD.
+
 A semantic element is **not required** to have a tag. Health starts only when generated tag ownership exists. After a successful `QS3DTAGREMOVE`, tag ownership metadata no longer exists and the element is again in the optional/no-tag state.
 
-P0 persisted health does not yet prove the live CAD handle is an MText after save/reopen. Exact live-entity/XData/content verification belongs to the licensed V25 runtime matrix or a future dedicated native tag health command.
+These source/static health paths improve runtime integrity detection, but they do not replace exact-SHA licensed BricsCAD V25 placement/refresh/remove/save-reopen/Undo qualification.
 
 ## Product boundary
 
@@ -121,6 +130,7 @@ Source is implemented and statically guarded, but the following remain open:
 - native MLeader / leader geometry;
 - automatic associative reposition when source geometry moves;
 - batch auto-placement / collision avoidance;
+- native DWG Table generation/refresh;
 - dimensions, title blocks and sheet/layout generation;
 - paper-space/view-specific annotation scale behavior;
 - standards-specific documentation templates;

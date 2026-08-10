@@ -60,10 +60,11 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
         public void Load(ProjectState project)
         {
-            _project = project ?? throw new ArgumentNullException(nameof(project));
+            if (project == null) throw new ArgumentNullException(nameof(project));
             ValidateWorkspaceCatalogs(project);
             SynchronizeActiveCatalogs(project);
 
+            _project = project;
             _selectedElement = null;
             _selectedPropertyScope = FamilyScope;
             OnChanged(nameof(SelectedPropertyScope));
@@ -301,62 +302,99 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
         private string ApplyFamilyName(ProjectFamily family, string value)
         {
+            var previous = family.Name;
             var next = (value ?? string.Empty).Trim();
             if (next.Length == 0)
             {
                 Status = "Tên Family không được để trống.";
-                return family.Name;
+                return previous;
             }
-            if (string.Equals(family.Name, next, StringComparison.Ordinal)) return family.Name;
-            if (_project != null && _project.Families.Any(x => !ReferenceEquals(x, family) && string.Equals(x.Name, next, StringComparison.CurrentCultureIgnoreCase)))
+            if (string.Equals(previous, next, StringComparison.Ordinal)) return previous;
+            if (_project == null)
             {
-                Status = "Tên Family đã tồn tại: " + next;
-                return family.Name;
+                Status = "Không thể đổi tên Family vì project không còn được mở.";
+                return previous;
             }
 
-            family.Name = next;
-            _project?.Touch();
-            SelectedFamilyName = family.Name;
-            Status = "Đã đổi tên Family: " + family.Name;
-            return family.Name;
+            try
+            {
+                var owned = _project.FindFamily(family.Id);
+                if (owned == null || !ReferenceEquals(owned, family))
+                {
+                    Status = "Không thể đổi tên Family vì lựa chọn đã stale hoặc không thuộc project đang mở.";
+                    return previous;
+                }
+                var renamed = ProjectFamilyService.Rename(_project, owned.Id, next);
+                SelectedFamilyName = renamed.Name;
+                Status = "Đã đổi tên Family: " + renamed.Name;
+                return renamed.Name;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException)
+            {
+                Status = "Không thể đổi tên Family: " + ex.Message;
+                return previous;
+            }
         }
 
         private string ApplyFamilyProperty(ProjectFamily family, string key, string unit, string value)
         {
-            var next = NormalizePropertyValue(key, unit, family.Properties.TryGetValue(key, out var previous) ? previous : string.Empty, value, out var valid);
-            var previousFamilyValue = previous ?? string.Empty;
+            var previousFamilyValue = family.Properties.TryGetValue(key, out var previous) ? previous ?? string.Empty : string.Empty;
+            var next = NormalizePropertyValue(key, unit, previousFamilyValue, value, out var valid);
             if (!valid) return previousFamilyValue;
             if (string.Equals(previousFamilyValue, next, StringComparison.Ordinal)) return previousFamilyValue;
-            family.Properties[key] = next;
-            if (_project == null) return next;
-
-            var inherited = 0;
-            var overrides = 0;
-            foreach (var element in _project.Elements.Where(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)))
+            if (_project == null)
             {
-                var hasInstanceValue = element.Properties.TryGetValue(key, out var instanceValue);
-                var isInherited = !hasInstanceValue || string.Equals(instanceValue, previousFamilyValue, StringComparison.Ordinal);
-                if (isInherited)
-                {
-                    element.SetProperty(key, next);
-                    inherited++;
-                }
-                else
-                {
-                    element.MarkDirty(ElementDirtyFlags.All);
-                    overrides++;
-                }
+                Status = "Không thể cập nhật Family vì project không còn được mở.";
+                return previousFamilyValue;
             }
 
-            _project.Touch();
-            Status = "Đã cập nhật " + DisplayNameFor(key) + " • kế thừa " + inherited + " cấu kiện" + (overrides > 0 ? " • giữ " + overrides + " instance override" : string.Empty);
-            return next;
+            try
+            {
+                var owned = _project.FindFamily(family.Id);
+                if (owned == null || !ReferenceEquals(owned, family))
+                {
+                    Status = "Không thể cập nhật Family vì lựa chọn đã stale hoặc không thuộc project đang mở.";
+                    return previousFamilyValue;
+                }
+
+                var result = ProjectFamilyService.SetProperty(_project, owned.Id, key, next);
+                Status = "Đã cập nhật " + DisplayNameFor(key) + " • kế thừa " + result.InheritedInstancesUpdated + " cấu kiện" +
+                         (result.OverridesPreserved > 0 ? " • giữ " + result.OverridesPreserved + " instance override" : string.Empty);
+                return owned.Properties.TryGetValue(key, out var stored) ? stored ?? next : next;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException)
+            {
+                Status = "Không thể cập nhật " + DisplayNameFor(key) + ": " + ex.Message;
+                return previousFamilyValue;
+            }
         }
 
         private string ApplyInstanceProperty(ProjectElement element, ProjectFamily family, string key, string unit, PropertyRowViewModel row, string value)
         {
             var familyValue = family.Properties.TryGetValue(key, out var familyRaw) ? familyRaw ?? string.Empty : string.Empty;
             var current = element.Properties.TryGetValue(key, out var stored) ? stored ?? string.Empty : familyValue;
+            if (_project == null)
+            {
+                Status = "Không thể cập nhật Instance vì project không còn được mở.";
+                return current;
+            }
+
+            try
+            {
+                var ownedElement = _project.FindElement(element.Id);
+                var ownedFamily = _project.FindFamily(family.Id);
+                if (ownedElement == null || !ReferenceEquals(ownedElement, element) || ownedFamily == null || !ReferenceEquals(ownedFamily, family))
+                {
+                    Status = "Không thể cập nhật Instance vì lựa chọn đã stale hoặc không thuộc project đang mở.";
+                    return current;
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                Status = "Không thể cập nhật Instance: " + ex.Message;
+                return current;
+            }
+
             var next = NormalizePropertyValue(key, unit, current, value, out var valid);
             if (!valid) return current;
             if (string.Equals(current, next, StringComparison.Ordinal))
@@ -367,7 +405,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
             element.SetProperty(key, next);
             element.MarkDirty(ElementDirtyFlags.All);
-            _project?.Touch();
+            _project.Touch();
             row.CanReset = !string.Equals(next, familyValue, StringComparison.Ordinal);
             var displayValue = ToDisplayValue(key, next);
             Status = row.CanReset
