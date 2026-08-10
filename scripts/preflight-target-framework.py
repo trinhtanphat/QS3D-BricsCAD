@@ -43,17 +43,80 @@ for source_root in roots:
                 line = code.count("\n", 0, match.start()) + 1
                 errors.append(str(path.relative_to(ROOT)) + ":" + str(line) + " uses unsupported target-framework API: " + label)
 
-# File.Move(source,destination,overwrite) is not available on these targets.
-move_three_args = re.compile(r"\bFile\.Move\s*\([^;\n]*,[^;\n]*,[^;\n]*\)")
+
+def call_top_level_comma_count(code, open_paren):
+    """Return top-level comma count for one call, or None when parentheses are malformed.
+
+    This intentionally understands nested parentheses and C# string/char literals so calls such as
+    File.Move(Path.Combine(a, b), target) are not mistaken for the unsupported three-argument overload.
+    """
+    depth = 0
+    commas = 0
+    quote = None
+    verbatim = False
+    escaped = False
+    index = open_paren
+    while index < len(code):
+        ch = code[index]
+        if quote is not None:
+            if quote == '"' and verbatim:
+                if ch == '"':
+                    if index + 1 < len(code) and code[index + 1] == '"':
+                        index += 2
+                        continue
+                    quote = None
+                    verbatim = False
+                index += 1
+                continue
+            if escaped:
+                escaped = False
+                index += 1
+                continue
+            if ch == '\\':
+                escaped = True
+                index += 1
+                continue
+            if ch == quote:
+                quote = None
+            index += 1
+            continue
+
+        if ch in ('"', "'"):
+            quote = ch
+            verbatim = ch == '"' and index > 0 and code[index - 1] == '@'
+            index += 1
+            continue
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+            if depth == 0:
+                return commas
+            if depth < 0:
+                return None
+        elif ch == ',' and depth == 1:
+            commas += 1
+        index += 1
+    return None
+
+
+# File.Move(source,destination,overwrite) is not available on these targets. Parse the call instead
+# of using a comma regex: nested calls such as File.Move(Path.Combine(a, b), target) are valid.
+move_call = re.compile(r"\bFile\.Move\s*\(")
 for source_root in roots:
     if not source_root.is_dir():
         continue
     for path in source_root.rglob("*.cs"):
         text = path.read_text(encoding="utf-8")
         code = "\n".join(line.split("//", 1)[0] for line in text.splitlines())
-        for match in move_three_args.finditer(code):
-            line = code.count("\n", 0, match.start()) + 1
-            errors.append(str(path.relative_to(ROOT)) + ":" + str(line) + " uses unsupported File.Move overwrite overload")
+        for match in move_call.finditer(code):
+            open_paren = code.find("(", match.start(), match.end())
+            comma_count = call_top_level_comma_count(code, open_paren)
+            if comma_count is None:
+                continue
+            if comma_count >= 2:
+                line = code.count("\n", 0, match.start()) + 1
+                errors.append(str(path.relative_to(ROOT)) + ":" + str(line) + " uses unsupported File.Move overwrite overload")
 
 print("QS3D target-framework compatibility preflight")
 if errors:
