@@ -26,7 +26,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null || !Attached.Contains(document)) return;
             try { document.ImpliedSelectionChanged -= OnImpliedSelectionChanged; }
             catch { }
-            StopPending(document);
+            RemovePending(document);
             Refreshing.Remove(document);
             Attached.Remove(document);
         }
@@ -92,6 +92,13 @@ namespace QS3D.BricsCAD.V25
         {
             if (!Pending.TryGetValue(document, out var timer)) return;
             timer.Stop();
+        }
+
+        private static void RemovePending(Document document)
+        {
+            if (!Pending.TryGetValue(document, out var timer)) return;
+            timer.Stop();
+            Pending.Remove(document);
         }
     }
 }
