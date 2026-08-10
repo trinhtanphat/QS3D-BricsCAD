@@ -19,7 +19,12 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    ReportBlocked(document, "Release Check: BLOCKED • chưa có QS3D project state/sidecar cho DWG hiện tại; lệnh kiểm tra không tạo project mới.");
+                    return;
+                }
+
                 var sourceHandles = project.Elements
                     .SelectMany(x => x.SourceHandles)
                     .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -72,6 +77,12 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\n" + message);
             }
+        }
+
+        private static void ReportBlocked(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
 
         private static void Locate(Document document, QS3D.Core.Domain.ProjectState project, ModelHealthIssue issue)
