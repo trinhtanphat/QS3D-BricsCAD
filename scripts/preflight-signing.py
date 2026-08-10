@@ -57,6 +57,8 @@ if release.is_file():
         "QS3D_TIMESTAMP_SERVER: ${{ vars.QS3D_TIMESTAMP_SERVER }}",
         "RELEASE_RUN_RUNTIME: ${{ inputs.run_runtime }}",
         "RELEASE_SIGN_PACKAGE: ${{ inputs.sign_package }}",
+        "if ($env:GITHUB_REF -ne 'refs/heads/main')",
+        "V25 releases must be dispatched from refs/heads/main",
         "Stable release requires run_runtime=true.",
         "Stable release requires sign_package=true.",
         "prerelease input must match the release_tag suffix",
@@ -68,6 +70,11 @@ if release.is_file():
         "-TimestampServer $env:QS3D_TIMESTAMP_SERVER",
         "-ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
         "-ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
+        "draft = $true",
+        "Expected release asset was not uploaded:",
+        "$publishBody = @{ draft = $false }",
+        "-Method Patch",
+        "GitHub release remained a draft after publish request.",
     )
     for needle in required:
         if needle not in text:
@@ -92,6 +99,15 @@ if release.is_file():
         errors.append("release-v25.yml must distinguish explicit prerelease exceptions from stable release requirements")
     if "(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?" not in text:
         errors.append("release-v25.yml release tag validation must support separate prerelease/build-metadata components")
+
+    draft_index = text.find("draft = $true")
+    upload_index = text.find("$uploadBase = $release.upload_url")
+    verify_assets_index = text.find("Expected release asset was not uploaded:")
+    publish_draft_index = text.find("$publishBody = @{ draft = $false }")
+    if any(index < 0 for index in (draft_index, upload_index, verify_assets_index, publish_draft_index)) or not (
+        draft_index < upload_index < verify_assets_index < publish_draft_index
+    ):
+        errors.append("release-v25.yml must create a draft, upload and verify all assets, then publish the release")
 
 for path in ROOT.rglob("*.pfx"):
     errors.append("private signing certificate must not be committed: " + str(path.relative_to(ROOT)))
