@@ -13,7 +13,9 @@ namespace QS3D.Core.Services
         public void Replace(IEnumerable<string> ids)
         {
             if (ids == null) throw new ArgumentNullException(nameof(ids));
-            var next = new HashSet<string>(ids.Where(x => !string.IsNullOrWhiteSpace(x)), StringComparer.OrdinalIgnoreCase);
+            var next = new HashSet<string>(ids
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
             if (_ids.SetEquals(next)) return;
             _ids.Clear();
             foreach (var id in next) _ids.Add(id);
