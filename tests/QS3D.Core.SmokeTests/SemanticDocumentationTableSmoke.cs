@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             ExplicitOrderAndTemplatesArePreserved();
+            BlankOptionalCellsAreAllowedWithoutWeakeningTagLabels();
             DuplicateElementIdsFailClosed();
             DuplicateHeadersFailClosed();
             GeneratedOwnershipPropertiesRemainBlocked();
@@ -41,6 +42,20 @@ namespace QS3D.Core.SmokeTests
             Equal("7.25", table.Rows[0].Cells[2]);
             Equal("E-1", table.Rows[1].ElementId);
             Equal("B1", table.Rows[1].Cells[0]);
+        }
+
+        private static void BlankOptionalCellsAreAllowedWithoutWeakeningTagLabels()
+        {
+            var project = new ProjectState("table", "Table");
+            var element = Element(project, "E-1", ElementCategory.Beam, "B1", 1.0);
+            var table = SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                new[] { element.Id },
+                new[] { new SemanticDocumentationColumn("Optional", "{P:MissingOptional}") });
+
+            Equal(string.Empty, table.Rows[0].Cells[0]);
+            Throws<InvalidOperationException>(() => SemanticTagRenderer.Render(project, element, "{P:MissingOptional}"));
         }
 
         private static void DuplicateElementIdsFailClosed()
