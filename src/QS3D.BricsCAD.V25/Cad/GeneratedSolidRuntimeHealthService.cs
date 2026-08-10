@@ -50,6 +50,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 issues,
                 "BqNativeTableBuilder",
                 () => BqNativeTableBuilder.Inspect(document, project));
+            AddProviderSafely(
+                issues,
+                "BbsNativeTableBuilder",
+                () => BbsNativeTableBuilder.Inspect(document, project));
             return issues.AsReadOnly();
         }
 
