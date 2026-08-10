@@ -142,7 +142,7 @@ namespace QS3D.Core.Export
             var familyIndex = ValidateFamilies(families, issues);
             var elementIndex = ValidateElements(elements, familyIndex, floorIds, zoneIds, issues);
             ValidateDependencies(elements, elementIndex, issues);
-            ValidateDependencyCycles(elements, elementIndex, issues);
+            ValidateDependencyCycles(elementIndex, issues);
 
             return new ProjectInterchangeValidationResult(
                 snapshot.Format ?? string.Empty,
@@ -374,48 +374,55 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static void ValidateDependencyCycles(IReadOnlyList<ElementContract> elements, IReadOnlyDictionary<string, ElementContract> elementIndex, IssueCollector issues)
+        private static void ValidateDependencyCycles(IReadOnlyDictionary<string, ElementContract> elementIndex, IssueCollector issues)
         {
-            var state = new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+            if (elementIndex.Count == 0 || issues.Full) return;
+
+            var indegree = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var dependents = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var id in elementIndex.Keys) indegree[id] = 0;
+
             foreach (var pair in elementIndex)
             {
-                if (issues.Full) break;
-                if (state.TryGetValue(pair.Key, out var existing) && existing == 2) continue;
-                VisitDependencies(pair.Key, elementIndex, state, new List<string>(), issues);
-            }
-        }
-
-        private static void VisitDependencies(
-            string id,
-            IReadOnlyDictionary<string, ElementContract> elements,
-            IDictionary<string, byte> state,
-            IList<string> stack,
-            IssueCollector issues)
-        {
-            if (issues.Full) return;
-            if (state.TryGetValue(id, out var current))
-            {
-                if (current == 2) return;
-                if (current == 1)
-                {
-                    issues.Error("DEPENDENCY_CYCLE", "Dependency cycle detected at element " + id + ".", "$.elements");
-                    return;
-                }
-            }
-            state[id] = 1;
-            stack.Add(id);
-            if (elements.TryGetValue(id, out var element))
-            {
-                foreach (var raw in element.Dependencies ?? new List<string>())
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var raw in pair.Value.Dependencies ?? new List<string>())
                 {
                     var dependency = (raw ?? string.Empty).Trim();
-                    if (dependency.Length == 0 || !elements.ContainsKey(dependency)) continue;
-                    VisitDependencies(dependency, elements, state, stack, issues);
-                    if (issues.Full) break;
+                    if (dependency.Length == 0 || string.Equals(dependency, pair.Key, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!elementIndex.ContainsKey(dependency) || !seen.Add(dependency)) continue;
+                    indegree[pair.Key] = indegree[pair.Key] + 1;
+                    if (!dependents.TryGetValue(dependency, out var next))
+                    {
+                        next = new List<string>();
+                        dependents[dependency] = next;
+                    }
+                    next.Add(pair.Key);
                 }
             }
-            stack.RemoveAt(stack.Count - 1);
-            state[id] = 2;
+
+            var ready = new SortedSet<string>(indegree.Where(x => x.Value == 0).Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
+            var processed = 0;
+            while (ready.Count > 0)
+            {
+                var id = ready.Min!;
+                ready.Remove(id);
+                processed++;
+                if (!dependents.TryGetValue(id, out var next)) continue;
+                foreach (var dependent in next.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                {
+                    var remaining = indegree[dependent] - 1;
+                    indegree[dependent] = remaining;
+                    if (remaining == 0) ready.Add(dependent);
+                }
+            }
+
+            if (processed == elementIndex.Count) return;
+            var unresolved = indegree.Where(x => x.Value > 0).Select(x => x.Key).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Take(8).ToArray();
+            issues.Error(
+                "DEPENDENCY_CYCLE",
+                "Dependency cycle detected across " + (elementIndex.Count - processed).ToString(CultureInfo.InvariantCulture) + " element(s)" +
+                (unresolved.Length == 0 ? "." : ": " + string.Join(", ", unresolved) + (elementIndex.Count - processed > unresolved.Length ? ", ..." : ".")),
+                "$.elements");
         }
 
         private static void ValidateProperties(IDictionary<string, string>? properties, string path, IssueCollector issues)
