@@ -46,6 +46,14 @@ Any exception before native commit causes the CAD transaction to roll back and r
 
 This prevents the failure window where DWG annotation is committed while `.qsdb` ownership still points at the previous entities.
 
+## Health and locate integration
+
+`GeneratedGridAnnotationHealthService` validates persisted annotation integrity without pretending that Core can inspect a live BricsCAD database. It reports malformed/duplicate handles, generated handles leaking into `SourceHandles`, stale built labels, owner project/element/version mismatches, and invalid bubble/text sizing.
+
+`ComprehensiveModelHealthService` includes these checks and classifies `GRID_ANNOTATION` issue codes as generated-output issues. This means the existing generated-output health/locate routing can prefer generated CAD when a tracked handle is available, while retaining semantic/source fallback when the generated entity itself is missing.
+
+Live entity type/XData verification still belongs to the V25 layer and remains a separate qualification step; persisted metadata health is not presented as proof that a DBText/Circle is actually live in a particular DWG.
+
 ## Explicit exclusions
 
 This source batch does not claim completion of:
