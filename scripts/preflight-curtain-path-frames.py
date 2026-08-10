@@ -55,11 +55,12 @@ checks = {
     ],
     "frame_command": [
         "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines",
-        "open/bulged POLYLINE WCS-XY",
+        "open/bulged POLYLINE WCS-XY", "FinalizeUi(document, message)", '"UI sync warning: " + ex.Message',
     ],
     "build_command": [
         "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines",
-        "PolylineWallSolidBuilder.BuildSelected", "open/bulged POLYLINE WCS-XY",
+        "PolylineWallSolidBuilder.BuildSelected", "open/bulged POLYLINE WCS-XY", "RegenerateDirty(project)",
+        "FinalizeUi(document, hostSolids, frameSolids, stamped, regenerated)", '"UI sync warning: " + ex.Message',
     ],
     "planner_smoke": [
         "ModuleInitializer", "BentPathSplitsFrameAtCorner", "ProjectionUsesNearestPathStation",
@@ -91,6 +92,24 @@ if files["builder"].is_file():
         if needle in text:
             errors.append("curtain path frame builder contains forbidden ownership/geometry shortcut: " + needle)
 
+if files["build_command"].is_file():
+    text = files["build_command"].read_text(encoding="utf-8")
+    regen_index = text.find("RegenerateDirty(project)")
+    first_native_index = text.find("WallSolidBuilder.BuildSelectedLineWalls")
+    if regen_index < 0 or first_native_index < 0 or regen_index > first_native_index:
+        errors.append("QS3DCURTAIN3D must resolve semantic regeneration before the first native host/frame transaction")
+
+for key in ("frame_command", "build_command"):
+    if files[key].is_file():
+        text = files[key].read_text(encoding="utf-8")
+        finalize_index = text.find("private static void FinalizeUi")
+        if finalize_index < 0:
+            errors.append(str(files[key].relative_to(ROOT)) + " missing non-fatal post-commit FinalizeUi boundary")
+        else:
+            finalize = text[finalize_index:]
+            if "catch (Exception ex)" not in finalize or "TryWriteMessage" not in finalize:
+                errors.append(str(files[key].relative_to(ROOT)) + " post-commit FinalizeUi must fail best-effort")
+
 print("QS3D curtain path-frame preflight")
 if errors:
     for error in errors:
@@ -98,4 +117,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: open/bulged WCS-XY GlassWall POLYLINE sources map deterministic curtain stations to tessellated path segments, project linked openings to nearest path stations, preserve dedicated generated-frame ownership/stale metadata, and extend live fingerprints to line/polyline host geometry without inventing a curved sweep primitive.")
+print("PASS: open/bulged WCS-XY GlassWall POLYLINE sources map deterministic curtain stations to tessellated path segments, project linked openings to nearest path stations, preserve dedicated generated-frame ownership/stale metadata, validate semantics before native Curtain3D mutation, and keep post-commit UI synchronization non-fatal.")
