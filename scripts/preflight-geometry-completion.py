@@ -81,9 +81,11 @@ checks = {
         "ProjectRebarScheduleBuilder.Build(project)", "RebarShapePathBuilder.Build", "RebarShapeLegsM", "RebarShapeTurnsDeg", "ProjectRebarShapePlan"
     ],
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": [
-        "REBAR_GENERATED_OWNERSHIP_CONFLICT", "REBAR_GENERATED_SOLID_MISSING", "REBAR_GENERATED_COUNT_MISMATCH",
-        "GeneratedShapeRebarHandles", "InspectShape", "InspectAll", "SHAPE_REBAR", "BuildOwnershipIndex",
-        "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "SourceHandles"
+        'CodePrefix = "REBAR"', 'CodePrefix = "SHAPE_REBAR"',
+        '"_GENERATED_OWNERSHIP_CONFLICT"', '"_GENERATED_SOLID_MISSING"', '"_GENERATED_COUNT_MISMATCH"',
+        "GeneratedShapeRebarHandles", "InspectShape", "InspectAll", "BuildOwnershipIndex",
+        "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "SourceHandles",
+        "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles"
     ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": [
         "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "EnsureOwned", "ownership conflict", "Refusing destructive erase",
@@ -128,7 +130,7 @@ checks = {
         "QS3DHIGHLIGHT", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE"
     ],
     "src/QS3D.BricsCAD.V25/WallJunctionCommands.cs": [
-        "QS3DWALLJUNCTIONS", "WallJunctionPlanner().Plan", "WallJunctionKind.L", "WallJunctionKind.T", "WallJunctionKind.X"
+        "QS3DWALLJUNCTIONS", "WallJunctionAdjustmentPlanner().Plan", "WallJunctionKind.L", "WallJunctionKind.T", "WallJunctionKind.X"
     ],
     "src/QS3D.BricsCAD.V25/Services/SemanticReferenceHandles.cs": [
         "MatchesSelection", "BoundarySourceHandlesKey", "GeneratedSolidHandle"
@@ -176,7 +178,7 @@ checks = {
         "ProjectsOntoHorizontalSegment", "ProjectsOntoVerticalSegment", "RejectsCornerCrossingCut", "RejectsFarOpening"
     ],
     "tests/QS3D.Core.SmokeTests/RebarShapeGeometrySmoke.cs": [
-        "ModuleInitializer", "StraightPath", "LShapePath", "UShapePath", "CustomTurns"
+        "ModuleInitializer", "Straight()", "LShape()", "UShape()", "CustomTurns()"
     ],
     "tests/QS3D.Core.SmokeTests/ProjectRebarShapeSmoke.cs": [
         "BuildsLShapeFromElementProperties", "StraightShapeNeedsNoLegMetadata", "MismatchedLegTotalIsRejected"
