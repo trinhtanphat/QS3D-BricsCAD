@@ -22,6 +22,8 @@ if SERVICE.is_file():
         '"GeneratedSemanticTagRuntimeHealthService"',
         "GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project)",
         '"GeneratedSemanticElementTableRuntimeHealthService"',
+        "DoorOpeningNativeTableBuilder.Inspect(document, project)",
+        '"DoorOpeningNativeTableBuilder"',
         "private static void AddProviderSafely(",
         "Func<IReadOnlyList<ModelHealthIssue>> provider",
         "catch (System.Exception ex) when (IsRecoverableDiagnosticFailure(ex))",
@@ -39,9 +41,10 @@ if SERVICE.is_file():
     grid = text.find('"GeneratedGridAnnotationRuntimeHealthService"', solid)
     tag = text.find('"GeneratedSemanticTagRuntimeHealthService"', grid)
     table = text.find('"GeneratedSemanticElementTableRuntimeHealthService"', tag)
-    result = text.find("return issues.AsReadOnly();", table)
-    if min(solid, grid, tag, table, result) < 0 or not solid < grid < tag < table < result:
-        errors.append("Runtime health providers must be invoked independently before the aggregate returns, including Semantic Element Table health.")
+    door_opening = text.find('"DoorOpeningNativeTableBuilder"', table)
+    result = text.find("return issues.AsReadOnly();", door_opening)
+    if min(solid, grid, tag, table, door_opening, result) < 0 or not solid < grid < tag < table < door_opening < result:
+        errors.append("Runtime health providers must be invoked independently before the aggregate returns, including semantic and authoritative Door/Opening native tables.")
 
     if "catch (System.Exception ex)\n" in text:
         errors.append("Runtime health provider isolation must not use an unfiltered broad System.Exception catch.")
@@ -60,4 +63,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: generated-solid, Grid annotation, Semantic Tag and Semantic Element Table native health providers are isolated so one recoverable provider failure becomes a diagnostic instead of aborting the whole QS3DHEALTH runtime report; fatal runtime failures still bubble.")
+print("PASS: generated-solid, Grid annotation, Semantic Tag, Semantic Element Table and Door/Opening native Table health providers are isolated so one recoverable provider failure becomes a diagnostic instead of aborting the whole QS3DHEALTH runtime report; fatal runtime failures still bubble.")
