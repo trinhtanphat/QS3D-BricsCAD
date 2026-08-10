@@ -173,6 +173,22 @@ No agent may infer engineering reinforcement, hook, lap, anchorage or fabricatio
 - exercise `QS3DUNTRACK` / `QS3DUNTRACKFINISH` on source and generated selections;
 - verify untrack blocks a target while external semantic dependents remain, allows a complete dependency batch, and does not erase CAD geometry.
 
+#### H.1 Modeless multi-DWG lifetime — **PENDING local V25 runtime proof**
+
+Run this scenario only on licensed BricsCAD V25 against the same exact SHA/package. Source preflight verifies the ownership contract, but only the real V25 document-destroy event/dispatcher can prove runtime behavior.
+
+1. Open DWG **A** and open several source-DWG-bound modeless surfaces: BQ, BBS, Model Health, Door/Opening Schedule, HT_Phòng Schedule, Family Manager, Level Picker, Zone Manager, Material Catalog, Project Tools, Schedule Hub and Curtain Hub.
+2. Also open **Domain Hub** and **Rebar 3D Hub**. These two are intentionally **active-document dynamic**, not bound to A.
+3. Open/switch to DWG **B** while A remains open.
+4. From the A-bound windows, attempt representative Locate/Refresh/Export/mutation actions. They must fail closed or tell the user to reactivate A; no B project/CAD state may change.
+5. From Domain Hub and Rebar 3D Hub, launch harmless representative commands while B is active. They must target B because those hubs resolve the active document at click time.
+6. Close DWG **A** while all A-bound windows remain open. Every A-bound window must unregister and close without blocking the DWG close or throwing an unhandled exception.
+7. Domain Hub and Rebar 3D Hub must remain usable after A closes and must continue targeting B.
+8. Reopen A or open a new third drawing and repeat switch/close cycles several times. Verify there are no disposed-document callbacks, stale project selection, duplicate lifetime subscriptions, `eNotOpenForWrite`/disposed-object errors, crash, or visible stale-A data retained by a supposedly closed bound window.
+9. Exit BricsCAD with bound and dynamic hubs open. Shutdown must complete without an unhandled UI/document lifecycle exception.
+
+Record this scenario as **PASS / FAIL / NOT TESTED** in the sanitized local result. Never convert it to PASS from source review alone.
+
 ### I. Reporting
 
 - BQ summary/recalculate/Locate;
@@ -234,6 +250,7 @@ Room/HT_PHÒNG: PASS/FAIL
 Curtain: PASS/FAIL
 Rebar: PASS/FAIL
 Project/save-reopen/multi-DWG: PASS/FAIL
+Modeless multi-DWG close lifecycle: PASS/FAIL/NOT TESTED
 BQ/BBS/Excel: PASS/FAIL
 Unicode/HiDPI: PASS/FAIL
 Clean install/upgrade/uninstall: PASS/FAIL
