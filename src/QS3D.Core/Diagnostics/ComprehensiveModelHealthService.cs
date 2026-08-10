@@ -22,7 +22,8 @@ namespace QS3D.Core.Diagnostics
         public IReadOnlyList<ModelHealthIssue> Inspect(
             ProjectState project,
             ISet<string>? liveSourceHandles = null,
-            ISet<string>? liveGeneratedSolidHandles = null)
+            ISet<string>? liveGeneratedSolidHandles = null,
+            ISet<string>? liveSemanticTagHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
 
@@ -35,7 +36,7 @@ namespace QS3D.Core.Diagnostics
             Add(issues, seen, new LevelReferenceHealthService().Inspect(project));
             Add(issues, seen, new GridNamingHealthService().Inspect(project));
             Add(issues, seen, new GeneratedGridAnnotationHealthService().Inspect(project));
-            Add(issues, seen, new GeneratedSemanticTagHealthService().Inspect(project));
+            Add(issues, seen, new GeneratedSemanticTagHealthService().Inspect(project, liveSemanticTagHandles));
             Add(issues, seen, new GeneratedHandleOwnershipHealthService().Inspect(project));
             Add(issues, seen, new GeneratedRebarOwnershipHealthService().Inspect(project));
             Add(issues, seen, new GeneratedGeometryStaleHealthService().Inspect(project));
