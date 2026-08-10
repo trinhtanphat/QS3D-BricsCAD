@@ -18,23 +18,29 @@ namespace QS3D.BricsCAD.V25.Cad
             if (element == null) throw new ArgumentNullException(nameof(element));
             if (!element.Properties.TryGetValue(HandleKey, out var text) || string.IsNullOrWhiteSpace(text)) return string.Empty;
 
-            if (long.TryParse(text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+            var normalized = text.Trim();
+            if (!long.TryParse(normalized, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+                throw new InvalidOperationException("GeneratedSolidHandle is invalid for " + element.Id + ": " + normalized);
+
+            ObjectId id;
+            try
             {
-                try
-                {
-                    var id = document.Database.GetObjectId(false, new Handle(value), 0);
-                    if (!id.IsNull && id.IsValid)
-                    {
-                        var solid = transaction.GetObject(id, OpenMode.ForWrite, false) as Solid3d;
-                        if (solid != null && !solid.IsErased) solid.Erase();
-                    }
-                }
-                catch
-                {
-                    // A stale generated handle is safe to ignore. Metadata is replaced only after the CAD transaction commits.
-                }
+                id = document.Database.GetObjectId(false, new Handle(value), 0);
             }
-            return text.Trim();
+            catch
+            {
+                // A handle that no longer resolves is stale and safe to replace.
+                return normalized;
+            }
+
+            if (id.IsNull || !id.IsValid) return normalized;
+            var entity = transaction.GetObject(id, OpenMode.ForWrite, true) as Entity;
+            if (entity == null || entity.IsErased) return normalized;
+            var solid = entity as Solid3d;
+            if (solid == null)
+                throw new InvalidOperationException("GeneratedSolidHandle " + normalized + " for " + element.Id + " resolves to a live non-Solid3d object. Refusing to orphan or overwrite generated geometry ownership.");
+            solid.Erase();
+            return normalized;
         }
 
         public static void CommitReplacement(ProjectElement element, string previousHandle, string generatedHandle, ElementCategory category)
