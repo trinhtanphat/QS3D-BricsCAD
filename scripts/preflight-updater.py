@@ -44,6 +44,12 @@ checks = {
         "Unsafe package archive entry",
         "Assert-PackageRoot",
         "Assert-AuthenticodeSigner",
+        "Read-SignedPluginVersion",
+        "[Reflection.AssemblyName]::GetAssemblyName",
+        "$signedPluginVersion",
+        "does not match manifest version",
+        "metadata version",
+        "Refusing replay/downgrade metadata substitution",
         "SHA256SUMS.txt",
         "$name.Split('/')",
         "Unsafe SHA256SUMS entry",
@@ -61,6 +67,10 @@ checks = {
         "embedded credentials",
         "PACKAGE-METADATA.json",
         "Assert-AuthenticodeSigner",
+        "Read-PluginAssemblyVersion",
+        "$signedPluginVersion",
+        "does not match signed QS3D plugin assembly version",
+        "version = $signedPluginVersion.ToString()",
         "Assert-ZipPayloadMatchesSignedStaging",
         "Zipped QS3D executable payload",
         "Package ZIP payload does not match signed staging file",
@@ -72,6 +82,10 @@ checks = {
         "ExpectedSignerThumbprint",
         "$SignedPayloadNames",
         "Assert-AuthenticodeSigner",
+        "Read-PluginAssemblyVersion",
+        "$signedPluginVersion",
+        "does not match signed QS3D plugin assembly version",
+        "signedPluginAssemblyVersion",
         "signedExecutablePayload",
         "signedPayloadSignerThumbprint",
         "SHA256SUMS.txt",
@@ -145,17 +159,32 @@ if updater.is_file():
     if archive_check < 0 or extraction < 0 or archive_check > extraction:
         errors.append("updater must validate archive paths/expanded limits before Expand-Archive")
     package_check = text.find("Assert-PackageRoot -Directory $extractRoot")
+    signed_version = text.find("$signedPluginVersion = Read-SignedPluginVersion")
+    metadata_check = text.find("$packageVersion -ne $signedPluginVersion")
     installer_execute = text.find("& $installer @arguments")
-    if package_check < 0 or installer_execute < 0 or package_check > installer_execute:
-        errors.append("all downloaded executable payload signatures must be pinned before installer execution")
+    if package_check < 0 or signed_version < 0 or metadata_check < 0 or installer_execute < 0:
+        errors.append("updater must verify signatures, signed plugin version, metadata binding, then execute installer")
+    elif not (package_check < signed_version < metadata_check < installer_execute):
+        errors.append("updater version binding must happen after signature verification and before installer execution")
 
 manifest = ROOT / "scripts/new-v25-update-manifest.ps1"
 if manifest.is_file():
     text = manifest.read_text(encoding="utf-8")
+    signer_check = text.find("Assert-AuthenticodeSigner -Path (Join-Path $package $name)")
+    signed_version = text.find("$signedPluginVersion = Read-PluginAssemblyVersion")
     verification = text.find("Assert-ZipPayloadMatchesSignedStaging -ZipPath $zip")
     package_hash = text.find("$zipHash =")
-    if verification < 0 or package_hash < 0 or verification > package_hash:
-        errors.append("update manifest generation must verify signed ZIP payload before hashing manifest package")
+    if min(signer_check, signed_version, verification, package_hash) < 0 or not (signer_check < signed_version < verification < package_hash):
+        errors.append("manifest generation must bind version to signed plugin before verifying/hashing the ZIP")
+
+finalizer = ROOT / "scripts/finalize-v25-signed-package.ps1"
+if finalizer.is_file():
+    text = finalizer.read_text(encoding="utf-8")
+    signer_check = text.find("Assert-AuthenticodeSigner -Path $path")
+    signed_version = text.find("$signedPluginVersion = Read-PluginAssemblyVersion")
+    should_process = text.find("$PSCmdlet.ShouldProcess($zip")
+    if min(signer_check, signed_version, should_process) < 0 or not (signer_check < signed_version < should_process):
+        errors.append("signed package finalization must validate signer and signed plugin version before mutating metadata/ZIP")
 
 installer = ROOT / "scripts/install-v25-autoload.ps1"
 if installer.is_file():
@@ -170,4 +199,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: secure V25 updates pin both DLLs plus install/update/uninstall scripts, validate ZIP path/count/expanded bounds before extraction, finalize signed staging and publish manifests only for matching signed ZIP payloads.")
+print("PASS: secure V25 updates pin executable payload signatures and cryptographically bind manifest/package versions to the signed QS3D plugin assembly before install.")
