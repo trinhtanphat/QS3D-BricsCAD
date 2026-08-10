@@ -11,9 +11,20 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
+            var elements = project.Elements.Where(x => x != null).ToList();
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in elements)
+            {
+                if (!counts.TryGetValue(element.Id, out var count)) count = 0;
+                counts[element.Id] = count + 1;
+                if (!byId.ContainsKey(element.Id)) byId[element.Id] = element;
+            }
+            var duplicateIds = new HashSet<string>(counts.Where(x => x.Value > 1).Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
             var identityGroups = new Dictionary<string, List<ProjectElement>>(StringComparer.OrdinalIgnoreCase);
+            var identityRoomIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var finish in project.Elements
+            foreach (var finish in elements
                 .Where(x => AutoRoomLifecycle.IsRoomFinishCategory(x.Category))
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
@@ -27,7 +38,7 @@ namespace QS3D.Core.Diagnostics
                     issues.Add(new ModelHealthIssue(
                         "ROOM_PROVENANCE_CONFLICT",
                         HealthSeverity.Error,
-                        "HT_Phòng có nhiều Room provenance mâu thuẫn: " + ex.Message,
+                        "HT_Phòng có Room provenance không thể phân giải an toàn: " + ex.Message,
                         finish.Id));
                     continue;
                 }
@@ -42,8 +53,17 @@ namespace QS3D.Core.Diagnostics
                     continue;
                 }
 
-                var room = project.FindElement(roomId);
-                if (room == null)
+                if (duplicateIds.Contains(roomId))
+                {
+                    issues.Add(new ModelHealthIssue(
+                        "AMBIGUOUS_ROOM_FINISH_PARENT",
+                        HealthSeverity.Error,
+                        "HT_Phòng tham chiếu mã Room/element bị trùng: " + roomId + ". Dòng này bị loại khỏi quantity cho tới khi identity được repair.",
+                        finish.Id));
+                    continue;
+                }
+
+                if (!byId.TryGetValue(roomId, out var room))
                 {
                     issues.Add(new ModelHealthIssue(
                         "ORPHAN_ROOM_FINISH",
@@ -80,6 +100,7 @@ namespace QS3D.Core.Diagnostics
                 {
                     group = new List<ProjectElement>();
                     identityGroups[identityKey] = group;
+                    identityRoomIds[identityKey] = room.Id;
                 }
                 group.Add(finish);
 
@@ -93,9 +114,10 @@ namespace QS3D.Core.Diagnostics
                 }
             }
 
-            foreach (var group in identityGroups.Values.Where(x => x.Count > 1))
+            foreach (var pair in identityGroups.Where(x => x.Value.Count > 1))
             {
-                var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, group[0]);
+                var group = pair.Value;
+                var roomId = identityRoomIds[pair.Key];
                 var ids = string.Join(", ", group.Select(x => x.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
                 foreach (var finish in group)
                     issues.Add(new ModelHealthIssue(
