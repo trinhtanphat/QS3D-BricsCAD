@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             RoomBoundaryRegressionSmoke.Run();
             GeometryCompletionSmoke.Run();
             AutoRoomLifecycleSmoke.Run();
+            RoomFinishHealthSmoke.Run();
             LinearRebarLayoutSmoke.Run();
             WallJunctionRegressionSmoke.Run();
             WallJunctionAdjustmentSmoke.Run();

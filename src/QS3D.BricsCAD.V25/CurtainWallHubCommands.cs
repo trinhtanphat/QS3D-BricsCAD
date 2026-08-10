@@ -14,7 +14,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                Application.ShowModelessWindow(IntPtr.Zero, new CurtainWallWindow(), true);
+                Application.ShowModelessWindow(IntPtr.Zero, new CurtainWallWindow(document), true);
                 PaletteCoordinator.SetStatus("Vách Kính Hub: Family • panel grid • schedule • workflow 3D.");
             }
             catch (System.Exception ex)

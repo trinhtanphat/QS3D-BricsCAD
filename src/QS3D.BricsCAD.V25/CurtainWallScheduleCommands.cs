@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.BricsCAD.V25.UI;
@@ -43,9 +42,16 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
                 CurtainWallXlsxExporter.Export(dialog.FileName, rows);
-                var panels = rows.Sum(x => x.PanelCount);
-                var glass = rows.Sum(x => x.NetGlassAreaM2);
-                var frame = rows.Sum(x => x.FrameLengthM);
+
+                var panels = 0;
+                var glass = 0d;
+                var frame = 0d;
+                foreach (var row in rows)
+                {
+                    panels = QuantityReportMath.AddCount(panels, row.PanelCount);
+                    glass = QuantityReportMath.Add(glass, row.NetGlassAreaM2, "Curtain export net glass area");
+                    frame = QuantityReportMath.Add(frame, row.FrameLengthM, "Curtain export frame length");
+                }
                 var status = "Curtain XLSX: " + rows.Count + " nhóm • " + panels + " panel • " + glass.ToString("0.###") + " m² kính net • " + frame.ToString("0.###") + " m khung.";
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status + "\n" + dialog.FileName);

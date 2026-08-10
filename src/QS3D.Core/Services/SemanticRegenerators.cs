@@ -80,34 +80,121 @@ namespace QS3D.Core.Services
 
             if (element.Category == ElementCategory.WallPier)
             {
-                var mode = ResolveWallPierProfileMode(element);
-                var profile = WallPierProfilePlanner.Plan(new WallPierProfileInput
+                var mode = ResolveWallPierProfileMode(project, element);
+                var chamfer = mode == WallPierProfileMode.Chamfered ? ResolveWallPierNumber(project, element, "WallPierChamferM", 0.02d) : 0d;
+                double profileAreaM2;
+                double profilePerimeterM;
+                double profileGrossVolumeM3;
+                double profileLateralAreaM2;
+                if (!TryReadCurrentWallPierPathProfile(
+                    element,
+                    mode,
+                    chamfer,
+                    length,
+                    thickness,
+                    height,
+                    out profileAreaM2,
+                    out profilePerimeterM,
+                    out profileGrossVolumeM3,
+                    out profileLateralAreaM2))
                 {
-                    Mode = mode,
-                    WidthM = length,
-                    DepthM = thickness,
-                    HeightM = height,
-                    ChamferM = mode == WallPierProfileMode.Chamfered ? SemanticNumber.Get(element, "WallPierChamferM", 0.02d) : 0d
-                });
-                var openingVolumeM3 = QuantityMath.Multiply(openingArea, thickness, element.Id + "/wall-pier opening volume");
-                var profileNetVolumeM3 = QuantityMath.SubtractFloorZero(profile.VolumeM3, openingVolumeM3, element.Id + "/wall-pier net profile volume");
+                    var profile = WallPierProfilePlanner.Plan(new WallPierProfileInput
+                    {
+                        Mode = mode,
+                        WidthM = length,
+                        DepthM = thickness,
+                        HeightM = height,
+                        ChamferM = chamfer
+                    });
+                    profileAreaM2 = profile.CrossSectionAreaM2;
+                    profilePerimeterM = profile.CrossSectionPerimeterM;
+                    profileGrossVolumeM3 = profile.VolumeM3;
+                    profileLateralAreaM2 = profile.LateralAreaM2;
+                }
 
-                element.SetQuantity("WallPierProfileCrossSectionAreaM2", profile.CrossSectionAreaM2);
-                element.SetQuantity("WallPierProfilePerimeterM", profile.CrossSectionPerimeterM);
-                element.SetQuantity("WallPierProfileLateralAreaM2", profile.LateralAreaM2);
-                element.SetQuantity("WallPierProfileGrossVolumeM3", profile.VolumeM3);
+                var openingVolumeM3 = QuantityMath.Multiply(openingArea, thickness, element.Id + "/wall-pier opening volume");
+                var profileNetVolumeM3 = QuantityMath.SubtractFloorZero(profileGrossVolumeM3, openingVolumeM3, element.Id + "/wall-pier net profile volume");
+
+                element.SetQuantity("WallPierProfileCrossSectionAreaM2", profileAreaM2);
+                element.SetQuantity("WallPierProfilePerimeterM", profilePerimeterM);
+                element.SetQuantity("WallPierProfileLateralAreaM2", profileLateralAreaM2);
+                element.SetQuantity("WallPierProfileGrossVolumeM3", profileGrossVolumeM3);
                 element.SetQuantity("WallPierProfileNetVolumeM3", profileNetVolumeM3);
-                element.SetQuantity("GrossVolumeM3", profile.VolumeM3);
+                element.SetQuantity("GrossVolumeM3", profileGrossVolumeM3);
                 element.SetQuantity("NetVolumeM3", profileNetVolumeM3);
             }
         }
 
-        private static WallPierProfileMode ResolveWallPierProfileMode(ProjectElement element)
+        private static WallPierProfileMode ResolveWallPierProfileMode(ProjectState project, ProjectElement element)
         {
-            if (!element.Properties.TryGetValue("WallPierProfileMode", out var raw) || string.IsNullOrWhiteSpace(raw))
-                return WallPierProfileMode.Rectangular;
-            if (Enum.TryParse(raw.Trim(), true, out WallPierProfileMode mode)) return mode;
+            var raw = ResolveWallPierText(project, element, "WallPierProfileMode", "Rectangular");
+            if (Enum.TryParse(raw, true, out WallPierProfileMode mode)) return mode;
             throw new InvalidOperationException(element.Id + "/WallPierProfileMode không hợp lệ: " + raw);
+        }
+
+        private static double ResolveWallPierNumber(ProjectState project, ProjectElement element, string key, double fallback)
+        {
+            var raw = ResolveWallPierText(project, element, key, fallback.ToString("R", CultureInfo.InvariantCulture));
+            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || !(value > 0d))
+                throw new InvalidOperationException(element.Id + "/" + key + " không hợp lệ: " + raw);
+            return value;
+        }
+
+        private static string ResolveWallPierText(ProjectState project, ProjectElement element, string key, string fallback)
+        {
+            if (element.Properties.TryGetValue(key, out var own) && !string.IsNullOrWhiteSpace(own)) return own.Trim();
+            var family = project.FindFamily(element.FamilyId);
+            if (family != null && family.Properties.TryGetValue(key, out var inherited) && !string.IsNullOrWhiteSpace(inherited)) return inherited.Trim();
+            return fallback;
+        }
+
+        private static bool TryReadCurrentWallPierPathProfile(
+            ProjectElement element,
+            WallPierProfileMode mode,
+            double chamferM,
+            double lengthM,
+            double thicknessM,
+            double heightM,
+            out double areaM2,
+            out double perimeterM,
+            out double grossVolumeM3,
+            out double lateralAreaM2)
+        {
+            areaM2 = perimeterM = grossVolumeM3 = lateralAreaM2 = 0d;
+            if (element.IsGeneratedSolidStale()) return false;
+            if (!element.Properties.TryGetValue("GeneratedSolidHandle", out var generatedHandle) || string.IsNullOrWhiteSpace(generatedHandle)) return false;
+            if (!element.Properties.TryGetValue("WallPierPathProfileKind", out var kind) || !string.Equals(kind, "OpenPolyline", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!element.Properties.TryGetValue("WallPierPathProfileMode", out var modeText) || !Enum.TryParse(modeText, true, out WallPierProfileMode storedMode) || storedMode != mode) return false;
+
+            if (!TryFinite(element, "WallPierPathProfileChamferM", out var storedChamfer) || !NearlyEqual(storedChamfer, chamferM)) return false;
+            if (!TryFinitePositive(element, "WallPierPathProfileCenterlineLengthM", out var storedLength) || !NearlyEqual(storedLength, lengthM)) return false;
+            if (!TryFinitePositive(element, "WallPierPathProfileThicknessM", out var storedThickness) || !NearlyEqual(storedThickness, thicknessM)) return false;
+            if (!TryFinitePositive(element, "WallPierPathProfileHeightM", out var storedHeight) || !NearlyEqual(storedHeight, heightM)) return false;
+            if (!TryFinitePositive(element, "WallPierPathProfileAreaM2", out areaM2)) return false;
+            if (!TryFinitePositive(element, "WallPierPathProfilePerimeterM", out perimeterM)) return false;
+            if (!TryFinitePositive(element, "WallPierPathProfileGrossVolumeM3", out grossVolumeM3)) return false;
+            if (!TryFinitePositive(element, "WallPierPathProfileLateralAreaM2", out lateralAreaM2)) return false;
+            if (!NearlyEqual(grossVolumeM3, areaM2 * heightM)) return false;
+            if (!NearlyEqual(lateralAreaM2, perimeterM * heightM)) return false;
+            return true;
+        }
+
+        private static bool TryFinite(ProjectElement element, string key, out double value)
+        {
+            value = 0d;
+            return element.Properties.TryGetValue(key, out var raw) &&
+                   double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
+                   !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static bool TryFinitePositive(ProjectElement element, string key, out double value) =>
+            TryFinite(element, key, out value) && value > 0d;
+
+        private static bool NearlyEqual(double left, double right)
+        {
+            if (double.IsNaN(left) || double.IsInfinity(left) || double.IsNaN(right) || double.IsInfinity(right)) return false;
+            var scale = Math.Max(1d, Math.Max(Math.Abs(left), Math.Abs(right)));
+            return Math.Abs(left - right) <= scale * 1e-9d;
         }
 
         private static double LinkedOpeningArea(ProjectState project, ProjectElement wall)

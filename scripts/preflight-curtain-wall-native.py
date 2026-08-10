@@ -61,9 +61,8 @@ checks = {
         "CadGeometryGuard.Subtract", "CadGeometryGuard.Multiply", "CadGeometryGuard.Add", "CadGeometryGuard.Hypot",
     ],
     "owner": [
-        'GeneratedCurtainFrameHandles', 'GeneratedSolidHandle', 'PhysicalOpeningCutSolidHandle',
-        'GeneratedRebarHandles', 'GeneratedShapeRebarHandles', 'GeneratedTieRebarHandles',
-        'GeneratedBeamStirrupHandles', 'GeneratedSlabMeshHandles', 'GeneratedWallMeshHandles',
+        'GeneratedCurtainFrameHandles', 'CoreOwnershipPolicy.IsOwnerSlot(property.Key)',
+        'string.Equals(property.Key, HandlesKey, StringComparison.OrdinalIgnoreCase)', 'Refusing destructive erase',
     ],
     "invalidator": [
         'GeneratedCurtainFrameHandles', 'GeneratedCurtainFrameCount', 'GeneratedCurtainFrameBaseCount',
@@ -79,6 +78,7 @@ checks = {
         'GeneratedCurtainFrameConfigFingerprint', 'CurtainWallFrameFingerprint.Compute',
         'CURTAIN_FRAME_CONFIG_FINGERPRINT_MISSING', 'CURTAIN_FRAME_CONFIG_STALE',
         'CURTAIN_FRAME_CONFIG_INVALID', 'ElementCategory.GlassWall',
+        'GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)',
         'class OwnershipIndex', 'HashSet<string> Conflicts', 'ownership.Conflicts.Contains(handle)',
         'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT', 'CURTAIN_FRAME_GENERATED_STALE',
     ],
@@ -133,4 +133,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: GlassWall keeps its backing host and adds bounded, finite, selectable opening-aware curtain-frame overlays with deterministic fingerprint stale detection, relation/property stale propagation, order-independent ownership health, complete invalidation metadata cleanup and UI/build command wiring. Curved frame overlay remains intentionally unsupported/runtime-gated.")
+print("PASS: GlassWall keeps its backing host and adds bounded, finite, selectable opening-aware curtain-frame overlays with deterministic fingerprint stale detection, relation/property stale propagation, policy-driven destructive/health ownership protection, complete invalidation metadata cleanup and UI/build command wiring. Curved frame overlay remains intentionally unsupported/runtime-gated.")

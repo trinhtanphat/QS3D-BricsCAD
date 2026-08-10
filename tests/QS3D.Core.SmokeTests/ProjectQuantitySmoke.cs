@@ -9,6 +9,12 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            LinkedOpeningReport();
+            PreferredBqQuantityDoesNotEvaluateUnusedFallbacks();
+        }
+
+        private static void LinkedOpeningReport()
+        {
             var project = new ProjectState("p", "P");
             project.DrawingFingerprint = "DWG-FP";
             project.Zones.Add(new ZoneDefinition("z", "Vùng-1"));
@@ -25,6 +31,26 @@ namespace QS3D.Core.SmokeTests
             var wallRow = rows[0].Category == ElementCategory.ArchitecturalWall.ToString() ? rows[0] : rows[1];
             if (wallRow.DrawingFingerprint != "DWG-FP" || wallRow.ElementIds.Count != 1 || wallRow.ElementIds[0] != "W1" || wallRow.SourceHandles.Count != 1 || wallRow.SourceHandles[0] != "AB12" || Math.Abs(wallRow.NetConcreteM3 - 2.604) > 1e-12) throw new Exception("Linked opening deduction/report failed.");
             if (!opening.Properties.TryGetValue("HostWallId", out var host) || host != "W1" || opening.DependsOn.Count != 1) throw new Exception("Host link failed.");
+        }
+
+        private static void PreferredBqQuantityDoesNotEvaluateUnusedFallbacks()
+        {
+            var project = new ProjectState("p2", "BQ fallback");
+            project.Floors.Add(new FloorDefinition("f", "Tầng", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Vùng"));
+            var family = new ProjectFamily("wall", "Tường", ElementCategory.ArchitecturalWall);
+            project.Families.Add(family);
+            var wall = new ProjectElement("W-PREFERRED", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
+            wall.Quantities["GrossConcreteM3"] = 2d;
+            wall.Quantities["GrossVolumeM3"] = double.NaN;
+            wall.Quantities["NetConcreteM3"] = 1.5d;
+            wall.Quantities["NetVolumeM3"] = double.PositiveInfinity;
+            wall.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(wall);
+
+            var row = ProjectQuantityReportBuilder.Group(project)[0];
+            if (Math.Abs(row.GrossConcreteM3 - 2d) > 1e-12 || Math.Abs(row.NetConcreteM3 - 1.5d) > 1e-12 || Math.Abs(row.DeductionM3 - 0.5d) > 1e-12)
+                throw new Exception("BQ must use preferred quantities lazily without evaluating invalid unused legacy fallbacks.");
         }
     }
 }

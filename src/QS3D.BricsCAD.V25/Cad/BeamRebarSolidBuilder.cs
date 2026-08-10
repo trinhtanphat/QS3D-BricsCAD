@@ -80,7 +80,8 @@ namespace QS3D.BricsCAD.V25.Cad
                     var dz = CadGeometryGuard.Finite(line.EndPoint.Z - line.StartPoint.Z, element.Id + "/beam direction Z");
                     var xyLength = CadGeometryGuard.Hypot(dx, dy, element.Id + "/beam XY length");
                     if (xyLength <= 1e-8d) throw new InvalidOperationException("Beam source LINE bị suy biến: " + element.Id);
-                    if (Math.Abs(dz) > xyLength * 1e-8d + 1e-8d) throw new InvalidOperationException("QS3DBEAMREBAR3D hiện chỉ hỗ trợ Beam LINE nằm ngang trong mặt phẳng XY.");
+                    var horizontalTolerance = Math.Max(1e-8d, Math.Abs(CadGeometryGuard.ToDrawingUnits(document, 0.005d, element.Id + "/beam horizontal tolerance")));
+                    if (Math.Abs(dz) > horizontalTolerance) throw new InvalidOperationException("QS3DBEAMREBAR3D hiện chỉ hỗ trợ Beam LINE gần nằm ngang trong mặt phẳng XY (|ΔZ| <= 5 mm).");
                     var lengthM = CadGeometryGuard.ToMeters(document, xyLength, element.Id + "/beam length");
                     var twoEndCovers = CadGeometryGuard.Finite(endCoverM * 2d, element.Id + "/two end covers");
                     var barLengthM = CadGeometryGuard.Finite(lengthM - twoEndCovers, element.Id + "/beam rebar usable length");

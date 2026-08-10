@@ -1,29 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Services
 {
     public static class SemanticHandleOwnershipResolver
     {
-        private static readonly string[] SingleHandleKeys =
-        {
-            "GeneratedSolidHandle",
-            "PhysicalOpeningCutSolidHandle"
-        };
-
-        private static readonly string[] MultiHandleKeys =
-        {
-            "GeneratedRebarHandles",
-            "GeneratedShapeRebarHandles",
-            "GeneratedTieRebarHandles",
-            "GeneratedBeamStirrupHandles",
-            "GeneratedSlabMeshHandles",
-            "GeneratedWallMeshHandles",
-            "GeneratedCurtainFrameHandles"
-        };
-
         public static IReadOnlyList<ProjectElement> Resolve(ProjectState project, IEnumerable<string> selectedHandles)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -40,13 +24,8 @@ namespace QS3D.Core.Services
             {
                 foreach (var handle in element.SourceHandles)
                     Add(handle, element, "SourceHandles", selected, owners, channels);
-                foreach (var key in SingleHandleKeys)
-                    if (element.Properties.TryGetValue(key, out var raw)) Add(raw, element, key, selected, owners, channels);
-                foreach (var key in MultiHandleKeys)
-                {
-                    if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
-                    foreach (var handle in Split(raw)) Add(handle, element, key, selected, owners, channels);
-                }
+                foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
+                    Add(entry.Key, element, entry.Value, selected, owners, channels);
             }
 
             return owners.Values
@@ -76,12 +55,5 @@ namespace QS3D.Core.Services
             owners[handle] = element;
             channels[handle] = channel;
         }
-
-        private static IEnumerable<string> Split(string raw) =>
-            (raw ?? string.Empty)
-                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => x.Trim())
-                .Where(x => x.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 }

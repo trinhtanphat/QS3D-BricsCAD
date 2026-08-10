@@ -32,6 +32,7 @@ namespace QS3D.BricsCAD.V25
                 var stirrupHandles = PropertyHandles(project, "GeneratedBeamStirrupHandles");
                 var slabMeshHandles = PropertyHandles(project, "GeneratedSlabMeshHandles");
                 var wallMeshHandles = PropertyHandles(project, "GeneratedWallMeshHandles");
+                var foundationMeshHandles = PropertyHandles(project, FoundationMeshSolidBuilder.HandlesKey);
                 var curtainFrameHandles = PropertyHandles(project, "GeneratedCurtainFrameHandles");
 
                 var liveSources = CadHandleService.GetLiveHandles(document, sourceHandles);
@@ -42,18 +43,22 @@ namespace QS3D.BricsCAD.V25
                 var liveStirrups = CadHandleService.GetLiveSolidHandles(document, stirrupHandles);
                 var liveSlabMesh = CadHandleService.GetLiveSolidHandles(document, slabMeshHandles);
                 var liveWallMesh = CadHandleService.GetLiveSolidHandles(document, wallMeshHandles);
+                var liveFoundationMesh = CadHandleService.GetLiveSolidHandles(document, foundationMeshHandles);
                 var liveCurtainFrames = CadHandleService.GetLiveSolidHandles(document, curtainFrameHandles);
 
                 var combined = new List<ModelHealthIssue>();
                 combined.AddRange(new ModelHealthService().Inspect(project, liveSources, liveMain));
+                combined.AddRange(new DependencyHealthService().Inspect(project));
                 combined.AddRange(new GeneratedGeometryStaleHealthService().Inspect(project));
                 combined.AddRange(new GeneratedRebarHealthService().InspectAll(project, liveLongitudinal, liveShape));
                 combined.AddRange(new GeneratedTieRebarHealthService().Inspect(project, liveTies));
                 combined.AddRange(new GeneratedBeamStirrupHealthService().Inspect(project, liveStirrups));
                 combined.AddRange(new GeneratedSlabMeshHealthService().Inspect(project, liveSlabMesh));
                 combined.AddRange(new GeneratedWallMeshHealthService().Inspect(project, liveWallMesh));
+                combined.AddRange(new GeneratedFoundationMeshHealthService().Inspect(project, liveFoundationMesh));
                 combined.AddRange(new GeneratedCurtainFrameHealthService().Inspect(project, liveCurtainFrames));
                 combined.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
+                combined.AddRange(new GeneratedHandleOwnershipHealthService().Inspect(project));
                 combined.AddRange(new GeneratedRebarModeHealthService().Inspect(project));
 
                 var issues = combined
@@ -100,15 +105,26 @@ namespace QS3D.BricsCAD.V25
         {
             var normalized = (code ?? string.Empty).ToUpperInvariant();
             if (normalized.Contains("CURTAIN_FRAME")) return SplitPropertyHandles(element, "GeneratedCurtainFrameHandles");
+            if (normalized.Contains("FOUNDATION_MESH")) return SplitPropertyHandles(element, FoundationMeshSolidBuilder.HandlesKey);
             if (normalized.Contains("WALL_MESH")) return SplitPropertyHandles(element, "GeneratedWallMeshHandles");
             if (normalized.Contains("SLAB_MESH")) return SplitPropertyHandles(element, "GeneratedSlabMeshHandles");
             if (normalized.Contains("BEAM_STIRRUP")) return SplitPropertyHandles(element, "GeneratedBeamStirrupHandles");
             if (normalized.Contains("TIE_REBAR")) return SplitPropertyHandles(element, "GeneratedTieRebarHandles");
             if (normalized.Contains("SHAPE_REBAR")) return SplitPropertyHandles(element, "GeneratedShapeRebarHandles");
+            if (normalized.Contains("CROSS_KEY") || normalized.Contains("GENERATED_HANDLE_OWNERSHIP")) return OwnerSlotHandles(element);
             if (normalized.Contains("REBAR_GENERATED") || normalized.Contains("GENERATED_REBAR")) return SplitPropertyHandles(element, "GeneratedRebarHandles");
             if (normalized.Contains("GENERATED_SOLID") || normalized.Contains("GENERATED_HANDLE"))
                 return SplitPropertyHandles(element, "GeneratedSolidHandle");
             return Array.Empty<string>();
+        }
+
+        private static IEnumerable<string> OwnerSlotHandles(ProjectElement element)
+        {
+            return element.Properties
+                .Where(x => GeneratedHandleOwnershipPolicy.IsOwnerSlot(x.Key) && !string.IsNullOrWhiteSpace(x.Value))
+                .SelectMany(x => SplitPropertyHandles(element, x.Key))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
         private static IEnumerable<string> SplitPropertyHandles(ProjectElement element, string key)

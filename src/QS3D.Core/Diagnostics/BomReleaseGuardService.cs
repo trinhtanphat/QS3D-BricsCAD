@@ -39,13 +39,9 @@ namespace QS3D.Core.Diagnostics
                     issues.Add(new ModelHealthIssue("BOM_TRACEABILITY_MISSING", HealthSeverity.Warning, "Dòng khối lượng không truy vết được về CAD Handle nguồn/generated.", element.Id));
 
                 if (liveGeneratedHandles != null)
-                    foreach (var property in element.Properties)
-                    {
-                        if (!GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key) || string.IsNullOrWhiteSpace(property.Value)) continue;
-                        foreach (var handle in SplitHandles(property.Value))
-                            if (!liveGeneratedHandles.Contains(handle))
-                                issues.Add(new ModelHealthIssue("BOM_GENERATED_HANDLE_MISSING", HealthSeverity.Error, property.Key + " tham chiếu CAD Handle không còn tồn tại: " + handle + ".", element.Id));
-                    }
+                    foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element))
+                        if (!liveGeneratedHandles.Contains(entry.Key))
+                            issues.Add(new ModelHealthIssue("BOM_GENERATED_HANDLE_MISSING", HealthSeverity.Error, entry.Value + " tham chiếu CAD Handle không còn tồn tại: " + entry.Key + ".", element.Id));
             }
 
             try
@@ -69,11 +65,5 @@ namespace QS3D.Core.Diagnostics
 
             return issues.AsReadOnly();
         }
-
-        private static IEnumerable<string> SplitHandles(string raw) =>
-            (raw ?? string.Empty)
-                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => x.Trim())
-                .Where(x => x.Length > 0);
     }
 }

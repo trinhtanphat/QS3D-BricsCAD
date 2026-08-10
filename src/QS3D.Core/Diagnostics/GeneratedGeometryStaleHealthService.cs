@@ -54,6 +54,12 @@ namespace QS3D.Core.Diagnostics
                         HealthSeverity.Warning,
                         Message(element, "Generated structural-wall mesh không còn khớp thông số/vách hiện tại; rebuild lưới thép vách 3D."),
                         element.Id));
+                if (element.IsGeneratedFoundationMeshStale())
+                    issues.Add(new ModelHealthIssue(
+                        "FOUNDATION_MESH_GENERATED_STALE",
+                        HealthSeverity.Warning,
+                        Message(element, "Generated foundation mesh không còn khớp thông số/móng hiện tại; rebuild lưới thép móng 3D."),
+                        element.Id));
                 if (element.IsGeneratedCurtainFrameStale())
                     issues.Add(new ModelHealthIssue(
                         "CURTAIN_FRAME_GENERATED_STALE",

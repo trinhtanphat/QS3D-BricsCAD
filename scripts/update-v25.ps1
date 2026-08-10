@@ -20,11 +20,26 @@ param(
     [ValidateRange(1, 512)]
     [int]$MaxPackageSizeMB = 256,
 
+    [ValidateRange(1, 2048)]
+    [int]$MaxExpandedPackageSizeMB = 512,
+
+    [ValidateRange(1, 20000)]
+    [int]$MaxArchiveEntries = 4096,
+
     [switch]$AllowSameVersion
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+$SignedPayloadNames = @(
+    'QS3D.BricsCAD.V25.dll',
+    'QS3D.Core.dll',
+    'install-v25-autoload.ps1',
+    'uninstall-v25-autoload.ps1',
+    'update-v25.ps1'
+)
 
 function Normalize-Thumbprint {
     param([string]$Thumbprint)
@@ -50,36 +65,123 @@ function Require-ManifestProperty {
 
 function Read-InstalledVersion {
     param([string]$Directory)
+
     $metadataPath = Join-Path $Directory 'PACKAGE-METADATA.json'
-    if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { return [Version]'0.0.0.0' }
+    $pluginPath = Join-Path $Directory 'QS3D.BricsCAD.V25.dll'
+    $hasMetadata = Test-Path -LiteralPath $metadataPath -PathType Leaf
+    $hasPlugin = Test-Path -LiteralPath $pluginPath -PathType Leaf
+    if (-not $hasMetadata -and -not $hasPlugin) { return [Version]'0.0.0.0' }
+
+    $metadataVersion = $null
+    if ($hasMetadata) {
+        try {
+            $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+            if (-not $metadata.PSObject.Properties['version']) {
+                throw 'version property is missing'
+            }
+            $metadataVersion = [Version]::Parse([string]$metadata.version)
+        }
+        catch {
+            throw "Installed PACKAGE-METADATA.json has an invalid version: $($_.Exception.Message)"
+        }
+    }
+
+    $pluginVersion = $null
+    if ($hasPlugin) {
+        try {
+            $pluginVersion = [Reflection.AssemblyName]::GetAssemblyName($pluginPath).Version
+            if (-not $pluginVersion) { throw 'assembly version is missing' }
+        }
+        catch {
+            throw "Installed QS3D plugin assembly version is unreadable: $($_.Exception.Message)"
+        }
+    }
+
+    if ($metadataVersion -and $pluginVersion -and $metadataVersion -ne $pluginVersion) {
+        throw "Installed package metadata version $metadataVersion does not match installed plugin assembly version $pluginVersion. Refusing update until installed state is repaired."
+    }
+    if ($pluginVersion) { return $pluginVersion }
+    if ($metadataVersion) { return $metadataVersion }
+    throw 'Installed QS3D state does not expose a readable version.'
+}
+
+function Read-SignedPluginVersion {
+    param([string]$Path)
     try {
-        $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-        if (-not $metadata.PSObject.Properties['version']) { return [Version]'0.0.0.0' }
-        return [Version]::Parse([string]$metadata.version)
+        $version = [Reflection.AssemblyName]::GetAssemblyName($Path).Version
+        if (-not $version) { throw 'assembly version is missing' }
+        return $version
     }
     catch {
-        throw "Installed PACKAGE-METADATA.json has an invalid version: $($_.Exception.Message)"
+        throw "Signed QS3D plugin assembly version is unreadable: $($_.Exception.Message)"
+    }
+}
+
+function Assert-AuthenticodeSigner {
+    param([string]$Path, [string]$ExpectedSigner, [string]$Label)
+    $signature = Get-AuthenticodeSignature -FilePath $Path
+    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+        throw "$Label signature is not valid: $($signature.Status)"
+    }
+    if (-not $signature.SignerCertificate) { throw "$Label signature has no signer certificate." }
+    $actualSigner = Normalize-Thumbprint $signature.SignerCertificate.Thumbprint
+    if ($actualSigner -ne $ExpectedSigner) {
+        throw "$Label signer mismatch. Expected $ExpectedSigner, got $actualSigner."
+    }
+}
+
+function Assert-SafeArchive {
+    param(
+        [string]$ZipPath,
+        [string]$DestinationRoot,
+        [int64]$MaxExpandedBytes,
+        [int]$MaxEntries
+    )
+
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        $root = [IO.Path]::GetFullPath($DestinationRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        [int64]$expandedBytes = 0
+        $entryCount = 0
+        foreach ($entry in $archive.Entries) {
+            $entryCount++
+            if ($entryCount -gt $MaxEntries) { throw "Package archive exceeds the allowed entry count ($MaxEntries)." }
+            $name = [string]$entry.FullName
+            if ([string]::IsNullOrWhiteSpace($name) -or $name.IndexOf([char]0) -ge 0 -or [IO.Path]::IsPathRooted($name) -or $name.Contains('\') -or $name.Contains(':')) {
+                throw "Unsafe package archive entry: $name"
+            }
+            $relative = $name.TrimEnd('/')
+            if ([string]::IsNullOrWhiteSpace($relative)) { throw "Unsafe package archive entry: $name" }
+            $segments = @($relative.Split('/'))
+            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+                throw "Unsafe package archive entry: $name"
+            }
+            $target = [IO.Path]::GetFullPath((Join-Path $DestinationRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))))
+            if (-not $target.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe package archive entry: $name" }
+            $entryLength = [int64]$entry.Length
+            if ($entryLength -lt 0 -or $expandedBytes -gt ($MaxExpandedBytes - $entryLength)) {
+                throw "Package expanded size exceeds the allowed maximum ($MaxExpandedBytes bytes)."
+            }
+            $expandedBytes += $entryLength
+        }
+        if ($entryCount -eq 0) { throw 'Downloaded package archive contains no entries.' }
+    }
+    finally {
+        $archive.Dispose()
     }
 }
 
 function Assert-PackageRoot {
     param([string]$Directory, [string]$ExpectedSigner)
 
-    foreach ($name in @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll', 'COMMANDS.txt', 'PACKAGE-METADATA.json', 'SHA256SUMS.txt', 'install-v25-autoload.ps1')) {
+    foreach ($name in @('COMMANDS.txt', 'PACKAGE-METADATA.json', 'SHA256SUMS.txt') + $SignedPayloadNames) {
         if (-not (Test-Path -LiteralPath (Join-Path $Directory $name) -PathType Leaf)) {
             throw "Downloaded package is missing required payload: $name"
         }
     }
 
-    $dll = Join-Path $Directory 'QS3D.BricsCAD.V25.dll'
-    $signature = Get-AuthenticodeSignature -FilePath $dll
-    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-        throw "Downloaded QS3D plugin signature is not valid: $($signature.Status)"
-    }
-    if (-not $signature.SignerCertificate) { throw 'Downloaded QS3D plugin signature has no signer certificate.' }
-    $actualSigner = Normalize-Thumbprint $signature.SignerCertificate.Thumbprint
-    if ($actualSigner -ne $ExpectedSigner) {
-        throw "Downloaded QS3D plugin signer mismatch. Expected $ExpectedSigner, got $actualSigner."
+    foreach ($name in $SignedPayloadNames) {
+        Assert-AuthenticodeSigner -Path (Join-Path $Directory $name) -ExpectedSigner $ExpectedSigner -Label ("Downloaded QS3D executable payload " + $name)
     }
 
     $hashManifest = Join-Path $Directory 'SHA256SUMS.txt'
@@ -163,13 +265,23 @@ try {
     $actualZipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()
     if ($actualZipHash -ne $expectedZipHash) { throw 'Downloaded package SHA-256 does not match the update manifest.' }
 
+    $maxExpandedBytes = [int64]$MaxExpandedPackageSizeMB * 1MB
+    Assert-SafeArchive -ZipPath $zipPath -DestinationRoot $extractRoot -MaxExpandedBytes $maxExpandedBytes -MaxEntries $MaxArchiveEntries
     New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
     Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
     Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner
 
+    $signedPluginVersion = Read-SignedPluginVersion -Path (Join-Path $extractRoot 'QS3D.BricsCAD.V25.dll')
+    if ($signedPluginVersion -ne $targetVersion) {
+        throw "Signed QS3D plugin assembly version $signedPluginVersion does not match manifest version $targetVersion. Refusing replay/downgrade metadata substitution."
+    }
+
     $downloadedMetadata = Get-Content -LiteralPath (Join-Path $extractRoot 'PACKAGE-METADATA.json') -Raw | ConvertFrom-Json
     if (-not $downloadedMetadata.PSObject.Properties['version']) { throw 'Downloaded PACKAGE-METADATA.json is missing version.' }
     $packageVersion = [Version]::Parse([string]$downloadedMetadata.version)
+    if ($packageVersion -ne $signedPluginVersion) {
+        throw "Downloaded package metadata version $packageVersion does not match signed plugin assembly version $signedPluginVersion."
+    }
     if ($packageVersion -ne $targetVersion) { throw "Downloaded package version $packageVersion does not match manifest version $targetVersion." }
 
     $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'

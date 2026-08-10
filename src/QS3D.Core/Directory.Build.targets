@@ -1,5 +1,0 @@
-<Project>
-  <ItemGroup>
-    <Compile Remove="Diagnostics/GeneratedHandleOwnershipHealthService.cs" />
-  </ItemGroup>
-</Project>

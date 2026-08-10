@@ -16,9 +16,9 @@ GitHub Actions on `main` are owner-controlled and manual-only:
 
 Do not add `push`, `pull_request`, `pull_request_target`, `schedule`, `workflow_run`, `workflow_call`, `repository_dispatch`, release-event, deployment-event or any other automatic/event-driven trigger unless the owner explicitly changes this policy.
 
-`scripts/preflight-ci-manual-only.py` enforces this rule across every `.yml`/`.yaml` workflow and is auto-discovered by `scripts/preflight-all.py`.
+`scripts/preflight-ci-manual-only.py` enforces this rule across every `.yml`/`.yaml` workflow and requires the manual-event guard on every executable job. It is auto-discovered by `scripts/preflight-all.py`.
 
-Because multiple agents may commit concurrently, sync the latest `main` before making changes and again immediately before committing/pushing. Never overwrite newer concurrent work.
+Because multiple agents may commit concurrently, sync the latest `main` before making changes and again immediately before shared-file writes. Never overwrite newer concurrent work.
 
 ## Manual workflows
 
@@ -42,13 +42,16 @@ No BricsCAD installation is required.
 - never dispatch automatically after commit/push/merge;
 - compiles the V25 adapter against a licensed self-hosted BricsCAD V25 installation;
 - can run NETLOAD/runtime/screenshot evidence when explicitly requested;
-- runtime/artifact paths use the actual x64 Release output `bin/x64/Release/net48`.
+- runtime/artifact paths use the x64 Release output `bin/x64/Release/net48`.
 
 ### Focused source gates
 
-- `.github/workflows/curved-opening.yml` — manual curved-opening source/Core validation.
-- `.github/workflows/geometry-extensions.yml` — manual geometry-extension source/Core validation.
-- `.github/workflows/project-data-gate.yml` — manual Zone/Floor/Family/Material/Project Tools/project-assignment-integrity validation plus Core build/smoke tests.
+- `.github/workflows/curved-opening.yml` — curved-opening source/Core validation.
+- `.github/workflows/geometry-extensions.yml` — geometry-extension source/Core validation.
+- `.github/workflows/project-data-gate.yml` — Zone/Floor/Family/Material/Project Tools/project-assignment-integrity validation plus Core build/smoke.
+- `.github/workflows/schedule-gate.yml` — Schedule Hub, Material usage, Door/Opening schedule, Room Finish schedule/UI and Core build/smoke validation.
+
+Focused gates remain manual-only and also run the strict manual-CI policy preflight.
 
 ### Manual build + GitHub Release
 
@@ -59,9 +62,11 @@ No BricsCAD installation is required.
 - requires a `release_tag` and explicit `confirm_release=RELEASE`;
 - runs source/preflight/Core/V25 build gates;
 - optionally runs real V25 NETLOAD/runtime validation;
+- packages from `src/QS3D.BricsCAD.V25/bin/x64/Release/net48`;
 - creates `QS3D-BricsCAD-V25.zip` and its SHA-256 checksum;
-- uploads workflow artifacts;
 - publishes a GitHub Release only after all required preceding steps succeed.
+
+The package command manifest is generated from current `[CommandMethod]` source declarations rather than a hand-maintained command list. The package excludes BricsCAD-owned runtime assemblies.
 
 This workflow is an owner-triggered release tool, **not continuous deployment**. Do not run it until the owner explicitly asks for a release.
 
@@ -76,21 +81,13 @@ Runner labels:
 - `x64`
 - `bricscad-v25`
 
-Repository variable:
+Repository variable: `BRICSCAD_V25_DIR`.
 
-`BRICSCAD_V25_DIR`
+Example: `C:\Program Files\Bricsys\BricsCAD V25 en_US`.
 
-Example value:
+Optional runtime profile variable: `BRICSCAD_V25_PROFILE`.
 
-`C:\Program Files\Bricsys\BricsCAD V25 en_US`
-
-Optional profile variable:
-
-`BRICSCAD_V25_PROFILE`
-
-The runner must have a valid licensed BricsCAD V25 installation.
-
-Agents with real local-machine/BricsCAD access should prioritize runtime-only validation. Remote/hybrid agents should handle repository/source/docs/static work that does not require that local environment.
+The runner must have a valid licensed BricsCAD V25 installation and an interactive Windows session for runtime/screenshot validation.
 
 ## Static/local review versus CI
 
@@ -102,12 +99,14 @@ When the owner explicitly asks to build and release:
 
 1. resolve the exact commit/tag;
 2. dispatch `release-v25.yml` manually with `confirm_release=RELEASE`;
-3. preflight including strict manual-CI policy gate;
-4. Core Release build;
-5. deterministic Core smoke tests;
-6. V25 adapter compile;
-7. scripted BricsCAD runtime/NETLOAD validation when enabled;
+3. run strict manual-policy + aggregate source preflights;
+4. build Core Release;
+5. run deterministic Core smoke tests;
+6. compile the V25 adapter Release/x64;
+7. run scripted BricsCAD runtime/NETLOAD validation when requested and available;
 8. package + SHA-256;
 9. publish GitHub Release.
 
-Do not upload BricsCAD-owned DLLs as source-controlled artifacts and do not publish a release by merely pushing a commit/tag.
+`QS3DRELEASECHECK` is a project/DWG health tool and should be run on representative project data during release qualification; it is not treated as a meaningful blank-DWG replacement for private-DWG runtime regression.
+
+Do not upload BricsCAD-owned DLLs as source-controlled artifacts and do not publish a release merely because a commit/tag was pushed.

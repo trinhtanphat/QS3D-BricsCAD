@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
@@ -15,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             RenameStalesInheritedConsumersButPreservesOverrides();
             ReferencedMaterialCannotBeDeleted();
             RejectsDuplicateBuiltInAndCorruptStorage();
+            RejectsStoredBuiltInShadowing();
         }
 
         private static void RenamePreservesReferences()
@@ -136,6 +138,26 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectMaterialCatalog.UpsertCustom(project, "custom", "Kính", "m²", ""));
             project.Metadata[ProjectMaterialCatalog.MetadataKey] = "not-base64|still-bad|x|y";
             Throws<InvalidOperationException>(() => ProjectMaterialCatalog.GetCustom(project));
+        }
+
+        private static void RejectsStoredBuiltInShadowing()
+        {
+            var project = new ProjectState("p-shadow", "Stored material shadowing");
+            project.Metadata[ProjectMaterialCatalog.MetadataKey] = Record("builtin-concrete", "Bê tông giả", "m³", "legacy/tampered id collision");
+            Throws<InvalidOperationException>(() => ProjectMaterialCatalog.GetCustom(project));
+
+            project.Metadata[ProjectMaterialCatalog.MetadataKey] = Record("custom-shadow", "Bê tông", "m³", "legacy/tampered name collision");
+            Throws<InvalidOperationException>(() => ProjectMaterialCatalog.GetAll(project));
+        }
+
+        private static string Record(string id, string name, string unit, string description)
+        {
+            return string.Join("|", Encode(id), Encode(name), Encode(unit), Encode(description));
+        }
+
+        private static string Encode(string value)
+        {
+            return Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
         }
 
         private static void Throws<T>(Action action) where T : Exception

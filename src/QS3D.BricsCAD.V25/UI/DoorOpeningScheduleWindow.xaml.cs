@@ -50,6 +50,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("xuất Door/Opening XLSX");
                 if (_rows.Count == 0) throw new InvalidOperationException("Schedule hiện chưa có dòng để xuất.");
                 var drawingName = string.IsNullOrWhiteSpace(_document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(_document.Name);
                 var dialog = new SaveFileDialog
@@ -72,6 +73,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("làm mới Door/Opening Schedule");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 _rows = DoorOpeningScheduleBuilder.Build(project);
@@ -94,10 +96,25 @@ namespace QS3D.BricsCAD.V25.UI
             if (query.Length > 0) views = views.Where(x => x.SearchText.Contains(query));
             var visible = views.ToList();
             ScheduleGrid.ItemsSource = visible;
+
+            var elementCount = 0;
+            var openingAreaM2 = 0d;
+            foreach (var row in visible)
+            {
+                elementCount = QuantityReportMath.AddCount(elementCount, row.Count);
+                openingAreaM2 = QuantityReportMath.Add(openingAreaM2, row.OpeningAreaM2, "Door/Opening visible area");
+            }
+
             GroupCountText.Text = visible.Count.ToString(CultureInfo.InvariantCulture);
-            ElementCountText.Text = visible.Sum(x => x.Count).ToString(CultureInfo.InvariantCulture);
-            AreaText.Text = visible.Sum(x => x.OpeningAreaM2).ToString("0.###", CultureInfo.InvariantCulture) + " m²";
+            ElementCountText.Text = elementCount.ToString(CultureInfo.InvariantCulture);
+            AreaText.Text = openingAreaM2.ToString("0.###", CultureInfo.InvariantCulture) + " m²";
             HostCountText.Text = visible.SelectMany(x => x.Source.HostIds).Distinct(StringComparer.OrdinalIgnoreCase).Count().ToString(CultureInfo.InvariantCulture);
+        }
+
+        private void EnsureActive(string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Door/Opening Schedule trước khi " + operation + ".");
         }
 
         private static string DrawingLabel(Document document)

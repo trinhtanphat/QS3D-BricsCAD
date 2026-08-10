@@ -50,7 +50,7 @@ namespace QS3D.Core.Reporting
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
                 families.TryGetValue(element.FamilyId, out var family);
                 var material = Effective(element, family, "Material");
-                var roomId = ResolveRoomId(element);
+                var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, element);
                 var roomLabel = RoomLabel(roomId, rooms);
                 var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
                 var familyName = family?.Name ?? element.FamilyId;
@@ -58,7 +58,9 @@ namespace QS3D.Core.Reporting
                 var unitHint = metrics.DefaultUnit;
                 if (material.Length > 0 && units.TryGetValue(material, out var unit) && SameDimension(unit, metrics.DefaultUnit)) unitHint = unit;
                 var primary = Primary(unitHint, metrics.LengthM, metrics.AreaM2);
-                var key = string.Join("\u001f", element.FloorId, roomLabel, element.Category.ToString(), element.FamilyId, material, unitHint);
+
+                var roomKey = roomId.Length > 0 ? roomId : "(unlinked)";
+                var key = string.Join("\u001f", element.FloorId, roomKey, element.Category.ToString(), element.FamilyId, material, unitHint);
                 if (!rows.TryGetValue(key, out var row))
                 {
                     row = new RoomFinishScheduleRow
@@ -97,39 +99,32 @@ namespace QS3D.Core.Reporting
                 case ElementCategory.Skirting:
                     return new FinishMetrics
                     {
-                        LengthM = Q(element, "SkirtingLengthM", Q(element, "InnerPerimeterM", Q(element, "PerimeterM", Q(element, "LengthM")))),
-                        AreaM2 = Q(element, "AreaM2"),
+                        LengthM = FirstQuantity(element, "SkirtingLengthM", "InnerPerimeterM", "PerimeterM", "LengthM"),
+                        AreaM2 = FirstQuantity(element, "AreaM2"),
                         DefaultUnit = "m"
                     };
                 case ElementCategory.WallFinish:
                     return new FinishMetrics
                     {
-                        AreaM2 = Q(element, "NetFinishAreaM2", Q(element, "SideAreaM2", Q(element, "AreaM2"))),
+                        AreaM2 = FirstQuantity(element, "NetFinishAreaM2", "SideAreaM2", "AreaM2"),
                         DefaultUnit = "m²"
                     };
                 case ElementCategory.CeilingFinish:
                     return new FinishMetrics
                     {
-                        AreaM2 = Q(element, "TopAreaM2", Q(element, "AreaM2")),
+                        AreaM2 = FirstQuantity(element, "TopAreaM2", "AreaM2"),
                         DefaultUnit = "m²"
                     };
                 case ElementCategory.FloorFinish:
                 case ElementCategory.Waterproofing:
                     return new FinishMetrics
                     {
-                        AreaM2 = Q(element, "BottomAreaM2", Q(element, "AreaM2")),
+                        AreaM2 = FirstQuantity(element, "BottomAreaM2", "AreaM2"),
                         DefaultUnit = "m²"
                     };
                 default:
                     throw new InvalidOperationException("Unsupported room-finish category: " + element.Category);
             }
-        }
-
-        private static string ResolveRoomId(ProjectElement element)
-        {
-            foreach (var key in new[] { "ParentRoomId", "SourceRoomId", "GeneratedFromRoomId", "RoomId" })
-                if (element.Properties.TryGetValue(key, out var raw) && !string.IsNullOrWhiteSpace(raw)) return raw.Trim();
-            return string.Empty;
         }
 
         private static string RoomLabel(string roomId, IDictionary<string, ProjectElement> rooms)
@@ -161,11 +156,16 @@ namespace QS3D.Core.Reporting
         private static string NormalizeUnit(string unit) =>
             (unit ?? string.Empty).Trim().ToLowerInvariant().Replace("²", "2").Replace("^", string.Empty).Replace(" ", string.Empty);
 
-        private static double Q(ProjectElement element, string key, double fallback = 0d)
+        private static double FirstQuantity(ProjectElement element, params string[] keys)
         {
-            var value = element.Quantities.TryGetValue(key, out var stored) ? stored : fallback;
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) throw new InvalidOperationException(element.Id + "/" + key + " must be finite and non-negative.");
-            return value;
+            foreach (var key in keys)
+            {
+                if (!element.Quantities.TryGetValue(key, out var value)) continue;
+                if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                    throw new InvalidOperationException(element.Id + "/" + key + " must be finite and non-negative.");
+                return value;
+            }
+            return 0d;
         }
 
         private static double Add(double left, double right, string label)

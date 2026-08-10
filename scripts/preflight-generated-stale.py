@@ -9,20 +9,25 @@ checks = {
     "src/QS3D.Core/Domain/ProjectElement.cs": [
         "GeneratedSlabMeshStateKey",
         "GeneratedWallMeshStateKey",
+        "GeneratedFoundationMeshStateKey",
         "GeneratedCurtainFrameStateKey",
         "GeneratedSlabMeshStaleSnapshotKey",
         "GeneratedWallMeshStaleSnapshotKey",
+        "GeneratedFoundationMeshStaleSnapshotKey",
         "GeneratedCurtainFrameStaleSnapshotKey",
         "GeneratedSlabMeshHandles",
         "GeneratedWallMeshHandles",
+        "GeneratedFoundationMeshHandles",
         "GeneratedCurtainFrameHandles",
         "IsGeneratedTieRebarStale",
         "IsGeneratedBeamStirrupStale",
         "IsGeneratedSlabMeshStale",
         "IsGeneratedWallMeshStale",
+        "IsGeneratedFoundationMeshStale",
         "IsGeneratedCurtainFrameStale",
         "ClearGeneratedSlabMeshStale",
         "ClearGeneratedWallMeshStale",
+        "ClearGeneratedFoundationMeshStale",
         "ClearGeneratedCurtainFrameStale",
     ],
     "src/QS3D.Core/Diagnostics/GeneratedGeometryStaleHealthService.cs": [
@@ -30,6 +35,7 @@ checks = {
         "BEAM_STIRRUP_GENERATED_STALE",
         "SLAB_MESH_GENERATED_STALE",
         "WALL_MESH_GENERATED_STALE",
+        "FOUNDATION_MESH_GENERATED_STALE",
         "CURTAIN_FRAME_GENERATED_STALE",
     ],
     "src/QS3D.Core/Diagnostics/GeneratedTieRebarHealthService.cs": [
@@ -48,6 +54,10 @@ checks = {
         "element.IsGeneratedWallMeshStale()",
         "WALL_MESH_GENERATED_STALE",
     ],
+    "src/QS3D.Core/Diagnostics/GeneratedFoundationMeshHealthService.cs": [
+        "element.IsGeneratedFoundationMeshStale()",
+        "FOUNDATION_MESH_GENERATED_STALE",
+    ],
     "src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs": [
         "element.IsGeneratedCurtainFrameStale()",
         "CURTAIN_FRAME_GENERATED_STALE",
@@ -55,13 +65,16 @@ checks = {
     "tests/QS3D.Core.SmokeTests/GeneratedGeometryStaleSmoke.cs": [
         'element.Properties["GeneratedSlabMeshHandles"]',
         'element.Properties["GeneratedWallMeshHandles"]',
+        'element.Properties["GeneratedFoundationMeshHandles"]',
         'element.Properties["GeneratedCurtainFrameHandles"]',
         "IsGeneratedSlabMeshStale",
         "IsGeneratedWallMeshStale",
+        "IsGeneratedFoundationMeshStale",
         "IsGeneratedCurtainFrameStale",
-        "Equal(8, issues.Count)",
+        "Equal(9, issues.Count)",
         'Contains(issues, "SLAB_MESH_GENERATED_STALE")',
         'Contains(issues, "WALL_MESH_GENERATED_STALE")',
+        'Contains(issues, "FOUNDATION_MESH_GENERATED_STALE")',
         'Contains(issues, "CURTAIN_FRAME_GENERATED_STALE")',
     ],
     "tests/QS3D.Core.SmokeTests/GeneratedOutputHealthStaleSmoke.cs": [
@@ -70,6 +83,7 @@ checks = {
         "BeamStirrupsUseSnapshotState",
         "SlabMeshUsesSnapshotState",
         "WallMeshUsesSnapshotState",
+        "FoundationMeshUsesSnapshotState",
         "NotContains(inspect(), code)",
         "element.MarkGeneratedGeometryStale",
         "Contains(inspect(), code)",
@@ -90,12 +104,12 @@ for relative, needles in checks.items():
         if needle not in text:
             errors.append(relative + " missing generated-stale guard/token: " + needle)
 
-# Generated-output health must never fall back to the old broad Dirty!=None stale heuristic.
 for relative in (
     "src/QS3D.Core/Diagnostics/GeneratedTieRebarHealthService.cs",
     "src/QS3D.Core/Diagnostics/GeneratedBeamStirrupHealthService.cs",
     "src/QS3D.Core/Diagnostics/GeneratedSlabMeshHealthService.cs",
     "src/QS3D.Core/Diagnostics/GeneratedWallMeshHealthService.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedFoundationMeshHealthService.cs",
     "src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs",
 ):
     path = ROOT / relative
@@ -108,4 +122,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: host, rebar, tie/stirrup, slab/wall mesh and curtain-frame outputs use per-output stale snapshots; dirty-only health false positives are regression-gated.")
+print("PASS: host, rebar, tie/stirrup, slab/wall/foundation mesh and curtain-frame outputs use per-output stale snapshots; dirty-only health false positives are regression-gated.")

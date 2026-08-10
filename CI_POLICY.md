@@ -7,6 +7,7 @@ This file is the repository-level source of truth for when GitHub Actions may ru
 GitHub Actions are **manual-only** on `main`.
 
 - Every workflow under `.github/workflows/` must use `workflow_dispatch` as its **only** trigger.
+- Every executable job must hard-guard `github.event_name == 'workflow_dispatch'`.
 - Do **not** add `push`, `pull_request`, `pull_request_target`, `schedule`, `workflow_run`, `workflow_call`, `repository_dispatch`, release-event, deployment-event, or any other automatic/event-driven trigger unless the repository owner explicitly asks to change this policy.
 - Do **not** automatically run, re-run, or dispatch CI/CD after a commit, push, merge, review, refactor, fix, documentation update, handoff, or `continue all` request.
 - A GitHub Actions run is allowed only when the repository owner explicitly requests a CI/build/test/runtime/release run.
@@ -61,7 +62,10 @@ Current workflows are expected to remain manual-only:
 - `.github/workflows/curved-opening.yml` — focused curved-opening gate.
 - `.github/workflows/geometry-extensions.yml` — focused geometry-extension gate.
 - `.github/workflows/project-data-gate.yml` — focused Zone/Floor/Family/Material/Project Tools/integrity gate.
+- `.github/workflows/schedule-gate.yml` — focused Schedule Hub / Room Finish / Material / Door-Opening schedule-export gate.
 - `.github/workflows/release-v25.yml` — owner-approved **build + package + GitHub Release** workflow.
+
+Every focused workflow must run `scripts/preflight-ci-manual-only.py` as part of its source gate so policy drift is detected inside an explicitly requested run as well.
 
 `release-v25.yml` is not a continuous-deployment pipeline. It is a manual release tool. Publishing requires an explicit `workflow_dispatch` plus the `RELEASE` confirmation input. It must not be dispatched until the owner requests the release.
 
@@ -97,10 +101,10 @@ Repository-local or static checks may be used during review without starting Git
 
 ## Enforcement
 
-- `scripts/preflight.py` retains the original manual-CI trigger guard.
-- `scripts/preflight-ci-manual-only.py` is the strict policy gate: every workflow must expose `workflow_dispatch` only, every executable workflow must hard-guard the manual event, and any other trigger is rejected.
+- `scripts/preflight.py` retains the original manual-CI trigger guard and private/reference artifact policy.
+- `scripts/preflight-ci-manual-only.py` is the strict policy gate: every workflow must expose `workflow_dispatch` only, **every executable job** must hard-guard the manual event, and any other trigger is rejected.
 - `scripts/preflight-all.py` auto-discovers the strict CI policy gate along with the other feature preflights.
 
 Keep these guards in place unless the repository owner explicitly changes this policy.
 
-Related documentation: `AGENTS.md`, `README.md`, `docs/CI.md`, `docs/CI-READINESS.md`, `docs/MANUAL-BUILD-RELEASE.md`, `docs/V25-RUNNER.md`.
+Related documentation: `AGENTS.md`, `README.md`, `docs/CI.md`, `docs/CI-READINESS.md`, `docs/MANUAL-BUILD-RELEASE.md`, `docs/V25-RUNNER.md`, `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`.

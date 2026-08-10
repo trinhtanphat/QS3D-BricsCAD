@@ -12,39 +12,81 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
+            var elementIndex = BuildElementIndex(project);
             var handles = new List<string>();
             var knownHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var id in elementIds.Where(x => !string.IsNullOrWhiteSpace(x)))
-                Visit(project, id.Trim(), visited, knownHandles, handles);
-            return handles;
+            var stack = new Stack<string>();
+
+            foreach (var rawId in elementIds.Where(x => !string.IsNullOrWhiteSpace(x)))
+            {
+                stack.Push(rawId.Trim());
+                while (stack.Count > 0)
+                {
+                    var elementId = stack.Pop();
+                    if (!visited.Add(elementId)) continue;
+                    if (!elementIndex.TryGetValue(elementId, out var element)) continue;
+
+                    AddDirectHandles(element, knownHandles, handles, out var hasDirectReference);
+                    var hasBoundaryReference = false;
+                    if (!hasDirectReference)
+                        AddBoundaryHandles(element, knownHandles, handles, out hasBoundaryReference);
+                    if (!hasDirectReference && !hasBoundaryReference)
+                        AddGeneratedSolidHandle(element, knownHandles, handles);
+
+                    for (var index = element.DependsOn.Count - 1; index >= 0; index--)
+                    {
+                        var dependency = (element.DependsOn[index] ?? string.Empty).Trim();
+                        if (dependency.Length > 0 && !visited.Contains(dependency)) stack.Push(dependency);
+                    }
+                }
+            }
+            return handles.AsReadOnly();
         }
 
-        private static void Visit(ProjectState project, string elementId, ISet<string> visited, ISet<string> knownHandles, ICollection<string> handles)
+        private static IReadOnlyDictionary<string, ProjectElement> BuildElementIndex(ProjectState project)
         {
-            if (!visited.Add(elementId)) return;
-            var element = project.FindElement(elementId);
-            if (element == null) return;
-            var hasDirectReference = false;
-            foreach (var handle in element.SourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()))
+            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
             {
+                if (element == null) throw new InvalidOperationException("Project contains a null semantic element.");
+                if (result.ContainsKey(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id);
+                result[element.Id] = element;
+            }
+            return result;
+        }
+
+        private static void AddDirectHandles(ProjectElement element, ISet<string> knownHandles, ICollection<string> handles, out bool hasDirectReference)
+        {
+            hasDirectReference = false;
+            foreach (var raw in element.SourceHandles)
+            {
+                var handle = (raw ?? string.Empty).Trim();
+                if (handle.Length == 0) continue;
                 hasDirectReference = true;
                 if (knownHandles.Add(handle)) handles.Add(handle);
             }
-            var hasBoundaryReference = false;
-            if (!hasDirectReference && element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var boundaryHandles))
-                foreach (var handle in (boundaryHandles ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0))
-                {
-                    hasBoundaryReference = true;
-                    if (knownHandles.Add(handle)) handles.Add(handle);
-                }
-            if (!hasDirectReference && !hasBoundaryReference && element.Properties.TryGetValue("GeneratedSolidHandle", out var generatedHandle) && !string.IsNullOrWhiteSpace(generatedHandle))
+        }
+
+        private static void AddBoundaryHandles(ProjectElement element, ISet<string> knownHandles, ICollection<string> handles, out bool hasBoundaryReference)
+        {
+            hasBoundaryReference = false;
+            if (!element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var boundaryHandles)) return;
+            foreach (var raw in (boundaryHandles ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                var normalized = generatedHandle.Trim();
-                if (knownHandles.Add(normalized)) handles.Add(normalized);
+                var handle = raw.Trim();
+                if (handle.Length == 0) continue;
+                hasBoundaryReference = true;
+                if (knownHandles.Add(handle)) handles.Add(handle);
             }
-            foreach (var dependency in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)))
-                Visit(project, dependency.Trim(), visited, knownHandles, handles);
+        }
+
+        private static void AddGeneratedSolidHandle(ProjectElement element, ISet<string> knownHandles, ICollection<string> handles)
+        {
+            if (!element.Properties.TryGetValue("GeneratedSolidHandle", out var generatedHandle)) return;
+            var normalized = (generatedHandle ?? string.Empty).Trim();
+            if (normalized.Length > 0 && knownHandles.Add(normalized)) handles.Add(normalized);
         }
     }
 }

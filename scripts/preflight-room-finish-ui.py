@@ -21,6 +21,8 @@ checks = {
     required[1]: [
         "private readonly Document _document", "RoomFinishScheduleWindow(Document document)", "RoomFinishScheduleBuilder.Build(project)",
         "RoomFinishXlsxExporter.Export", "RegenerationEngine", "SearchText.Contains(query)", "DrawingLabel(_document)",
+        "EnsureActive", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
+        'EnsureActive("làm mới HT_Phòng Schedule")', 'EnsureActive("xuất HT_Phòng XLSX")',
     ],
     required[2]: ['CommandMethod("QS3DFINISHSCHEDULE"', "new RoomFinishScheduleWindow(document)", "ShowModelessWindow"],
 }
@@ -39,4 +41,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: document-bound HT_Phòng schedule UI, filtering and XLSX entry points are present.")
+print("PASS: document-bound HT_Phòng schedule UI rejects cross-DWG refresh/export and exposes filtering/XLSX workflows.")

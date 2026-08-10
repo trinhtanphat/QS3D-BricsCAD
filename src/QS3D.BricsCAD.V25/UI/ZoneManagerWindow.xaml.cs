@@ -32,6 +32,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("lưu Zone");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 ZoneDefinition zone;
                 if (string.IsNullOrWhiteSpace(_editingId))
@@ -55,6 +56,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("xóa Zone");
                 if (!(ZoneList.SelectedItem is ZoneDefinition zone)) throw new InvalidOperationException("Chọn một Zone trước khi xóa.");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 if (!ProjectZoneService.Delete(project, zone.Id)) return;
@@ -68,6 +70,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("đặt Zone active");
                 if (!(ZoneList.SelectedItem is ZoneDefinition zone)) throw new InvalidOperationException("Chọn một Zone trước khi đặt active.");
                 var project = ProjectContextCoordinator.GetOrCreate(_document); var previous = project.ActiveZoneId;
                 ProjectZoneService.SetActive(project, zone.Id);

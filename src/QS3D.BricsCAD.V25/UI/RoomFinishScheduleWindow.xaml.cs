@@ -49,6 +49,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("xuất HT_Phòng XLSX");
                 if (_rows.Count == 0) throw new InvalidOperationException("Schedule hiện chưa có dòng để xuất.");
                 var drawingName = string.IsNullOrWhiteSpace(_document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(_document.Name);
                 var dialog = new SaveFileDialog
@@ -71,6 +72,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("làm mới HT_Phòng Schedule");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 _rows = RoomFinishScheduleBuilder.Build(project);
@@ -93,10 +95,27 @@ namespace QS3D.BricsCAD.V25.UI
             if (query.Length > 0) views = views.Where(x => x.SearchText.Contains(query));
             var visible = views.ToList();
             ScheduleGrid.ItemsSource = visible;
+
+            var elementCount = 0;
+            var totalLengthM = 0d;
+            var totalAreaM2 = 0d;
+            foreach (var row in visible)
+            {
+                elementCount = QuantityReportMath.AddCount(elementCount, row.Count);
+                totalLengthM = QuantityReportMath.Add(totalLengthM, row.LengthM, "HT_Phòng visible length");
+                totalAreaM2 = QuantityReportMath.Add(totalAreaM2, row.AreaM2, "HT_Phòng visible area");
+            }
+
             GroupCountText.Text = visible.Count.ToString(CultureInfo.InvariantCulture);
-            ElementCountText.Text = visible.Sum(x => x.Count).ToString(CultureInfo.InvariantCulture);
-            LengthText.Text = visible.Sum(x => x.LengthM).ToString("0.###", CultureInfo.InvariantCulture) + " m";
-            AreaText.Text = visible.Sum(x => x.AreaM2).ToString("0.###", CultureInfo.InvariantCulture) + " m²";
+            ElementCountText.Text = elementCount.ToString(CultureInfo.InvariantCulture);
+            LengthText.Text = totalLengthM.ToString("0.###", CultureInfo.InvariantCulture) + " m";
+            AreaText.Text = totalAreaM2.ToString("0.###", CultureInfo.InvariantCulture) + " m²";
+        }
+
+        private void EnsureActive(string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở HT_Phòng Schedule trước khi " + operation + ".");
         }
 
         private static string DrawingLabel(Document document)

@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.BricsCAD.V25.UI;
@@ -42,8 +41,14 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
                 RoomFinishXlsxExporter.Export(dialog.FileName, rows);
-                var count = rows.Sum(x => x.Count);
-                var primary = rows.Sum(x => x.PrimaryQuantity);
+
+                var count = 0;
+                var primary = 0d;
+                foreach (var row in rows)
+                {
+                    count = QuantityReportMath.AddCount(count, row.Count);
+                    primary = QuantityReportMath.Add(primary, row.PrimaryQuantity, "HT_Phòng export primary quantity");
+                }
                 var status = "HT_Phòng XLSX: " + rows.Count + " nhóm • " + count + " finish element • tổng KL chính " + primary.ToString("0.###") + ".";
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status + "\n" + dialog.FileName);

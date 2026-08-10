@@ -38,7 +38,7 @@
         </Grid>
         <StackPanel Grid.Row="6" Margin="0,10,0,0">
             <CheckBox x:Name="ClosestToFaceCheck" Content="Phương 1 nằm gần mặt bê tông hơn phương 2"/>
-            <TextBlock Text="Notation phải là một nhóm count hoặc spacing, ví dụ cú pháp dự án hỗ trợ như D10@200 hoặc 20D10. Native mesh hiện yêu cầu hai phương cùng đường kính." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,10,0,0"/>
+            <TextBlock Text="Mỗi phương dùng một notation độc lập (count hoặc spacing), ví dụ D10@200 hoặc 20D10. Hai phương có thể dùng đường kính, số lượng hoặc bước khác nhau; native planner sẽ validate từng phương và envelope/cover trước khi tạo 3D." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,10,0,0"/>
             <TextBlock x:Name="ValidationText" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
         </StackPanel>
         <DockPanel Grid.Row="7" Margin="0,14,0,0" LastChildFill="False">

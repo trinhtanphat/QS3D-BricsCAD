@@ -7,6 +7,13 @@ namespace QS3D.Core.Services
 {
     public sealed class DependencyGraph
     {
+        private sealed class VisitFrame
+        {
+            public VisitFrame(ProjectElement element) { Element = element; }
+            public ProjectElement Element { get; }
+            public int NextDependencyIndex { get; set; }
+        }
+
         private readonly Dictionary<string, HashSet<string>> _dependents = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
         public void Rebuild(IEnumerable<ProjectElement> elements)
@@ -15,6 +22,7 @@ namespace QS3D.Core.Services
             _dependents.Clear();
             foreach (var element in elements)
             {
+                if (element == null) throw new InvalidOperationException("Dependency graph cannot contain a null semantic element.");
                 foreach (var source in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)))
                 {
                     if (!_dependents.TryGetValue(source, out var set))
@@ -51,26 +59,52 @@ namespace QS3D.Core.Services
 
         public IReadOnlyList<ProjectElement> TopologicalDirtyOrder(IEnumerable<ProjectElement> elements)
         {
-            var list = elements.Where(x => x.Dirty != ElementDirtyFlags.None).ToList();
-            var byId = list.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+            if (elements == null) throw new ArgumentNullException(nameof(elements));
+            var list = new List<ProjectElement>();
+            foreach (var element in elements)
+            {
+                if (element == null) throw new InvalidOperationException("Dependency ordering cannot contain a null semantic element.");
+                if (element.Dirty != ElementDirtyFlags.None) list.Add(element);
+            }
+
+            var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in list)
+            {
+                if (byId.ContainsKey(element.Id))
+                    throw new InvalidOperationException("Dependency ordering contains duplicate semantic element id: " + element.Id);
+                byId[element.Id] = element;
+            }
+
             var result = new List<ProjectElement>(list.Count);
             var temporary = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var permanent = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in list) Visit(element, byId, temporary, permanent, result);
-            return result;
-        }
+            var stack = new Stack<VisitFrame>();
 
-        private static void Visit(ProjectElement element, IDictionary<string, ProjectElement> byId, ISet<string> temporary, ISet<string> permanent, IList<ProjectElement> result)
-        {
-            if (permanent.Contains(element.Id)) return;
-            if (!temporary.Add(element.Id)) throw new InvalidOperationException("Dependency cycle detected at " + element.Id + ".");
-            foreach (var dependencyId in element.DependsOn)
+            foreach (var root in list)
             {
-                if (byId.TryGetValue(dependencyId, out var dependency)) Visit(dependency, byId, temporary, permanent, result);
+                if (permanent.Contains(root.Id)) continue;
+                temporary.Add(root.Id);
+                stack.Push(new VisitFrame(root));
+
+                while (stack.Count > 0)
+                {
+                    var frame = stack.Peek();
+                    if (frame.NextDependencyIndex < frame.Element.DependsOn.Count)
+                    {
+                        var dependencyId = (frame.Element.DependsOn[frame.NextDependencyIndex++] ?? string.Empty).Trim();
+                        if (dependencyId.Length == 0 || !byId.TryGetValue(dependencyId, out var dependency) || permanent.Contains(dependency.Id)) continue;
+                        if (!temporary.Add(dependency.Id))
+                            throw new InvalidOperationException("Dependency cycle detected at " + dependency.Id + ".");
+                        stack.Push(new VisitFrame(dependency));
+                        continue;
+                    }
+
+                    stack.Pop();
+                    temporary.Remove(frame.Element.Id);
+                    if (permanent.Add(frame.Element.Id)) result.Add(frame.Element);
+                }
             }
-            temporary.Remove(element.Id);
-            permanent.Add(element.Id);
-            result.Add(element);
+            return result.AsReadOnly();
         }
     }
 }

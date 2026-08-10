@@ -6,11 +6,20 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 checks = {
+    "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": [
+        "public static class GeneratedHandleOwnershipPolicy",
+        "IsOwnerSlot",
+        "EnumerateOwnerHandles",
+        "CollectOwnerHandles",
+        "TryFindOwner",
+        'StartsWith("Generated"',
+        'PhysicalOpeningCutSolidHandle',
+    ],
     "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs": [
-        "SemanticHandleOwnershipResolver", "selected.Contains(handle)", "GeneratedSolidHandle",
-        "PhysicalOpeningCutSolidHandle", "GeneratedRebarHandles", "GeneratedShapeRebarHandles",
-        "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles", "GeneratedSlabMeshHandles",
-        "GeneratedWallMeshHandles", "GeneratedCurtainFrameHandles", "ambiguously owned by semantic elements",
+        "SemanticHandleOwnershipResolver",
+        "selected.Contains(handle)",
+        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
+        "ambiguously owned by semantic elements",
     ],
     "src/QS3D.BricsCAD.V25/Cad/SemanticSelectionResolver.cs": [
         "SelectImplied", "StartOpenCloseTransaction", "SemanticHandleOwnershipResolver.Resolve(project, selectedHandles)"
@@ -23,8 +32,10 @@ checks = {
     ],
     "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipSmoke.cs": [
         "ModuleInitializer", "UnrelatedAmbiguityDoesNotBlockCleanSelection", "SelectedAmbiguityIsRejected",
-        "GeneratedMultiHandleResolvesOwner", 'SemanticHandleOwnershipResolver.Resolve(project, new[] { "AA" })',
-        'SemanticHandleOwnershipResolver.Resolve(project, new[] { "BB" })'
+        "GeneratedMultiHandleResolvesOwner", "FoundationMeshGeneratedHandleResolvesOwner",
+        "FutureGeneratedOwnerSlotResolvesOwner", "ReferenceHandleIsNotGeneratedOwner",
+        "OwnerCollectionDedupesAndIncludesOpeningCut", "AmbiguousGeneratedOwnerIsRejected",
+        'GeneratedFuturePanelHandles', 'PhysicalOpeningCutSolidHandle',
     ],
 }
 
@@ -38,6 +49,17 @@ for relative, needles in checks.items():
         if needle not in text:
             errors.append(relative + " missing guard/token: " + needle)
 
+resolver = ROOT / "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs"
+if resolver.is_file():
+    text = resolver.read_text(encoding="utf-8")
+    for stale in (
+        "private static readonly string[] SingleHandleKeys",
+        "private static readonly string[] MultiHandleKeys",
+        '"GeneratedFoundationMeshHandles"',
+    ):
+        if stale in text:
+            errors.append("SemanticHandleOwnershipResolver still hard-codes generated owner families: " + stale)
+
 adapter = ROOT / "src/QS3D.BricsCAD.V25/Cad/SemanticSelectionResolver.cs"
 if adapter.is_file():
     text = adapter.read_text(encoding="utf-8")
@@ -50,4 +72,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: bound-drawing Floor/Material bulk selection resolves only selected ownership handles, rejects selected ambiguity, ignores unrelated conflicts and supports generated geometry channels.")
+print("PASS: semantic selection uses the shared generated-owner policy, rejects ambiguity/provenance drift and automatically supports future Generated*Handle(s) families.")

@@ -31,10 +31,18 @@ namespace QS3D.Core.SmokeTests
             element.SourceHandles.Clear();
             Has(BomReleaseGuardService.Inspect(project), "BOM_TRACEABILITY_MISSING");
             element.Properties["GeneratedSolidHandle"] = "2B";
-            Has(BomReleaseGuardService.Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase)), "BOM_GENERATED_HANDLE_MISSING");
+            element.Properties["PhysicalOpeningCutSolidHandle"] = "2B";
+            Equal(1, Count(BomReleaseGuardService.Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase)), "BOM_GENERATED_HANDLE_MISSING"));
             var live = new HashSet<string>(new[] { "2B" }, StringComparer.OrdinalIgnoreCase);
             if (BomReleaseGuardService.Inspect(project, live).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
                 throw new Exception("Live generated Handle must satisfy the BOM release guard.");
+
+            element.Properties["GeneratedFuturePanelHandles"] = "3C;3D;3d";
+            var partialFuture = new HashSet<string>(new[] { "2B", "3C" }, StringComparer.OrdinalIgnoreCase);
+            Has(BomReleaseGuardService.Inspect(project, partialFuture), "BOM_GENERATED_HANDLE_MISSING");
+            var allFuture = new HashSet<string>(new[] { "2B", "3C", "3D" }, StringComparer.OrdinalIgnoreCase);
+            if (BomReleaseGuardService.Inspect(project, allFuture).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
+                throw new Exception("Future Generated*Handles owner slot must use the shared BOM liveness registry without a hard-coded family update.");
         }
 
         private static void Empty(IReadOnlyList<ModelHealthIssue> issues)
@@ -45,6 +53,14 @@ namespace QS3D.Core.SmokeTests
         private static void Has(IReadOnlyList<ModelHealthIssue> issues, string code)
         {
             if (!issues.Any(x => string.Equals(x.Code, code, StringComparison.Ordinal))) throw new Exception("Expected BOM issue " + code + ".");
+        }
+
+        private static int Count(IReadOnlyList<ModelHealthIssue> issues, string code) =>
+            issues.Count(x => string.Equals(x.Code, code, StringComparison.Ordinal));
+
+        private static void Equal(int expected, int actual)
+        {
+            if (expected != actual) throw new Exception("Expected " + expected + ", got " + actual + ".");
         }
     }
 }

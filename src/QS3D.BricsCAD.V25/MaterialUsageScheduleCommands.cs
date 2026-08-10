@@ -44,7 +44,8 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
                 MaterialUsageXlsxExporter.Export(dialog.FileName, rows);
                 var materials = rows.Select(x => x.MaterialName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-                var elements = rows.Sum(x => x.ElementCount);
+                var elements = 0;
+                foreach (var row in rows) elements = QuantityReportMath.AddCount(elements, row.ElementCount);
                 var status = "Material XLSX: " + rows.Count + " nhóm • " + materials + " vật liệu • " + elements + " lượt cấu kiện/component.";
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status + "\n" + dialog.FileName);
