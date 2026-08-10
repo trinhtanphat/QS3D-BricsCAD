@@ -8,12 +8,15 @@ permissions:
 
 jobs:
   preflight:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Manual-only CI policy gate
+        run: python scripts/preflight-ci-manual-only.py
       - name: Generic source guard
         run: python scripts/preflight.py
       - name: All discovered feature source guards
@@ -40,6 +43,7 @@ jobs:
           }
 
   core:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: preflight
     runs-on: windows-latest
     steps:
