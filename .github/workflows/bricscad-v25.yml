@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   plugin:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, windows, x64, bricscad-v25]
     env:
       BRICSCAD_V25_DIR: ${{ vars.BRICSCAD_V25_DIR }}
