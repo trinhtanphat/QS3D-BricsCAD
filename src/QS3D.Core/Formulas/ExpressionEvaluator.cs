@@ -122,7 +122,7 @@ namespace QS3D.Core.Formulas
                     else if (Match('/'))
                     {
                         var divisor = ParseUnary(depth);
-                        if (Math.Abs(divisor) < 1e-15) throw Error("Division by zero.");
+                        if (divisor == 0d) throw Error("Division by zero.");
                         value /= divisor;
                     }
                     else return value;
@@ -182,14 +182,14 @@ namespace QS3D.Core.Formulas
                     case "ceil": RequireArgCount(name, args, 1); return Math.Ceiling(args[0]);
                     case "floor": RequireArgCount(name, args, 1); return Math.Floor(args[0]);
                     case "round":
-                        if (args.Count == 1) return Math.Round(args[0]);
+                        if (args.Count == 1) return Math.Round(args[0], MidpointRounding.AwayFromZero);
                         if (args.Count == 2)
                         {
                             var digitsValue = args[1];
-                            var roundedDigits = Math.Round(digitsValue);
+                            var roundedDigits = Math.Round(digitsValue, MidpointRounding.AwayFromZero);
                             if (digitsValue < 0d || digitsValue > 15d || Math.Abs(digitsValue - roundedDigits) > 1e-12)
                                 throw Error("round(value, digits) requires an integer digits argument from 0 to 15.");
-                            return Math.Round(args[0], (int)roundedDigits);
+                            return Math.Round(args[0], (int)roundedDigits, MidpointRounding.AwayFromZero);
                         }
                         throw Error("round expects 1 or 2 arguments.");
                     case "min":

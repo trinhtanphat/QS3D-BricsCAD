@@ -80,9 +80,7 @@ namespace QS3D.BricsCAD.V25
                 var snapshots = scanCurrentSpace ? EntitySnapshotReader.ReadCurrentSpace(doc) : EntitySnapshotReader.ReadCurrentSelection(doc);
                 if (scanCurrentSpace)
                 {
-                    var generatedHandles = new HashSet<string>(project.Elements
-                        .Select(x => x.Properties.TryGetValue("GeneratedSolidHandle", out var handle) ? handle : string.Empty)
-                        .Where(x => !string.IsNullOrWhiteSpace(x)), StringComparer.OrdinalIgnoreCase);
+                    var generatedHandles = CollectGeneratedHandles(project);
                     snapshots = snapshots.Where(x => !generatedHandles.Contains(x.Handle)).ToList();
                 }
                 if (snapshots.Count == 0) { doc.Editor.WriteMessage("\nQS3D: Current Space không có đối tượng CAD nguồn để quét."); return; }
@@ -128,6 +126,28 @@ namespace QS3D.BricsCAD.V25
                 AuditTrail.ForProject(project).Record("revision.compare", string.Empty, before.Id + " → " + after.Id + " • " + rows.Count + " quantity changes");
                 PaletteCoordinator.SetStatus("Revision diff: " + rows.Count + " thay đổi quantity.");
             });
+        }
+
+        private static HashSet<string> CollectGeneratedHandles(ProjectState project)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+                foreach (var key in new[]
+                {
+                    "GeneratedSolidHandle",
+                    "PhysicalOpeningCutSolidHandle",
+                    "GeneratedRebarHandles",
+                    "GeneratedShapeRebarHandles",
+                    "GeneratedTieRebarHandles",
+                    "GeneratedBeamStirrupHandles"
+                })
+                    if (element.Properties.TryGetValue(key, out var raw))
+                        foreach (var handle in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            var normalized = handle.Trim();
+                            if (normalized.Length > 0) result.Add(normalized);
+                        }
+            return result;
         }
 
         private static string GeometryHint(ElementCategory category)

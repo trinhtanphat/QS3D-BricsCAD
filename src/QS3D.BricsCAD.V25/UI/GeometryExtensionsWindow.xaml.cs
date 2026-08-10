@@ -17,7 +17,8 @@ namespace QS3D.BricsCAD.V25.UI
             var button = sender as Button;
             var command = button?.Tag as string;
             if (string.IsNullOrWhiteSpace(command)) return;
-            var document = Application.DocumentManager.MdiActiveDocument;
+            var normalizedCommand = command!.Trim();
+            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (document == null)
             {
                 StatusText.Text = "Không có BricsCAD document đang active.";
@@ -25,12 +26,12 @@ namespace QS3D.BricsCAD.V25.UI
             }
             try
             {
-                document.SendStringToExecute(command.Trim() + " ", true, false, false);
-                StatusText.Text = "Đã gửi lệnh " + command.Trim() + " sang BricsCAD.";
+                document.SendStringToExecute(normalizedCommand + " ", true, false, false);
+                StatusText.Text = "Đã gửi lệnh " + normalizedCommand + " sang BricsCAD.";
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
-                StatusText.Text = command.Trim() + " lỗi: " + ex.Message;
+                StatusText.Text = normalizedCommand + " lỗi: " + ex.Message;
             }
         }
     }

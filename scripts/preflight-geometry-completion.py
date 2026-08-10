@@ -81,9 +81,10 @@ checks = {
         "ProjectRebarScheduleBuilder.Build(project)", "RebarShapePathBuilder.Build", "RebarShapeLegsM", "RebarShapeTurnsDeg", "ProjectRebarShapePlan"
     ],
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": [
-        "REBAR_GENERATED_OWNERSHIP_CONFLICT", "REBAR_GENERATED_SOLID_MISSING", "REBAR_GENERATED_COUNT_MISMATCH",
-        "GeneratedShapeRebarHandles", "InspectShape", "InspectAll", "SHAPE_REBAR", "BuildOwnershipIndex",
-        "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "SourceHandles"
+        "CodePrefix = \"REBAR\"", "CodePrefix = \"SHAPE_REBAR\"",
+        "spec.CodePrefix + \"_GENERATED_OWNERSHIP_CONFLICT\"", "spec.CodePrefix + \"_GENERATED_SOLID_MISSING\"",
+        "spec.CodePrefix + \"_GENERATED_COUNT_MISMATCH\"", "GeneratedShapeRebarHandles", "InspectShape", "InspectAll",
+        "BuildOwnershipIndex", "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "SourceHandles"
     ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": [
         "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "EnsureOwned", "ownership conflict", "Refusing destructive erase",
@@ -91,16 +92,25 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
         "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
-        "GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
+        "GeneratedGeometryService.PrepareReplacement(document, transaction, project, element)",
+        "GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category)",
+        "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
     ],
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs": [
         "WallFootprintEngine", "BulgeArcTessellator.Tessellate", "Region.CreateFromCurves", "CreateExtrudedSolid", "WallJoinMode",
-        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelected(Document document, ProjectState project, ElementCategory category)"
+        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelected(Document document, ProjectState project, ElementCategory category)",
+        "GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category)",
+        "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
     ],
     "src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs": [
         "OpeningCutPlanner.Plan", "PolylineOpeningCutPlanner.Plan", "PreparePolylineHost", "PhysicalOpeningCutSolidHandle", "PhysicalOpeningCutFingerprint",
         "BooleanOperationType.BoolSubtract", "FingerprintPart", "HostFingerprint", "curved/bulged wall POLYLINE",
-        "ElementCategory.ArchitecturalWall", "ElementCategory.GlassWall", "ElementCategory.WallPier", "ElementCategory.StructuralWall"
+        "ElementCategory.ArchitecturalWall", "ElementCategory.GlassWall", "ElementCategory.WallPier", "ElementCategory.StructuralWall",
+        "GeneratedGeometryService.RequireMatchingOwnership"
+    ],
+    "src/QS3D.BricsCAD.V25/Cad/CurvedOpeningBooleanService.cs": [
+        "CurvedOpeningFootprintPlanner.Plan", "GeneratedGeometryService.RequireMatchingOwnership",
+        "IsGeneratedSolidStale", "PhysicalOpeningCutSolidHandle", "BooleanOperationType.BoolSubtract"
     ],
     "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs": [
         "RectangularRebarLayoutPlanner.Plan", "CreateFrustum", "GeneratedRebarHandles", "RebarBarsAlongWidth", "RebarBarsAlongDepth",
@@ -128,7 +138,7 @@ checks = {
         "QS3DHIGHLIGHT", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE"
     ],
     "src/QS3D.BricsCAD.V25/WallJunctionCommands.cs": [
-        "QS3DWALLJUNCTIONS", "WallJunctionPlanner().Plan", "WallJunctionKind.L", "WallJunctionKind.T", "WallJunctionKind.X"
+        "QS3DWALLJUNCTIONS", "WallJunctionAdjustmentPlanner().Plan", "WallJunctionKind.L", "WallJunctionKind.T", "WallJunctionKind.X"
     ],
     "src/QS3D.BricsCAD.V25/Services/SemanticReferenceHandles.cs": [
         "MatchesSelection", "BoundarySourceHandlesKey", "GeneratedSolidHandle"
@@ -176,7 +186,7 @@ checks = {
         "ProjectsOntoHorizontalSegment", "ProjectsOntoVerticalSegment", "RejectsCornerCrossingCut", "RejectsFarOpening"
     ],
     "tests/QS3D.Core.SmokeTests/RebarShapeGeometrySmoke.cs": [
-        "ModuleInitializer", "StraightPath", "LShapePath", "UShapePath", "CustomTurns"
+        "ModuleInitializer", "Straight()", "LShape()", "UShape()", "CustomTurns"
     ],
     "tests/QS3D.Core.SmokeTests/ProjectRebarShapeSmoke.cs": [
         "BuildsLShapeFromElementProperties", "StraightShapeNeedsNoLegMetadata", "MismatchedLegTotalIsRejected"

@@ -64,18 +64,20 @@ namespace QS3D.Core.SmokeTests
             var bltPath = Path.Combine(directory, "blt.xlsx");
             try
             {
-                var row = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "WF", Count = 1 };
+                var row = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "$12510 cost note", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
                 row.ElementIds.Add("WF-1"); row.SourceHandles.Add("AB12"); row.SourceHandles.Add("30DE");
                 XlsxQuantityExporter.Export(qs3dPath, new[] { row });
-                var exported = XlsxHandleReader.ReadHandles(qs3dPath, 2);
-                Equal(2, exported.Count); Equal("AB12", exported[0]); Equal("30DE", exported[1]);
+                var exported = XlsxHandleReader.ReadHandleLookup(qs3dPath, 2);
+                Equal(2, exported.Handles.Count); Equal("AB12", exported.Handles[0]); Equal("30DE", exported.Handles[1]);
+                Equal("DWG-FINGERPRINT-1", exported.DrawingFingerprint); True(!exported.UsesLegacyDecimalHandles);
 
                 using (var stream = new FileStream(bltPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
                 using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
                 using (var writer = new StreamWriter(archive.CreateEntry("xl/worksheets/sheet1.xml").Open(), new UTF8Encoding(false)))
                     writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"E1\" t=\"inlineStr\"><is><t>Handle</t></is></c></row><row r=\"5\"><c r=\"A5\" t=\"inlineStr\"><is><t>$12510$12512</t></is></c><c r=\"E5\" t=\"inlineStr\"><is><t>CF4</t></is></c></row></sheetData></worksheet>");
-                var legacy = XlsxHandleReader.ReadHandles(bltPath, 5);
-                Equal(2, legacy.Count); Equal("30DE", legacy[0]); Equal("30E0", legacy[1]);
+                var legacy = XlsxHandleReader.ReadHandleLookup(bltPath, 5);
+                Equal(2, legacy.Handles.Count); Equal("30DE", legacy.Handles[0]); Equal("30E0", legacy.Handles[1]);
+                Equal(string.Empty, legacy.DrawingFingerprint); True(legacy.UsesLegacyDecimalHandles);
             }
             finally { DeleteDirectory(directory); }
         }

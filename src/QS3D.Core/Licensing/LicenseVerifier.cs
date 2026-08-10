@@ -167,7 +167,7 @@ namespace QS3D.Core.Licensing
         {
             var value = (string?)element.Attribute(attribute);
             if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("License attribute is required: " + attribute);
-            return value.Trim();
+            return value!.Trim();
         }
 
         private static DateTime ParseUtc(string value, string label)

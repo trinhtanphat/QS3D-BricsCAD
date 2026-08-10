@@ -7,7 +7,7 @@
 - BricsCAD V25 `net48/x64` adapter with external `BrxMgd.dll` / `TD_Mgd.dll` references.
 - Project / Zone / Floor / Family / semantic Element model, `.qsdb` schema v3 migration, validated temp-save, atomic replacement where supported, `.bak` recovery, project locking, size/XML safety guards and protected recovery mode.
 - persisted dirty flags/timestamps, dependency graph + bounded fixed-point regeneration, project QuantityRules, audit provenance, revision baseline/diff and `.qstemplate` import/export.
-- multi-document project cache keyed by live `Document` identity; Save As/unsaved drawing handling is guarded.
+- multi-document project cache keyed by live `Document` identity; Save As/unsaved drawing handling is guarded. Live identity uses BricsCAD `Database.FingerprintGuid`; copied/mismatched `.qsdb` Handle identities fail closed instead of being silently rebound.
 
 ### BLT-style UI / selection / property editing
 
@@ -43,7 +43,9 @@
 
 - deterministic semantic quantities and guarded native source paths for Beam, Slab, Column, StructuralWall, Foundation, Stair, Railing and Earthwork.
 - Quick Takeoff Length/Area/Volume/Count uses drawing `INSUNITS` conversion.
-- BQ groups by stable Floor/Family IDs, supports filtering/Locate/XLSX, real recalculation and persisted column preferences.
+- `QS3DB4D` performs a bounded whole-Current-Space scan, excludes generated mass/rebar/shape-rebar handles, reads curve/Polyline/Region/Hatch/Solid3d metrics and applies only high-confidence recognition. Rescan replaces stale source-derived metrics and `CAD.*` metadata while preserving an existing element's Family/Floor/Zone context.
+- BQ groups by stable Floor/Family IDs, supports filtering/Locate/XLSX, real recalculation and persisted column preferences. XLSX rows carry QS3D Element IDs, CAD handles and the owning DWG fingerprint; `QS3DED2` exposes the workflow and `QS3DEXCELLOCATE` rejects a mismatched fingerprint before selection. Legacy BLT `$<decimal handle>` rows require explicit `YES` confirmation.
+- source-reference resolution follows room dependencies for generated finishes, so BQ/Locate/untrack reach the room source without duplicating Handle ownership.
 - deterministic recognition + review and confident auto-apply; project/company layer mappings override fallback heuristics.
 - live Xref/Layer controls, selection inspection and semantic reference-based Locate paths are wired through BQ/Health/BBS/revision workflows.
 
@@ -64,6 +66,14 @@
 - both manual-only workflows include the safe Auto Host source preflight; no workflow was dispatched as part of these source changes.
 - `main` GitHub Actions workflows remain `workflow_dispatch` only.
 
+## Locally verified on 2026-08-10
+
+- The integrated branch based on `origin/main` `b00d03f` compiled Core and the BricsCAD V25 adapter against the installed V25.2.10 managed assemblies in Release/x64 with **0 warnings / 0 errors**.
+- The deterministic Core smoke executable reported `ALL PASS`.
+- All twenty-one repository `preflight*.py` scripts, including the aggregate auto-discovery gate, passed using the installed BricsCAD Python 3.9 runtime. No GitHub Action was dispatched.
+- Generated host/rebar/shape/tie/stirrup outputs enter an explicit stale lifecycle after geometry-affecting semantic edits and clear their own stale state only after successful replacement. Beam-rebar erasure is ownership-guarded; Wall Snap validates its source fingerprint and plan hash again inside the write transaction.
+- Read-only reference check: supplied `DGKL.xlsx` row 5 decimal handles `12510,12512` resolve to hexadecimal `30DE,30E0`; row 6 resolves to `30DF,30E1`. The workbook was not modified.
+
 ## Verified in earlier GitHub-hosted CI
 
 - Earlier full-domain integration gates passed generic/full-domain preflights, Core Release build and deterministic smoke suites.
@@ -77,7 +87,7 @@ Historical V25 integration probe run `31341184031` remained queued because no ma
 
 ## Runtime/product work still remaining
 
-- compile the newest adapter against the exact installed V25 `BrxMgd.dll` / `TD_Mgd.dll`, then real DemandLoad/NETLOAD command/Ribbon/palette regression;
+- preserve the successful local V25.2.10 compile while still completing real DemandLoad/NETLOAD command/Ribbon/palette regression on the final published SHA;
 - private-DWG and save/reopen/multi-DWG regression for Room Auto, wall centerlines/snap cleanup, Auto Host, straight-polyline opening cuts, structure, BQ/BBS and both rebar geometry paths;
 - real V25 validation of Family/Instance scope, typed controls, Focus/Isolate/restore and Unicode/HiDPI behavior;
 - production-grade Vách Kính curtain-wall framing/panels and specialized Trụ Tường profiles/material presentation beyond the generic Tường KT extrusion;

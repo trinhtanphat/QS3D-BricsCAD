@@ -3,7 +3,7 @@
 **Audit/update date:** 2026-08-10 (UTC+7)  
 **Repository:** `trinhtanphat/QS3D-BricsCAD`  
 **Branch:** `main`  
-**Source reconciliation cutoff for this edition:** `ded0b605f5630851f5bfc8a383651acd32e0005d` (`docs: record auto host and review gated wall cleanup`)  
+**Source reconciliation cutoff for this edition:** `b00d03f65bf89ff9a06b2c65fa68722c7cad92ce` (`ci: auto discover all feature preflight gates`) plus the rebased B4D/ED2, DWG-identity and generated-geometry hardening branch documented below.
 **Historical exhaustive session audit:** `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md`  
 **Status:** this file is the **canonical current handoff**. If this file, an older chat message, or the historical handoff conflicts with newer `main`, **newer source wins**.
 
@@ -313,6 +313,7 @@ Recognition is deterministic/rule-based and review-oriented:
 - semantic collision rejection;
 - project/company layer mappings override fallback heuristics;
 - invalid/ambiguous mapping/confidence state rejected.
+- `QS3DB4D` performs a bounded whole-Current-Space scan, excludes generated mass/rebar/shape-rebar handles, reads curve/Polyline/Region/Hatch/Solid3d metrics and auto-applies only high-confidence results. Rescan replaces stale source-derived metrics/`CAD.*` metadata while preserving existing Family/Floor/Zone context.
 
 ### Templates
 
@@ -389,6 +390,10 @@ Current BQ/reporting includes:
 - finite/overflow-safe accumulation;
 - real XLSX output with expected headers/filter/freeze behavior;
 - drawing-unit-aware fallback takeoff rather than silent hard-coded millimeters.
+- exported aggregate rows contain stable QS3D Element IDs, hexadecimal CAD handles and the owning DWG fingerprint;
+- `QS3DED2` aliases the BQ/export workflow;
+- `QS3DEXCELLOCATE` fails closed when the workbook fingerprint differs from the active DWG. Legacy BLT hidden `$<decimal handle>` rows are supported only after explicit `YES` confirmation because they have no fingerprint;
+- generated room-finish rows resolve source handles transitively through their Room dependency without duplicating semantic ownership.
 
 Undefined/unsupported units must remain explicitly surfaced to users.
 
@@ -434,11 +439,25 @@ Newest source was **not** automatically CI-run merely because these preflights w
 
 ---
 
+## 15.1 Local integration evidence
+
+- branch baseline: `origin/main` `b00d03f` plus rebased B4D/ED2 and hardening changes;
+- exact installed BricsCAD V25.2.10 references compiled the Release/x64 adapter with **0 warnings / 0 errors**;
+- deterministic Core smoke executable: `ALL PASS`;
+- all twenty-one local `preflight*.py` scripts, including the aggregate auto-discovery gate: PASS using BricsCAD's bundled Python 3.9;
+- reconciled beam longitudinal/stirrup and column-tie batches now compile; generated-output stale lifecycle is implemented, destructive beam-rebar replacement is ownership-guarded, and Wall Snap revalidates both source fingerprint and plan hash inside the write transaction;
+- supplied `DGKL.xlsx` was inspected read-only: row 5 decimal handles `12510,12512` → `30DE,30E0`; row 6 → `30DF,30E1`;
+- no GitHub Action was dispatched and no private DWG/XLSX/BLT payload was added to Git.
+
+This is source/build/static/file-format evidence, not interactive NETLOAD or command-runtime proof.
+
+---
+
 ## 16. Remaining truth gaps / work still not safe to call complete
 
 Even though source breadth is now large, keep these gaps explicit:
 
-1. newest exact `main` still needs real V25 adapter compile + NETLOAD/DemandLoad qualification;
+1. the final published SHA still needs real V25 NETLOAD/DemandLoad qualification and a final compile confirmation if `main` moves again;
 2. private sample-DWG regression;
 3. actual Ribbon/Palette/Domain Hub/typed-property/Focus/Isolate/Room Auto/Rebar/Opening-cut runtime verification;
 4. Windows 100/125/150/200% DPI + Vietnamese Unicode visual acceptance;
@@ -472,12 +491,14 @@ A local/Windows agent with licensed BricsCAD V25 should prioritize:
 13. HT_Phòng sync/untracking safety;
 14. structural native 3D source paths;
 15. column `QS3DREBAR3D`, BBS-shape `QS3DREBAR3DSHAPE`, both health commands;
-16. BQ XLSX, BBS XLSX/CSV;
-17. Recognition + company mappings;
-18. Template export/import rollback and inheritance behavior;
-19. Revision/Audit/Model Health;
-20. package install/uninstall on a clean V25 test profile;
-21. private DWG + screenshot evidence.
+16. BQ/`QS3DED2` XLSX fingerprint round-trip plus `QS3DEXCELLOCATE` for both matching QS3D export and explicitly confirmed legacy BLT row;
+17. `QS3DB4D` whole-space scan, generated-geometry exclusion, ambiguous review and same-handle rescan after Area/Text removal;
+18. BBS XLSX/CSV;
+19. Recognition + company mappings;
+20. Template export/import rollback and inheritance behavior;
+21. Revision/Audit/Model Health;
+22. package install/uninstall on a clean V25 test profile;
+23. private DWG + screenshot evidence.
 
 Only then update runtime status as “verified”.
 
@@ -508,10 +529,10 @@ Use `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` when deeper chronology, s
 
 ## 19. Final continuation statement
 
-Current QS3D source is well beyond the original UI shell: it includes schema-v3 persistence, deterministic regeneration/rules, TKT/Room/HT_Phòng/Cửa, structural semantics/native source paths, wall topology analysis/review-gated cleanup, automatic room discovery including direct curves, conservative automatic host matching, guarded physical opening cuts, BQ/XLSX, deterministic BBS + CSV, column and BBS-shape native rebar source paths, Recognition, Template, Revision, Audit, Model Health, Focus/Isolate, Xref/Layer/selection and V25 DemandLoad/package tooling.
+Current QS3D source is well beyond the original UI shell: it includes schema-v3 persistence, deterministic regeneration/rules, TKT/Room/HT_Phòng/Cửa, structural semantics/native source paths, wall topology analysis/review-gated cleanup, automatic room discovery including direct curves, conservative automatic host matching, guarded physical opening cuts, B4D whole-space recognition, BQ/ED2 fingerprinted XLSX reverse lookup, deterministic BBS + CSV, column and BBS-shape native rebar source paths, Recognition, Template, Revision, Audit, Model Health, Focus/Isolate, Xref/Layer/selection and V25 DemandLoad/package tooling.
 
 The major remaining truth boundary is still **current-main execution inside a real licensed BricsCAD V25 environment**.
 
 Precise wording remains mandatory:
 
-**source-implemented / deterministic-Core-covered ≠ current-head compiled/NETLOAD/runtime-verified in BricsCAD V25.**
+**source-implemented / deterministic-Core-covered / locally compiled ≠ NETLOAD/runtime-verified in BricsCAD V25.**

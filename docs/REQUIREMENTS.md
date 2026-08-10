@@ -31,9 +31,16 @@ The embedded screenshots add the following UI/workflow expectations:
 - Quantity columns include count, gross/deduction/net concrete, formwork, length, perimeter and finish/opening areas.
 - Column visibility controls.
 - Export to real `.xlsx` without requiring Microsoft Excel to be installed.
-- Preserve a bidirectional identity bridge: QS3D Element ID ↔ CAD Handle in each exported aggregate row.
+- Preserve a bidirectional identity bridge: QS3D Element ID ↔ CAD Handle ↔ owning DWG fingerprint in each exported aggregate row.
 - Read a selected QS3D export row back into BricsCAD and select/zoom the referenced entities.
-- Support the supplied legacy BLT workbook convention where hidden cells contain one or more decimal handles prefixed with `$`; convert those decimal values to BricsCAD hexadecimal handles without modifying the source workbook.
+- Support the supplied legacy BLT workbook convention where hidden cells contain one or more decimal handles prefixed with `$`; convert those decimal values to BricsCAD hexadecimal handles without modifying the source workbook, and require explicit confirmation because legacy workbooks have no DWG fingerprint.
+- Treat a CAD Handle as valid only together with the owning DWG fingerprint; a copied/mismatched `.qsdb` must fail closed instead of silently rebinding Handles.
+
+## Generated 3D safety
+
+- Mark every QS3D-generated entity with project/element/category ownership data inside the DWG.
+- Never erase or boolean-modify a Solid3d solely because its hexadecimal Handle matches persisted text; the live ownership marker must also match.
+- Quantity regeneration must preserve a stale `Geometry` flag. Only a successfully committed CAD build/replacement may mark generated geometry clean.
 
 ## B4D-style drawing scan
 

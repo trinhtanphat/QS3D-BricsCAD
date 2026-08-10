@@ -132,6 +132,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["GeneratedRebarBeamTopCount"] = update.TopCount.ToString(CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedRebarBeamBottomCount"] = update.BottomCount.ToString(CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedRebarMode"] = "BeamLongitudinalBars";
+                update.Element.ClearGeneratedRebarStale();
                 AuditTrail.ForProject(project).Record("geometry.rebar.beam", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
             }
             if (pending.Count > 0) { document.Editor.Regen(); project.Touch(); }
@@ -157,9 +158,13 @@ namespace QS3D.BricsCAD.V25.Cad
             if (top.HasValue || bottom.HasValue)
             {
                 if (!top.HasValue || !bottom.HasValue) throw new InvalidOperationException("Khai báo đồng thời RebarBeamTopCount và RebarBeamBottomCount.");
-                return Tuple.Create(top.Value, bottom.Value);
+                return Tuple.Create(top.GetValueOrDefault(), bottom.GetValueOrDefault());
             }
-            if (groups.Count == 1 && groups[0].Quantity.HasValue && groups[0].Quantity.Value >= 4 && groups[0].Quantity.Value % 2 == 0) return Tuple.Create(groups[0].Quantity.Value / 2, groups[0].Quantity.Value / 2);
+            if (groups.Count == 1 && groups[0].Quantity.HasValue)
+            {
+                var quantity = groups[0].Quantity.GetValueOrDefault();
+                if (quantity >= 4 && quantity % 2 == 0) return Tuple.Create(quantity / 2, quantity / 2);
+            }
             throw new InvalidOperationException(element.Id + ": không thể suy ra top/bottom beam layout từ RebarNotation. Khai báo RebarBeamTopCount và RebarBeamBottomCount.");
         }
 

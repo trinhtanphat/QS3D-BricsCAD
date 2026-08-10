@@ -19,7 +19,8 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class WallJunctionSnapCommands
     {
-        private const string PreviewSignatureKey = "WallJunctionSnapPreviewSignature";
+        private const string PreviewPlanHashKey = "WallJunctionSnapPreviewPlanHash";
+        private const string PreviewSourceFingerprintKey = "WallJunctionSnapPreviewSourceFingerprint";
         private const string PreviewCountKey = "WallJunctionSnapPreviewCount";
         private const string PreviewUtcKey = "WallJunctionSnapPreviewUtc";
 
@@ -52,7 +53,8 @@ namespace QS3D.BricsCAD.V25
         {
             public IReadOnlyList<EditableSegment> Segments { get; set; } = Array.Empty<EditableSegment>();
             public IReadOnlyList<VertexEdit> Edits { get; set; } = Array.Empty<VertexEdit>();
-            public string Signature { get; set; } = string.Empty;
+            public string PlanHash { get; set; } = string.Empty;
+            public string SourceFingerprint { get; set; } = string.Empty;
             public double ToleranceM { get; set; }
             public double MovementEpsilonM { get; set; }
         }
@@ -72,7 +74,8 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                project.Metadata[PreviewSignatureKey] = plan.Signature;
+                project.Metadata[PreviewPlanHashKey] = plan.PlanHash;
+                project.Metadata[PreviewSourceFingerprintKey] = plan.SourceFingerprint;
                 project.Metadata[PreviewCountKey] = plan.Edits.Count.ToString(CultureInfo.InvariantCulture);
                 project.Metadata[PreviewUtcKey] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
                 project.Touch();
@@ -105,7 +108,9 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\nQS3D Wall Snap: selection không có semantic wall source có thể chỉnh.");
                     return;
                 }
-                if (!project.Metadata.TryGetValue(PreviewSignatureKey, out var preview) || !string.Equals(preview, plan.Signature, StringComparison.Ordinal))
+                if (!project.Metadata.TryGetValue(PreviewSourceFingerprintKey, out var previewSource) || !string.Equals(previewSource, plan.SourceFingerprint, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Source fingerprint không còn khớp preview. Chạy QS3DWALLSNAPPREVIEW lại trước khi apply.");
+                if (!project.Metadata.TryGetValue(PreviewPlanHashKey, out var previewPlan) || !string.Equals(previewPlan, plan.PlanHash, StringComparison.Ordinal))
                     throw new InvalidOperationException("Preview không còn khớp selection/geometry hiện tại. Chạy QS3DWALLSNAPPREVIEW lại trước khi apply.");
                 if (project.Metadata.TryGetValue(PreviewCountKey, out var countText) && int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var previewCount) && previewCount != plan.Edits.Count)
                     throw new InvalidOperationException("Số endpoint cần chỉnh đã thay đổi từ preview. Chạy preview lại.");
@@ -123,6 +128,7 @@ namespace QS3D.BricsCAD.V25
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
+                    RequireSourceFingerprint(transaction, units, plan);
                     invalidation = GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, touchedOwners);
                     foreach (var edit in plan.Edits)
                     {
@@ -175,11 +181,13 @@ namespace QS3D.BricsCAD.V25
             if (segments.Count == 0) return new SnapPlan { ToleranceM = tolerance, MovementEpsilonM = movementEpsilon };
             var adjustmentPlan = new WallJunctionAdjustmentPlanner().Plan(segments.Select(x => x.Axis), tolerance, movementEpsilon);
             var edits = ConsolidateEdits(segments, adjustmentPlan.Adjustments, movementEpsilon);
+            var sourceFingerprint = BuildSourceFingerprint(segments, tolerance, movementEpsilon);
             return new SnapPlan
             {
                 Segments = segments,
                 Edits = edits,
-                Signature = BuildSignature(segments, edits, tolerance, movementEpsilon),
+                SourceFingerprint = sourceFingerprint,
+                PlanHash = BuildPlanHash(sourceFingerprint, edits),
                 ToleranceM = tolerance,
                 MovementEpsilonM = movementEpsilon
             };
@@ -298,7 +306,7 @@ namespace QS3D.BricsCAD.V25
             return owners.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
-        private static string BuildSignature(IReadOnlyList<EditableSegment> segments, IReadOnlyList<VertexEdit> edits, double tolerance, double epsilon)
+        private static string BuildSourceFingerprint(IReadOnlyList<EditableSegment> segments, double tolerance, double epsilon)
         {
             var text = new StringBuilder();
             text.Append("tol=").Append(tolerance.ToString("R", CultureInfo.InvariantCulture)).Append("|eps=").Append(epsilon.ToString("R", CultureInfo.InvariantCulture));
@@ -310,15 +318,26 @@ namespace QS3D.BricsCAD.V25
                     .Append(segment.Axis.End.X.ToString("R", CultureInfo.InvariantCulture)).Append(',')
                     .Append(segment.Axis.End.Y.ToString("R", CultureInfo.InvariantCulture));
             }
+            return Hash(text.ToString());
+        }
+
+        private static string BuildPlanHash(string sourceFingerprint, IReadOnlyList<VertexEdit> edits)
+        {
+            var text = new StringBuilder(sourceFingerprint ?? string.Empty);
             foreach (var edit in edits)
             {
                 text.Append("|E:").Append(edit.Key).Append(':')
                     .Append(edit.Target.X.ToString("R", CultureInfo.InvariantCulture)).Append(',')
                     .Append(edit.Target.Y.ToString("R", CultureInfo.InvariantCulture));
             }
+            return Hash(text.ToString());
+        }
+
+        private static string Hash(string text)
+        {
             using (var sha = SHA256.Create())
             {
-                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(text.ToString()));
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(text ?? string.Empty));
                 var output = new StringBuilder(hash.Length * 2);
                 foreach (var value in hash) output.Append(value.ToString("x2", CultureInfo.InvariantCulture));
                 return output.ToString();
@@ -327,9 +346,43 @@ namespace QS3D.BricsCAD.V25
 
         private static void ClearPreview(ProjectState project)
         {
-            project.Metadata.Remove(PreviewSignatureKey);
+            project.Metadata.Remove(PreviewPlanHashKey);
+            project.Metadata.Remove(PreviewSourceFingerprintKey);
             project.Metadata.Remove(PreviewCountKey);
             project.Metadata.Remove(PreviewUtcKey);
+        }
+
+        private static void RequireSourceFingerprint(Transaction transaction, QS3D.Core.Units.ProjectUnitPolicy units, SnapPlan plan)
+        {
+            var current = new List<EditableSegment>(plan.Segments.Count);
+            foreach (var segment in plan.Segments)
+            {
+                var entity = transaction.GetObject(segment.ObjectId, OpenMode.ForRead, false) as Entity;
+                if (entity == null || entity.IsErased) throw new InvalidOperationException("Wall source không còn live: " + segment.SourceHandle);
+                WallAxisSegment axis;
+                if (segment.IsLine)
+                {
+                    var line = entity as Line ?? throw new InvalidOperationException("Wall source type đã đổi từ LINE: " + segment.SourceHandle);
+                    axis = new WallAxisSegment(segment.Id,
+                        new Point2(units.ToMeters(line.StartPoint.X), units.ToMeters(line.StartPoint.Y)),
+                        new Point2(units.ToMeters(line.EndPoint.X), units.ToMeters(line.EndPoint.Y)));
+                }
+                else
+                {
+                    var polyline = entity as Polyline ?? throw new InvalidOperationException("Wall source type đã đổi từ POLYLINE: " + segment.SourceHandle);
+                    if (polyline.Closed || segment.StartVertex < 0 || segment.EndVertex >= polyline.NumberOfVertices)
+                        throw new InvalidOperationException("Polyline source mapping không còn hợp lệ: " + segment.SourceHandle);
+                    var a = polyline.GetPoint2dAt(segment.StartVertex);
+                    var b = polyline.GetPoint2dAt(segment.EndVertex);
+                    axis = new WallAxisSegment(segment.Id,
+                        new Point2(units.ToMeters(a.X), units.ToMeters(a.Y)),
+                        new Point2(units.ToMeters(b.X), units.ToMeters(b.Y)));
+                }
+                current.Add(new EditableSegment { Id = segment.Id, ObjectId = segment.ObjectId, SourceHandle = segment.SourceHandle, IsLine = segment.IsLine, StartVertex = segment.StartVertex, EndVertex = segment.EndVertex, Axis = axis });
+            }
+            var liveFingerprint = BuildSourceFingerprint(current, plan.ToleranceM, plan.MovementEpsilonM);
+            if (!string.Equals(liveFingerprint, plan.SourceFingerprint, StringComparison.Ordinal))
+                throw new InvalidOperationException("SourceFingerprint changed after preview validation. Refusing wall source mutation; run QS3DWALLSNAPPREVIEW again.");
         }
 
         private static void EnsureElevation(ref double? referenceElevationM, double elevationM, double toleranceM, string label)
@@ -357,7 +410,7 @@ namespace QS3D.BricsCAD.V25
         private static void Guard(Document document, string operation, Action action)
         {
             try { action(); }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = operation + " lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);

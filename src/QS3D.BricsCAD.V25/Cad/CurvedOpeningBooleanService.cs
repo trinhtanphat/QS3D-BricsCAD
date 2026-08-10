@@ -21,6 +21,14 @@ namespace QS3D.BricsCAD.V25.Cad
             public int OpeningCount { get; set; }
         }
 
+        private sealed class PlannedOpeningCut
+        {
+            public string OpeningId { get; set; } = string.Empty;
+            public IReadOnlyList<Point2> CutterPolygon { get; set; } = Array.Empty<Point2>();
+            public double CutterHeightM { get; set; }
+            public double BaseElevationM { get; set; }
+        }
+
         public static int CutLinkedOpenings(Document document, ProjectState project)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -52,6 +60,9 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (solidId.IsNull) continue;
                     var hostSolid = transaction.GetObject(solidId, OpenMode.ForWrite, false) as Solid3d;
                     if (hostSolid == null || hostSolid.IsErased) continue;
+                    if (host.IsGeneratedSolidStale())
+                        throw new InvalidOperationException("Host " + host.Id + " has stale generated geometry. Rebuild 3D before cutting curved openings.");
+                    GeneratedGeometryService.RequireMatchingOwnership(hostSolid, project, host, "cut curved openings in Solid3d " + solidHandle.Trim());
 
                     var family = project.FindFamily(host.FamilyId);
                     var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "ThicknessM", 0.2d), host.Id + "/ThicknessM");
@@ -63,7 +74,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     var miterLimit = ProjectNumber(project, "WallMiterLimit", 4d, 1d);
                     var centerline = ReadCenterline(document, hostSource, sagittaM, host.Id);
                     var fingerprintParts = new List<string>();
-                    var hostCutCount = 0;
+                    var plannedCuts = new List<PlannedOpeningCut>();
 
                     foreach (var opening in group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                     {
@@ -109,10 +120,13 @@ namespace QS3D.BricsCAD.V25.Cad
                             ClearanceM = clearanceM
                         });
 
-                        using (var cutter = BuildCutter(document, hostSource.Elevation, bottomOffsetM, footprint.CutterPolygon, vertical.CutterHeightM, vertical.BaseElevationM, opening.Id))
-                            hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
-                        cuts++;
-                        hostCutCount++;
+                        plannedCuts.Add(new PlannedOpeningCut
+                        {
+                            OpeningId = opening.Id,
+                            CutterPolygon = footprint.CutterPolygon,
+                            CutterHeightM = vertical.CutterHeightM,
+                            BaseElevationM = vertical.BaseElevationM
+                        });
                         fingerprintParts.Add(opening.Id + ":" + openingSourceId.Handle + ":" +
                             openingPoint.X.ToString("R", CultureInfo.InvariantCulture) + "," + openingPoint.Y.ToString("R", CultureInfo.InvariantCulture) + ":" +
                             widthM.ToString("R", CultureInfo.InvariantCulture) + ":" + openingHeightM.ToString("R", CultureInfo.InvariantCulture) + ":" +
@@ -129,7 +143,13 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal)) continue;
                         throw new InvalidOperationException("Host " + host.Id + " đã được khoét trên generated solid hiện tại nhưng geometry/fingerprint đã thay đổi. Build 3D lại host trước khi khoét curved openings.");
                     }
-                    pending.Add(new PendingHostUpdate { Host = host, SolidHandle = currentSolidHandle, Fingerprint = fingerprint, OpeningCount = hostCutCount });
+                    foreach (var planned in plannedCuts)
+                    {
+                        using (var cutter = BuildCutter(document, hostSource.Elevation, bottomOffsetM, planned.CutterPolygon, planned.CutterHeightM, planned.BaseElevationM, planned.OpeningId))
+                            hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
+                        cuts++;
+                    }
+                    pending.Add(new PendingHostUpdate { Host = host, SolidHandle = currentSolidHandle, Fingerprint = fingerprint, OpeningCount = plannedCuts.Count });
                 }
                 transaction.Commit();
             }
@@ -149,8 +169,9 @@ namespace QS3D.BricsCAD.V25.Cad
         private static Solid3d BuildCutter(Document document, double hostElevationDrawing, double hostBottomOffsetM, IReadOnlyList<Point2> polygonM, double heightM, double baseElevationM, string label)
         {
             if (polygonM == null || polygonM.Count < 3) throw new InvalidOperationException("Curved opening cutter footprint is invalid: " + label);
+            var baseOffsetM = CadGeometryGuard.Add(hostBottomOffsetM, baseElevationM, label + "/cutter base offset");
             var baseZ = CadGeometryGuard.Add(hostElevationDrawing,
-                CadGeometryGuard.ToDrawingUnits(document, hostBottomOffsetM + baseElevationM, label + "/cutter base"), label + "/cutter world base");
+                CadGeometryGuard.ToDrawingUnits(document, baseOffsetM, label + "/cutter base"), label + "/cutter world base");
             var height = CadGeometryGuard.ToDrawingUnits(document, heightM, label + "/cutter height");
             using (var boundary = new Polyline())
             {

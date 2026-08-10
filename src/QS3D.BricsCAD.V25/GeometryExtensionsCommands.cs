@@ -17,7 +17,7 @@ namespace QS3D.BricsCAD.V25
                 Application.ShowModelessWindow(IntPtr.Zero, new GeometryExtensionsWindow(), true);
                 PaletteCoordinator.SetStatus("Đã mở Geometry Extensions.");
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DGEOMETRYEXT lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);

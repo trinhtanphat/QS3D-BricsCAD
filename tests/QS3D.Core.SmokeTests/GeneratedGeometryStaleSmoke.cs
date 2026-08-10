@@ -88,7 +88,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void StaleHealthReportsAllGeneratedKinds()
         {
-            var project = new ProjectState("STALE");
+            var project = new ProjectState("STALE", "Generated stale lifecycle");
             var element = Element();
             project.Elements.Add(element);
             element.Properties["GeneratedSolidHandle"] = "10";

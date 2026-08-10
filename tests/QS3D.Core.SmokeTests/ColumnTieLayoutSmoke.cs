@@ -29,7 +29,8 @@ namespace QS3D.Core.SmokeTests
             if (layout.ActualSpacingM > 0.150000000001d) throw new Exception("Tie spacing exceeded requested maximum.");
             Near(0.044d, layout.ElevationsM[0], 1e-12d);
             Near(2.956d, layout.ElevationsM[layout.ElevationsM.Count - 1], 1e-12d);
-            Near(1.628d, layout.PathPerimeterM, 1e-12d);
+            // Centerline envelope: 2 * ((0.4 - 2 * 0.044) + (0.5 - 2 * 0.044)).
+            Near(1.448d, layout.PathPerimeterM, 1e-12d);
             if (layout.ClosedPath.Count != 5) throw new Exception("Expected closed rectangular path with repeated start point.");
         }
 
