@@ -21,7 +21,8 @@ Before starting substantive work, read in this order:
 5. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — **canonical current source/status handoff**;
 6. `docs/IMPLEMENTATION-STATUS.md`;
 7. `docs/PLAN.md` and `docs/COMMANDS.md`;
-8. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
+8. `docs/DIRECT-DRAW-WORKFLOW.md` — **owner-required BLT-style direct authoring direction for new Wall/Beam/Column/Slab geometry**;
+9. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
 
 The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the latest handoff or current source, current `main` wins. For product-form/hosting ambiguity, `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes that requirement.
 
