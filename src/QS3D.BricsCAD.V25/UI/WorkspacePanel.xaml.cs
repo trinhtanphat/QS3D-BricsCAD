@@ -99,7 +99,14 @@ namespace QS3D.BricsCAD.V25.UI
             Send(command);
         }
 
-        private void OnView3DClick(object sender, RoutedEventArgs e) { var family = FamilyList.SelectedItem as ProjectFamily; _viewModel.SetActiveFamily(family); SetStatus("Vẽ/Cập nhật 3D: " + (family?.Name ?? "chưa chọn Family")); Send("QS3DBUILD3D"); }
+        private void OnView3DClick(object sender, RoutedEventArgs e)
+        {
+            var family = FamilyList.SelectedItem as ProjectFamily;
+            _viewModel.SetActiveFamily(family);
+            var restoredSources = SelectInspectionSemanticSourcesForBuild();
+            SetStatus("Vẽ/Cập nhật 3D: " + (family?.Name ?? "chưa chọn Family") + (restoredSources > 0 ? " • source " + restoredSources : string.Empty));
+            Send("QS3DBUILD3D");
+        }
         private void OnWallJunctionsClick(object sender, RoutedEventArgs e) { SetStatus("Phân tích giao tim tường L / T / X trong selection."); Send("QS3DWALLJUNCTIONS"); }
         private void OnWallSnapPreviewClick(object sender, RoutedEventArgs e) { SetStatus("Xem trước kế hoạch snap đầu mút tường; chưa sửa CAD."); Send("QS3DWALLSNAPPREVIEW"); }
         private void OnWallSnapApplyClick(object sender, RoutedEventArgs e) { SetStatus("Áp dụng wall snap từ preview còn hợp lệ."); Send("QS3DWALLSNAPAPPLY"); }
@@ -128,6 +135,17 @@ namespace QS3D.BricsCAD.V25.UI
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null || _inspection.Count == 0) return 0;
             return Cad.CadHandleService.Select(doc, _inspection.Select(x => x.Handle));
+        }
+
+        private int SelectInspectionSemanticSourcesForBuild()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null || _inspection.Count == 0) return 0;
+            var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
+            var project = ProjectContextCoordinator.GetOrCreate(doc);
+            var matches = project.Elements.Where(x => SemanticReferenceHandles.MatchesSelection(x, handles)).Take(2).ToList();
+            if (matches.Count != 1) return 0;
+            return Cad.CadHandleService.Select(doc, matches[0].SourceHandles);
         }
 
         private void ApplyFamilyFilter()
