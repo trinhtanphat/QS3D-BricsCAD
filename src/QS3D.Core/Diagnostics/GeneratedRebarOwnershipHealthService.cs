@@ -7,17 +7,6 @@ namespace QS3D.Core.Diagnostics
 {
     public sealed class GeneratedRebarOwnershipHealthService
     {
-        private static readonly string[] Keys =
-        {
-            "GeneratedRebarHandles",
-            "GeneratedShapeRebarHandles",
-            "GeneratedTieRebarHandles",
-            "GeneratedBeamStirrupHandles",
-            "GeneratedSlabMeshHandles",
-            "GeneratedWallMeshHandles",
-            "GeneratedFoundationMeshHandles"
-        };
-
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -25,7 +14,7 @@ namespace QS3D.Core.Diagnostics
             var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                foreach (var key in Keys)
+                foreach (var key in GeneratedHandleOwnershipPolicy.RebarHandleKeys)
                 {
                     if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                     foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))

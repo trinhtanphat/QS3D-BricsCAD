@@ -4,6 +4,7 @@ using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Domain;
 using Teigha.DatabaseServices;
+using CoreOwnershipPolicy = QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy;
 
 namespace QS3D.BricsCAD.V25.Cad
 {
@@ -22,104 +23,33 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             foreach (var element in _elements)
             {
-                Remove(element, "GeneratedSolidHandle");
-                Remove(element, "GeneratedSolidCategory");
-                Remove(element, "PhysicalOpeningCutSolidHandle");
-                Remove(element, "PhysicalOpeningCutFingerprint");
-                Remove(element, "PhysicalOpeningCutCount");
-                Remove(element, "PhysicalOpeningCutMode");
-
-                Remove(element, "GeneratedRebarHandles");
-                Remove(element, "GeneratedRebarCount");
-                Remove(element, "GeneratedRebarDiameterMm");
-                Remove(element, "GeneratedRebarCoverM");
-                Remove(element, "GeneratedRebarMode");
-                Remove(element, "GeneratedRebarBeamEndCoverM");
-                Remove(element, "GeneratedRebarBeamTopCount");
-                Remove(element, "GeneratedRebarBeamBottomCount");
-
-                Remove(element, "GeneratedShapeRebarHandles");
-                Remove(element, "GeneratedShapeRebarCount");
-                Remove(element, "GeneratedShapeRebarMode");
-
-                Remove(element, "GeneratedTieRebarHandles");
-                Remove(element, "GeneratedTieRebarCount");
-                Remove(element, "GeneratedTieRebarDiameterMm");
-                Remove(element, "GeneratedTieRebarActualSpacingM");
-                Remove(element, "GeneratedTieRebarCoverM");
-                Remove(element, "GeneratedTieRebarMode");
-
-                Remove(element, "GeneratedBeamStirrupHandles");
-                Remove(element, "GeneratedBeamStirrupCount");
-                Remove(element, "GeneratedBeamStirrupDiameterMm");
-                Remove(element, "GeneratedBeamStirrupActualSpacingM");
-                Remove(element, "GeneratedBeamStirrupNotation");
-                Remove(element, "GeneratedBeamStirrupMode");
-
-                Remove(element, "GeneratedSlabMeshHandles");
-                Remove(element, "GeneratedSlabMeshCount");
-                Remove(element, "GeneratedSlabMeshXDiameterMm");
-                Remove(element, "GeneratedSlabMeshYDiameterMm");
-                Remove(element, "GeneratedSlabMeshCoverM");
-                Remove(element, "GeneratedSlabMeshMode");
-                Remove(element, "GeneratedSlabMeshXActualSpacingM");
-                Remove(element, "GeneratedSlabMeshYActualSpacingM");
-                Remove(element, "GeneratedSlabMeshFaces");
-
-                Remove(element, "GeneratedWallMeshHandles");
-                Remove(element, "GeneratedWallMeshCount");
-                Remove(element, "GeneratedWallMeshHorizontalDiameterMm");
-                Remove(element, "GeneratedWallMeshVerticalDiameterMm");
-                Remove(element, "GeneratedWallMeshCoverM");
-                Remove(element, "GeneratedWallMeshMode");
-                Remove(element, "GeneratedWallMeshHorizontalActualSpacingM");
-                Remove(element, "GeneratedWallMeshVerticalActualSpacingM");
-                Remove(element, "GeneratedWallMeshFaces");
-
-                Remove(element, "GeneratedFoundationMeshHandles");
-                Remove(element, "GeneratedFoundationMeshCount");
-                Remove(element, "GeneratedFoundationMeshXDiameterMm");
-                Remove(element, "GeneratedFoundationMeshYDiameterMm");
-                Remove(element, "GeneratedFoundationMeshCoverM");
-                Remove(element, "GeneratedFoundationMeshMode");
-                Remove(element, "GeneratedFoundationMeshXActualSpacingM");
-                Remove(element, "GeneratedFoundationMeshYActualSpacingM");
-                Remove(element, "GeneratedFoundationMeshFaces");
-
-                Remove(element, "GeneratedCurtainFrameHandles");
-                Remove(element, "GeneratedCurtainFrameCount");
-                Remove(element, "GeneratedCurtainFrameBaseCount");
-                Remove(element, "GeneratedCurtainFrameOpeningCount");
-                Remove(element, "GeneratedCurtainFrameColumns");
-                Remove(element, "GeneratedCurtainFrameRows");
-                Remove(element, "GeneratedCurtainFrameDepthM");
-                Remove(element, "GeneratedCurtainFrameSourceLengthM");
-                Remove(element, "GeneratedCurtainFrameHeightM");
-                Remove(element, "GeneratedCurtainFrameConfigFingerprint");
-                Remove(element, "GeneratedCurtainFrameMode");
+                RemoveByPrefix(element, "GeneratedSolid");
+                RemoveByPrefix(element, "PhysicalOpeningCutSolid");
+                foreach (var key in CoreOwnershipPolicy.RebarHandleKeys)
+                    RemoveByPrefix(element, MetadataPrefixForHandleKey(key));
+                RemoveByPrefix(element, "GeneratedCurtainFrame");
                 element.ClearGeneratedGeometryStale();
             }
         }
 
-        private static void Remove(ProjectElement element, string key)
+        private static string MetadataPrefixForHandleKey(string key)
         {
-            if (element.Properties.ContainsKey(key)) element.Properties.Remove(key);
+            if (key.EndsWith("Handles", StringComparison.OrdinalIgnoreCase)) return key.Substring(0, key.Length - "Handles".Length);
+            if (key.EndsWith("Handle", StringComparison.OrdinalIgnoreCase)) return key.Substring(0, key.Length - "Handle".Length);
+            return key;
+        }
+
+        private static void RemoveByPrefix(ProjectElement element, string prefix)
+        {
+            var keys = element.Properties.Keys
+                .Where(x => x.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            foreach (var key in keys) element.Properties.Remove(key);
         }
     }
 
     internal static class GeneratedDependentGeometryInvalidator
     {
-        private static readonly string[] RebarHandleKeys =
-        {
-            "GeneratedRebarHandles",
-            "GeneratedShapeRebarHandles",
-            "GeneratedTieRebarHandles",
-            "GeneratedBeamStirrupHandles",
-            "GeneratedSlabMeshHandles",
-            "GeneratedWallMeshHandles",
-            "GeneratedFoundationMeshHandles"
-        };
-
         public static GeneratedGeometryInvalidation Prepare(
             Document document,
             Transaction transaction,
@@ -146,7 +76,8 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
                 if (rebarOwnership != null)
-                    foreach (var key in RebarHandleKeys) EraseRebarSet(document, transaction, element, key, rebarOwnership);
+                    foreach (var key in CoreOwnershipPolicy.RebarHandleKeys)
+                        EraseRebarSet(document, transaction, element, key, rebarOwnership);
                 if (curtainOwnership != null) EraseCurtainFrames(document, transaction, element, curtainOwnership);
             }
             return new GeneratedGeometryInvalidation(targets);
@@ -154,7 +85,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static bool HasGeneratedRebar(ProjectElement element)
         {
-            foreach (var key in RebarHandleKeys)
+            foreach (var key in CoreOwnershipPolicy.RebarHandleKeys)
                 if (element.Properties.TryGetValue(key, out var raw) && !string.IsNullOrWhiteSpace(raw)) return true;
             return false;
         }

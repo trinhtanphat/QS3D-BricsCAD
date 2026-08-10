@@ -110,19 +110,20 @@ namespace QS3D.BricsCAD.V25
             if (normalized.Contains("BEAM_STIRRUP")) return SplitPropertyHandles(element, "GeneratedBeamStirrupHandles");
             if (normalized.Contains("TIE_REBAR")) return SplitPropertyHandles(element, "GeneratedTieRebarHandles");
             if (normalized.Contains("SHAPE_REBAR")) return SplitPropertyHandles(element, "GeneratedShapeRebarHandles");
-            if (normalized.Contains("CROSS_KEY"))
-                return SplitPropertyHandles(element, "GeneratedRebarHandles")
-                    .Concat(SplitPropertyHandles(element, "GeneratedShapeRebarHandles"))
-                    .Concat(SplitPropertyHandles(element, "GeneratedTieRebarHandles"))
-                    .Concat(SplitPropertyHandles(element, "GeneratedBeamStirrupHandles"))
-                    .Concat(SplitPropertyHandles(element, "GeneratedSlabMeshHandles"))
-                    .Concat(SplitPropertyHandles(element, "GeneratedWallMeshHandles"))
-                    .Concat(SplitPropertyHandles(element, FoundationMeshSolidBuilder.HandlesKey))
-                    .Distinct(StringComparer.OrdinalIgnoreCase);
+            if (normalized.Contains("CROSS_KEY") || normalized.Contains("GENERATED_HANDLE_OWNERSHIP")) return OwnerSlotHandles(element);
             if (normalized.Contains("REBAR_GENERATED") || normalized.Contains("GENERATED_REBAR")) return SplitPropertyHandles(element, "GeneratedRebarHandles");
             if (normalized.Contains("GENERATED_SOLID") || normalized.Contains("GENERATED_HANDLE"))
                 return SplitPropertyHandles(element, "GeneratedSolidHandle");
             return Array.Empty<string>();
+        }
+
+        private static IEnumerable<string> OwnerSlotHandles(ProjectElement element)
+        {
+            return element.Properties
+                .Where(x => GeneratedHandleOwnershipPolicy.IsOwnerSlot(x.Key) && !string.IsNullOrWhiteSpace(x.Value))
+                .SelectMany(x => SplitPropertyHandles(element, x.Key))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
         private static IEnumerable<string> SplitPropertyHandles(ProjectElement element, string key)
