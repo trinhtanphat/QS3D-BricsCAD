@@ -12,6 +12,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public const string ChoiceEditor = "Choice";
 
         private string _value = string.Empty;
+        private bool _canReset;
         public string Group { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string Unit { get; set; } = string.Empty;
@@ -20,6 +21,13 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public string EditorKind { get; set; } = TextEditor;
         public IReadOnlyList<string> Choices { get; set; } = Array.Empty<string>();
         public Func<string, string>? Apply { private get; set; }
+        public Action? Reset { private get; set; }
+
+        public bool CanReset
+        {
+            get => _canReset;
+            set { if (_canReset == value) return; _canReset = value; OnChanged(); }
+        }
 
         public string Value
         {
@@ -44,6 +52,12 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         {
             get => ParseBoolean(_value);
             set => Value = value ? "true" : "false";
+        }
+
+        public void ResetValue()
+        {
+            if (!CanReset || IsReadOnly || Reset == null) return;
+            Reset();
         }
 
         private static bool ParseBoolean(string value)
