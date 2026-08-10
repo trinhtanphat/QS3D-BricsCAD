@@ -166,7 +166,7 @@ namespace QS3D.Core.SmokeTests
                     new QuantityReportRow
                     {
                         Floor = "Nền 0.00", Category = "ArchitecturalWall", FamilyName = "Tường 200", Count = 1,
-                        BottomAreaM2 = 1.1, TopAreaM2 = 1.2, OtherAreaM2 = 1.3
+                        BottomAreaM2 = 1.1, TopAreaM2 = 1.2, OtherAreaM2 = 1.3, SteelWeightKg = 12.5
                     }
                 };
                 XlsxQuantityExporter.Export(path, rows);
@@ -179,9 +179,10 @@ namespace QS3D.Core.SmokeTests
                         Require(xml.Contains("DT đáy (m²)"), "Excel bottom-area header missing.");
                         Require(xml.Contains("DT đỉnh (m²)"), "Excel top-area header missing.");
                         Require(xml.Contains("DT khác (m²)"), "Excel other-area header missing.");
+                        Require(xml.Contains("Thép (kg)"), "Excel steel-weight header missing.");
                         Require(!xml.Contains("Đỉnh cửa"), "Stale mismatched Excel header is still present.");
                         Require(xml.Contains("state=\"frozen\""), "Excel header row is not frozen.");
-                        Require(xml.Contains("<autoFilter ref=\"A1:P2\"/>"), "Excel autofilter range is missing.");
+                        Require(xml.Contains("<autoFilter ref=\"A1:Q2\"/>"), "Excel autofilter range is missing.");
                     }
                 }
             }
