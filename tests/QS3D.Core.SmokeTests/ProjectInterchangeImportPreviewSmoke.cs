@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void NewIdentitiesArePreviewedWithoutMutation()
         {
-            var source = SourceProject("source", "SRC-FP", "Z-S", "F-S", "FAM-S", "E-S", ElementCategory.Wall);
+            var source = SourceProject("source", "SRC-FP", "Z-S", "F-S", "FAM-S", "E-S", ElementCategory.ArchitecturalWall);
             var target = new ProjectState("target", "Target") { DrawingFingerprint = "TGT-FP" };
             var targetUpdated = new DateTime(2026, 8, 10, 1, 2, 3, DateTimeKind.Utc);
             target.UpdatedUtc = targetUpdated;
@@ -53,7 +53,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void CategoryMismatchIsIncompatible()
         {
-            var source = SourceProject("source", "FP", "Z-S", "F-S", "FAM-X", "E-X", ElementCategory.Wall);
+            var source = SourceProject("source", "FP", "Z-S", "F-S", "FAM-X", "E-X", ElementCategory.ArchitecturalWall);
             var target = SourceProject("target", "FP", "Z-T", "F-T", "FAM-X", "E-X", ElementCategory.Column);
             var preview = ProjectInterchangeImportPreview.Plan(target, ProjectInterchangeJsonExporter.Build(source));
             Equal(2, preview.IncompatibleCollisionCount);
@@ -81,7 +81,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void AmbiguousTargetIdsFailClosed()
         {
-            var source = SourceProject("source", "FP", "Z-S", "F-S", "FAM-S", "E-S", ElementCategory.Wall);
+            var source = SourceProject("source", "FP", "Z-S", "F-S", "FAM-S", "E-S", ElementCategory.ArchitecturalWall);
             var target = new ProjectState("target", "Target");
             target.Zones.Add(new ZoneDefinition("DUP", "First"));
             target.Zones.Add(new ZoneDefinition("dup", "Second"));
