@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             TopologyChangeMarksStale();
             StaleRoomsAndDependentsAreExcludedFromBq();
             ReactivationClearsStaleState();
+            FamilyDefaultsPreserveInstanceOverrides();
         }
 
         private static void SourceSignatureIsDeterministic()
@@ -101,6 +102,42 @@ namespace QS3D.Core.SmokeTests
             Equal("A;B", room.Properties[AutoRoomLifecycle.BoundarySourceSignatureKey]);
             True(!room.Properties.ContainsKey("BoundaryStaleUtc"));
             True(!room.Properties.ContainsKey("BoundaryStaleReason"));
+        }
+
+        private static void FamilyDefaultsPreserveInstanceOverrides()
+        {
+            var project = NewProject();
+            var oldFamily = project.FindFamily("room") ?? throw new Exception("Missing room family.");
+            oldFamily.Properties["HeightM"] = "3.0";
+            oldFamily.Properties["WidthM"] = "4.0";
+            oldFamily.Properties["LegacyCode"] = "OLD";
+
+            var nextFamily = new ProjectFamily("room-next", "Room Next", ElementCategory.Room);
+            nextFamily.Properties["HeightM"] = "3.6";
+            nextFamily.Properties["WidthM"] = "5.0";
+            nextFamily.Properties["FireRating"] = "A";
+            project.Families.Add(nextFamily);
+
+            var room = AutoRoom("R-FAMILY", "A;B;C", project);
+            room.Properties["HeightM"] = "3.0";
+            room.Properties["WidthM"] = "9.0";
+            room.Properties["LegacyCode"] = "OLD";
+            project.Elements.Add(room);
+
+            AutoRoomLifecycle.SyncFamilyDefaults(project, room, nextFamily);
+            Equal("room-next", room.FamilyId);
+            Equal("3.6", room.Properties["HeightM"]);
+            Equal("9.0", room.Properties["WidthM"]);
+            Equal("A", room.Properties["FireRating"]);
+            True(!room.Properties.ContainsKey("LegacyCode"));
+
+            room.Properties["HeightM"] = "4.2";
+            nextFamily.Properties["HeightM"] = "4.0";
+            nextFamily.Properties.Remove("FireRating");
+            AutoRoomLifecycle.SyncFamilyDefaults(project, room, nextFamily);
+            Equal("4.2", room.Properties["HeightM"]);
+            Equal("9.0", room.Properties["WidthM"]);
+            True(!room.Properties.ContainsKey("FireRating"));
         }
 
         private static ProjectState NewProject()
