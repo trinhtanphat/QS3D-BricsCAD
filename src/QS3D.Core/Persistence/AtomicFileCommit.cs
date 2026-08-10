@@ -30,7 +30,7 @@ namespace QS3D.Core.Persistence
             }
             catch (PlatformNotSupportedException)
             {
-                CopyWithRecovery(tempPath, destination, backup, keepBackup: true);
+                MoveWithRecovery(tempPath, destination, backup, keepBackup: true);
             }
         }
 
@@ -53,7 +53,7 @@ namespace QS3D.Core.Persistence
                 }
                 catch (PlatformNotSupportedException)
                 {
-                    CopyWithRecovery(tempPath, destination, safetyBackup, keepBackup: false);
+                    MoveWithRecovery(tempPath, destination, safetyBackup, keepBackup: false);
                 }
             }
             finally
@@ -69,22 +69,31 @@ namespace QS3D.Core.Persistence
             catch (UnauthorizedAccessException) { }
         }
 
-        private static void CopyWithRecovery(string tempPath, string destinationPath, string backupPath, bool keepBackup)
+        private static void MoveWithRecovery(string tempPath, string destinationPath, string backupPath, bool keepBackup)
         {
-            File.Copy(destinationPath, backupPath, true);
+            if (File.Exists(backupPath)) File.Delete(backupPath);
+            File.Move(destinationPath, backupPath);
+            var installed = false;
             try
             {
-                File.Copy(tempPath, destinationPath, true);
-                File.Delete(tempPath);
-                if (!keepBackup) TryDelete(backupPath);
+                File.Move(tempPath, destinationPath);
+                installed = true;
             }
-            catch
+            finally
             {
-                try { if (File.Exists(backupPath)) File.Copy(backupPath, destinationPath, true); }
-                catch (IOException) { }
-                catch (UnauthorizedAccessException) { }
-                throw;
+                if (!installed)
+                {
+                    try
+                    {
+                        if (!File.Exists(destinationPath) && File.Exists(backupPath))
+                            File.Move(backupPath, destinationPath);
+                    }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
             }
+
+            if (!keepBackup) TryDelete(backupPath);
         }
 
         private static void Validate(string tempPath, string destinationPath)
