@@ -44,22 +44,46 @@ required = {
         "BuildClosedPolylinePrism",
         "GeneratedGeometryService.PrepareReplacement",
         "GeneratedGeometryService.CommitReplacement",
+        'CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z',
+        "line planarity tolerance",
+        "|ΔZ| <= 0.005 m",
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
         "BuildSelectedLineWalls",
         "GeneratedGeometryService.PrepareReplacement",
         "GeneratedGeometryService.CommitReplacement",
+        'CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z',
+        "wall planarity tolerance",
+        "|ΔZ| <= 0.005 m",
     ],
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs": [
         "BuildSelected",
         "GeneratedGeometryService.PrepareReplacement",
         "GeneratedGeometryService.CommitReplacement",
     ],
+    "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
+        'RibbonTabSpec("QS3D_AUTHOR", "TẠO MỚI"',
+        '"QS3DDRAWWALL"',
+        '"QS3DDRAWBEAM"',
+        '"QS3DDRAWCOLUMN"',
+        '"QS3DDRAWSLAB"',
+        '"QS3DBUILD3D"',
+    ],
+    "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
+        'Text="TẠO MỚI / DIRECT DRAW"',
+        'Tag="QS3DDRAWWALL"',
+        'Tag="QS3DDRAWBEAM"',
+        'Tag="QS3DDRAWCOLUMN"',
+        'Tag="QS3DDRAWSLAB"',
+        "Capture/Bóc chọn",
+    ],
     "docs/DIRECT-DRAW-WORKFLOW.md": [
         "QS3DDRAWWALL",
         "QS3DDRAWBEAM",
         "QS3DDRAWCOLUMN",
         "QS3DDRAWSLAB",
+        "Atomicity and cancellation",
+        "Ribbon / discoverability",
     ],
 }
 
@@ -79,7 +103,10 @@ if command_root.is_dir():
     for path in command_root.rglob("*.cs"):
         text = path.read_text(encoding="utf-8")
         commands.extend(re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', text))
-for name in ("QS3DDRAWWALL", "QS3DDRAWBEAM", "QS3DDRAWCOLUMN", "QS3DDRAWSLAB"):
+for name in (
+    "QS3DDRAWWALL", "QS3DDRAWBEAM", "QS3DDRAWCOLUMN", "QS3DDRAWSLAB",
+    "QS3DWALL", "QS3DBEAM", "QS3DCOLUMN", "QS3DSLAB", "QS3DBUILD3D",
+):
     if commands.count(name) != 1:
         errors.append(name + " must be declared exactly once, found " + str(commands.count(name)))
 
@@ -94,8 +121,17 @@ if source.is_file():
     for token in forbidden:
         if token in text:
             errors.append("DirectDrawCommands must reuse established builders instead of duplicating native geometry: " + token)
-    if text.find("rollback.Restore(project)") > text.find("EraseHandles(document, cleanupHandles)"):
-        errors.append("Direct Draw failure path must restore semantic project state before final CAD cleanup")
+    create = text.find("sourceId = createSource();")
+    capture = text.find("SemanticCaptureService.Capture(document, category)")
+    build = text.find("BuildSelected(document, project, category)")
+    restore = text.find("rollback.Restore(project)")
+    erase = text.find("EraseHandles(document, cleanupHandles)")
+    if min(create, capture, build, restore, erase) < 0:
+        errors.append("Direct Draw transaction/rollback ordering tokens are incomplete")
+    elif not (create < capture < build < restore < erase):
+        errors.append("Direct Draw must create source -> capture -> build, then restore semantic state before CAD cleanup")
+    if "priorGenerated.Contains(handle)" not in text:
+        errors.append("Direct Draw rollback must preserve generated handles that existed before the operation")
 
 print("QS3D Direct Draw P0 preflight")
 if errors:
@@ -103,4 +139,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Wall/Beam/Column/Slab Direct Draw commands create source CAD, reuse semantic/native builders, and retain rollback/ownership contracts.")
+print("PASS: Wall/Beam/Column/Slab Direct Draw preserves legacy capture, rolls back semantic/CAD state, reuses guarded builders, rejects sloped LINE flattening and is exposed in Ribbon/Domain Hub.")
