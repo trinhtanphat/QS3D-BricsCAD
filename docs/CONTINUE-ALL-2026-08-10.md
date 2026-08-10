@@ -37,12 +37,16 @@ Regression/static coverage now includes `RoomFinishSynchronizationSmoke`, single
 
 ## Direct Draw P0 audit
 
-- `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWCOLUMN` and `QS3DDRAWSLAB` already use an atomic source -> semantic capture -> semantic regenerate -> native 3D builder path.
+- `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWCOLUMN` and `QS3DDRAWSLAB` use an atomic source -> semantic capture -> semantic regenerate -> native 3D builder path.
 - Failure cleanup discovers generated output through both semantic owner slots and owned CAD/XData, requires matching generated ownership before destructive erase, erases the newly-created source, restores the project snapshot and verifies no cleanup handles remain live.
 - Direct Draw is Model-Space-only and source path input is limited to a 5 mm planarity tolerance before native builders run.
 - Family/instance dimensions are validated as finite/positive where required; invalid existing Family values fail closed rather than being silently replaced.
-- Current source still requires a real rotated-UCS qualification before release. BricsCAD V25 exposes `Editor.CurrentUserCoordinateSystem` as a `Matrix3d`, while current source creation directly appends prompt coordinates. The audited implementation target is: keep prompt/planarity coordinates in current UCS, transform source entities to WCS/database coordinates before append, support planar rotated/translated UCS, and fail closed for tilted UCS until native builders are explicitly generalized/tested.
-- This UCS item remains a source/runtime blocker and must not be described as completed until the code change is merged and exercised in BricsCAD V25.
+- Planar current-UCS authoring is now handled explicitly in source. `LINE` and `POLYLINE` are authored from current-UCS prompt coordinates and transformed by `Editor.CurrentUserCoordinateSystem` before `AppendEntity`, so translated/rotated planar UCS does not silently create WCS-aligned source geometry.
+- The UCS guard reads `CurrentUserCoordinateSystem.CoordinateSystem3d.Zaxis` and rejects tilted/3D UCS before source creation. QS3D does not reset or mutate the user's UCS.
+- `scripts/preflight-direct-draw-ucs.py` guards the Model-Space/UCS ordering, transform-before-append behavior and no-UCS-mutation contract.
+- Source implementation does **not** equal runtime qualification: World/translated/30°/45°/90° planar UCS creation still needs exact-current-sha BricsCAD V25 interactive proof. Tilted/3D UCS remains intentionally unsupported until native builders are generalized and tested.
+
+See `docs/DIRECT-DRAW-UCS.md` for the coordinate-system contract and runtime matrix.
 
 ## Generated-output stale semantics
 
@@ -103,7 +107,7 @@ Regression/static coverage now includes `RoomFinishSynchronizationSmoke`, single
 
 - Main GitHub Actions workflows remain manual-only (`workflow_dispatch`).
 - No GitHub Actions workflow was dispatched as part of this continue-all batch.
-- Source preflights were extended for curtain opening/live-state behavior, generated stale semantics, modeless document affinity, provenance-safe ownership, Build3D/recognition safety, project-context lifecycle, Room/HT_Phòng integrity, schedule arithmetic, UI HiDPI/focus and release-readiness.
+- Source preflights were extended for curtain opening/live-state behavior, generated stale semantics, modeless document affinity, provenance-safe ownership, Build3D/recognition safety, project-context lifecycle, Room/HT_Phòng integrity, schedule arithmetic, Direct Draw planar-UCS source behavior, UI HiDPI/focus and release-readiness.
 - `scripts/preflight-all.py` discovers the `preflight-*.py` contracts.
 - The current remote source review does **not** claim a fresh local aggregate-preflight/Core build/V25 compile. The execution container previously could not resolve `github.com`; current final-head compile/runtime proof remains pending.
 
@@ -111,7 +115,7 @@ Regression/static coverage now includes `RoomFinishSynchronizationSmoke`, single
 
 - Exact compile against the installed BricsCAD V25 `BrxMgd.dll` / `TD_Mgd.dll` set.
 - Real NETLOAD/DemandLoad, Ribbon/palette interaction and V25 command execution.
-- Direct Draw rotated/translated UCS qualification after the source WCS-transform path is implemented; tilted/3D UCS remains unsupported until native builders are generalized and proven.
+- Direct Draw World/translated/rotated planar-UCS runtime qualification; tilted/3D UCS remains unsupported until native builders are generalized and proven.
 - Private-DWG save/reopen, multi-DWG, opening/curtain, wall-junction, structure/BQ/BBS/rebar regression.
 - Unicode/HiDPI and screenshot-based UI parity review on real BricsCAD V25.
 - Production certificate possession/signing operation and production licensing/updater backend operations.
