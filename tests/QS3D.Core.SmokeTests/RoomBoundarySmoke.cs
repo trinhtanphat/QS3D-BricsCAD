@@ -52,7 +52,12 @@ namespace QS3D.Core.SmokeTests
         private static void OrderAndDirectionAreStable()
         {
             var forward = RectangleSegments(0, 0, 4, 3).ToArray();
-            var reversed = forward.Reverse().Select(x => new BoundarySegment2(x.End, x.Start, x.SourceId)).ToArray();
+            var reversed = new BoundarySegment2[forward.Length];
+            for (var i = 0; i < forward.Length; i++)
+            {
+                var source = forward[forward.Length - 1 - i];
+                reversed[i] = new BoundarySegment2(source.End, source.Start, source.SourceId);
+            }
             var a = RoomBoundaryFinder.Find(forward).Single(); var b = RoomBoundaryFinder.Find(reversed).Single();
             Equal(a.Key, b.Key); Near(a.Area, b.Area); Near(a.Perimeter, b.Perimeter);
         }
