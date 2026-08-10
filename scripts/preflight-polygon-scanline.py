@@ -36,6 +36,7 @@ for token in [
     "odd intersection count",
     "PolygonScanAxis.Horizontal",
     "PolygonScanAxis.Vertical",
+    "axis != PolygonScanAxis.Horizontal && axis != PolygonScanAxis.Vertical",
 ]:
     require(planner, token, "polygon scanline planner")
 
@@ -45,6 +46,7 @@ for token in [
     "ClosingVertexMayBeRepeated",
     "SelfIntersectionFailsClosed",
     "BoundaryVertexRuleIsDeterministic",
+    "InvalidAxisFailsClosed",
 ]:
     require(smoke, token, "polygon scanline smoke")
 

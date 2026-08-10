@@ -34,6 +34,8 @@ namespace QS3D.Core.Geometry
         public static IReadOnlyList<PolygonScanSegment> Clip(IReadOnlyList<Point2> polygon, PolygonScanAxis axis, double coordinate)
         {
             if (polygon == null) throw new ArgumentNullException(nameof(polygon));
+            if (axis != PolygonScanAxis.Horizontal && axis != PolygonScanAxis.Vertical)
+                throw new ArgumentOutOfRangeException(nameof(axis));
             if (!Finite(coordinate)) throw new ArgumentOutOfRangeException(nameof(coordinate));
             var vertices = NormalizeAndValidate(polygon);
             var intersections = new List<double>(vertices.Count);
