@@ -28,7 +28,7 @@ namespace QS3D.BricsCAD.V25
                 if (rows.Count == 0) { doc.Editor.WriteMessage("\nQS3D BBS: chưa có cấu kiện khai báo RebarNotation."); return; }
                 Action<RebarScheduleRow> locate = row => { var element = project.FindElement(row.ElementId); if (element == null) return; var count = CadHandleService.Select(doc, SourceHandleResolver.Resolve(project, new[] { element.Id })); PaletteCoordinator.SetStatus("BBS Locate " + row.BarMark + " • " + count + " CAD object"); if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false); };
                 var fileName = (string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name)) + "-BBS.xlsx";
-                Application.ShowModelessWindow(IntPtr.Zero, new RebarScheduleWindow(rows, locate, fileName), true);
+                Application.ShowModelessWindow(IntPtr.Zero, new RebarScheduleWindow(doc, rows, locate, fileName), true);
             });
         }
 
