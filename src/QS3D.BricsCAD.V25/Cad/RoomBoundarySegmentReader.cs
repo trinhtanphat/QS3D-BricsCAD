@@ -9,11 +9,14 @@ namespace QS3D.BricsCAD.V25.Cad
 {
     internal static class RoomBoundarySegmentReader
     {
-        public static IReadOnlyList<BoundarySegment> ReadCurrentSelection(Document document, double arcSagittaM = 0.002d, double planarityToleranceM = 0.005d)
+        private const int MaxSplineSegments = 4096;
+
+        public static IReadOnlyList<BoundarySegment> ReadCurrentSelection(Document document, double arcSagittaM = 0.002d, double planarityToleranceM = 0.005d, double splineChordM = 0.02d)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (double.IsNaN(arcSagittaM) || double.IsInfinity(arcSagittaM) || arcSagittaM <= 0d) throw new ArgumentOutOfRangeException(nameof(arcSagittaM));
             if (double.IsNaN(planarityToleranceM) || double.IsInfinity(planarityToleranceM) || planarityToleranceM <= 0d) throw new ArgumentOutOfRangeException(nameof(planarityToleranceM));
+            if (double.IsNaN(splineChordM) || double.IsInfinity(splineChordM) || splineChordM <= 0d) throw new ArgumentOutOfRangeException(nameof(splineChordM));
             var editor = document.Editor;
             var selection = editor.SelectImplied();
             if (selection.Status != PromptStatus.OK || selection.Value == null)
@@ -73,6 +76,32 @@ namespace QS3D.BricsCAD.V25.Cad
                         var points = BulgeArcTessellator.Tessellate(start, end, bulge, arcSagittaM);
                         for (var pointIndex = 1; pointIndex < points.Count; pointIndex++)
                             result.Add(new BoundarySegment(points[pointIndex - 1], points[pointIndex], handle));
+                        continue;
+                    }
+
+                    if (entity is Spline spline)
+                    {
+                        var totalDrawing = spline.GetDistanceAtParameter(spline.EndParam);
+                        if (double.IsNaN(totalDrawing) || double.IsInfinity(totalDrawing) || totalDrawing <= 0d)
+                            throw new InvalidOperationException("SPLINE " + handle + " có chiều dài không hợp lệ.");
+                        var totalM = units.ToMeters(totalDrawing);
+                        if (double.IsNaN(totalM) || double.IsInfinity(totalM) || totalM <= 0d)
+                            throw new InvalidOperationException("SPLINE " + handle + " có chiều dài metric không hợp lệ.");
+                        var required = Math.Ceiling(totalM / splineChordM);
+                        if (double.IsNaN(required) || double.IsInfinity(required) || required > MaxSplineSegments)
+                            throw new InvalidOperationException("SPLINE " + handle + " cần quá " + MaxSplineSegments + " segment; tăng RoomBoundarySplineChordM hoặc simplify spline.");
+                        var segmentCount = Math.Max(1, (int)required);
+                        Point2? previous = null;
+                        for (var sample = 0; sample <= segmentCount; sample++)
+                        {
+                            var distance = totalDrawing * (sample / (double)segmentCount);
+                            var point = sample == segmentCount ? spline.EndPoint : spline.GetPointAtDist(distance);
+                            RequireElevation(point.Z, "SPLINE " + handle + " sample " + sample);
+                            var current = new Point2(units.ToMeters(point.X), units.ToMeters(point.Y));
+                            if (previous.HasValue && previous.Value.DistanceTo(current) > 1e-12d)
+                                result.Add(new BoundarySegment(previous.Value, current, handle));
+                            previous = current;
+                        }
                         continue;
                     }
 
