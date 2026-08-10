@@ -29,13 +29,29 @@ else:
         "PlanarityToleranceM = 0.005d",
         "CadGeometryGuard.ToMeters(document, widthDrawing",
         "FamilyPositiveNumber(project, category, \"HeightM\"",
+        "FamilyNonNegativeNumber(project, category, \"BottomOffsetM\"",
         "FamilyNonNegativeNumber(project, category, \"SillHeightM\"",
         "FamilyNonNegativeNumber(project, category, \"BooleanClearanceM\"",
+        "FamilyConfiguredNumber",
+        "PreferredFamily(project, category)",
+        "Sửa Family trước khi Direct Draw.",
+        "default phải là số hữu hạn > 0",
+        "default phải là số hữu hạn >= 0",
         "QS3DCUTOPENINGS khi muốn khoét physical host",
     )
     for needle in required:
         if needle not in text:
             errors.append("DirectDrawOpeningCommands missing contract: " + needle)
+
+    forbidden = (
+        "return value > 0d ? value : fallback;",
+        "defaultValue = 0d;",
+        "FamilyFiniteNumber(",
+        "FamilyNumber(",
+    )
+    for token in forbidden:
+        if token in text:
+            errors.append("Door/Opening Direct Draw must not mask invalid configured Family numerics: " + token)
 
     if "OpeningBooleanService.CutLinkedOpenings" in text or "new OpeningBooleanCommands().CutOpenings" in text:
         errors.append("Door/Opening Direct Draw must not invoke the global physical-cut path")
@@ -43,6 +59,8 @@ else:
         errors.append("Door/Opening Direct Draw must not queue global QS3DCUTOPENINGS")
     if text.count("new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)") < 2:
         errors.append("Door/Opening Direct Draw must validate semantic state both before and after Auto Host")
+    if text.count("Sửa Family trước khi Direct Draw.") < 3:
+        errors.append("Configured positive/non-negative Door/Opening Family values must fail closed with a repair message")
 
 command_root = ROOT / "src/QS3D.BricsCAD.V25"
 commands = []
@@ -77,4 +95,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Door/Opening Direct Draw creates one real source, validates Family defaults/units/Model Space, captures one semantic element, auto-links only the new selection, verifies post-link regeneration, rolls back orphan creation, exposes Ribbon/Hub actions, and never invokes global physical cutting.")
+print("PASS: Door/Opening Direct Draw creates one real source, rejects invalid configured Family numerics without silent fallback, validates units/Model Space, captures one semantic element, auto-links only the new selection, verifies post-link regeneration, rolls back orphan creation, exposes Ribbon/Hub actions, and never invokes global physical cutting.")
