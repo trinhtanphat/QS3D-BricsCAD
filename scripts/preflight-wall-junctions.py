@@ -25,7 +25,12 @@ if planner.is_file():
         "WallJunctionKind.X",
         "active = new List<SegmentInfo>()",
         "Intersections(other, current, tolerance)",
-        "PointOnSegment(candidate.Point, segment, tolerance)",
+        "CandidateIndex",
+        "TryQuantize",
+        "_unindexed",
+        "segment.Start.DistanceTo(segment.End)",
+        "ParallelDirectionEpsilon",
+        "CrossFinite",
         "angularToleranceRadians",
         "Duplicate wall segment id",
         "MaxSegments",
@@ -57,6 +62,7 @@ if smoke.is_file():
         "TJunction();",
         "XJunction();",
         "NearEndpointSnapsByTolerance();",
+        "HugeCoordinateCrossingUsesFallbackIndex();",
         "RejectsDuplicateIdsAndInvalidCoordinates();",
     ):
         if needle not in text:
@@ -71,4 +77,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: deterministic End/Straight/L/T/X wall-junction planning, command/UI wiring and regression coverage are present.")
+print("PASS: deterministic End/Straight/L/T/X wall-junction planning, spatial candidate indexing with large-coordinate fallback, finite-safe geometry, command/UI wiring and regression coverage are present.")
