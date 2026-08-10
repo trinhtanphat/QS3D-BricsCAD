@@ -224,7 +224,8 @@
                                     Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
                             <Button Content="Kiểm tra sức khỏe toàn diện" Tag="QS3DHEALTHALL" Click="OnCommandClick"/>
                             <Button Content="Kiểm tra sức khỏe cơ bản" Tag="QS3DHEALTH" Click="OnCommandClick"/>
-                            <Button Content="Kiểm tra runtime V25" Tag="QS3DRUNTIMEPROBE" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra runtime V25" Tag="QS3DRUNTIMECHECK" Click="OnCommandClick"/>
+                            <Button Content="Xuất Support Bundle" Tag="QS3DSUPPORTBUNDLE" Click="OnCommandClick"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
