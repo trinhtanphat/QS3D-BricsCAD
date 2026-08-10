@@ -265,8 +265,9 @@ namespace QS3D.Core.Export
             foreach (var pair in source.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var key = (pair.Key ?? string.Empty).Trim();
-                if (!copy.TryAdd(key, pair.Value ?? string.Empty))
+                if (copy.ContainsKey(key))
                     throw new InvalidDataException("Validated semantic snapshot contains ambiguous normalized key in " + label + ": " + key + ".");
+                copy[key] = pair.Value ?? string.Empty;
             }
             return new ReadOnlyDictionary<string, string>(copy);
         }
@@ -277,8 +278,9 @@ namespace QS3D.Core.Export
             foreach (var pair in source.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var key = (pair.Key ?? string.Empty).Trim();
-                if (!copy.TryAdd(key, pair.Value))
+                if (copy.ContainsKey(key))
                     throw new InvalidDataException("Validated semantic snapshot contains ambiguous normalized key in " + label + ": " + key + ".");
+                copy[key] = pair.Value;
             }
             return new ReadOnlyDictionary<string, double>(copy);
         }
