@@ -57,8 +57,11 @@ required = {
         "unsupported.Count > 0",
         "categories.Count > 1",
         "một category mỗi lần",
-        "CadHandleService.Select(document, sourceHandles)",
-        "liveSourceCount != sourceHandles.Count",
+        "CadHandleService.Resolve(document, sourceHandles)",
+        "sourceIds.Count != sourceHandles.Count",
+        "AreAllModelSpaceEntities(document, sourceIds)",
+        "entity.OwnerId.Equals(modelSpaceId)",
+        "document.Editor.SetImpliedSelection(sourceIds.ToArray())",
         "EntitySnapshotReader.ReadImpliedSelection(document)",
         "ValidateWallSourceBatch",
         'string.Equals(x, "Line"',
@@ -201,15 +204,17 @@ build3d = ROOT / "src/QS3D.BricsCAD.V25/Build3DCommands.cs"
 if build3d.is_file():
     text = build3d.read_text(encoding="utf-8")
     guard_category = text.find("if (categories.Count > 1)")
-    resolve_sources = text.find("var liveSourceCount = CadHandleService.Select(document, sourceHandles);")
+    resolve_sources = text.find("var sourceIds = CadHandleService.Resolve(document, sourceHandles);")
+    source_space = text.find("if (!AreAllModelSpaceEntities(document, sourceIds))")
+    select_sources = text.find("document.Editor.SetImpliedSelection(sourceIds.ToArray())")
     source_snapshots = text.find("var sourceSnapshots = EntitySnapshotReader.ReadImpliedSelection(document);")
     validate_call = text.find("if (!ValidateWallSourceBatch(selectedElements, sourceSnapshots, category, out var wallSourceError))")
     regenerate = text.find("var regenerated = new RegenerationEngine")
     build = text.find("var built = BuildCategory(document, project, category);")
-    if min(guard_category, resolve_sources, source_snapshots, validate_call, regenerate, build) < 0 or not (
-        guard_category < resolve_sources < source_snapshots < validate_call < regenerate < build
+    if min(guard_category, resolve_sources, source_space, select_sources, source_snapshots, validate_call, regenerate, build) < 0 or not (
+        guard_category < resolve_sources < source_space < select_sources < source_snapshots < validate_call < regenerate < build
     ):
-        errors.append("QS3DBUILD3D must reject mixed categories, resolve all live source CAD, validate the source batch and regenerate semantic state before the native builder commit")
+        errors.append("QS3DBUILD3D must reject mixed categories, resolve complete live Model-Space source CAD, validate the source batch and regenerate semantic state before the native builder commit")
     if "if (sourceTypes.Count > 1)" not in text:
         errors.append("QS3DBUILD3D wall validation must reject mixed LINE/open POLYLINE source batches")
     if "foreach (var category in categories)" in text:
@@ -229,4 +234,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw prompts BLT-style P0 dimensions, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and QS3DBUILD3D/Workspace resolve semantic/generated selections back to complete live source batches before rebuilding.")
+print("PASS: Direct Draw prompts BLT-style P0 dimensions, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and QS3DBUILD3D/Workspace resolve semantic/generated selections back to complete live Model-Space source batches before rebuilding.")
