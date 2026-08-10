@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             CustomRoundTripAndUpdate();
             ReferencedMaterialsAreDiscovered();
             RenamePropagatesReferencesAndStaleState();
+            RenameStalesInheritedConsumersButPreservesOverrides();
             ReferencedMaterialCannotBeDeleted();
             RejectsDuplicateBuiltInAndCorruptStorage();
         }
@@ -68,6 +69,32 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Instance material references were not renamed.");
             if (!element.IsGeneratedSolidStale() || !element.IsGeneratedCurtainFrameStale())
                 throw new Exception("Renaming an instance-referenced material must stale generated geometry outputs.");
+        }
+
+        private static void RenameStalesInheritedConsumersButPreservesOverrides()
+        {
+            var project = new ProjectState("p6", "Inherited Materials");
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-inherit", "Vật liệu A", "m²", "");
+            var family = new ProjectFamily("f-inherit", "Tường", ElementCategory.ArchitecturalWall);
+            family.Properties["Material"] = "Vật liệu A";
+            project.Families.Add(family);
+
+            var inherited = new ProjectElement("e-inherit", ElementCategory.ArchitecturalWall, family.Id, "floor", "zone");
+            inherited.Properties["GeneratedSolidHandle"] = "CC";
+            project.Elements.Add(inherited);
+
+            var overridden = new ProjectElement("e-override", ElementCategory.ArchitecturalWall, family.Id, "floor", "zone");
+            overridden.Properties["Material"] = "Gạch";
+            overridden.Properties["GeneratedSolidHandle"] = "DD";
+            overridden.ClearGeneratedGeometryStale();
+            project.Elements.Add(overridden);
+
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-inherit", "Vật liệu B", "m²", "");
+
+            if (family.Properties["Material"] != "Vật liệu B") throw new Exception("Inherited family material was not renamed.");
+            if (!inherited.IsGeneratedSolidStale()) throw new Exception("Inherited material consumers must become stale when the Family reference is renamed.");
+            if (overridden.Properties["Material"] != "Gạch") throw new Exception("True instance material override must be preserved.");
+            if (overridden.IsGeneratedSolidStale()) throw new Exception("Unchanged material override must not become stale solely because the Family material was renamed.");
         }
 
         private static void ReferencedMaterialCannotBeDeleted()
