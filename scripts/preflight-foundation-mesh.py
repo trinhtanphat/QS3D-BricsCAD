@@ -41,7 +41,10 @@ checks = {
     "src/QS3D.BricsCAD.V25/UI/Rebar3DHubWindow.xaml": ["QS3DFOUNDATIONREBAR3D", "QS3DFOUNDATIONREBARHEALTH", "QS3DREBARMESHSETUP"],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": ["QS3DFOUNDATIONREBAR3D", "QS3DFOUNDATIONREBARHEALTH", "QS3DREBARMESHSETUP"],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": ["QS3DFOUNDATIONREBAR3D", "QS3DFOUNDATIONREBARHEALTH", "QS3DREBARMESHSETUP"],
-    "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": ["GeneratedFoundationMeshHandles", "RebarHandleKeys", "IsOwnerSlot", "IsRebarOwnerSlot"],
+    "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": [
+        "GeneratedFoundationMeshHandles", "RebarHandleKeys", "IsOwnerSlot", "IsRebarOwnerSlot",
+        "EnumerateOwnerHandles", "CollectOwnerHandles", "TryFindOwner"
+    ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedTieRebarOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedCurtainFrameOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "GeneratedCurtainFrameHandles"],
@@ -50,20 +53,20 @@ checks = {
         "GeneratedFoundationMeshStateKey", "GeneratedFoundationMeshStaleSnapshotKey", "IsGeneratedFoundationMeshStale", "ClearGeneratedFoundationMeshStale"
     ],
     "src/QS3D.Core/Diagnostics/GeneratedGeometryStaleHealthService.cs": ["FOUNDATION_MESH_GENERATED_STALE"],
-    "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs": ["GeneratedFoundationMeshHandles"],
+    "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs": ["GeneratedHandleOwnershipPolicy.RebarHandleKeys", "REBAR_GENERATED_CROSS_KEY_OWNERSHIP_CONFLICT"],
     "src/QS3D.Core/Diagnostics/GeneratedRebarModeHealthService.cs": ["FoundationMeshXY", "GeneratedFoundationMeshHandles", "GeneratedSlabMeshHandles", "GeneratedWallMeshHandles"],
-    "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs": ["GeneratedFoundationMeshHandles"],
+    "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs": ["GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)"],
     "src/QS3D.BricsCAD.V25/RebarHealthAllCommands.cs": ["GeneratedFoundationMeshHealthService", "FoundationMeshSolidBuilder.HandlesKey"],
     "src/QS3D.BricsCAD.V25/HealthAllCommands.cs": ["GeneratedFoundationMeshHealthService", "FoundationMeshSolidBuilder.HandlesKey"],
-    "src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs": ["GeneratedFoundationMeshHealthService().Inspect", "GeneratedRebarModeHealthService().Inspect"],
-    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": ["CollectGeneratedHandles(project)", "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)"],
+    "src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs": ["GeneratedFoundationMeshHealthService().Inspect", "GeneratedRebarModeHealthService().Inspect", "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)"],
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": ["CollectGeneratedHandles(project)", "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)"],
     "src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs": ["0.005d", "beam horizontal tolerance"],
     "tests/QS3D.Core.SmokeTests/FoundationMeshHealthSmoke.cs": [
         "IsGeneratedFoundationMeshStale", "GeneratedRebarModeHealthService", "GeneratedRebarOwnershipHealthService",
         "DetectsLaterOwnerConflictAndFutureGeneratedSlot", "GeneratedFutureMeshHandles"
     ],
     "tests/QS3D.Core.SmokeTests/FoundationMeshHealthSmokeRegistration.cs": ["FoundationMeshHealthSmoke.Run();"],
-    "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipSmoke.cs": ["FoundationMeshGeneratedHandleResolvesOwner", "GeneratedFoundationMeshHandles"],
+    "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipSmoke.cs": ["FoundationMeshGeneratedHandleResolvesOwner", "FutureGeneratedOwnerSlotResolvesOwner", "GeneratedFoundationMeshHandles"],
     "tests/QS3D.Core.SmokeTests/GeneratedGeometryStaleSmoke.cs": ["FOUNDATION_MESH_GENERATED_STALE", "GeneratedFoundationMeshHandles"],
     "tests/QS3D.Core.SmokeTests/GeneratedOutputHealthStaleSmoke.cs": ["FoundationMeshUsesSnapshotState"],
 }
@@ -76,6 +79,19 @@ for relative, needles in checks.items():
     for needle in needles:
         if needle not in text:
             errors.append(relative + " missing guard/token: " + needle)
+
+resolver = ROOT / "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs"
+if resolver.is_file():
+    resolver_text = resolver.read_text(encoding="utf-8")
+    if '"GeneratedFoundationMeshHandles"' in resolver_text:
+        errors.append("semantic ownership resolver must discover Foundation/future generated slots dynamically through GeneratedHandleOwnershipPolicy")
+
+review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+if review.is_file():
+    review_text = review.read_text(encoding="utf-8")
+    collect_start = review_text.find("private static HashSet<string> CollectGeneratedHandles")
+    if collect_start >= 0 and "property.Value.Split" in review_text[collect_start:]:
+        errors.append("B4D must use canonical CollectOwnerHandles instead of duplicating generated-handle parsing")
 
 setup = ROOT / "src/QS3D.BricsCAD.V25/UI/RebarMeshSetupWindow.xaml.cs"
 if setup.is_file():
@@ -102,4 +118,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Foundation mesh uses dedicated stale/health metadata, policy-driven destructive ownership, semantic-selection/B4D exclusion, independent X/Y setup, unified health/release-readiness and UI contracts.")
+print("PASS: Foundation mesh uses dedicated stale/health metadata and canonical policy-driven ownership across destructive guards, dynamic semantic selection, B4D exclusion, unified health/release-readiness and UI contracts.")
