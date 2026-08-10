@@ -11,8 +11,10 @@ namespace QS3D.Core.SmokeTests
             ExplicitOrderAndTemplatesArePreserved();
             BlankOptionalCellsAreAllowedWithoutWeakeningTagLabels();
             DuplicateElementIdsFailClosed();
+            AmbiguousProjectElementFailsClosed();
             DuplicateHeadersFailClosed();
             GeneratedOwnershipPropertiesRemainBlocked();
+            UnusedReferenceIndexesStayLazy();
         }
 
         private static void ExplicitOrderAndTemplatesArePreserved()
@@ -69,6 +71,18 @@ namespace QS3D.Core.SmokeTests
                 new[] { new SemanticDocumentationColumn("Id", "{Id}") }));
         }
 
+        private static void AmbiguousProjectElementFailsClosed()
+        {
+            var project = new ProjectState("table", "Table");
+            var element = Element(project, "E-1", ElementCategory.Beam, "B1", 1.0);
+            Element(project, "e-1", ElementCategory.Column, "C1", 2.0);
+            Throws<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                new[] { element.Id },
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") }));
+        }
+
         private static void DuplicateHeadersFailClosed()
         {
             var project = new ProjectState("table", "Table");
@@ -94,6 +108,28 @@ namespace QS3D.Core.SmokeTests
                 "Schedule",
                 new[] { element.Id },
                 new[] { new SemanticDocumentationColumn("Native", "{P:GeneratedSolidHandle}") }));
+        }
+
+        private static void UnusedReferenceIndexesStayLazy()
+        {
+            var project = new ProjectState("table", "Table");
+            project.Families.Add(new ProjectFamily("F-1", "Family A", ElementCategory.Beam));
+            project.Families.Add(new ProjectFamily("f-1", "Family B", ElementCategory.Beam));
+            var element = new ProjectElement("E-1", ElementCategory.Beam, "F-1", string.Empty, string.Empty);
+            project.Elements.Add(element);
+
+            var idOnly = SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                new[] { element.Id },
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") });
+            Equal("E-1", idOnly.Rows[0].Cells[0]);
+
+            Throws<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                new[] { element.Id },
+                new[] { new SemanticDocumentationColumn("Family", "{Family}") }));
         }
 
         private static ProjectElement Element(ProjectState project, string id, ElementCategory category, string mark, double length)
