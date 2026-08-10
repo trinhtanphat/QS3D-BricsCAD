@@ -18,11 +18,7 @@ namespace QS3D.Core.SmokeTests
         private static void GeneratedOutputsBecomeStaleAfterSemanticEdit()
         {
             var element = Element();
-            element.Properties["GeneratedSolidHandle"] = "AA";
-            element.Properties["GeneratedRebarHandles"] = "BB;BC";
-            element.Properties["GeneratedShapeRebarHandles"] = "CC";
-            element.Properties["GeneratedTieRebarHandles"] = "DD";
-            element.Properties["GeneratedBeamStirrupHandles"] = "EE";
+            SeedAllGeneratedOutputs(element);
             element.MarkGeneratedGeometryStale("Thickness changed");
 
             True(element.IsGeneratedSolidStale());
@@ -30,6 +26,9 @@ namespace QS3D.Core.SmokeTests
             True(element.IsGeneratedShapeRebarStale());
             True(element.IsGeneratedTieRebarStale());
             True(element.IsGeneratedBeamStirrupStale());
+            True(element.IsGeneratedSlabMeshStale());
+            True(element.IsGeneratedWallMeshStale());
+            True(element.IsGeneratedCurtainFrameStale());
             True(element.IsGeneratedGeometryStale());
             Equal("Thickness changed", element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey]);
         }
@@ -37,11 +36,7 @@ namespace QS3D.Core.SmokeTests
         private static void ReplacedHandleAutoResolvesOnlyItsOwnStaleKind()
         {
             var element = Element();
-            element.Properties["GeneratedSolidHandle"] = "AA";
-            element.Properties["GeneratedRebarHandles"] = "BB";
-            element.Properties["GeneratedShapeRebarHandles"] = "CC";
-            element.Properties["GeneratedTieRebarHandles"] = "DD";
-            element.Properties["GeneratedBeamStirrupHandles"] = "EE";
+            SeedAllGeneratedOutputs(element);
             element.MarkGeneratedGeometryStale("Family changed");
 
             element.Properties["GeneratedRebarHandles"] = "BD";
@@ -50,13 +45,19 @@ namespace QS3D.Core.SmokeTests
             True(element.IsGeneratedShapeRebarStale());
             True(element.IsGeneratedTieRebarStale());
             True(element.IsGeneratedBeamStirrupStale());
+            True(element.IsGeneratedSlabMeshStale());
+            True(element.IsGeneratedWallMeshStale());
+            True(element.IsGeneratedCurtainFrameStale());
             True(element.IsGeneratedGeometryStale());
 
             element.Properties["GeneratedSolidHandle"] = "AD";
             element.Properties["GeneratedShapeRebarHandles"] = "CD";
             element.Properties["GeneratedTieRebarHandles"] = "DE";
-            True(element.IsGeneratedBeamStirrupStale());
             element.Properties["GeneratedBeamStirrupHandles"] = "EF";
+            element.Properties["GeneratedSlabMeshHandles"] = "FG";
+            element.Properties["GeneratedWallMeshHandles"] = "GH";
+            True(element.IsGeneratedCurtainFrameStale());
+            element.Properties["GeneratedCurtainFrameHandles"] = "HI";
             False(element.IsGeneratedGeometryStale());
             False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStateKey));
         }
@@ -64,11 +65,7 @@ namespace QS3D.Core.SmokeTests
         private static void ExplicitClearPreservesOtherStaleKinds()
         {
             var element = Element();
-            element.Properties["GeneratedSolidHandle"] = "10";
-            element.Properties["GeneratedRebarHandles"] = "20";
-            element.Properties["GeneratedShapeRebarHandles"] = "30";
-            element.Properties["GeneratedTieRebarHandles"] = "40";
-            element.Properties["GeneratedBeamStirrupHandles"] = "50";
+            SeedAllGeneratedOutputs(element);
             element.MarkGeneratedGeometryStale("Instance changed");
 
             element.ClearGeneratedRebarStale();
@@ -77,12 +74,18 @@ namespace QS3D.Core.SmokeTests
             True(element.IsGeneratedShapeRebarStale());
             True(element.IsGeneratedTieRebarStale());
             True(element.IsGeneratedBeamStirrupStale());
+            True(element.IsGeneratedSlabMeshStale());
+            True(element.IsGeneratedWallMeshStale());
+            True(element.IsGeneratedCurtainFrameStale());
 
             element.ClearGeneratedSolidStale();
             element.ClearGeneratedShapeRebarStale();
             element.ClearGeneratedTieRebarStale();
-            True(element.IsGeneratedBeamStirrupStale());
             element.ClearGeneratedBeamStirrupStale();
+            element.ClearGeneratedSlabMeshStale();
+            element.ClearGeneratedWallMeshStale();
+            True(element.IsGeneratedCurtainFrameStale());
+            element.ClearGeneratedCurtainFrameStale();
             False(element.IsGeneratedGeometryStale());
         }
 
@@ -91,19 +94,18 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("STALE", "Generated stale lifecycle");
             var element = Element();
             project.Elements.Add(element);
-            element.Properties["GeneratedSolidHandle"] = "10";
-            element.Properties["GeneratedRebarHandles"] = "20";
-            element.Properties["GeneratedShapeRebarHandles"] = "30";
-            element.Properties["GeneratedTieRebarHandles"] = "40";
-            element.Properties["GeneratedBeamStirrupHandles"] = "50";
+            SeedAllGeneratedOutputs(element);
             element.MarkGeneratedGeometryStale("source moved");
             var issues = new GeneratedGeometryStaleHealthService().Inspect(project);
-            Equal(5, issues.Count);
+            Equal(8, issues.Count);
             Contains(issues, "GENERATED_SOLID_STALE");
             Contains(issues, "REBAR_GENERATED_STALE");
             Contains(issues, "SHAPE_REBAR_GENERATED_STALE");
             Contains(issues, "TIE_REBAR_GENERATED_STALE");
             Contains(issues, "BEAM_STIRRUP_GENERATED_STALE");
+            Contains(issues, "SLAB_MESH_GENERATED_STALE");
+            Contains(issues, "WALL_MESH_GENERATED_STALE");
+            Contains(issues, "CURTAIN_FRAME_GENERATED_STALE");
         }
 
         private static void ElementsWithoutGeneratedOutputsRemainFresh()
@@ -112,6 +114,18 @@ namespace QS3D.Core.SmokeTests
             element.MarkGeneratedGeometryStale("No generated geometry");
             False(element.IsGeneratedGeometryStale());
             False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStateKey));
+        }
+
+        private static void SeedAllGeneratedOutputs(ProjectElement element)
+        {
+            element.Properties["GeneratedSolidHandle"] = "AA";
+            element.Properties["GeneratedRebarHandles"] = "BB;BC";
+            element.Properties["GeneratedShapeRebarHandles"] = "CC";
+            element.Properties["GeneratedTieRebarHandles"] = "DD";
+            element.Properties["GeneratedBeamStirrupHandles"] = "EE";
+            element.Properties["GeneratedSlabMeshHandles"] = "FF";
+            element.Properties["GeneratedWallMeshHandles"] = "GG";
+            element.Properties["GeneratedCurtainFrameHandles"] = "HH";
         }
 
         private static void Contains(System.Collections.Generic.IReadOnlyList<ModelHealthIssue> issues, string code)

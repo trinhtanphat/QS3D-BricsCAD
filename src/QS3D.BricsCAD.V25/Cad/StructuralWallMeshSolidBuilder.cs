@@ -58,6 +58,16 @@ namespace QS3D.BricsCAD.V25.Cad
                 .ToList();
             if (elements.Count == 0) return new StructuralWallMeshBuildResult();
 
+            var duplicateSelectedSource = elements
+                .SelectMany(element => element.SourceHandles
+                    .Where(selectedHandles.Contains)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(handle => new { Handle = handle, Element = element.Id }))
+                .GroupBy(x => x.Handle, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group.Select(x => x.Element).Distinct(StringComparer.OrdinalIgnoreCase).Take(2).Count() > 1);
+            if (duplicateSelectedSource != null)
+                throw new InvalidOperationException("StructuralWall source " + duplicateSelectedSource.Key + " đang thuộc nhiều QS3D element; sửa semantic ownership trước khi dựng wall mesh 3D.");
+
             var ownership = GeneratedRebarOwnershipGuard.Build(project);
             var pending = new List<PendingUpdate>();
             var batchBars = 0;
@@ -74,12 +84,12 @@ namespace QS3D.BricsCAD.V25.Cad
                     var horizontal = ParseDirection(element, "RebarWallHorizontalNotation");
                     var vertical = ParseDirection(element, "RebarWallVerticalNotation");
 
-                    var dx = CadGeometryGuard.Finite(line.EndPoint.X - line.StartPoint.X, element.Id + "/wall dx");
-                    var dy = CadGeometryGuard.Finite(line.EndPoint.Y - line.StartPoint.Y, element.Id + "/wall dy");
-                    var dz = CadGeometryGuard.Finite(line.EndPoint.Z - line.StartPoint.Z, element.Id + "/wall dz");
+                    var dx = CadGeometryGuard.Subtract(line.EndPoint.X, line.StartPoint.X, element.Id + "/wall dx");
+                    var dy = CadGeometryGuard.Subtract(line.EndPoint.Y, line.StartPoint.Y, element.Id + "/wall dy");
+                    var dz = CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z, element.Id + "/wall dz");
                     var lengthDrawing = CadGeometryGuard.Hypot(dx, dy, element.Id + "/wall length");
                     if (lengthDrawing <= 1e-9d) throw new InvalidOperationException("StructuralWall LINE quá ngắn cho mesh 3D: " + element.Id);
-                    var planarityTolerance = CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/wall mesh planarity tolerance");
+                    var planarityTolerance = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/wall mesh planarity tolerance"), element.Id + "/wall mesh planarity tolerance drawing");
                     if (Math.Abs(dz) > planarityTolerance) throw new InvalidOperationException("StructuralWall mesh 3D hiện yêu cầu source LINE gần ngang (|ΔZ| <= 0.005 m): " + element.Id);
                     var lengthM = CadGeometryGuard.ToMeters(document, lengthDrawing, element.Id + "/wall length");
                     var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3d), element.Id + "/HeightM");
@@ -108,7 +118,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         HorizontalClosestToFace = horizontalClosest
                     });
                     if (batchBars > MaxBarsPerBatch - layout.Count) throw new InvalidOperationException("StructuralWall mesh batch vượt giới hạn " + MaxBarsPerBatch + " bar.");
-                    batchBars += layout.Count;
+                    batchBars = checked(batchBars + layout.Count);
 
                     ErasePrevious(document, transaction, element, ownership);
                     var ux = dx / lengthDrawing;
@@ -141,21 +151,29 @@ namespace QS3D.BricsCAD.V25.Cad
                         Vector3d direction;
                         if (placement.Direction == WallMeshDirection.Horizontal)
                         {
-                            var cx = CadGeometryGuard.Add(wallCenter.X, CadGeometryGuard.Finite(normal.X * faceOffset, element.Id + "/wall H face X"), element.Id + "/wall H center X");
-                            var cy = CadGeometryGuard.Add(wallCenter.Y, CadGeometryGuard.Finite(normal.Y * faceOffset, element.Id + "/wall H face Y"), element.Id + "/wall H center Y");
+                            var cx = CadGeometryGuard.Add(wallCenter.X, CadGeometryGuard.Multiply(normal.X, faceOffset, element.Id + "/wall H face X"), element.Id + "/wall H center X");
+                            var cy = CadGeometryGuard.Add(wallCenter.Y, CadGeometryGuard.Multiply(normal.Y, faceOffset, element.Id + "/wall H face Y"), element.Id + "/wall H center Y");
                             var cz = CadGeometryGuard.Add(wallCenter.Z, distributionOffset, element.Id + "/wall H center Z");
                             var half = length / 2d;
                             start = new Point3d(
-                                CadGeometryGuard.Add(cx, CadGeometryGuard.Finite(-axis.X * half, element.Id + "/wall H start X offset"), element.Id + "/wall H start X"),
-                                CadGeometryGuard.Add(cy, CadGeometryGuard.Finite(-axis.Y * half, element.Id + "/wall H start Y offset"), element.Id + "/wall H start Y"),
-                                cz);
+                                CadGeometryGuard.Subtract(cx, CadGeometryGuard.Multiply(axis.X, half, element.Id + "/wall H start X offset"), element.Id + "/wall H start X"),
+                                CadGeometryGuard.Subtract(cy, CadGeometryGuard.Multiply(axis.Y, half, element.Id + "/wall H start Y offset"), element.Id + "/wall H start Y"),
+                                CadGeometryGuard.Finite(cz, element.Id + "/wall H start Z"));
                             direction = axis;
                         }
                         else
                         {
-                            var cx = CadGeometryGuard.Add(wallCenter.X, CadGeometryGuard.Add(CadGeometryGuard.Finite(axis.X * distributionOffset, element.Id + "/wall V distribution X"), CadGeometryGuard.Finite(normal.X * faceOffset, element.Id + "/wall V face X"), element.Id + "/wall V XY X"), element.Id + "/wall V center X");
-                            var cy = CadGeometryGuard.Add(wallCenter.Y, CadGeometryGuard.Add(CadGeometryGuard.Finite(axis.Y * distributionOffset, element.Id + "/wall V distribution Y"), CadGeometryGuard.Finite(normal.Y * faceOffset, element.Id + "/wall V face Y"), element.Id + "/wall V XY Y"), element.Id + "/wall V center Y");
-                            start = new Point3d(cx, cy, wallCenter.Z - length / 2d);
+                            var xOffset = CadGeometryGuard.Add(
+                                CadGeometryGuard.Multiply(axis.X, distributionOffset, element.Id + "/wall V distribution X"),
+                                CadGeometryGuard.Multiply(normal.X, faceOffset, element.Id + "/wall V face X"),
+                                element.Id + "/wall V X offset");
+                            var yOffset = CadGeometryGuard.Add(
+                                CadGeometryGuard.Multiply(axis.Y, distributionOffset, element.Id + "/wall V distribution Y"),
+                                CadGeometryGuard.Multiply(normal.Y, faceOffset, element.Id + "/wall V face Y"),
+                                element.Id + "/wall V Y offset");
+                            var cx = CadGeometryGuard.Add(wallCenter.X, xOffset, element.Id + "/wall V center X");
+                            var cy = CadGeometryGuard.Add(wallCenter.Y, yOffset, element.Id + "/wall V center Y");
+                            start = new Point3d(cx, cy, CadGeometryGuard.Subtract(wallCenter.Z, length / 2d, element.Id + "/wall V start Z"));
                             direction = Vector3d.ZAxis;
                         }
                         Solid3d? bar = CreateCylinder(document, start, direction, length, radius, element.Id + "/wall mesh bar");
@@ -202,6 +220,7 @@ namespace QS3D.BricsCAD.V25.Cad
             if (groups.Count != 1) throw new InvalidOperationException(element.Id + "/" + key + " chỉ hỗ trợ một group.");
             var group = groups[0];
             if (!group.Quantity.HasValue && !group.SpacingMm.HasValue) throw new InvalidOperationException(element.Id + "/" + key + " phải có count hoặc spacing.");
+            if (group.Quantity.HasValue && group.SpacingMm.HasValue) throw new InvalidOperationException(element.Id + "/" + key + " không được đồng thời có count và spacing.");
             return group;
         }
 
@@ -225,9 +244,12 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             length = CadGeometryGuard.Positive(length, label + "/length");
             radius = CadGeometryGuard.Positive(radius, label + "/radius");
-            var magnitude = Hypot3(direction.X, direction.Y, direction.Z, label + "/axis magnitude");
+            var magnitude = CadGeometryGuard.Hypot3(direction.X, direction.Y, direction.Z, label + "/axis magnitude");
             if (magnitude <= 1e-12d) throw new InvalidOperationException("StructuralWall mesh axis không hợp lệ: " + label);
             var unit = new Vector3d(direction.X / magnitude, direction.Y / magnitude, direction.Z / magnitude);
+            var startX = CadGeometryGuard.Finite(start.X, label + "/start X");
+            var startY = CadGeometryGuard.Finite(start.Y, label + "/start Y");
+            var startZ = CadGeometryGuard.Finite(start.Z, label + "/start Z");
             var solid = new Solid3d();
             try
             {
@@ -236,9 +258,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 var dot = Math.Max(-1d, Math.Min(1d, unit.Z));
                 var angle = Math.Acos(dot);
                 var rotationAxis = Vector3d.ZAxis.CrossProduct(unit);
-                if (rotationAxis.Length > 1e-12d) solid.TransformBy(Matrix3d.Rotation(angle, rotationAxis, Point3d.Origin));
+                if (CadGeometryGuard.Hypot3(rotationAxis.X, rotationAxis.Y, rotationAxis.Z, label + "/rotation axis") > 1e-12d)
+                    solid.TransformBy(Matrix3d.Rotation(angle, rotationAxis, Point3d.Origin));
                 else if (unit.Z < 0d) solid.TransformBy(Matrix3d.Rotation(Math.PI, Vector3d.XAxis, Point3d.Origin));
-                solid.TransformBy(Matrix3d.Displacement(new Vector3d(start.X, start.Y, start.Z)));
+                solid.TransformBy(Matrix3d.Displacement(new Vector3d(startX, startY, startZ)));
                 var complete = solid;
                 solid = null!;
                 return complete;
@@ -279,15 +302,6 @@ namespace QS3D.BricsCAD.V25.Cad
             if (raw == "1") return true;
             if (raw == "0") return false;
             throw new InvalidOperationException(element.Id + "/" + key + " phải là true/false hoặc 1/0.");
-        }
-
-        private static double Hypot3(double x, double y, double z, string label)
-        {
-            x = Math.Abs(CadGeometryGuard.Finite(x, label + "/x")); y = Math.Abs(CadGeometryGuard.Finite(y, label + "/y")); z = Math.Abs(CadGeometryGuard.Finite(z, label + "/z"));
-            var maximum = Math.Max(x, Math.Max(y, z));
-            if (maximum <= 0d) return 0d;
-            var sx = x / maximum; var sy = y / maximum; var sz = z / maximum;
-            return CadGeometryGuard.Finite(maximum * Math.Sqrt(sx * sx + sy * sy + sz * sz), label);
         }
     }
 }

@@ -17,7 +17,7 @@ if planner.is_file():
         "SlabMeshFace", "SlabMeshDirection", "RectangularSlabMeshInput", "SlabMeshBarPlacement",
         "LinearRebarLayoutPlanner.Plan", "IncludeBottom", "IncludeTop", "XClosestToFace",
         "slab X end center cover", "slab Y end center cover", "top + bottom two-direction mesh",
-        "MaxBars = 8192", "ActualSpacingM",
+        "MaxBars = 8192", "projectedBars", "new List<SlabMeshBarPlacement>((int)projectedBars)", "ActualSpacingM",
     ):
         if needle not in text: errors.append("slab mesh planner guard missing: " + needle)
 
@@ -25,7 +25,7 @@ if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
     for needle in (
         "BottomMeshUsesTwoDirectionsAndCover();", "BothFacesRemainSeparated();", "CountModeIsDeterministic();",
-        "ThinSlabIsRejected();", "AmbiguousDistributionIsRejected();", "ModuleInitializer",
+        "ThinSlabIsRejected();", "AmbiguousDistributionIsRejected();", "OversizedAggregateMeshIsRejected();", "ModuleInitializer",
     ):
         if needle not in text: errors.append("slab mesh regression missing: " + needle)
 
@@ -34,4 +34,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: deterministic rectangular slab X/Y mesh planning, cover/stacking guards, limits and smoke coverage are present; native CAD adapter remains separately runtime-gated.")
+print("PASS: deterministic rectangular slab X/Y mesh planning, cover/stacking guards, pre-allocation aggregate limits and smoke coverage are present; native CAD adapter remains separately runtime-gated.")

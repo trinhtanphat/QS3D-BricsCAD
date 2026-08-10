@@ -34,7 +34,8 @@ if planner.is_file():
     text = planner.read_text(encoding="utf-8")
     for needle in (
         "WallMeshFace", "WallMeshDirection", "LinearRebarLayoutPlanner.Plan", "IncludeNear", "IncludeFar",
-        "HorizontalClosestToFace", "two-face mesh", "MaxBars = 8192", "HorizontalActualSpacingM", "VerticalActualSpacingM",
+        "HorizontalClosestToFace", "two-face mesh", "MaxBars = 8192", "projectedBars",
+        "new List<WallMeshBarPlacement>((int)projectedBars)", "HorizontalActualSpacingM", "VerticalActualSpacingM",
     ):
         if needle not in text: errors.append("structural-wall mesh planner missing: " + needle)
 
@@ -44,11 +45,12 @@ if builder.is_file():
     for needle in (
         "ElementCategory.StructuralWall", "RectangularWallMeshPlanner.Plan", 'HandlesKey = "GeneratedWallMeshHandles"',
         'Mode = "StructuralWallMesh"', "GeneratedRebarOwnershipGuard.Build(project)",
-        "ownership.EnsureOwned(handle, element, HandlesKey)", "MaxBarsPerBatch = 12000",
+        "ownership.EnsureOwned(handle, element, HandlesKey)", "duplicateSelectedSource", "MaxBarsPerBatch = 12000",
         "RebarWallHorizontalNotation", "RebarWallVerticalNotation", "RebarWallCoverM", "RebarWallFaces",
         "RebarWallHorizontalClosestToFace", "GeneratedWallMeshHorizontalDiameterMm", "GeneratedWallMeshVerticalDiameterMm",
         "GeneratedWallMeshHorizontalActualSpacingM", "GeneratedWallMeshVerticalActualSpacingM",
-        '"GeneratedWallMeshMode"] = Mode', "CreateFrustum", "source LINE gần ngang",
+        '"GeneratedWallMeshMode"] = Mode', "CadGeometryGuard.Subtract", "CadGeometryGuard.Multiply",
+        "CadGeometryGuard.Hypot3", "CreateFrustum", "source LINE gần ngang",
     ):
         if needle not in text: errors.append("native StructuralWall mesh builder missing: " + needle)
     for obsolete in ('HandlesKey = "GeneratedRebarHandles"', "EnsureWallMeshOwnsGenericRebarSlot", "cùng đường kính"):
@@ -92,7 +94,7 @@ if health.is_file():
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/WallMeshRegressionSmoke.cs"
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
-    for needle in ("TwoFaceMeshUsesBothDirections();", "SingleFaceCountModeIsDeterministic();", "ThinWallIsRejected();", "AmbiguousDistributionIsRejected();", "ModuleInitializer"):
+    for needle in ("TwoFaceMeshUsesBothDirections();", "SingleFaceCountModeIsDeterministic();", "ThinWallIsRejected();", "AmbiguousDistributionIsRejected();", "OversizedAggregateMeshIsRejected();", "ModuleInitializer"):
         if needle not in text: errors.append("StructuralWall mesh regression missing: " + needle)
 
 print("QS3D StructuralWall mesh preflight")
@@ -100,4 +102,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: StructuralWall horizontal/vertical near/far mesh planning uses dedicated ownership, independent diameters, invalidation, health, limits and command registration; runtime remains V25-gated.")
+print("PASS: StructuralWall horizontal/vertical near/far mesh planning uses dedicated ownership, independent diameters, invalidation, health, pre-allocation limits, finite Solid3d transforms and command registration; runtime remains V25-gated.")
