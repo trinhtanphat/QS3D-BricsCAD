@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             PreviewIsReadOnlyAndClassifiesChanges();
             ProvenanceOnlyStaleOutputIsRemoved();
             StaleElementPreviewFailsBeforeMutation();
+            ChangeVersionInvalidatesEquivalentPreview();
             ProjectPreviewAppliesAtomicallyFromFreshState();
             HealthGuardedProjectApplyReturnsRegressionDiff();
             ForeignElementInstanceFailsClosed();
@@ -26,11 +27,13 @@ namespace QS3D.Core.SmokeTests
             element.Quantities["OldManaged"] = 9d;
             element.Properties["Rule:OldManaged"] = "old@1";
             var originalUpdated = element.UpdatedUtc;
+            var originalVersion = project.ChangeVersion;
 
             var service = new QuantityRulePreviewService();
             var preview = service.PreviewElement(project, element);
 
             True(preview.HasChanges);
+            Equal(originalVersion, preview.SourceChangeVersion);
             Equal(2, preview.Changes.Count);
             Equal(QuantityRulePreviewChangeKind.Added, preview.Changes.Single(x => x.OutputName == "Cost").Kind);
             Equal(QuantityRulePreviewChangeKind.Removed, preview.Changes.Single(x => x.OutputName == "OldManaged").Kind);
@@ -38,6 +41,7 @@ namespace QS3D.Core.SmokeTests
             Near(9d, element.Quantities["OldManaged"]);
             Equal("old@1", element.Properties["Rule:OldManaged"]);
             Equal(originalUpdated, element.UpdatedUtc);
+            Equal(originalVersion, project.ChangeVersion);
         }
 
         private static void ProvenanceOnlyStaleOutputIsRemoved()
@@ -65,6 +69,18 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => service.ApplyElement(project, element, preview));
             Equal(before, element.Quantities.Count);
             True(!element.Quantities.ContainsKey("Cost"));
+        }
+
+        private static void ChangeVersionInvalidatesEquivalentPreview()
+        {
+            var project = Fixture();
+            var service = new QuantityRulePreviewService();
+            var preview = service.PreviewProject(project);
+            var oldVersion = preview.SourceChangeVersion;
+            project.Touch();
+            True(project.ChangeVersion > oldVersion);
+            Throws<InvalidOperationException>(() => service.ApplyProject(project, preview));
+            True(!project.FindElement("E1")!.Quantities.ContainsKey("Cost"));
         }
 
         private static void ProjectPreviewAppliesAtomicallyFromFreshState()
