@@ -81,8 +81,7 @@ namespace QS3D.Core.Services
             finish.ZoneId = room.ZoneId;
             finish.DrawingFingerprint = room.DrawingFingerprint;
             finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
-            if (!finish.DependsOn.Any(x => string.Equals((x ?? string.Empty).Trim(), room.Id, StringComparison.OrdinalIgnoreCase)))
-                finish.DependsOn.Add(room.Id);
+            EnsureSingleRoomDependency(finish, room.Id);
 
             foreach (var key in RoomMetricKeys)
                 ReplaceMetric(room, finish, key);
@@ -115,6 +114,16 @@ namespace QS3D.Core.Services
             var owned = project.FindElement(element.Id);
             if (!ReferenceEquals(owned, element))
                 throw new ArgumentException("Element must be the ProjectElement instance owned by the supplied project: " + element.Id + ".", parameterName);
+        }
+
+        private static void EnsureSingleRoomDependency(ProjectElement finish, string roomId)
+        {
+            for (var index = finish.DependsOn.Count - 1; index >= 0; index--)
+            {
+                var dependency = (finish.DependsOn[index] ?? string.Empty).Trim();
+                if (string.Equals(dependency, roomId, StringComparison.OrdinalIgnoreCase)) finish.DependsOn.RemoveAt(index);
+            }
+            finish.DependsOn.Add(roomId);
         }
 
         private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError, string operation)

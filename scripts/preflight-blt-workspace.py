@@ -57,6 +57,10 @@ checks = {
         "FamilyScope", "InstanceScope", "PropertyScopes", "SelectedPropertyScope", "SetSelectedElement",
         "LoadInstanceProperties", "ApplyInstanceProperty", "isInherited", "instance override", "row.CanReset",
         "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance",
+        "SourceDerivedInstanceKeys", '"LengthM"', '"AreaM2"', '"VolumeM3"', '"PerimeterM"', '"Layer"',
+        "NGUỒN CAD / ĐO ĐẠC", "IsSourceDerivedInstanceKey", "sourceRow.IsReadOnly = true",
+        "RequiresPositiveNumber", "RequiresNonNegativeNumber", "phải lớn hơn 0; đã giữ giá trị cũ",
+        "không được âm; đã giữ giá trị cũ", "Offset đáy (so với source)", "Offset đỉnh (so với source)",
     ],
     "property_vm": [
         "TextEditor", "BooleanEditor", "ChoiceEditor", "BooleanValue", "Choices", "CanReset", "ResetValue",
@@ -103,10 +107,22 @@ for key, needles in checks.items():
         if needle not in text:
             errors.append(str(path.relative_to(ROOT)) + " missing BLT workspace token: " + needle)
 
+workspace_vm = files["workspace_vm"]
+if workspace_vm.is_file():
+    text = workspace_vm.read_text(encoding="utf-8")
+    instance_body = text.split("private void LoadInstanceProperties", 1)[-1].split("private PropertyRowViewModel CreatePropertyRow", 1)[0]
+    if "sourceRow.IsReadOnly = true" not in instance_body or "NGUỒN CAD / ĐO ĐẠC" not in instance_body:
+        errors.append("Instance inspector must expose source-derived geometry as read-only CAD provenance")
+    if 'case "BottomOffsetM": return "Cao độ đáy";' in text or 'case "TopOffsetM": return "Cao độ đỉnh";' in text:
+        errors.append("Workspace must not label source-relative offsets as absolute elevations")
+    normalize_body = text.split("private string NormalizePropertyValue", 1)[-1].split("private IReadOnlyList<string> ChoicesFor", 1)[0]
+    if "RequiresPositiveNumber(key)" not in normalize_body or "RequiresNonNegativeNumber(key)" not in normalize_body:
+        errors.append("Workspace numeric editor must reject impossible dimensions before native builders")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BLT-style Workspace/Ribbon/Hub property scopes, wall/curtain/opening review, Door-Opening schedule/XLSX, curved cut, generated rebar/mesh and release-readiness entry points are present; key XAML is well formed.")
+print("PASS: BLT-style Workspace/Ribbon/Hub property scopes, read-only source geometry, early dimension validation, source-relative offset labels, wall/curtain/opening review, Door-Opening schedule/XLSX, curved cut, generated rebar/mesh and release-readiness entry points are present; key XAML is well formed.")
