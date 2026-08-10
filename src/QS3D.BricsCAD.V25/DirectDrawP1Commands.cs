@@ -8,6 +8,7 @@ using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 using Teigha.Runtime;
