@@ -163,6 +163,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
 
                     foreach (var update in pending) CommitSemanticUpdate(project, update);
+                    if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
@@ -182,7 +183,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw;
             }
 
-            if (pending.Count > 0) project.Touch();
             return new CurtainFrameBuildResult { Elements = pending.Count, Frames = pending.Sum(x => x.Handles.Count) };
         }
 
