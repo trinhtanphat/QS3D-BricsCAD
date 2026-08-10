@@ -22,16 +22,17 @@ else:
         if token not in text:
             errors.append("QS3DREBARTIEQTY missing post-commit boundary token: " + token)
 
+    snapshot_pos = text.find(snapshot)
     touch_pos = text.find(touch)
     restore_pos = text.find(restore)
     finalize_pos = text.find(finalize)
     helper_pos = text.find(helper)
-    if min(touch_pos, restore_pos, finalize_pos, helper_pos) >= 0:
-        if not restore_pos < touch_pos < finalize_pos < helper_pos:
-            errors.append("QS3DREBARTIEQTY must keep semantic rollback before commit completion and invoke FinalizeUi only after semantic mutation succeeds")
-        post_commit = text[touch_pos + len(touch):finalize_pos]
-        if refresh in post_commit or "PaletteCoordinator.SetStatus" in post_commit or "Editor.WriteMessage" in post_commit:
-            errors.append("QS3DREBARTIEQTY must not perform fallible UI work directly after semantic commit")
+    if min(snapshot_pos, touch_pos, restore_pos, finalize_pos, helper_pos) >= 0:
+        if not snapshot_pos < touch_pos < restore_pos < finalize_pos < helper_pos:
+            errors.append("QS3DREBARTIEQTY must snapshot before mutation, retain catch/restore, and invoke FinalizeUi only after the semantic try/catch completes")
+        post_commit_boundary = text[restore_pos + len(restore):finalize_pos]
+        if refresh in post_commit_boundary or "PaletteCoordinator.SetStatus" in post_commit_boundary or "Editor.WriteMessage" in post_commit_boundary:
+            errors.append("QS3DREBARTIEQTY must not perform fallible UI work directly between semantic rollback boundary and FinalizeUi")
 
     helper_body = text[helper_pos:] if helper_pos >= 0 else ""
     if helper_pos >= 0 and ("catch (System.Exception ex)" not in helper_body or refresh not in helper_body):
