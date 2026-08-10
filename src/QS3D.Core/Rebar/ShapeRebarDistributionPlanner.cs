@@ -35,7 +35,8 @@ namespace QS3D.Core.Rebar
             if (input.Count <= 0) throw new ArgumentOutOfRangeException(nameof(input.Count));
 
             var clearance = RebarMath.Add(cover, radius, "shape rebar center clearance");
-            var usable = RebarMath.Add(span, -RebarMath.Multiply(2d, clearance, "shape rebar two-side clearance"), "shape rebar usable span");
+            var twoSideClearance = RebarMath.Multiply(2d, clearance, "shape rebar two-side clearance");
+            var usable = SubtractFinite(span, twoSideClearance, "shape rebar usable span");
             if (usable < 0d) throw new InvalidOperationException("Cover + bar radius leaves no usable shape-rebar distribution span inside the host.");
 
             var offsets = new double[input.Count];
@@ -47,14 +48,24 @@ namespace QS3D.Core.Rebar
             if (!(usable > 0d)) throw new InvalidOperationException("Multiple shape rebars require a positive usable distribution span.");
 
             var step = RebarMath.Divide(usable, input.Count - 1d, "shape rebar distribution step");
+            var halfSpan = RebarMath.Divide(span, 2d, "shape rebar half span");
             for (var index = 0; index < input.Count; index++)
             {
                 var edgeOffset = RebarMath.Add(clearance, RebarMath.Multiply(step, index, "shape rebar distribution index"), "shape rebar edge offset");
                 offsets[index] = input.Centered
-                    ? RebarMath.Add(edgeOffset, -RebarMath.Divide(span, 2d, "shape rebar half span"), "shape rebar centered offset")
+                    ? SubtractFinite(edgeOffset, halfSpan, "shape rebar centered offset")
                     : edgeOffset;
             }
             return new ShapeRebarDistributionResult(clearance, Array.AsReadOnly(offsets));
+        }
+
+        private static double SubtractFinite(double left, double right, string label)
+        {
+            if (double.IsNaN(left) || double.IsInfinity(left) || double.IsNaN(right) || double.IsInfinity(right))
+                throw new ArgumentOutOfRangeException(label, "Shape rebar values must be finite.");
+            var result = left - right;
+            if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Shape rebar subtraction overflow: " + label);
+            return result;
         }
     }
 }
