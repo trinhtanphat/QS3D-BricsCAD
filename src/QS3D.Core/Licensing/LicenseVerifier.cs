@@ -165,7 +165,9 @@ namespace QS3D.Core.Licensing
 
         private static string Required(XElement element, string attribute)
         {
-            var value = (string?)element.Attribute(attribute);
+            var attributeValue = element.Attribute(attribute);
+            if (attributeValue == null) throw new InvalidDataException("License attribute is required: " + attribute);
+            var value = attributeValue.Value;
             if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("License attribute is required: " + attribute);
             return value.Trim();
         }
