@@ -253,7 +253,7 @@ namespace QS3D.Core.Export
                 items);
         }
 
-        private static void AddSimple<T>(
+        private static void AddSimple(
             InterchangeIdentityKind kind,
             string id,
             bool exists,
@@ -312,7 +312,7 @@ namespace QS3D.Core.Export
 
         private static string Required(string? value, string label)
         {
-            if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("Validated interchange " + label + " is empty.");
+            if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("Required identity value is empty: " + label + ".");
             return value.Trim();
         }
 
