@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25
                 var json = ReadGuardedSnapshotText(dialog.FileName);
                 EnsureActive(document, "Interchange Import As New / preview");
                 var project = ProjectContextCoordinator.GetOrCreate(document);
+                var previewChangeVersion = project.ChangeVersion;
                 var plan = ProjectInterchangeRemapAppendImporter.Plan(project, json);
                 if (!plan.CanImport)
                 {
@@ -79,7 +80,12 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
                 EnsureActive(document, "Interchange Import As New / mutation");
-                var result = ProjectInterchangeRemapAppendImporter.Import(project, json);
+                var currentProject = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ReferenceEquals(currentProject, project) || currentProject.ChangeVersion != previewChangeVersion)
+                    throw new InvalidOperationException(
+                        "Interchange Import As New target semantic project changed after preview. Run the command again to review a fresh remap plan.");
+
+                var result = ProjectInterchangeRemapAppendImporter.Import(currentProject, json);
                 try { PaletteCoordinator.RefreshProject(); } catch { }
 
                 var status =
