@@ -48,10 +48,21 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
+                var unsupported = selectedElements
+                    .Where(x => !IsNativeBuildCategory(x.Category))
+                    .Select(x => x.Category)
+                    .Distinct()
+                    .OrderBy(x => x.ToString(), StringComparer.Ordinal)
+                    .ToList();
+                if (unsupported.Count > 0)
+                {
+                    Write(document, "QS3DBUILD3D: selection chứa category chưa hỗ trợ native 3D: " + string.Join(", ", unsupported) + ". Tách selection trước khi build.");
+                    return;
+                }
+
                 var categories = selectedElements
                     .Select(x => x.Category)
                     .Distinct()
-                    .Where(IsNativeBuildCategory)
                     .ToList();
 
                 if (categories.Count == 0)
@@ -59,10 +70,14 @@ namespace QS3D.BricsCAD.V25
                     Write(document, "QS3DBUILD3D: selection không có category hỗ trợ native 3D.");
                     return;
                 }
+                if (categories.Count > 1)
+                {
+                    Write(document, "QS3DBUILD3D: selection chứa nhiều category native (" + string.Join(", ", categories) + "). Chọn một category mỗi lần để giữ build atomic/fail-closed.");
+                    return;
+                }
 
-                var built = 0;
-                foreach (var category in categories)
-                    built += BuildCategory(document, project, category);
+                var category = categories[0];
+                var built = BuildCategory(document, project, category);
 
                 if (built <= 0)
                     throw new InvalidOperationException("Không tạo được solid từ source đang chọn. Tường KT cần LINE hoặc open POLYLINE; các cấu kiện khác phải đúng source profile được builder hỗ trợ.");
@@ -72,7 +87,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.RefreshProject();
                 document.Editor.Regen();
 
-                var status = "Vẽ/Cập nhật 3D: " + built + " solid • " + selectedElements.Count + " semantic • regenerate " + regenerated + ".";
+                var status = "Vẽ/Cập nhật 3D: " + built + " solid • " + selectedElements.Count + " semantic • " + category + " • regenerate " + regenerated + ".";
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
                 document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
