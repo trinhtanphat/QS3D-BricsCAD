@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         {
             FamilyInheritanceAndCurtainComponents();
             InstanceOverrideUsesCatalogUnit();
+            PrimaryQuantitiesIgnoreInvalidFallbacks();
+            InvalidUsedFallbackIsRejected();
             RejectsInvalidQuantities();
         }
 
@@ -70,6 +72,36 @@ namespace QS3D.Core.SmokeTests
             Near(4.4d, row.VolumeM3);
             Near(22d, row.PrimaryQuantity);
             if (row.ElementIds.Count != 2) throw new Exception("Material schedule provenance failed.");
+        }
+
+        private static void PrimaryQuantitiesIgnoreInvalidFallbacks()
+        {
+            var project = new ProjectState("p-primary", "Lazy fallback");
+            var family = new ProjectFamily("wall", "Tường", ElementCategory.ArchitecturalWall);
+            family.Properties["Material"] = "Gạch";
+            project.Families.Add(family);
+            var wall = new ProjectElement("w-primary", ElementCategory.ArchitecturalWall, family.Id, "floor", "z");
+            wall.Quantities["NetVolumeM3"] = 2.4d;
+            wall.Quantities["VolumeM3"] = -99d;
+            wall.Quantities["NetWallAreaM2"] = 12d;
+            wall.Quantities["SideAreaM2"] = double.NaN;
+            project.Elements.Add(wall);
+
+            var row = MaterialUsageScheduleBuilder.Build(project).Single();
+            Near(2.4d, row.VolumeM3);
+            Near(12d, row.AreaM2);
+        }
+
+        private static void InvalidUsedFallbackIsRejected()
+        {
+            var project = new ProjectState("p-fallback", "Used fallback");
+            var family = new ProjectFamily("wall", "Tường", ElementCategory.ArchitecturalWall);
+            family.Properties["Material"] = "Gạch";
+            project.Families.Add(family);
+            var wall = new ProjectElement("w-fallback", ElementCategory.ArchitecturalWall, family.Id, "floor", "z");
+            wall.Quantities["SideAreaM2"] = -1d;
+            project.Elements.Add(wall);
+            Throws<InvalidOperationException>(() => MaterialUsageScheduleBuilder.Build(project));
         }
 
         private static void RejectsInvalidQuantities()
