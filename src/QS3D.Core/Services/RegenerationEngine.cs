@@ -63,13 +63,37 @@ namespace QS3D.Core.Services
         public int RegenerateDirty(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            return Regenerate(project, project.Elements, project.Elements.Count);
+        }
+
+        public int RegenerateDirtySubset(ProjectState project, IEnumerable<string> elementIds)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+
+            var ids = new HashSet<string>(
+                elementIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            if (ids.Count == 0) return 0;
+
+            var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements) byId[element.Id] = element;
+            foreach (var id in ids)
+                if (!byId.ContainsKey(id)) throw new KeyNotFoundException("Unknown regeneration target: " + id);
+
+            var targets = project.Elements.Where(x => ids.Contains(x.Id)).ToList();
+            return Regenerate(project, targets, targets.Count);
+        }
+
+        private int Regenerate(ProjectState project, IReadOnlyList<ProjectElement> candidates, int passBasis)
+        {
             var total = 0;
-            var maxPasses = Math.Max(2, project.Elements.Count * 2 + 2);
+            var maxPasses = Math.Max(2, passBasis * 2 + 2);
 
             for (var pass = 0; pass < maxPasses; pass++)
             {
                 _graph.Rebuild(project.Elements);
-                var dirty = _graph.TopologicalDirtyOrder(project.Elements);
+                var dirty = _graph.TopologicalDirtyOrder(candidates);
                 if (dirty.Count == 0) break;
                 var progress = 0;
 
