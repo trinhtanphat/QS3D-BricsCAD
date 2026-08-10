@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Geometry;
 using QS3D.Core.Rebar;
@@ -105,7 +106,7 @@ namespace QS3D.Core.SmokeTests
             return new PolygonalSlabMeshInput
             {
                 FootprintM = Square(0, 0, 10, 10),
-                ThicknessM = 0.30d,
+                ThicknessM = 0.60d,
                 CoverM = 0.20d,
                 XDiameterMm = 20d,
                 YDiameterMm = 20d,
