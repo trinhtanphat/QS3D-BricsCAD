@@ -13,6 +13,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class FloorLevelWindow : Window
     {
         private readonly Document _document;
+        private string _editingFloorId = string.Empty;
         private bool _loading;
 
         public FloorLevelWindow(Document document)
@@ -27,7 +28,63 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnFloorSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loading) return;
+            LoadSelectedFloorEditor();
             RefreshLabels();
+        }
+
+        private void OnNewFloorClick(object sender, RoutedEventArgs e)
+        {
+            _editingFloorId = string.Empty;
+            _loading = true;
+            try { FloorList.SelectedItem = null; }
+            finally { _loading = false; }
+            FloorNameBox.Text = string.Empty;
+            FloorElevationBox.Text = string.Empty;
+            ReferenceCountText.Text = "0";
+            FloorNameBox.Focus();
+            SetStatus("Tạo tầng mới.");
+        }
+
+        private void OnSaveFloorClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var elevationM = ParseElevation(FloorElevationBox.Text);
+                FloorDefinition floor;
+                string operation;
+                if (string.IsNullOrWhiteSpace(_editingFloorId))
+                {
+                    floor = ProjectFloorService.Create(project, "floor-" + Guid.NewGuid().ToString("N"), FloorNameBox.Text, elevationM);
+                    operation = "floor.create";
+                }
+                else
+                {
+                    floor = ProjectFloorService.Update(project, _editingFloorId, FloorNameBox.Text, elevationM);
+                    operation = "floor.update";
+                }
+                AuditTrail.ForProject(project).Record(operation, floor.Id, floor.Name + " • " + floor.ElevationM.ToString("R", CultureInfo.InvariantCulture) + "m");
+                PaletteCoordinator.RefreshProject();
+                RefreshAll(floor.Id);
+                SetStatus("Đã lưu tầng: " + floor.Name + ".");
+            }
+            catch (System.Exception ex) { SetStatus("Lưu tầng lỗi: " + ex.Message); }
+        }
+
+        private void OnDeleteFloorClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var floor = RequireSelectedFloor(project);
+                if (!ProjectFloorService.Delete(project, floor.Id)) return;
+                AuditTrail.ForProject(project).Record("floor.delete", floor.Id, floor.Name);
+                _editingFloorId = string.Empty;
+                PaletteCoordinator.RefreshProject();
+                RefreshAll();
+                SetStatus("Đã xóa tầng: " + floor.Name + ".");
+            }
+            catch (System.Exception ex) { SetStatus("Xóa tầng lỗi: " + ex.Message); }
         }
 
         private void OnActivateClick(object sender, RoutedEventArgs e)
@@ -36,10 +93,10 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var floor = RequireSelectedFloor(project);
-                if (!string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
+                var previous = project.ActiveFloorId;
+                ProjectFloorService.SetActive(project, floor.Id);
+                if (!string.Equals(previous, floor.Id, StringComparison.OrdinalIgnoreCase))
                 {
-                    project.ActiveFloorId = floor.Id;
-                    project.Touch();
                     AuditTrail.ForProject(project).Record("floor.activate", string.Empty, floor.Id + " • " + floor.Name + " • " + floor.ElevationM.ToString("R", CultureInfo.InvariantCulture) + "m");
                     PaletteCoordinator.RefreshProject();
                 }
@@ -59,19 +116,17 @@ namespace QS3D.BricsCAD.V25.UI
                 var elements = SemanticSelectionResolver.ResolveImplied(_document, project).ToList();
                 if (elements.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
 
-                var changed = 0;
-                foreach (var element in elements)
+                var changedElements = elements
+                    .Where(element => !string.Equals(element.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
+                    .Select(element => new { Element = element, Previous = element.FloorId })
+                    .ToList();
+                var changed = ProjectFloorService.Assign(project, floor.Id, elements);
+                foreach (var item in changedElements)
                 {
-                    if (string.Equals(element.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase)) continue;
-                    var previous = element.FloorId;
-                    element.FloorId = floor.Id;
-                    element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-                    AuditTrail.ForProject(project).Record("floor.assign", element.Id, previous + " -> " + floor.Id + " • semantic only; CAD source position unchanged");
-                    changed++;
+                    AuditTrail.ForProject(project).Record("floor.assign", item.Element.Id, item.Previous + " -> " + floor.Id + " • semantic only; CAD source position unchanged");
                 }
                 if (changed > 0)
                 {
-                    project.Touch();
                     PaletteCoordinator.RefreshProject();
                 }
                 SelectionCountText.Text = elements.Count.ToString(CultureInfo.InvariantCulture);
@@ -119,6 +174,7 @@ namespace QS3D.BricsCAD.V25.UI
                         ?? floors.FirstOrDefault();
                 }
                 finally { _loading = false; }
+                LoadSelectedFloorEditor();
                 RefreshLabels();
                 Title = "QS3D • Level Picker • " + DrawingLabel(_document);
                 if (floors.Count == 0) SetStatus("Project chưa có tầng. Tạo tầng trong Project Setup trước khi dùng Level Picker.");
@@ -141,6 +197,9 @@ namespace QS3D.BricsCAD.V25.UI
             var selected = FloorList.SelectedItem as FloorDefinition;
             ActiveFloorText.Text = active == null ? "—" : active.Name + " • " + active.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m";
             SelectedFloorText.Text = selected == null ? "—" : selected.Name + " • " + selected.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m";
+            ReferenceCountText.Text = selected == null
+                ? "0"
+                : ProjectFloorService.ReferenceCount(project, selected.Id).ToString(CultureInfo.InvariantCulture);
             if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
             {
                 SelectionCountText.Text = "—";
@@ -157,6 +216,31 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
                 throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Level Picker trước khi " + operation + ".");
+        }
+
+        private void LoadSelectedFloorEditor()
+        {
+            if (!(FloorList.SelectedItem is FloorDefinition floor))
+            {
+                _editingFloorId = string.Empty;
+                FloorNameBox.Text = string.Empty;
+                FloorElevationBox.Text = string.Empty;
+                return;
+            }
+            _editingFloorId = floor.Id;
+            FloorNameBox.Text = floor.Name;
+            FloorElevationBox.Text = floor.ElevationM.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+
+        private static double ParseElevation(string raw)
+        {
+            var text = (raw ?? string.Empty).Trim();
+            double value;
+            if ((!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
+                 !double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value)) ||
+                double.IsNaN(value) || double.IsInfinity(value))
+                throw new FormatException("Cao độ tầng phải là số hữu hạn (m).");
+            return value;
         }
 
         private static string FloorLabel(ProjectState project, string floorId)
