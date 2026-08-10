@@ -20,18 +20,14 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var result = SlabMeshSolidBuilder.BuildSelected(document, project);
-                PaletteCoordinator.RefreshProject();
                 var message = result.Bars == 0
                     ? "Slab Mesh 3D: chọn Slab semantic có closed rectangular POLYLINE + RebarSlabXNotation/RebarSlabYNotation."
                     : "Slab Mesh 3D: đã tạo/cập nhật " + result.Bars + " thanh trên " + result.Elements + " sàn.";
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                FinalizeUi(document, message);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                var message = "QS3DSLABREBAR3D lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                Report(document, "QS3DSLABREBAR3D lỗi: " + ex.Message);
             }
         }
 
@@ -59,12 +55,38 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
                 if (issues.Count > 50) document.Editor.WriteMessage("\n  … health output truncated.");
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                var message = "QS3DSLABREBARHEALTH lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                Report(document, "QS3DSLABREBARHEALTH lỗi: " + ex.Message);
             }
+        }
+
+        private static void FinalizeUi(Document document, string message)
+        {
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                document.Editor.Regen();
+                PaletteCoordinator.SetStatus(message);
+                document.Editor.WriteMessage("\nQS3D " + message);
+            }
+            catch (Exception ex)
+            {
+                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
+            }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); }
+            catch { }
+            TryWriteMessage(document, "\nQS3D " + message);
+        }
+
+        private static void TryWriteMessage(Document document, string message)
+        {
+            try { document.Editor.WriteMessage(message); }
+            catch { }
         }
     }
 }
