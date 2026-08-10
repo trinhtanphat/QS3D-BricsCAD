@@ -130,6 +130,7 @@
                             <Button Content="Xuất Semantic Snapshot JSON" Tag="QS3DINTERCHANGEJSON" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Kiểm tra Semantic Snapshot JSON" Tag="QS3DINTERCHANGEVALIDATE" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Nạp Snapshot (Append-only)" Tag="QS3DINTERCHANGEAPPEND" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Nạp Snapshot (Replace Element semantic)" Tag="QS3DINTERCHANGEUSESOURCE" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick" ToolTip="Thay portable semantic state cho Element trùng ID; giữ source CAD ownership của target, xóa generated outputs bị ảnh hưởng và yêu cầu rebuild explicit."/>
                             <Button Content="Xuất bảng vật liệu" Tag="QS3DMATERIALXLSX" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Xuất Template" Tag="QS3DTEMPLATEEXPORT" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
                             <Button Content="Nạp Template" Tag="QS3DTEMPLATEIMPORT" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
