@@ -141,21 +141,17 @@ namespace QS3D.BricsCAD.V25
         {
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
-                foreach (var key in new[]
+            {
+                foreach (var property in element.Properties)
                 {
-                    "GeneratedSolidHandle",
-                    "PhysicalOpeningCutSolidHandle",
-                    "GeneratedRebarHandles",
-                    "GeneratedShapeRebarHandles",
-                    "GeneratedTieRebarHandles",
-                    "GeneratedBeamStirrupHandles"
-                })
-                    if (element.Properties.TryGetValue(key, out var raw))
-                        foreach (var handle in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
-                        {
-                            var normalized = handle.Trim();
-                            if (normalized.Length > 0) result.Add(normalized);
-                        }
+                    if (!GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key) || string.IsNullOrWhiteSpace(property.Value)) continue;
+                    foreach (var handle in property.Value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        var normalized = handle.Trim();
+                        if (normalized.Length > 0) result.Add(normalized);
+                    }
+                }
+            }
             return result;
         }
 
