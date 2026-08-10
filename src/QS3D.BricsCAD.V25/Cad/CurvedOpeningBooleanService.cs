@@ -52,6 +52,9 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (solidId.IsNull) continue;
                     var hostSolid = transaction.GetObject(solidId, OpenMode.ForWrite, false) as Solid3d;
                     if (hostSolid == null || hostSolid.IsErased) continue;
+                    if (host.IsGeneratedSolidStale())
+                        throw new InvalidOperationException("Host " + host.Id + " has stale generated geometry. Rebuild 3D before cutting curved openings.");
+                    GeneratedGeometryService.RequireMatchingOwnership(hostSolid, project, host, "cut curved openings in Solid3d " + solidHandle.Trim());
 
                     var family = project.FindFamily(host.FamilyId);
                     var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "ThicknessM", 0.2d), host.Id + "/ThicknessM");

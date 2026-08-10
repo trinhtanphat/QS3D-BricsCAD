@@ -25,7 +25,7 @@ namespace QS3D.Core.Reporting
                 var key = element.FloorId + "\u001f" + category + "\u001f" + element.FamilyId;
                 if (!rows.TryGetValue(key, out var row))
                 {
-                    row = new QuantityReportRow { Floor = floor, Category = category, FamilyName = familyName };
+                    row = new QuantityReportRow { Floor = floor, Category = category, FamilyName = familyName, DrawingFingerprint = project.DrawingFingerprint };
                     rows[key] = row;
                     order.Add(key);
                 }

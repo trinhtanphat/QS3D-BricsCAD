@@ -40,7 +40,8 @@ checks = {
         "SourceHandles", "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle", "AddProtected", "EnsureOwned"
     ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs": [
-        "GeneratedGeometryService.PrepareReplacement", "GeneratedRebarOwnershipGuard.Build", "ClearGeneratedGeometryStale"
+        "GeneratedGeometryService.PrepareReplacement", "GeneratedRebarOwnershipGuard.Build", "ClearGeneratedGeometryStale",
+        "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles"
     ],
     "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs": [
         "GeneratedRebarOwnershipGuard.Build", "ownership.EnsureOwned", "GeneratedRebarHandles"

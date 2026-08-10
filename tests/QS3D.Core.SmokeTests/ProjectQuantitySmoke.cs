@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             var project = new ProjectState("p", "P");
+            project.DrawingFingerprint = "DWG-FP";
             project.Zones.Add(new ZoneDefinition("z", "Vùng-1"));
             project.Floors.Add(new FloorDefinition("f", "Nền 0.00", 0));
             var wallFamily = new ProjectFamily("wall", "Tường 200", ElementCategory.ArchitecturalWall); project.Families.Add(wallFamily);
@@ -22,7 +23,7 @@ namespace QS3D.Core.SmokeTests
             var rows = ProjectQuantityReportBuilder.Group(project);
             if (rows.Count != 2) throw new Exception("Project quantity grouping failed.");
             var wallRow = rows[0].Category == ElementCategory.ArchitecturalWall.ToString() ? rows[0] : rows[1];
-            if (wallRow.ElementIds.Count != 1 || wallRow.ElementIds[0] != "W1" || wallRow.SourceHandles.Count != 1 || wallRow.SourceHandles[0] != "AB12" || Math.Abs(wallRow.NetConcreteM3 - 2.604) > 1e-12) throw new Exception("Linked opening deduction/report failed.");
+            if (wallRow.DrawingFingerprint != "DWG-FP" || wallRow.ElementIds.Count != 1 || wallRow.ElementIds[0] != "W1" || wallRow.SourceHandles.Count != 1 || wallRow.SourceHandles[0] != "AB12" || Math.Abs(wallRow.NetConcreteM3 - 2.604) > 1e-12) throw new Exception("Linked opening deduction/report failed.");
             if (!opening.Properties.TryGetValue("HostWallId", out var host) || host != "W1" || opening.DependsOn.Count != 1) throw new Exception("Host link failed.");
         }
     }

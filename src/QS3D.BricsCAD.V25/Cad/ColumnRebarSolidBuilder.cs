@@ -152,6 +152,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["GeneratedRebarDiameterMm"] = update.DiameterMm.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedRebarCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedRebarMode"] = "ColumnVerticalBars";
+                update.Element.ClearGeneratedRebarStale();
                 AuditTrail.ForProject(project).Record("geometry.rebar.column", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
             }
             if (pending.Count > 0)
