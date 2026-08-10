@@ -35,6 +35,13 @@ namespace QS3D.Core.SmokeTests
             var live = new HashSet<string>(new[] { "2B" }, StringComparer.OrdinalIgnoreCase);
             if (BomReleaseGuardService.Inspect(project, live).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
                 throw new Exception("Live generated Handle must satisfy the BOM release guard.");
+
+            element.Properties["GeneratedFuturePanelHandles"] = "3C;3D;3d";
+            var partialFuture = new HashSet<string>(new[] { "2B", "3C" }, StringComparer.OrdinalIgnoreCase);
+            Has(BomReleaseGuardService.Inspect(project, partialFuture), "BOM_GENERATED_HANDLE_MISSING");
+            var allFuture = new HashSet<string>(new[] { "2B", "3C", "3D" }, StringComparer.OrdinalIgnoreCase);
+            if (BomReleaseGuardService.Inspect(project, allFuture).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
+                throw new Exception("Future Generated*Handles owner slot must use the shared BOM liveness registry without a hard-coded family update.");
         }
 
         private static void Empty(IReadOnlyList<ModelHealthIssue> issues)

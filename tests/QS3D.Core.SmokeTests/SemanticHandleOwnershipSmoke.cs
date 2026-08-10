@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -17,6 +18,10 @@ namespace QS3D.Core.SmokeTests
             SelectedAmbiguityIsRejected();
             GeneratedMultiHandleResolvesOwner();
             FoundationMeshGeneratedHandleResolvesOwner();
+            FutureGeneratedOwnerSlotResolvesOwner();
+            ReferenceHandleIsNotGeneratedOwner();
+            OwnerCollectionDedupesAndIncludesOpeningCut();
+            AmbiguousGeneratedOwnerIsRejected();
         }
 
         private static void UnrelatedAmbiguityDoesNotBlockCleanSelection()
@@ -55,6 +60,60 @@ namespace QS3D.Core.SmokeTests
             var resolved = SemanticHandleOwnershipResolver.Resolve(project, new[] { "f2" });
             if (resolved.Count != 1 || resolved[0].Id != "FND")
                 throw new Exception("Generated foundation-mesh selection did not resolve its semantic owner.");
+        }
+
+        private static void FutureGeneratedOwnerSlotResolvesOwner()
+        {
+            var project = Project();
+            var future = new ProjectElement("FUTURE", ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
+            future.Properties["GeneratedFuturePanelHandles"] = "N1;N2";
+            project.Elements.Add(future);
+
+            var resolved = SemanticHandleOwnershipResolver.Resolve(project, new[] { "n2" });
+            if (resolved.Count != 1 || resolved[0].Id != "FUTURE")
+                throw new Exception("Future Generated*Handles owner slot was not resolved dynamically.");
+        }
+
+        private static void ReferenceHandleIsNotGeneratedOwner()
+        {
+            var project = Project();
+            var reference = new ProjectElement("REF", ElementCategory.Door, string.Empty, string.Empty, string.Empty);
+            reference.Properties["HostHandle"] = "HOST-1";
+            reference.Properties["BoundarySourceHandles"] = "BOUNDARY-1";
+            project.Elements.Add(reference);
+
+            if (GeneratedHandleOwnershipPolicy.TryFindOwner(project, "HOST-1", out _, out _))
+                throw new Exception("Reference/provenance HostHandle was incorrectly treated as generated ownership.");
+            if (SemanticHandleOwnershipResolver.Resolve(project, new[] { "HOST-1" }).Count != 0)
+                throw new Exception("Reference/provenance handle incorrectly resolved as generated owner.");
+        }
+
+        private static void OwnerCollectionDedupesAndIncludesOpeningCut()
+        {
+            var project = Project();
+            var element = new ProjectElement("OWN", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            element.Properties["GeneratedSolidHandle"] = "S1";
+            element.Properties["GeneratedFutureHandles"] = "S1;S2;s2";
+            element.Properties["PhysicalOpeningCutSolidHandle"] = "CUT1";
+            project.Elements.Add(element);
+
+            var handles = GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project);
+            if (handles.Count(x => string.Equals(x, "S1", StringComparison.OrdinalIgnoreCase)) != 1 ||
+                handles.Count(x => string.Equals(x, "S2", StringComparison.OrdinalIgnoreCase)) != 1 ||
+                handles.Count(x => string.Equals(x, "CUT1", StringComparison.OrdinalIgnoreCase)) != 1)
+                throw new Exception("Generated owner collection did not dedupe or include opening-cut ownership.");
+        }
+
+        private static void AmbiguousGeneratedOwnerIsRejected()
+        {
+            var project = Project();
+            var left = new ProjectElement("LEFT", ElementCategory.Slab, string.Empty, string.Empty, string.Empty);
+            left.Properties["GeneratedSlabMeshHandles"] = "DUP";
+            var right = new ProjectElement("RIGHT", ElementCategory.Foundation, string.Empty, string.Empty, string.Empty);
+            right.Properties["GeneratedFoundationMeshHandles"] = "dup";
+            project.Elements.Add(left);
+            project.Elements.Add(right);
+            Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "DUP", out _, out _));
         }
 
         private static ProjectState Project()
