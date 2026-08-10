@@ -99,6 +99,7 @@ namespace QS3D.Core.SmokeTests
             missingBottom.Properties[ProjectFloorService.BottomLevelIdKey] = "missing";
             var topWithoutBottom = NewElement(project, "bad-top");
             topWithoutBottom.Properties[ProjectFloorService.TopLevelIdKey] = "L2";
+            topWithoutBottom.Properties[ProjectFloorService.TopLevelOffsetKey] = "0.2";
             var badOffset = NewElement(project, "bad-offset");
             badOffset.Properties[ProjectFloorService.BottomLevelIdKey] = "L1";
             badOffset.Properties[ProjectFloorService.BottomLevelOffsetKey] = "NaN";
@@ -109,6 +110,7 @@ namespace QS3D.Core.SmokeTests
             var issues = new LevelReferenceHealthService().Inspect(project);
             True(issues.Any(x => x.Code == "BOTTOM_LEVEL_REFERENCE_INVALID" && x.ElementId == missingBottom.Id));
             True(issues.Any(x => x.Code == "TOP_LEVEL_REQUIRES_BOTTOM_LEVEL" && x.ElementId == topWithoutBottom.Id));
+            True(!issues.Any(x => x.Code == "TOP_LEVEL_OFFSET_WITHOUT_LEVEL" && x.ElementId == topWithoutBottom.Id));
             True(issues.Any(x => x.Code == "BOTTOM_LEVEL_OFFSET_INVALID" && x.ElementId == badOffset.Id));
             True(issues.Any(x => x.Code == "LEVEL_RANGE_INVALID" && x.ElementId == badRange.Id));
         }
