@@ -25,17 +25,21 @@ namespace QS3D.BricsCAD.V25
                 var tieHandles = Collect(project, "GeneratedTieRebarHandles");
                 var stirrupHandles = Collect(project, "GeneratedBeamStirrupHandles");
                 var slabMeshHandles = Collect(project, "GeneratedSlabMeshHandles");
+                var wallMeshHandles = Collect(project, "GeneratedWallMeshHandles");
                 var liveColumn = CadHandleService.GetLiveSolidHandles(document, columnHandles);
                 var liveShape = CadHandleService.GetLiveSolidHandles(document, shapeHandles);
                 var liveTie = CadHandleService.GetLiveSolidHandles(document, tieHandles);
                 var liveStirrup = CadHandleService.GetLiveSolidHandles(document, stirrupHandles);
                 var liveSlabMesh = CadHandleService.GetLiveSolidHandles(document, slabMeshHandles);
+                var liveWallMesh = CadHandleService.GetLiveSolidHandles(document, wallMeshHandles);
 
                 var issues = new List<ModelHealthIssue>();
                 issues.AddRange(new GeneratedRebarHealthService().InspectAll(project, liveColumn, liveShape));
                 issues.AddRange(new GeneratedTieRebarHealthService().Inspect(project, liveTie));
                 issues.AddRange(new GeneratedBeamStirrupHealthService().Inspect(project, liveStirrup));
                 issues.AddRange(new GeneratedSlabMeshHealthService().Inspect(project, liveSlabMesh));
+                issues.AddRange(new GeneratedWallMeshHealthService().Inspect(project, liveWallMesh));
+                issues.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
                 var summary = new HealthSummary(issues);
                 var message = "Rebar Health All: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
@@ -65,6 +69,7 @@ namespace QS3D.BricsCAD.V25
 
         private static IEnumerable<string> HandlesForIssue(ProjectElement element, string code)
         {
+            if (code.IndexOf("WALL_MESH", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedWallMeshHandles");
             if (code.IndexOf("SLAB_MESH", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedSlabMeshHandles");
             if (code.IndexOf("BEAM_STIRRUP", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedBeamStirrupHandles");
             if (code.IndexOf("TIE_REBAR", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedTieRebarHandles");
