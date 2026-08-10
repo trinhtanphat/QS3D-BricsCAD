@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             SourceHandlesAreCaseInsensitive();
             BlankSourceHandlesDoNotMaskOrphans();
+            BlankOnlySourceHandlesAreIgnored();
             GeneratedHandlesAreCaseInsensitive();
         }
 
@@ -41,6 +42,18 @@ namespace QS3D.Core.SmokeTests
             var issues = new ModelHealthService().Inspect(project, new HashSet<string>(StringComparer.Ordinal));
             if (!issues.Any(x => x.Code == "ORPHAN_HANDLE" && string.Equals(x.ElementId, element.Id, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("ModelHealthHandleNormalizationSmoke: blank source-handle noise must not suppress a real orphan.");
+        }
+
+        private static void BlankOnlySourceHandlesAreIgnored()
+        {
+            var project = new ProjectState("P-health-blank-only", "Blank-only source handle normalization");
+            var element = new ProjectElement("E4", ElementCategory.Room, string.Empty, string.Empty, string.Empty);
+            element.SourceHandles.Add("   ");
+            project.Elements.Add(element);
+
+            var issues = new ModelHealthService().Inspect(project, new HashSet<string>(StringComparer.Ordinal));
+            if (issues.Any(x => x.Code == "ORPHAN_HANDLE" && string.Equals(x.ElementId, element.Id, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("ModelHealthHandleNormalizationSmoke: blank-only source handles must not create a false orphan.");
         }
 
         private static void GeneratedHandlesAreCaseInsensitive()
