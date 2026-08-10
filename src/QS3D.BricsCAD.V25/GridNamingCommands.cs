@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
+using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -38,6 +39,17 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            IReadOnlyList<string> annotatedIds;
+            try
+            {
+                annotatedIds = CaptureAnnotatedGridIds(project, orderedIds);
+            }
+            catch (Exception ex)
+            {
+                ReportOperationFailure(document, "QS3DGRIDNUMBER không thể xác định annotation hiện hữu: " + ex.Message);
+                return;
+            }
+
             var rollback = ProjectStateSnapshot.Capture(project);
             IReadOnlyList<GridLabelAssignment> assignments;
             try
@@ -49,6 +61,14 @@ namespace QS3D.BricsCAD.V25
                     "grid.renumber",
                     project.ProjectId,
                     assignments.Count.ToString(CultureInfo.InvariantCulture) + " Grid • " + first + " → " + last);
+
+                // Preserve the user's annotation intent. Grids that already had bubble/text before
+                // renumber are rebuilt with the new label; unannotated Grids remain unannotated.
+                // Keep this as the final fallible operation in the semantic try block: Build owns a
+                // CAD transaction, so on failure that transaction aborts and the outer snapshot can
+                // safely restore the pre-renumber semantic state while the old annotation survives.
+                if (annotatedIds.Count > 0)
+                    GridAnnotationBuilder.Build(document, project, ResolveGridElements(project, annotatedIds));
             }
             catch (Exception operationError)
             {
@@ -65,6 +85,48 @@ namespace QS3D.BricsCAD.V25
             }
 
             FinalizeUi(document, assignments, options);
+        }
+
+        private static IReadOnlyList<string> CaptureAnnotatedGridIds(ProjectState project, IReadOnlyList<string> orderedIds)
+        {
+            var byId = BuildGridIndex(project);
+            var result = new List<string>();
+            foreach (var rawId in orderedIds)
+            {
+                var id = (rawId ?? string.Empty).Trim();
+                if (id.Length == 0 || !byId.TryGetValue(id, out var element))
+                    throw new InvalidOperationException("Không tìm thấy semantic Grid trong project: " + rawId + ".");
+                if (!element.Properties.TryGetValue(GridAnnotationBuilder.HandlesKey, out var handles) || string.IsNullOrWhiteSpace(handles))
+                    continue;
+                result.Add(element.Id);
+            }
+            return result.AsReadOnly();
+        }
+
+        private static IReadOnlyList<ProjectElement> ResolveGridElements(ProjectState project, IReadOnlyList<string> ids)
+        {
+            var byId = BuildGridIndex(project);
+            var result = new List<ProjectElement>(ids.Count);
+            foreach (var rawId in ids)
+            {
+                var id = (rawId ?? string.Empty).Trim();
+                if (id.Length == 0 || !byId.TryGetValue(id, out var element))
+                    throw new InvalidOperationException("Grid annotation target không còn tồn tại sau renumber: " + rawId + ".");
+                result.Add(element);
+            }
+            return result.AsReadOnly();
+        }
+
+        private static Dictionary<string, ProjectElement> BuildGridIndex(ProjectState project)
+        {
+            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null || element.Category != ElementCategory.Grid) continue;
+                if (!result.TryAdd(element.Id, element))
+                    throw new InvalidOperationException("Project chứa semantic Grid trùng Id: " + element.Id + ".");
+            }
+            return result;
         }
 
         private static IReadOnlyList<string>? AcquireOrderedGridIds(Document document, ProjectState project)
@@ -88,7 +150,7 @@ namespace QS3D.BricsCAD.V25
 
                 var handle = result.ObjectId.Handle.ToString();
                 var matches = project.Elements
-                    .Where(x => x.Category == ElementCategory.Grid && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
+                    .Where(x => x != null && x.Category == ElementCategory.Grid && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
                     .Take(2)
                     .ToList();
                 if (matches.Count == 0)
