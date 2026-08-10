@@ -41,6 +41,7 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 Add(element, "GeneratedRebarHandles", owners);
                 Add(element, "GeneratedShapeRebarHandles", owners);
+                Add(element, "GeneratedTieRebarHandles", owners);
                 Add(element, "GeneratedBeamStirrupHandles", owners);
             }
             return new OwnershipIndex(owners);
