@@ -25,8 +25,12 @@ if BUILDER.is_file():
         'rollback.Restore(project)',
         'GeneratedGeometryService.MarkGenerated(',
         'GeneratedGeometryService.RequireMatchingOwnership(',
-        'new Circle(',
+        'new Circle(center, normal, radius)',
         'new DBText',
+        'Normal = normal',
+        'annotationNormal = arc.Normal',
+        'Math.Abs(start.Z - end.Z) > GeometryTolerance',
+        'ValidateVector(annotationNormal, element.Id + "/arc normal")',
         'AuditTrail.ForProject(project).Record(',
         'project.Touch();',
         'transaction.Commit();',
@@ -47,6 +51,12 @@ if BUILDER.is_file():
         errors.append("Grid annotation Regen must be best-effort after CAD commit")
     if 'GeneratedSolidHandle' in text:
         errors.append("Grid annotation must not claim the host GeneratedSolidHandle slot")
+    for forbidden in (
+        'new Circle(center, Vector3d.ZAxis',
+        'Normal = Vector3d.ZAxis',
+    ):
+        if forbidden in text:
+            errors.append("Grid annotation must not force ARC/native text onto WCS-Z plane: " + forbidden)
 
 if COMMANDS.is_file():
     text = COMMANDS.read_text(encoding="utf-8")
@@ -111,6 +121,8 @@ if DOC.is_file():
         'GeneratedGridAnnotationHealthService',
         'ComprehensiveModelHealthService',
         'XData',
+        'ARC uses its native plane normal',
+        '3D-sloped LINE',
         'LOCAL_ONLY',
         'BricsCAD V25',
     ):
@@ -123,4 +135,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: native Grid annotation has explicit semantic labels, generated ownership, replacement guards, health integration and cross-layer rollback; runtime remains separately qualified.")
+print("PASS: native Grid annotation has explicit semantic labels, source-plane-aware geometry, generated ownership, replacement guards, health integration and cross-layer rollback; runtime remains separately qualified.")
