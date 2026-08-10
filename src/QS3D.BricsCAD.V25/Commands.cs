@@ -129,14 +129,15 @@ namespace QS3D.BricsCAD.V25
                 var captured = SemanticCaptureService.Capture(doc, ElementCategory.ArchitecturalWall);
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
                 var solids = Cad.WallSolidBuilder.BuildSelectedLineWalls(doc, project);
+                solids += Cad.PolylineWallSolidBuilder.BuildSelected(doc, project);
                 foreach (var wall in project.Elements.Where(x => x.Category == ElementCategory.ArchitecturalWall && x.Dirty != ElementDirtyFlags.None))
                 {
                     new WallRegenerator().Regenerate(project, wall);
                     wall.MarkClean(ElementDirtyFlags.All);
                 }
                 PaletteCoordinator.RefreshProject();
-                PaletteCoordinator.SetStatus("Tường KT: " + captured + " semantic • " + solids + " solid 3D từ LINE.");
-                doc.Editor.WriteMessage("\nQS3D Tường KT: captured " + captured + ", created " + solids + " line-wall solid(s).");
+                PaletteCoordinator.SetStatus("Tường KT: " + captured + " semantic • " + solids + " solid 3D từ LINE/open POLYLINE.");
+                doc.Editor.WriteMessage("\nQS3D Tường KT: captured " + captured + ", created " + solids + " wall solid(s) from LINE/open POLYLINE.");
             });
         }
 
