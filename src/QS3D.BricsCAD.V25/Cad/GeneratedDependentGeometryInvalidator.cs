@@ -28,6 +28,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 foreach (var key in CoreOwnershipPolicy.RebarHandleKeys)
                     RemoveByPrefix(element, MetadataPrefixForHandleKey(key));
                 RemoveByPrefix(element, "GeneratedCurtainFrame");
+                RemoveByPrefix(element, "GeneratedGridAnnotation");
                 element.ClearGeneratedGeometryStale();
             }
         }
@@ -79,6 +80,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     foreach (var key in CoreOwnershipPolicy.RebarHandleKeys)
                         EraseRebarSet(document, transaction, element, key, rebarOwnership);
                 if (curtainOwnership != null) EraseCurtainFrames(document, transaction, element, curtainOwnership);
+                EraseGridAnnotations(document, transaction, project, element);
             }
             return new GeneratedGeometryInvalidation(targets);
         }
@@ -110,6 +112,32 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 ownership.EnsureOwned(handle, element);
                 EraseSolid(document, transaction, handle, "GeneratedCurtainFrameHandles");
+            }
+        }
+
+        private static void EraseGridAnnotations(Document document, Transaction transaction, ProjectState project, ProjectElement element)
+        {
+            if (!element.Properties.TryGetValue(GridAnnotationBuilder.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            if (element.Category != ElementCategory.Grid)
+                throw new InvalidOperationException("Generated Grid annotation metadata is attached to non-Grid element " + element.Id + ". Refusing destructive invalidation.");
+
+            foreach (var handle in SplitHandles(raw))
+            {
+                if (!CoreOwnershipPolicy.TryFindOwner(project, handle, out var owner, out var propertyKey) || owner == null)
+                    throw new InvalidOperationException("Generated Grid annotation handle " + handle + " has no semantic owner. Refusing destructive invalidation.");
+                if (!string.Equals(owner.Id, element.Id, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(CoreOwnershipPolicy.CanonicalOwnerSlot(propertyKey), CoreOwnershipPolicy.CanonicalOwnerSlot(GridAnnotationBuilder.HandlesKey), StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Generated Grid annotation handle " + handle + " is owned by " + owner.Id + "/" + propertyKey + ", not " + element.Id + "/" + GridAnnotationBuilder.HandlesKey + ". Refusing destructive invalidation.");
+
+                var ids = CadHandleService.Resolve(document, new[] { handle });
+                if (ids.Count == 0) continue;
+                if (ids.Count > 1) throw new InvalidOperationException("Generated Grid annotation handle " + handle + " resolves to multiple live CAD objects.");
+                var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
+                if (entity == null || entity.IsErased) continue;
+                if (!(entity is Line) && !(entity is Circle) && !(entity is DBText))
+                    throw new InvalidOperationException("Generated Grid annotation handle " + handle + " resolves to unsupported entity type " + entity.GetType().Name + ". Refusing destructive invalidation.");
+                GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "erase stale Grid annotation " + handle);
+                entity.Erase();
             }
         }
 
