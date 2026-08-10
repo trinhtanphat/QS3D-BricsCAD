@@ -1,8 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Audit;
@@ -48,35 +47,59 @@ namespace QS3D.BricsCAD.V25
                     var audit = AuditTrail.ForProject(project);
                     var created = 0;
                     var updated = 0;
-                    foreach (var boundary in boundaries)
+                    var claimedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var currentIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var signatures = boundaries.Select(x => AutomaticRoomLifecycleService.NormalizeSourceSignature(x.SourceIds)).ToArray();
+                    var signatureCounts = signatures.GroupBy(x => x, StringComparer.Ordinal).ToDictionary(x => x.Key, x => x.Count(), StringComparer.Ordinal);
+
+                    for (var index = 0; index < boundaries.Count; index++)
                     {
-                        var id = "ROOMAUTO-" + StableToken(boundary.Key);
-                        var element = project.FindElement(id);
+                        var boundary = boundaries[index];
+                        var signature = signatures[index];
+                        var disambiguate = signature.Length == 0 || signatureCounts[signature] > 1;
+                        var stableId = AutomaticRoomLifecycleService.BuildStableElementId(signature, boundary.Key, disambiguate);
+                        var element = project.FindElement(stableId);
+                        if (element == null && !disambiguate && signature.Length > 0)
+                        {
+                            element = project.Elements.FirstOrDefault(x =>
+                                AutomaticRoomLifecycleService.IsManaged(x) &&
+                                !claimedIds.Contains(x.Id) &&
+                                string.Equals(AutomaticRoomLifecycleService.GetSourceSignature(x), signature, StringComparison.Ordinal));
+                        }
+
                         var isNew = element == null;
                         if (element == null)
                         {
-                            element = new ProjectElement(id, ElementCategory.Room, family.Id, project.ActiveFloorId, project.ActiveZoneId);
+                            element = new ProjectElement(stableId, ElementCategory.Room, family.Id, project.ActiveFloorId, project.ActiveZoneId);
                             project.Elements.Add(element);
                             created++;
                         }
                         else
                         {
-                            if (element.Category != ElementCategory.Room) throw new InvalidOperationException("Boundary id collision with non-room semantic element: " + id);
+                            if (element.Category != ElementCategory.Room) throw new InvalidOperationException("Boundary id collision with non-room semantic element: " + stableId);
                             updated++;
                         }
+                        if (!claimedIds.Add(element.Id)) throw new InvalidOperationException("Automatic room identity collision: " + element.Id);
+                        currentIds.Add(element.Id);
 
                         element.Category = ElementCategory.Room;
                         element.FamilyId = family.Id;
                         element.FloorId = project.ActiveFloorId;
                         element.ZoneId = project.ActiveZoneId;
                         element.DrawingFingerprint = project.DrawingFingerprint;
+                        element.SourceHandles.Clear();
+                        foreach (var sourceId in boundary.SourceIds.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                            element.SourceHandles.Add(sourceId.Trim());
                         element.Properties["BoundaryMode"] = "AutoNetwork";
+                        element.Properties["AutoBoundaryManaged"] = "true";
                         element.Properties["BoundaryKey"] = boundary.Key;
-                        element.Properties["BoundarySourceHandles"] = string.Join(";", boundary.SourceIds);
+                        element.Properties["BoundarySourceHandles"] = string.Join(";", element.SourceHandles);
+                        element.Properties["BoundarySourceSignature"] = signature;
                         element.Properties["BoundaryVertexCount"] = boundary.Vertices.Count.ToString(CultureInfo.InvariantCulture);
                         element.Properties["BoundaryArcSagittaM"] = arcSagitta.ToString("R", CultureInfo.InvariantCulture);
                         element.Properties["AreaM2"] = boundary.Area.ToString("R", CultureInfo.InvariantCulture);
                         element.Properties["PerimeterM"] = boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties.Remove("AutoBoundaryStale");
                         foreach (var property in family.Properties)
                             if (!element.Properties.ContainsKey(property.Key)) element.Properties[property.Key] = property.Value;
                         element.MarkDirty(ElementDirtyFlags.All);
@@ -87,10 +110,15 @@ namespace QS3D.BricsCAD.V25
                             ";arcSagitta=" + arcSagitta.ToString("R", CultureInfo.InvariantCulture));
                     }
 
+                    var selectedSources = segments.Select(x => x.SourceId).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                    var lifecycle = AutomaticRoomLifecycleService.ReconcileStale(project, currentIds, selectedSources);
+                    foreach (var removedId in lifecycle.RemovedRoomIds) audit.Record("RoomBoundaryRemove", removedId, "Boundary no longer exists in selected network.");
+                    foreach (var staleId in lifecycle.RetainedStaleRoomIds) audit.Record("RoomBoundaryStale", staleId, "Retained because a non-generated dependent still references the room.");
+
                     var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                     project.Touch();
                     PaletteCoordinator.RefreshProject();
-                    var message = "Room Auto: " + boundaries.Count + " face • mới " + created + " • cập nhật " + updated + " • regenerate " + regenerated + ".";
+                    var message = "Room Auto: " + boundaries.Count + " face • mới " + created + " • cập nhật " + updated + " • xóa cũ " + lifecycle.RemovedRoomIds.Count + " • stale giữ " + lifecycle.RetainedStaleRoomIds.Count + " • regenerate " + regenerated + ".";
                     PaletteCoordinator.SetStatus(message);
                     document.Editor.WriteMessage("\nQS3D " + message);
                 }
@@ -136,15 +164,6 @@ namespace QS3D.BricsCAD.V25
             if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value <= minimumExclusive)
                 throw new InvalidOperationException(key + " không hợp lệ: " + raw);
             return value;
-        }
-
-        private static string StableToken(string value)
-        {
-            using (var sha = SHA256.Create())
-            {
-                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty));
-                return BitConverter.ToString(hash, 0, 8).Replace("-", string.Empty);
-            }
         }
     }
 }
