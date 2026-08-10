@@ -118,6 +118,102 @@ function Assert-PackageIntegrity {
     return $commands
 }
 
+function Get-RegistryValueSnapshot {
+    param([string]$Path, [string]$Name)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return [pscustomobject]@{ Exists = $false; Name = $Name; Value = $null; Kind = $null }
+    }
+    $key = Get-Item -LiteralPath $Path
+    try {
+        if (-not ($key.GetValueNames() -contains $Name)) {
+            return [pscustomobject]@{ Exists = $false; Name = $Name; Value = $null; Kind = $null }
+        }
+        return [pscustomobject]@{
+            Exists = $true
+            Name = $Name
+            Value = $key.GetValue($Name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+            Kind = $key.GetValueKind($Name).ToString()
+        }
+    }
+    finally { $key.Close() }
+}
+
+function Get-RegistryValuesSnapshot {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return @() }
+    $key = Get-Item -LiteralPath $Path
+    try {
+        $values = @()
+        foreach ($name in $key.GetValueNames()) {
+            $values += [pscustomobject]@{
+                Name = $name
+                Value = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                Kind = $key.GetValueKind($name).ToString()
+            }
+        }
+        return $values
+    }
+    finally { $key.Close() }
+}
+
+function Get-DemandLoadSnapshot {
+    param([string]$AppKey)
+    $commandsKey = Join-Path $AppKey 'Commands'
+    return [pscustomobject]@{
+        AppKey = $AppKey
+        Exists = (Test-Path -LiteralPath $AppKey)
+        Loader = Get-RegistryValueSnapshot -Path $AppKey -Name 'Loader'
+        LoadCtrls = Get-RegistryValueSnapshot -Path $AppKey -Name 'LoadCtrls'
+        Description = Get-RegistryValueSnapshot -Path $AppKey -Name 'Description'
+        CommandsExists = (Test-Path -LiteralPath $commandsKey)
+        Commands = @(Get-RegistryValuesSnapshot -Path $commandsKey)
+    }
+}
+
+function Set-RegistryValueSnapshot {
+    param([string]$Path, $Snapshot)
+    if ($Snapshot.Exists) {
+        New-Item -Path $Path -Force | Out-Null
+        $key = Get-Item -LiteralPath $Path
+        try {
+            $kind = [Microsoft.Win32.RegistryValueKind][Enum]::Parse([Microsoft.Win32.RegistryValueKind], [string]$Snapshot.Kind)
+            $key.SetValue([string]$Snapshot.Name, $Snapshot.Value, $kind)
+        }
+        finally { $key.Close() }
+    }
+    elseif (Test-Path -LiteralPath $Path) {
+        Remove-ItemProperty -LiteralPath $Path -Name ([string]$Snapshot.Name) -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Restore-DemandLoadSnapshot {
+    param($Snapshot)
+    $appKey = [string]$Snapshot.AppKey
+    if (-not $Snapshot.Exists) {
+        Remove-Item -LiteralPath $appKey -Recurse -Force -ErrorAction SilentlyContinue
+        return
+    }
+
+    New-Item -Path $appKey -Force | Out-Null
+    Set-RegistryValueSnapshot -Path $appKey -Snapshot $Snapshot.Loader
+    Set-RegistryValueSnapshot -Path $appKey -Snapshot $Snapshot.LoadCtrls
+    Set-RegistryValueSnapshot -Path $appKey -Snapshot $Snapshot.Description
+
+    $commandsKey = Join-Path $appKey 'Commands'
+    Remove-Item -LiteralPath $commandsKey -Recurse -Force -ErrorAction SilentlyContinue
+    if ($Snapshot.CommandsExists) {
+        New-Item -Path $commandsKey -Force | Out-Null
+        $key = Get-Item -LiteralPath $commandsKey
+        try {
+            foreach ($value in @($Snapshot.Commands)) {
+                $kind = [Microsoft.Win32.RegistryValueKind][Enum]::Parse([Microsoft.Win32.RegistryValueKind], [string]$value.Kind)
+                $key.SetValue([string]$value.Name, $value.Value, $kind)
+            }
+        }
+        finally { $key.Close() }
+    }
+}
+
 if (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {
     throw 'Close all BricsCAD processes before installing or upgrading QS3D.'
 }
@@ -132,11 +228,13 @@ foreach ($target in $targets) {
     }
 }
 
+$registrySnapshots = @($targets | ForEach-Object { Get-DemandLoadSnapshot -AppKey $_.AppKey })
 $installFull = [IO.Path]::GetFullPath($InstallDirectory)
 $parent = Split-Path -Parent $installFull
 if ([string]::IsNullOrWhiteSpace($parent)) { throw 'InstallDirectory must have a parent directory.' }
 $stage = Join-Path $parent ('.qs3d-stage-' + [Guid]::NewGuid().ToString('N'))
 $backup = $null
+$payloadCommitted = $false
 $payload = @(
     'QS3D.BricsCAD.V25.dll',
     'QS3D.Core.dll',
@@ -164,6 +262,7 @@ try {
             Move-Item -LiteralPath $installFull -Destination $backup
         }
         Move-Item -LiteralPath $stage -Destination $installFull
+        $payloadCommitted = $true
     }
 
     $loader = Join-Path $installFull 'QS3D.BricsCAD.V25.dll'
@@ -190,9 +289,28 @@ try {
     Write-Host 'Security settings were not weakened. Production -RequireSigned verifies both DLLs and all packaged PowerShell executable payloads.'
 }
 catch {
-    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
-    if ($backup -and (Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $installFull)) {
-        Move-Item -LiteralPath $backup -Destination $installFull -ErrorAction SilentlyContinue
+    $originalError = $_
+    $rollbackFailures = @()
+
+    for ($index = $registrySnapshots.Count - 1; $index -ge 0; $index--) {
+        try { Restore-DemandLoadSnapshot -Snapshot $registrySnapshots[$index] }
+        catch { $rollbackFailures += ("registry " + $registrySnapshots[$index].AppKey + ": " + $_.Exception.Message) }
     }
-    throw
+
+    try {
+        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+        if ($backup -and (Test-Path -LiteralPath $backup)) {
+            if (Test-Path -LiteralPath $installFull) { Remove-Item -LiteralPath $installFull -Recurse -Force }
+            Move-Item -LiteralPath $backup -Destination $installFull
+        }
+        elseif ($payloadCommitted -and (Test-Path -LiteralPath $installFull)) {
+            Remove-Item -LiteralPath $installFull -Recurse -Force
+        }
+    }
+    catch { $rollbackFailures += ("payload: " + $_.Exception.Message) }
+
+    if ($rollbackFailures.Count -gt 0) {
+        Write-Warning ("QS3D installer rollback encountered error(s): " + ($rollbackFailures -join ' | '))
+    }
+    throw $originalError
 }
