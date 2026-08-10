@@ -53,6 +53,19 @@ function Normalize-Thumbprint {
     return $Thumbprint.Replace(' ', '').ToUpperInvariant()
 }
 
+function Assert-AuthenticodeSigner {
+    param([string]$Path, [string]$ExpectedSigner, [string]$Label)
+    $signature = Get-AuthenticodeSignature -FilePath $Path
+    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+        throw "$Label signature is not valid: $($signature.Status)"
+    }
+    if (-not $signature.SignerCertificate) { throw "$Label signature has no signer certificate." }
+    if ($ExpectedSigner.Length -gt 0) {
+        $actualSigner = Normalize-Thumbprint $signature.SignerCertificate.Thumbprint
+        if ($actualSigner -ne $ExpectedSigner) { throw "$Label signer mismatch. Expected $ExpectedSigner, got $actualSigner." }
+    }
+}
+
 function Assert-PackageIntegrity {
     param([string]$Directory, [switch]$SignedRequired, [string]$SignerThumbprint)
 
@@ -82,20 +95,19 @@ function Assert-PackageIntegrity {
     }
     if ($verified -eq 0) { throw 'SHA256SUMS.txt contains no payload entries.' }
 
-    $dll = Join-Path $Directory 'QS3D.BricsCAD.V25.dll'
-    if (-not (Test-Path -LiteralPath $dll -PathType Leaf)) { throw 'QS3D.BricsCAD.V25.dll is missing.' }
     $expectedSigner = Normalize-Thumbprint $SignerThumbprint
-    if ($SignedRequired -or $expectedSigner.Length -gt 0) {
-        $signature = Get-AuthenticodeSignature -FilePath $dll
-        if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-            throw "QS3D plugin signature is not valid: $($signature.Status)"
-        }
-        if (-not $signature.SignerCertificate) { throw 'QS3D plugin signature has no signer certificate.' }
-        if ($expectedSigner.Length -gt 0) {
-            $actualSigner = Normalize-Thumbprint $signature.SignerCertificate.Thumbprint
-            if ($actualSigner -ne $expectedSigner) {
-                throw "QS3D plugin signer mismatch. Expected $expectedSigner, got $actualSigner."
-            }
+    $signedPayloadNames = @(
+        'QS3D.BricsCAD.V25.dll',
+        'QS3D.Core.dll',
+        'install-v25-autoload.ps1',
+        'uninstall-v25-autoload.ps1',
+        'update-v25.ps1'
+    )
+    foreach ($name in $signedPayloadNames) {
+        $path = Join-Path $Directory $name
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required executable payload is missing: $name" }
+        if ($SignedRequired -or $expectedSigner.Length -gt 0) {
+            Assert-AuthenticodeSigner -Path $path -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name)
         }
     }
 
@@ -175,7 +187,7 @@ try {
     Write-Host "QS3D installed: $installFull"
     Write-Host "DemandLoad mode: $LoadMode"
     Write-Host "Registered targets: $($targets.Count)"
-    Write-Host 'Security settings were not weakened. If company policy blocks an unsigned DLL, use a signed build or an administrator-approved trusted location.'
+    Write-Host 'Security settings were not weakened. Production -RequireSigned verifies both DLLs and all packaged PowerShell executable payloads.'
 }
 catch {
     if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }

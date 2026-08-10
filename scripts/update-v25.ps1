@@ -20,11 +20,26 @@ param(
     [ValidateRange(1, 512)]
     [int]$MaxPackageSizeMB = 256,
 
+    [ValidateRange(1, 2048)]
+    [int]$MaxExpandedPackageSizeMB = 512,
+
+    [ValidateRange(1, 20000)]
+    [int]$MaxArchiveEntries = 4096,
+
     [switch]$AllowSameVersion
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+$SignedPayloadNames = @(
+    'QS3D.BricsCAD.V25.dll',
+    'QS3D.Core.dll',
+    'install-v25-autoload.ps1',
+    'uninstall-v25-autoload.ps1',
+    'update-v25.ps1'
+)
 
 function Normalize-Thumbprint {
     param([string]$Thumbprint)
@@ -62,24 +77,71 @@ function Read-InstalledVersion {
     }
 }
 
+function Assert-AuthenticodeSigner {
+    param([string]$Path, [string]$ExpectedSigner, [string]$Label)
+    $signature = Get-AuthenticodeSignature -FilePath $Path
+    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+        throw "$Label signature is not valid: $($signature.Status)"
+    }
+    if (-not $signature.SignerCertificate) { throw "$Label signature has no signer certificate." }
+    $actualSigner = Normalize-Thumbprint $signature.SignerCertificate.Thumbprint
+    if ($actualSigner -ne $ExpectedSigner) {
+        throw "$Label signer mismatch. Expected $ExpectedSigner, got $actualSigner."
+    }
+}
+
+function Assert-SafeArchive {
+    param(
+        [string]$ZipPath,
+        [string]$DestinationRoot,
+        [int64]$MaxExpandedBytes,
+        [int]$MaxEntries
+    )
+
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        $root = [IO.Path]::GetFullPath($DestinationRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        [int64]$expandedBytes = 0
+        $entryCount = 0
+        foreach ($entry in $archive.Entries) {
+            $entryCount++
+            if ($entryCount -gt $MaxEntries) { throw "Package archive exceeds the allowed entry count ($MaxEntries)." }
+            $name = [string]$entry.FullName
+            if ([string]::IsNullOrWhiteSpace($name) -or $name.IndexOf([char]0) -ge 0 -or [IO.Path]::IsPathRooted($name) -or $name.Contains('\') -or $name.Contains(':')) {
+                throw "Unsafe package archive entry: $name"
+            }
+            $relative = $name.TrimEnd('/')
+            if ([string]::IsNullOrWhiteSpace($relative)) { throw "Unsafe package archive entry: $name" }
+            $segments = @($relative.Split('/'))
+            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+                throw "Unsafe package archive entry: $name"
+            }
+            $target = [IO.Path]::GetFullPath((Join-Path $DestinationRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))))
+            if (-not $target.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe package archive entry: $name" }
+            $entryLength = [int64]$entry.Length
+            if ($entryLength -lt 0 -or $expandedBytes -gt ($MaxExpandedBytes - $entryLength)) {
+                throw "Package expanded size exceeds the allowed maximum ($MaxExpandedBytes bytes)."
+            }
+            $expandedBytes += $entryLength
+        }
+        if ($entryCount -eq 0) { throw 'Downloaded package archive contains no entries.' }
+    }
+    finally {
+        $archive.Dispose()
+    }
+}
+
 function Assert-PackageRoot {
     param([string]$Directory, [string]$ExpectedSigner)
 
-    foreach ($name in @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll', 'COMMANDS.txt', 'PACKAGE-METADATA.json', 'SHA256SUMS.txt', 'install-v25-autoload.ps1')) {
+    foreach ($name in @('COMMANDS.txt', 'PACKAGE-METADATA.json', 'SHA256SUMS.txt') + $SignedPayloadNames) {
         if (-not (Test-Path -LiteralPath (Join-Path $Directory $name) -PathType Leaf)) {
             throw "Downloaded package is missing required payload: $name"
         }
     }
 
-    $dll = Join-Path $Directory 'QS3D.BricsCAD.V25.dll'
-    $signature = Get-AuthenticodeSignature -FilePath $dll
-    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-        throw "Downloaded QS3D plugin signature is not valid: $($signature.Status)"
-    }
-    if (-not $signature.SignerCertificate) { throw 'Downloaded QS3D plugin signature has no signer certificate.' }
-    $actualSigner = Normalize-Thumbprint $signature.SignerCertificate.Thumbprint
-    if ($actualSigner -ne $ExpectedSigner) {
-        throw "Downloaded QS3D plugin signer mismatch. Expected $ExpectedSigner, got $actualSigner."
+    foreach ($name in $SignedPayloadNames) {
+        Assert-AuthenticodeSigner -Path (Join-Path $Directory $name) -ExpectedSigner $ExpectedSigner -Label ("Downloaded QS3D executable payload " + $name)
     }
 
     $hashManifest = Join-Path $Directory 'SHA256SUMS.txt'
@@ -163,6 +225,8 @@ try {
     $actualZipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()
     if ($actualZipHash -ne $expectedZipHash) { throw 'Downloaded package SHA-256 does not match the update manifest.' }
 
+    $maxExpandedBytes = [int64]$MaxExpandedPackageSizeMB * 1MB
+    Assert-SafeArchive -ZipPath $zipPath -DestinationRoot $extractRoot -MaxExpandedBytes $maxExpandedBytes -MaxEntries $MaxArchiveEntries
     New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
     Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
     Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner
