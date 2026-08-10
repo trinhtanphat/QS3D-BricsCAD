@@ -76,7 +76,16 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 EnsureActive("lưu material");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
-                var id = string.IsNullOrWhiteSpace(_editingId) ? "mat-" + Guid.NewGuid().ToString("N") : _editingId;
+                var editingExisting = !string.IsNullOrWhiteSpace(_editingId);
+                if (editingExisting)
+                {
+                    var current = ProjectMaterialCatalog.GetCustom(project)
+                        .FirstOrDefault(x => string.Equals(x.Id, _editingId, StringComparison.OrdinalIgnoreCase));
+                    if (current == null)
+                        throw new InvalidOperationException("Material đang chỉnh sửa không còn tồn tại trong project hiện tại. Hãy Refresh rồi chọn lại material; Save không tự tạo lại row stale.");
+                }
+
+                var id = editingExisting ? _editingId : "mat-" + Guid.NewGuid().ToString("N");
                 var rollback = ProjectStateSnapshot.Capture(project);
                 ProjectMaterial material;
                 try
@@ -101,12 +110,16 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnDeleteClick(object sender, RoutedEventArgs e)
         {
-            if (!(MaterialList.SelectedItem is ProjectMaterial material)) return;
+            if (!(MaterialList.SelectedItem is ProjectMaterial selectedMaterial)) return;
             try
             {
                 EnsureActive("xóa material");
-                if (material.IsBuiltIn) throw new InvalidOperationException("Built-in material không thể xóa.");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var material = ProjectMaterialCatalog.GetAll(project)
+                    .FirstOrDefault(x => string.Equals(x.Id, selectedMaterial.Id, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException("Material đã thay đổi hoặc bị xóa khỏi project hiện tại. Hãy Refresh và chọn lại material.");
+                if (material.IsBuiltIn) throw new InvalidOperationException("Built-in material không thể xóa.");
+
                 var rollback = ProjectStateSnapshot.Capture(project);
                 var deleted = false;
                 try
