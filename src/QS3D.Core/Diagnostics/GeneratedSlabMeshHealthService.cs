@@ -10,14 +10,18 @@ namespace QS3D.Core.Diagnostics
     {
         private const string HandlesKey = "GeneratedSlabMeshHandles";
         private const string CountKey = "GeneratedSlabMeshCount";
+        private const string FootprintModeKey = "GeneratedSlabMeshFootprintMode";
+        private const string RectangleFootprintMode = "RectangleLocalXY";
+        private const string PolygonFootprintMode = "PolygonGlobalXY";
 
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveSolidHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = BuildOwnershipIndex(project);
+            var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var validCount = 0;
@@ -36,8 +40,8 @@ namespace QS3D.Core.Diagnostics
                     }
                     validCount++;
                     var expectedOwner = element.Id + "/" + HandlesKey;
-                    if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expectedOwner, StringComparison.OrdinalIgnoreCase))
-                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated slab mesh solid xung đột owner/project handle khác: " + owner, element.Id));
+                    if (ownership.IsConflicted(handle, expectedOwner))
+                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated slab mesh solid xung đột owner/project handle khác: " + ownership.Describe(handle), element.Id));
                     if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated slab mesh handle không được nằm trong SourceHandles.", element.Id));
                     if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
@@ -63,13 +67,30 @@ namespace QS3D.Core.Diagnostics
                 if (!element.Properties.TryGetValue("GeneratedSlabMeshMode", out var mode) || !string.Equals(mode, "SlabMeshXY", StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("SLAB_MESH_MODE_INVALID", HealthSeverity.Warning, "GeneratedSlabMeshMode thiếu hoặc không hợp lệ.", element.Id));
 
+                // Slab meshes generated before footprint-mode metadata existed were rectangle-only,
+                // so a missing key remains a valid legacy RectangleLocalXY state. Once present, the
+                // metadata must stay inside the two reviewed coordinate-system contracts.
+                if (element.Properties.TryGetValue(FootprintModeKey, out var footprintMode))
+                {
+                    var normalizedFootprintMode = (footprintMode ?? string.Empty).Trim();
+                    if (!(string.Equals(normalizedFootprintMode, RectangleFootprintMode, StringComparison.OrdinalIgnoreCase) ||
+                          string.Equals(normalizedFootprintMode, PolygonFootprintMode, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "SLAB_MESH_FOOTPRINT_MODE_INVALID",
+                            HealthSeverity.Error,
+                            FootprintModeKey + " phải là " + RectangleFootprintMode + " hoặc " + PolygonFootprintMode + "; missing key chỉ được chấp nhận như metadata rectangle legacy.",
+                            element.Id));
+                    }
+                }
+
                 if (element.Category != ElementCategory.Slab)
                     issues.Add(new ModelHealthIssue("SLAB_MESH_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated slab mesh metadata chỉ hợp lệ trên Slab element.", element.Id));
 
                 if (element.IsGeneratedSlabMeshStale())
                     issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_STALE", HealthSeverity.Warning, "Generated slab mesh snapshot không còn khớp semantic/source hiện tại; rebuild slab mesh trước khi phát hành bản vẽ.", element.Id));
             }
-            return issues;
+            return issues.AsReadOnly();
         }
 
         private static void ValidatePositive(ProjectElement element, string key, string code, List<ModelHealthIssue> issues)
@@ -88,33 +109,59 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " thiếu hoặc không hợp lệ.", element.Id));
         }
 
-        private static Dictionary<string, string> BuildOwnershipIndex(ProjectState project)
+        private sealed class OwnershipIndex
         {
-            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<string, string> Owners { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            public HashSet<string> Conflicts { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            public bool IsConflicted(string handle, string expectedOwner)
+            {
+                if (Conflicts.Contains(handle)) return true;
+                return Owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expectedOwner, StringComparison.OrdinalIgnoreCase);
+            }
+
+            public string Describe(string handle)
+            {
+                if (Conflicts.Contains(handle)) return "multiple owners";
+                return Owners.TryGetValue(handle, out var owner) ? owner : "unknown owner";
+            }
+        }
+
+        private static OwnershipIndex BuildOwnershipIndex(ProjectState project)
+        {
+            var index = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
-                foreach (var handle in element.SourceHandles) Reserve(owners, handle, element.Id + "/SourceHandles");
+                if (element == null) continue;
+                foreach (var handle in element.SourceHandles)
+                    Reserve(index, handle, element.Id + "/SourceHandles");
                 foreach (var property in element.Properties)
                 {
                     if (!GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)) continue;
-                    ReserveProperty(owners, element, property.Key);
+                    ReserveProperty(index, element, property.Key, property.Value);
                 }
             }
-            return owners;
+            return index;
         }
 
-        private static void ReserveProperty(Dictionary<string, string> owners, ProjectElement element, string key)
+        private static void ReserveProperty(OwnershipIndex index, ProjectElement element, string key, string raw)
         {
-            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            if (string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
-                Reserve(owners, handle, element.Id + "/" + key);
+                Reserve(index, handle, element.Id + "/" + key);
         }
 
-        private static void Reserve(Dictionary<string, string> owners, string? handle, string token)
+        private static void Reserve(OwnershipIndex index, string? handle, string token)
         {
             var normalized = (handle ?? string.Empty).Trim();
-            if (normalized.Length == 0 || owners.ContainsKey(normalized)) return;
-            owners[normalized] = token;
+            if (normalized.Length == 0) return;
+            if (!index.Owners.TryGetValue(normalized, out var existing))
+            {
+                index.Owners[normalized] = token;
+                return;
+            }
+            if (!string.Equals(existing, token, StringComparison.OrdinalIgnoreCase))
+                index.Conflicts.Add(normalized);
         }
     }
 }
