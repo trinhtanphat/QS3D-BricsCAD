@@ -26,6 +26,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Manual-only CI policy gate
+        run: python scripts/preflight-ci-manual-only.py
       - name: Generic source guard
         run: python scripts/preflight.py
       - name: All discovered feature source guards
@@ -70,7 +72,7 @@ jobs:
         if: ${{ inputs.run_runtime }}
         shell: powershell
         run: |
-          $plugin = (Resolve-Path "src\QS3D.BricsCAD.V25\bin\Release\net48\QS3D.BricsCAD.V25.dll").Path
+          $plugin = (Resolve-Path "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll").Path
           & .\scripts\test-bricscad-v25-runtime.ps1 `
             -BricsCadDir $env:BRICSCAD_V25_DIR `
             -PluginDll $plugin `
@@ -80,8 +82,8 @@ jobs:
         with:
           name: QS3D-BricsCAD-V25
           path: |
-            src/QS3D.BricsCAD.V25/bin/Release/net48/QS3D.BricsCAD.V25.dll
-            src/QS3D.BricsCAD.V25/bin/Release/net48/QS3D.Core.dll
+            src/QS3D.BricsCAD.V25/bin/x64/Release/net48/QS3D.BricsCAD.V25.dll
+            src/QS3D.BricsCAD.V25/bin/x64/Release/net48/QS3D.Core.dll
             dist/QS3D-BricsCAD-V25.zip
       - name: Upload V25 runtime evidence
         if: ${{ always() && inputs.run_runtime }}
