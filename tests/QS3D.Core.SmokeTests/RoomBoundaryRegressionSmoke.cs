@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             EndpointToleranceClosesGap();
             DanglingBridgeIsIgnored();
             LongDanglingChainIsIgnored();
+            SparseBroadPhasePreservesRoom();
             DuplicateSegmentsKeepSourceEvidence();
             BulgeSemicircleTessellation();
             BulgeDirectionMirrors();
@@ -81,6 +82,25 @@ namespace QS3D.Core.SmokeTests
             Equal(1, boundaries.Count);
             Near(12d, boundaries[0].Area);
             Near(14d, boundaries[0].Perimeter);
+        }
+
+        private static void SparseBroadPhasePreservesRoom()
+        {
+            var segments = new List<BoundarySegment>
+            {
+                S(0, 0, 4, 0, "B"), S(4, 0, 4, 3, "R"), S(4, 3, 0, 3, "T"), S(0, 3, 0, 0, "L")
+            };
+            for (var index = 0; index < 512; index++)
+            {
+                var x = 1000d + index * 10d;
+                segments.Add(S(x, 1000d, x + 1d, 1000d, "SPARSE-" + index));
+            }
+
+            var boundaries = new RoomBoundaryEngine().Discover(segments);
+            Equal(1, boundaries.Count);
+            Near(12d, boundaries[0].Area);
+            Near(14d, boundaries[0].Perimeter);
+            Equal(4, boundaries[0].SourceIds.Count);
         }
 
         private static void DuplicateSegmentsKeepSourceEvidence()
