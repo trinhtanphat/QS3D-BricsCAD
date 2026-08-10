@@ -17,6 +17,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                 var key = item.EntityType + "\u001f" + item.Layer;
                 if (!grouped.TryGetValue(key, out var row)) { row = new QuantityReportRow { Floor = "Selection", Category = item.EntityType, FamilyName = item.Layer }; grouped.Add(key, row); order.Add(key); }
                 row.Count++;
+                if (!row.SourceHandles.Contains(item.Handle)) row.SourceHandles.Add(item.Handle);
                 if (item.LengthDrawingUnits.HasValue) row.LengthM += UnitScale.ToMeters(item.LengthDrawingUnits.Value, unit);
                 if (item.AreaDrawingUnitsSquared.HasValue) row.SideAreaM2 += UnitScale.ToSquareMeters(item.AreaDrawingUnitsSquared.Value, unit);
                 if (item.VolumeDrawingUnitsCubed.HasValue) row.NetConcreteM3 += UnitScale.ToCubicMeters(item.VolumeDrawingUnitsCubed.Value, unit);

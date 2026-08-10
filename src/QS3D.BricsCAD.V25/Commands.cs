@@ -70,6 +70,9 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
+        [CommandMethod("QS3DED2", CommandFlags.UsePickSet)]
+        public void ShowEd2Workflow() => ShowQuantitySummary();
+
         [CommandMethod("QS3DBBS", CommandFlags.Modal)]
         public void ExportBbs()
         {
@@ -224,6 +227,25 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
+        [CommandMethod("QS3DEXCELLOCATE", CommandFlags.Modal)]
+        public void LocateFromExcel()
+        {
+            var doc = Active(); if (doc == null) return;
+            Guard(doc, "QS3DEXCELLOCATE", () =>
+            {
+                var dialog = new OpenFileDialog { Title = "Chọn bảng Excel QS3D/BLT để định vị", Filter = "Excel Workbook (*.xlsx)|*.xlsx", CheckFileExists = true, Multiselect = false };
+                if (dialog.ShowDialog() != true) return;
+                var prompt = new PromptIntegerOptions("\nNhập số dòng Excel cần định vị: ") { AllowNone = false, LowerLimit = 1, UseDefaultValue = true, DefaultValue = 2 };
+                var row = doc.Editor.GetInteger(prompt); if (row.Status != PromptStatus.OK) return;
+                var handles = XlsxHandleReader.ReadHandles(dialog.FileName, row.Value);
+                if (handles.Count == 0) { doc.Editor.WriteMessage("\nQS3D: dòng Excel không có CAD Handle hợp lệ."); return; }
+                var count = Cad.CadHandleService.Select(doc, handles);
+                PaletteCoordinator.SetStatus("Excel dòng " + row.Value + ": " + handles.Count + " Handle • " + count + " đối tượng CAD");
+                doc.Editor.WriteMessage("\nQS3D Excel Locate: resolved " + count + "/" + handles.Count + " handle(s).");
+                if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+            });
+        }
+
         [CommandMethod("QS3DRESETUI", CommandFlags.Modal)] public void ResetUi() { PaletteCoordinator.Dispose(); PaletteCoordinator.EnsureCreated(); PaletteCoordinator.Show(); RibbonBootstrapper.Reset(); RibbonBootstrapper.TryInitialize(); Write("QS3D UI đã reset."); }
         [CommandMethod("QS3DSAFEMODE", CommandFlags.Modal)] public void SafeMode() { PaletteCoordinator.Dispose(); PaletteCoordinator.EnsureCreated(); PaletteCoordinator.ShowSafeMode(); Write("QS3D Safe Mode đã bật."); }
         [CommandMethod("QS3DABOUT", CommandFlags.Modal)] public void About() => Write("QS3D for BricsCAD V25 — clean-room quantity takeoff / semantic QS workspace.");
@@ -243,6 +265,6 @@ namespace QS3D.BricsCAD.V25
         private static int RegenerateProject(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
         private static void Write(string message) => Active()?.Editor.WriteMessage("\n" + message);
-        private static void Guard(Document document, string operation, Action action) { try { action(); } catch (Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }
+        private static void Guard(Document document, string operation, Action action) { try { action(); } catch (System.Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }
     }
 }

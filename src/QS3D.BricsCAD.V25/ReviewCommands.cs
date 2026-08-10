@@ -57,6 +57,7 @@ namespace QS3D.BricsCAD.V25
 
         [CommandMethod("QS3DRECOGNIZE", CommandFlags.UsePickSet)] public void Recognize() => RecognizeInternal(false);
         [CommandMethod("QS3DRECOGNIZEAUTO", CommandFlags.UsePickSet)] public void RecognizeAuto() => RecognizeInternal(true);
+        [CommandMethod("QS3DB4D", CommandFlags.UsePickSet)] public void ScanB4DWorkflow() => RecognizeInternal(true);
         private static void RecognizeInternal(bool autoApply)
         {
             var doc = Active(); if (doc == null) return;
@@ -110,6 +111,6 @@ namespace QS3D.BricsCAD.V25
 
         private static int Regenerate(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
-        private static void Guard(Document document, string operation, Action action) { try { action(); } catch (Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }
+        private static void Guard(Document document, string operation, Action action) { try { action(); } catch (System.Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }
     }
 }
