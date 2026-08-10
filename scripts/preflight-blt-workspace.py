@@ -55,7 +55,7 @@ checks = {
     ],
     "workspace_vm": [
         "FamilyScope", "InstanceScope", "PropertyScopes", "SelectedPropertyScope", "SetSelectedElement",
-        "LoadInstanceProperties", "ApplyInstanceProperty", "isInherited", "instance override", "row.CanReset",
+        "LoadInstanceProperties", "ApplyInstanceProperty", "ProjectFamilyService.SetProperty", "InheritedInstancesUpdated", "OverridesPreserved", "instance override", "row.CanReset",
         "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance",
         "SourceDerivedInstanceKeys", '"LengthM"', '"AreaM2"', '"VolumeM3"', '"PerimeterM"', '"Layer"',
         "NGUỒN CAD / ĐO ĐẠC", "IsSourceDerivedInstanceKey", "sourceRow.IsReadOnly = true",
