@@ -144,11 +144,11 @@ namespace QS3D.BricsCAD.V25.Services
                 {
                     foreach (var category in RoomFinishCategories)
                     {
-                        var finish = FindRoomFinish(project, room, category);
+                        var finish = RoomFinishIdentityService.FindExisting(project, room, category);
                         if (finish == null)
                         {
                             var family = ResolveFamily(project, category);
-                            finish = new ProjectElement(room.Id + "-" + category, category, family.Id, room.FloorId, room.ZoneId);
+                            finish = new ProjectElement(RoomFinishIdentityService.CanonicalId(room.Id, category), category, family.Id, room.FloorId, room.ZoneId);
                             finish.DependsOn.Add(room.Id);
                             project.Elements.Add(finish);
                             created++;
@@ -179,7 +179,7 @@ namespace QS3D.BricsCAD.V25.Services
                 var updated = 0;
                 foreach (var category in RoomFinishCategories)
                 {
-                    var finish = FindRoomFinish(project, room, category);
+                    var finish = RoomFinishIdentityService.FindExisting(project, room, category);
                     if (finish == null) continue;
                     EnsureRoomDependency(finish, room.Id);
                     SyncFinishFromRoom(room, finish);
@@ -194,27 +194,6 @@ namespace QS3D.BricsCAD.V25.Services
                 RestoreOrThrow(project, rollback, operationError, "Room finish synchronization");
                 throw;
             }
-        }
-
-        private static ProjectElement? FindRoomFinish(ProjectState project, ProjectElement room, ElementCategory category)
-        {
-            var canonicalId = room.Id + "-" + category;
-            var canonical = project.FindElement(canonicalId);
-            if (canonical != null && canonical.Category != category)
-                throw new InvalidOperationException("Room finish id collision with category " + canonical.Category + ": " + canonicalId);
-
-            var matches = new List<ProjectElement>();
-            if (canonical != null) matches.Add(canonical);
-            foreach (var candidate in project.Elements.Where(x => x.Category == category && !string.Equals(x.Id, canonicalId, StringComparison.OrdinalIgnoreCase)))
-            {
-                var linkedRoomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, candidate);
-                if (string.Equals(linkedRoomId, room.Id, StringComparison.OrdinalIgnoreCase)) matches.Add(candidate);
-            }
-
-            var distinct = matches.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).Select(x => x.First()).ToList();
-            if (distinct.Count > 1)
-                throw new InvalidOperationException("Multiple " + category + " finishes reference Room " + room.Id + ": " + string.Join(", ", distinct.Select(x => x.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase)));
-            return distinct.Count == 1 ? distinct[0] : null;
         }
 
         private static void SyncFinishFromRoom(ProjectElement room, ProjectElement finish)
