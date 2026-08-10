@@ -35,6 +35,7 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 foreach (var ownerHandle in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
                 {
                     var handle = (ownerHandle.Key ?? string.Empty).Trim();
