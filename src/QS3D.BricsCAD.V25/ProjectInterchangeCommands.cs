@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.Core.Export;
@@ -12,6 +13,8 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class ProjectInterchangeCommands
     {
+        private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
+
         [CommandMethod("QS3DINTERCHANGEJSON", CommandFlags.Modal)]
         public void ExportSemanticSnapshot()
         {
@@ -66,11 +69,11 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
-                var validation = ProjectInterchangeJsonValidator.ValidateFile(dialog.FileName);
+                var json = ReadGuardedSnapshotText(dialog.FileName);
+                var validation = ProjectInterchangeJsonValidator.Validate(json);
                 if (!validation.IsValid)
                     throw new InvalidDataException("Snapshot không hợp lệ: " + validation.ErrorCount.ToString(CultureInfo.InvariantCulture) + " error(s). Chạy QS3DINTERCHANGEVALIDATE để xem chi tiết.");
 
-                var json = File.ReadAllText(dialog.FileName);
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var preview = ProjectInterchangeImportPreview.Plan(project, json);
                 if (!preview.Validation.IsValid)
@@ -83,14 +86,19 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
+                // The append plan performs the stricter all-new ID + name preflight. This is intentionally
+                // read-only and runs before confirmation so a name collision never surprises the user after Yes.
+                var appendPlan = ProjectInterchangeAppendOnlyImporter.Plan(project, json);
                 var confirmText =
                     "Thêm snapshot semantic vào project hiện tại theo chế độ APPEND-ONLY?\n\n" +
-                    "Source project: " + preview.SourceProjectId + "\n" +
-                    "Semantic identity mới: " + preview.NewIdentityCount.ToString(CultureInfo.InvariantCulture) + "\n" +
-                    "Zone: " + validation.ZoneCount.ToString(CultureInfo.InvariantCulture) +
-                    " • Floor: " + validation.FloorCount.ToString(CultureInfo.InvariantCulture) +
-                    " • Family: " + validation.FamilyCount.ToString(CultureInfo.InvariantCulture) +
-                    " • Element: " + validation.ElementCount.ToString(CultureInfo.InvariantCulture) + "\n\n" +
+                    "Source project: " + appendPlan.SourceProjectId + "\n" +
+                    "Semantic identity mới: " + appendPlan.TotalSemanticIdentitiesToAdd.ToString(CultureInfo.InvariantCulture) + "\n" +
+                    "Zone: " + appendPlan.ZonesToAdd.ToString(CultureInfo.InvariantCulture) +
+                    " • Floor: " + appendPlan.FloorsToAdd.ToString(CultureInfo.InvariantCulture) +
+                    " • Family: " + appendPlan.FamiliesToAdd.ToString(CultureInfo.InvariantCulture) +
+                    " • Element: " + appendPlan.ElementsToAdd.ToString(CultureInfo.InvariantCulture) + "\n" +
+                    "Source CAD handles sẽ bỏ: " + appendPlan.SourceHandlesToDiscard.ToString(CultureInfo.InvariantCulture) +
+                    " • validation warning: " + appendPlan.ValidationWarnings.ToString(CultureInfo.InvariantCulture) + "\n\n" +
                     "Chế độ này chỉ nhận ID/tên semantic mới; không merge/replace dữ liệu đang có.\n" +
                     "Drawing handles/fingerprint nguồn KHÔNG trở thành ownership của DWG đích; generated/native ownership không được tái tạo.\n" +
                     "Project ID, drawing identity và active context hiện tại được giữ nguyên. Imported elements được đánh dấu dirty để review/rebuild sau.\n\n" +
@@ -101,6 +109,8 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxButton.YesNo,
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
+                // Import repeats the plan immediately before mutation. If target state changed while the
+                // confirmation dialog was open, the second preflight fails closed instead of applying stale intent.
                 var result = ProjectInterchangeAppendOnlyImporter.Import(project, json);
                 try { PaletteCoordinator.RefreshProject(); } catch { }
 
@@ -120,6 +130,36 @@ namespace QS3D.BricsCAD.V25
             {
                 try { PaletteCoordinator.SetStatus("QS3DINTERCHANGEAPPEND lỗi: " + ex.Message); } catch { }
                 document.Editor.WriteMessage("\nQS3DINTERCHANGEAPPEND error: " + ex.Message + " Importer rollback semantic mutation nếu apply thất bại.");
+            }
+        }
+
+        private static string ReadGuardedSnapshotText(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Interchange snapshot path is required.", nameof(path));
+            var fullPath = Path.GetFullPath(path);
+            using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                if (stream.Length > ProjectInterchangeJsonValidator.MaxFileBytes)
+                    throw new InvalidDataException("Semantic snapshot exceeds the guarded " + ProjectInterchangeJsonValidator.MaxFileBytes.ToString(CultureInfo.InvariantCulture) + " byte limit.");
+                var length = checked((int)stream.Length);
+                var bytes = new byte[length];
+                var offset = 0;
+                while (offset < bytes.Length)
+                {
+                    var read = stream.Read(bytes, offset, bytes.Length - offset);
+                    if (read <= 0) throw new EndOfStreamException("Semantic snapshot changed or ended while it was being read.");
+                    offset += read;
+                }
+                if (stream.ReadByte() != -1)
+                    throw new InvalidDataException("Semantic snapshot changed while it was being read; reopen the file and retry.");
+                try
+                {
+                    return StrictUtf8.GetString(bytes);
+                }
+                catch (DecoderFallbackException ex)
+                {
+                    throw new InvalidDataException("Semantic snapshot is not valid UTF-8.", ex);
+                }
             }
         }
     }
