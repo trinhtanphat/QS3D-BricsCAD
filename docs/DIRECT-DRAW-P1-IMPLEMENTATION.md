@@ -1,4 +1,4 @@
-# QS3D Direct Draw P1 subset — implementation handoff
+# QS3D Direct Draw P1 — implementation handoff
 
 Updated: 2026-08-10 (UTC+7).
 
@@ -17,7 +17,7 @@ This extends the P0 authoring flow in `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` wi
 - Prompts thickness, height and `BottomOffsetM`; the bottom offset is **relative to the source Z**, matching the existing native wall contract.
 - Uses the compatible active GlassWall Family when available. An explicitly configured non-finite/invalid Family numeric fails closed instead of being silently replaced by a fallback.
 - Captures `GlassWall` semantic state, then reuses canonical `QS3DBUILD3D` for the backing native wall solid.
-- Does **not** claim completion of Curtain perimeter/mullion/transom frames. Use `QS3DCURTAIN3D` / Curtain Hub for that workflow.
+- Curtain perimeter/mullion/transom frames remain a dedicated Curtain workflow (`QS3DCURTAIN3D` / Curtain Hub), including the path-frame implementation for supported open POLYLINE hosts.
 
 ### `QS3DDRAWWALLPIER` — Trụ Tường
 
@@ -41,6 +41,22 @@ This extends the P0 authoring flow in `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` wi
 - Prompts thickness and source-relative bottom offset.
 - Captures `Foundation` semantic state and delegates native extrusion to canonical `QS3DBUILD3D` / `StructuralSolidBuilder` behavior.
 
+### `QS3DDRAWDOOR` / `QS3DDRAWOPENING` — Cửa / Lỗ Mở Vách
+
+Door/Opening now has an explicit host-aware Direct Draw contract rather than guessing the full physical-cut workflow:
+
+- Requires Model Space and exactly two plan-view edge points; the resulting real LINE source owns the authoritative plan `WidthM`.
+- Prompts/inherits `HeightM`, sill/bottom offset and `BooleanClearanceM`; configured invalid Family values fail closed.
+- Captures exactly one `Door` or `WallOpening` semantic element and persists instance parameters through `ProjectElement.SetProperty()`.
+- Performs deterministic semantic regeneration before Auto Host.
+- Re-checks that the DWG which started the command is still active immediately before calling the selection-scoped `QS3DAUTOLINKHOSTS` implementation.
+- Requires a unique resulting `HostWallId`, then regenerates again so host-dependent quantities/relations must succeed before commit.
+- On failure, erases the **exact operation-created source ObjectId** first, verifies the source is no longer live, then restores the project snapshot. It refuses textual-handle fallback when the exact ObjectId is unavailable.
+- Palette/selection/Regen/status synchronization happens after the semantic/host-link operation and is best-effort; a UI-only failure does not roll back valid source + semantic + host relation state.
+- **Physical boolean cutting remains explicit.** Direct Draw does not call or queue global `QS3DCUTOPENINGS`; the user can run the guarded cut workflow separately when a physical host subtraction is desired.
+
+This separation intentionally keeps semantic authoring/host relation atomic without pretending that global straight/curved boolean-cut scope is part of a single targeted Door/Opening transaction.
+
 ## Shared safety contract
 
 P1 deliberately reuses existing QS3D infrastructure instead of adding another geometry engine:
@@ -48,16 +64,16 @@ P1 deliberately reuses existing QS3D infrastructure instead of adding another ge
 1. create one real source entity in the active DWG;
 2. capture exactly one semantic element with `SemanticCaptureService`;
 3. apply explicit instance dimensions/offsets through `ProjectElement.SetProperty()` so Properties/Quantity/Geometry dirty flags and generated-stale invalidation stay on the canonical Core path;
-4. immediately re-check that the DWG which started the command is still the active document before delegating to `QS3DBUILD3D`;
-5. run canonical `QS3DBUILD3D` for complete-source, Model-Space, category, semantic-regeneration and native geometry checks;
-6. require a non-empty `GeneratedSolidHandle` and verify that handle is still live;
-7. select the generated result while keeping source CAD as authoritative editable geometry.
+4. immediately re-check that the DWG which started the command is still the active document before delegating to nested command-surface workflows such as `QS3DBUILD3D` or Auto Host;
+5. use canonical existing builders/linkers instead of creating a second geometry/host engine;
+6. verify the required native output or host relation after the nested command returns because command-surface handlers may intentionally catch/report their own errors;
+7. keep source CAD as authoritative editable geometry.
 
-LINE/POLYLINE authoring uses the same finite/unit-aware plan-view rules as P0. Persisted POLYLINE elevation and X/Y vertices are finite-checked before they enter the DWG database.
+LINE/POLYLINE authoring uses finite/unit-aware plan-view rules. Persisted P1 POLYLINE elevation and X/Y vertices are finite-checked before they enter the DWG database.
 
-`QS3DBUILD3D` intentionally reports many user-facing failures instead of throwing them outward. Therefore the P1 wrapper performs the explicit live-generated-handle check; a reported-but-unbuilt result becomes a P1 failure and enters outer rollback rather than being treated as success.
+### Native-solid P1 rollback
 
-Before source creation, P1 snapshots full project state. On failure it gathers generated owner handles from the newly-created semantic element plus matching QS3D XData, then performs rollback in this order:
+GlassWall/WallPier/StructuralWall/Foundation snapshot full project state before source creation. On failure they gather generated owner handles from the newly-created semantic element plus matching QS3D XData, then:
 
 1. erase the operation-created source CAD;
 2. require matching QS3D project/element/category XData before erasing generated CAD;
@@ -67,20 +83,13 @@ Before source creation, P1 snapshots full project state. On failure it gathers g
 
 The project snapshot is deliberately restored **after** CAD cleanup so ownership information remains available while destructive erase decisions are made. P1 must never erase generated CAD solely because a textual persisted Handle collides with another object.
 
-Palette refresh, result selection, editor regen/status and other UI synchronization happen only **after** the CAD/project operation has succeeded. UI synchronization is best-effort; a Palette/UI failure after a valid native commit must not roll back otherwise-correct CAD and project state.
+### Door/Opening rollback
 
-## Why Door / Opening Direct Draw is not included
+Door/Opening does not create generated native output during Direct Draw because physical cutting is separate. On failure it retains the exact newly-created source `ObjectId`, erases that object, verifies its Handle is no longer live, and only then restores the project snapshot. It does not resolve an arbitrary textual Handle as a fallback destructive target.
 
-`QS3DDRAWOPENING` and `QS3DDRAWDOOR` are intentionally **not** added in this P1 subset. Door/Opening authoring has extra decisions that should not be guessed:
+### Post-commit UI
 
-- semantic host compatibility and automatic vs manual host selection;
-- Floor/Zone/elevation ambiguity;
-- opening dimensions and sill rules;
-- whether physical boolean cutting is requested;
-- straight vs curved host support;
-- rollback when host relation succeeds but physical cutting cannot commit.
-
-Until that contract is explicit, the existing capture + Auto Host/Manual Host + guarded cut commands remain the correct workflow.
+Palette refresh, result/source selection, editor Regen/status and other UI synchronization happen only **after** the CAD/project operation has succeeded. UI synchronization is best-effort; a Palette/UI failure after a valid commit must not roll back otherwise-correct CAD and project state.
 
 ## Discoverability
 
@@ -94,14 +103,17 @@ The BricsCAD-hosted `TẠO MỚI` Ribbon tab and Full Domain Hub expose the curr
 - `QS3DDRAWCOLUMN`
 - `QS3DDRAWSLAB`
 - `QS3DDRAWFOUNDATION`
+- `QS3DDRAWDOOR`
+- `QS3DDRAWOPENING`
 
-Legacy Capture/Bóc chọn and `QS3DBUILD3D` remain supported for drawings that already contain source geometry.
+Legacy Capture/Bóc chọn and `QS3DBUILD3D` remain supported for drawings that already contain source geometry. Auto/Manual Host and straight/curved physical opening-cut workflows remain available independently.
 
 ## Static guards
 
-- `scripts/preflight-direct-draw.py` continues to own the current P0 and shared `QS3DBUILD3D` hardening contract.
-- `scripts/preflight-direct-draw-p1.py` guards the four P1 commands, command uniqueness, Ribbon/Hub discoverability, Model-Space/unit-aware behavior, source-relative offsets, fail-closed Family numerics, canonical `SetProperty` writes, active-DWG revalidation, live-generated verification, ownership/XData-aware rollback ordering, finite persisted paths and non-destructive post-commit UI synchronization.
-- `scripts/preflight-all.py` auto-discovers both gates.
+- `scripts/preflight-direct-draw.py` owns the current P0 and shared `QS3DBUILD3D` hardening contract.
+- `scripts/preflight-direct-draw-p1.py` guards GlassWall/WallPier/StructuralWall/Foundation authoring, Model-Space/unit-aware behavior, canonical `SetProperty` writes, active-DWG revalidation, live-generated verification, ownership/XData-aware rollback ordering, finite persisted paths and non-destructive post-commit UI synchronization.
+- `scripts/preflight-direct-draw-openings.py` guards Door/Opening Family rules, authoritative width/source semantics, active-DWG revalidation before Auto Host, unique host verification, canonical property writes, exact-source rollback-before-project-restore, non-destructive post-commit UI finalization and the boundary that physical cutting is never invoked automatically.
+- `scripts/preflight-all.py` auto-discovers all three gates.
 
 GitHub Actions remain manual-only. A `continue all` source/docs request does not authorize workflow dispatch.
 
@@ -113,13 +125,16 @@ Source implementation is not BricsCAD runtime proof. Before these commands are c
 2. NETLOAD/DemandLoad registration;
 3. Ribbon/Domain Hub invocation;
 4. cancel-at-each-prompt behavior with no orphan CAD/project state;
-5. source → semantic → native solid success for all four P1 categories;
-6. GlassWall backing host followed by Curtain-frame workflow;
+5. source → semantic → native solid success for GlassWall/WallPier/StructuralWall/Foundation;
+6. GlassWall backing host followed by Curtain path/frame workflow;
 7. WallPier LINE/open-POLYLINE compatibility and specialized-profile boundary;
 8. StructuralWall near-planar LINE tolerance and source-relative offset behavior;
 9. Foundation closed-POLYLINE extrusion, drawing-unit behavior and save/reopen;
-10. forced native-build failure followed by verified source/generated CAD cleanup and project rollback;
-11. forced Palette/UI synchronization failure after a successful native commit, verifying that valid CAD/project state is preserved;
-12. multi-DWG active-document switching guard, Unicode/HiDPI and representative private-DWG regression.
+10. Door/Opening width/sill/clearance authoring and unique Auto Host matching across representative Floor/Zone/elevation cases;
+11. ambiguous/unmatched Door/Opening host rollback with no orphan source/semantic state;
+12. explicit physical `QS3DCUTOPENINGS` after a successful Door/Opening authoring flow, including straight and separately supported curved-host cases;
+13. forced native-build failure followed by verified source/generated CAD cleanup and project rollback;
+14. forced Palette/UI synchronization failure after successful native/host commit, verifying valid CAD/project state is preserved;
+15. multi-DWG active-document switching guard, Unicode/HiDPI and representative private-DWG regression.
 
 Until those gates are executed, the precise status is **source-implemented / statically guarded, runtime qualification pending**.
