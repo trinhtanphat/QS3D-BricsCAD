@@ -83,7 +83,9 @@ if room_reader.exists():
 room_command = ROOT / "src/QS3D.BricsCAD.V25/RoomBoundaryCommands.cs"
 if room_command.exists():
     text = room_command.read_text(encoding="utf-8")
-    for needle in ('BoundaryMode"] = "AutoNetwork"', "BoundarySourceHandles", "BoundaryArcSagittaM", "RoomBoundaryArcSagittaM", "AuditTrail.ForProject", "RegeneratorCatalog.CreateDefault"):
+    if 'BoundaryMode"] = "AutoNetwork"' not in text and "AutoRoomLifecycle.BoundaryModeAutoNetwork" not in text:
+        errors.append("QS3DROOMAUTO workflow missing: AutoNetwork boundary mode assignment")
+    for needle in ("BoundarySourceHandles", "BoundaryArcSagittaM", "RoomBoundaryArcSagittaM", "AuditTrail.ForProject", "RegeneratorCatalog.CreateDefault"):
         if needle not in text: errors.append("QS3DROOMAUTO workflow missing: " + needle)
     if "SourceHandles.Add" in text: errors.append("auto-room discovery must not claim wall/source handles as Room semantic ownership")
     if "ProjectStateSnapshot.Capture(project)" not in text or "rollback.Restore(project)" not in text:

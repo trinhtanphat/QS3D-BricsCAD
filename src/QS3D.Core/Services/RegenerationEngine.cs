@@ -63,6 +63,9 @@ namespace QS3D.Core.Services
 
                 foreach (var element in dirty)
                 {
+                    var semanticDirty = element.Dirty & (ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+                    if (semanticDirty == ElementDirtyFlags.None) continue;
+
                     IElementRegenerator? selected = null;
                     foreach (var regenerator in _regenerators)
                     {
@@ -80,7 +83,7 @@ namespace QS3D.Core.Services
                     if (_ruleEngine.ApplyMatching(project, element) > 0) handled = true;
                     if (!handled) continue;
 
-                    element.MarkClean(ElementDirtyFlags.All);
+                    element.MarkClean(ElementGeometryPolicy.SemanticCleanFlags(element.Category));
                     progress++;
                     total++;
                 }
