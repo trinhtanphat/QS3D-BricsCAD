@@ -28,8 +28,11 @@ safe_summary_files = [
     "src/QS3D.BricsCAD.V25/DoorOpeningScheduleCommands.cs",
     "src/QS3D.BricsCAD.V25/CurtainWallScheduleCommands.cs",
     "src/QS3D.BricsCAD.V25/MaterialUsageScheduleCommands.cs",
+    "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs",
     "src/QS3D.BricsCAD.V25/UI/RoomFinishScheduleWindow.xaml.cs",
     "src/QS3D.BricsCAD.V25/UI/DoorOpeningScheduleWindow.xaml.cs",
+    "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml.cs",
+    "src/QS3D.BricsCAD.V25/UI/RebarScheduleWindow.xaml.cs",
 ]
 for relative in safe_summary_files:
     path = ROOT / relative
@@ -48,9 +51,15 @@ if room_finish.is_file():
     for needle in ("AutoRoomLifecycle.ResolveRoomReferenceId(project, element)", "AutoRoomLifecycle.IsExcludedFromQuantity(project, element)"):
         if needle not in text: errors.append("room-finish provenance/exclusion guard missing: " + needle)
 
+bq_window = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs"
+if bq_window.is_file():
+    text = bq_window.read_text(encoding="utf-8")
+    for needle in ("QuantityReportTotals.FromRows", 'EnsureActive("xuất BQ XLSX")', "_rows = _recalculate()"):
+        if needle not in text: errors.append("BQ review/export consistency guard missing: " + needle)
+
 print("QS3D schedule arithmetic/provenance preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: BQ fallbacks are lazy and schedule UI/export totals use shared checked finite arithmetic with room provenance exclusion.")
+print("PASS: BQ fallbacks are lazy; BQ export refreshes its bound drawing; schedule/Curtain/BBS UI-export totals use shared checked finite arithmetic with room provenance exclusion.")
