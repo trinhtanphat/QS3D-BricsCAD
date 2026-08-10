@@ -24,13 +24,17 @@ This document collects work that cannot be honestly marked complete from remote/
 
 ## 1. First local build gate
 
-On Windows with the required .NET tooling and licensed BricsCAD V25 x64 installation, run the canonical local qualification runner from the newest `main`:
+On Windows with the required .NET tooling and licensed BricsCAD V25 x64 installation, run the canonical local qualification runner from the newest `main` and pass the actual installed V25 directory:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run-local-v25-qualification.ps1
+.\scripts\run-local-v25-qualification.ps1 `
+  -BricsCadDir "C:\Program Files\Bricsys\BricsCAD V25 en_US" `
+  -Profile "QS3D-V25-TEST"
 ```
 
-Also run the newly added source preflights explicitly if they are not yet part of an aggregate runner:
+Use the real local BricsCAD V25 directory; the path above is only the common example already used by the canonical qualification runbook. `-BricsCadDir` is mandatory. Do not copy BricsCAD managed assemblies into the repository.
+
+`scripts/preflight-all.py` auto-discovers every `scripts/preflight-*.py` gate, so the current aggregate qualification already includes the Interchange JSON, polygon scanline and semantic-tag gates. They can still be run individually when diagnosing a failure:
 
 ```powershell
 python .\scripts\preflight-interchange-json.py
