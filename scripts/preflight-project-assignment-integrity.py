@@ -23,6 +23,7 @@ checks = {
     ],
     "src/QS3D.Core/Services/BulkEditService.cs": [
         "OwnedDistinct(project, elements)",
+        "OwnedDistinctByIds(project, elementIds)",
         "Project contains duplicate semantic element id",
         "ReferenceEquals(owned, element)",
         "Element does not belong to the project instance",
@@ -38,6 +39,11 @@ checks = {
     "tests/QS3D.Core.SmokeTests/LogicRegressionSmoke.cs": [
         "BulkEditRejectsForeignSameIdElements",
         "MultiplyNumericProperty",
+    ],
+    "tests/QS3D.Core.SmokeTests/BulkEditAtomicitySmoke.cs": [
+        "InvalidLaterElementDoesNotPartiallyMutateBatch",
+        "AssignFamilyRejectsDuplicateProjectIdsWithoutMutation",
+        "AssignFamily must fail closed when the project contains duplicate semantic element IDs",
     ],
     "src/QS3D.BricsCAD.V25/Cad/SemanticSelectionResolver.cs": [
         "SemanticHandleOwnershipResolver.Resolve(project, selectedHandles)",
@@ -61,4 +67,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: Floor/Zone/Family/BulkEdit object-based mutations require exact project-owned semantic instances, duplicate project IDs fail closed, and spoofed same-ID regressions are covered.")
+print("PASS: Floor/Zone/Family/BulkEdit mutations require project-owned semantic identity, ID-based family assignment fails closed on duplicate project IDs, and spoofed/atomic regressions are covered.")

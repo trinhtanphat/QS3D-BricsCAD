@@ -68,14 +68,7 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            var elements = new List<ProjectElement>();
-            foreach (var id in elementIds)
-            {
-                if (string.IsNullOrWhiteSpace(id)) continue;
-                var element = project.FindElement(id.Trim());
-                if (element != null) elements.Add(element);
-            }
-            return SetProperty(project, elements, propertyName, value).Count;
+            return SetProperty(project, OwnedDistinctByIds(project, elementIds), propertyName, value).Count;
         }
 
         public int AssignFamily(ProjectState project, IEnumerable<string> elementIds, string familyId)
@@ -84,11 +77,9 @@ namespace QS3D.Core.Services
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             var family = project.FindFamily(familyId) ?? throw new KeyNotFoundException("Unknown family: " + familyId);
             var count = 0;
-            foreach (var id in elementIds)
+            foreach (var element in OwnedDistinctByIds(project, elementIds))
             {
-                if (string.IsNullOrWhiteSpace(id)) continue;
-                var element = project.FindElement(id.Trim());
-                if (element == null || element.Category != family.Category) continue;
+                if (element.Category != family.Category) continue;
                 if (string.Equals(element.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
 
                 var previousFamily = project.FindFamily(element.FamilyId);
@@ -112,6 +103,25 @@ namespace QS3D.Core.Services
             }
             if (count > 0) project.Touch();
             return count;
+        }
+
+        private static IReadOnlyList<ProjectElement> OwnedDistinctByIds(ProjectState project, IEnumerable<string> elementIds)
+        {
+            var resolved = new List<ProjectElement>();
+            foreach (var id in elementIds)
+            {
+                if (string.IsNullOrWhiteSpace(id)) continue;
+                var normalized = id.Trim();
+                ProjectElement? match = null;
+                foreach (var candidate in project.Elements)
+                {
+                    if (candidate == null || !string.Equals(candidate.Id, normalized, StringComparison.OrdinalIgnoreCase)) continue;
+                    match = candidate;
+                    break;
+                }
+                if (match != null) resolved.Add(match);
+            }
+            return OwnedDistinct(project, resolved);
         }
 
         private static IReadOnlyList<ProjectElement> OwnedDistinct(ProjectState project, IEnumerable<ProjectElement> elements)
