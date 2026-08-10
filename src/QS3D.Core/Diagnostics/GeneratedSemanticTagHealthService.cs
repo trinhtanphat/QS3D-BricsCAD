@@ -30,6 +30,7 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 if (!element.Properties.TryGetValue(HandlesKey, out var rawHandles) || string.IsNullOrWhiteSpace(rawHandles)) continue;
                 var handles = ParseHandles(element, rawHandles, issues);
                 if (handles.Count == 0)
