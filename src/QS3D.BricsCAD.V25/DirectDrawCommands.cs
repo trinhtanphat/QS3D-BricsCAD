@@ -22,6 +22,8 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     public sealed class DirectDrawCommands
     {
+        private const double PlanarityToleranceM = 0.005d;
+
         [CommandMethod("QS3DDRAWWALL", CommandFlags.Modal)]
         public void DrawWall()
         {
@@ -29,10 +31,29 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             Guard(document, "QS3DDRAWWALL", () =>
             {
-                var points = AcquirePath(document.Editor, "Tường", minimumPoints: 2, close: false);
+                RequireModelSpace(document);
+                var points = AcquirePath(document, "Tường", minimumPoints: 2, close: false);
                 if (points == null) return;
-                ExecuteDirect(document, ElementCategory.ArchitecturalWall, () =>
-                    points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false));
+
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Tường (m)", FamilyNumber(project, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d));
+                if (!thicknessM.HasValue) return;
+                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Tường (m)", FamilyNumber(project, ElementCategory.ArchitecturalWall, "HeightM", 3.6d));
+                if (!heightM.HasValue) return;
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d));
+                if (!bottomOffsetM.HasValue) return;
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.ArchitecturalWall,
+                    () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
+                    element =>
+                    {
+                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
             });
         }
 
@@ -43,9 +64,29 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             Guard(document, "QS3DDRAWBEAM", () =>
             {
-                var points = AcquireFixedPath(document.Editor, "Dầm", 2);
+                RequireModelSpace(document);
+                var points = AcquireFixedPath(document, "Dầm", 2);
                 if (points == null) return;
-                ExecuteDirect(document, ElementCategory.Beam, () => CreateLine(document, points[0], points[1]));
+
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var widthM = PromptPositiveMeters(document.Editor, "Bề rộng Dầm (m)", FamilyNumber(project, ElementCategory.Beam, "WidthM", 0.3d));
+                if (!widthM.HasValue) return;
+                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Dầm (m)", FamilyNumber(project, ElementCategory.Beam, "HeightM", 0.5d));
+                if (!heightM.HasValue) return;
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Dầm so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.Beam, "BottomOffsetM", 0d));
+                if (!bottomOffsetM.HasValue) return;
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.Beam,
+                    () => CreateLine(document, points[0], points[1]),
+                    element =>
+                    {
+                        element.Properties["WidthM"] = widthM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
             });
         }
 
@@ -56,9 +97,26 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             Guard(document, "QS3DDRAWSLAB", () =>
             {
-                var points = AcquirePath(document.Editor, "Sàn", minimumPoints: 3, close: true);
+                RequireModelSpace(document);
+                var points = AcquirePath(document, "Sàn", minimumPoints: 3, close: true);
                 if (points == null) return;
-                ExecuteDirect(document, ElementCategory.Slab, () => CreatePolyline(document, points, true));
+
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Sàn (m)", FamilyNumber(project, ElementCategory.Slab, "ThicknessM", 0.12d));
+                if (!thicknessM.HasValue) return;
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Sàn so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.Slab, "BottomOffsetM", 0d));
+                if (!bottomOffsetM.HasValue) return;
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.Slab,
+                    () => CreatePolyline(document, points, true),
+                    element =>
+                    {
+                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
             });
         }
 
@@ -69,6 +127,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             Guard(document, "QS3DDRAWCOLUMN", () =>
             {
+                RequireModelSpace(document);
                 var centerResult = document.Editor.GetPoint(new PromptPointOptions("\nChọn tâm Cột: "));
                 if (centerResult.Status != PromptStatus.OK) return;
 
@@ -77,6 +136,10 @@ namespace QS3D.BricsCAD.V25
                 if (!widthM.HasValue) return;
                 var depthM = PromptPositiveMeters(document.Editor, "Bề sâu Cột (m)", FamilyNumber(project, ElementCategory.Column, "DepthM", 0.4d));
                 if (!depthM.HasValue) return;
+                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Cột (m)", FamilyNumber(project, ElementCategory.Column, "HeightM", 3.6d));
+                if (!heightM.HasValue) return;
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Cột so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.Column, "BottomOffsetM", 0d));
+                if (!bottomOffsetM.HasValue) return;
 
                 ExecuteDirect(
                     document,
@@ -86,6 +149,8 @@ namespace QS3D.BricsCAD.V25
                     {
                         element.Properties["WidthM"] = widthM.Value.ToString("R", CultureInfo.InvariantCulture);
                         element.Properties["DepthM"] = depthM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
                         element.MarkDirty(ElementDirtyFlags.Properties);
                     });
             });
@@ -101,7 +166,8 @@ namespace QS3D.BricsCAD.V25
             var rollback = ProjectStateSnapshot.Capture(project);
             var priorGenerated = new HashSet<string>(GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project), StringComparer.OrdinalIgnoreCase);
             var sourceId = ObjectId.Null;
-            string sourceHandle = string.Empty;
+            var sourceHandle = string.Empty;
+            var elementId = string.Empty;
 
             try
             {
@@ -116,16 +182,23 @@ namespace QS3D.BricsCAD.V25
                 var element = project.Elements.SingleOrDefault(x =>
                     x.Category == category && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)));
                 if (element == null) throw new InvalidOperationException("Không tìm thấy semantic element vừa tạo cho source " + sourceHandle + ".");
+                elementId = element.Id;
 
                 configureElement?.Invoke(element);
+
+                // Resolve dependency/rule failures before any native builder commits Solid3d output.
+                // Instance dimensions are configured after the initial capture and therefore need
+                // a deterministic regeneration pass before the native builder consumes them.
+                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
                 var solids = BuildSelected(document, project, category);
                 if (solids <= 0) throw new InvalidOperationException("Native 3D builder không tạo được solid cho " + category + ".");
 
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 project.Touch();
                 PaletteCoordinator.RefreshProject();
-                document.Editor.SetImpliedSelection(new[] { sourceId });
+                var generatedHandle = element.Properties.TryGetValue("GeneratedSolidHandle", out var generated) ? generated : string.Empty;
+                if (!string.IsNullOrWhiteSpace(generatedHandle)) CadHandleService.Select(document, new[] { generatedHandle });
+                else document.Editor.SetImpliedSelection(new[] { sourceId });
                 document.Editor.Regen();
 
                 var status = "Direct Draw " + category + ": 1 semantic • " + solids + " solid • regenerate " + regenerated + ".";
@@ -140,6 +213,20 @@ namespace QS3D.BricsCAD.V25
                 foreach (var handle in GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project))
                     if (!priorGenerated.Contains(handle)) cleanupHandles.Add(handle);
 
+                Exception? ownershipDiscoveryError = null;
+                if (!string.IsNullOrWhiteSpace(elementId))
+                {
+                    try
+                    {
+                        foreach (var handle in GeneratedGeometryService.FindMatchingOwnedHandles(document, project.ProjectId, elementId, category))
+                            cleanupHandles.Add(handle);
+                    }
+                    catch (Exception ex)
+                    {
+                        ownershipDiscoveryError = ex;
+                    }
+                }
+
                 Exception? restoreError = null;
                 Exception? cadCleanupError = null;
                 try { rollback.Restore(project); }
@@ -149,9 +236,10 @@ namespace QS3D.BricsCAD.V25
                 try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
                 catch { }
 
-                if (restoreError != null || cadCleanupError != null)
+                if (ownershipDiscoveryError != null || restoreError != null || cadCleanupError != null)
                 {
                     var errors = new List<Exception> { operationError };
+                    if (ownershipDiscoveryError != null) errors.Add(ownershipDiscoveryError);
                     if (restoreError != null) errors.Add(restoreError);
                     if (cadCleanupError != null) errors.Add(cadCleanupError);
                     throw new InvalidOperationException("Direct Draw thất bại và rollback không hoàn tất đầy đủ.", new AggregateException(errors));
@@ -172,8 +260,9 @@ namespace QS3D.BricsCAD.V25
             throw new InvalidOperationException("Direct Draw P0 chưa hỗ trợ category " + category + ".");
         }
 
-        private static IReadOnlyList<Point3d>? AcquireFixedPath(Editor editor, string label, int count)
+        private static IReadOnlyList<Point3d>? AcquireFixedPath(Document document, string label, int count)
         {
+            var editor = document.Editor;
             var points = new List<Point3d>(count);
             for (var index = 0; index < count; index++)
             {
@@ -189,11 +278,13 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException(label + " có hai điểm trùng nhau.");
                 points.Add(result.Value);
             }
+            ValidatePlanView(document, points, label);
             return points;
         }
 
-        private static IReadOnlyList<Point3d>? AcquirePath(Editor editor, string label, int minimumPoints, bool close)
+        private static IReadOnlyList<Point3d>? AcquirePath(Document document, string label, int minimumPoints, bool close)
         {
+            var editor = document.Editor;
             var points = new List<Point3d>();
             while (true)
             {
@@ -217,21 +308,26 @@ namespace QS3D.BricsCAD.V25
             if (close && points.Count >= 3 && points[0].DistanceTo(points[points.Count - 1]) <= 1e-9d)
                 points.RemoveAt(points.Count - 1);
             if (points.Count < minimumPoints) return null;
-            ValidatePlanView(points, label);
+            ValidatePlanView(document, points, label);
             return points;
         }
 
-        private static void ValidatePlanView(IReadOnlyList<Point3d> points, string label)
+        private static void ValidatePlanView(Document document, IReadOnlyList<Point3d> points, string label)
         {
             if (points.Count == 0) return;
-            var z = points[0].Z;
+            var z = CadGeometryGuard.Finite(points[0].Z, label + "/base Z");
             for (var index = 1; index < points.Count; index++)
-                if (Math.Abs(points[index].Z - z) > 1e-6d)
-                    throw new InvalidOperationException(label + " Direct Draw hiện yêu cầu các điểm cùng cao độ plan-view.");
+            {
+                var deltaDrawingUnits = Math.Abs(CadGeometryGuard.Subtract(points[index].Z, z, label + "/delta Z"));
+                var deltaM = Math.Abs(CadGeometryGuard.ToMeters(document, deltaDrawingUnits, label + "/delta Z"));
+                if (deltaM > PlanarityToleranceM)
+                    throw new InvalidOperationException(label + " Direct Draw yêu cầu plan-view |ΔZ| <= 0.005 m.");
+            }
         }
 
         private static ObjectId CreateLine(Document document, Point3d start, Point3d end)
         {
+            ValidatePlanView(document, new[] { start, end }, "LINE");
             if (start.DistanceTo(end) <= 1e-9d) throw new InvalidOperationException("LINE Direct Draw quá ngắn.");
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
@@ -251,7 +347,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (points == null) throw new ArgumentNullException(nameof(points));
             if (points.Count < (closed ? 3 : 2)) throw new InvalidOperationException("Không đủ điểm để tạo POLYLINE Direct Draw.");
-            ValidatePlanView(points, closed ? "Closed POLYLINE" : "Open POLYLINE");
+            ValidatePlanView(document, points, closed ? "Closed POLYLINE" : "Open POLYLINE");
 
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
@@ -304,38 +400,92 @@ namespace QS3D.BricsCAD.V25
             return value;
         }
 
+        private static double? PromptFiniteMeters(Editor editor, string label, double defaultValue)
+        {
+            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            {
+                AllowNegative = true,
+                AllowZero = true,
+                AllowNone = true,
+                DefaultValue = defaultValue,
+                UseDefaultValue = true
+            };
+            var result = editor.GetDouble(options);
+            if (result.Status == PromptStatus.Cancel) return null;
+            if (result.Status != PromptStatus.OK && result.Status != PromptStatus.None) return null;
+            var value = result.Status == PromptStatus.OK ? result.Value : defaultValue;
+            if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidOperationException(label + " phải là số hữu hạn.");
+            return value;
+        }
+
         private static double FamilyNumber(ProjectState project, ElementCategory category, string key, double fallback)
         {
-            ProjectFamily? family = null;
+            var value = FamilyFiniteNumber(project, category, key, fallback);
+            if (!(value > 0d))
+                throw new InvalidOperationException("Family " + category + "/" + key + " phải là số hữu hạn > 0 trước khi Direct Draw.");
+            return value;
+        }
+
+        private static double FamilyFiniteNumber(ProjectState project, ElementCategory category, string key, double fallback)
+        {
+            var family = PreferredFamily(project, category);
+            if (family == null || !family.Properties.TryGetValue(key, out var raw)) return fallback;
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsNaN(value) || double.IsInfinity(value))
+                throw new InvalidOperationException("Family '" + family.Name + "' (" + category + ") có " + key + " không hợp lệ: '" + (raw ?? string.Empty) + "'. Sửa Family trước khi Direct Draw.");
+            return value;
+        }
+
+        private static ProjectFamily? PreferredFamily(ProjectState project, ElementCategory category)
+        {
             if (project.Metadata.TryGetValue("ActiveFamilyId", out var activeId))
             {
                 var active = project.FindFamily(activeId);
-                if (active != null && active.Category == category) family = active;
+                if (active != null && active.Category == category) return active;
             }
-            family = family ?? project.Families.FirstOrDefault(x => x.Category == category);
-            if (family == null || !family.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return fallback;
-            if (!double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || !(value > 0d)) return fallback;
-            return value;
+            return project.Families.FirstOrDefault(x => x.Category == category);
+        }
+
+        private static void RequireModelSpace(Document document)
+        {
+            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                var modelSpaceId = blockTable[BlockTableRecord.ModelSpace];
+                if (!document.Database.CurrentSpaceId.Equals(modelSpaceId))
+                    throw new InvalidOperationException("Direct Draw P0 hiện chỉ hỗ trợ Model Space. Chuyển sang tab Model trước khi vẽ.");
+                transaction.Commit();
+            }
         }
 
         private static void EraseHandles(Document document, IEnumerable<string> handles)
         {
-            var ids = CadHandleService.Resolve(document, handles);
-            if (ids.Count == 0) return;
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (handles == null) throw new ArgumentNullException(nameof(handles));
+
+            var normalized = new HashSet<string>(
+                handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            if (normalized.Count == 0) return;
+
+            var ids = CadHandleService.Resolve(document, normalized);
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
                 foreach (var id in ids)
                 {
-                    try
-                    {
-                        var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
-                        if (entity != null && !entity.IsErased) entity.Erase(true);
-                    }
-                    catch { }
+                    var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
+                    if (entity == null)
+                        throw new InvalidOperationException("Direct Draw rollback handle " + id.Handle + " không còn trỏ tới Entity hợp lệ.");
+                    if (!entity.IsErased) entity.Erase(true);
                 }
                 transaction.Commit();
             }
+
+            var remaining = CadHandleService.GetLiveHandles(document, normalized);
+            if (remaining.Count > 0)
+                throw new InvalidOperationException("Direct Draw rollback còn CAD handle chưa xóa: " + string.Join(", ", remaining.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)) + ".");
             document.Editor.Regen();
         }
 

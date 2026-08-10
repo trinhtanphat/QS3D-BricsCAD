@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Domain;
@@ -59,6 +60,31 @@ namespace QS3D.BricsCAD.V25.Cad
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, elementId.Trim()),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, category.ToString())))
                 entity.XData = marker;
+        }
+
+        public static IReadOnlyList<string> FindMatchingOwnedHandles(Document document, string projectId, string elementId, ElementCategory category)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (string.IsNullOrWhiteSpace(projectId)) throw new ArgumentException("Project id is required.", nameof(projectId));
+            if (string.IsNullOrWhiteSpace(elementId)) throw new ArgumentException("Element id is required.", nameof(elementId));
+
+            var normalizedProjectId = projectId.Trim();
+            var normalizedElementId = elementId.Trim();
+            var result = new List<string>();
+            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+                foreach (ObjectId id in modelSpace)
+                {
+                    var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                    if (entity == null || entity.IsErased) continue;
+                    if (HasMatchingOwnership(entity, normalizedProjectId, normalizedElementId, category))
+                        result.Add(entity.Handle.ToString());
+                }
+                transaction.Commit();
+            }
+            return result.AsReadOnly();
         }
 
         public static void RequireMatchingOwnership(Entity entity, ProjectState project, ProjectElement element, string operation)

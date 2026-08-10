@@ -12,6 +12,12 @@ namespace QS3D.BricsCAD.V25.Cad
 {
     internal static class WallSolidBuilder
     {
+        private enum SourceBatchKind
+        {
+            Line,
+            OpenPolyline
+        }
+
         private sealed class PendingUpdate
         {
             public ProjectElement Element { get; set; } = null!;
@@ -34,6 +40,12 @@ namespace QS3D.BricsCAD.V25.Cad
             if (selection.Status != PromptStatus.OK || selection.Value == null) return 0;
             var sourceIds = selection.Value.GetObjectIds();
             if (sourceIds.Length == 0) return 0;
+
+            // This LINE builder is often called immediately before the open-POLYLINE builder.
+            // Validate the whole logical wall batch before either builder is allowed to commit,
+            // otherwise a mixed selection could commit LINE solids and then fail on POLYLINE.
+            if (ValidateSourceBatch(document, sourceIds) != SourceBatchKind.Line) return 0;
+
             var pending = new List<PendingUpdate>();
             var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -46,6 +58,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var line = transaction.GetObject(id, OpenMode.ForRead, false) as Line;
                     if (line == null) continue;
+                    if (!line.OwnerId.Equals(modelSpace.ObjectId))
+                        throw new InvalidOperationException("Wall source phải nằm trong Model Space trước khi tạo native 3D: " + line.Handle + ".");
                     var sourceHandle = line.Handle.ToString();
                     var matches = project.Elements
                         .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, sourceHandle, StringComparison.OrdinalIgnoreCase)))
@@ -128,6 +142,49 @@ namespace QS3D.BricsCAD.V25.Cad
                 project.Touch();
             }
             return pending.Count;
+        }
+
+        private static SourceBatchKind ValidateSourceBatch(Document document, IReadOnlyCollection<ObjectId> sourceIds)
+        {
+            var sawLine = false;
+            var sawPolyline = false;
+            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                var modelSpaceId = blockTable[BlockTableRecord.ModelSpace];
+                foreach (var id in sourceIds)
+                {
+                    var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                    if (entity == null || entity.IsErased)
+                        throw new InvalidOperationException("Wall source selection chứa entity không còn hợp lệ.");
+                    if (!entity.OwnerId.Equals(modelSpaceId))
+                        throw new InvalidOperationException("Wall source phải nằm trong Model Space trước khi tạo native 3D: " + entity.Handle + ".");
+
+                    if (entity is Line)
+                    {
+                        sawLine = true;
+                        continue;
+                    }
+                    if (entity is Polyline polyline)
+                    {
+                        if (polyline.Closed)
+                            throw new InvalidOperationException("Tường KT centerline POLYLINE phải open. Closed wall loop cần tách thành các wall centerline trước khi Build 3D.");
+                        if (polyline.NumberOfVertices < 2)
+                            throw new InvalidOperationException("Tường KT centerline POLYLINE cần ít nhất 2 đỉnh: " + polyline.Handle + ".");
+                        sawPolyline = true;
+                        continue;
+                    }
+
+                    throw new InvalidOperationException("Tường KT native 3D chỉ hỗ trợ source LINE hoặc open POLYLINE; nhận " + entity.GetType().Name + " (" + entity.Handle + ").");
+                }
+                transaction.Commit();
+            }
+
+            if (sawLine && sawPolyline)
+                throw new InvalidOperationException("Không build chung LINE và open POLYLINE trong một wall batch vì hai builder có transaction riêng. Chọn một source type mỗi lần.");
+            if (sawLine) return SourceBatchKind.Line;
+            if (sawPolyline) return SourceBatchKind.OpenPolyline;
+            throw new InvalidOperationException("Wall source selection không có LINE/open POLYLINE hợp lệ.");
         }
 
         private static bool IsSupportedWall(ElementCategory category) =>

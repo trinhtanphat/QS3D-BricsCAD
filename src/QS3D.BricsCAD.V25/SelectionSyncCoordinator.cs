@@ -17,6 +17,14 @@ namespace QS3D.BricsCAD.V25
             Refresh(document);
         }
 
+        public static void Detach(Document? document)
+        {
+            if (document == null || !Attached.Contains(document)) return;
+            try { document.ImpliedSelectionChanged -= OnImpliedSelectionChanged; }
+            catch { }
+            Attached.Remove(document);
+        }
+
         public static void DetachByName(string? fileName)
         {
             if (string.IsNullOrWhiteSpace(fileName)) return;
@@ -33,13 +41,6 @@ namespace QS3D.BricsCAD.V25
         public static void Stop()
         {
             foreach (var document in Attached.ToArray()) Detach(document);
-        }
-
-        private static void Detach(Document document)
-        {
-            try { document.ImpliedSelectionChanged -= OnImpliedSelectionChanged; }
-            catch { }
-            Attached.Remove(document);
         }
 
         private static void OnImpliedSelectionChanged(object sender, EventArgs e)

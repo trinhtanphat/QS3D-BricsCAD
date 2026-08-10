@@ -8,6 +8,7 @@ using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
 using QS3D.Core.Services;
+using Teigha.DatabaseServices;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -33,19 +34,19 @@ namespace QS3D.BricsCAD.V25
                 var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
                 if (snapshots.Count == 0)
                 {
-                    Write(document, "QS3DBUILD3D: chưa có CAD reference. Chọn LINE/open POLYLINE hoặc source đã capture rồi chạy lại.");
+                    Write(document, "QS3DBUILD3D: chưa có CAD reference. Chọn source hoặc solid QS3D đã tạo rồi chạy lại.");
                     return;
                 }
 
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
                 var selectedElements = project.Elements
-                    .Where(x => x.SourceHandles.Any(handles.Contains))
+                    .Where(x => SemanticReferenceHandles.MatchesSelection(x, handles))
                     .ToList();
 
                 if (selectedElements.Count == 0)
                 {
-                    Write(document, "QS3DBUILD3D: selection chưa được capture semantic. Chạy QS3DWALL/QS3DBEAM/... trước rồi Vẽ/Cập nhật 3D.");
+                    Write(document, "QS3DBUILD3D: selection chưa thuộc cấu kiện semantic QS3D. Chạy QS3DWALL/QS3DBEAM/... trước rồi Vẽ/Cập nhật 3D.");
                     return;
                 }
 
@@ -77,8 +78,39 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
+                var sourceHandles = selectedElements
+                    .SelectMany(x => x.SourceHandles)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (sourceHandles.Count == 0)
+                {
+                    Write(document, "QS3DBUILD3D: cấu kiện semantic đang chọn không còn source handle để dựng lại 3D.");
+                    return;
+                }
+
+                var sourceIds = CadHandleService.Resolve(document, sourceHandles);
+                if (sourceIds.Count != sourceHandles.Count)
+                {
+                    Write(document, "QS3DBUILD3D: source CAD bị thiếu/stale (live " + sourceIds.Count + "/" + sourceHandles.Count + "). Không rebuild một phần; chạy Health/Locate và sửa source trước.");
+                    return;
+                }
+                if (!AreAllModelSpaceEntities(document, sourceIds))
+                {
+                    Write(document, "QS3DBUILD3D: native generated geometry được quản lý trong Model Space; source đang nằm ngoài Model Space. Di chuyển/capture source trong Model Space trước khi rebuild.");
+                    return;
+                }
+
+                document.Editor.SetImpliedSelection(sourceIds.ToArray());
+                var sourceSnapshots = EntitySnapshotReader.ReadImpliedSelection(document);
+                if (sourceSnapshots.Count != sourceHandles.Count)
+                {
+                    Write(document, "QS3DBUILD3D: không đọc đủ source CAD sau khi resolve semantic selection. Đã dừng trước khi thay solid.");
+                    return;
+                }
+
                 var category = categories[0];
-                if (!ValidateWallSourceBatch(selectedElements, snapshots, category, out var wallSourceError))
+                if (!ValidateWallSourceBatch(selectedElements, sourceSnapshots, category, out var wallSourceError))
                 {
                     Write(document, wallSourceError);
                     return;
@@ -96,6 +128,16 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.RefreshProject();
                 document.Editor.Regen();
 
+                // Prefer selecting the newly generated result, like BLT. A subsequent QS3DBUILD3D
+                // still resolves that generated selection back to the stable source handles above.
+                var generatedHandles = selectedElements
+                    .Select(x => x.Properties.TryGetValue("GeneratedSolidHandle", out var handle) ? handle : string.Empty)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (generatedHandles.Count > 0) CadHandleService.Select(document, generatedHandles);
+                else CadHandleService.Select(document, sourceHandles);
+
                 var status = "Vẽ/Cập nhật 3D: " + built + " solid • " + selectedElements.Count + " semantic • " + category + " • regenerate " + regenerated + ".";
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
@@ -107,6 +149,24 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
+        }
+
+        private static bool AreAllModelSpaceEntities(Document document, IReadOnlyCollection<ObjectId> ids)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (ids == null) throw new ArgumentNullException(nameof(ids));
+            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                var modelSpaceId = blockTable[BlockTableRecord.ModelSpace];
+                foreach (var id in ids)
+                {
+                    var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                    if (entity == null || entity.IsErased || !entity.OwnerId.Equals(modelSpaceId)) return false;
+                }
+                transaction.Commit();
+            }
+            return true;
         }
 
         private static bool ValidateWallSourceBatch(

@@ -14,15 +14,6 @@ namespace QS3D.BricsCAD.V25.Services
 {
     internal static class SemanticCaptureService
     {
-        private static readonly ElementCategory[] RoomFinishCategories =
-        {
-            ElementCategory.FloorFinish,
-            ElementCategory.Waterproofing,
-            ElementCategory.Skirting,
-            ElementCategory.WallFinish,
-            ElementCategory.CeilingFinish
-        };
-
         public static int Capture(Document document, ElementCategory category)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -142,19 +133,17 @@ namespace QS3D.BricsCAD.V25.Services
                 var created = 0;
                 foreach (var room in rooms)
                 {
-                    foreach (var category in RoomFinishCategories)
+                    foreach (var category in RoomFinishSynchronizationService.Categories)
                     {
                         var finish = RoomFinishIdentityService.FindExisting(project, room, category);
                         if (finish == null)
                         {
                             var family = ResolveFamily(project, category);
                             finish = new ProjectElement(RoomFinishIdentityService.CanonicalId(room.Id, category), category, family.Id, room.FloorId, room.ZoneId);
-                            finish.DependsOn.Add(room.Id);
                             project.Elements.Add(finish);
                             created++;
                         }
-                        EnsureRoomDependency(finish, room.Id);
-                        SyncFinishFromRoom(room, finish);
+                        RoomFinishSynchronizationService.Synchronize(project, room, finish);
                         Regenerate(project, finish);
                     }
                 }
@@ -176,42 +165,16 @@ namespace QS3D.BricsCAD.V25.Services
             var rollback = ProjectStateSnapshot.Capture(project);
             try
             {
-                var updated = 0;
-                foreach (var category in RoomFinishCategories)
-                {
-                    var finish = RoomFinishIdentityService.FindExisting(project, room, category);
-                    if (finish == null) continue;
-                    EnsureRoomDependency(finish, room.Id);
-                    SyncFinishFromRoom(room, finish);
-                    Regenerate(project, finish);
-                    updated++;
-                }
-                if (updated > 0) project.Touch();
-                return updated;
+                var finishes = RoomFinishSynchronizationService.SynchronizeExisting(project, room);
+                foreach (var finish in finishes) Regenerate(project, finish);
+                if (finishes.Count > 0) project.Touch();
+                return finishes.Count;
             }
             catch (Exception operationError)
             {
                 RestoreOrThrow(project, rollback, operationError, "Room finish synchronization");
                 throw;
             }
-        }
-
-        private static void SyncFinishFromRoom(ProjectElement room, ProjectElement finish)
-        {
-            finish.FloorId = room.FloorId;
-            finish.ZoneId = room.ZoneId;
-            finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
-            Copy(room, finish, "AreaM2");
-            Copy(room, finish, "PerimeterM");
-            Copy(room, finish, "HeightM");
-            Copy(room, finish, "OpeningAreaM2");
-            Copy(room, finish, "DoorWidthM");
-            finish.MarkDirty(ElementDirtyFlags.All);
-        }
-
-        private static void EnsureRoomDependency(ProjectElement finish, string roomId)
-        {
-            if (!finish.DependsOn.Any(x => string.Equals(x, roomId, StringComparison.OrdinalIgnoreCase))) finish.DependsOn.Add(roomId);
         }
 
         private static ProjectFamily ResolveFamily(ProjectState project, ElementCategory category)
@@ -329,12 +292,6 @@ namespace QS3D.BricsCAD.V25.Services
                 element.Properties["WidthM"] = element.Properties.TryGetValue("LengthM", out var length) ? length : "0.9";
             if (element.Category == ElementCategory.Room && element.Properties.TryGetValue("LengthM", out var perimeter)) element.Properties["PerimeterM"] = perimeter;
             if ((element.Category == ElementCategory.Slab || element.Category == ElementCategory.Foundation || element.Category == ElementCategory.Stair || element.Category == ElementCategory.Earthwork) && element.Properties.TryGetValue("LengthM", out var outline) && !element.Properties.ContainsKey("PerimeterM")) element.Properties["PerimeterM"] = outline;
-        }
-
-        private static void Copy(ProjectElement from, ProjectElement to, string key)
-        {
-            if (from.Properties.TryGetValue(key, out var value)) to.Properties[key] = value;
-            else if (from.Quantities.TryGetValue(key, out var quantity)) to.Properties[key] = quantity.ToString("R", CultureInfo.InvariantCulture);
         }
     }
 }

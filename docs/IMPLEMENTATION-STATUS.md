@@ -38,6 +38,19 @@ See `docs/PRODUCT-BOUNDARY.md`. Any future standalone product requires a separat
 - Full Domain Hub, Project Tools, Schedule Hub, Rebar 3D Hub, Curtain Hub and Geometry Extensions provide discoverable workflow entry points.
 - Semantic handle ownership resolution includes current generated channels, including Slab mesh, StructuralWall mesh, Foundation mesh and Curtain frame overlays, and consumes shared generated-owner enumeration instead of a hard-coded family list so future `Generated*Handle(s)` slots resolve automatically.
 
+### Direct Draw / new-geometry authoring P0
+
+- BLT-style Direct Draw is source-implemented for `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWCOLUMN` and `QS3DDRAWSLAB` and is exposed through the **TẠO MỚI** Ribbon workflow plus Full Domain Hub.
+- New geometry starts from native BricsCAD point acquisition, creates a real LINE/closed-or-open POLYLINE source with a stable DWG Handle, then converges through `SemanticCaptureService` and the existing wall/structural builders rather than a second geometry/model stack.
+- Wall prompts/inherits thickness, height and bottom offset; Beam prompts/inherits width, height and bottom offset; Column prompts/inherits width, depth, height and bottom offset; Slab prompts/inherits thickness and bottom offset.
+- P0 runs in Model Space only and fails closed in PaperSpace/Layout before persistent source creation.
+- Wall/Beam/Slab picked paths use a unit-aware **5 mm** vertical planarity tolerance; raw drawing-unit epsilon is not used as the product tolerance.
+- Direct Draw regenerates semantic state before native builder mutation so dependency/rule failures are surfaced before Solid3d commit whenever possible.
+- The outer authoring rollback snapshots project state and pre-existing generated ownership, discovers QS3D XData-tagged output for the just-created project/element/category, restores project state, erases only operation-owned source/new output and verifies requested cleanup handles are no longer live.
+- Successful Direct Draw selects the generated host when available. `QS3DBUILD3D`/Workspace rebuild paths resolve semantic/generated selections back to complete live source geometry where supported and reject mixed-category/mixed wall-source atomicity hazards before native commit.
+- Existing `QS3DWALL`, `QS3DBEAM`, `QS3DCOLUMN`, `QS3DSLAB` and `QS3DBUILD3D` capture/rebuild workflows remain supported for pre-existing drawings.
+- Detailed source/runtime boundary and private sample-DWG checklist are in `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md`.
+
 ### Room / finishes / schedules
 
 - Deterministic `RoomBoundaryEngine` and bounded LINE/POLYLINE/ARC/SPLINE Room Auto sampling/topology.
@@ -140,6 +153,7 @@ Current source preflights cover, among other things:
 - manual-only GitHub Actions policy and per-job manual guards;
 - product-boundary documentation/source markers that keep the shipping target explicitly a BricsCAD plugin;
 - command uniqueness and key XAML contracts;
+- Direct Draw P0 command uniqueness, BLT-style prompts, Model-Space/unit-aware planarity guards, semantic-regeneration-before-native-build ordering, generated-XData orphan discovery, verified rollback cleanup, Ribbon/Hub exposure and semantic/generated rebuild-source resolution;
 - project-editor active-DWG affinity and project-owned mutation integrity;
 - semantic selection including dynamic future generated owner slots;
 - B4D future-proof generated-source exclusion through the Core owner policy;
@@ -156,7 +170,7 @@ Current source preflights cover, among other things:
 - schedule/export hub wiring;
 - synthetic sample provenance/private-file policy.
 
-`scripts/preflight-all.py` auto-discovers feature preflights, including `preflight-product-boundary.py`.
+`scripts/preflight-all.py` auto-discovers feature preflights, including `preflight-product-boundary.py` and `preflight-direct-draw.py`.
 
 ## Manual GitHub Actions policy
 
@@ -176,16 +190,17 @@ No GitHub Action was dispatched as part of the current continue-all review/sourc
 
 ## Validation history — do not confuse with current head
 
-An **earlier** integrated snapshot based on `b00d03f` was compiled against BricsCAD V25.2.10 managed assemblies in Release/x64 and the then-current Core/preflight suite passed. That proof predates many current Curtain/rebar/Foundation/Schedule/ownership/project-editor/updater/Beam-Stirrup changes.
+An **earlier** integrated snapshot based on `b00d03f` was compiled against BricsCAD V25.2.10 managed assemblies in Release/x64 and the then-current Core/preflight suite passed. That proof predates many current Curtain/rebar/Foundation/Schedule/ownership/project-editor/updater/Beam-Stirrup/Direct-Draw changes.
 
 Earlier GitHub-hosted runs also predate the newest batches. They are historical evidence only and **must not** be described as validation of the current `main` head.
 
-The current final SHA still requires an explicitly approved build/runtime validation before it can be called current V25-verified. During the full-repository hardening audit, the execution container could not resolve `github.com`, so this batch does **not** claim a local `dotnet build`, Core smoke execution or aggregate Python preflight pass.
+The current final SHA still requires an explicitly approved build/runtime validation before it can be called current V25-verified. During the current source hardening work, the execution container could not resolve `github.com`, so this batch does **not** claim a local `dotnet build`, Core smoke execution or aggregate Python preflight pass.
 
 ## Runtime/product work still remaining
 
 - compile the exact final SHA against the exact target BricsCAD V25 managed assemblies;
 - NETLOAD/DemandLoad command/Ribbon/palette regression in a licensed interactive session;
+- Direct Draw P0 runtime qualification for Wall/Beam/Column/Slab, including prompted parameters, Model/Paper Space behavior, millimeter/meter units, 5 mm planarity boundary, World/rotated UCS, source/semantic/generated ownership, rebuild, ESC/failure cleanup and a private copy of owner-provided `MB MONG.dwg` without committing it;
 - representative private-DWG save/reopen/multi-DWG regression;
 - Room Auto mixed-curve regression;
 - wall snap, Auto Host and straight/curved opening-cut regression;
@@ -200,4 +215,4 @@ The current final SHA still requires an explicitly approved build/runtime valida
 
 A standalone QS3D CAD executable is **not** a remaining gap; it is outside the current product boundary.
 
-See `docs/PRODUCT-BOUNDARY.md`, `docs/CONTINUE-ALL-DEEP-AUDIT-2026-08-10.md`, `docs/DEEP-AUDIT-2026-08-10.md`, `docs/FULL-REPO-AUDIT-2026-08-10.md` and `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the product boundary, deep passes and broader runtime/product boundary.
+See `docs/PRODUCT-BOUNDARY.md`, `docs/DIRECT-DRAW-WORKFLOW.md`, `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md`, `docs/CONTINUE-ALL-DEEP-AUDIT-2026-08-10.md`, `docs/DEEP-AUDIT-2026-08-10.md`, `docs/FULL-REPO-AUDIT-2026-08-10.md` and `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md` for the product boundary, Direct Draw contract/status, deep passes and broader runtime/product boundary.
