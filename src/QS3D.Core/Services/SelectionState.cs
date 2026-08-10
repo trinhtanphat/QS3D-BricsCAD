@@ -8,7 +8,7 @@ namespace QS3D.Core.Services
     {
         private readonly HashSet<string> _ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public event EventHandler? Changed;
-        public IReadOnlyCollection<string> ElementIds => _ids;
+        public IReadOnlyCollection<string> ElementIds => _ids.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
 
         public void Replace(IEnumerable<string> ids)
         {
