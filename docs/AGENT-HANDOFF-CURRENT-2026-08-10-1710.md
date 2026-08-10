@@ -5,7 +5,7 @@
 
 This is the newest short current-state delta for fast-moving work. Fetch `main` before every write. If current source conflicts with this note, current source wins.
 
-Read this together with `docs/AGENT-HANDOFF-LATEST-2026-08-10.md`, `docs/LOCAL-V25-QUALIFICATION.md`, `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` and `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`.
+Read this together with `docs/AGENT-HANDOFF-LATEST-2026-08-10.md`, `docs/LOCAL-V25-QUALIFICATION.md`, `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` and `docs/LEVEL-REFERENCES.md`.
 
 ## 1. Product boundary
 
@@ -40,6 +40,26 @@ Current contract:
 Read `docs/GRID-WORKFLOW.md`.
 
 Still not implemented/qualified: Grid bubbles/naming/renumbering, rectangular/radial systems, Grid constraints, Direct Draw Grid jig/repeat mode, structure-to-grid hosting.
+
+### Manual host-link atomicity — source blocker closed
+
+`QS3DLINKHOST` now snapshots the full `ProjectState` before `HostLinkService.LinkOpening(...)`. Manual link mutation and deterministic regeneration share one rollback boundary. If linking/regeneration fails, the snapshot is restored; if restore itself fails, both failures are surfaced rather than silently keeping a half-mutated project.
+
+Preserve the rule that semantic commit succeeds before palette/status refresh. Post-commit UI refresh is not allowed to turn a valid host-link commit into an apparent semantic failure.
+
+### Physical opening cut live freshness
+
+Straight/selected and curved physical opening cuts now stamp a live-input fingerprint after a successful cut. Health/Release can detect a host that still carries an old hole after host/opening CAD geometry, linked opening membership or effective cut parameters changed.
+
+The fingerprint covers host CAD source geometry and effective host dimensions, linked opening source extents plus width/height/sill/clearance, and the curved-host settings that affect curved cutter construction. Host rebuild invalidation still clears the entire `PhysicalOpeningCut*` metadata family.
+
+Keep `PhysicalOpeningCutLiveStateService` wired into `QS3DHEALTHALL` and `QS3DRELEASECHECK`. A legacy cut without live fingerprint is intentionally a release-blocking warning until rebuilt/cut again; do not silently auto-upgrade stale CAD geometry by stamping metadata only.
+
+### Comprehensive Core health
+
+`QS3DHEALTH` now uses `ComprehensiveModelHealthService`. The Core composite includes model/source health, Room Finish integrity, dependency health, Level-reference health, generated ownership/stale/mode health, fabrication qualification and all generated rebar/mesh/curtain families.
+
+Adapter/live-CAD-specific checks such as curtain-frame live fingerprints and physical-opening live-cut fingerprints remain in `QS3DHEALTHALL` / `QS3DRELEASECHECK`; do not move those into Core by duplicating BricsCAD runtime dependencies.
 
 ### Runtime diagnostics truthfulness
 
@@ -103,19 +123,27 @@ Do not remove the warning. Whole-command completion needs either a shared native
 
 Panel-by-panel native backing glass also remains a local/native architecture gate; do not add it as an unrelated best-effort third transaction.
 
-## 6. Floor / Level model clarification
+## 6. Floor / Level model clarification — P1.1 Core foundation merged
 
-Do not add a duplicate `LevelDefinition` merely for visual parity with another product.
+Do not add a duplicate `LevelDefinition` merely for visual parity with another product. Existing `ProjectFloor` is the semantic Level catalog.
 
-Current Core already has:
+Current Core now has:
 
 - `FloorDefinition` with stable ID/name/elevation;
-- `ActiveFloorId`;
-- element `FloorId`;
-- dirty propagation for Relations + Quantity + Geometry when a referenced Floor elevation changes;
-- deletion guards for active/referenced Floors.
+- `ActiveFloorId` and legacy element `FloorId`;
+- opt-in element `BottomLevelId`, `BottomLevelOffsetM`, `TopLevelId`, `TopLevelOffsetM` semantics owned by `ProjectFloorService`;
+- `ElementVerticalPlacementService` as the single Core contract for legacy source-relative vs Level-referenced vertical placement;
+- legacy no-Level behavior preserved exactly as source base + legacy `BottomOffsetM` + legacy `HeightM`;
+- Bottom-only behavior resolving absolute bottom from Level elevation + explicit offset while retaining legacy height;
+- Bottom+Top behavior deriving effective height from explicit Level elevations + offsets;
+- fail-closed validation for Top-without-Bottom, missing Level IDs, non-finite offsets and top <= bottom;
+- Floor update/reference-count/delete lifecycle covering `FloorId` plus Bottom/Top Level references;
+- `LevelReferenceHealthService` wired into comprehensive Health, Health All and Release Check;
+- Core smoke + static preflight protecting compatibility and invalid-reference behavior.
 
-Future top/bottom level-reference semantics should extend this existing model with explicit migration/dependency behavior.
+Important boundary: **native CAD placement and Bottom/Top Level assignment UI are not enabled yet**. Do not expose Level-picker buttons that imply CAD placement until host solids, physical openings, curtain geometry and rebar/dependent outputs consume the same vertical-placement resolver coherently. There is no implicit `FloorId -> BottomLevelId` migration and no double application of legacy `BottomOffsetM` after a Bottom Level ref is present.
+
+Read `docs/LEVEL-REFERENCES.md`.
 
 ## 7. Diagnostics Hub integration — source resolved
 
@@ -138,6 +166,7 @@ Source-only agents must not fake completion of:
 - Direct Draw/planar-UCS/ESC/UNDO/repeat authoring and future DrawJig behavior;
 - Curtain whole-command recovery and panel-by-panel native glass;
 - physical ownership-safe L/T/X/Multi wall-junction solids;
+- native Level-referenced placement across host solids + physical openings + curtain + rebar/dependent generated geometry, and the matching Bottom/Top Level assignment UI;
 - representative private-DWG save/reopen/multi-DWG regression;
 - Unicode/HiDPI and large-model performance;
 - clean install/upgrade/uninstall;
@@ -162,7 +191,7 @@ GitHub tracking created for continuation/local agents:
 - #75 production signing/install/update + optional licensing boundary;
 - #76 fabrication-grade rebar / structural depth;
 - #77 documentation layer;
-- #79 Grid/reference model + richer level constraints — **partially advanced by current `QS3DGRID` semantic capture; inspect current source before planning more**;
+- #79 Grid/reference model + richer level constraints — **partially advanced by `QS3DGRID` semantic capture and the P1.1 Core Level-reference foundation; native placement/UI remain open**;
 - #80 native semantic modify/edit workflow;
 - #81 large-model performance;
 - #82 real V25 UI/DPI/context-menu/Ribbon polish;
