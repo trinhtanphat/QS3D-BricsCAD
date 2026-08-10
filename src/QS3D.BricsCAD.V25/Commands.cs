@@ -131,18 +131,17 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3D Tường KT", () =>
             {
+                // BLT-style compatibility workflow is deliberately two-step:
+                // capture the reference first, let the user review/edit Family/Instance parameters,
+                // then commit/rebuild native Solid3d explicitly with QS3DBUILD3D.
+                // Direct Draw remains the one-shot source -> semantic -> native 3D authoring path.
                 var captured = SemanticCaptureService.Capture(doc, ElementCategory.ArchitecturalWall);
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
-                var solids = Cad.WallSolidBuilder.BuildSelectedLineWalls(doc, project);
-                solids += Cad.PolylineWallSolidBuilder.BuildSelected(doc, project);
-                foreach (var wall in project.Elements.Where(x => x.Category == ElementCategory.ArchitecturalWall && x.Dirty != ElementDirtyFlags.None))
-                {
-                    new WallRegenerator().Regenerate(project, wall);
-                    wall.MarkClean(ElementGeometryPolicy.SemanticCleanFlags(wall.Category));
-                }
                 PaletteCoordinator.RefreshProject();
-                PaletteCoordinator.SetStatus("Tường KT: " + captured + " semantic • " + solids + " solid 3D từ LINE/open POLYLINE.");
-                doc.Editor.WriteMessage("\nQS3D Tường KT: captured " + captured + ", created " + solids + " wall solid(s) from LINE/open POLYLINE.");
+                var status = captured > 0
+                    ? "Tường KT: đã capture " + captured + " semantic. Chỉnh Family/Instance (bề dày, chiều cao, offset) rồi chạy QS3DBUILD3D."
+                    : "Tường KT: chưa capture được semantic nào; chọn LINE/open POLYLINE tham chiếu rồi chạy lại.";
+                PaletteCoordinator.SetStatus(status);
+                doc.Editor.WriteMessage("\nQS3D " + status);
             });
         }
 
