@@ -27,7 +27,7 @@ namespace QS3D.BricsCAD.V25
                 var message = "Tie Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
-                Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(issues, issue =>
+                Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue =>
                 {
                     var element = project.FindElement(issue.ElementId);
                     if (element == null) return;
