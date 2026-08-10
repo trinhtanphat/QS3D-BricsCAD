@@ -67,6 +67,8 @@ if room_engine.exists():
         errors.append("room boundary bridge detection must remain iterative so large graphs cannot overflow the call stack")
     if "BuildSourceLookup" not in text or "IReadOnlyDictionary<string, ISet<string>> sourceLookup" not in text:
         errors.append("room boundary source evidence lookup must avoid scanning all edges during each face step")
+    if "SegmentBounds" not in text or "bounds[i].Overlaps(bounds[j])" not in text:
+        errors.append("room boundary pair subdivision must retain the tolerance-aware broad-phase bounds rejection")
 
 bulge = ROOT / "src/QS3D.Core/Geometry/BulgeArcTessellator.cs"
 if bulge.exists():
@@ -113,7 +115,7 @@ if completion.exists():
 room_smoke = ROOT / "tests/QS3D.Core.SmokeTests/RoomBoundaryRegressionSmoke.cs"
 if room_smoke.exists():
     text = room_smoke.read_text(encoding="utf-8")
-    for needle in ("RectangleBoundary();", "TjunctionCreatesAdjacentRooms();", "EndpointToleranceClosesGap();", "DanglingBridgeIsIgnored();", "LongDanglingChainIsIgnored();", "DuplicateSegmentsKeepSourceEvidence();", "BulgeSemicircleTessellation();", "BulgeDirectionMirrors();", "CurvedRoomBoundary();", "LargeRadiusTinySagittaHonorsLimit();", "InvalidCoordinatesRejected();", "InvalidBulgeToleranceRejected();"):
+    for needle in ("RectangleBoundary();", "TjunctionCreatesAdjacentRooms();", "EndpointToleranceClosesGap();", "DanglingBridgeIsIgnored();", "LongDanglingChainIsIgnored();", "SparseBroadPhasePreservesRoom();", "DuplicateSegmentsKeepSourceEvidence();", "BulgeSemicircleTessellation();", "BulgeDirectionMirrors();", "CurvedRoomBoundary();", "LargeRadiusTinySagittaHonorsLimit();", "InvalidCoordinatesRejected();", "InvalidBulgeToleranceRejected();"):
         if needle not in text: errors.append("room boundary regression coverage missing: " + needle)
 
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
@@ -146,4 +148,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: full-domain files, unique commands, structural quantities/native mass adapters, BBS CSV safety, planar LINE/POLYLINE/ARC room discovery performance/rollback/UI wiring, DemandLoad packaging/install guards and regression registration are present.")
+print("PASS: full-domain files, unique commands, structural quantities/native mass adapters, BBS CSV safety, tolerance-aware room broad-phase/planar boundary discovery/rollback/UI wiring, DemandLoad packaging/install guards and regression registration are present.")
