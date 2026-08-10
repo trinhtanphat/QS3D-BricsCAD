@@ -5,7 +5,8 @@ using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
 using Application = Bricscad.ApplicationServices.Application;
-using QS3D.Core.Domain;
+using QS3D.Core.Reporting;
+using QS3D.Core.Services;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -39,32 +40,65 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
-                ElementCountText.Text = project.Elements.Count.ToString(CultureInfo.InvariantCulture);
-                FinishCountText.Text = project.Elements.Count(x => IsRoomFinish(x.Category)).ToString(CultureInfo.InvariantCulture);
-                DoorCountText.Text = project.Elements.Count(x => x.Category == ElementCategory.Door || x.Category == ElementCategory.WallOpening).ToString(CultureInfo.InvariantCulture);
-                CurtainCountText.Text = project.Elements.Count(x => x.Category == ElementCategory.GlassWall).ToString(CultureInfo.InvariantCulture);
-                MaterialCountText.Text = ProjectMaterialCatalog.ReferencedMaterialNames(project).Count.ToString(CultureInfo.InvariantCulture);
                 Title = "QS3D • Schedule Hub • " + DrawingLabel(_document);
-                if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)) SetStatus("Schedule snapshot đã đồng bộ.");
-                else SetStatus("Kích hoạt lại “" + DrawingLabel(_document) + "” trước khi chạy schedule/export command.");
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                {
+                    SetStatus("Kích hoạt lại “" + DrawingLabel(_document) + "” để làm mới Schedule snapshot; số đang hiển thị được giữ nguyên.");
+                    return;
+                }
+
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+
+                var bqRows = ProjectQuantityReportBuilder.Group(project);
+                var finishRows = RoomFinishScheduleBuilder.Build(project);
+                var doorRows = DoorOpeningScheduleBuilder.Build(project);
+                var curtainRows = CurtainWallScheduleBuilder.Build(project);
+                var materialRows = MaterialUsageScheduleBuilder.Build(project);
+
+                ElementCountText.Text = CountBqElements(bqRows).ToString(CultureInfo.InvariantCulture);
+                FinishCountText.Text = CountFinishElements(finishRows).ToString(CultureInfo.InvariantCulture);
+                DoorCountText.Text = CountDoorElements(doorRows).ToString(CultureInfo.InvariantCulture);
+                CurtainCountText.Text = CountCurtainElements(curtainRows).ToString(CultureInfo.InvariantCulture);
+                MaterialCountText.Text = materialRows.Select(x => x.MaterialName).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).Count().ToString(CultureInfo.InvariantCulture);
+
+                SetStatus("Schedule snapshot đã đồng bộ từ dữ liệu schedule hợp lệ" + (regenerated > 0 ? " • regen " + regenerated + " cấu kiện dirty." : "."));
             }
             catch (Exception ex) { SetStatus("Đọc Schedule Hub lỗi: " + ex.Message); }
+        }
+
+        private static int CountBqElements(System.Collections.Generic.IEnumerable<QuantityReportRow> rows)
+        {
+            var count = 0;
+            foreach (var row in rows) count = QuantityReportMath.AddCount(count, row.Count);
+            return count;
+        }
+
+        private static int CountFinishElements(System.Collections.Generic.IEnumerable<RoomFinishScheduleRow> rows)
+        {
+            var count = 0;
+            foreach (var row in rows) count = QuantityReportMath.AddCount(count, row.Count);
+            return count;
+        }
+
+        private static int CountDoorElements(System.Collections.Generic.IEnumerable<DoorOpeningScheduleRow> rows)
+        {
+            var count = 0;
+            foreach (var row in rows) count = QuantityReportMath.AddCount(count, row.Count);
+            return count;
+        }
+
+        private static int CountCurtainElements(System.Collections.Generic.IEnumerable<CurtainWallScheduleRow> rows)
+        {
+            var count = 0;
+            foreach (var row in rows) count = QuantityReportMath.AddCount(count, row.ElementIds.Count);
+            return count;
         }
 
         private void EnsureActive(string operation)
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
                 throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Schedule Hub trước khi " + operation + ".");
-        }
-
-        private static bool IsRoomFinish(ElementCategory category)
-        {
-            return category == ElementCategory.FloorFinish ||
-                   category == ElementCategory.Waterproofing ||
-                   category == ElementCategory.Skirting ||
-                   category == ElementCategory.WallFinish ||
-                   category == ElementCategory.CeilingFinish;
         }
 
         private static string DrawingLabel(Document document)
