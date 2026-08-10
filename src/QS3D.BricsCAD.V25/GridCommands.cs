@@ -16,12 +16,13 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
 
+            int count;
             try
             {
                 var snapshots = Cad.EntitySnapshotReader.ReadCurrentSelection(document);
                 if (snapshots.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3D Grid: chọn LINE/ARC trục tham chiếu rồi chạy lại QS3DGRID.");
+                    TryWriteMessage(document, "\nQS3D Grid: chọn LINE/ARC trục tham chiếu rồi chạy lại QS3DGRID.");
                     return;
                 }
 
@@ -35,22 +36,45 @@ namespace QS3D.BricsCAD.V25
                 if (invalid.Length > 0)
                 {
                     var kinds = string.Join(", ", invalid.Select(x => x.EntityType).Distinct(StringComparer.OrdinalIgnoreCase));
-                    document.Editor.WriteMessage("\nQS3D Grid: chỉ nhận LINE/ARC có chiều dài hữu hạn dương. Selection không hợp lệ: " + kinds + ".");
+                    TryWriteMessage(document, "\nQS3D Grid: chỉ nhận LINE/ARC có chiều dài hữu hạn dương. Selection không hợp lệ: " + kinds + ".");
                     return;
                 }
 
-                var count = SemanticCaptureService.Capture(document, ElementCategory.Grid);
+                count = SemanticCaptureService.Capture(document, ElementCategory.Grid);
+            }
+            catch (Exception ex)
+            {
+                ReportOperationFailure(document, "QS3DGRID lỗi: " + ex.Message);
+                return;
+            }
+
+            FinalizeUi(document, count);
+        }
+
+        private static void FinalizeUi(Document document, int count)
+        {
+            var status = "Grid/Trục: đã capture " + count + " semantic reference(s). Grid hiện là reference/takeoff semantic, không sinh native 3D.";
+            try
+            {
                 PaletteCoordinator.RefreshProject();
-                var status = "Grid/Trục: đã capture " + count + " semantic reference(s). Grid hiện là reference/takeoff semantic, không sinh native 3D.";
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                var message = "QS3DGRID lỗi: " + ex.Message;
-                try { PaletteCoordinator.SetStatus(message); } catch { }
-                document.Editor.WriteMessage("\n" + message);
+                TryWriteMessage(document, "\nQS3D " + status + " UI sync warning: " + ex.Message);
             }
+        }
+
+        private static void ReportOperationFailure(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            TryWriteMessage(document, "\n" + message);
+        }
+
+        private static void TryWriteMessage(Document document, string message)
+        {
+            try { document.Editor.WriteMessage(message); } catch { }
         }
 
         private static bool IsSupportedGridSource(string entityType) =>
