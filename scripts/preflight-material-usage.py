@@ -63,6 +63,8 @@ checks = {
     required[8]: ["MaterialUsageXlsxExporter.Export", "xl/worksheets/sheet1.xml", "KL chính", "22.5", "Kính"],
     required[9]: ["MaterialUsageXlsxSmoke.Run();"],
 }
+checks[required[1]].append("XlsxPackageValidator.Validate")
+checks[required[8]].extend(("Invalid\\u0001Family", "ORIGINAL"))
 
 for relative, needles in checks.items():
     path = ROOT / relative

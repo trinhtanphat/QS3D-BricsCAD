@@ -7,6 +7,7 @@ errors = []
 
 files = {
     "commands": ROOT / "src/QS3D.BricsCAD.V25/Commands.cs",
+    "cad_handles": ROOT / "src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs",
     "builder": ROOT / "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs",
     "row": ROOT / "src/QS3D.Core/Reporting/QuantityReportRow.cs",
     "exporter": ROOT / "src/QS3D.Core/Export/XlsxQuantityExporter.cs",
@@ -38,6 +39,8 @@ require("commands", (
     "ResolveEd2Selection(project, snapshots)",
     "ProjectQuantityReportBuilder.Detail(project, elementIds)",
     "ProjectQuantityReportBuilder.Group(project, elementIds)",
+    "EnsureEd2HandlesAreLive(doc, details)",
+    "ED2 export blocked:",
     "XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary)",
     '[CommandMethod("QS3DEXCELLOCATE", CommandFlags.Modal)]',
     "lookup.ElementIds",
@@ -46,6 +49,11 @@ require("commands", (
     "var resolved = Cad.CadHandleService.Resolve(doc, handles)",
     "if (resolved.Count != handles.Count)",
     "doc.Editor.SetImpliedSelection(resolved.ToArray())",
+))
+require("cad_handles", (
+    "NormalizeHexHandle",
+    'StartsWith("0x", StringComparison.OrdinalIgnoreCase)',
+    'value.ToString("X", CultureInfo.InvariantCulture)',
 ))
 if "ShowEd2Workflow() => ShowQuantitySummary()" in texts.get("commands", ""):
     errors.append("QS3DED2 is still an alias of QS3DBQ instead of a scoped ED2 export.")
