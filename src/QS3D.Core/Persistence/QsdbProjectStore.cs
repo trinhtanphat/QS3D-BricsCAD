@@ -227,6 +227,11 @@ namespace QS3D.Core.Persistence
         private static void ValidateProject(ProjectState project)
         {
             if (string.IsNullOrWhiteSpace(project.Name)) throw new InvalidDataException("QSDB project name is required.");
+            if (project.Zones.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || string.IsNullOrWhiteSpace(x.Name))) throw new InvalidDataException("QSDB zones require non-empty ids and names.");
+            if (project.Floors.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || string.IsNullOrWhiteSpace(x.Name))) throw new InvalidDataException("QSDB floors require non-empty ids and names.");
+            if (project.Families.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || string.IsNullOrWhiteSpace(x.Name))) throw new InvalidDataException("QSDB families require non-empty ids and names.");
+            if (project.Elements.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id))) throw new InvalidDataException("QSDB elements require non-empty ids.");
+            if (project.QuantityRules.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || string.IsNullOrWhiteSpace(x.OutputName))) throw new InvalidDataException("QSDB quantity rules require non-empty ids and outputs.");
             var duplicateFamily = project.Families.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFamily != null) throw new InvalidDataException("Duplicate family id in QSDB: " + duplicateFamily.Key);
             var duplicateElement = project.Elements.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
@@ -242,9 +247,22 @@ namespace QS3D.Core.Persistence
 
             foreach (var floor in project.Floors)
                 if (double.IsNaN(floor.ElevationM) || double.IsInfinity(floor.ElevationM)) throw new InvalidDataException("Floor elevation must be finite: " + floor.Id);
+            ValidateStringMap(project.Metadata, "project metadata");
+            foreach (var family in project.Families) ValidateStringMap(family.Properties, "family " + family.Id + " properties");
             foreach (var element in project.Elements)
+            {
+                ValidateStringMap(element.Properties, "element " + element.Id + " properties");
                 foreach (var quantity in element.Quantities)
+                {
+                    if (string.IsNullOrWhiteSpace(quantity.Key)) throw new InvalidDataException("Element quantity names must not be empty: " + element.Id);
                     if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value)) throw new InvalidDataException("Element quantity must be finite: " + element.Id + "/" + quantity.Key);
+                }
+            }
+        }
+
+        private static void ValidateStringMap(System.Collections.Generic.IDictionary<string, string> values, string label)
+        {
+            if (values.Keys.Any(string.IsNullOrWhiteSpace)) throw new InvalidDataException("QSDB " + label + " contains an empty key.");
         }
 
         private static bool IsRecoverableDataFailure(Exception exception) => exception is InvalidDataException || exception is XmlException || exception is FormatException || exception is FileNotFoundException;
