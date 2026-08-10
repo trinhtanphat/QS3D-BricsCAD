@@ -38,7 +38,7 @@ Current semantics:
 
 ### `QS3DGRIDNUMBER` V25 interaction layer
 
-The V25 adapter now supplies the reviewed ordering explicitly instead of relying on selection-set order:
+The V25 adapter supplies the reviewed ordering explicitly instead of relying on selection-set order:
 
 1. run `QS3DGRIDNUMBER`;
 2. click each tracked Grid source one by one in the exact order that should receive labels;
@@ -51,6 +51,20 @@ The V25 adapter now supplies the reviewed ordering explicitly instead of relying
 The command accepts only CAD sources already tracked by a semantic Grid. Unknown CAD is not silently converted into a Grid; use `QS3DGRID` first. Duplicate picks are ignored with guidance, ambiguous semantic ownership fails closed, and the semantic mutation is wrapped in a project snapshot so command failure restores pre-command project state. Post-success Palette/status refresh is best-effort and cannot turn a successful semantic renumber into a false operation failure.
 
 `QS3DGRIDNUMBER` remains semantic-only: it does not move/rotate source CAD, generate Grid bubbles, create dimensions, or infer left-to-right / bottom-to-top / radial ordering. The explicit click order is the authoritative ordering supplied by the user.
+
+## Grid naming health
+
+`GridNamingHealthService` is included in `ComprehensiveModelHealthService`, so normal comprehensive Health/Release paths can surface semantic Grid naming corruption even before a native bubble/annotation layer exists.
+
+Current checks:
+
+- `GRID_LABEL_DUPLICATE` — Error on both Grid owners when labels collide case-insensitively;
+- `GRID_LABEL_EMPTY` — Warning when a Grid explicitly carries an empty label property;
+- `GRID_LABEL_TOO_LONG` — Error when external/manual mutation exceeds the 64-character semantic naming bound;
+- `GRID_SEQUENCE_INVALID` — Error when `GridSequenceIndex` is not an integer in the supported range;
+- `GRID_SEQUENCE_WITHOUT_LABEL` — Warning when a sequence index exists without a valid semantic label.
+
+A missing label is not itself an error because `QS3DGRID` capture and semantic naming are separate workflows. **Health does not invent labels or mutate the model.** This health layer is Core/source functionality only; it does not imply native Grid annotation completion.
 
 ## Product boundary
 
@@ -99,6 +113,7 @@ A local-capable agent should include Grid in the exact-SHA runtime matrix:
 8. verify UI/selection sync and Locate behavior;
 9. run `QS3DGRIDNUMBER`, click a reviewed Grid order, verify Numeric and Alphabetic sequences, prefix/suffix/padding, duplicate-label fail-closed behavior and save/reopen persistence;
 10. verify cancelling during ordered picking/options leaves labels unchanged;
-11. verify the command does not create native Grid bubbles or mutate source CAD.
+11. verify the command does not create native Grid bubbles or mutate source CAD;
+12. verify `QS3DHEALTH` / comprehensive health reports malformed or duplicate Grid labels without changing them.
 
-Until that runtime pass exists, describe `QS3DGRID`, `QS3DGRIDNUMBER` and `GridNamingService` as source-implemented/statically guarded, not `LOCAL_PASS` or V25-runtime-certified. Native Grid bubble/label drawing, automatic spatial ordering and Grid constraint systems remain separate product work.
+Until that runtime pass exists, describe `QS3DGRID`, `QS3DGRIDNUMBER`, `GridNamingService` and `GridNamingHealthService` as source-implemented/statically guarded, not `LOCAL_PASS` or V25-runtime-certified. Native Grid bubble/label drawing, automatic spatial ordering and Grid constraint systems remain separate product work.
