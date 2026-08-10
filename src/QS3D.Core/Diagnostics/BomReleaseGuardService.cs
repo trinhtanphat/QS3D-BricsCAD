@@ -13,6 +13,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
+            issues.AddRange(new RoomFinishHealthService().Inspect(project));
             var included = project.Elements.Where(x => !AutoRoomLifecycle.IsExcludedFromQuantity(project, x)).ToList();
 
             if (included.Count == 0)
