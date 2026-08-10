@@ -23,9 +23,10 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var owners = BuildOwnershipIndex(project);
+            var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var validCount = 0;
@@ -44,8 +45,8 @@ namespace QS3D.Core.Diagnostics
                     }
                     validCount++;
                     var expectedOwner = element.Id + "/" + HandlesKey;
-                    if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expectedOwner, StringComparison.OrdinalIgnoreCase))
-                        issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated beam stirrup solid xung đột owner/project handle khác: " + owner, element.Id));
+                    if (ownership.IsConflicted(handle, expectedOwner))
+                        issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated beam stirrup solid xung đột owner/project handle khác: " + ownership.Describe(handle), element.Id));
                     if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated beam stirrup handle không được nằm trong SourceHandles.", element.Id));
                     if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
@@ -69,7 +70,7 @@ namespace QS3D.Core.Diagnostics
                 if (element.IsGeneratedBeamStirrupStale())
                     issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_STALE", HealthSeverity.Warning, "Generated beam stirrup snapshot không còn khớp semantic/source hiện tại; rebuild stirrups trước khi phát hành bản vẽ.", element.Id));
             }
-            return issues;
+            return issues.AsReadOnly();
         }
 
         private static void InspectAdvancedMetadata(ProjectElement element, int validCount, ICollection<ModelHealthIssue> issues)
@@ -90,7 +91,6 @@ namespace QS3D.Core.Diagnostics
             if (mode.Length > 0 && !isClosed && !isRounded && !isHooked)
                 issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_INVALID", HealthSeverity.Warning, ModeKey + " không phải mode beam stirrup được hỗ trợ.", element.Id));
 
-            // Old generated snapshots predate bend/hook length metadata. Keep them valid until rebuilt.
             if (!hasAdvancedMetadata) return;
             if (mode.Length == 0)
                 issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_INVALID", HealthSeverity.Warning, ModeKey + " bắt buộc khi advanced stirrup metadata đã tồn tại.", element.Id));
@@ -149,33 +149,58 @@ namespace QS3D.Core.Diagnostics
             return !double.IsNaN(value) && !double.IsInfinity(value);
         }
 
-        private static Dictionary<string, string> BuildOwnershipIndex(ProjectState project)
+        private sealed class OwnershipIndex
         {
-            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<string, string> Owners { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            public HashSet<string> Conflicts { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            public bool IsConflicted(string handle, string expectedOwner)
+            {
+                if (Conflicts.Contains(handle)) return true;
+                return Owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expectedOwner, StringComparison.OrdinalIgnoreCase);
+            }
+
+            public string Describe(string handle)
+            {
+                if (Conflicts.Contains(handle)) return "multiple owners";
+                return Owners.TryGetValue(handle, out var owner) ? owner : "unknown owner";
+            }
+        }
+
+        private static OwnershipIndex BuildOwnershipIndex(ProjectState project)
+        {
+            var index = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
-                foreach (var handle in element.SourceHandles) Reserve(owners, handle, element.Id + "/SourceHandles");
+                if (element == null) continue;
+                foreach (var handle in element.SourceHandles) Reserve(index, handle, element.Id + "/SourceHandles");
                 foreach (var property in element.Properties)
                 {
                     if (!GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)) continue;
-                    ReserveProperty(owners, element, property.Key);
+                    ReserveProperty(index, element, property.Key, property.Value);
                 }
             }
-            return owners;
+            return index;
         }
 
-        private static void ReserveProperty(Dictionary<string, string> owners, ProjectElement element, string key)
+        private static void ReserveProperty(OwnershipIndex index, ProjectElement element, string key, string raw)
         {
-            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            if (string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
-                Reserve(owners, handle, element.Id + "/" + key);
+                Reserve(index, handle, element.Id + "/" + key);
         }
 
-        private static void Reserve(Dictionary<string, string> owners, string? handle, string token)
+        private static void Reserve(OwnershipIndex index, string? handle, string token)
         {
             var normalized = (handle ?? string.Empty).Trim();
-            if (normalized.Length == 0 || owners.ContainsKey(normalized)) return;
-            owners[normalized] = token;
+            if (normalized.Length == 0) return;
+            if (!index.Owners.TryGetValue(normalized, out var existing))
+            {
+                index.Owners[normalized] = token;
+                return;
+            }
+            if (!string.Equals(existing, token, StringComparison.OrdinalIgnoreCase))
+                index.Conflicts.Add(normalized);
         }
     }
 }
