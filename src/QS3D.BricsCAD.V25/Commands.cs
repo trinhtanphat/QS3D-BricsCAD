@@ -128,6 +128,7 @@ namespace QS3D.BricsCAD.V25
                 if (details.Count == 0)
                     throw new InvalidOperationException("ED2 scope " + scope + " không có cấu kiện hợp lệ để xuất.");
 
+                EnsureEd2HandlesAreLive(doc, details);
                 var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
                 var dialog = new SaveFileDialog
                 {
@@ -424,10 +425,12 @@ namespace QS3D.BricsCAD.V25
                         if (project.FindElement(elementId) == null)
                             throw new InvalidOperationException("Excel references unknown QS3D Element ID: " + elementId + ".");
                     var projectHandles = SourceHandleResolver.Resolve(project, lookup.ElementIds)
+                        .Select(x => Cad.CadHandleService.NormalizeHexHandle(x) ?? throw new InvalidOperationException("QS3D project contains an invalid CAD Handle: " + x + "."))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                         .ToList();
                     var excelHandles = lookup.Handles
+                        .Select(x => Cad.CadHandleService.NormalizeHexHandle(x) ?? throw new InvalidOperationException("Excel contains an invalid CAD Handle: " + x + "."))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                         .ToList();
@@ -485,6 +488,27 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DRESETUI", CommandFlags.Modal)] public void ResetUi() { PaletteCoordinator.Dispose(); PaletteCoordinator.EnsureCreated(); PaletteCoordinator.Show(); RibbonBootstrapper.Reset(); RibbonBootstrapper.TryInitialize(); Write("QS3D UI đã reset."); }
         [CommandMethod("QS3DSAFEMODE", CommandFlags.Modal)] public void SafeMode() { PaletteCoordinator.Dispose(); PaletteCoordinator.EnsureCreated(); PaletteCoordinator.ShowSafeMode(); Write("QS3D Safe Mode đã bật."); }
         [CommandMethod("QS3DABOUT", CommandFlags.Modal)] public void About() => Write("QS3D for BricsCAD V25 — clean-room quantity takeoff / semantic QS workspace.");
+
+        private static void EnsureEd2HandlesAreLive(Document document, IReadOnlyList<QuantityReportRow> details)
+        {
+            var expected = details
+                .SelectMany(x => x.SourceHandles)
+                .Select(x => Cad.CadHandleService.NormalizeHexHandle(x) ?? throw new InvalidOperationException("ED2 contains an invalid CAD Handle: " + x + "."))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (expected.Count == 0)
+                throw new InvalidOperationException("ED2 scope has no CAD Handle provenance. Capture/reconcile the source objects before export.");
+
+            var live = Cad.CadHandleService.GetLiveHandles(document, expected);
+            var missing = expected.Where(x => !live.Contains(x)).ToList();
+            if (missing.Count == 0) return;
+            var sample = string.Join(", ", missing.Take(8));
+            throw new InvalidOperationException(
+                "ED2 export blocked: " + missing.Count + " source Handle(s) are stale or missing" +
+                (sample.Length == 0 ? "." : " (" + sample + ").") +
+                " Run QS3DSYNCSOURCE or recapture before export.");
+        }
 
         private static void Capture(ElementCategory category, string label)
         {

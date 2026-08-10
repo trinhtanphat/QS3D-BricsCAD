@@ -3,6 +3,7 @@ using System.IO;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
+using QS3D.Core.Rules;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -15,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             NonCanonicalHandleAndDependencyFailBeforePersistence();
             NullAuditEventFailsClosed();
             NonUtcTimestampFailsBeforePersistence();
+            UndefinedCategoryFailsClosed();
         }
 
         private static void PaddedMapKeyFailsBeforePersistence()
@@ -75,6 +77,40 @@ namespace QS3D.Core.SmokeTests
                 Action = "test"
             });
             RejectSave(project, "Local audit timestamp was converted using machine timezone during persistence.");
+        }
+
+        private static void UndefinedCategoryFailsClosed()
+        {
+            var project = NewProject("family-category");
+            project.Families.Add(new ProjectFamily("F1", "Family", (ElementCategory)999));
+            RejectSave(project, "Undefined family category was persisted.");
+
+            project = NewProject("element-category");
+            project.Elements.Add(new ProjectElement("E1", (ElementCategory)999, string.Empty, string.Empty, string.Empty));
+            RejectSave(project, "Undefined element category was persisted.");
+
+            project = NewProject("rule-category");
+            project.QuantityRules.Add(new QuantityRule("R1", (ElementCategory)999, "Area", "1", "v1"));
+            RejectSave(project, "Undefined quantity-rule category was persisted.");
+
+            project = NewProject("load-category");
+            project.Families.Add(new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall));
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-category-load-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(project, path);
+                File.WriteAllText(path, File.ReadAllText(path).Replace("category=\"ArchitecturalWall\"", "category=\"999\""));
+                var rejected = false;
+                try { store.Load(path); }
+                catch (InvalidDataException) { rejected = true; }
+                if (!rejected) throw new Exception("Undefined numeric category was accepted while loading QSDB.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
         }
 
         private static ProjectState NewProject(string id)
