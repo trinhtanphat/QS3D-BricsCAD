@@ -45,6 +45,7 @@ namespace QS3D.BricsCAD.V25
                 issues.AddRange(PhysicalOpeningCutLiveStateService.Inspect(document, project));
                 issues.AddRange(new GeneratedGeometryStaleHealthService().Inspect(project));
                 issues.AddRange(new GeneratedRebarModeHealthService().Inspect(project));
+                issues.AddRange(new RebarFabricationQualificationHealthService().Inspect(project));
                 issues.AddRange(BomReleaseGuardService.Inspect(project, liveGenerated));
                 issues = issues
                     .GroupBy(x => x.Code + "\n" + x.ElementId + "\n" + x.Message, StringComparer.Ordinal)
