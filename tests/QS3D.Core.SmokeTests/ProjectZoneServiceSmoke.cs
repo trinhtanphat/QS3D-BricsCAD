@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         {
             CreateUpdateAssignAndDelete();
             AssignmentMarksGeneratedGeometryStale();
+            AssignmentRejectsSpoofedSameIdElement();
             DeleteGuardsActiveAndReferencedZones();
             RejectsDuplicateNames();
         }
@@ -46,6 +47,20 @@ namespace QS3D.Core.SmokeTests
             ProjectZoneService.Assign(project, z2.Id, new[] { element });
             if (!element.IsGeneratedSolidStale()) throw new Exception("Zone assignment must stale generated solid output.");
             if ((element.Dirty & ElementDirtyFlags.Relations) == 0) throw new Exception("Zone assignment must dirty relations.");
+        }
+
+        private static void AssignmentRejectsSpoofedSameIdElement()
+        {
+            var project = new ProjectState("p-spoof", "Zone ownership");
+            var z1 = ProjectZoneService.Create(project, "z1", "Khu A");
+            var z2 = ProjectZoneService.Create(project, "z2", "Khu B");
+            var owned = new ProjectElement("same-id", ElementCategory.Room, "fam", "floor", z1.Id);
+            project.Elements.Add(owned);
+            var spoofed = new ProjectElement("same-id", ElementCategory.Room, "fam", "floor", z1.Id);
+
+            Throws<InvalidOperationException>(() => ProjectZoneService.Assign(project, z2.Id, new[] { spoofed }));
+            if (owned.ZoneId != z1.Id) throw new Exception("Rejected spoofed assignment must not mutate the project-owned element.");
+            if (spoofed.ZoneId != z1.Id) throw new Exception("Rejected spoofed assignment must not mutate the foreign element.");
         }
 
         private static void DeleteGuardsActiveAndReferencedZones()
