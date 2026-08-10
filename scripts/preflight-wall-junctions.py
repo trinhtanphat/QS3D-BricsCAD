@@ -8,12 +8,13 @@ errors = []
 planner = ROOT / "src/QS3D.Core/Geometry/WallJunctionPlanner.cs"
 adjustment = ROOT / "src/QS3D.Core/Geometry/WallJunctionAdjustmentPlanner.cs"
 command = ROOT / "src/QS3D.BricsCAD.V25/WallJunctionCommands.cs"
+snap_command = ROOT / "src/QS3D.BricsCAD.V25/WallJunctionSnapCommands.cs"
 hub = ROOT / "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml"
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/WallJunctionRegressionSmoke.cs"
 adjustment_smoke = ROOT / "tests/QS3D.Core.SmokeTests/WallJunctionAdjustmentSmoke.cs"
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 
-for path in (planner, adjustment, command, hub, smoke, adjustment_smoke, registration):
+for path in (planner, adjustment, command, snap_command, hub, smoke, adjustment_smoke, registration):
     if not path.is_file():
         errors.append("missing wall-junction file: " + str(path.relative_to(ROOT)))
 
@@ -59,7 +60,7 @@ if command.is_file():
     text = command.read_text(encoding="utf-8")
     for needle in (
         'CommandMethod("QS3DWALLJUNCTIONS"',
-        "new WallJunctionPlanner().Plan",
+        "new WallJunctionAdjustmentPlanner().Plan",
         'MetadataNumber(project, "WallJunctionToleranceM", 0.005d',
         'MetadataNumber(project, "WallArcSagittaM", 0.002d',
         'MetadataNumber(project, "WallJunctionPlanarityToleranceM", tolerance',
@@ -71,13 +72,37 @@ if command.is_file():
         "EnsureElevation",
         "plan-view đồng phẳng",
         "BulgeArcTessellator.Tessellate",
+        "SnapPlan=",
         'AuditTrail.ForProject(project).Record("wall.junction.analyze"',
     ):
         if needle not in text:
             errors.append("wall junction command guard missing: " + needle)
 
-if hub.is_file() and 'Tag="QS3DWALLJUNCTIONS"' not in hub.read_text(encoding="utf-8"):
-    errors.append("Domain Hub does not expose QS3DWALLJUNCTIONS")
+if snap_command.is_file():
+    text = snap_command.read_text(encoding="utf-8")
+    for needle in (
+        'CommandMethod("QS3DWALLSNAPPREVIEW"',
+        'CommandMethod("QS3DWALLSNAPAPPLY"',
+        "WallJunctionAdjustmentPlanner",
+        "PreviewSignatureKey",
+        "SHA256.Create()",
+        "preview không còn khớp" if False else "Preview không còn khớp",
+        "ElementDirtyFlags.Geometry | ElementDirtyFlags.Quantity",
+        "wallHandles.Contains(handle)",
+        "Wall Snap không tự chỉnh bulged/curved POLYLINE",
+        'AuditTrail.ForProject(project).Record("wall.junction.snap.preview"',
+        'AuditTrail.ForProject(project).Record("wall.junction.snap.apply"',
+    ):
+        if needle not in text:
+            errors.append("wall snap preview/apply guard missing: " + needle)
+
+if hub.is_file():
+    text = hub.read_text(encoding="utf-8")
+    if 'Tag="QS3DWALLJUNCTIONS"' not in text:
+        errors.append("Domain Hub does not expose QS3DWALLJUNCTIONS")
+    for command_name in ("QS3DWALLSNAPPREVIEW", "QS3DWALLSNAPAPPLY"):
+        if 'Tag="' + command_name + '"' not in text:
+            errors.append("Domain Hub does not expose " + command_name)
 
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
@@ -117,4 +142,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: deterministic wall-junction topology, reviewable endpoint snap plans, spatial indexing, finite-safe/coplanar CAD analysis, command/UI wiring and regression coverage are present.")
+print("PASS: deterministic wall-junction topology, review-gated endpoint snap apply, spatial indexing, finite-safe/coplanar CAD analysis, command/UI wiring and regression coverage are present.")
