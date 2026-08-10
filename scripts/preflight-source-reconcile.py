@@ -10,9 +10,11 @@ service = ROOT / "src/QS3D.BricsCAD.V25/Services/SourceReconcileService.cs"
 command = ROOT / "src/QS3D.BricsCAD.V25/SourceReconcileCommands.cs"
 ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/ProjectRibbonAugmenter.cs"
 engine = ROOT / "src/QS3D.Core/Services/RegenerationEngine.cs"
+dependency_graph = ROOT / "src/QS3D.Core/Services/DependencyGraph.cs"
 ownership_index = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipIndex.cs"
 regen_smoke = ROOT / "tests/QS3D.Core.SmokeTests/RegenerationSubsetSmoke.cs"
 ownership_smoke = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedHandleOwnershipIndexSmoke.cs"
+direct_dependency_smoke = ROOT / "tests/QS3D.Core.SmokeTests/DependencyGraphDirectDependentsSmoke.cs"
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 doc = ROOT / "docs/SOURCE-EDIT-WORKFLOW.md"
 
@@ -29,7 +31,12 @@ checks = {
         "Select the authoritative source CAD instead.",
         "Source reconcile P0 requires exactly one authoritative source handle per semantic element",
         "ExpandInvalidationTargets",
-        "candidate.DependsOn.Any(result.ContainsKey)",
+        "graph.Rebuild(project.Elements);",
+        "graph.GetDirectDependents(current.Id)",
+        "new Queue<ProjectElement>()",
+        "EnqueueOpeningHost(current, byId, result, queue)",
+        "EnqueueInvalidationTarget(dependent, result, queue)",
+        "Source reconcile cannot resolve duplicate semantic element id",
         "GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets)",
         "ProjectStateSnapshot.Capture(project)",
         "var cadCommitted = false;",
@@ -73,6 +80,11 @@ checks = {
         "var targets = project.Elements.Where(x => ids.Contains(x.Id)).ToList();",
         "return Regenerate(project, targets, targets.Count);",
     ],
+    dependency_graph: [
+        "public IReadOnlyList<string> GetDirectDependents(string sourceId)",
+        "_dependents.TryGetValue(normalized, out var dependents)",
+        "dependents.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)",
+    ],
     ownership_index: [
         "public sealed class GeneratedHandleOwnershipIndex",
         "public static GeneratedHandleOwnershipIndex Build(ProjectState project)",
@@ -97,9 +109,15 @@ checks = {
         "DifferentLogicalSlotsOnSameOwnerFailClosed",
         "BuiltIndexIsMembershipSnapshot",
     ],
+    direct_dependency_smoke: [
+        "DirectLookupIsDeterministicAndNonTransitive",
+        "LookupNormalizesSourceId",
+        "MissingSourceIsEmpty",
+    ],
     registration: [
         "RegenerationSubsetSmoke.Run();",
         "GeneratedHandleOwnershipIndexSmoke.Run();",
+        "DependencyGraphDirectDependentsSmoke.Run();",
     ],
     doc: [
         "`QS3DSYNCSOURCE`",
@@ -144,6 +162,17 @@ if service.is_file():
         errors.append("Source reconcile must not rescan the whole project for generated ownership on every selected handle")
     if ".Where(x => x.SourceHandles.Any" in resolve:
         errors.append("Source reconcile must not rescan all project elements for source ownership on every selected handle")
+
+    closure_start = text.find("private static IReadOnlyList<ProjectElement> ExpandInvalidationTargets")
+    closure_end = text.find("private static void EnqueueInvalidationTarget", closure_start)
+    closure = text[closure_start:closure_end] if closure_start >= 0 and closure_end > closure_start else ""
+    graph_build = closure.find("graph.Rebuild(project.Elements)")
+    queue_loop = closure.find("while (queue.Count > 0)")
+    if min(graph_build, queue_loop) < 0 or graph_build > queue_loop:
+        errors.append("Source reconcile must build the reverse dependency index once before queue-based invalidation closure traversal")
+    if "while (expanded)" in closure or "candidate.DependsOn.Any(result.ContainsKey)" in closure:
+        errors.append("Source reconcile invalidation closure must not repeatedly rescan all project elements")
+
     if "GeneratedHandleOwnershipLookupStatus" in text:
         errors.append("GeneratedHandleOwnershipLookupStatus is not part of the current Core ownership API")
     if "engine.RegenerateDirty(project)" in text:
@@ -166,4 +195,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE builds generated/source ownership indexes once per operation, preserves ambiguous/untracked fail-closed behavior, expands linked-host/DependsOn invalidation closure, removes generated dependents ownership-safely, refreshes source-derived semantic state, regenerates only the affected semantic closure to stability, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
+print("PASS: QS3DSYNCSOURCE builds generated/source ownership and reverse dependency indexes once per operation, preserves ambiguous/untracked fail-closed behavior, traverses linked-host/DependsOn invalidation through a bounded queue, removes generated dependents ownership-safely, refreshes source-derived semantic state, regenerates only the affected semantic closure to stability, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
