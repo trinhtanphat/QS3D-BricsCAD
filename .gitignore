@@ -4,6 +4,7 @@ bin/
 obj/
 TestResults/
 dist/
+artifacts/
 *.user
 *.suo
 *.nupkg
