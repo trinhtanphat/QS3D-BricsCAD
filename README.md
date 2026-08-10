@@ -96,7 +96,7 @@ Beam stirrups can use explicitly configured bend-radius/hook-tail parameters. Fa
 
 ### Quantity, schedules and exports
 
-- BQ grouping/filtering/Locate/XLSX and ED2 Excel/Handle round-trip.
+- BQ grouping/filtering/Locate and one-sheet XLSX review. `QS3DED2` applies `Selection/Floor/Zone/All` before aggregation, writes one-element-per-row `CHI_TIET` plus Zone-aware `TONG_HOP`, and `QS3DEXCELLOCATE` validates Element ID ↔ Handle ↔ DWG fingerprint before changing CAD selection.
 - Quick Takeoff with drawing-unit conversion.
 - `QS3DB4D` bounded Current Space scan with high-confidence recognition/review.
 - B4D excludes generated output via canonical Core `CollectOwnerHandles(project)`, so owner classification, parsing and dedupe remain one source of truth as generated families evolve.

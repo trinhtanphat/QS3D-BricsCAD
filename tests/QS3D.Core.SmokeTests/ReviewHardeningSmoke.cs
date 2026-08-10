@@ -62,6 +62,9 @@ namespace QS3D.Core.SmokeTests
             var directory = TempDirectory("excel-handle-roundtrip");
             var qs3dPath = Path.Combine(directory, "qs3d.xlsx");
             var qs3dBlankHandlePath = Path.Combine(directory, "qs3d-blank-handle.xlsx");
+            var invalidHandlePath = Path.Combine(directory, "qs3d-invalid-handle.xlsx");
+            var ed2Path = Path.Combine(directory, "ed2.xlsx");
+            var reorderedEd2Path = Path.Combine(directory, "ed2-reordered.xlsx");
             var bltPath = Path.Combine(directory, "blt.xlsx");
             try
             {
@@ -70,13 +73,43 @@ namespace QS3D.Core.SmokeTests
                 XlsxQuantityExporter.Export(qs3dPath, new[] { row });
                 var exported = XlsxHandleReader.ReadHandleLookup(qs3dPath, 2);
                 Equal(2, exported.Handles.Count); Equal("AB12", exported.Handles[0]); Equal("30DE", exported.Handles[1]);
-                Equal("DWG-FINGERPRINT-1", exported.DrawingFingerprint); True(!exported.UsesLegacyDecimalHandles);
+                Equal(1, exported.ElementIds.Count); Equal("WF-1", exported.ElementIds[0]);
+                Equal("DWG-FINGERPRINT-1", exported.DrawingFingerprint); True(!exported.UsesLegacyDecimalHandles); True(exported.IsModernSchema);
 
                 var blankHandleRow = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "$12510 cost note", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
                 blankHandleRow.ElementIds.Add("WF-2");
                 XlsxQuantityExporter.Export(qs3dBlankHandlePath, new[] { blankHandleRow });
-                var blankHandle = XlsxHandleReader.ReadHandleLookup(qs3dBlankHandlePath, 2);
-                Equal(0, blankHandle.Handles.Count); Equal("DWG-FINGERPRINT-1", blankHandle.DrawingFingerprint); True(!blankHandle.UsesLegacyDecimalHandles);
+                Throws<InvalidDataException>(() => XlsxHandleReader.ReadHandleLookup(qs3dBlankHandlePath, 2));
+
+                var invalidHandle = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
+                invalidHandle.ElementIds.Add("WF-BAD"); invalidHandle.SourceHandles.Add("NOT-HEX");
+                XlsxQuantityExporter.Export(invalidHandlePath, new[] { invalidHandle });
+                Throws<InvalidDataException>(() => XlsxHandleReader.ReadHandleLookup(invalidHandlePath, 2));
+
+                var secondDetail = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
+                secondDetail.ElementIds.Add("WF-2"); secondDetail.SourceHandles.Add("40AA");
+                var summary = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 2 };
+                summary.ElementIds.Add("WF-1"); summary.ElementIds.Add("WF-2"); summary.SourceHandles.Add("AB12"); summary.SourceHandles.Add("30DE"); summary.SourceHandles.Add("40AA");
+                XlsxQuantityExporter.ExportEd2(ed2Path, new[] { row, secondDetail }, new[] { summary });
+                using (var archive = ZipFile.OpenRead(ed2Path))
+                {
+                    True(archive.GetEntry("xl/worksheets/sheet1.xml") != null);
+                    True(archive.GetEntry("xl/worksheets/sheet2.xml") != null);
+                    using (var reader = new StreamReader(archive.GetEntry("xl/workbook.xml")!.Open(), Encoding.UTF8))
+                    {
+                        var workbook = reader.ReadToEnd();
+                        True(workbook.Contains("CHI_TIET")); True(workbook.Contains("TONG_HOP"));
+                    }
+                }
+                var ed2Detail = XlsxHandleReader.ReadHandleLookup(ed2Path, 3);
+                Equal(1, ed2Detail.Handles.Count); Equal("40AA", ed2Detail.Handles[0]); Equal(1, ed2Detail.ElementIds.Count); Equal("WF-2", ed2Detail.ElementIds[0]); Equal("DWG-FINGERPRINT-1", ed2Detail.DrawingFingerprint);
+                Equal("CHI_TIET", ed2Detail.WorksheetName); True(ed2Detail.IsModernSchema); True(ed2Detail.IsEd2Detail);
+                Throws<InvalidDataException>(() => XlsxQuantityExporter.ExportEd2(ed2Path, new[] { summary }, new[] { summary }));
+
+                CreateReorderedEd2Workbook(reorderedEd2Path);
+                var reordered = XlsxHandleReader.ReadHandleLookup(reorderedEd2Path, 2);
+                Equal("CHI_TIET", reordered.WorksheetName); True(reordered.IsEd2Detail);
+                Equal("ED2-2", reordered.ElementIds.Single()); Equal("BEEF", reordered.Handles.Single());
 
                 using (var stream = new FileStream(bltPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
                 using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
@@ -218,6 +251,23 @@ namespace QS3D.Core.SmokeTests
             project.Zones.Add(new ZoneDefinition("z", "Vùng")); project.Floors.Add(new FloorDefinition("f", "Tầng", 0));
             var element = new ProjectElement("B1", ElementCategory.Beam, "beam-family", "f", "z"); element.Properties["Material"] = "C30"; element.SourceHandles.Add("A1"); element.SetQuantity("NetVolumeM3", 1.25d); project.Elements.Add(element);
             return project;
+        }
+
+        private static void CreateReorderedEd2Workbook(string path)
+        {
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+            using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
+            {
+                WriteEntry(archive, "xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"TONG_HOP\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"CHI_TIET\" sheetId=\"2\" r:id=\"rId2\"/></sheets></workbook>");
+                WriteEntry(archive, "xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/></Relationships>");
+                WriteEntry(archive, "xl/worksheets/sheet1.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData/></worksheet>");
+                WriteEntry(archive, "xl/worksheets/sheet2.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>QS3D Element ID</t></is></c><c r=\"B1\" t=\"inlineStr\"><is><t>CAD Handle (hex)</t></is></c><c r=\"C1\" t=\"inlineStr\"><is><t>QS3D Drawing Fingerprint</t></is></c></row><row r=\"2\"><c r=\"A2\" t=\"inlineStr\"><is><t>ED2-2</t></is></c><c r=\"B2\" t=\"inlineStr\"><is><t>BEEF</t></is></c><c r=\"C2\" t=\"inlineStr\"><is><t>FP-2</t></is></c></row></sheetData></worksheet>");
+            }
+        }
+
+        private static void WriteEntry(ZipArchive archive, string path, string contents)
+        {
+            using (var writer = new StreamWriter(archive.CreateEntry(path).Open(), new UTF8Encoding(false))) writer.Write(contents);
         }
 
         private static string TempDirectory(string name)

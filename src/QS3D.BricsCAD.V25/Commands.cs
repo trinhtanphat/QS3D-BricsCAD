@@ -12,6 +12,7 @@ using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
+using QS3D.Core.Model;
 using QS3D.Core.Rebar;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
@@ -73,7 +74,80 @@ namespace QS3D.BricsCAD.V25
         }
 
         [CommandMethod("QS3DED2", CommandFlags.UsePickSet)]
-        public void ShowEd2Workflow() => ShowQuantitySummary();
+        public void ExportEd2Workflow()
+        {
+            var doc = Active(); if (doc == null) return;
+            Guard(doc, "QS3DED2", () =>
+            {
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                if (project.Elements.Count == 0)
+                    throw new InvalidOperationException("ED2 chưa có semantic element để xuất. Chạy QS3DB4D/capture trước.");
+
+                var implied = Cad.EntitySnapshotReader.ReadImpliedSelection(doc);
+                var defaultScope = implied.Count > 0 ? "Selection" : "All";
+                var scopePrompt = doc.Editor.GetKeywords(
+                    "\nPhạm vi ED2 [Selection/Floor/Zone/All] <" + defaultScope + ">: ",
+                    "Selection Floor Zone All");
+                if (scopePrompt.Status != PromptStatus.OK && scopePrompt.Status != PromptStatus.None) return;
+                var scope = scopePrompt.Status == PromptStatus.None ? defaultScope : scopePrompt.StringResult;
+
+                IReadOnlyList<string>? elementIds = null;
+                if (string.Equals(scope, "Selection", StringComparison.OrdinalIgnoreCase))
+                {
+                    var snapshots = implied.Count > 0 ? implied : Cad.EntitySnapshotReader.ReadCurrentSelection(doc);
+                    elementIds = ResolveEd2Selection(project, snapshots);
+                }
+                else if (string.Equals(scope, "Floor", StringComparison.OrdinalIgnoreCase))
+                {
+                    var floor = project.FindFloor(project.ActiveFloorId) ?? throw new InvalidOperationException("ED2 Floor cần một Floor/Level active hợp lệ.");
+                    elementIds = project.Elements
+                        .Where(x => string.Equals(x.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
+                        .Select(x => x.Id)
+                        .ToList();
+                }
+                else if (string.Equals(scope, "Zone", StringComparison.OrdinalIgnoreCase))
+                {
+                    var zone = project.FindZone(project.ActiveZoneId) ?? throw new InvalidOperationException("ED2 Zone cần một Zone active hợp lệ.");
+                    elementIds = project.Elements
+                        .Where(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))
+                        .Select(x => x.Id)
+                        .ToList();
+                }
+                else if (!string.Equals(scope, "All", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("ED2 scope không được hỗ trợ: " + scope + ".");
+                }
+
+                var regenerated = RegenerateProject(project);
+                var details = elementIds == null
+                    ? ProjectQuantityReportBuilder.Detail(project)
+                    : ProjectQuantityReportBuilder.Detail(project, elementIds);
+                var summary = elementIds == null
+                    ? ProjectQuantityReportBuilder.Group(project)
+                    : ProjectQuantityReportBuilder.Group(project, elementIds);
+                if (details.Count == 0)
+                    throw new InvalidOperationException("ED2 scope " + scope + " không có cấu kiện hợp lệ để xuất.");
+
+                var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
+                var dialog = new SaveFileDialog
+                {
+                    Title = "ED2 • Xuất CHI_TIET / TONG_HOP",
+                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
+                    DefaultExt = ".xlsx",
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                    FileName = drawingName + "-ED2.xlsx"
+                };
+                if (dialog.ShowDialog() != true) return;
+                XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);
+
+                var status = "ED2 " + scope + ": " + details.Count + " CHI_TIET • " + summary.Count +
+                             " TONG_HOP • regenerate " + regenerated + " • " + dialog.FileName;
+                PaletteCoordinator.SetStatus(status);
+                doc.Editor.WriteMessage("\nQS3D " + status +
+                    "\nDùng QS3DEXCELLOCATE với số dòng trong sheet CHI_TIET để định vị ngược theo Handle.");
+            });
+        }
 
         [CommandMethod("QS3DBBS", CommandFlags.Modal)]
         public void ExportBbs()
@@ -324,8 +398,6 @@ namespace QS3D.BricsCAD.V25
                 var prompt = new PromptIntegerOptions("\nNhập số dòng Excel cần định vị: ") { AllowNone = false, LowerLimit = 1, UseDefaultValue = true, DefaultValue = 2 };
                 var row = doc.Editor.GetInteger(prompt); if (row.Status != PromptStatus.OK) return;
                 var lookup = XlsxHandleReader.ReadHandleLookup(dialog.FileName, row.Value);
-                var handles = lookup.Handles;
-                if (handles.Count == 0) { doc.Editor.WriteMessage("\nQS3D: dòng Excel không có CAD Handle hợp lệ."); return; }
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
                 if (!string.IsNullOrWhiteSpace(lookup.DrawingFingerprint) &&
                     !string.Equals(lookup.DrawingFingerprint, project.DrawingFingerprint, StringComparison.OrdinalIgnoreCase))
@@ -334,9 +406,9 @@ namespace QS3D.BricsCAD.V25
                         ", current=" + project.DrawingFingerprint + ".");
                 if (string.IsNullOrWhiteSpace(lookup.DrawingFingerprint))
                 {
-                    var warning = lookup.UsesLegacyDecimalHandles
-                        ? "\nLegacy BLT row has no DWG fingerprint. Type YES to locate these Handles in the active drawing: "
-                        : "\nExcel row has no DWG fingerprint. Type YES to locate these Handles in the active drawing: ";
+                    if (!lookup.UsesLegacyDecimalHandles)
+                        throw new InvalidOperationException("Only a legacy BLT $decimal Handle row may omit the DWG fingerprint.");
+                    var warning = "\nLegacy BLT row has no DWG fingerprint. Type YES to locate these Handles in the active drawing: ";
                     var confirmation = doc.Editor.GetString(new PromptStringOptions(warning) { AllowSpaces = false });
                     if (confirmation.Status != PromptStatus.OK || !string.Equals(confirmation.StringResult?.Trim(), "YES", StringComparison.OrdinalIgnoreCase))
                     {
@@ -344,11 +416,70 @@ namespace QS3D.BricsCAD.V25
                         return;
                     }
                 }
-                var count = Cad.CadHandleService.Select(doc, handles);
+
+                IReadOnlyList<string> handles = lookup.Handles;
+                if (lookup.ElementIds.Count > 0)
+                {
+                    foreach (var elementId in lookup.ElementIds)
+                        if (project.FindElement(elementId) == null)
+                            throw new InvalidOperationException("Excel references unknown QS3D Element ID: " + elementId + ".");
+                    var projectHandles = SourceHandleResolver.Resolve(project, lookup.ElementIds)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    var excelHandles = lookup.Handles
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    if (!excelHandles.SequenceEqual(projectHandles, StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Excel Element ID ↔ CAD Handle provenance does not match the active QS3D project.");
+                    handles = projectHandles;
+                }
+                if (handles.Count == 0) { doc.Editor.WriteMessage("\nQS3D: dòng Excel không có Element ID/CAD Handle hợp lệ."); return; }
+
+                var resolved = Cad.CadHandleService.Resolve(doc, handles);
+                if (resolved.Count != handles.Count)
+                    throw new InvalidOperationException(
+                        "Excel Locate resolved only " + resolved.Count + "/" + handles.Count +
+                        " Handle(s). Selection was not changed; repair stale/missing CAD provenance first.");
+                doc.Editor.SetImpliedSelection(resolved.ToArray());
+                var count = resolved.Count;
                 PaletteCoordinator.SetStatus("Excel dòng " + row.Value + ": " + handles.Count + " Handle • " + count + " đối tượng CAD");
                 doc.Editor.WriteMessage("\nQS3D Excel Locate: resolved " + count + "/" + handles.Count + " handle(s).");
                 if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
             });
+        }
+
+        private static IReadOnlyList<string> ResolveEd2Selection(ProjectState project, IReadOnlyList<EntitySnapshot> snapshots)
+        {
+            if (snapshots == null || snapshots.Count == 0)
+                throw new InvalidOperationException("ED2 Selection cần ít nhất một CAD object đã được QS3D theo dõi.");
+
+            var handles = new HashSet<string>(
+                snapshots.Select(x => (x.Handle ?? string.Empty).Trim()).Where(x => x.Length > 0),
+                StringComparer.OrdinalIgnoreCase);
+            var elements = project.Elements
+                .Where(x => SemanticReferenceHandles.MatchesSelection(x, handles))
+                .ToList();
+            if (elements.Count == 0)
+                throw new InvalidOperationException("ED2 Selection không khớp semantic element nào; chạy QS3DB4D/capture trước.");
+
+            var aliases = new HashSet<string>(
+                elements.SelectMany(SemanticReferenceHandles.GetSelectionAliases),
+                StringComparer.OrdinalIgnoreCase);
+            var untracked = handles
+                .Where(x => !aliases.Contains(x))
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (untracked.Count > 0)
+                throw new InvalidOperationException(
+                    "ED2 Selection trộn CAD object chưa thuộc semantic scope: " + string.Join(", ", untracked) + ".");
+
+            return elements
+                .Select(x => x.Id)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         [CommandMethod("QS3DRESETUI", CommandFlags.Modal)] public void ResetUi() { PaletteCoordinator.Dispose(); PaletteCoordinator.EnsureCreated(); PaletteCoordinator.Show(); RibbonBootstrapper.Reset(); RibbonBootstrapper.TryInitialize(); Write("QS3D UI đã reset."); }

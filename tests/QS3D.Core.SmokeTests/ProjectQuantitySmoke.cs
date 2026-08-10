@@ -11,8 +11,53 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             LinkedOpeningReport();
+            DetailRowsPreserveOneElementProvenance();
             PreferredBqQuantityDoesNotEvaluateUnusedFallbacks();
             WallFinishPrefersRegeneratedNetArea();
+        }
+
+        private static void DetailRowsPreserveOneElementProvenance()
+        {
+            var project = new ProjectState("detail", "ED2 detail") { DrawingFingerprint = "DETAIL-FP" };
+            project.Floors.Add(new FloorDefinition("f", "Tầng 1", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone A"));
+            var family = new ProjectFamily("wall", "Tường", ElementCategory.ArchitecturalWall);
+            project.Families.Add(family);
+            var first = new ProjectElement("W1", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
+            first.SourceHandles.Add("A1");
+            first.Quantities["NetConcreteM3"] = 1.25d;
+            first.Quantities["GrossConcreteM3"] = 1.5d;
+            var second = new ProjectElement("W2", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
+            second.SourceHandles.Add("A2");
+            second.Quantities["NetConcreteM3"] = 2.25d;
+            second.Quantities["GrossConcreteM3"] = 2.5d;
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+
+            var detail = ProjectQuantityReportBuilder.Detail(project);
+            if (detail.Count != 2 || detail.Any(x => x.Count != 1 || x.ElementIds.Count != 1 || x.SourceHandles.Count != 1))
+                throw new Exception("ED2 detail must retain exactly one semantic element and its source Handle per row.");
+            if (detail[0].ElementIds[0] != "W1" || detail[0].SourceHandles[0] != "A1" || detail[0].DrawingFingerprint != "DETAIL-FP")
+                throw new Exception("ED2 detail provenance/order failed.");
+            if (detail[0].Zone != "Zone A") throw new Exception("ED2 detail must expose the semantic Zone.");
+
+            var selectedDetail = ProjectQuantityReportBuilder.Detail(project, new[] { " w2 " });
+            var selectedSummary = ProjectQuantityReportBuilder.Group(project, new[] { "W2" });
+            if (selectedDetail.Count != 1 || selectedDetail[0].ElementIds.Single() != "W2" || selectedSummary.Single().Count != 1)
+                throw new Exception("ED2 selected semantic scope failed.");
+
+            project.Zones.Add(new ZoneDefinition("z2", "Zone B"));
+            var third = new ProjectElement("W3", ElementCategory.ArchitecturalWall, family.Id, "f", "z2");
+            third.SourceHandles.Add("A3");
+            project.Elements.Add(third);
+            var grouped = ProjectQuantityReportBuilder.Group(project);
+            if (grouped.Count != 2 || grouped.Any(x => string.IsNullOrWhiteSpace(x.Zone)))
+                throw new Exception("BQ/ED2 summary must not merge the same Floor/Family across different Zones.");
+
+            try { ProjectQuantityReportBuilder.Detail(project, new[] { "missing" }); throw new Exception("Unknown ED2 element id must fail closed."); }
+            catch (System.Collections.Generic.KeyNotFoundException) { }
+            try { ProjectQuantityReportBuilder.Group(project, new[] { " " }); throw new Exception("Blank ED2 element id must fail closed."); }
+            catch (ArgumentException) { }
         }
 
         private static void LinkedOpeningReport()

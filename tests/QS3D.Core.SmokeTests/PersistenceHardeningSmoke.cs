@@ -183,7 +183,7 @@ namespace QS3D.Core.SmokeTests
                         Require(xml.Contains("QS3D Drawing Fingerprint"), "Excel drawing-fingerprint header missing.");
                         Require(!xml.Contains("Đỉnh cửa"), "Stale mismatched Excel header is still present.");
                         Require(xml.Contains("state=\"frozen\""), "Excel header row is not frozen.");
-                        Require(xml.Contains("<autoFilter ref=\"A1:S2\"/>"), "Excel autofilter range is missing.");
+                        Require(xml.Contains("<autoFilter ref=\"A1:T2\"/>"), "Excel autofilter range is missing.");
                     }
                 }
             }

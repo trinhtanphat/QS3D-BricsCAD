@@ -13,16 +13,42 @@ namespace QS3D.Core.Export
     public sealed class XlsxHandleLookupResult
     {
         public XlsxHandleLookupResult(IEnumerable<string> handles, string drawingFingerprint, bool usesLegacyDecimalHandles)
+            : this(handles, Array.Empty<string>(), drawingFingerprint, usesLegacyDecimalHandles, string.Empty, false, false)
+        {
+        }
+
+        public XlsxHandleLookupResult(IEnumerable<string> handles, IEnumerable<string> elementIds, string drawingFingerprint, bool usesLegacyDecimalHandles)
+            : this(handles, elementIds, drawingFingerprint, usesLegacyDecimalHandles, string.Empty, false, false)
+        {
+        }
+
+        internal XlsxHandleLookupResult(
+            IEnumerable<string> handles,
+            IEnumerable<string> elementIds,
+            string drawingFingerprint,
+            bool usesLegacyDecimalHandles,
+            string worksheetName,
+            bool isModernSchema,
+            bool isEd2Detail)
         {
             if (handles == null) throw new ArgumentNullException(nameof(handles));
+            if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             Handles = handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+            ElementIds = elementIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
             DrawingFingerprint = (drawingFingerprint ?? string.Empty).Trim();
             UsesLegacyDecimalHandles = usesLegacyDecimalHandles;
+            WorksheetName = (worksheetName ?? string.Empty).Trim();
+            IsModernSchema = isModernSchema;
+            IsEd2Detail = isEd2Detail;
         }
 
         public IReadOnlyList<string> Handles { get; }
+        public IReadOnlyList<string> ElementIds { get; }
         public string DrawingFingerprint { get; }
         public bool UsesLegacyDecimalHandles { get; }
+        public string WorksheetName { get; }
+        public bool IsModernSchema { get; }
+        public bool IsEd2Detail { get; }
     }
 
     public static class XlsxHandleReader
@@ -45,38 +71,95 @@ namespace QS3D.Core.Export
 
             using (var archive = ZipFile.OpenRead(fullPath))
             {
-                var sheetEntry = archive.GetEntry("xl/worksheets/sheet1.xml") ?? archive.Entries.FirstOrDefault(x => x.FullName.StartsWith("xl/worksheets/sheet", StringComparison.OrdinalIgnoreCase) && x.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
-                if (sheetEntry == null) throw new InvalidDataException("Excel workbook does not contain a worksheet.");
+                var worksheet = ResolveWorksheet(archive);
+                var sheetEntry = worksheet.Entry;
                 var sharedStrings = ReadSharedStrings(archive);
                 var sheet = LoadXml(sheetEntry);
                 XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
                 var rows = sheet.Descendants(ns + "row").ToList();
-                var target = rows.FirstOrDefault(x => ParsePositiveInt((string?)x.Attribute("r")) == rowNumber);
-                if (target == null) return new XlsxHandleLookupResult(Array.Empty<string>(), string.Empty, false);
+                var targets = rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) == rowNumber).ToList();
+                if (targets.Count > 1) throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");
+                var target = targets.SingleOrDefault();
+                if (target == null)
+                    return new XlsxHandleLookupResult(Array.Empty<string>(), Array.Empty<string>(), string.Empty, false, worksheet.Name, false, worksheet.IsEd2Detail);
 
                 var targetCells = ReadCells(target, ns, sharedStrings);
                 var handleColumns = new HashSet<int>();
+                var elementIdColumns = new HashSet<int>();
                 var fingerprintColumns = new HashSet<int>();
-                var hasQs3dElementIdHeader = false;
                 foreach (var headerRow in rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) < rowNumber).Take(10))
                     foreach (var cell in ReadCells(headerRow, ns, sharedStrings))
                     {
-                        if (cell.Value.IndexOf("handle", StringComparison.OrdinalIgnoreCase) >= 0) handleColumns.Add(cell.Key);
-                        if (cell.Value.IndexOf("fingerprint", StringComparison.OrdinalIgnoreCase) >= 0) fingerprintColumns.Add(cell.Key);
-                        if (cell.Value.IndexOf("QS3D Element ID", StringComparison.OrdinalIgnoreCase) >= 0) hasQs3dElementIdHeader = true;
+                        var header = (cell.Value ?? string.Empty).Trim();
+                        if (string.Equals(header, "CAD Handle (hex)", StringComparison.OrdinalIgnoreCase)) handleColumns.Add(cell.Key);
+                        else if (header.IndexOf("handle", StringComparison.OrdinalIgnoreCase) >= 0) handleColumns.Add(cell.Key);
+                        if (string.Equals(header, "QS3D Drawing Fingerprint", StringComparison.OrdinalIgnoreCase)) fingerprintColumns.Add(cell.Key);
+                        if (string.Equals(header, "QS3D Element ID", StringComparison.OrdinalIgnoreCase)) elementIdColumns.Add(cell.Key);
                     }
 
-                var explicitHandles = new List<string>();
-                foreach (var column in handleColumns)
-                    if (targetCells.TryGetValue(column, out var value)) AddHexHandles(explicitHandles, value);
+                var isModernSchema = elementIdColumns.Count > 0 || fingerprintColumns.Count > 0;
+                if (isModernSchema && (elementIdColumns.Count != 1 || handleColumns.Count != 1 || fingerprintColumns.Count != 1))
+                    throw new InvalidDataException("QS3D Excel schema must contain exactly one Element ID, CAD Handle, and drawing fingerprint column.");
+
+                var elementIds = new List<string>();
+                foreach (var column in elementIdColumns)
+                    if (targetCells.TryGetValue(column, out var value)) AddElementIds(elementIds, value);
 
                 var drawingFingerprint = ReadDrawingFingerprint(targetCells, fingerprintColumns);
                 var decimalHandles = ParseDecimalHandles(targetCells.Values);
-                var preferLegacy = decimalHandles.Count > 0 && string.IsNullOrWhiteSpace(drawingFingerprint) && !hasQs3dElementIdHeader;
+                var preferLegacy = !isModernSchema && decimalHandles.Count > 0 && string.IsNullOrWhiteSpace(drawingFingerprint);
                 if (preferLegacy)
-                    return new XlsxHandleLookupResult(decimalHandles, drawingFingerprint, true);
-                return new XlsxHandleLookupResult(explicitHandles, drawingFingerprint, false);
+                    return new XlsxHandleLookupResult(decimalHandles, Array.Empty<string>(), drawingFingerprint, true, worksheet.Name, false, false);
+                var explicitHandles = new List<string>();
+                foreach (var column in handleColumns)
+                    if (targetCells.TryGetValue(column, out var value)) AddHexHandles(explicitHandles, value);
+                if (isModernSchema)
+                {
+                    if (elementIds.Count == 0) throw new InvalidDataException("QS3D Excel row is missing its Element ID.");
+                    if (worksheet.IsEd2Detail && elementIds.Count != 1) throw new InvalidDataException("ED2 CHI_TIET row must contain exactly one Element ID.");
+                    if (explicitHandles.Count == 0) throw new InvalidDataException("QS3D Excel row is missing its CAD Handle provenance.");
+                    if (string.IsNullOrWhiteSpace(drawingFingerprint)) throw new InvalidDataException("QS3D Excel row is missing its drawing fingerprint.");
+                }
+                return new XlsxHandleLookupResult(explicitHandles, elementIds, drawingFingerprint, false, worksheet.Name, isModernSchema, worksheet.IsEd2Detail);
             }
+        }
+
+        private static WorksheetReference ResolveWorksheet(ZipArchive archive)
+        {
+            var workbookEntry = archive.GetEntry("xl/workbook.xml");
+            var relationshipsEntry = archive.GetEntry("xl/_rels/workbook.xml.rels");
+            if (workbookEntry != null && relationshipsEntry != null)
+            {
+                var workbook = LoadXml(workbookEntry);
+                var relationships = LoadXml(relationshipsEntry);
+                XNamespace workbookNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                XNamespace documentRelationshipNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+                XNamespace packageRelationshipNs = "http://schemas.openxmlformats.org/package/2006/relationships";
+                var sheets = workbook.Descendants(workbookNs + "sheet").ToList();
+                if (sheets.Count == 0) throw new InvalidDataException("Excel workbook does not declare any worksheets.");
+                var detailSheets = sheets.Where(x => string.Equals(((string?)x.Attribute("name") ?? string.Empty).Trim(), "CHI_TIET", StringComparison.OrdinalIgnoreCase)).ToList();
+                if (detailSheets.Count > 1) throw new InvalidDataException("Excel workbook contains duplicate CHI_TIET worksheets.");
+                var selected = detailSheets.Count == 1 ? detailSheets[0] : sheets[0];
+                var relationshipId = (string?)selected.Attribute(documentRelationshipNs + "id");
+                if (string.IsNullOrWhiteSpace(relationshipId)) throw new InvalidDataException("Excel worksheet relationship id is missing.");
+                var matches = relationships.Descendants(packageRelationshipNs + "Relationship")
+                    .Where(x => string.Equals((string?)x.Attribute("Id"), relationshipId, StringComparison.Ordinal))
+                    .ToList();
+                if (matches.Count != 1) throw new InvalidDataException("Excel worksheet relationship is missing or ambiguous.");
+                if (string.Equals((string?)matches[0].Attribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("External Excel worksheet relationships are not supported.");
+                var target = ((string?)matches[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').TrimStart('/');
+                if (target.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) target = target.Substring(3);
+                if (target.IndexOf("..", StringComparison.Ordinal) >= 0) throw new InvalidDataException("Excel worksheet relationship target is invalid.");
+                var entry = archive.GetEntry("xl/" + target);
+                if (entry == null) throw new InvalidDataException("Excel worksheet part is missing: " + target + ".");
+                var name = ((string?)selected.Attribute("name") ?? string.Empty).Trim();
+                return new WorksheetReference(entry, name, string.Equals(name, "CHI_TIET", StringComparison.OrdinalIgnoreCase));
+            }
+
+            var fallback = archive.GetEntry("xl/worksheets/sheet1.xml") ?? archive.Entries.FirstOrDefault(x => x.FullName.StartsWith("xl/worksheets/sheet", StringComparison.OrdinalIgnoreCase) && x.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+            if (fallback == null) throw new InvalidDataException("Excel workbook does not contain a worksheet.");
+            return new WorksheetReference(fallback, string.Empty, false);
         }
 
         private static string ReadDrawingFingerprint(IReadOnlyDictionary<int, string> cells, IEnumerable<int> columns)
@@ -129,7 +212,8 @@ namespace QS3D.Core.Export
                     value = cell.Element(ns + "v")?.Value ?? string.Empty;
                     if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var index) && index >= 0 && index < sharedStrings.Count) value = sharedStrings[index];
                 }
-                result[column] = value;
+                if (result.ContainsKey(column)) throw new InvalidDataException("Excel row contains duplicate cells in column " + (column + 1) + ".");
+                result.Add(column, value);
             }
             return result;
         }
@@ -153,7 +237,19 @@ namespace QS3D.Core.Export
             {
                 var token = raw.Trim();
                 if (token.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) token = token.Substring(2);
-                if (long.TryParse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var number) && number > 0) AddUnique(result, number.ToString("X", CultureInfo.InvariantCulture));
+                if (!long.TryParse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var number) || number <= 0)
+                    throw new InvalidDataException("Excel row contains an invalid CAD Handle token: " + raw.Trim() + ".");
+                AddUnique(result, number.ToString("X", CultureInfo.InvariantCulture));
+            }
+        }
+
+        private static void AddElementIds(ICollection<string> result, string value)
+        {
+            foreach (var raw in (value ?? string.Empty).Split(new[] { ';', '|', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var id = raw.Trim();
+                if (id.Length == 0) continue;
+                if (!result.Contains(id, StringComparer.OrdinalIgnoreCase)) result.Add(id);
             }
         }
 
@@ -176,6 +272,20 @@ namespace QS3D.Core.Export
                 letters++;
             }
             return letters == 0 ? -1 : value - 1;
+        }
+
+        private sealed class WorksheetReference
+        {
+            public WorksheetReference(ZipArchiveEntry entry, string name, bool isEd2Detail)
+            {
+                Entry = entry ?? throw new ArgumentNullException(nameof(entry));
+                Name = name ?? string.Empty;
+                IsEd2Detail = isEd2Detail;
+            }
+
+            public ZipArchiveEntry Entry { get; }
+            public string Name { get; }
+            public bool IsEd2Detail { get; }
         }
     }
 }

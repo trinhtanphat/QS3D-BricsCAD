@@ -8,32 +8,56 @@ namespace QS3D.Core.Reporting
 {
     public static class ProjectQuantityReportBuilder
     {
-        public static IReadOnlyList<QuantityReportRow> Group(ProjectState project)
+        public static IReadOnlyList<QuantityReportRow> Group(ProjectState project) => Build(project, null, false);
+
+        public static IReadOnlyList<QuantityReportRow> Group(ProjectState project, IEnumerable<string> elementIds)
+        {
+            if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+            return Build(project, elementIds, false);
+        }
+
+        public static IReadOnlyList<QuantityReportRow> Detail(ProjectState project) => Build(project, null, true);
+
+        public static IReadOnlyList<QuantityReportRow> Detail(ProjectState project, IEnumerable<string> elementIds)
+        {
+            if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+            return Build(project, elementIds, true);
+        }
+
+        private static IReadOnlyList<QuantityReportRow> Build(ProjectState project, IEnumerable<string>? elementIds, bool detail)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             RoomFinishIdentityService.ValidateProject(project);
+            var selectedIds = ResolveSelection(project, elementIds);
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
+            var zones = project.Zones.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
+            var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var element in project.Elements)
             {
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0) throw new InvalidOperationException("Quantity report contains an element with an empty id.");
+                if (!seenElementIds.Add(elementId)) throw new InvalidOperationException("Quantity report contains duplicate element id: " + elementId + ".");
+                if (selectedIds != null && !selectedIds.Contains(elementId)) continue;
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
                 var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
+                var zone = zones.TryGetValue(element.ZoneId, out var zoneName) ? zoneName : element.ZoneId;
                 var familyName = families.TryGetValue(element.FamilyId, out var family) ? family.Name : element.FamilyId;
                 var category = element.Category.ToString();
-                var key = element.FloorId + "\u001f" + category + "\u001f" + element.FamilyId;
+                var key = detail ? "ELEMENT\u001f" + elementId : element.FloorId + "\u001f" + element.ZoneId + "\u001f" + category + "\u001f" + element.FamilyId;
                 if (!rows.TryGetValue(key, out var row))
                 {
-                    row = new QuantityReportRow { Floor = floor, Category = category, FamilyName = familyName, DrawingFingerprint = project.DrawingFingerprint };
+                    row = new QuantityReportRow { Floor = floor, Zone = zone, Category = category, FamilyName = familyName, DrawingFingerprint = project.DrawingFingerprint };
                     rows[key] = row;
                     order.Add(key);
                 }
 
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
-                row.ElementIds.Add(element.Id);
-                AddHandles(row.SourceHandles, SourceHandleResolver.Resolve(project, new[] { element.Id }));
+                row.ElementIds.Add(elementId);
+                AddHandles(row.SourceHandles, SourceHandleResolver.Resolve(project, new[] { elementId }));
                 var gross = QFirst(element, "GrossConcreteM3", "GrossVolumeM3");
                 var net = QFirstOrFallback(element, gross, "NetConcreteM3", "NetVolumeM3");
                 row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, gross, element.Id + "/GrossConcreteM3");
@@ -63,6 +87,20 @@ namespace QS3D.Core.Reporting
             }
 
             return order.Select(x => rows[x]).ToList();
+        }
+
+        private static HashSet<string>? ResolveSelection(ProjectState project, IEnumerable<string>? elementIds)
+        {
+            if (elementIds == null) return null;
+            var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in elementIds)
+            {
+                var id = (raw ?? string.Empty).Trim();
+                if (id.Length == 0) throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
+                if (!selected.Add(id)) continue;
+                if (project.FindElement(id) == null) throw new KeyNotFoundException("Unknown quantity report element: " + id);
+            }
+            return selected;
         }
 
         private static void AddHandles(IList<string> destination, IEnumerable<string> source)

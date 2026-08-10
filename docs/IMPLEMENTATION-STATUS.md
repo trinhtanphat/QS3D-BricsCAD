@@ -120,7 +120,7 @@ Remaining Curtain product/runtime work includes panel-by-panel backing glass sol
 
 - Semantic quantities and guarded native paths for Beam, Slab, Column, StructuralWall, Foundation, Stair, Railing and Earthwork.
 - Quick Takeoff uses drawing unit conversion.
-- BQ grouping/filtering/Locate/XLSX and ED2 Excel/Handle round-trip with DWG fingerprint safety.
+- BQ grouping/filtering/Locate and one-sheet XLSX review. ED2 now scopes before aggregation (`Selection/Floor/Zone/All`), exports one-element-per-row `CHI_TIET` plus Zone-aware `TONG_HOP`, and requires matching Element ID ↔ Handle ↔ DWG fingerprint plus complete live-Handle resolution before Excel-driven CAD selection.
 - Deterministic recognition/review/auto-apply.
 - `QS3DB4D` bounded Current Space scan excludes **all generated owner-slot handles through the shared ownership policy**, preventing QS3D-generated geometry from feeding back into source recognition when new generated families are introduced. Recognition/B4D apply still flows through guarded transactional semantic capture, so an output handle cannot be recaptured if a future scanner regression reaches that stage.
 

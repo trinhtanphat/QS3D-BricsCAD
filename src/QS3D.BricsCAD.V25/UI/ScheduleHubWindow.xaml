@@ -111,7 +111,9 @@
                         <Border Style="{StaticResource ScheduleCard}">
                             <StackPanel>
                                 <TextBlock Text="BẢNG TỔNG HỢP" Style="{StaticResource PanelTitle}"/>
-                                <Button Content="BQ tổng hợp / Excel" Tag="QS3DBQ" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
+                                <Button Content="BQ tổng hợp" Tag="QS3DBQ" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="ED2 • Excel ↔ CAD" Tag="QS3DED2" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
+                                <Button Content="Excel → CAD" Tag="QS3DEXCELLOCATE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Làm mới quantity" Tag="QS3DREGEN" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>

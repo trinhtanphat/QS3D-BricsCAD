@@ -7,6 +7,7 @@ namespace QS3D.Core.Reporting
     {
         public QuantityReportRow() { ElementIds = new List<string>(); SourceHandles = new List<string>(); }
         public string Floor { get; set; } = string.Empty;
+        public string Zone { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;
         public string FamilyName { get; set; } = string.Empty;
         public string DrawingFingerprint { get; set; } = string.Empty;
