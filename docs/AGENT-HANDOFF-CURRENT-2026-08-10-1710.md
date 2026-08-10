@@ -19,6 +19,7 @@ Local/runtime work is parked in:
 - `docs/LOCAL-V25-QUALIFICATION.md`
 - `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`
 - `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`
+- `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
 
 ## 1. Product and execution boundary
 
@@ -53,6 +54,8 @@ Transient thickness/profile DrawJig preview, repeated authoring UX and broader n
 
 `QS3DLINKHOST` now snapshots the full `ProjectState` before `HostLinkService.LinkOpening(...)`. Manual link mutation plus deterministic regeneration share one rollback boundary. If link/regeneration fails, the project snapshot is restored; if rollback itself fails, both failures are surfaced instead of silently leaving a half-mutated semantic project.
 
+Opening host dependencies are canonicalized rather than accumulated as duplicate host references. Keep dependency mutations ownership-safe and preserve dependent propagation through `DependencyGraph`.
+
 Keep palette/status refresh outside the semantic commit boundary. A post-commit UI failure must not turn a valid host-link commit into an apparent semantic failure.
 
 ### Physical opening-cut live freshness
@@ -63,19 +66,41 @@ The live fingerprint covers host source geometry and effective host dimensions; 
 
 Keep this service wired into `QS3DHEALTHALL` and `QS3DRELEASECHECK`. Missing/stale/mismatched live-cut metadata is intentionally release-blocking; do not “upgrade” an old cut by stamping metadata without actually rebuilding/cutting it.
 
-### Comprehensive Core health
+### Comprehensive Core health and semantic regeneration
 
-`QS3DHEALTH` uses `ComprehensiveModelHealthService`. Its Core-only aggregate includes model/source health, Room Finish integrity, dependency health, Level-reference health, generated ownership/stale/mode health, fabrication qualification and all current generated rebar/mesh/curtain output-family diagnostics.
+`QS3DHEALTH` uses `ComprehensiveModelHealthService`. Its Core-only aggregate includes model/source health, Room Finish integrity, dependency health, Level-reference health, Grid naming integrity, generated ownership/stale/mode health, fabrication qualification and all current generated rebar/mesh/curtain output-family diagnostics.
+
+`RegenerationEngine.RegenerateDirty(...)` and `RegenerateDirtySubset(...)` now share a project-snapshot transaction boundary. A semantic regenerator/rule failure restores the full project snapshot; if rollback itself fails, both errors are surfaced. Preserve this invariant when adding new regenerators. UI/native post-processing remains a separate boundary and must not be confused with Core semantic rollback.
 
 Live BricsCAD-state checks such as curtain-frame live fingerprints and physical-opening live-cut freshness stay in `QS3DHEALTHALL` / `QS3DRELEASECHECK`; do not introduce BricsCAD runtime dependencies into Core just to make the composite broader.
 
-## 3. Grid / reference model — partially advanced
+## 3. Grid / reference model — source workflow materially advanced
 
 `QS3DGRID` is source-implemented as guarded semantic capture for finite positive `LINE` / `ARC` Grid references. It reuses `ElementCategory.Grid`, transactional `SemanticCaptureService` and generic semantic quantities (`LengthM`, `Count`).
 
-Grid naming/renumbering bubbles, rectangular/radial systems, intersection constraints, Direct Draw Grid and structure-to-grid hosting are not complete. Extend the existing Grid semantic model rather than creating a second store.
+The semantic naming layer is also implemented:
 
-Read `docs/GRID-WORKFLOW.md`.
+- `GridNamingService` stores `GridLabel` and `GridSequenceIndex` on the existing Grid elements;
+- numeric and alphabetic (`A..Z, AA...`) sequences are deterministic;
+- the caller supplies explicit ordering; Core does not pretend to infer CAD spatial order;
+- the whole batch is validated before mutation, with case-insensitive uniqueness against other Grid labels;
+- `QS3DGRIDNUMBER` lets the user pick Grid source entities in explicit order, snapshots project state, renumbers atomically and records `grid.renumber` audit;
+- comprehensive Health checks malformed/duplicate semantic Grid naming;
+- the Project Ribbon exposes both `QS3DGRID` and `QS3DGRIDNUMBER` and static preflight guards their discoverability.
+
+`GridIntersectionPlanner` provides a bounded CAD-independent finite intersection contract for explicit Grid `LINE`/`ARC` references, covering LINE×LINE, LINE×ARC and ARC×ARC. It fails closed on duplicate semantic IDs, invalid/degenerate geometry, overlapping collinear LINEs, coincident ARC support circles and bounded-count overflow. It reports intersection geometry only; it does not infer engineering constraints or mutate source CAD.
+
+Still not complete / not to be overclaimed:
+
+- native Grid bubble/label geometry and ownership/replacement lifecycle;
+- automatic CAD spatial ordering for renumbering;
+- V25 native LINE/ARC extraction into the Core intersection contract;
+- rectangular/radial Grid-system authoring;
+- Grid constraints, dimensions or native intersection markers;
+- Direct Draw Grid / transient repeated authoring;
+- automatic structure-to-grid hosting/snapping.
+
+Extend the existing `ElementCategory.Grid` model rather than creating a competing Grid store. Read `docs/GRID-WORKFLOW.md` and `docs/GRID-INTERSECTIONS.md`.
 
 ## 4. Floor / Level semantics — Core implemented, native integration parked
 
@@ -115,11 +140,21 @@ Do not compose `QS3DSYNCSOURCE` + `QS3DBUILD3D` and call the combination atomic 
 
 Read `docs/SOURCE-EDIT-WORKFLOW.md`. Interactive MOVE/ROTATE/STRETCH/grip, UNDO, document-switch and save/reopen proof remains LOCAL_ONLY.
 
-## 6. Semantic interchange JSON — source implemented, read-only boundary
+## 6. Semantic interchange JSON — source implemented, genuinely read-only command boundary
 
 `QS3DINTERCHANGEJSON` exports deterministic `QS3D.SemanticSnapshot` format version 1 as UTF-8 semantic JSON.
 
 The snapshot includes stable semantic project/catalog/element/reference/quantity data and excludes generated native ownership/runtime state. Drawing CAD handles remain explicitly drawing-local provenance; semantic element IDs are the portable identity.
+
+The BricsCAD command preserves the read-only contract end-to-end:
+
+1. Save dialog is shown before the active project is obtained, so Cancel performs no semantic mutation;
+2. `ProjectStateSnapshot.CreateDetachedCopy(...)` creates a deep detached working state;
+3. dirty semantic quantities are regenerated only on that detached copy;
+4. `ProjectInterchangeJsonExporter` writes the detached snapshot through its existing temporary-file/replace atomic boundary;
+5. live project object references are never restored/replaced, so modeless UI stays attached to the original live state.
+
+Static preflight rejects regressions that call `RegenerateDirty(project)` or export the live project, and Core smoke proves detached project/element mutations do not leak into live state.
 
 Version 1 does **not** claim JSON re-import/round-trip, IFC/Revit/BCF exchange or cloud/team synchronization. Any future importer must define identity collision, unit/schema validation, provenance, ownership reconstruction, migration and rollback before mutating live data.
 
@@ -204,12 +239,12 @@ Current issues include:
 - #75 production signing/install/update + licensing boundary;
 - #76 fabrication-grade rebar / structural depth;
 - #77 documentation layer — **partially advanced by `SemanticTagRenderer`; native tag/table/sheet workflows remain**;
-- #79 Grid/reference model + richer Level constraints — **partially advanced by `QS3DGRID` and current Bottom/Top Level Core semantics**;
+- #79 Grid/reference model + richer Level constraints — **materially advanced by `QS3DGRID`, semantic Grid numbering/naming health, finite LINE/ARC intersection planning and current Bottom/Top Level Core semantics; native visualization/spatial ordering/constraints and Level native placement remain**;
 - #80 native semantic modify/edit workflow — **materially advanced by `QS3DSYNCSOURCE`; richer interactive edit UX/runtime proof remains**;
 - #81 large-model performance;
 - #82 real V25 UI/DPI/context-menu/Ribbon polish;
 - #83 generalized polygonal Slab/Foundation mesh;
-- #84 interoperability/import-export — **partially advanced by read-only `QS3DINTERCHANGEJSON`; import/round-trip and broader formats remain**.
+- #84 interoperability/import-export — **materially advanced by detached read-only `QS3DINTERCHANGEJSON`; import/round-trip and broader formats remain**.
 
 Do not close runtime/engineering/external-policy issues from source inspection alone.
 

@@ -85,11 +85,16 @@ namespace QS3D.BricsCAD.V25
                 RegenerateProject(project);
                 var rows = ProjectRebarScheduleBuilder.Build(project);
                 if (rows.Count == 0) { doc.Editor.WriteMessage("\nQS3D BBS: chưa có cấu kiện nào khai báo RebarNotation."); return; }
+                var totalWeight = 0d;
+                foreach (var row in rows)
+                {
+                    if (row == null) throw new InvalidOperationException("BBS không được chứa dòng null.");
+                    totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight");
+                }
                 var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
                 var dialog = new SaveFileDialog { Title = "Xuất Bar Bending Schedule", Filter = "Excel Workbook (*.xlsx)|*.xlsx", DefaultExt = ".xlsx", AddExtension = true, OverwritePrompt = true, FileName = drawingName + "-BBS.xlsx" };
                 if (dialog.ShowDialog() != true) return;
                 XlsxRebarScheduleExporter.Export(dialog.FileName, rows);
-                var totalWeight = rows.Sum(x => x.TotalWeightKg);
                 var status = "BBS: " + rows.Count + " bar mark • " + totalWeight.ToString("0.###") + " kg • " + dialog.FileName;
                 PaletteCoordinator.SetStatus(status); doc.Editor.WriteMessage("\nQS3D " + status);
             });
@@ -252,7 +257,8 @@ namespace QS3D.BricsCAD.V25
                 var generatedHandles = GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project);
                 var liveSources = Cad.CadHandleService.GetLiveHandles(doc, sourceHandles);
                 var liveGeneratedSolids = Cad.CadHandleService.GetLiveSolidHandles(doc, generatedHandles);
-                var issues = new ComprehensiveModelHealthService().Inspect(project, liveSources, liveGeneratedSolids);
+                var issues = new ComprehensiveModelHealthService().Inspect(project, liveSources, liveGeneratedSolids).ToList();
+                issues.AddRange(Cad.GeneratedSolidRuntimeHealthService.Inspect(doc, project));
                 var summary = new HealthSummary(issues);
                 var text = "Model Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(text); doc.Editor.WriteMessage("\nQS3D " + text);

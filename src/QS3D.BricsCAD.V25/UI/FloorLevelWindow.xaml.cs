@@ -7,6 +7,7 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -55,26 +56,37 @@ namespace QS3D.BricsCAD.V25.UI
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var name = (FloorNameBox.Text ?? string.Empty).Trim();
                 var elevation = ParseElevation(FloorElevationBox.Text);
+                var rollback = ProjectStateSnapshot.Capture(project);
                 FloorDefinition floor;
-                if (string.IsNullOrWhiteSpace(_editingFloorId))
+                try
                 {
-                    floor = ProjectFloorService.Create(project, "floor-" + Guid.NewGuid().ToString("N"), name, elevation);
-                    AuditTrail.ForProject(project).Record("floor.create", string.Empty, floor.Id + " • " + floor.Name + " • " + floor.ElevationM.ToString("R", CultureInfo.InvariantCulture) + "m");
+                    if (string.IsNullOrWhiteSpace(_editingFloorId))
+                    {
+                        floor = ProjectFloorService.Create(project, "floor-" + Guid.NewGuid().ToString("N"), name, elevation);
+                        AuditTrail.ForProject(project).Record("floor.create", string.Empty, floor.Id + " • " + floor.Name + " • " + floor.ElevationM.ToString("R", CultureInfo.InvariantCulture) + "m");
+                    }
+                    else
+                    {
+                        var existing = project.Floors.FirstOrDefault(x => string.Equals(x.Id, _editingFloorId, StringComparison.OrdinalIgnoreCase))
+                            ?? throw new InvalidOperationException("Tầng đang chỉnh không còn tồn tại trong project.");
+                        var before = existing.Name + "@" + existing.ElevationM.ToString("R", CultureInfo.InvariantCulture);
+                        floor = ProjectFloorService.Update(project, existing.Id, name, elevation);
+                        var after = floor.Name + "@" + floor.ElevationM.ToString("R", CultureInfo.InvariantCulture);
+                        if (!string.Equals(before, after, StringComparison.Ordinal))
+                            AuditTrail.ForProject(project).Record("floor.update", string.Empty, floor.Id + " • " + before + " -> " + after);
+                    }
                 }
-                else
+                catch (Exception operationError)
                 {
-                    var existing = project.Floors.FirstOrDefault(x => string.Equals(x.Id, _editingFloorId, StringComparison.OrdinalIgnoreCase))
-                        ?? throw new InvalidOperationException("Tầng đang chỉnh không còn tồn tại trong project.");
-                    var before = existing.Name + "@" + existing.ElevationM.ToString("R", CultureInfo.InvariantCulture);
-                    floor = ProjectFloorService.Update(project, existing.Id, name, elevation);
-                    var after = floor.Name + "@" + floor.ElevationM.ToString("R", CultureInfo.InvariantCulture);
-                    if (!string.Equals(before, after, StringComparison.Ordinal))
-                        AuditTrail.ForProject(project).Record("floor.update", string.Empty, floor.Id + " • " + before + " -> " + after);
+                    RestoreOrThrow(project, rollback, operationError, "Lưu Floor/Level");
+                    throw;
                 }
 
-                PaletteCoordinator.RefreshProject();
-                RefreshAll(floor.Id);
-                SetStatus("Đã lưu tầng “" + floor.Name + "” • " + floor.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m.");
+                _editingFloorId = floor.Id;
+                RefreshAfterCommit(
+                    () => RefreshAll(floor.Id),
+                    "Đã lưu tầng “" + floor.Name + "” • " + floor.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m.",
+                    "Floor/Level save");
             }
             catch (System.Exception ex) { SetStatus("Lưu tầng lỗi: " + ex.Message); }
         }
@@ -86,12 +98,26 @@ namespace QS3D.BricsCAD.V25.UI
                 EnsureBoundDrawingIsActive("xóa tầng");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var floor = RequireSelectedFloor(project);
-                if (!ProjectFloorService.Delete(project, floor.Id)) return;
-                AuditTrail.ForProject(project).Record("floor.delete", string.Empty, floor.Id + " • " + floor.Name);
+                var rollback = ProjectStateSnapshot.Capture(project);
+                var deleted = false;
+                try
+                {
+                    deleted = ProjectFloorService.Delete(project, floor.Id);
+                    if (deleted)
+                        AuditTrail.ForProject(project).Record("floor.delete", string.Empty, floor.Id + " • " + floor.Name);
+                }
+                catch (Exception operationError)
+                {
+                    RestoreOrThrow(project, rollback, operationError, "Xóa Floor/Level");
+                    throw;
+                }
+
+                if (!deleted) return;
                 _editingFloorId = string.Empty;
-                PaletteCoordinator.RefreshProject();
-                RefreshAll();
-                SetStatus("Đã xóa tầng “" + floor.Name + "”.");
+                RefreshAfterCommit(
+                    () => RefreshAll(),
+                    "Đã xóa tầng “" + floor.Name + "”.",
+                    "Floor/Level delete");
             }
             catch (System.Exception ex) { SetStatus("Xóa tầng lỗi: " + ex.Message); }
         }
@@ -104,12 +130,23 @@ namespace QS3D.BricsCAD.V25.UI
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var floor = RequireSelectedFloor(project);
                 var previous = project.ActiveFloorId;
-                ProjectFloorService.SetActive(project, floor.Id);
-                if (!string.Equals(previous, floor.Id, StringComparison.OrdinalIgnoreCase))
-                    AuditTrail.ForProject(project).Record("floor.activate", string.Empty, previous + " -> " + floor.Id + " • " + floor.Name + " • " + floor.ElevationM.ToString("R", CultureInfo.InvariantCulture) + "m");
-                PaletteCoordinator.RefreshProject();
-                RefreshAll(floor.Id);
-                SetStatus("Tầng hoạt động: " + floor.Name + " • " + floor.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m.");
+                var rollback = ProjectStateSnapshot.Capture(project);
+                try
+                {
+                    ProjectFloorService.SetActive(project, floor.Id);
+                    if (!string.Equals(previous, floor.Id, StringComparison.OrdinalIgnoreCase))
+                        AuditTrail.ForProject(project).Record("floor.activate", string.Empty, previous + " -> " + floor.Id + " • " + floor.Name + " • " + floor.ElevationM.ToString("R", CultureInfo.InvariantCulture) + "m");
+                }
+                catch (Exception operationError)
+                {
+                    RestoreOrThrow(project, rollback, operationError, "Đặt Floor/Level active");
+                    throw;
+                }
+
+                RefreshAfterCommit(
+                    () => RefreshAll(floor.Id),
+                    "Tầng hoạt động: " + floor.Name + " • " + floor.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m.",
+                    "Floor/Level activate");
             }
             catch (System.Exception ex) { SetStatus("Đặt tầng active lỗi: " + ex.Message); }
         }
@@ -131,14 +168,28 @@ namespace QS3D.BricsCAD.V25.UI
                     .Where(element => !string.Equals(element.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
                     .Select(element => new { Element = element, Previous = element.FloorId })
                     .ToList();
-                var changed = ProjectFloorService.Assign(project, floor.Id, elements);
-                foreach (var item in changedElements)
-                    AuditTrail.ForProject(project).Record("floor.assign", item.Element.Id, item.Previous + " -> " + floor.Id + " • semantic only; CAD source position unchanged");
+                var rollback = ProjectStateSnapshot.Capture(project);
+                int changed;
+                try
+                {
+                    changed = ProjectFloorService.Assign(project, floor.Id, elements);
+                    foreach (var item in changedElements)
+                        AuditTrail.ForProject(project).Record("floor.assign", item.Element.Id, item.Previous + " -> " + floor.Id + " • semantic only; CAD source position unchanged");
+                }
+                catch (Exception operationError)
+                {
+                    RestoreOrThrow(project, rollback, operationError, "Gán Floor/Level cho selection");
+                    throw;
+                }
 
-                if (changed > 0) PaletteCoordinator.RefreshProject();
-                SelectionCountText.Text = elements.Count.ToString(CultureInfo.InvariantCulture);
-                RefreshLabels();
-                SetStatus("Đã gán “" + floor.Name + "” cho " + changed + "/" + elements.Count + " semantic element. Generated output liên quan đã stale; CAD source không bị Move.");
+                RefreshAfterCommit(
+                    () =>
+                    {
+                        SelectionCountText.Text = elements.Count.ToString(CultureInfo.InvariantCulture);
+                        RefreshLabels();
+                    },
+                    "Đã gán “" + floor.Name + "” cho " + changed + "/" + elements.Count + " semantic element. Generated output liên quan đã stale; CAD source không bị Move.",
+                    "Floor/Level assign");
             }
             catch (System.Exception ex) { SetStatus("Gán tầng lỗi: " + ex.Message); }
         }
@@ -236,6 +287,37 @@ namespace QS3D.BricsCAD.V25.UI
             catch { SelectionCountText.Text = "!"; }
         }
 
+        private void RefreshAfterCommit(Action refresh, string successMessage, string context)
+        {
+            SetStatus(successMessage);
+            try
+            {
+                refresh();
+                PaletteCoordinator.RefreshProject();
+            }
+            catch (Exception refreshError)
+            {
+                var warning = successMessage + " UI sync warning: " + refreshError.Message;
+                try { StatusText.Text = warning; } catch { }
+                try { PaletteCoordinator.SetStatus(warning); } catch { }
+                try { _document.Editor.WriteMessage("\nQS3D " + context + " đã commit; UI sync warning: " + refreshError.Message); } catch { }
+            }
+        }
+
+        private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError, string operation)
+        {
+            try
+            {
+                rollback.Restore(project);
+            }
+            catch (Exception restoreError)
+            {
+                throw new InvalidOperationException(
+                    operation + " thất bại và rollback project cũng không hoàn tất.",
+                    new AggregateException(operationError, restoreError));
+            }
+        }
+
         private void EnsureBoundDrawingIsActive(string operation)
         {
             if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
@@ -270,7 +352,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void SetStatus(string text)
         {
             StatusText.Text = text ?? string.Empty;
-            PaletteCoordinator.SetStatus(StatusText.Text);
+            try { PaletteCoordinator.SetStatus(StatusText.Text); } catch { }
         }
     }
 }

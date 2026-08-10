@@ -15,29 +15,25 @@ namespace QS3D.Core.Services
             EnsureOpening(opening, openingId);
             if (!IsWall(wall.Category)) throw new InvalidOperationException("Host is not a wall: " + wallId);
 
-            var previousHost = opening.Properties.TryGetValue("HostWallId", out var previous) ? previous : string.Empty;
+            var previousHost = opening.Properties.TryGetValue("HostWallId", out var previous) ? (previous ?? string.Empty).Trim() : string.Empty;
             var relationshipChanged = !string.Equals(previousHost, wall.Id, StringComparison.OrdinalIgnoreCase);
-            if (!string.IsNullOrWhiteSpace(previousHost) && relationshipChanged)
+            if (previousHost.Length > 0 && relationshipChanged)
             {
-                for (var i = opening.DependsOn.Count - 1; i >= 0; i--)
-                    if (string.Equals(opening.DependsOn[i], previousHost, StringComparison.OrdinalIgnoreCase)) opening.DependsOn.RemoveAt(i);
+                RemoveDependencies(opening, previousHost);
                 MarkHostOpeningRelationChanged(project.FindElement(previousHost), opening.Id, "unlinked/re-hosted");
             }
 
             opening.Properties["HostWallId"] = wall.Id;
-            var dependencyAdded = false;
-            if (!opening.DependsOn.Any(x => string.Equals(x, wall.Id, StringComparison.OrdinalIgnoreCase)))
-            {
-                opening.DependsOn.Add(wall.Id);
-                dependencyAdded = true;
-            }
+            var dependencyAdded = !opening.DependsOn.Any(x => DependencyMatches(x, wall.Id));
+            RemoveDependencies(opening, wall.Id);
+            opening.DependsOn.Add(wall.Id);
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             if (relationshipChanged || dependencyAdded)
                 MarkHostOpeningRelationChanged(wall, opening.Id, "linked/re-hosted");
             else
                 wall.MarkDirty(ElementDirtyFlags.Quantity);
             project.Touch();
-            AuditTrail.ForProject(project).Record("host.link", opening.Id, (string.IsNullOrWhiteSpace(previousHost) ? "" : previousHost + " → ") + wall.Id);
+            AuditTrail.ForProject(project).Record("host.link", opening.Id, (previousHost.Length == 0 ? "" : previousHost + " → ") + wall.Id);
         }
 
         public void UnlinkOpening(ProjectState project, string openingId)
@@ -45,17 +41,11 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             EnsureOpening(opening, openingId);
-            var hostId = opening.Properties.TryGetValue("HostWallId", out var value) ? value : string.Empty;
+            var hostId = opening.Properties.TryGetValue("HostWallId", out var value) ? (value ?? string.Empty).Trim() : string.Empty;
             opening.Properties.Remove("HostWallId");
-            var dependencyRemoved = false;
-            for (var i = opening.DependsOn.Count - 1; i >= 0; i--)
-            {
-                if (!string.Equals(opening.DependsOn[i], hostId, StringComparison.OrdinalIgnoreCase)) continue;
-                opening.DependsOn.RemoveAt(i);
-                dependencyRemoved = true;
-            }
+            var dependencyRemoved = RemoveDependencies(opening, hostId) > 0;
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-            if (!string.IsNullOrWhiteSpace(hostId))
+            if (hostId.Length > 0)
             {
                 var host = project.FindElement(hostId);
                 if (host != null)
@@ -68,6 +58,24 @@ namespace QS3D.Core.Services
             }
             project.Touch();
             AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
+        }
+
+        private static int RemoveDependencies(ProjectElement opening, string hostId)
+        {
+            if (string.IsNullOrWhiteSpace(hostId)) return 0;
+            var removed = 0;
+            for (var i = opening.DependsOn.Count - 1; i >= 0; i--)
+            {
+                if (!DependencyMatches(opening.DependsOn[i], hostId)) continue;
+                opening.DependsOn.RemoveAt(i);
+                removed++;
+            }
+            return removed;
+        }
+
+        private static bool DependencyMatches(string candidate, string expected)
+        {
+            return string.Equals((candidate ?? string.Empty).Trim(), (expected ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
         private static void MarkHostOpeningRelationChanged(ProjectElement? host, string openingId, string action)

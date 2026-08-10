@@ -29,7 +29,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
             new ButtonSpec("QS3D_PROJECT_INTERCHANGEJSON", "Xuất Semantic JSON", "QS3DINTERCHANGEJSON"),
             new ButtonSpec("QS3D_PROJECT_LEVELS", "Tầng / Cao độ", "QS3DLEVELS"),
             new ButtonSpec("QS3D_PROJECT_ZONES", "Khu vực / Zone", "QS3DZONES"),
-            new ButtonSpec("QS3D_PROJECT_MATERIALS", "Vật liệu", "QS3DMATERIALS")
+            new ButtonSpec("QS3D_PROJECT_MATERIALS", "Vật liệu", "QS3DMATERIALS"),
+            new ButtonSpec("QS3D_PROJECT_GRID", "Grid / Trục", "QS3DGRID"),
+            new ButtonSpec("QS3D_PROJECT_GRIDNUMBER", "Đánh số Grid", "QS3DGRIDNUMBER")
         };
 
         public static bool TryInitialize()

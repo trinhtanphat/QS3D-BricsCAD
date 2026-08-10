@@ -19,8 +19,17 @@ def require(text: str, token: str, label: str) -> None:
         sys.exit(1)
 
 
+def require_before(text: str, first: str, second: str, label: str) -> None:
+    require(text, first, label)
+    require(text, second, label)
+    if text.index(first) >= text.index(second):
+        print(f"[FAIL] {label}: expected {first} before {second}")
+        sys.exit(1)
+
+
 core = read("src/QS3D.Core/Export/ProjectInterchangeJsonExporter.cs")
 adapter = read("src/QS3D.BricsCAD.V25/ProjectInterchangeCommands.cs")
+snapshot = read("src/QS3D.Core/Persistence/ProjectStateSnapshot.cs")
 smoke = read("tests/QS3D.Core.SmokeTests/ProjectInterchangeJsonSmoke.cs")
 registration = read("tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs")
 
@@ -49,23 +58,32 @@ for token in [
     require(core, token, "interchange core contract")
 
 for token in [
+    "public static ProjectState CreateDetachedCopy(ProjectState project)",
+    "return Clone(project);",
+]:
+    require(snapshot, token, "detached project snapshot contract")
+
+for token in [
     '[CommandMethod("QS3DINTERCHANGEJSON"',
-    "RegenerateDirty(project)",
-    "ProjectInterchangeJsonExporter.Export(dialog.FileName, project)",
+    "ProjectStateSnapshot.CreateDetachedCopy(project)",
+    "RegenerateDirty(snapshot)",
+    "ProjectInterchangeJsonExporter.Export(dialog.FileName, snapshot)",
     "read-only semantic interchange",
+    "không mutate project live",
     "không chứa generated CAD ownership handles",
 ]:
     require(adapter, token, "BricsCAD interchange command")
 
-for token in [
-    "SnapshotIsDeterministicAndUsesStableIds",
-    "GeneratedOwnershipIsExcluded",
-    "NumericContractFailsClosed",
-]:
-    require(smoke, token, "interchange smoke")
-require(registration, "ProjectInterchangeJsonSmoke.Run();", "smoke registration")
+require_before(
+    adapter,
+    "if (dialog.ShowDialog() != true) return;",
+    "ProjectContextCoordinator.GetOrCreate(document)",
+    "cancel must be zero-mutation",
+)
 
 for forbidden in [
+    "RegenerateDirty(project)",
+    "ProjectInterchangeJsonExporter.Export(dialog.FileName, project)",
     "QS3DINTERCHANGEIMPORT",
     "IFC",
     "Revit",
@@ -73,7 +91,17 @@ for forbidden in [
     "GeneratedRebarHandles\"",
 ]:
     if forbidden in adapter:
-        print(f"[FAIL] adapter overclaims or exposes unsafe round-trip contract: {forbidden}")
+        print(f"[FAIL] adapter mutates live state, overclaims, or exposes unsafe round-trip contract: {forbidden}")
         sys.exit(1)
 
-print("[PASS] semantic JSON interchange is stable-ID/SI/read-only, smoke-covered and excludes generated CAD ownership handles")
+for token in [
+    "SnapshotIsDeterministicAndUsesStableIds",
+    "GeneratedOwnershipIsExcluded",
+    "NumericContractFailsClosed",
+    "DetachedCopyDoesNotMutateLiveProject",
+    "ProjectStateSnapshot.CreateDetachedCopy(live)",
+]:
+    require(smoke, token, "interchange smoke")
+require(registration, "ProjectInterchangeJsonSmoke.Run();", "smoke registration")
+
+print("[PASS] semantic JSON interchange is stable-ID/SI/read-only, detached from live state, smoke-covered and excludes generated CAD ownership handles")
