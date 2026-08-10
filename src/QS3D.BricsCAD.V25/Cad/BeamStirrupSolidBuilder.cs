@@ -30,6 +30,12 @@ namespace QS3D.BricsCAD.V25.Cad
             public List<string> Handles { get; } = new List<string>();
             public double DiameterMm { get; set; }
             public double ActualSpacingM { get; set; }
+            public double CenterlineLengthM { get; set; }
+            public double PolylineLengthM { get; set; }
+            public double BendRadiusM { get; set; }
+            public double HookLengthM { get; set; }
+            public double HookTailAngleDeg { get; set; }
+            public bool HasHookTails { get; set; }
             public string Notation { get; set; } = string.Empty;
         }
 
@@ -96,8 +102,14 @@ namespace QS3D.BricsCAD.V25.Cad
                     var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", .5d), element.Id + "/HeightM");
                     var sectionCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .025d));
                     var endCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupEndCoverM", sectionCoverM);
+                    var bendRadiusM = CadGeometryGuard.Number(element, family, "RebarStirrupBendRadiusM", 0d);
+                    var hookLengthM = CadGeometryGuard.Number(element, family, "RebarStirrupHookLengthM", 0d);
+                    var hookTailAngleDeg = CadGeometryGuard.Number(element, family, "RebarStirrupHookTailAngleDeg", 0d);
+                    var maximumSagittaM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "RebarStirrupMaximumSagittaM", .001d), element.Id + "/RebarStirrupMaximumSagittaM");
                     if (sectionCoverM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupCoverM phải >= 0.");
                     if (endCoverM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupEndCoverM phải >= 0.");
+                    if (bendRadiusM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupBendRadiusM phải >= 0.");
+                    if (hookLengthM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupHookLengthM phải >= 0.");
                     var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
 
                     var dx = CadGeometryGuard.Subtract(source.EndPoint.X, source.StartPoint.X, element.Id + "/beam dx");
@@ -117,7 +129,11 @@ namespace QS3D.BricsCAD.V25.Cad
                         EndCoverM = endCoverM,
                         DiameterMm = group.DiameterMm,
                         Count = group.Quantity,
-                        SpacingMm = group.SpacingMm
+                        SpacingMm = group.SpacingMm,
+                        BendRadiusM = bendRadiusM,
+                        MaximumSagittaM = maximumSagittaM,
+                        HookLengthM = hookLengthM,
+                        HookTailAngleDeg = hookTailAngleDeg
                     });
                     if (layout.Count > MaxStirrupsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxStirrupsPerElement + " stirrup/element.");
                     if (batchCount > MaxStirrupsPerBatch - layout.Count) throw new InvalidOperationException("Beam stirrup 3D vượt giới hạn " + MaxStirrupsPerBatch + " stirrup/batch.");
@@ -129,6 +145,12 @@ namespace QS3D.BricsCAD.V25.Cad
                         Element = element,
                         DiameterMm = group.DiameterMm,
                         ActualSpacingM = layout.ActualSpacingM,
+                        CenterlineLengthM = layout.CenterlineLengthM,
+                        PolylineLengthM = layout.PolylineLengthM,
+                        BendRadiusM = layout.BendRadiusM,
+                        HookLengthM = hookLengthM,
+                        HookTailAngleDeg = hookTailAngleDeg,
+                        HasHookTails = layout.HasHookTails,
                         Notation = notation.Trim()
                     };
 
@@ -172,8 +194,14 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["GeneratedBeamStirrupCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedBeamStirrupDiameterMm"] = update.DiameterMm.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedBeamStirrupActualSpacingM"] = update.ActualSpacingM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedBeamStirrupCenterlineLengthM"] = update.CenterlineLengthM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedBeamStirrupTotalCenterlineLengthM"] = CadGeometryGuard.Multiply(update.CenterlineLengthM, update.Handles.Count, update.Element.Id + "/stirrup total centerline").ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedBeamStirrupPolylineLengthM"] = update.PolylineLengthM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedBeamStirrupBendRadiusM"] = update.BendRadiusM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedBeamStirrupHookLengthM"] = update.HookLengthM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedBeamStirrupHookTailAngleDeg"] = update.HookTailAngleDeg.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedBeamStirrupNotation"] = update.Notation;
-                update.Element.Properties["GeneratedBeamStirrupMode"] = "Beam.Line.RectangularClosedLoop";
+                update.Element.Properties["GeneratedBeamStirrupMode"] = update.HasHookTails ? "Beam.Line.RectangularHookedPath" : (update.BendRadiusM > 1e-12d ? "Beam.Line.RectangularRoundedLoop" : "Beam.Line.RectangularClosedLoop");
                 update.Element.ClearGeneratedBeamStirrupStale();
                 AuditTrail.ForProject(project).Record("geometry.rebar.beam.stirrup", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " stirrups");
             }
@@ -189,6 +217,8 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static Solid3d BuildLoop(Document document, Point3d center, Vector3d horizontal, IReadOnlyList<QS3D.Core.Geometry.Point2> loop, double radius, string label)
         {
+            if (loop == null || loop.Count < 2) throw new ArgumentException("Beam stirrup section path is incomplete.", nameof(loop));
+            var closed = loop[0].DistanceTo(loop[loop.Count - 1]) <= 1e-12d;
             Solid3d? result = null;
             try
             {
@@ -203,12 +233,15 @@ namespace QS3D.BricsCAD.V25.Cad
                     var length = CadGeometryGuard.Hypot3(dx, dy, dz, label + "/segment length");
                     if (length <= 1e-9d) throw new InvalidOperationException("Beam stirrup chứa segment rỗng: " + label);
                     var overlap = Math.Min(CadGeometryGuard.Multiply(radius, .75d, label + "/overlap radius"), CadGeometryGuard.Multiply(length, .1d, label + "/overlap length"));
+                    var before = closed || index > 1 ? overlap : 0d;
+                    var after = closed || index < loop.Count - 1 ? overlap : 0d;
                     var unit = new Vector3d(dx / length, dy / length, dz / length);
                     var extendedStart = new Point3d(
-                        CadGeometryGuard.Subtract(start.X, CadGeometryGuard.Multiply(unit.X, overlap, label + "/overlap X"), label + "/extended X"),
-                        CadGeometryGuard.Subtract(start.Y, CadGeometryGuard.Multiply(unit.Y, overlap, label + "/overlap Y"), label + "/extended Y"),
-                        CadGeometryGuard.Subtract(start.Z, CadGeometryGuard.Multiply(unit.Z, overlap, label + "/overlap Z"), label + "/extended Z"));
-                    var extendedLength = CadGeometryGuard.Add(length, CadGeometryGuard.Multiply(overlap, 2d, label + "/double overlap"), label + "/extended length");
+                        CadGeometryGuard.Subtract(start.X, CadGeometryGuard.Multiply(unit.X, before, label + "/overlap X"), label + "/extended X"),
+                        CadGeometryGuard.Subtract(start.Y, CadGeometryGuard.Multiply(unit.Y, before, label + "/overlap Y"), label + "/extended Y"),
+                        CadGeometryGuard.Subtract(start.Z, CadGeometryGuard.Multiply(unit.Z, before, label + "/overlap Z"), label + "/extended Z"));
+                    var extension = CadGeometryGuard.Add(before, after, label + "/combined overlap");
+                    var extendedLength = CadGeometryGuard.Add(length, extension, label + "/extended length");
                     var part = Cylinder(document, extendedStart, unit, extendedLength, radius, label + "/segment" + index);
                     if (result == null) { result = part; continue; }
                     try { result.BooleanOperation(BooleanOperationType.BoolUnite, part); }
