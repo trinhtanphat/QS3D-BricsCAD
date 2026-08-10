@@ -149,6 +149,7 @@ namespace QS3D.BricsCAD.V25.Cad
             foreach (var update in pending)
             {
                 GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, ElementCategory.WallPier);
+                ClearPathProfileSnapshot(update.Element);
                 update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["HeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
@@ -163,6 +164,14 @@ namespace QS3D.BricsCAD.V25.Cad
                 project.Touch();
             }
             return pending.Count;
+        }
+
+        private static void ClearPathProfileSnapshot(ProjectElement element)
+        {
+            var keys = element.Properties.Keys
+                .Where(x => x.StartsWith("WallPierPathProfile", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            foreach (var key in keys) element.Properties.Remove(key);
         }
 
         private static WallPierProfileMode ResolveMode(ProjectElement element, ProjectFamily? family)
