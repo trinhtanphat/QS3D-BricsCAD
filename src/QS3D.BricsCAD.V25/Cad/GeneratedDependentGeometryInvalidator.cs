@@ -33,10 +33,20 @@ namespace QS3D.BricsCAD.V25.Cad
                 Remove(element, "GeneratedRebarDiameterMm");
                 Remove(element, "GeneratedRebarCoverM");
                 Remove(element, "GeneratedRebarMode");
+                Remove(element, "GeneratedRebarBeamEndCoverM");
+                Remove(element, "GeneratedRebarBeamTopCount");
+                Remove(element, "GeneratedRebarBeamBottomCount");
 
                 Remove(element, "GeneratedShapeRebarHandles");
                 Remove(element, "GeneratedShapeRebarCount");
                 Remove(element, "GeneratedShapeRebarMode");
+
+                Remove(element, "GeneratedTieRebarHandles");
+                Remove(element, "GeneratedTieRebarCount");
+                Remove(element, "GeneratedTieRebarDiameterMm");
+                Remove(element, "GeneratedTieRebarActualSpacingM");
+                Remove(element, "GeneratedTieRebarCoverM");
+                Remove(element, "GeneratedTieRebarMode");
 
                 Remove(element, "GeneratedBeamStirrupHandles");
                 Remove(element, "GeneratedBeamStirrupCount");
@@ -59,6 +69,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             "GeneratedRebarHandles",
             "GeneratedShapeRebarHandles",
+            "GeneratedTieRebarHandles",
             "GeneratedBeamStirrupHandles"
         };
 
