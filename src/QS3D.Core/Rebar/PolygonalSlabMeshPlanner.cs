@@ -70,8 +70,25 @@ namespace QS3D.Core.Rebar
         public static PolygonalSlabMeshLayout Plan(PolygonalSlabMeshInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
+            if (input.FootprintM == null) throw new ArgumentNullException(nameof(input.FootprintM));
             if (input.HoleFootprintsM == null) throw new ArgumentNullException(nameof(input.HoleFootprintsM));
-            var region = PolygonRegionScanlineClipper.NormalizeAndValidate(input.FootprintM, input.HoleFootprintsM);
+
+            // Keep all topology, scanline and cover math near a local origin. Large WCS offsets can
+            // otherwise destroy small polygon areas through floating-point cancellation even though
+            // the slab dimensions themselves are perfectly ordinary.
+            var origin = input.FootprintM.Count > 0 ? input.FootprintM[0] : new Point2(0d, 0d);
+            ValidateFinite(origin.X, "polygonal slab origin X");
+            ValidateFinite(origin.Y, "polygonal slab origin Y");
+            var localOuter = TranslateLoopToLocal(input.FootprintM, origin, "polygonal slab outer");
+            var localHoles = new List<IReadOnlyList<Point2>>(input.HoleFootprintsM.Count);
+            for (var index = 0; index < input.HoleFootprintsM.Count; index++)
+            {
+                var hole = input.HoleFootprintsM[index];
+                if (hole == null) throw new ArgumentException("Polygonal slab hole cannot be null at index " + index + ".", nameof(input.HoleFootprintsM));
+                localHoles.Add(TranslateLoopToLocal(hole, origin, "polygonal slab hole " + index));
+            }
+
+            var region = PolygonRegionScanlineClipper.NormalizeAndValidate(localOuter, localHoles);
             var footprint = region.Outer;
             var thickness = RebarMath.Positive(input.ThicknessM, nameof(input.ThicknessM));
             var cover = RebarMath.NonNegative(input.CoverM, nameof(input.CoverM));
@@ -125,6 +142,7 @@ namespace QS3D.Core.Rebar
                 AppendFace(bars, SlabMeshFace.Bottom, xSegments, ySegments, elevations.BottomX, elevations.BottomY, xDiameter, yDiameter);
             if (input.IncludeTop)
                 AppendFace(bars, SlabMeshFace.Top, xSegments, ySegments, elevations.TopX, elevations.TopY, xDiameter, yDiameter);
+            RestoreGlobalCoordinates(bars, origin);
 
             return new PolygonalSlabMeshLayout(bars.AsReadOnly(), xDistribution.ActualSpacingM, yDistribution.ActualSpacingM);
         }
@@ -316,6 +334,33 @@ namespace QS3D.Core.Rebar
                 bars.Add(new PolygonalSlabMeshBarPlacement { Face = face, Direction = SlabMeshDirection.Y, StartM = segment.Start, EndM = segment.End, ElevationOffsetM = yElevation, DiameterMm = yDiameter });
         }
 
+        private static IReadOnlyList<Point2> TranslateLoopToLocal(IReadOnlyList<Point2> loop, Point2 origin, string label)
+        {
+            if (loop == null) throw new ArgumentNullException(nameof(loop));
+            var translated = new List<Point2>(loop.Count);
+            for (var index = 0; index < loop.Count; index++)
+            {
+                var point = loop[index];
+                translated.Add(new Point2(
+                    CheckedSubtract(point.X, origin.X, label + "[" + index + "]/X"),
+                    CheckedSubtract(point.Y, origin.Y, label + "[" + index + "]/Y")));
+            }
+            return translated.AsReadOnly();
+        }
+
+        private static void RestoreGlobalCoordinates(IList<PolygonalSlabMeshBarPlacement> bars, Point2 origin)
+        {
+            foreach (var bar in bars)
+            {
+                bar.StartM = new Point2(
+                    CheckedAdd(origin.X, bar.StartM.X, "polygonal slab global start X"),
+                    CheckedAdd(origin.Y, bar.StartM.Y, "polygonal slab global start Y"));
+                bar.EndM = new Point2(
+                    CheckedAdd(origin.X, bar.EndM.X, "polygonal slab global end X"),
+                    CheckedAdd(origin.Y, bar.EndM.Y, "polygonal slab global end Y"));
+            }
+        }
+
         private sealed class MeshElevations
         {
             public double BottomX { get; set; }
@@ -393,6 +438,15 @@ namespace QS3D.Core.Rebar
             ValidateFinite(left, label);
             ValidateFinite(right, label);
             var value = left + right;
+            ValidateFinite(value, label);
+            return value;
+        }
+
+        private static double CheckedSubtract(double left, double right, string label)
+        {
+            ValidateFinite(left, label);
+            ValidateFinite(right, label);
+            var value = left - right;
             ValidateFinite(value, label);
             return value;
         }
