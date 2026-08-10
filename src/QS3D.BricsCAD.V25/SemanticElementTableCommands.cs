@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.BricsCAD.V25.Cad;
@@ -69,20 +68,13 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
-                var issues = GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project);
+                var issues = SemanticElementTableBuilder.ValidateRuntime(document, project);
                 if (issues.Count == 0)
                 {
-                    Report(document, "Semantic Element Table health: không phát hiện persisted/native ownership/content drift issue.");
+                    Report(document, "Semantic Element Table health: không phát hiện persisted/native ownership issue.");
                     return;
                 }
-
-                var visible = issues.Take(100)
-                    .Select(x => x.Code + ": " + x.Message)
-                    .ToArray();
-                var suffix = issues.Count > visible.Length
-                    ? "\n- … +" + (issues.Count - visible.Length) + " issue(s)"
-                    : string.Empty;
-                Report(document, "Semantic Element Table health: " + issues.Count + " issue(s).\n- " + string.Join("\n- ", visible) + suffix);
+                Report(document, "Semantic Element Table health: " + issues.Count + " issue(s).\n- " + string.Join("\n- ", issues));
             }
             catch (Exception ex) { Report(document, "QS3DELEMENTTABLEHEALTH lỗi: " + ex.Message); }
         }
