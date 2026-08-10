@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   schedule-core:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
