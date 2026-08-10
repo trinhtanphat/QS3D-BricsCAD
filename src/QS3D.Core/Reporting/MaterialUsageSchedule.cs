@@ -107,14 +107,21 @@ namespace QS3D.Core.Reporting
                     metrics.AreaM2 = QFirst(element, "NetWallAreaM2", "SideAreaM2");
                     break;
                 case ElementCategory.WallFinish:
-                    metrics.AreaM2 = QFirst(element, "NetFinishAreaM2", "AreaM2");
+                    metrics.AreaM2 = QFirst(element, "NetFinishAreaM2", "SideAreaM2", "AreaM2");
+                    break;
+                case ElementCategory.FloorFinish:
+                case ElementCategory.Waterproofing:
+                    metrics.AreaM2 = QFirst(element, "BottomAreaM2", "AreaM2");
+                    break;
+                case ElementCategory.CeilingFinish:
+                    metrics.AreaM2 = QFirst(element, "TopAreaM2", "AreaM2");
                     break;
                 case ElementCategory.Door:
                 case ElementCategory.WallOpening:
                     metrics.AreaM2 = QFirst(element, "OpeningAreaM2", "AreaM2");
                     break;
                 case ElementCategory.Skirting:
-                    metrics.LengthM = Q(element, "SkirtingLengthM", metrics.LengthM);
+                    metrics.LengthM = QFirst(element, "SkirtingLengthM", "InnerPerimeterM", "PerimeterM", "LengthM");
                     metrics.AreaM2 = Q(element, "AreaM2");
                     break;
                 default:
@@ -154,11 +161,11 @@ namespace QS3D.Core.Reporting
                 rows[key] = row;
                 order.Add(key);
             }
-            row.ElementCount = checked(row.ElementCount + 1);
-            row.LengthM = Add(row.LengthM, metrics.LengthM, element.Id + "/material length");
-            row.AreaM2 = Add(row.AreaM2, metrics.AreaM2, element.Id + "/material area");
-            row.VolumeM3 = Add(row.VolumeM3, metrics.VolumeM3, element.Id + "/material volume");
-            row.MassKg = Add(row.MassKg, metrics.MassKg, element.Id + "/material mass");
+            row.ElementCount = QuantityReportMath.AddCount(row.ElementCount, 1);
+            row.LengthM = QuantityReportMath.Add(row.LengthM, metrics.LengthM, element.Id + "/material length");
+            row.AreaM2 = QuantityReportMath.Add(row.AreaM2, metrics.AreaM2, element.Id + "/material area");
+            row.VolumeM3 = QuantityReportMath.Add(row.VolumeM3, metrics.VolumeM3, element.Id + "/material volume");
+            row.MassKg = QuantityReportMath.Add(row.MassKg, metrics.MassKg, element.Id + "/material mass");
             row.ElementIds.Add(element.Id);
         }
 
@@ -169,10 +176,11 @@ namespace QS3D.Core.Reporting
             return string.Empty;
         }
 
-        private static double QFirst(ProjectElement element, string primaryKey, string fallbackKey)
+        private static double QFirst(ProjectElement element, params string[] keys)
         {
-            if (element.Quantities.ContainsKey(primaryKey)) return Q(element, primaryKey);
-            return Q(element, fallbackKey);
+            foreach (var key in keys)
+                if (element.Quantities.ContainsKey(key)) return Q(element, key);
+            return 0d;
         }
 
         private static double Q(ProjectElement element, string key, double fallback = 0d)
@@ -181,15 +189,6 @@ namespace QS3D.Core.Reporting
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
                 throw new InvalidOperationException(element.Id + "/" + key + " must be finite and non-negative.");
             return value;
-        }
-
-        private static double Add(double left, double right, string label)
-        {
-            if (double.IsNaN(left) || double.IsInfinity(left) || left < 0d || double.IsNaN(right) || double.IsInfinity(right) || right < 0d)
-                throw new InvalidOperationException(label + " requires finite non-negative values.");
-            var result = left + right;
-            if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " overflowed.");
-            return result;
         }
     }
 }
