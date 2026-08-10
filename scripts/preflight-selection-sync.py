@@ -64,7 +64,7 @@ if files["sync"].is_file():
     event_end = text.find("private static void ScheduleRefresh", event_start)
     if event_start >= 0 and event_end > event_start:
         event_body = text[event_start:event_end]
-        if "EntitySnapshotReader.ReadImpliedSelection" in event_body or "Refresh(document);" in event_body:
+        if "EntitySnapshotReader.ReadImpliedSelection" in event_body or "\n            Refresh(document);" in event_body:
             errors.append("ImpliedSelectionChanged must schedule/coalesce work instead of synchronously reading snapshots.")
 
 print("QS3D selection-sync preflight")
