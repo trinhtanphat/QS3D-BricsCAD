@@ -55,6 +55,7 @@ namespace QS3D.Core.SmokeTests
             GeneratedSemanticTagHealthSmoke.Run();
             SemanticDocumentationTableSmoke.Run();
             SemanticViewSheetPlannerSmoke.Run();
+            ProjectBrowserPlannerSmoke.Run();
             ProjectInterchangeJsonSmoke.Run();
             ProjectInterchangeImportPreviewSmoke.Run();
             ProjectInterchangeValidatedSnapshotReaderSmoke.Run();
