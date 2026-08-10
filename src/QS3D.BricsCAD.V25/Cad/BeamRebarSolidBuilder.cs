@@ -14,6 +14,9 @@ namespace QS3D.BricsCAD.V25.Cad
 {
     internal static class BeamRebarSolidBuilder
     {
+        private const int MaxBarsPerElement = 1024;
+        private const int MaxBarsPerBatch = 4096;
+
         private sealed class PendingUpdate
         {
             public ProjectElement Element { get; set; } = null!;
@@ -30,11 +33,17 @@ namespace QS3D.BricsCAD.V25.Cad
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             var selection = document.Editor.SelectImplied();
-            if (selection.Status != PromptStatus.OK || selection.Value == null) return 0;
+            if (selection.Status != PromptStatus.OK || selection.Value == null)
+            {
+                selection = document.Editor.GetSelection();
+                if (selection.Status != PromptStatus.OK || selection.Value == null) return 0;
+                document.Editor.SetImpliedSelection(selection.Value.GetObjectIds());
+            }
             var ids = selection.Value.GetObjectIds();
             if (ids.Length == 0) return 0;
             var pending = new List<PendingUpdate>();
             var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ownership = GeneratedRebarOwnershipGuard.Build(project);
             var totalBars = 0;
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
@@ -56,6 +65,9 @@ namespace QS3D.BricsCAD.V25.Cad
                     var groups = RebarNotationParser.Parse(notation);
                     var diameterMm = ResolveDiameter(element, groups);
                     var counts = ResolveLayerCounts(element, groups);
+                    var elementBarCount = checked(counts.Item1 + counts.Item2);
+                    if (elementBarCount > MaxBarsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxBarsPerElement + " Beam longitudinal bar/element.");
+                    if (totalBars > MaxBarsPerBatch - elementBarCount) throw new InvalidOperationException("Beam longitudinal rebar batch vượt giới hạn " + MaxBarsPerBatch + " bar.");
                     var coverM = CadGeometryGuard.Number(element, family, "RebarCoverM", 0.04d);
                     if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarCoverM phải >= 0.");
                     var endCoverM = CadGeometryGuard.Number(element, family, "RebarBeamEndCoverM", coverM);
@@ -70,23 +82,24 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (xyLength <= 1e-8d) throw new InvalidOperationException("Beam source LINE bị suy biến: " + element.Id);
                     if (Math.Abs(dz) > xyLength * 1e-8d + 1e-8d) throw new InvalidOperationException("QS3DBEAMREBAR3D hiện chỉ hỗ trợ Beam LINE nằm ngang trong mặt phẳng XY.");
                     var lengthM = CadGeometryGuard.ToMeters(document, xyLength, element.Id + "/beam length");
-                    var barLengthM = CadGeometryGuard.Finite(lengthM - CadGeometryGuard.Finite(endCoverM * 2d, element.Id + "/two end covers"), element.Id + "/beam rebar usable length");
+                    var twoEndCovers = CadGeometryGuard.Finite(endCoverM * 2d, element.Id + "/two end covers");
+                    var barLengthM = CadGeometryGuard.Finite(lengthM - twoEndCovers, element.Id + "/beam rebar usable length");
                     if (barLengthM <= 1e-9d) throw new InvalidOperationException(element.Id + ": RebarBeamEndCoverM không còn chiều dài thanh hữu dụng.");
                     var ux = dx / xyLength; var uy = dy / xyLength; var nx = -uy; var ny = ux; var angle = Math.Atan2(uy, ux);
                     var barLength = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, barLengthM, element.Id + "/beam rebar length"), element.Id + "/beam rebar drawing length");
                     var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, diameterMm / 2000d, element.Id + "/beam rebar radius"), element.Id + "/beam rebar drawing radius");
                     var endCover = CadGeometryGuard.ToDrawingUnits(document, endCoverM, element.Id + "/beam end cover");
-                    var startX = CadGeometryGuard.Add(line.StartPoint.X, ux * endCover, element.Id + "/beam rebar start X");
-                    var startY = CadGeometryGuard.Add(line.StartPoint.Y, uy * endCover, element.Id + "/beam rebar start Y");
+                    var startX = CadGeometryGuard.Add(line.StartPoint.X, CadGeometryGuard.Finite(ux * endCover, element.Id + "/beam rebar start dx"), element.Id + "/beam rebar start X");
+                    var startY = CadGeometryGuard.Add(line.StartPoint.Y, CadGeometryGuard.Finite(uy * endCover, element.Id + "/beam rebar start dy"), element.Id + "/beam rebar start Y");
                     var centerZ = CadGeometryGuard.Midpoint(line.StartPoint.Z, line.EndPoint.Z, element.Id + "/beam center Z");
-                    ErasePrevious(document, transaction, element);
+                    ErasePrevious(document, transaction, element, ownership);
                     var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, CoverM = coverM, EndCoverM = endCoverM, TopCount = counts.Item1, BottomCount = counts.Item2 };
                     foreach (var local in layout.TopBarCenters.Concat(layout.BottomBarCenters))
                     {
                         var localX = CadGeometryGuard.ToDrawingUnits(document, local.X, element.Id + "/beam rebar transverse offset");
                         var localZ = CadGeometryGuard.ToDrawingUnits(document, local.Y, element.Id + "/beam rebar vertical offset");
-                        var x = CadGeometryGuard.Add(startX, nx * localX, element.Id + "/beam rebar X");
-                        var y = CadGeometryGuard.Add(startY, ny * localX, element.Id + "/beam rebar Y");
+                        var x = CadGeometryGuard.Add(startX, CadGeometryGuard.Finite(nx * localX, element.Id + "/beam rebar transverse X"), element.Id + "/beam rebar X");
+                        var y = CadGeometryGuard.Add(startY, CadGeometryGuard.Finite(ny * localX, element.Id + "/beam rebar transverse Y"), element.Id + "/beam rebar Y");
                         var z = CadGeometryGuard.Add(centerZ, localZ, element.Id + "/beam rebar Z");
                         Solid3d? bar = new Solid3d();
                         try
@@ -104,7 +117,8 @@ namespace QS3D.BricsCAD.V25.Cad
                         }
                         finally { bar?.Dispose(); }
                     }
-                    pending.Add(update); totalBars += update.Handles.Count;
+                    pending.Add(update);
+                    totalBars = checked(totalBars + update.Handles.Count);
                 }
                 transaction.Commit();
             }
@@ -156,18 +170,19 @@ namespace QS3D.BricsCAD.V25.Cad
             return value;
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue("GeneratedRebarHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                ownership.EnsureOwned(handle, element, "GeneratedRebarHandles");
                 var ids = CadHandleService.Resolve(document, new[] { handle });
                 if (ids.Count == 0) continue;
                 if (ids.Count > 1) throw new InvalidOperationException("Generated rebar handle " + handle + " resolves to multiple live CAD objects.");
                 var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
                 if (entity == null || entity.IsErased) continue;
                 var solid = entity as Solid3d;
-                if (solid == null) throw new InvalidOperationException("Generated rebar handle " + handle + " is live but is not a Solid3d. Refusing to orphan or overwrite rebar ownership.");
+                if (solid == null) throw new InvalidOperationException("Generated rebar handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
                 solid.Erase();
             }
         }
