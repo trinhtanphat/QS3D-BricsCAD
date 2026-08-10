@@ -1,10 +1,10 @@
 using System;
 using System.IO;
-using System.Linq;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.Core.Export;
 using QS3D.Core.Rebar;
+using QS3D.Core.Reporting;
 using QS3D.Core.Services;
 using Teigha.Runtime;
 
@@ -39,7 +39,8 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
                 RebarCsvExporter.Export(dialog.FileName, rows);
-                var totalWeight = rows.Sum(x => x.TotalWeightKg);
+                var totalWeight = 0d;
+                foreach (var row in rows) totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight");
                 var status = "BBS CSV: " + rows.Count + " bar mark • " + totalWeight.ToString("0.###") + " kg • " + dialog.FileName;
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
