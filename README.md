@@ -80,6 +80,7 @@ See [`docs/COMMANDS.md`](docs/COMMANDS.md) and [`docs/ADVANCED-GEOMETRY.md`](doc
 - `src/QS3D.Core` — CAD-independent domain, persistence, geometry, quantity, recognition, revision, rebar and reporting logic.
 - `src/QS3D.BricsCAD.V25` — BricsCAD document/database adapters, native geometry builders, commands, WPF palettes and Ribbon integration.
 - `tests/QS3D.Core.SmokeTests` — deterministic Core regression/smoke suite.
+- `samples/generated` — repository-owned synthetic DXF/DWG, QSDB, Excel Handle lookup and `.qstemplate` fixtures; no BLT/private/vendor content.
 - `scripts` — static preflight, V25 packaging, DemandLoad install/uninstall and runtime harness support.
 - `docs` — requirements, UI specification, implementation status, runtime gate and handoff documentation.
 
@@ -102,7 +103,7 @@ Until those gates are green, runtime-dependent features are described as **imple
 
 ## Build policy
 
-Do not commit `BrxMgd.dll`, `TD_Mgd.dll`, BLT/BLT3D folders, or private DWG/DOCX fixtures. The BricsCAD plugin resolves V25 assemblies through `BRICSCAD_V25_DIR` with `Private=false`.
+Do not commit `BrxMgd.dll`, `TD_Mgd.dll`, BLT/BLT3D folders, or private DWG/DOCX fixtures. The BricsCAD plugin resolves V25 assemblies through `BRICSCAD_V25_DIR` with `Private=false`. Use the new `samples/generated` fixture set for public tests; the whitelist in `.gitignore` permits only the named synthetic DXF/DWG/XLSX binaries.
 
 GitHub Actions on `main` are **manual-only and owner-controlled**. Documentation/Markdown, `docs:` and `chore:` commits do not need GitHub CI, and no commit/push/merge should dispatch Actions automatically. Even source changes run GitHub CI only when the repository owner explicitly requests it.
 

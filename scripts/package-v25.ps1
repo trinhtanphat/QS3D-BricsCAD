@@ -6,6 +6,7 @@ $dist = Join-Path $distRoot 'QS3D-BricsCAD-V25'
 $zip = Join-Path $distRoot 'QS3D-BricsCAD-V25.zip'
 $required = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
 $forbidden = @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')
+$sampleSource = Join-Path $root 'samples/generated'
 
 if (-not (Test-Path $source)) { throw "V25 Release output was not found: $source" }
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
@@ -23,6 +24,17 @@ foreach ($script in @('install-v25-autoload.ps1', 'uninstall-v25-autoload.ps1', 
     if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw "Missing release script: $scriptPath" }
     Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $dist $script)
 }
+
+if (-not (Test-Path -LiteralPath $sampleSource -PathType Container)) { throw "Synthetic sample folder was not found: $sampleSource" }
+$sampleDestination = Join-Path $dist 'Samples'
+New-Item -ItemType Directory -Path $sampleDestination -Force | Out-Null
+foreach ($sampleName in @('README.md', 'QS3D-Sample.dxf', 'QS3D-Sample.qsdb', 'QS3D-Quantity-Template.xlsx', 'QS3D-Architecture.qstemplate')) {
+    $samplePath = Join-Path $sampleSource $sampleName
+    if (-not (Test-Path -LiteralPath $samplePath -PathType Leaf)) { throw "Missing synthetic sample artifact: $samplePath" }
+    Copy-Item -LiteralPath $samplePath -Destination (Join-Path $sampleDestination $sampleName)
+}
+$sampleDwg = Join-Path $sampleSource 'QS3D-Sample.dwg'
+if (Test-Path -LiteralPath $sampleDwg -PathType Leaf) { Copy-Item -LiteralPath $sampleDwg -Destination (Join-Path $sampleDestination 'QS3D-Sample.dwg') }
 
 $commands = @()
 Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs' | ForEach-Object {
@@ -73,6 +85,7 @@ Security:
 - The installer verifies SHA256SUMS.txt before copying files.
 - It does not disable or weaken BricsCAD security settings.
 - This package intentionally excludes BricsCAD runtime assemblies.
+- Samples/ contains only repository-owned synthetic DXF/DWG/QSDB/XLSX/template fixtures.
 
 Native Solid3d and DemandLoad behavior still require the real licensed V25 runtime gate before release qualification.
 "@ | Set-Content -Path (Join-Path $dist 'README.txt') -Encoding UTF8
@@ -83,9 +96,11 @@ foreach ($name in $forbidden) {
     }
 }
 
-$hashLines = Get-ChildItem $dist -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | Sort-Object Name | ForEach-Object {
+$distFull = [IO.Path]::GetFullPath($dist).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+$hashLines = Get-ChildItem $dist -Recurse -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | Sort-Object FullName | ForEach-Object {
     $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-    "$hash  $($_.Name)"
+    $relativePath = $_.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/')
+    "$hash  $relativePath"
 }
 if (-not $hashLines) { throw 'No package files were available for hashing.' }
 $hashLines | Set-Content -Path (Join-Path $dist 'SHA256SUMS.txt') -Encoding ASCII

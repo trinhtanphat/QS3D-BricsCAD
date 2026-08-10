@@ -26,3 +26,8 @@ TD_MgdBrep.dll
 BLT/
 BLT3D/
 samples/private/
+
+# Only these repository-owned synthetic fixtures may bypass the binary guards above.
+!samples/generated/QS3D-Sample.dxf
+!samples/generated/QS3D-Sample.dwg
+!samples/generated/QS3D-Quantity-Template.xlsx

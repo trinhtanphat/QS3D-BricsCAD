@@ -65,10 +65,16 @@ function Assert-PackageIntegrity {
         $expected = $Matches[1].ToUpperInvariant()
         $name = $Matches[2].Trim()
         if ($name -eq 'SHA256SUMS.txt') { throw 'SHA256SUMS.txt must not hash itself.' }
-        if ([IO.Path]::IsPathRooted($name) -or $name.Contains('..') -or $name.Contains('/') -or $name.Contains('\')) {
-            throw "SHA256SUMS entry must be a package-root filename: $name"
+        if ([IO.Path]::IsPathRooted($name) -or $name.Contains('\') -or $name.Contains(':')) {
+            throw "Unsafe SHA256SUMS entry: $name"
         }
-        $file = Join-Path $Directory $name
+        $segments = @($name.Split('/'))
+        if ($segments.Count -eq 0 -or @($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+            throw "Unsafe SHA256SUMS entry: $name"
+        }
+        $packageRoot = [IO.Path]::GetFullPath($Directory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        $file = [IO.Path]::GetFullPath((Join-Path $Directory ($name.Replace('/', [IO.Path]::DirectorySeparatorChar))))
+        if (-not $file.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe SHA256SUMS entry: $name" }
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing package payload: $name" }
         $actual = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToUpperInvariant()
         if ($actual -ne $expected) { throw "SHA-256 mismatch for $name" }
