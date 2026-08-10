@@ -304,7 +304,7 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateOptionalCanonicalValue(string? value, string label)
         {
-            if (string.IsNullOrEmpty(value)) return;
+            if (value == null || value.Length == 0) return;
             if (string.IsNullOrWhiteSpace(value))
                 throw new InvalidDataException("QSDB " + label + " must not be whitespace.");
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
@@ -364,6 +364,7 @@ namespace QS3D.Core.Persistence
 
         private static DateTime Date(string? value)
         {
+            if (value == null) return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
             if (string.IsNullOrWhiteSpace(value)) return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
             var raw = value.Trim();
             if (!HasExplicitUtcOffset(raw) || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result))
