@@ -58,12 +58,8 @@ namespace QS3D.BricsCAD.V25
                 Action<QuantityReportRow> locate = row =>
                 {
                     var project = ProjectContextCoordinator.GetOrCreate(doc);
-                    var handles = row.ElementIds.SelectMany(id =>
-                    {
-                        var element = project.FindElement(id);
-                        return element == null ? Enumerable.Empty<string>() : SemanticReferenceHandles.Get(element).AsEnumerable();
-                    }).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                    if (handles.Length == 0) { PaletteCoordinator.SetStatus("BQ Định vị: dòng này chưa có semantic reference handle để chọn trong CAD."); return; }
+                    var handles = SourceHandleResolver.Resolve(project, row.ElementIds);
+                    if (handles.Count == 0) { PaletteCoordinator.SetStatus("BQ Định vị: dòng này chưa có semantic handle để chọn trong CAD."); return; }
                     var count = Cad.CadHandleService.Select(doc, handles);
                     PaletteCoordinator.SetStatus("BQ Định vị: " + count + " đối tượng CAD");
                     if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
@@ -73,6 +69,9 @@ namespace QS3D.BricsCAD.V25
                 Application.ShowModelessWindow(IntPtr.Zero, new QuantitySummaryWindow(rows, locate, recalculate), true);
             });
         }
+
+        [CommandMethod("QS3DED2", CommandFlags.UsePickSet)]
+        public void ShowEd2Workflow() => ShowQuantitySummary();
 
         [CommandMethod("QS3DBBS", CommandFlags.Modal)]
         public void ExportBbs()
@@ -231,10 +230,30 @@ namespace QS3D.BricsCAD.V25
             var result = doc.Editor.GetString(options); if (result.Status != PromptStatus.OK) return;
             Guard(doc, "QS3DLOCATE", () =>
             {
-                var element = ProjectContextCoordinator.GetOrCreate(doc).FindElement(result.StringResult);
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var element = project.FindElement(result.StringResult);
                 if (element == null) { doc.Editor.WriteMessage("\nKhông tìm thấy QS3D element."); return; }
-                var count = Cad.CadHandleService.Select(doc, SemanticReferenceHandles.Get(element));
+                var count = Cad.CadHandleService.Select(doc, SourceHandleResolver.Resolve(project, new[] { element.Id }));
                 PaletteCoordinator.SetStatus("Locate " + element.Id + " • " + count + " CAD object");
+            });
+        }
+
+        [CommandMethod("QS3DEXCELLOCATE", CommandFlags.Modal)]
+        public void LocateFromExcel()
+        {
+            var doc = Active(); if (doc == null) return;
+            Guard(doc, "QS3DEXCELLOCATE", () =>
+            {
+                var dialog = new OpenFileDialog { Title = "Chọn bảng Excel QS3D/BLT để định vị", Filter = "Excel Workbook (*.xlsx)|*.xlsx", CheckFileExists = true, Multiselect = false };
+                if (dialog.ShowDialog() != true) return;
+                var prompt = new PromptIntegerOptions("\nNhập số dòng Excel cần định vị: ") { AllowNone = false, LowerLimit = 1, UseDefaultValue = true, DefaultValue = 2 };
+                var row = doc.Editor.GetInteger(prompt); if (row.Status != PromptStatus.OK) return;
+                var handles = XlsxHandleReader.ReadHandles(dialog.FileName, row.Value);
+                if (handles.Count == 0) { doc.Editor.WriteMessage("\nQS3D: dòng Excel không có CAD Handle hợp lệ."); return; }
+                var count = Cad.CadHandleService.Select(doc, handles);
+                PaletteCoordinator.SetStatus("Excel dòng " + row.Value + ": " + handles.Count + " Handle • " + count + " đối tượng CAD");
+                doc.Editor.WriteMessage("\nQS3D Excel Locate: resolved " + count + "/" + handles.Count + " handle(s).");
+                if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
             });
         }
 
@@ -263,6 +282,6 @@ namespace QS3D.BricsCAD.V25
         private static int RegenerateProject(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
         private static void Write(string message) => Active()?.Editor.WriteMessage("\n" + message);
-        private static void Guard(Document document, string operation, Action action) { try { action(); } catch (Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }
+        private static void Guard(Document document, string operation, Action action) { try { action(); } catch (System.Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }
     }
 }

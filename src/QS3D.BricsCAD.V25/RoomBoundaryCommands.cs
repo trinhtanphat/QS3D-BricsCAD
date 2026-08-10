@@ -112,21 +112,21 @@ namespace QS3D.BricsCAD.V25
                     PaletteCoordinator.SetStatus(message);
                     document.Editor.WriteMessage("\nQS3D " + message);
                 }
-                catch (Exception operationError)
+                catch (System.Exception operationError)
                 {
                     try
                     {
                         rollback.Restore(project);
                         PaletteCoordinator.RefreshProject();
                     }
-                    catch (Exception restoreError)
+                    catch (System.Exception restoreError)
                     {
                         throw new InvalidOperationException("QS3DROOMAUTO failed and project rollback also failed.", new AggregateException(operationError, restoreError));
                     }
                     throw;
                 }
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 document.Editor.WriteMessage("\nQS3DROOMAUTO error: " + ex.Message);
                 PaletteCoordinator.SetStatus("QS3DROOMAUTO lỗi: " + ex.Message);

@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using Bricscad.ApplicationServices;
+using Application = Bricscad.ApplicationServices.Application;
 using QS3D.BricsCAD.V25.UI.ViewModels;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
