@@ -77,11 +77,7 @@ namespace QS3D.Core.Export
 
         private static void ValidatePackage(string path)
         {
-            using (var archive = ZipFile.OpenRead(path))
-            {
-                foreach (var name in new[] { "[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet1.xml" })
-                    if (archive.GetEntry(name) == null) throw new InvalidDataException("Generated XLSX package is missing " + name + ".");
-            }
+            XlsxPackageValidator.Validate(path, "[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet1.xml");
         }
 
         private static void AppendText(StringBuilder sb, string cellRef, string value, int style)
