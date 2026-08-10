@@ -30,8 +30,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
-                    throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Material Catalog trước khi xuất bảng vật liệu.");
+                EnsureActive("xuất bảng vật liệu");
                 SetStatus("Chuẩn bị Material Usage XLSX…");
                 _document.SendStringToExecute("QS3DMATERIALXLSX ", true, false, false);
             }
@@ -73,6 +72,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                EnsureActive("lưu material");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var id = string.IsNullOrWhiteSpace(_editingId) ? "mat-" + Guid.NewGuid().ToString("N") : _editingId;
                 var material = ProjectMaterialCatalog.UpsertCustom(project, id, NameBox.Text, UnitBox.Text, DescriptionBox.Text);
@@ -90,6 +90,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (!(MaterialList.SelectedItem is ProjectMaterial material)) return;
             try
             {
+                EnsureActive("xóa material");
                 if (material.IsBuiltIn) throw new InvalidOperationException("Built-in material không thể xóa.");
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
                 if (!ProjectMaterialCatalog.DeleteCustom(project, material.Id)) return;
@@ -106,8 +107,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
-                    throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Material Catalog trước khi áp dụng cho selection.");
+                EnsureActive("áp dụng material cho selection");
                 if (!(MaterialList.SelectedItem is ProjectMaterial material)) throw new InvalidOperationException("Chọn một material trước khi áp dụng.");
                 var target = (TargetCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Material";
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
@@ -156,6 +156,12 @@ namespace QS3D.BricsCAD.V25.UI
                 Title = "QS3D • Vật liệu • " + DrawingLabel(_document);
             }
             catch (Exception ex) { SetStatus("Đọc Material Catalog lỗi: " + ex.Message); }
+        }
+
+        private void EnsureActive(string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Material Catalog trước khi " + operation + ".");
         }
 
         private static string DrawingLabel(Document document)
