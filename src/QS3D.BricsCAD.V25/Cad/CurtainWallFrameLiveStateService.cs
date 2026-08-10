@@ -48,6 +48,23 @@ namespace QS3D.BricsCAD.V25.Cad
             return stamped.Count;
         }
 
+        public static int TryStampSelected(Document document, ProjectState project, out string warning)
+        {
+            warning = string.Empty;
+            try
+            {
+                return StampSelected(document, project);
+            }
+            catch (Exception ex)
+            {
+                // Frame/host geometry has already committed by the time command orchestration calls
+                // this health stamp. Missing fingerprint is a diagnosable health warning, not a
+                // reason to report an otherwise valid native geometry commit as failed.
+                warning = "Không stamp được live curtain fingerprint: " + ex.Message;
+                return 0;
+            }
+        }
+
         public static IReadOnlyList<ModelHealthIssue> Inspect(Document document, ProjectState project)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));

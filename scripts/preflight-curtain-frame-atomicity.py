@@ -76,6 +76,37 @@ for label, contract in contracts.items():
     if touch >= 0 and commit >= 0 and touch < commit:
         errors.append(label + ": project.Touch must remain post-CAD-commit")
 
+live_state = ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameLiveStateService.cs"
+if not live_state.is_file():
+    errors.append("missing CurtainWallFrameLiveStateService.cs")
+else:
+    text = live_state.read_text(encoding="utf-8")
+    for token in (
+        "public static int TryStampSelected(Document document, ProjectState project, out string warning)",
+        "return StampSelected(document, project);",
+        'warning = "Không stamp được live curtain fingerprint: " + ex.Message;',
+        "return 0;",
+        "CURTAIN_FRAME_LIVE_FINGERPRINT_MISSING",
+    ):
+        if token not in text:
+            errors.append("curtain live fingerprint best-effort contract missing: " + token)
+
+for relative in (
+    "src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs",
+    "src/QS3D.BricsCAD.V25/CurtainWallFrameCommands.cs",
+):
+    path = ROOT / relative
+    if not path.is_file():
+        errors.append("missing curtain command surface: " + relative)
+        continue
+    text = path.read_text(encoding="utf-8")
+    if "CurtainWallFrameLiveStateService.TryStampSelected" not in text:
+        errors.append(relative + " must use best-effort live fingerprint stamping after geometry commit")
+    if "CurtainWallFrameLiveStateService.StampSelected" in text:
+        errors.append(relative + " must not let direct StampSelected failure convert valid geometry commit into command failure")
+    if "fingerprint pending" not in text or "stampWarning" not in text:
+        errors.append(relative + " must surface missing live fingerprint as a warning/pending health state")
+
 print("QS3D curtain frame cross-layer atomicity preflight")
 if errors:
     for error in errors:
@@ -83,4 +114,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: LINE and path curtain frame builders replace old owned frames, write handles/count/fingerprint/stale/audit state before CAD commit, and restore the project snapshot on pre-commit failure. Whole QS3DCURTAIN3D host+frame orchestration remains a separate transaction-boundary concern.")
+print("PASS: LINE and path curtain frame builders replace old owned frames and write handles/count/fingerprint/stale/audit state before CAD commit with deep snapshot rollback; post-commit live fingerprint stamping is best-effort and cannot misreport valid geometry as failed. Whole QS3DCURTAIN3D host+frame orchestration remains a separate transaction-boundary concern.")

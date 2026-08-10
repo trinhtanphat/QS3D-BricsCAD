@@ -29,14 +29,15 @@ namespace QS3D.BricsCAD.V25
                 var pathFrames = CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project);
                 var frameElements = checked(lineFrames.Elements + pathFrames.Elements);
                 var frameSolids = checked(lineFrames.Frames + pathFrames.Frames);
-                var stamped = frameElements > 0 ? CurtainWallFrameLiveStateService.StampSelected(document, project) : 0;
+                var stampWarning = string.Empty;
+                var stamped = frameElements > 0 ? CurtainWallFrameLiveStateService.TryStampSelected(document, project, out stampWarning) : 0;
                 if (hostSolids == 0 && frameSolids == 0)
                 {
                     Report(document, "Curtain 3D: chọn GlassWall semantic LINE hoặc open/bulged POLYLINE WCS-XY.");
                     return;
                 }
 
-                FinalizeUi(document, hostSolids, frameSolids, stamped, regenerated);
+                FinalizeUi(document, hostSolids, frameSolids, stamped, regenerated, stampWarning);
             }
             catch (Exception ex)
             {
@@ -44,20 +45,25 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void FinalizeUi(Document document, int hostSolids, int frameSolids, int stamped, int regenerated)
+        private static void FinalizeUi(Document document, int hostSolids, int frameSolids, int stamped, int regenerated, string stampWarning)
         {
-            var status = "Curtain 3D: " + hostSolids + " host solid • " + frameSolids + " frame solid • live fingerprint " + stamped + " • regenerate " + regenerated + ".";
+            var status = "Curtain 3D: " + hostSolids + " host solid • " + frameSolids + " frame solid • live fingerprint " + stamped + " • regenerate " + regenerated;
+            if (!string.IsNullOrWhiteSpace(stampWarning)) status += " • fingerprint pending";
+            status += ".";
             try
             {
                 PaletteCoordinator.RefreshProject();
                 document.Editor.Regen();
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
+                if (!string.IsNullOrWhiteSpace(stampWarning))
+                    document.Editor.WriteMessage("\nQS3D warning: " + stampWarning);
                 document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
             }
             catch (Exception ex)
             {
                 TryWriteMessage(document, "\nQS3D " + status + " UI sync warning: " + ex.Message);
+                if (!string.IsNullOrWhiteSpace(stampWarning)) TryWriteMessage(document, "\nQS3D warning: " + stampWarning);
             }
         }
 
