@@ -59,6 +59,8 @@ namespace QS3D.BricsCAD.V25
                 combined.AddRange(new GeneratedWallMeshHealthService().Inspect(project, liveWallMesh));
                 combined.AddRange(new GeneratedFoundationMeshHealthService().Inspect(project, liveFoundationMesh));
                 combined.AddRange(new GeneratedCurtainFrameHealthService().Inspect(project, liveCurtainFrames));
+                combined.AddRange(CurtainWallFrameLiveStateService.Inspect(document, project));
+                combined.AddRange(PhysicalOpeningCutLiveStateService.Inspect(document, project));
                 combined.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
                 combined.AddRange(new GeneratedHandleOwnershipHealthService().Inspect(project));
                 combined.AddRange(new GeneratedRebarModeHealthService().Inspect(project));
@@ -106,6 +108,7 @@ namespace QS3D.BricsCAD.V25
         private static IEnumerable<string> LocateHandles(ProjectElement element, string code)
         {
             var normalized = (code ?? string.Empty).ToUpperInvariant();
+            if (normalized.Contains("PHYSICAL_OPENING_CUT")) return SplitPropertyHandles(element, "PhysicalOpeningCutSolidHandle");
             if (normalized.Contains("CURTAIN_FRAME")) return SplitPropertyHandles(element, "GeneratedCurtainFrameHandles");
             if (normalized.Contains("FOUNDATION_MESH")) return SplitPropertyHandles(element, FoundationMeshSolidBuilder.HandlesKey);
             if (normalized.Contains("WALL_MESH")) return SplitPropertyHandles(element, "GeneratedWallMeshHandles");
