@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             HealthyFoundation();
+            AcceptsPolygonFootprintMode();
+            DetectsInvalidFootprintMode();
             DetectsWrongCategoryAndStaleSnapshot();
             DetectsCrossKeyOwnershipConflict();
             DetectsLaterOwnerConflictAndFutureGeneratedSlot();
@@ -26,7 +28,28 @@ namespace QS3D.Core.SmokeTests
             var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA", "BB" };
             var issues = new GeneratedFoundationMeshHealthService().Inspect(project, live);
             Require(!issues.Any(x => x.Severity == HealthSeverity.Error), "healthy foundation mesh produced an error");
+            Require(!issues.Any(x => x.Code == "FOUNDATION_MESH_FOOTPRINT_MODE_INVALID"), "RectangleLocalXY should be a healthy Foundation footprint mode");
             Require(!issues.Any(x => x.Code == "FOUNDATION_MESH_GENERATED_STALE"), "fresh foundation mesh should not be stale");
+        }
+
+        private static void AcceptsPolygonFootprintMode()
+        {
+            var project = new ProjectState("P-poly", "Polygon Foundation");
+            var foundation = MeshElement("F-POLY", ElementCategory.Foundation, "AA", "1");
+            foundation.Properties["GeneratedFoundationMeshFootprintMode"] = "PolygonGlobalXY";
+            project.Elements.Add(foundation);
+            var issues = new GeneratedFoundationMeshHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" });
+            Require(!issues.Any(x => x.Code == "FOUNDATION_MESH_FOOTPRINT_MODE_INVALID"), "PolygonGlobalXY should be a healthy Foundation footprint mode");
+        }
+
+        private static void DetectsInvalidFootprintMode()
+        {
+            var project = new ProjectState("P-bad-footprint", "Bad footprint");
+            var foundation = MeshElement("F-BAD", ElementCategory.Foundation, "AA", "1");
+            foundation.Properties["GeneratedFoundationMeshFootprintMode"] = "PolygonLocalMagic";
+            project.Elements.Add(foundation);
+            var issues = new GeneratedFoundationMeshHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" });
+            Require(issues.Any(x => x.Code == "FOUNDATION_MESH_FOOTPRINT_MODE_INVALID"), "invalid Foundation footprint mode was not detected");
         }
 
         private static void DetectsWrongCategoryAndStaleSnapshot()
@@ -101,6 +124,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedFoundationMeshYActualSpacingM"] = "0.15";
             element.Properties["GeneratedFoundationMeshFaces"] = "Bottom";
             element.Properties["GeneratedFoundationMeshMode"] = "FoundationMeshXY";
+            element.Properties["GeneratedFoundationMeshFootprintMode"] = "RectangleLocalXY";
             return element;
         }
 
