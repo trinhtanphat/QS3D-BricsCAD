@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             RecognitionRejectsDuplicateRuleIds();
             HostUnlinkRejectsNonOpeningElements();
             OpeningDimensionsRejectNegativeValues();
+            BulkEditRejectsForeignSameIdElements();
         }
 
         private static void RecognitionUsesTokenBoundaries()
@@ -109,6 +110,29 @@ namespace QS3D.Core.SmokeTests
             });
             True(valid.OpeningAreaM2 > 0d);
             True(valid.NetAreaM2 < valid.GrossAreaM2);
+        }
+
+        private static void BulkEditRejectsForeignSameIdElements()
+        {
+            var project = new ProjectState("bulk-owned", "Bulk ownership");
+            var owned = new ProjectElement("same-id", ElementCategory.Slab, "family", "floor", "zone");
+            owned.Properties["ThicknessM"] = "0.2";
+            project.Elements.Add(owned);
+            var foreign = new ProjectElement("same-id", ElementCategory.Slab, "family", "floor", "zone");
+            foreign.Properties["ThicknessM"] = "0.2";
+            var service = new BulkEditService();
+
+            Throws<InvalidOperationException>(() => service.SetProperty(project, new[] { foreign }, "ThicknessM", "0.3"));
+            Equal("0.2", owned.Properties["ThicknessM"]);
+            Equal("0.2", foreign.Properties["ThicknessM"]);
+
+            Throws<InvalidOperationException>(() => service.MultiplyNumericProperty(project, new[] { foreign }, "ThicknessM", 2d));
+            Equal("0.2", owned.Properties["ThicknessM"]);
+            Equal("0.2", foreign.Properties["ThicknessM"]);
+
+            var changed = service.SetProperty(project, new[] { owned, owned }, "ThicknessM", "0.25");
+            Equal(1, changed.Count);
+            Equal("0.25", owned.Properties["ThicknessM"]);
         }
 
         private static void Equal<T>(T expected, T actual) { if (!Equals(expected, actual)) throw new Exception("Expected " + expected + ", got " + actual); }
