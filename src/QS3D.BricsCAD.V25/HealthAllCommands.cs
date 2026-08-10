@@ -20,11 +20,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
-                var sourceHandles = project.Elements
-                    .SelectMany(x => x.SourceHandles)
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
+                var sourceHandles = project.Elements.SelectMany(x => x.SourceHandles).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
                 var mainHandles = PropertyHandles(project, "GeneratedSolidHandle");
                 var longitudinalHandles = PropertyHandles(project, "GeneratedRebarHandles");
                 var shapeHandles = PropertyHandles(project, "GeneratedShapeRebarHandles");
@@ -32,6 +28,7 @@ namespace QS3D.BricsCAD.V25
                 var stirrupHandles = PropertyHandles(project, "GeneratedBeamStirrupHandles");
                 var slabMeshHandles = PropertyHandles(project, "GeneratedSlabMeshHandles");
                 var wallMeshHandles = PropertyHandles(project, "GeneratedWallMeshHandles");
+                var foundationMeshHandles = PropertyHandles(project, FoundationMeshSolidBuilder.HandlesKey);
 
                 var liveSources = CadHandleService.GetLiveHandles(document, sourceHandles);
                 var liveMain = CadHandleService.GetLiveSolidHandles(document, mainHandles);
@@ -41,6 +38,7 @@ namespace QS3D.BricsCAD.V25
                 var liveStirrups = CadHandleService.GetLiveSolidHandles(document, stirrupHandles);
                 var liveSlabMesh = CadHandleService.GetLiveSolidHandles(document, slabMeshHandles);
                 var liveWallMesh = CadHandleService.GetLiveSolidHandles(document, wallMeshHandles);
+                var liveFoundationMesh = CadHandleService.GetLiveSolidHandles(document, foundationMeshHandles);
 
                 var combined = new List<ModelHealthIssue>();
                 combined.AddRange(new ModelHealthService().Inspect(project, liveSources, liveMain));
@@ -50,16 +48,14 @@ namespace QS3D.BricsCAD.V25
                 combined.AddRange(new GeneratedBeamStirrupHealthService().Inspect(project, liveStirrups));
                 combined.AddRange(new GeneratedSlabMeshHealthService().Inspect(project, liveSlabMesh));
                 combined.AddRange(new GeneratedWallMeshHealthService().Inspect(project, liveWallMesh));
+                combined.AddRange(new GeneratedFoundationMeshHealthService().Inspect(project, liveFoundationMesh));
                 combined.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
                 combined.AddRange(new GeneratedRebarModeHealthService().Inspect(project));
 
                 var issues = combined
                     .GroupBy(x => x.Severity + "|" + x.Code + "|" + x.ElementId + "|" + x.Message, StringComparer.Ordinal)
-                    .Select(x => x.First())
-                    .OrderByDescending(x => x.Severity)
-                    .ThenBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                    .Select(x => x.First()).OrderByDescending(x => x.Severity)
+                    .ThenBy(x => x.Code, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).ToList();
                 var summary = new HealthSummary(issues);
                 var message = "Health All: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
@@ -85,37 +81,27 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static string[] PropertyHandles(ProjectState project, string key)
-        {
-            return project.Elements
-                .SelectMany(x => SplitPropertyHandles(x, key))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-        }
+        private static string[] PropertyHandles(ProjectState project, string key) => project.Elements
+            .SelectMany(x => SplitPropertyHandles(x, key)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
         private static IEnumerable<string> LocateHandles(ProjectElement element, string code)
         {
             var normalized = (code ?? string.Empty).ToUpperInvariant();
+            if (normalized.Contains("FOUNDATION_MESH")) return SplitPropertyHandles(element, FoundationMeshSolidBuilder.HandlesKey);
             if (normalized.Contains("WALL_MESH")) return SplitPropertyHandles(element, "GeneratedWallMeshHandles");
             if (normalized.Contains("SLAB_MESH")) return SplitPropertyHandles(element, "GeneratedSlabMeshHandles");
             if (normalized.Contains("BEAM_STIRRUP")) return SplitPropertyHandles(element, "GeneratedBeamStirrupHandles");
             if (normalized.Contains("TIE_REBAR")) return SplitPropertyHandles(element, "GeneratedTieRebarHandles");
             if (normalized.Contains("SHAPE_REBAR")) return SplitPropertyHandles(element, "GeneratedShapeRebarHandles");
             if (normalized.Contains("REBAR_GENERATED") || normalized.Contains("GENERATED_REBAR")) return SplitPropertyHandles(element, "GeneratedRebarHandles");
-            if (normalized.Contains("GENERATED_SOLID") || normalized.Contains("GENERATED_HANDLE"))
-                return SplitPropertyHandles(element, "GeneratedSolidHandle");
+            if (normalized.Contains("GENERATED_SOLID") || normalized.Contains("GENERATED_HANDLE")) return SplitPropertyHandles(element, "GeneratedSolidHandle");
             return Array.Empty<string>();
         }
 
         private static IEnumerable<string> SplitPropertyHandles(ProjectElement element, string key)
         {
             if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
-            return raw
-                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => x.Trim())
-                .Where(x => x.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+            return raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         }
     }
 }
