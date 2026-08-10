@@ -31,5 +31,15 @@ The embedded screenshots add the following UI/workflow expectations:
 - Quantity columns include count, gross/deduction/net concrete, formwork, length, perimeter and finish/opening areas.
 - Column visibility controls.
 - Export to real `.xlsx` without requiring Microsoft Excel to be installed.
+- Preserve a bidirectional identity bridge: QS3D Element ID ↔ CAD Handle in each exported aggregate row.
+- Read a selected QS3D export row back into BricsCAD and select/zoom the referenced entities.
+- Support the supplied legacy BLT workbook convention where hidden cells contain one or more decimal handles prefixed with `$`; convert those decimal values to BricsCAD hexadecimal handles without modifying the source workbook.
+
+## B4D-style drawing scan
+
+- Scan the entire active Current Space without requiring a manual selection.
+- Read length, closed area and native Region/Hatch/Solid3d area/volume where the BricsCAD entity exposes it.
+- Auto-capture only unambiguous high-confidence classifications; retain ambiguous results for human review.
+- Never mutate or package BLT binaries/private DWG/XLSX reference files.
 
 The raw user DOCX and DWG are deliberately **not committed** to this public repository.
