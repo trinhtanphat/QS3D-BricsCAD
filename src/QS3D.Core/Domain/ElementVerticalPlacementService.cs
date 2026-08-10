@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using System.Linq;
 
 namespace QS3D.Core.Domain
 {
@@ -81,7 +80,7 @@ namespace QS3D.Core.Domain
 
         private static FloorDefinition FindFloor(ProjectState project, string floorId, string label)
         {
-            return project.Floors.FirstOrDefault(x => string.Equals(x.Id, floorId, StringComparison.OrdinalIgnoreCase))
+            return project.FindFloor(floorId)
                 ?? throw new InvalidOperationException(label + " references missing floor/level " + floorId + ".");
         }
 
