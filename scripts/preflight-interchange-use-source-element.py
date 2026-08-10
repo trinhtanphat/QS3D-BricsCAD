@@ -7,9 +7,10 @@ root = Path(__file__).resolve().parents[1]
 service = root / "src/QS3D.BricsCAD.V25/Services/InterchangeUseSourceElementImportService.cs"
 command = root / "src/QS3D.BricsCAD.V25/ProjectInterchangeUseSourceCommands.cs"
 append_command = root / "src/QS3D.BricsCAD.V25/ProjectInterchangeCommands.cs"
+project_tools = root / "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml"
 
 errors = []
-for path in (service, command, append_command):
+for path in (service, command, append_command, project_tools):
     if not path.exists():
         errors.append(f"missing required source: {path.relative_to(root)}")
 
@@ -17,6 +18,7 @@ if not errors:
     s = service.read_text(encoding="utf-8")
     c = command.read_text(encoding="utf-8")
     a = append_command.read_text(encoding="utf-8")
+    ui = project_tools.read_text(encoding="utf-8")
 
     required_service = [
         "ElementCollision = InterchangeExistingIdentityAction.UseSourceSemanticData",
@@ -73,6 +75,17 @@ if not errors:
     if "UseSourceSemanticData" in a:
         errors.append("QS3DINTERCHANGEAPPEND must not silently acquire replacement semantics")
 
+    if ui.count('Tag="QS3DINTERCHANGEUSESOURCE"') != 1:
+        errors.append("Project Tools must expose QS3DINTERCHANGEUSESOURCE exactly once")
+    for needle in [
+        "Nạp Snapshot (Append-only)",
+        "Nạp Snapshot (Replace Element semantic)",
+        "giữ source CAD ownership của target",
+        "yêu cầu rebuild explicit",
+    ]:
+        if needle not in ui:
+            errors.append(f"Project Tools missing separated interchange UX contract: {needle}")
+
     all_cs = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in (root / "src").rglob("*.cs"))
     registrations = len(re.findall(r'\[CommandMethod\("QS3DINTERCHANGEUSESOURCE"', all_cs))
     if registrations != 1:
@@ -85,4 +98,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-use-source-element: PASS")
-print("UseSource Element import is guarded by native invalidation + semantic rollback; target source ownership is preserved and rebuild remains explicit.")
+print("UseSource Element import is guarded by native invalidation + semantic rollback; target source ownership is preserved, UI keeps Append separate, and rebuild remains explicit.")
