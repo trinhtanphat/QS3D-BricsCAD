@@ -10,6 +10,7 @@ errors = []
 files = {
     "planner": ROOT / "src/QS3D.Core/Geometry/CurtainWallLayoutPlanner.cs",
     "detail": ROOT / "src/QS3D.Core/Geometry/CurtainWallDetailPlanner.cs",
+    "fingerprint": ROOT / "src/QS3D.Core/Geometry/CurtainWallFrameFingerprint.cs",
     "builder": ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs",
     "owner": ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedCurtainFrameOwnershipGuard.cs",
     "invalidator": ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
@@ -30,25 +31,35 @@ if files["ui"].is_file():
 
 checks = {
     "detail": ["VerticalFrames", "HorizontalFrames", "MaxDetailSolids", "PanelAreaM2"],
+    "fingerprint": [
+        "CurtainWallFrameFingerprintInput", "CURTAIN_FRAME_V1", "SHA256.Create()",
+        "MaxPanelWidthM", "MaxPanelHeightM", "PerimeterFrameWidthM", "MullionWidthM",
+        "TransomWidthM", "FrameDepthM", "BottomOffsetM",
+    ],
     "builder": [
         'HandlesKey = "GeneratedCurtainFrameHandles"', 'Mode = "LineFrameOverlay"',
-        "CurtainWallDetailPlanner.Plan", "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192",
+        "CurtainWallDetailPlanner.Plan", "CurtainWallFrameFingerprint.Compute", "CurtainWallFrameFingerprintInput",
+        "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192",
         "GeneratedCurtainFrameOwnershipGuard.Build", "ownership.EnsureOwned", "CurtainFrameDepthM",
         "GeneratedCurtainFrameColumns", "GeneratedCurtainFrameRows", "GeneratedCurtainFrameSourceLengthM",
-        "GeneratedCurtainFrameHeightM", "CreateBox", "GlassWall", "LINE nằm ngang",
+        "GeneratedCurtainFrameHeightM", "GeneratedCurtainFrameConfigFingerprint", "CreateBox", "GlassWall", "LINE nằm ngang",
     ],
     "owner": [
         'GeneratedCurtainFrameHandles', 'GeneratedSolidHandle', 'PhysicalOpeningCutSolidHandle',
         'GeneratedSlabMeshHandles', 'GeneratedWallMeshHandles',
     ],
     "invalidator": [
-        'GeneratedCurtainFrameHandles', 'GeneratedCurtainFrameCount', 'GeneratedCurtainFrameMode',
-        'GeneratedCurtainFrameOwnershipGuard.Build', 'EraseCurtainFrames',
+        'GeneratedCurtainFrameHandles', 'GeneratedCurtainFrameCount', 'GeneratedCurtainFrameConfigFingerprint',
+        'GeneratedCurtainFrameMode', 'GeneratedCurtainFrameOwnershipGuard.Build', 'EraseCurtainFrames',
+        'PhysicalOpeningCutMode',
     ],
     "health": [
         'GeneratedCurtainFrameHandles', 'CURTAIN_FRAME_GENERATED_SOLID_MISSING',
         'CURTAIN_FRAME_GRID_COUNT_MISMATCH', 'GeneratedCurtainFrameDepthM',
-        'GeneratedCurtainFrameSourceLengthM', 'GeneratedCurtainFrameHeightM', 'ElementCategory.GlassWall',
+        'GeneratedCurtainFrameSourceLengthM', 'GeneratedCurtainFrameHeightM',
+        'GeneratedCurtainFrameConfigFingerprint', 'CurtainWallFrameFingerprint.Compute',
+        'CURTAIN_FRAME_CONFIG_FINGERPRINT_MISSING', 'CURTAIN_FRAME_CONFIG_STALE',
+        'CURTAIN_FRAME_CONFIG_INVALID', 'ElementCategory.GlassWall',
     ],
     "frame_command": ['CommandMethod("QS3DCURTAINFRAMES3D"', 'CurtainWallFrameSolidBuilder.BuildSelectedLineWalls'],
     "health_command": ['CommandMethod("QS3DCURTAINFRAMEHEALTH"', 'GeneratedCurtainFrameHealthService().Inspect'],
@@ -86,4 +97,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: GlassWall LINE keeps one backing host for opening booleans and adds guarded dedicated curtain-frame overlays with Family depth, ownership, invalidation and health. Curved frame overlay remains intentionally unsupported/runtime-gated.")
+print("PASS: GlassWall LINE keeps one backing host for opening booleans and adds guarded dedicated curtain-frame overlays with Family depth, deterministic config fingerprint, invalidation and health. Curved frame overlay remains intentionally unsupported/runtime-gated.")
