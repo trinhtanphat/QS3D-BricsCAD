@@ -87,13 +87,22 @@ namespace QS3D.Core.Domain
             var byId = custom.FindIndex(x => string.Equals(x.Id, material.Id, StringComparison.OrdinalIgnoreCase));
             var duplicateName = custom.FirstOrDefault(x => !string.Equals(x.Id, material.Id, StringComparison.OrdinalIgnoreCase) && string.Equals(x.Name, material.Name, StringComparison.OrdinalIgnoreCase));
             if (duplicateName != null) throw new InvalidOperationException("Another custom material already uses the name '" + material.Name + "'.");
-            if (byId >= 0) custom[byId] = material;
+
+            string? previousName = null;
+            if (byId >= 0)
+            {
+                previousName = custom[byId].Name;
+                custom[byId] = material;
+            }
             else
             {
                 if (custom.Count >= MaxCustomMaterials) throw new InvalidOperationException("Project material catalog supports at most " + MaxCustomMaterials + " custom materials.");
                 custom.Add(material);
             }
+
             WriteCustom(project, custom);
+            if (!string.IsNullOrWhiteSpace(previousName) && !string.Equals(previousName, material.Name, StringComparison.Ordinal))
+                RenameReferences(project, previousName, material.Name);
             project.Touch();
             return material;
         }
@@ -104,8 +113,11 @@ namespace QS3D.Core.Domain
             var normalized = (id ?? string.Empty).Trim();
             if (normalized.Length == 0) return false;
             var custom = ReadCustom(project);
-            var removed = custom.RemoveAll(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
-            if (removed == 0) return false;
+            var material = custom.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
+            if (material == null) return false;
+            if (ReferencedMaterialNames(project).Any(x => string.Equals(x, material.Name, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Material '" + material.Name + "' is still referenced by a Family or Instance and cannot be deleted.");
+            custom.RemoveAll(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
             WriteCustom(project, custom);
             project.Touch();
             return true;
@@ -120,6 +132,32 @@ namespace QS3D.Core.Domain
             foreach (var element in project.Elements)
                 AddMaterial(element.Properties, names);
             return names.OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static void RenameReferences(ProjectState project, string previousName, string nextName)
+        {
+            foreach (var family in project.Families)
+            {
+                RenameReference(family.Properties, "Material", previousName, nextName);
+                RenameReference(family.Properties, "CurtainFrameMaterial", previousName, nextName);
+            }
+            foreach (var element in project.Elements)
+            {
+                RenameElementReference(element, "Material", previousName, nextName);
+                RenameElementReference(element, "CurtainFrameMaterial", previousName, nextName);
+            }
+        }
+
+        private static void RenameReference(IDictionary<string, string> properties, string key, string previousName, string nextName)
+        {
+            if (properties.TryGetValue(key, out var value) && string.Equals((value ?? string.Empty).Trim(), previousName, StringComparison.OrdinalIgnoreCase))
+                properties[key] = nextName;
+        }
+
+        private static void RenameElementReference(ProjectElement element, string key, string previousName, string nextName)
+        {
+            if (element.Properties.TryGetValue(key, out var value) && string.Equals((value ?? string.Empty).Trim(), previousName, StringComparison.OrdinalIgnoreCase))
+                element.SetProperty(key, nextName);
         }
 
         private static void AddMaterial(IDictionary<string, string> properties, ISet<string> names)
