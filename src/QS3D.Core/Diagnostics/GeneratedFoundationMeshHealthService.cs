@@ -63,10 +63,13 @@ namespace QS3D.Core.Diagnostics
                 if (!element.Properties.TryGetValue("GeneratedFoundationMeshMode", out var mode) || !string.Equals(mode, "FoundationMeshXY", StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("FOUNDATION_MESH_MODE_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshMode thiếu hoặc không hợp lệ.", element.Id));
 
-                if (!element.Properties.TryGetValue("GeneratedFoundationMeshFootprintMode", out var footprintMode) ||
+                // Foundation meshes generated before footprint-mode metadata existed were rectangle-only,
+                // so a missing key is a valid legacy RectangleLocalXY state. Newly generated meshes always
+                // write an explicit footprint mode; if the key is present it must be one of the reviewed modes.
+                if (element.Properties.TryGetValue("GeneratedFoundationMeshFootprintMode", out var footprintMode) &&
                     !(string.Equals(footprintMode, "RectangleLocalXY", StringComparison.OrdinalIgnoreCase) ||
                       string.Equals(footprintMode, "PolygonGlobalXY", StringComparison.OrdinalIgnoreCase)))
-                    issues.Add(new ModelHealthIssue("FOUNDATION_MESH_FOOTPRINT_MODE_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshFootprintMode phải là RectangleLocalXY hoặc PolygonGlobalXY.", element.Id));
+                    issues.Add(new ModelHealthIssue("FOUNDATION_MESH_FOOTPRINT_MODE_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshFootprintMode phải là RectangleLocalXY hoặc PolygonGlobalXY; missing key is accepted only as legacy rectangle metadata.", element.Id));
 
                 if (element.Category != ElementCategory.Foundation)
                     issues.Add(new ModelHealthIssue("FOUNDATION_MESH_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated foundation mesh metadata chỉ hợp lệ trên Foundation element.", element.Id));
