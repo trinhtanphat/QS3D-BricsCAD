@@ -48,10 +48,16 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (_inspection.Count == 0) return; var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null) return;
             var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase); var project = ProjectContextCoordinator.GetOrCreate(doc);
-            var element = project.Elements.FirstOrDefault(x => SemanticReferenceHandles.MatchesSelection(x, handles)); if (element == null || string.IsNullOrWhiteSpace(element.FamilyId)) return;
+            var matches = project.Elements.Where(x => SemanticReferenceHandles.MatchesSelection(x, handles)).Take(2).ToList();
+            if (matches.Count != 1 || string.IsNullOrWhiteSpace(matches[0].FamilyId))
+            {
+                if (matches.Count > 1) SetStatus("Selection khớp nhiều cấu kiện semantic; inspector giữ scope Family để tránh sửa nhầm Instance.");
+                return;
+            }
+            var element = matches[0];
             var family = project.FindFamily(element.FamilyId); if (family == null) return;
             _loadingContext = true;
-            try { _categoryFilter = family.Category; ApplyFamilyFilter(); FamilyList.SelectedItem = family; FamilyList.ScrollIntoView(family); _viewModel.SetActiveFamily(family); }
+            try { _categoryFilter = family.Category; ApplyFamilyFilter(); FamilyList.SelectedItem = family; FamilyList.ScrollIntoView(family); _viewModel.SetSelectedElement(element); }
             finally { _loadingContext = false; }
         }
 
@@ -109,7 +115,8 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnFocusSelectedClick(object sender, RoutedEventArgs e) { var count = SelectInspection(); if (count <= 0) { SetStatus("Chưa có đối tượng để Focus."); return; } SetStatus("Focus " + count + " đối tượng."); Send("QS3DFOCUS"); }
         private void OnIsolateSelectedClick(object sender, RoutedEventArgs e) { var count = SelectInspection(); if (count <= 0) { SetStatus("Chưa có đối tượng để Cô lập."); return; } SetStatus("Cô lập " + count + " đối tượng."); Send("QS3DISOLATE"); }
         private void OnUnisolateClick(object sender, RoutedEventArgs e) { SetStatus("Khôi phục đối tượng đã cô lập."); Send("QS3DUNISOLATE"); }
-        private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e) { if (_loadingContext) return; _viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily); }
+        private void OnResetPropertyClick(object sender, RoutedEventArgs e) { if (sender is Button button && button.CommandParameter is PropertyRowViewModel row) row.ResetValue(); }
+        private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e) { if (_loadingContext) return; _viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily); _viewModel.ShowFamilyProperties(); }
         private void OnFamilySearchChanged(object sender, TextChangedEventArgs e) => ApplyFamilyFilter();
 
         private int SelectInspection()
