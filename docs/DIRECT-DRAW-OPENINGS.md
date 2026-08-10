@@ -6,11 +6,16 @@ Updated: 2026-08-10 (UTC+7)
 
 `QS3DDRAWDOOR` and `QS3DDRAWOPENING` are implemented in source, exposed through the BricsCAD-hosted `TẠO MỚI` Ribbon and Full Domain Hub, and protected by `scripts/preflight-direct-draw-openings.py`.
 
+A targeted physical-cut path is also source-implemented:
+
+- `QS3DCUTSELECTEDOPENINGS` resolves the current CAD/semantic selection to Door/WallOpening elements and passes only those semantic ids to `OpeningBooleanService`;
+- the original `QS3DCUTOPENINGS` remains available for the broader all-linked workflow.
+
 This is **source implementation / static contract coverage**, not licensed BricsCAD V25 runtime proof.
 
 ## Product flow
 
-Both commands keep BricsCAD as the CAD host and create a real DWG source LINE. The picked two plan-view edge points define the opening width; QS3D does not create a fake semantic-only opening.
+Both Direct Draw commands keep BricsCAD as the CAD host and create a real DWG source LINE. The picked two plan-view edge points define the opening width; QS3D does not create a fake semantic-only opening.
 
 ```text
 QS3DDRAWDOOR / QS3DDRAWOPENING
@@ -27,7 +32,17 @@ QS3DDRAWDOOR / QS3DDRAWOPENING
 -> verify HostWallId
 -> deterministic post-link regeneration
 -> commit project/source state
+-> leave the new source selected
 -> best-effort UI sync
+```
+
+The new source staying selected makes the explicit targeted follow-up natural:
+
+```text
+Direct Draw Door/Opening
+-> review Host / dimensions / sill / clearance
+-> QS3DCUTSELECTEDOPENINGS
+-> only the selected semantic Door/WallOpening set is eligible for physical cut
 ```
 
 ## Safety contract
@@ -42,19 +57,31 @@ QS3DDRAWDOOR / QS3DDRAWOPENING
 - Unmatched or ambiguous Auto Host leaves no orphan Door/Opening: source CAD is erased by exact `ObjectId`, then the project snapshot is restored.
 - Post-commit Palette/UI synchronization is best-effort and cannot roll back otherwise valid source/project state.
 
-## Physical boolean boundary
+## Targeted physical boolean boundary
 
-Direct Draw **does not automatically call** `QS3DCUTOPENINGS` or `OpeningBooleanService.CutLinkedOpenings(...)`.
+Direct Draw still **does not automatically call** `QS3DCUTOPENINGS`, `QS3DCUTSELECTEDOPENINGS` or `OpeningBooleanService.CutLinkedOpenings(...)`.
 
-The current physical-cut service is intentionally a broader linked-opening operation grouped by host. Calling it implicitly after creating one new Door/Opening could mutate other already-linked pending openings on the same project. Therefore the safe current workflow is:
+Physical host mutation remains an explicit user action. The difference is that source now has a safe selection-scoped option instead of forcing every explicit cut through the broader all-linked operation.
+
+`OpeningBooleanService` keeps backward compatibility:
 
 ```text
-Direct Draw Door/Opening
--> review Host / dimensions / sill / clearance
--> explicitly run QS3DCUTOPENINGS when physical host mutation is intended
+CutLinkedOpenings(document, project)
+-> all currently linked Door/WallOpening elements
 ```
 
-Do not bypass this boundary by queuing the global cut command from Direct Draw. A future one-shot cut first needs an explicit-target opening subset API plus proven host-Solid3d rollback semantics.
+and adds the targeted overload:
+
+```text
+CutLinkedOpenings(document, project, openingIds)
+-> validates every requested id
+-> requires each target to be Door/WallOpening with HostWallId
+-> groups and cuts only that requested subset
+```
+
+The existing host fingerprint/idempotency guard is intentionally preserved. If the same generated host solid was already cut with a **different** opening set or changed geometry/configuration, a targeted retry does not layer an untracked second state onto that solid: it fails closed and requires `QS3DBUILD3D`/host rebuild first. Repeating the same target/fingerprint remains an idempotent no-op.
+
+This means `QS3DCUTSELECTEDOPENINGS` solves the previous “global command may mutate unrelated pending openings” problem without pretending incremental boolean history is fully journaled. It is not yet permission to auto-cut from Direct Draw.
 
 ## Legacy compatibility
 
@@ -63,17 +90,18 @@ These existing commands remain valid and must not be removed:
 - `QS3DDOOR`, `QS3DOPENING` — capture pre-existing CAD;
 - `QS3DAUTOLINKHOSTS` — selection-scoped automatic host matching;
 - `QS3DLINKHOST` — explicit manual host linking;
-- `QS3DCUTOPENINGS` / `QS3DCUTOPENINGSCURVED` — guarded physical host cutting;
+- `QS3DCUTOPENINGS` — guarded broad all-linked physical host cutting;
+- `QS3DCUTOPENINGSCURVED` — dedicated guarded curved-host workflow;
 - `QS3DDOORSCHEDULE` / `QS3DDOORXLSX` — schedule/export.
 
-Direct Draw is the creation path; capture remains the conversion path.
+Direct Draw is the creation path; capture remains the conversion path. Targeted cut is an explicit physical-mutation option after either path.
 
 ## Runtime qualification required
 
 A local agent with licensed BricsCAD V25 must validate the exact current/release SHA for:
 
 1. Release/x64 compile against exact installed V25 managed assemblies;
-2. `NETLOAD` / DemandLoad unique command registration;
+2. `NETLOAD` / DemandLoad unique command registration, including `QS3DCUTSELECTEDOPENINGS`;
 3. Ribbon and Domain Hub invocation;
 4. Door and WallOpening creation in millimeter and meter drawings;
 5. exact picked LINE plan length -> `WidthM` behavior;
@@ -84,9 +112,14 @@ A local agent with licensed BricsCAD V25 must validate the exact current/release
 10. Floor/Zone/elevation/gap/ambiguity tolerance behavior;
 11. World UCS and representative rotated UCS behavior;
 12. save/reopen, `QS3DREGEN`, `QS3DHEALTHALL`, schedule and XLSX;
-13. explicit `QS3DCUTOPENINGS` after Direct Draw and host fingerprint/rebuild behavior;
-14. supported curved/open-POLYLINE host cutting paths;
-15. a private copy of owner-provided `MB MONG.dwg` without committing the drawing;
-16. Unicode/HiDPI and real runtime screenshots.
+13. `QS3DCUTSELECTEDOPENINGS` after Direct Draw with exactly one selected opening and with multiple selected openings;
+14. target selection spanning multiple hosts;
+15. selection containing unrelated CAD plus a valid opening;
+16. same selected target rerun is idempotent;
+17. different target/fingerprint on an already-cut generated host fails closed until rebuild;
+18. legacy `QS3DCUTOPENINGS` behavior remains unchanged;
+19. supported curved/open-POLYLINE host cutting paths;
+20. a private copy of owner-provided `MB MONG.dwg` without committing the drawing;
+21. Unicode/HiDPI and real runtime screenshots.
 
 GitHub Actions remain manual-only; source/docs implementation does not authorize workflow dispatch.

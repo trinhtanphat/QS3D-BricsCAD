@@ -29,7 +29,8 @@
                     <Button Content="Vẽ Móng trực tiếp" Tag="QS3DDRAWFOUNDATION" Click="OnCommandClick"/>
                     <Button Content="Vẽ Cửa + Auto Host" Tag="QS3DDRAWDOOR" Click="OnCommandClick"/>
                     <Button Content="Vẽ Lỗ Mở + Auto Host" Tag="QS3DDRAWOPENING" Click="OnCommandClick"/>
-                    <TextBlock Text="Chọn Family / Type trước khi vẽ để kích hoạt bộ thông số phù hợp. Direct Draw tạo CAD source thật → semantic QS3D → native 3D trong cùng workflow cho cấu kiện có native builder. Cửa/Lỗ mở Direct Draw tạo source + semantic và Auto Host đúng đối tượng mới; physical boolean vẫn là thao tác riêng Khoét Cửa/Lỗ để tránh mutation ngoài ý muốn. Capture/Bóc chọn bên dưới vẫn dùng cho CAD đã vẽ sẵn." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+                    <Button Content="Khoét Cửa/Lỗ đang chọn" Tag="QS3DCUTSELECTEDOPENINGS" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <TextBlock Text="Chọn Family / Type trước khi vẽ để kích hoạt bộ thông số phù hợp. Direct Draw tạo CAD source thật → semantic QS3D → native 3D trong cùng workflow cho cấu kiện có native builder. Cửa/Lỗ mở Direct Draw tạo source + semantic và Auto Host đúng đối tượng mới; source mới vẫn được chọn để có thể chạy Khoét Cửa/Lỗ đang chọn. Physical boolean vẫn là thao tác riêng có chủ ý; lệnh Khoét Cửa/Lỗ tổng vẫn xử lý broader all-linked workflow." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
 
                     <TextBlock Text="TƯỜNG KT / CỬA / HT_PHÒNG" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
                     <Button Content="Tường Gạch" Tag="QS3DWALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
@@ -47,7 +48,8 @@
                     <Button Content="Xuất Cửa / Lỗ mở XLSX" Tag="QS3DDOORXLSX" Click="OnCommandClick"/>
                     <Button Content="Tự tìm host cho Cửa/Lỗ" Tag="QS3DAUTOLINKHOSTS" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
                     <Button Content="Liên kết Cửa/Lỗ với host thủ công" Tag="QS3DLINKHOST" Click="OnCommandClick"/>
-                    <Button Content="Khoét Cửa/Lỗ vào solid host" Tag="QS3DCUTOPENINGS" Click="OnCommandClick"/>
+                    <Button Content="Khoét Cửa/Lỗ đang chọn" Tag="QS3DCUTSELECTEDOPENINGS" Click="OnCommandClick"/>
+                    <Button Content="Khoét tất cả Cửa/Lỗ đã link" Tag="QS3DCUTOPENINGS" Click="OnCommandClick"/>
                     <Button Content="Khoét Cửa/Lỗ trên host cong" Tag="QS3DCUTOPENINGSCURVED" Click="OnCommandClick"/>
                     <Button Content="Tạo / cập nhật HT_Phòng" Tag="QS3DFINISH" Click="OnCommandClick"/>
 
