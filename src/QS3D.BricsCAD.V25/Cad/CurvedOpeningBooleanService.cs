@@ -21,6 +21,14 @@ namespace QS3D.BricsCAD.V25.Cad
             public int OpeningCount { get; set; }
         }
 
+        private sealed class PendingCutter
+        {
+            public string Label { get; set; } = string.Empty;
+            public IReadOnlyList<Point2> PolygonM { get; set; } = Array.Empty<Point2>();
+            public double HeightM { get; set; }
+            public double BaseElevationM { get; set; }
+        }
+
         public static int CutLinkedOpenings(Document document, ProjectState project)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -63,7 +71,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     var miterLimit = ProjectNumber(project, "WallMiterLimit", 4d, 1d);
                     var centerline = ReadCenterline(document, hostSource, sagittaM, host.Id);
                     var fingerprintParts = new List<string>();
-                    var hostCutCount = 0;
+                    var cutters = new List<PendingCutter>();
 
                     foreach (var opening in group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                     {
@@ -109,10 +117,13 @@ namespace QS3D.BricsCAD.V25.Cad
                             ClearanceM = clearanceM
                         });
 
-                        using (var cutter = BuildCutter(document, hostSource.Elevation, bottomOffsetM, footprint.CutterPolygon, vertical.CutterHeightM, vertical.BaseElevationM, opening.Id))
-                            hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
-                        cuts++;
-                        hostCutCount++;
+                        cutters.Add(new PendingCutter
+                        {
+                            Label = opening.Id,
+                            PolygonM = footprint.CutterPolygon,
+                            HeightM = vertical.CutterHeightM,
+                            BaseElevationM = vertical.BaseElevationM
+                        });
                         fingerprintParts.Add(opening.Id + ":" + openingSourceId.Handle + ":" +
                             openingPoint.X.ToString("R", CultureInfo.InvariantCulture) + "," + openingPoint.Y.ToString("R", CultureInfo.InvariantCulture) + ":" +
                             widthM.ToString("R", CultureInfo.InvariantCulture) + ":" + openingHeightM.ToString("R", CultureInfo.InvariantCulture) + ":" +
@@ -129,7 +140,14 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal)) continue;
                         throw new InvalidOperationException("Host " + host.Id + " đã được khoét trên generated solid hiện tại nhưng geometry/fingerprint đã thay đổi. Build 3D lại host trước khi khoét curved openings.");
                     }
-                    pending.Add(new PendingHostUpdate { Host = host, SolidHandle = currentSolidHandle, Fingerprint = fingerprint, OpeningCount = hostCutCount });
+
+                    foreach (var cutterPlan in cutters)
+                    {
+                        using (var cutter = BuildCutter(document, hostSource.Elevation, bottomOffsetM, cutterPlan.PolygonM, cutterPlan.HeightM, cutterPlan.BaseElevationM, cutterPlan.Label))
+                            hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
+                    }
+                    cuts += cutters.Count;
+                    pending.Add(new PendingHostUpdate { Host = host, SolidHandle = currentSolidHandle, Fingerprint = fingerprint, OpeningCount = cutters.Count });
                 }
                 transaction.Commit();
             }
@@ -149,8 +167,9 @@ namespace QS3D.BricsCAD.V25.Cad
         private static Solid3d BuildCutter(Document document, double hostElevationDrawing, double hostBottomOffsetM, IReadOnlyList<Point2> polygonM, double heightM, double baseElevationM, string label)
         {
             if (polygonM == null || polygonM.Count < 3) throw new InvalidOperationException("Curved opening cutter footprint is invalid: " + label);
+            var localBaseM = CadGeometryGuard.Add(hostBottomOffsetM, baseElevationM, label + "/cutter local base");
             var baseZ = CadGeometryGuard.Add(hostElevationDrawing,
-                CadGeometryGuard.ToDrawingUnits(document, hostBottomOffsetM + baseElevationM, label + "/cutter base"), label + "/cutter world base");
+                CadGeometryGuard.ToDrawingUnits(document, localBaseM, label + "/cutter base"), label + "/cutter world base");
             var height = CadGeometryGuard.ToDrawingUnits(document, heightM, label + "/cutter height");
             using (var boundary = new Polyline())
             {
