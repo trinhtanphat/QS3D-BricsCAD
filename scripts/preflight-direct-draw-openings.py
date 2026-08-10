@@ -15,17 +15,19 @@ else:
         'CommandMethod("QS3DDRAWOPENING"',
         "RequireModelSpace(document)",
         "SemanticCaptureService.Capture(document, category)",
-        'element.Properties["WidthM"]',
-        'element.Properties["HeightM"]',
-        'element.Properties["SillHeightM"]',
-        'element.Properties["BooleanClearanceM"]',
+        'createdElement.SetProperty("WidthM"',
+        'createdElement.SetProperty("HeightM"',
+        'createdElement.SetProperty("SillHeightM"',
+        'createdElement.SetProperty("BottomOffsetM"',
+        'createdElement.SetProperty("BooleanClearanceM"',
         "ProjectStateSnapshot.Capture(project)",
+        "EnsureActive(document, \"Direct Draw \" + label + \" / Auto Host\")",
         "new AutoHostLinkCommands().AutoLinkHosts()",
-        'element.Properties.TryGetValue("HostWallId"',
-        "regeneratedAfterLink",
+        'createdElement.Properties.TryGetValue("HostWallId"',
+        "regenerated += new RegenerationEngine",
+        "EraseSource(document, sourceId)",
         "rollback.Restore(project)",
-        "EraseSource(document, sourceHandle)",
-        "CadHandleService.GetLiveHandles(document, new[] { normalized })",
+        "CadHandleService.GetLiveHandles(document, new[] { handle })",
         "PlanarityToleranceM = 0.005d",
         "CadGeometryGuard.ToMeters(document, widthDrawing",
         "FamilyPositiveNumber(project, category, \"HeightM\"",
@@ -37,6 +39,8 @@ else:
         "Sửa Family trước khi Direct Draw.",
         "default phải là số hữu hạn > 0",
         "default phải là số hữu hạn >= 0",
+        "FinalizeUi(document, sourceId, label, widthM, hostId, regenerated)",
+        "UI sync warning",
         "QS3DCUTOPENINGS khi muốn khoét physical host",
     )
     for needle in required:
@@ -48,10 +52,12 @@ else:
         "defaultValue = 0d;",
         "FamilyFiniteNumber(",
         "FamilyNumber(",
+        'createdElement.Properties["WidthM"] =',
+        'createdElement.Properties["HeightM"] =',
     )
     for token in forbidden:
         if token in text:
-            errors.append("Door/Opening Direct Draw must not mask invalid configured Family numerics: " + token)
+            errors.append("Door/Opening Direct Draw contains a forbidden lifecycle shortcut: " + token)
 
     if "OpeningBooleanService.CutLinkedOpenings" in text or "new OpeningBooleanCommands().CutOpenings" in text:
         errors.append("Door/Opening Direct Draw must not invoke the global physical-cut path")
@@ -61,6 +67,12 @@ else:
         errors.append("Door/Opening Direct Draw must validate semantic state both before and after Auto Host")
     if text.count("Sửa Family trước khi Direct Draw.") < 3:
         errors.append("Configured positive/non-negative Door/Opening Family values must fail closed with a repair message")
+
+    erase = text.find("EraseSource(document, sourceId)")
+    restore = text.find("rollback.Restore(project)")
+    finalize = text.find("FinalizeUi(document, sourceId, label, widthM, hostId, regenerated)")
+    if min(erase, restore, finalize) < 0 or not (erase < restore < finalize):
+        errors.append("Door/Opening rollback must clean operation-owned CAD before project restore, and UI sync must happen only after successful operation scope")
 
 command_root = ROOT / "src/QS3D.BricsCAD.V25"
 commands = []
@@ -95,4 +107,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Door/Opening Direct Draw creates one real source, rejects invalid configured Family numerics without silent fallback, validates units/Model Space, captures one semantic element, auto-links only the new selection, verifies post-link regeneration, rolls back orphan creation, exposes Ribbon/Hub actions, and never invokes global physical cutting.")
+print("PASS: Door/Opening Direct Draw uses canonical SetProperty writes, active-DWG guards, operation-owned ObjectId cleanup before project restore, post-link semantic verification and non-destructive post-commit UI sync; it exposes Ribbon/Hub actions and never invokes global physical cutting.")
