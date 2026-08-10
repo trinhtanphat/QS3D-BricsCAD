@@ -77,6 +77,37 @@ namespace QS3D.Core.Services
                 element.SetQuantity("CurtainNetGlassAreaM2", netGlassAreaM2);
                 element.SetQuantity("CurtainFrameFaceAreaM2", curtain.FrameFaceAreaM2);
             }
+
+            if (element.Category == ElementCategory.WallPier)
+            {
+                var mode = ResolveWallPierProfileMode(element);
+                var profile = WallPierProfilePlanner.Plan(new WallPierProfileInput
+                {
+                    Mode = mode,
+                    WidthM = length,
+                    DepthM = thickness,
+                    HeightM = height,
+                    ChamferM = mode == WallPierProfileMode.Chamfered ? SemanticNumber.Get(element, "WallPierChamferM", 0.02d) : 0d
+                });
+                var openingVolumeM3 = QuantityMath.Multiply(openingArea, thickness, element.Id + "/wall-pier opening volume");
+                var profileNetVolumeM3 = QuantityMath.SubtractFloorZero(profile.VolumeM3, openingVolumeM3, element.Id + "/wall-pier net profile volume");
+
+                element.SetQuantity("WallPierProfileCrossSectionAreaM2", profile.CrossSectionAreaM2);
+                element.SetQuantity("WallPierProfilePerimeterM", profile.CrossSectionPerimeterM);
+                element.SetQuantity("WallPierProfileLateralAreaM2", profile.LateralAreaM2);
+                element.SetQuantity("WallPierProfileGrossVolumeM3", profile.VolumeM3);
+                element.SetQuantity("WallPierProfileNetVolumeM3", profileNetVolumeM3);
+                element.SetQuantity("GrossVolumeM3", profile.VolumeM3);
+                element.SetQuantity("NetVolumeM3", profileNetVolumeM3);
+            }
+        }
+
+        private static WallPierProfileMode ResolveWallPierProfileMode(ProjectElement element)
+        {
+            if (!element.Properties.TryGetValue("WallPierProfileMode", out var raw) || string.IsNullOrWhiteSpace(raw))
+                return WallPierProfileMode.Rectangular;
+            if (Enum.TryParse(raw.Trim(), true, out WallPierProfileMode mode)) return mode;
+            throw new InvalidOperationException(element.Id + "/WallPierProfileMode không hợp lệ: " + raw);
         }
 
         private static double LinkedOpeningArea(ProjectState project, ProjectElement wall)
