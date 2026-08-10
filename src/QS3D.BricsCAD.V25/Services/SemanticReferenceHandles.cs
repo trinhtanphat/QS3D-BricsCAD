@@ -28,17 +28,35 @@ namespace QS3D.BricsCAD.V25.Services
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
             if (handles == null) throw new ArgumentNullException(nameof(handles));
-            var owned = element.SourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            if (owned.Count > 0) return owned.Any(handles.Contains);
 
-            if (element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var rawBoundary))
+            var owned = element.SourceHandles
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (owned.Any(handles.Contains)) return true;
+
+            // Auto Room boundary provenance is intentionally all-or-nothing and only acts as the
+            // semantic reference when the Room has no explicit source handle of its own.
+            if (owned.Count == 0 && element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var rawBoundary))
             {
                 var boundary = (rawBoundary ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                if (boundary.Count > 0) return boundary.All(handles.Contains);
+                if (boundary.Count > 0 && boundary.All(handles.Contains)) return true;
             }
 
-            return Get(element).Any(handles.Contains);
+            // BLT-style rebuild must also work when the user selects the generated host solid.
+            // Do not broaden this to generated rebar/mesh/detail families: QS3DBUILD3D rebuilds the
+            // semantic host and should only resolve its host-solid aliases back to stable sources.
+            return MatchesPropertyHandle(element, "GeneratedSolidHandle", handles) ||
+                   MatchesPropertyHandle(element, "PhysicalOpeningCutSolidHandle", handles);
+        }
+
+        private static bool MatchesPropertyHandle(ProjectElement element, string key, ISet<string> handles)
+        {
+            return element.Properties.TryGetValue(key, out var raw) &&
+                   !string.IsNullOrWhiteSpace(raw) &&
+                   handles.Contains(raw.Trim());
         }
 
         private static void Add(string? value, ICollection<string> target, ISet<string> seen)
