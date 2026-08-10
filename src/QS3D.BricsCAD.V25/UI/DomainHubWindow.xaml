@@ -11,13 +11,20 @@
     <Grid Background="{StaticResource Bg0Brush}">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <Border Background="{StaticResource Bg1Brush}" Padding="14" BorderThickness="0,0,0,1">
-            <StackPanel><TextBlock Text="QS3D — TRUNG TÂM CÔNG VIỆC" FontWeight="Bold" FontSize="18"/><TextBlock Text="Mô hình • nhận dạng • cốt thép • khối lượng • revision • template • kiểm soát" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/></StackPanel>
+            <StackPanel><TextBlock Text="QS3D — TRUNG TÂM CÔNG VIỆC" FontWeight="Bold" FontSize="18"/><TextBlock Text="Tạo mới • mô hình • nhận dạng • cốt thép • khối lượng • revision • template • kiểm soát" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/></StackPanel>
         </Border>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <Grid Margin="14">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="TƯỜNG KT / CỬA / HT_PHÒNG" Style="{StaticResource SectionLabel}"/>
+                    <TextBlock Text="TẠO MỚI / DIRECT DRAW" Style="{StaticResource SectionLabel}"/>
+                    <Button Content="Vẽ Tường trực tiếp" Tag="QS3DDRAWWALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Vẽ Dầm trực tiếp" Tag="QS3DDRAWBEAM" Click="OnCommandClick"/>
+                    <Button Content="Vẽ Cột trực tiếp" Tag="QS3DDRAWCOLUMN" Click="OnCommandClick"/>
+                    <Button Content="Vẽ Sàn trực tiếp" Tag="QS3DDRAWSLAB" Click="OnCommandClick"/>
+                    <TextBlock Text="Direct Draw tạo CAD source thật → semantic QS3D → native 3D trong cùng workflow. Capture/Bóc chọn bên dưới vẫn dùng cho CAD đã vẽ sẵn." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+
+                    <TextBlock Text="TƯỜNG KT / CỬA / HT_PHÒNG" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
                     <Button Content="Tường Gạch" Tag="QS3DWALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
                     <Button Content="Vách Kính" Tag="QS3DGLASSWALL" Click="OnCommandClick"/>
                     <Button Content="Vách Kính Hub" Tag="QS3DCURTAIN" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
@@ -48,7 +55,7 @@
                     <Button Content="Lan can" Tag="QS3DRAILING" Click="OnCommandClick"/>
                     <Button Content="Đào đất" Tag="QS3DEARTHWORK" Click="OnCommandClick"/>
                     <Button Content="Tạo / cập nhật 3D từ đối tượng chọn" Tag="QS3DBUILD3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
-                    <TextBlock Text="Tường KT hỗ trợ LINE hoặc open POLYLINE tim tường (kể cả bulge). Vách Kính LINE có backing host + frame overlay opening-aware; open/curved POLYLINE hiện chỉ dựng host. Wall Snap chỉ apply LINE/open straight POLYLINE đã capture và bắt buộc Preview trước. Kết cấu dùng LINE/closed POLYLINE theo loại. Phòng Auto nhận LINE/POLYLINE/ARC/SPLINE plan-view." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+                    <TextBlock Text="Tường KT hỗ trợ LINE hoặc open POLYLINE tim tường (kể cả bulge). LINE wall/Beam/StructuralWall/Railing native prism hiện fail closed nếu lệch cao độ quá 5 mm, tránh flatten sai geometry. Vách Kính LINE có backing host + frame overlay opening-aware; open/curved POLYLINE hiện chỉ dựng host. Wall Snap chỉ apply LINE/open straight POLYLINE đã capture và bắt buộc Preview trước. Kết cấu dùng LINE/closed POLYLINE theo loại. Phòng Auto nhận LINE/POLYLINE/ARC/SPLINE plan-view." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
 
                     <TextBlock Text="DỰ ÁN &amp; TEMPLATE" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
                     <Button Content="Schedule / Bóc khối lượng Hub" Tag="QS3DSCHEDULES" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
