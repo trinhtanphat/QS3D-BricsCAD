@@ -3,7 +3,7 @@
 **Audit/update date:** 2026-08-10 (UTC+7)  
 **Repository:** `trinhtanphat/QS3D-BricsCAD`  
 **Branch:** `main`  
-**Repository/source reconciliation cutoff for this edition:** `f127360` (`feat(room): support curved polyline boundary discovery`) plus the B4D/ED2/Handle and local V25 compile patch documented below.
+**Repository/source reconciliation cutoff for this edition:** `9abe8c6` (`fix(ui): preserve instance overrides and type property editors`) plus rebased B4D/ED2/Handle commit `120cff0` and the DWG-identity/generated-ownership hardening documented below.
 **Historical exhaustive session handoff:** `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md`  
 **Status of this file:** **canonical for current source status and continuation**. The older session-history handoff is retained as the detailed historical audit trail, but any source-status statement in that older file that conflicts with this file or newer `main` is superseded.
 
@@ -162,6 +162,7 @@ Current source has:
 - family property propagation to member elements with derived quantities dirtied;
 - multi-DWG live cache keyed by `Document` identity rather than mutable drawing filename;
 - Save As drawing identity synchronization;
+- live DWG identity based on BricsCAD `Database.FingerprintGuid`, with a same-path legacy migration and fail-closed rejection of copied/mismatched `.qsdb` Handle identities;
 - **QSDB schema v3**, with deterministic **v1 → v2 → v3** migration;
 - persisted `QuantityRule` definitions and audit provenance;
 - persisted dirty flags and UTC update state;
@@ -179,6 +180,7 @@ Current regeneration model includes:
 
 - dependency graph and dirty propagation;
 - bounded fixed-point regeneration;
+- semantic regeneration preserves `Geometry` dirty state for native-solid categories; a successful committed CAD builder is the only path that clears that flag;
 - explicit `QS3DREGEN`;
 - BQ/BBS/Refresh regenerate deterministic dirty quantities before consuming them;
 - guarded `QuantityMath` for finite/non-negative multiply/add/subtract/divide/hypotenuse/clamp operations;
@@ -292,6 +294,7 @@ Important safety work now present:
 
 - source/generated handles are distinct;
 - generated geometry replacement uses guarded/two-phase behavior;
+- generated entities receive versioned QS3D XData ownership (`ProjectId`, `ElementId`, category); erase/replacement and physical opening boolean modification require a matching live marker;
 - health validates generated Solid3d ownership/liveness/category;
 - erased/non-Entity source handles are not considered live;
 - 3D builders reject ambiguous semantic ownership of one CAD source;
@@ -813,7 +816,8 @@ Runtime blocker/history:
 
 Current reconciliation cutoff for this document:
 
-- `fc59fccc5d116b28758ddcbc77bdf10217f71f21` — deterministic QuantityRule dependency hardening.
+- `9abe8c6` — override-safe typed property editors plus straight-polyline opening cuts, indexed wall junctions and advanced geometry/review workflows;
+- `120cff0` — B4D whole-space scan and ED2 Excel/Handle round-trip rebased onto that mainline.
 
 The older handoff cutoff `c987b34...` is an ancestor of later `main`; subsequent full-domain/release work was layered/merged on top rather than using a destructive reset.
 

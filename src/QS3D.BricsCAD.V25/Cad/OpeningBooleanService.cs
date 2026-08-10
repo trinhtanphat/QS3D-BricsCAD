@@ -80,6 +80,8 @@ namespace QS3D.BricsCAD.V25.Cad
                     var hostSource = transaction.GetObject(hostSourceId, OpenMode.ForRead, false) as Entity;
                     if (hostSolid == null || hostSource == null || hostSolid.IsErased || hostSource.IsErased) continue;
 
+                    var currentSolidHandle = solidId.Handle.ToString();
+                    GeneratedGeometryService.RequireMatchingOwnership(hostSolid, project, host, "boolean-cut generated host solid " + currentSolidHandle);
                     var family = project.FindFamily(host.FamilyId);
                     var hostThicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "ThicknessM", 0.2d), host.Id + "/ThicknessM");
                     var hostHeightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, family, "HeightM", 3.6d), host.Id + "/HeightM");
@@ -103,7 +105,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
 
                     var fingerprint = prepared.FingerprintPrefix + "|" + string.Join("|", prepared.Cuts.Select(x => x.FingerprintPart));
-                    var currentSolidHandle = solidId.Handle.ToString();
                     if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolidHandle) &&
                         host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) &&
                         string.Equals(cutSolidHandle, currentSolidHandle, StringComparison.OrdinalIgnoreCase))
