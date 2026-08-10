@@ -76,21 +76,24 @@ namespace QS3D.BricsCAD.V25.Cad
                     var placement = ResolvePlacement(document, project, element, source);
                     ErasePrevious(document, transaction, element, ownership);
                     var item = new PendingElement { Element = element };
-                    var rowIndex = 0;
                     foreach (var row in elementRows)
                     {
                         var path = RebarShapePathBuilder.Build(row.ShapeCode, row.CuttingLengthM, Text(element, "RebarShapeLegsM"), Text(element, "RebarShapeTurnsDeg"));
                         var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, row.DiameterMm / 2000d, element.Id + "/bar radius"), element.Id + "/bar radius drawing units");
-                        var edgeInset = CadGeometryGuard.Finite(placement.Cover + radius, element.Id + "/shape rebar edge inset");
+                        var distributionPlan = ShapeRebarDistributionPlanner.Plan(new ShapeRebarDistributionInput
+                        {
+                            Span = placement.Span,
+                            Cover = placement.Cover,
+                            Radius = radius,
+                            Count = row.Quantity,
+                            Centered = placement.DistributionCentered
+                        });
+                        var edgeInset = distributionPlan.CenterClearance;
                         for (var index = 0; index < row.Quantity; index++)
                         {
-                            var offset = DistributionOffset(index, row.Quantity, placement.Span, placement.Cover, radius, placement.DistributionCentered);
+                            var offset = distributionPlan.Offsets[index];
                             var axisInset = placement.AxisStartsAtBoundary ? edgeInset : 0d;
-                            var lift = rowIndex * radius * 2.5d;
-                            var origin = new Point3d(
-                                placement.Origin.X + placement.Axis.X * axisInset + placement.Distribution.X * offset,
-                                placement.Origin.Y + placement.Axis.Y * axisInset + placement.Distribution.Y * offset,
-                                placement.Origin.Z + edgeInset + lift);
+                            var origin = OffsetPoint(placement.Origin, placement.Axis, axisInset, placement.Distribution, offset, edgeInset, element.Id + "/shape rebar origin");
                             var solid = BuildShape(document, origin, placement.Axis, placement.Distribution, path, radius, element.Id + "/" + row.BarMark);
                             try
                             {
@@ -102,7 +105,6 @@ namespace QS3D.BricsCAD.V25.Cad
                             }
                             finally { solid?.Dispose(); }
                         }
-                        rowIndex++;
                     }
                     pending.Add(item);
                 }
@@ -128,16 +130,18 @@ namespace QS3D.BricsCAD.V25.Cad
             var bottom = CadGeometryGuard.ToDrawingUnits(document, CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d), element.Id + "/bottom");
             if (source is Line line)
             {
-                var dx = line.EndPoint.X - line.StartPoint.X; var dy = line.EndPoint.Y - line.StartPoint.Y;
+                var dx = SubtractFinite(line.EndPoint.X, line.StartPoint.X, element.Id + "/axis dx");
+                var dy = SubtractFinite(line.EndPoint.Y, line.StartPoint.Y, element.Id + "/axis dy");
                 var length = CadGeometryGuard.Hypot(dx, dy, element.Id + "/axis");
                 if (length <= 1e-9) throw new InvalidOperationException("Source LINE quá ngắn cho shape rebar: " + element.Id);
-                var axis = new Vector3d(dx / length, dy / length, 0d); var distribution = new Vector3d(-axis.Y, axis.X, 0d);
-                var wallLike = element.Category == ElementCategory.StructuralWall || element.Category == ElementCategory.ArchitecturalWall || element.Category == ElementCategory.GlassWall || element.Category == ElementCategory.WallPier;
+                var axis = new Vector3d(dx / length, dy / length, 0d);
+                var distribution = new Vector3d(-axis.Y, axis.X, 0d);
+                var wallLike = IsWallLike(element.Category);
                 var spanM = wallLike ? CadGeometryGuard.Number(element, family, "ThicknessM", .2d) : CadGeometryGuard.Number(element, family, "WidthM", .3d);
                 var span = CadGeometryGuard.ToDrawingUnits(document, CadGeometryGuard.Positive(spanM, element.Id + "/spanM"), element.Id + "/span");
                 return new Placement
                 {
-                    Origin = new Point3d(line.StartPoint.X, line.StartPoint.Y, line.StartPoint.Z + bottom),
+                    Origin = Point(line.StartPoint.X, line.StartPoint.Y, AddFinite(line.StartPoint.Z, bottom, element.Id + "/shape rebar base Z"), element.Id + "/line origin"),
                     Axis = axis,
                     Distribution = distribution,
                     Span = span,
@@ -146,13 +150,18 @@ namespace QS3D.BricsCAD.V25.Cad
                     AxisStartsAtBoundary = false
                 };
             }
-            var extents = source.GeometricExtents; var width = extents.MaxPoint.X - extents.MinPoint.X; var depth = extents.MaxPoint.Y - extents.MinPoint.Y; var alongX = width >= depth;
+
+            var extents = source.GeometricExtents;
+            var width = SubtractFinite(extents.MaxPoint.X, extents.MinPoint.X, element.Id + "/source width");
+            var depth = SubtractFinite(extents.MaxPoint.Y, extents.MinPoint.Y, element.Id + "/source depth");
+            if (width <= 1e-9d || depth <= 1e-9d) throw new InvalidOperationException("Source extents quá nhỏ cho shape rebar: " + element.Id);
+            var alongX = width >= depth;
             return new Placement
             {
-                Origin = new Point3d(extents.MinPoint.X, extents.MinPoint.Y, extents.MinPoint.Z + bottom),
+                Origin = Point(extents.MinPoint.X, extents.MinPoint.Y, AddFinite(extents.MinPoint.Z, bottom, element.Id + "/shape rebar base Z"), element.Id + "/extents origin"),
                 Axis = alongX ? Vector3d.XAxis : Vector3d.YAxis,
                 Distribution = alongX ? Vector3d.YAxis : Vector3d.XAxis,
-                Span = Math.Max(1e-9, alongX ? depth : width),
+                Span = alongX ? depth : width,
                 Cover = cover,
                 DistributionCentered = false,
                 AxisStartsAtBoundary = true
@@ -161,61 +170,126 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static Solid3d BuildShape(Document document, Point3d origin, Vector3d axis, Vector3d distribution, RebarShapePath path, double radius, string label)
         {
-            var normal = Normalize(axis.CrossProduct(distribution), label + "/normal"); Solid3d? result = null;
+            var normal = Normalize(axis.CrossProduct(distribution), label + "/normal");
+            Solid3d? result = null;
             try
             {
                 for (var i = 1; i < path.Points.Count; i++)
                 {
-                    var start = World(document, origin, axis, distribution, normal, path.Points[i - 1], label + "/p" + (i - 1)); var end = World(document, origin, axis, distribution, normal, path.Points[i], label + "/p" + i);
-                    var vector = new Vector3d(end.X - start.X, end.Y - start.Y, end.Z - start.Z); var length = vector.Length;
-                    if (double.IsNaN(length) || double.IsInfinity(length) || length <= 1e-9) throw new InvalidOperationException("Shape rebar chứa segment rỗng: " + label);
-                    var overlap = Math.Min(radius * .75d, length * .1d); var unit = new Vector3d(vector.X / length, vector.Y / length, vector.Z / length); var before = i == 1 ? 0d : overlap; var after = i == path.Points.Count - 1 ? 0d : overlap;
-                    var extendedStart = new Point3d(start.X - unit.X * before, start.Y - unit.Y * before, start.Z - unit.Z * before); var part = Cylinder(document, extendedStart, vector, length + before + after, radius, label + "/s" + i);
+                    var start = World(document, origin, axis, distribution, normal, path.Points[i - 1], label + "/p" + (i - 1));
+                    var end = World(document, origin, axis, distribution, normal, path.Points[i], label + "/p" + i);
+                    var vx = SubtractFinite(end.X, start.X, label + "/segment dx");
+                    var vy = SubtractFinite(end.Y, start.Y, label + "/segment dy");
+                    var vz = SubtractFinite(end.Z, start.Z, label + "/segment dz");
+                    var length = Hypot3(vx, vy, vz, label + "/segment length");
+                    if (length <= 1e-9d) throw new InvalidOperationException("Shape rebar chứa segment rỗng: " + label);
+                    var overlap = Math.Min(MultiplyFinite(radius, .75d, label + "/overlap radius"), MultiplyFinite(length, .1d, label + "/overlap length"));
+                    var unit = new Vector3d(vx / length, vy / length, vz / length);
+                    var before = i == 1 ? 0d : overlap;
+                    var after = i == path.Points.Count - 1 ? 0d : overlap;
+                    var extendedStart = Point(
+                        SubtractFinite(start.X, MultiplyFinite(unit.X, before, label + "/extended start X delta"), label + "/extended start X"),
+                        SubtractFinite(start.Y, MultiplyFinite(unit.Y, before, label + "/extended start Y delta"), label + "/extended start Y"),
+                        SubtractFinite(start.Z, MultiplyFinite(unit.Z, before, label + "/extended start Z delta"), label + "/extended start Z"),
+                        label + "/extended start");
+                    var extendedLength = AddFinite(AddFinite(length, before, label + "/extended length"), after, label + "/extended length");
+                    var part = Cylinder(document, extendedStart, new Vector3d(vx, vy, vz), extendedLength, radius, label + "/s" + i);
                     if (result == null) { result = part; continue; }
-                    try { result.BooleanOperation(BooleanOperationType.BoolUnite, part); } finally { part.Dispose(); }
+                    try { result.BooleanOperation(BooleanOperationType.BoolUnite, part); }
+                    finally { part.Dispose(); }
                 }
-                if (result == null) throw new InvalidOperationException("Không tạo được shape rebar: " + label); var completed = result; result = null; return completed;
+                if (result == null) throw new InvalidOperationException("Không tạo được shape rebar: " + label);
+                var completed = result;
+                result = null;
+                return completed;
             }
             finally { result?.Dispose(); }
         }
 
         private static Point3d World(Document document, Point3d origin, Vector3d axis, Vector3d distribution, Vector3d normal, RebarShapePoint point, string label)
         {
-            var x = CadGeometryGuard.ToDrawingUnits(document, point.X, label + "/x"); var y = CadGeometryGuard.ToDrawingUnits(document, point.Y, label + "/y"); var z = CadGeometryGuard.ToDrawingUnits(document, point.Z, label + "/z");
-            return new Point3d(origin.X + axis.X * x + distribution.X * y + normal.X * z, origin.Y + axis.Y * x + distribution.Y * y + normal.Y * z, origin.Z + axis.Z * x + distribution.Z * y + normal.Z * z);
+            var x = CadGeometryGuard.ToDrawingUnits(document, point.X, label + "/x");
+            var y = CadGeometryGuard.ToDrawingUnits(document, point.Y, label + "/y");
+            var z = CadGeometryGuard.ToDrawingUnits(document, point.Z, label + "/z");
+            var worldX = AddFinite(origin.X, AddFinite(MultiplyFinite(axis.X, x, label + "/axis X"), AddFinite(MultiplyFinite(distribution.X, y, label + "/distribution X"), MultiplyFinite(normal.X, z, label + "/normal X"), label + "/secondary X"), label + "/local X"), label + "/world X");
+            var worldY = AddFinite(origin.Y, AddFinite(MultiplyFinite(axis.Y, x, label + "/axis Y"), AddFinite(MultiplyFinite(distribution.Y, y, label + "/distribution Y"), MultiplyFinite(normal.Y, z, label + "/normal Y"), label + "/secondary Y"), label + "/local Y"), label + "/world Y");
+            var worldZ = AddFinite(origin.Z, AddFinite(MultiplyFinite(axis.Z, x, label + "/axis Z"), AddFinite(MultiplyFinite(distribution.Z, y, label + "/distribution Z"), MultiplyFinite(normal.Z, z, label + "/normal Z"), label + "/secondary Z"), label + "/local Z"), label + "/world Z");
+            return Point(worldX, worldY, worldZ, label + "/world");
         }
 
         private static Solid3d Cylinder(Document document, Point3d start, Vector3d direction, double length, double radius, string label)
         {
-            var magnitude = direction.Length; if (magnitude <= 1e-12 || double.IsNaN(magnitude) || double.IsInfinity(magnitude)) throw new InvalidOperationException("Rebar axis không hợp lệ: " + label);
-            var unit = new Vector3d(direction.X / magnitude, direction.Y / magnitude, direction.Z / magnitude); var solid = new Solid3d();
+            length = CadGeometryGuard.Positive(length, label + "/length");
+            radius = CadGeometryGuard.Positive(radius, label + "/radius");
+            var magnitude = Hypot3(direction.X, direction.Y, direction.Z, label + "/axis magnitude");
+            if (magnitude <= 1e-12d) throw new InvalidOperationException("Rebar axis không hợp lệ: " + label);
+            var unit = new Vector3d(direction.X / magnitude, direction.Y / magnitude, direction.Z / magnitude);
+            var solid = new Solid3d();
             try
             {
-                solid.SetDatabaseDefaults(document.Database); solid.CreateFrustum(length, radius, radius, radius); var dot = Math.Max(-1d, Math.Min(1d, unit.Z)); var angle = Math.Acos(dot); var rotationAxis = Vector3d.ZAxis.CrossProduct(unit);
-                if (rotationAxis.Length > 1e-12) solid.TransformBy(Matrix3d.Rotation(angle, rotationAxis, Point3d.Origin)); else if (unit.Z < 0d) solid.TransformBy(Matrix3d.Rotation(Math.PI, Vector3d.XAxis, Point3d.Origin));
-                solid.TransformBy(Matrix3d.Displacement(new Vector3d(start.X, start.Y, start.Z))); var completed = solid; solid = null!; return completed;
+                solid.SetDatabaseDefaults(document.Database);
+                solid.CreateFrustum(length, radius, radius, radius);
+                var dot = Math.Max(-1d, Math.Min(1d, unit.Z));
+                var angle = Math.Acos(dot);
+                var rotationAxis = Vector3d.ZAxis.CrossProduct(unit);
+                if (rotationAxis.Length > 1e-12d) solid.TransformBy(Matrix3d.Rotation(angle, rotationAxis, Point3d.Origin));
+                else if (unit.Z < 0d) solid.TransformBy(Matrix3d.Rotation(Math.PI, Vector3d.XAxis, Point3d.Origin));
+                solid.TransformBy(Matrix3d.Displacement(new Vector3d(start.X, start.Y, start.Z)));
+                var completed = solid;
+                solid = null!;
+                return completed;
             }
             finally { solid?.Dispose(); }
         }
 
-        private static double DistributionOffset(int index, int count, double span, double cover, double radius, bool centered)
+        // ShapeRebarDistributionPlanner preserves the diagnostic "Multiple shape rebars require a positive usable distribution span."
+        // while the ModuleInitializer smoke test now locks the actual cover/radius and centered-offset behavior.
+
+        private static Point3d OffsetPoint(Point3d origin, Vector3d axis, double axial, Vector3d distribution, double distributed, double zOffset, string label)
         {
-            if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count));
-            if (index < 0 || index >= count) throw new ArgumentOutOfRangeException(nameof(index));
-            span = CadGeometryGuard.Positive(span, "shape rebar distribution span");
-            cover = CadGeometryGuard.Finite(cover, "shape rebar distribution cover");
-            radius = CadGeometryGuard.Positive(radius, "shape rebar distribution radius");
-            if (cover < 0d) throw new InvalidOperationException("Shape rebar distribution cover không được âm.");
-            var edgeInset = CadGeometryGuard.Finite(cover + radius, "shape rebar distribution edge inset");
-            var usable = CadGeometryGuard.Finite(span - 2d * edgeInset, "shape rebar usable distribution span");
-            if (usable < 0d) throw new InvalidOperationException("Cover + bar radius leaves no usable shape-rebar distribution span inside the host.");
-            if (count == 1) return centered ? 0d : span / 2d;
-            if (!(usable > 1e-12d)) throw new InvalidOperationException("Multiple shape rebars require a positive usable distribution span.");
-            var step = CadGeometryGuard.Finite(usable * index / (count - 1d), "shape rebar distribution step");
-            return centered ? CadGeometryGuard.Finite(-usable / 2d + step, "shape rebar centered distribution offset") : CadGeometryGuard.Finite(edgeInset + step, "shape rebar edge distribution offset");
+            var x = AddFinite(origin.X, AddFinite(MultiplyFinite(axis.X, axial, label + "/axis X"), MultiplyFinite(distribution.X, distributed, label + "/distribution X"), label + "/XY X"), label + "/X");
+            var y = AddFinite(origin.Y, AddFinite(MultiplyFinite(axis.Y, axial, label + "/axis Y"), MultiplyFinite(distribution.Y, distributed, label + "/distribution Y"), label + "/XY Y"), label + "/Y");
+            var z = AddFinite(origin.Z, zOffset, label + "/Z");
+            return Point(x, y, z, label);
         }
 
-        private static Vector3d Normalize(Vector3d vector, string label) { var length = vector.Length; if (length <= 1e-12 || double.IsNaN(length) || double.IsInfinity(length)) throw new InvalidOperationException("Không xác định được " + label + "."); return new Vector3d(vector.X / length, vector.Y / length, vector.Z / length); }
+        private static Point3d Point(double x, double y, double z, string label)
+            => new Point3d(CadGeometryGuard.Finite(x, label + "/X"), CadGeometryGuard.Finite(y, label + "/Y"), CadGeometryGuard.Finite(z, label + "/Z"));
+
+        private static double Hypot3(double x, double y, double z, string label)
+        {
+            x = Math.Abs(CadGeometryGuard.Finite(x, label + "/x"));
+            y = Math.Abs(CadGeometryGuard.Finite(y, label + "/y"));
+            z = Math.Abs(CadGeometryGuard.Finite(z, label + "/z"));
+            var maximum = Math.Max(x, Math.Max(y, z));
+            if (maximum <= 0d) return 0d;
+            var sx = x / maximum;
+            var sy = y / maximum;
+            var sz = z / maximum;
+            return CadGeometryGuard.Finite(maximum * Math.Sqrt(sx * sx + sy * sy + sz * sz), label);
+        }
+
+        private static double MultiplyFinite(double first, double second, string label)
+            => CadGeometryGuard.Finite(CadGeometryGuard.Finite(first, label + "/first") * CadGeometryGuard.Finite(second, label + "/second"), label);
+
+        private static double AddFinite(double first, double second, string label) => CadGeometryGuard.Add(first, second, label);
+
+        private static double SubtractFinite(double first, double second, string label)
+            => CadGeometryGuard.Finite(CadGeometryGuard.Finite(first, label + "/first") - CadGeometryGuard.Finite(second, label + "/second"), label);
+
+        private static bool IsWallLike(ElementCategory category) =>
+            category == ElementCategory.ArchitecturalWall ||
+            category == ElementCategory.StructuralWall ||
+            category == ElementCategory.GlassWall ||
+            category == ElementCategory.WallPier;
+
+        private static Vector3d Normalize(Vector3d vector, string label)
+        {
+            var length = Hypot3(vector.X, vector.Y, vector.Z, label);
+            if (length <= 1e-12d) throw new InvalidOperationException("Không xác định được " + label + ".");
+            return new Vector3d(vector.X / length, vector.Y / length, vector.Z / length);
+        }
+
         private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
@@ -232,6 +306,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 solid.Erase();
             }
         }
+
         private static Entity? OpenSelectedSource(Document document, Transaction transaction, ProjectElement element, ISet<string> selectedHandles)
         {
             Entity? selected = null;
@@ -250,6 +325,7 @@ namespace QS3D.BricsCAD.V25.Cad
             }
             return selected;
         }
+
         private static string? Text(ProjectElement element, string key) => element.Properties.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
     }
 }
