@@ -119,10 +119,26 @@ namespace QS3D.Core.Domain
         public IList<AuditEvent> AuditEvents { get; }
         public IDictionary<string, string> Metadata { get; }
 
-        public ProjectElement? FindElement(string id) => Elements.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
-        public ProjectFamily? FindFamily(string id) => Families.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
-        public QuantityRule? FindQuantityRule(string id) => QuantityRules.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+        public ProjectElement? FindElement(string id)
+        {
+            var normalized = NormalizeLookupId(id);
+            return normalized.Length == 0 ? null : Elements.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public ProjectFamily? FindFamily(string id)
+        {
+            var normalized = NormalizeLookupId(id);
+            return normalized.Length == 0 ? null : Families.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public QuantityRule? FindQuantityRule(string id)
+        {
+            var normalized = NormalizeLookupId(id);
+            return normalized.Length == 0 ? null : QuantityRules.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
+        }
 
         public void Touch() => UpdatedUtc = DateTime.UtcNow;
+
+        private static string NormalizeLookupId(string id) => (id ?? string.Empty).Trim();
     }
 }
