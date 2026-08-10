@@ -20,6 +20,7 @@ namespace QS3D.BricsCAD.V25.Cad
             public string SolidHandle { get; set; } = string.Empty;
             public string Fingerprint { get; set; } = string.Empty;
             public int OpeningCount { get; set; }
+            public IReadOnlyList<string> OpeningIds { get; set; } = Array.Empty<string>();
         }
 
         private sealed class PreparedCut
@@ -144,13 +145,34 @@ namespace QS3D.BricsCAD.V25.Cad
                             bottomOffsetM,
                             sagittaM,
                             preparedCuts.Select(x => x.FingerprintPart).ToList());
+                        var openingIds = PhysicalOpeningCutTargetState.Normalize(preparedCuts.Select(x => x.OpeningId));
                         var currentSolidHandle = solidId.Handle.ToString();
                         if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var previousSolid) &&
                             string.Equals(previousSolid, currentSolidHandle, StringComparison.OrdinalIgnoreCase) &&
                             host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var previousFingerprint))
                         {
-                            if (string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal)) continue;
-                            throw new InvalidOperationException("Host " + host.Id + " đã được khoét trên generated solid hiện tại nhưng geometry/fingerprint đã thay đổi. Build 3D lại host trước khi khoét curved openings.");
+                            if (!string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal))
+                                throw new InvalidOperationException("Host " + host.Id + " đã được khoét trên generated solid hiện tại nhưng geometry/fingerprint đã thay đổi. Build 3D lại host trước khi khoét curved openings.");
+
+                            if (PhysicalOpeningCutTargetState.TryRead(host, out var storedIds))
+                            {
+                                if (!storedIds.SequenceEqual(openingIds, StringComparer.OrdinalIgnoreCase))
+                                    throw new InvalidOperationException("Host " + host.Id + " có physical opening target-state không khớp fingerprint hiện tại. Build 3D lại host trước khi khoét curved openings.");
+                                continue;
+                            }
+
+                            // A matching legacy curved fingerprint proves that the current linked
+                            // opening set is the set baked into this exact solid, so we can backfill
+                            // target-state without subtracting cutters a second time.
+                            pending.Add(new PendingHostUpdate
+                            {
+                                Host = host,
+                                SolidHandle = currentSolidHandle,
+                                Fingerprint = fingerprint,
+                                OpeningCount = preparedCuts.Count,
+                                OpeningIds = openingIds
+                            });
+                            continue;
                         }
                         foreach (var prepared in preparedCuts)
                         {
@@ -172,7 +194,8 @@ namespace QS3D.BricsCAD.V25.Cad
                             Host = host,
                             SolidHandle = currentSolidHandle,
                             Fingerprint = fingerprint,
-                            OpeningCount = preparedCuts.Count
+                            OpeningCount = preparedCuts.Count,
+                            OpeningIds = openingIds
                         });
                     }
 
@@ -207,6 +230,7 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Host.Properties["PhysicalOpeningCutFingerprint"] = update.Fingerprint;
             update.Host.Properties["PhysicalOpeningCutCount"] = update.OpeningCount.ToString(CultureInfo.InvariantCulture);
             update.Host.Properties["PhysicalOpeningCutMode"] = "CurvedCenterlineFootprint";
+            PhysicalOpeningCutTargetState.Write(update.Host, update.OpeningIds);
             AuditTrail.ForProject(project).Record("geometry.opening.boolean.curved", update.Host.Id, update.OpeningCount.ToString(CultureInfo.InvariantCulture) + " opening(s) • solid " + update.SolidHandle);
         }
 
