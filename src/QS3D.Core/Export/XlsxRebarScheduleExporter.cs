@@ -43,9 +43,14 @@ namespace QS3D.Core.Export
 
         private static string BuildSheet(IReadOnlyList<RebarScheduleRow> rows)
         {
-            var headers = new[] { "Element", "Bar Mark", "Shape", "Notation", "Ø (mm)", "SL", "L cắt (m)", "Tổng L (m)", "kg/m", "KL net (kg)", "Hao hụt (%)", "KL tổng (kg)" };
+            var headers = new[]
+            {
+                "Element", "Bar Mark", "Shape", "Notation", "Ø (mm)", "SL", "L cắt (m)", "Tổng L (m)",
+                "kg/m", "KL net (kg)", "Hao hụt (%)", "KL tổng (kg)",
+                "Fabrication Status", "Standard Code", "Detailing Revision"
+            };
             var lastRow = Math.Max(1, rows.Count + 1);
-            var range = "A1:L" + lastRow.ToString(CultureInfo.InvariantCulture);
+            var range = "A1:O" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"").Append(range).Append("\"/>");
@@ -55,7 +60,8 @@ namespace QS3D.Core.Export
             sb.Append("</row>");
             for (var i = 0; i < rows.Count; i++)
             {
-                var row = rows[i]; var r = i + 2;
+                var row = rows[i] ?? throw new ArgumentException("BBS row cannot be null.", nameof(rows));
+                var r = i + 2;
                 sb.Append("<row r=\"").Append(r).Append("\">");
                 AppendText(sb, CellRef(0, r), row.ElementId, 0);
                 AppendText(sb, CellRef(1, r), row.BarMark, 0);
@@ -69,6 +75,9 @@ namespace QS3D.Core.Export
                 AppendNumber(sb, CellRef(9, r), row.NetWeightKg);
                 AppendNumber(sb, CellRef(10, r), row.WastePercent);
                 AppendNumber(sb, CellRef(11, r), row.TotalWeightKg);
+                AppendText(sb, CellRef(12, r), row.FabricationStatus, 0);
+                AppendText(sb, CellRef(13, r), row.FabricationStandardCode, 0);
+                AppendText(sb, CellRef(14, r), row.FabricationDetailingRevision, 0);
                 sb.Append("</row>");
             }
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
