@@ -48,7 +48,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status + "\n" + dialog.FileName);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var status = "QS3DFINISHXLSX lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(status);

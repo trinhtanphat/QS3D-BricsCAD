@@ -55,7 +55,8 @@ namespace QS3D.Core.Reporting
                 var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
                 var familyName = family?.Name ?? element.FamilyId;
                 var metrics = Metrics(element);
-                var unitHint = material.Length > 0 && units.TryGetValue(material, out var unit) ? unit : metrics.DefaultUnit;
+                var unitHint = metrics.DefaultUnit;
+                if (material.Length > 0 && units.TryGetValue(material, out var unit) && SameDimension(unit, metrics.DefaultUnit)) unitHint = unit;
                 var primary = Primary(unitHint, metrics.LengthM, metrics.AreaM2);
                 var key = string.Join("\u001f", element.FloorId, roomLabel, element.Category.ToString(), element.FamilyId, material, unitHint);
                 if (!rows.TryGetValue(key, out var row))
@@ -149,11 +150,16 @@ namespace QS3D.Core.Reporting
 
         private static double Primary(string unitHint, double lengthM, double areaM2)
         {
-            var unit = (unitHint ?? string.Empty).Trim().ToLowerInvariant().Replace("²", "2").Replace("^", string.Empty).Replace(" ", string.Empty);
+            var unit = NormalizeUnit(unitHint);
             if (unit == "m") return lengthM;
             if (unit == "m2") return areaM2;
             return areaM2 > 0d ? areaM2 : lengthM;
         }
+
+        private static bool SameDimension(string left, string right) => string.Equals(NormalizeUnit(left), NormalizeUnit(right), StringComparison.Ordinal);
+
+        private static string NormalizeUnit(string unit) =>
+            (unit ?? string.Empty).Trim().ToLowerInvariant().Replace("²", "2").Replace("^", string.Empty).Replace(" ", string.Empty);
 
         private static double Q(ProjectElement element, string key, double fallback = 0d)
         {

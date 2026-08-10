@@ -17,7 +17,7 @@ namespace QS3D.BricsCAD.V25
                 Application.ShowModelessWindow(IntPtr.Zero, new RoomFinishScheduleWindow(document), true);
                 PaletteCoordinator.SetStatus("HT_Phòng Schedule: review • filter • XLSX • khóa theo project của bản vẽ.");
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DFINISHSCHEDULE lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);

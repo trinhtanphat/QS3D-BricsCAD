@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
+using Application = Bricscad.ApplicationServices.Application;
 using QS3D.Core.Domain;
 
 namespace QS3D.BricsCAD.V25.UI

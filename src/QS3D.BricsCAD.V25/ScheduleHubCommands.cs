@@ -17,7 +17,7 @@ namespace QS3D.BricsCAD.V25
                 Application.ShowModelessWindow(IntPtr.Zero, new ScheduleHubWindow(document), true);
                 PaletteCoordinator.SetStatus("Schedule Hub: BQ • vật liệu • curtain • cửa/lỗ • cốt thép • khóa theo bản vẽ.");
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DSCHEDULES lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);
