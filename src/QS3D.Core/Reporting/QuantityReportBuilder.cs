@@ -20,20 +20,20 @@ namespace QS3D.Core.Reporting
                     row = new QuantityReportRow { Floor = element.Floor, Category = element.Family.Category.ToString(), FamilyName = element.Family.Name };
                     grouped.Add(key, row); order.Add(key);
                 }
-                row.Count++;
+                row.Count = QuantityReportMath.AddCount(row.Count, 1);
                 row.ElementIds.Add(element.Id);
-                row.GrossConcreteM3 += element.GrossConcreteM3;
-                row.DeductionM3 += element.DeductionM3;
-                row.NetConcreteM3 += element.NetConcreteM3;
-                row.FormworkM2 += element.FormworkM2;
-                row.LengthM += element.LengthM;
-                row.OuterPerimeterM += element.OuterPerimeterM;
-                row.InnerPerimeterM += element.InnerPerimeterM;
-                row.DoorAreaM2 += element.DoorAreaM2;
-                row.SideAreaM2 += element.SideAreaM2;
-                row.BottomAreaM2 += element.BottomAreaM2;
-                row.TopAreaM2 += element.TopAreaM2;
-                row.OtherAreaM2 += element.OtherAreaM2;
+                row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, element.GrossConcreteM3, element.Id + "/GrossConcreteM3");
+                row.DeductionM3 = QuantityReportMath.Add(row.DeductionM3, element.DeductionM3, element.Id + "/DeductionM3");
+                row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3, element.NetConcreteM3, element.Id + "/NetConcreteM3");
+                row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, element.FormworkM2, element.Id + "/FormworkM2");
+                row.LengthM = QuantityReportMath.Add(row.LengthM, element.LengthM, element.Id + "/LengthM");
+                row.OuterPerimeterM = QuantityReportMath.Add(row.OuterPerimeterM, element.OuterPerimeterM, element.Id + "/OuterPerimeterM");
+                row.InnerPerimeterM = QuantityReportMath.Add(row.InnerPerimeterM, element.InnerPerimeterM, element.Id + "/InnerPerimeterM");
+                row.DoorAreaM2 = QuantityReportMath.Add(row.DoorAreaM2, element.DoorAreaM2, element.Id + "/DoorAreaM2");
+                row.SideAreaM2 = QuantityReportMath.Add(row.SideAreaM2, element.SideAreaM2, element.Id + "/SideAreaM2");
+                row.BottomAreaM2 = QuantityReportMath.Add(row.BottomAreaM2, element.BottomAreaM2, element.Id + "/BottomAreaM2");
+                row.TopAreaM2 = QuantityReportMath.Add(row.TopAreaM2, element.TopAreaM2, element.Id + "/TopAreaM2");
+                row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, element.OtherAreaM2, element.Id + "/OtherAreaM2");
             }
             var result = new List<QuantityReportRow>(order.Count);
             foreach (var key in order) result.Add(grouped[key]);

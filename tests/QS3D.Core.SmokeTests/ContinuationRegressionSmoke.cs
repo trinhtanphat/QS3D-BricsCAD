@@ -5,6 +5,7 @@ using System.Text;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
 using QS3D.Core.Persistence;
+using QS3D.Core.Reporting;
 using QS3D.Core.Services;
 using QS3D.Core.Takeoff;
 using QS3D.Core.Units;
@@ -20,6 +21,7 @@ namespace QS3D.Core.SmokeTests
             QsdbRejectsNonFiniteStateBeforeReplace();
             LegacyWallCalculatorRejectsNonFiniteValues();
             QuantityEngineRejectsInvalidSnapshotMetrics();
+            ReportingRejectsNonFiniteState();
         }
 
         private static void LegacyMigrationMarksElementsDirty()
@@ -103,6 +105,24 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => QuantityEngine.Calculate(invalidLength, TakeoffKind.Length, DrawingUnit.Millimeter));
             var invalidArea = new EntitySnapshot("B", "Polyline", "0") { AreaDrawingUnitsSquared = -1d };
             Throws<InvalidOperationException>(() => QuantityEngine.Calculate(invalidArea, TakeoffKind.Area, DrawingUnit.Meter));
+        }
+
+        private static void ReportingRejectsNonFiniteState()
+        {
+            var project = NewProject();
+            var family = new ProjectFamily("wall", "Wall", ElementCategory.ArchitecturalWall);
+            project.Families.Add(family);
+            var element = new ProjectElement("W-RPT", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
+            element.Quantities["LengthM"] = double.NaN;
+            project.Elements.Add(element);
+            Throws<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project));
+
+            var legacyFamily = new FamilyDefinition("Legacy", ElementCategory.ArchitecturalWall);
+            var legacy = new ElementInstance("LEGACY", legacyFamily, "Floor") { GrossConcreteM3 = double.PositiveInfinity };
+            Throws<InvalidOperationException>(() => QuantityReportBuilder.Group(new[] { legacy }));
+
+            var badRow = new QuantityReportRow { Count = 1, LengthM = double.NaN };
+            Throws<InvalidOperationException>(() => QuantityReportTotals.FromRows(new[] { badRow }));
         }
 
         private static ProjectState NewProject()

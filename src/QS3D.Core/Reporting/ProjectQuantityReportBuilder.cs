@@ -28,27 +28,31 @@ namespace QS3D.Core.Reporting
                     order.Add(key);
                 }
 
-                row.Count++;
+                row.Count = QuantityReportMath.AddCount(row.Count, 1);
                 row.ElementIds.Add(element.Id);
                 var gross = Q(element, "GrossConcreteM3", Q(element, "GrossVolumeM3"));
                 var net = Q(element, "NetConcreteM3", Q(element, "NetVolumeM3", gross));
-                row.GrossConcreteM3 += gross;
-                row.NetConcreteM3 += net;
-                row.DeductionM3 += Q(element, "DeductionM3", Math.Max(0d, gross - net));
-                row.FormworkM2 += Q(element, "FormworkM2");
-                row.LengthM += Q(element, "LengthM");
-                row.OuterPerimeterM += Q(element, "OuterPerimeterM", element.Category == ElementCategory.Room ? Q(element, "PerimeterM") : 0d);
-                row.InnerPerimeterM += Q(element, "InnerPerimeterM", element.Category == ElementCategory.Skirting ? Q(element, "PerimeterM") : 0d);
-                row.DoorAreaM2 += element.Category == ElementCategory.Door || element.Category == ElementCategory.WallOpening ? Q(element, "OpeningAreaM2") : Q(element, "DoorAreaM2");
-                row.SideAreaM2 += Q(element, "SideAreaM2", element.Category == ElementCategory.WallFinish ? Q(element, "NetFinishAreaM2") : 0d);
-                row.BottomAreaM2 += Q(element, "BottomAreaM2", element.Category == ElementCategory.FloorFinish || element.Category == ElementCategory.Waterproofing ? Q(element, "AreaM2") : 0d);
-                row.TopAreaM2 += Q(element, "TopAreaM2", element.Category == ElementCategory.CeilingFinish ? Q(element, "AreaM2") : 0d);
-                row.OtherAreaM2 += Q(element, "OtherAreaM2");
+                row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, gross, element.Id + "/GrossConcreteM3");
+                row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3, net, element.Id + "/NetConcreteM3");
+                row.DeductionM3 = QuantityReportMath.Add(row.DeductionM3, Q(element, "DeductionM3", Math.Max(0d, gross - net)), element.Id + "/DeductionM3");
+                row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, Q(element, "FormworkM2"), element.Id + "/FormworkM2");
+                row.LengthM = QuantityReportMath.Add(row.LengthM, Q(element, "LengthM"), element.Id + "/LengthM");
+                row.OuterPerimeterM = QuantityReportMath.Add(row.OuterPerimeterM, Q(element, "OuterPerimeterM", element.Category == ElementCategory.Room ? Q(element, "PerimeterM") : 0d), element.Id + "/OuterPerimeterM");
+                row.InnerPerimeterM = QuantityReportMath.Add(row.InnerPerimeterM, Q(element, "InnerPerimeterM", element.Category == ElementCategory.Skirting ? Q(element, "PerimeterM") : 0d), element.Id + "/InnerPerimeterM");
+                row.DoorAreaM2 = QuantityReportMath.Add(row.DoorAreaM2, element.Category == ElementCategory.Door || element.Category == ElementCategory.WallOpening ? Q(element, "OpeningAreaM2") : Q(element, "DoorAreaM2"), element.Id + "/DoorAreaM2");
+                row.SideAreaM2 = QuantityReportMath.Add(row.SideAreaM2, Q(element, "SideAreaM2", element.Category == ElementCategory.WallFinish ? Q(element, "NetFinishAreaM2") : 0d), element.Id + "/SideAreaM2");
+                row.BottomAreaM2 = QuantityReportMath.Add(row.BottomAreaM2, Q(element, "BottomAreaM2", element.Category == ElementCategory.FloorFinish || element.Category == ElementCategory.Waterproofing ? Q(element, "AreaM2") : 0d), element.Id + "/BottomAreaM2");
+                row.TopAreaM2 = QuantityReportMath.Add(row.TopAreaM2, Q(element, "TopAreaM2", element.Category == ElementCategory.CeilingFinish ? Q(element, "AreaM2") : 0d), element.Id + "/TopAreaM2");
+                row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, Q(element, "OtherAreaM2"), element.Id + "/OtherAreaM2");
             }
 
             return order.Select(x => rows[x]).ToList();
         }
 
-        private static double Q(ProjectElement element, string name, double fallback = 0d) => element.Quantities.TryGetValue(name, out var value) ? value : fallback;
+        private static double Q(ProjectElement element, string name, double fallback = 0d)
+        {
+            var value = element.Quantities.TryGetValue(name, out var stored) ? stored : fallback;
+            return QuantityReportMath.Finite(value, element.Id + "/" + name);
+        }
     }
 }
