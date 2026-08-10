@@ -96,7 +96,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var ownership = needsRebarOwnership ? GeneratedRebarOwnershipGuard.Build(project) : null;
             foreach (var element in targets)
             {
-                GeneratedGeometryService.PrepareReplacement(document, transaction, element);
+                GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
                 if (ownership == null) continue;
                 foreach (var key in RebarHandleKeys) EraseRebarSet(document, transaction, element, key, ownership);
             }

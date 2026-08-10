@@ -20,8 +20,7 @@ namespace QS3D.Core.Services
                 var next = value ?? string.Empty;
                 if (string.Equals(before ?? string.Empty, next, StringComparison.Ordinal)) continue;
                 element.Properties[propertyName] = next;
-                element.MarkGeneratedGeometryStale("Bulk property changed: " + propertyName);
-                element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
+                element.MarkDirty(DirtyFlags(element, propertyName));
                 changed.Add(element.Id);
             }
             if (changed.Count > 0) project.Touch();
@@ -45,12 +44,68 @@ namespace QS3D.Core.Services
                 var formatted = next.ToString("R", CultureInfo.InvariantCulture);
                 if (string.Equals(text, formatted, StringComparison.Ordinal)) continue;
                 element.Properties[propertyName] = formatted;
-                element.MarkGeneratedGeometryStale("Bulk numeric property changed: " + propertyName);
-                element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
+                element.MarkDirty(DirtyFlags(element, propertyName));
                 changed.Add(element.Id);
             }
             if (changed.Count > 0) project.Touch();
             return changed.AsReadOnly();
+        }
+
+        public int SetProperty(ProjectState project, IEnumerable<string> elementIds, string propertyName, string value)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+            var elements = new List<ProjectElement>();
+            foreach (var id in elementIds)
+            {
+                if (string.IsNullOrWhiteSpace(id)) continue;
+                var element = project.FindElement(id.Trim());
+                if (element != null) elements.Add(element);
+            }
+            return SetProperty(project, elements, propertyName, value).Count;
+        }
+
+        public int AssignFamily(ProjectState project, IEnumerable<string> elementIds, string familyId)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+            var family = project.FindFamily(familyId) ?? throw new KeyNotFoundException("Unknown family: " + familyId);
+            var count = 0;
+            foreach (var id in elementIds)
+            {
+                if (string.IsNullOrWhiteSpace(id)) continue;
+                var element = project.FindElement(id.Trim());
+                if (element == null || element.Category != family.Category) continue;
+                if (string.Equals(element.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
+
+                var previousFamily = project.FindFamily(element.FamilyId);
+                var inheritedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (previousFamily != null)
+                    foreach (var property in previousFamily.Properties)
+                        if (element.Properties.TryGetValue(property.Key, out var current) && string.Equals(current, property.Value ?? string.Empty, StringComparison.Ordinal))
+                            inheritedKeys.Add(property.Key);
+
+                foreach (var key in inheritedKeys)
+                    if (!family.Properties.ContainsKey(key)) element.Properties.Remove(key);
+                foreach (var property in family.Properties)
+                    if (inheritedKeys.Contains(property.Key) || !element.Properties.ContainsKey(property.Key))
+                        element.Properties[property.Key] = property.Value ?? string.Empty;
+
+                element.FamilyId = family.Id;
+                var dirty = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
+                if (ElementGeometryPolicy.RequiresGeneratedGeometry(element.Category)) dirty |= ElementDirtyFlags.Geometry;
+                element.MarkDirty(dirty);
+                count++;
+            }
+            if (count > 0) project.Touch();
+            return count;
+        }
+
+        private static ElementDirtyFlags DirtyFlags(ProjectElement element, string propertyName)
+        {
+            var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
+            if (ElementGeometryPolicy.AffectsGeneratedGeometry(element.Category, propertyName)) flags |= ElementDirtyFlags.Geometry;
+            return flags;
         }
     }
 }

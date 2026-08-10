@@ -54,6 +54,14 @@ namespace QS3D.Core.Geometry
 
             var segments = source.ToList();
             var junctions = new WallJunctionPlanner().Plan(segments, junctionTolerance);
+            var segmentsById = segments.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+            foreach (var junction in junctions.Where(x => x.SegmentIds.Count > 1))
+                foreach (var segmentId in junction.SegmentIds)
+                {
+                    var segment = segmentsById[segmentId];
+                    if (segment.Start.DistanceTo(junction.Point) <= junctionTolerance && segment.End.DistanceTo(junction.Point) <= junctionTolerance)
+                        throw new InvalidOperationException("Wall endpoint adjustment would collapse segment " + segment.Id + ".");
+                }
             var bySegment = new Dictionary<string, List<WallJunction>>(StringComparer.OrdinalIgnoreCase);
             foreach (var junction in junctions.Where(x => x.SegmentIds.Count > 1 && x.Kind != WallJunctionKind.End))
             {
