@@ -12,6 +12,13 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class ProjectInterchangeImportCommands
     {
+        private enum CollisionPolicyChoice
+        {
+            KeepTarget = 0,
+            UseSourceElement = 1,
+            UseSourceCatalog = 2
+        }
+
         private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         [CommandMethod("QS3DINTERCHANGEIMPORT", CommandFlags.Modal)]
@@ -40,120 +47,263 @@ namespace QS3D.BricsCAD.V25
                 var keepPlan = ProjectInterchangeKeepTargetImporter.Plan(project, json);
                 if (preview.CollisionCount == 0)
                 {
-                    var appendPlan = ProjectInterchangeAppendOnlyImporter.Plan(project, json);
-                    var appendConfirm =
-                        "Snapshot không có semantic ID collision. Chạy APPEND-ONLY?\n\n" +
-                        "Source project: " + appendPlan.SourceProjectId + "\n" +
-                        "Semantic identity mới: " + appendPlan.TotalSemanticIdentitiesToAdd.ToString(CultureInfo.InvariantCulture) + "\n" +
-                        "Incoming source handles discard: " + appendPlan.SourceHandlesToDiscard.ToString(CultureInfo.InvariantCulture) + "\n\n" +
-                        "Không merge/replace, không nhận CAD ownership từ source, không tự lưu .qsdb.";
-                    if (System.Windows.MessageBox.Show(
-                            appendConfirm,
-                            "QS3D — Interchange Import / Append-only",
-                            System.Windows.MessageBoxButton.YesNo,
-                            System.Windows.MessageBoxImage.Question) != System.Windows.MessageBoxResult.Yes) return;
-
-                    EnsureActive(document, "Interchange append-only import");
-                    var result = ProjectInterchangeAppendOnlyImporter.Import(project, json);
-                    FinishSemanticOnlyImport(
-                        document,
-                        "Interchange Import / Append-only: semantic +" +
-                        (result.ZonesAdded + result.FloorsAdded + result.FamiliesAdded + result.ElementsAdded).ToString(CultureInfo.InvariantCulture) +
-                        " • source handles discarded " + result.SourceHandlesDiscarded.ToString(CultureInfo.InvariantCulture) +
-                        ". Chưa tự lưu .qsdb.");
+                    RunAppendOnly(document, project, json);
                     return;
                 }
 
-                InterchangeUseSourceElementImportPlan? useSourcePlan = null;
-                string useSourceBlock = string.Empty;
+                InterchangeUseSourceElementImportPlan? elementPlan = null;
+                string elementBlock = string.Empty;
                 try
                 {
                     var candidate = InterchangeUseSourceElementImportService.Plan(project, json);
-                    if (candidate.ElementsToReplace > 0) useSourcePlan = candidate;
+                    if (candidate.ElementsToReplace > 0) elementPlan = candidate;
                 }
                 catch (Exception ex)
                 {
-                    useSourceBlock = ex.Message;
+                    elementBlock = ex.Message;
                 }
 
-                if (useSourcePlan == null)
+                InterchangeUseSourceCatalogImportPlan? catalogPlan = null;
+                string catalogBlock = string.Empty;
+                try
                 {
-                    var keepOnly =
-                        "Snapshot có " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s), nhưng không có executable same-category Element replacement.\n\n" +
-                        "Policy khả dụng hiện tại: KEEP TARGET.\n" +
-                        "Target identity trùng ID giữ nguyên; chỉ semantic identity mới được thêm. Incoming source handles bị discard.\n" +
-                        (string.IsNullOrWhiteSpace(useSourceBlock) ? string.Empty : "\nUseSource bị chặn: " + useSourceBlock + "\n") +
-                        "\nTiếp tục KeepTarget?";
-                    if (System.Windows.MessageBox.Show(
-                            keepOnly,
-                            "QS3D — Interchange Import / KeepTarget",
-                            System.Windows.MessageBoxButton.YesNo,
-                            System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
-
-                    EnsureActive(document, "Interchange KeepTarget import");
-                    var keepResult = ProjectInterchangeKeepTargetImporter.Import(project, json);
-                    FinishSemanticOnlyImport(
-                        document,
-                        "Interchange Import / KeepTarget: semantic +" +
-                        (keepResult.ZonesAdded + keepResult.FloorsAdded + keepResult.FamiliesAdded + keepResult.ElementsAdded).ToString(CultureInfo.InvariantCulture) +
-                        " • target identities kept " + keepResult.TargetIdentitiesKept.ToString(CultureInfo.InvariantCulture) +
-                        " • source handles discarded " + keepResult.SourceHandlesDiscarded.ToString(CultureInfo.InvariantCulture) +
-                        ". Chưa tự lưu .qsdb.");
-                    return;
+                    var candidate = InterchangeUseSourceCatalogImportService.Plan(project, json);
+                    if (candidate.ZonesToReplace + candidate.FloorsToReplace + candidate.FamiliesToReplace > 0)
+                        catalogPlan = candidate;
                 }
-
-                var chooseText =
-                    "Snapshot có " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s). Chọn policy:\n\n" +
-                    "YES — REPLACE ELEMENT SEMANTIC\n" +
-                    "• replace same-category Element collisions: " + useSourcePlan.ElementsToReplace.ToString(CultureInfo.InvariantCulture) + "\n" +
-                    "• giữ Zone/Floor/Family collision của target\n" +
-                    "• giữ target SourceHandles/drawing fingerprint\n" +
-                    "• xóa ownership-safe generated outputs của affected closure; rebuild explicit\n\n" +
-                    "NO — KEEP TARGET\n" +
-                    "• giữ toàn bộ target identities trùng ID: " + keepPlan.TotalSemanticIdentitiesToKeep.ToString(CultureInfo.InvariantCulture) + "\n" +
-                    "• chỉ append identities mới\n" +
-                    "• không replace target semantic collision\n\n" +
-                    "CANCEL — không import.\n\n" +
-                    "Cả hai policy đều discard incoming source CAD handles và không tự lưu .qsdb.";
-
-                var choice = System.Windows.MessageBox.Show(
-                    chooseText,
-                    "QS3D — Interchange Import Policy",
-                    System.Windows.MessageBoxButton.YesNoCancel,
-                    System.Windows.MessageBoxImage.Warning);
-                if (choice == System.Windows.MessageBoxResult.Cancel) return;
-
-                if (choice == System.Windows.MessageBoxResult.No)
+                catch (Exception ex)
                 {
-                    EnsureActive(document, "Interchange KeepTarget import");
-                    var keepResult = ProjectInterchangeKeepTargetImporter.Import(project, json);
-                    FinishSemanticOnlyImport(
-                        document,
-                        "Interchange Import / KeepTarget: semantic +" +
-                        (keepResult.ZonesAdded + keepResult.FloorsAdded + keepResult.FamiliesAdded + keepResult.ElementsAdded).ToString(CultureInfo.InvariantCulture) +
-                        " • target identities kept " + keepResult.TargetIdentitiesKept.ToString(CultureInfo.InvariantCulture) +
-                        " • source handles discarded " + keepResult.SourceHandlesDiscarded.ToString(CultureInfo.InvariantCulture) +
-                        ". Chưa tự lưu .qsdb.");
-                    return;
+                    catalogBlock = ex.Message;
                 }
 
-                EnsureActive(document, "Interchange UseSource element import");
-                var sourceResult = InterchangeUseSourceElementImportService.Import(document, json);
-                try { PaletteCoordinator.RefreshProject(); } catch { }
-                var status =
-                    "Interchange Import / UseSource: Element replace " + sourceResult.ElementsReplaced.ToString(CultureInfo.InvariantCulture) +
-                    " • Element +" + sourceResult.ElementsAdded.ToString(CultureInfo.InvariantCulture) +
-                    " • catalog +" + (sourceResult.ZonesAdded + sourceResult.FloorsAdded + sourceResult.FamiliesAdded).ToString(CultureInfo.InvariantCulture) +
-                    " • generated closure invalidated " + sourceResult.GeneratedElementsInvalidated.ToString(CultureInfo.InvariantCulture) +
-                    ". Rebuild explicit; chưa tự lưu .qsdb.";
-                try { PaletteCoordinator.SetStatus(status); } catch { }
-                document.Editor.WriteMessage("\nQS3D " + status);
+                var choice = ChooseCollisionPolicy(
+                    preview,
+                    keepPlan,
+                    elementPlan,
+                    catalogPlan,
+                    elementBlock,
+                    catalogBlock);
+                if (!choice.HasValue) return;
+
+                switch (choice.Value)
+                {
+                    case CollisionPolicyChoice.KeepTarget:
+                        RunKeepTarget(document, project, json);
+                        return;
+                    case CollisionPolicyChoice.UseSourceElement:
+                        RunUseSourceElement(document, json);
+                        return;
+                    case CollisionPolicyChoice.UseSourceCatalog:
+                        RunUseSourceCatalog(document, json);
+                        return;
+                    default:
+                        throw new InvalidOperationException("Unsupported interchange collision policy choice.");
+                }
             }
             catch (Exception ex)
             {
                 try { PaletteCoordinator.SetStatus("QS3DINTERCHANGEIMPORT lỗi: " + ex.Message); } catch { }
                 document.Editor.WriteMessage("\nQS3DINTERCHANGEIMPORT error: " + ex.Message + " Import policy không được claim thành công nếu apply chưa hoàn tất.");
             }
+        }
+
+        private static CollisionPolicyChoice? ChooseCollisionPolicy(
+            ProjectInterchangeImportPreviewResult preview,
+            ProjectInterchangeKeepTargetImportPlan keepPlan,
+            InterchangeUseSourceElementImportPlan? elementPlan,
+            InterchangeUseSourceCatalogImportPlan? catalogPlan,
+            string elementBlock,
+            string catalogBlock)
+        {
+            if (elementPlan == null && catalogPlan == null)
+            {
+                var keepOnly =
+                    "Snapshot có " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s), nhưng không có executable UseSource replacement.\n\n" +
+                    "Policy khả dụng hiện tại: KEEP TARGET.\n" +
+                    "Target identity trùng ID giữ nguyên; chỉ semantic identity mới được thêm. Incoming source handles bị discard.\n" +
+                    BlockText("Element UseSource", elementBlock) +
+                    BlockText("Catalog UseSource", catalogBlock) +
+                    "\nTiếp tục KeepTarget?";
+                return System.Windows.MessageBox.Show(
+                           keepOnly,
+                           "QS3D — Interchange Import / KeepTarget",
+                           System.Windows.MessageBoxButton.YesNo,
+                           System.Windows.MessageBoxImage.Warning) == System.Windows.MessageBoxResult.Yes
+                    ? CollisionPolicyChoice.KeepTarget
+                    : (CollisionPolicyChoice?)null;
+            }
+
+            if (elementPlan != null && catalogPlan == null)
+            {
+                var choice = System.Windows.MessageBox.Show(
+                    ElementVsKeepText(preview, keepPlan, elementPlan, catalogBlock),
+                    "QS3D — Interchange Import Policy",
+                    System.Windows.MessageBoxButton.YesNoCancel,
+                    System.Windows.MessageBoxImage.Warning);
+                if (choice == System.Windows.MessageBoxResult.Cancel) return null;
+                return choice == System.Windows.MessageBoxResult.Yes
+                    ? CollisionPolicyChoice.UseSourceElement
+                    : CollisionPolicyChoice.KeepTarget;
+            }
+
+            if (elementPlan == null && catalogPlan != null)
+            {
+                var choice = System.Windows.MessageBox.Show(
+                    CatalogVsKeepText(preview, keepPlan, catalogPlan, elementBlock),
+                    "QS3D — Interchange Import Policy",
+                    System.Windows.MessageBoxButton.YesNoCancel,
+                    System.Windows.MessageBoxImage.Warning);
+                if (choice == System.Windows.MessageBoxResult.Cancel) return null;
+                return choice == System.Windows.MessageBoxResult.Yes
+                    ? CollisionPolicyChoice.UseSourceCatalog
+                    : CollisionPolicyChoice.KeepTarget;
+            }
+
+            var first = System.Windows.MessageBox.Show(
+                "Snapshot có " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s).\n\n" +
+                "YES — chọn một USE SOURCE policy ở bước tiếp theo.\n" +
+                "NO — KEEP TARGET cho toàn bộ collisions (" + keepPlan.TotalSemanticIdentitiesToKeep.ToString(CultureInfo.InvariantCulture) + ").\n" +
+                "CANCEL — không import.\n\n" +
+                "UseSource Element và UseSource Catalog là hai mutation policy tách biệt; chưa tự gộp cả hai trong một import. Incoming source CAD handles vẫn không trở thành target ownership.",
+                "QS3D — Interchange Import Policy",
+                System.Windows.MessageBoxButton.YesNoCancel,
+                System.Windows.MessageBoxImage.Warning);
+            if (first == System.Windows.MessageBoxResult.Cancel) return null;
+            if (first == System.Windows.MessageBoxResult.No) return CollisionPolicyChoice.KeepTarget;
+
+            var second = System.Windows.MessageBox.Show(
+                "Chọn USE SOURCE policy:\n\n" +
+                "YES — REPLACE ELEMENT SEMANTIC\n" +
+                "• Element same-category collisions: " + elementPlan!.ElementsToReplace.ToString(CultureInfo.InvariantCulture) + "\n" +
+                "• Zone/Floor/Family collisions giữ target\n" +
+                "• target SourceHandles/drawing fingerprint giữ nguyên\n\n" +
+                "NO — REPLACE CATALOG SEMANTIC\n" +
+                "• Zone: " + catalogPlan!.ZonesToReplace.ToString(CultureInfo.InvariantCulture) +
+                " • Floor: " + catalogPlan.FloorsToReplace.ToString(CultureInfo.InvariantCulture) +
+                " • Family: " + catalogPlan.FamiliesToReplace.ToString(CultureInfo.InvariantCulture) + "\n" +
+                "• Element collisions giữ target\n\n" +
+                "CANCEL — không import.\n\n" +
+                "Cả hai UseSource path đều ownership-safe invalidate generated closure trong CAD transaction và yêu cầu rebuild explicit.",
+                "QS3D — Chọn UseSource scope",
+                System.Windows.MessageBoxButton.YesNoCancel,
+                System.Windows.MessageBoxImage.Warning);
+            if (second == System.Windows.MessageBoxResult.Cancel) return null;
+            return second == System.Windows.MessageBoxResult.Yes
+                ? CollisionPolicyChoice.UseSourceElement
+                : CollisionPolicyChoice.UseSourceCatalog;
+        }
+
+        private static string ElementVsKeepText(
+            ProjectInterchangeImportPreviewResult preview,
+            ProjectInterchangeKeepTargetImportPlan keepPlan,
+            InterchangeUseSourceElementImportPlan plan,
+            string catalogBlock)
+        {
+            return
+                "Snapshot có " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s). Chọn policy:\n\n" +
+                "YES — REPLACE ELEMENT SEMANTIC\n" +
+                "• replace same-category Element collisions: " + plan.ElementsToReplace.ToString(CultureInfo.InvariantCulture) + "\n" +
+                "• giữ Zone/Floor/Family collision của target\n" +
+                "• giữ target SourceHandles/drawing fingerprint\n" +
+                "• xóa ownership-safe generated outputs của affected closure; rebuild explicit\n\n" +
+                "NO — KEEP TARGET\n" +
+                "• giữ toàn bộ target identities trùng ID: " + keepPlan.TotalSemanticIdentitiesToKeep.ToString(CultureInfo.InvariantCulture) + "\n" +
+                "• chỉ append identities mới\n\n" +
+                "CANCEL — không import." + BlockText("Catalog UseSource", catalogBlock) +
+                "\nIncoming source CAD handles bị discard; không tự lưu .qsdb.";
+        }
+
+        private static string CatalogVsKeepText(
+            ProjectInterchangeImportPreviewResult preview,
+            ProjectInterchangeKeepTargetImportPlan keepPlan,
+            InterchangeUseSourceCatalogImportPlan plan,
+            string elementBlock)
+        {
+            return
+                "Snapshot có " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s). Chọn policy:\n\n" +
+                "YES — REPLACE CATALOG SEMANTIC\n" +
+                "• Zone: " + plan.ZonesToReplace.ToString(CultureInfo.InvariantCulture) +
+                " • Floor: " + plan.FloorsToReplace.ToString(CultureInfo.InvariantCulture) +
+                " • Family: " + plan.FamiliesToReplace.ToString(CultureInfo.InvariantCulture) + "\n" +
+                "• Element collisions giữ target\n" +
+                "• invalidates referencing elements/dependents in CAD transaction; rebuild explicit\n\n" +
+                "NO — KEEP TARGET\n" +
+                "• giữ toàn bộ target identities trùng ID: " + keepPlan.TotalSemanticIdentitiesToKeep.ToString(CultureInfo.InvariantCulture) + "\n" +
+                "• chỉ append identities mới\n\n" +
+                "CANCEL — không import." + BlockText("Element UseSource", elementBlock) +
+                "\nIncoming source CAD handles bị discard; không tự lưu .qsdb.";
+        }
+
+        private static string BlockText(string label, string reason) =>
+            string.IsNullOrWhiteSpace(reason) ? string.Empty : "\n\n" + label + " bị chặn: " + reason;
+
+        private static void RunAppendOnly(Document document, QS3D.Core.Domain.ProjectState project, string json)
+        {
+            var appendPlan = ProjectInterchangeAppendOnlyImporter.Plan(project, json);
+            var appendConfirm =
+                "Snapshot không có semantic ID collision. Chạy APPEND-ONLY?\n\n" +
+                "Source project: " + appendPlan.SourceProjectId + "\n" +
+                "Semantic identity mới: " + appendPlan.TotalSemanticIdentitiesToAdd.ToString(CultureInfo.InvariantCulture) + "\n" +
+                "Incoming source handles discard: " + appendPlan.SourceHandlesToDiscard.ToString(CultureInfo.InvariantCulture) + "\n\n" +
+                "Không merge/replace, không nhận CAD ownership từ source, không tự lưu .qsdb.";
+            if (System.Windows.MessageBox.Show(
+                    appendConfirm,
+                    "QS3D — Interchange Import / Append-only",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Question) != System.Windows.MessageBoxResult.Yes) return;
+
+            EnsureActive(document, "Interchange append-only import");
+            var result = ProjectInterchangeAppendOnlyImporter.Import(project, json);
+            FinishSemanticOnlyImport(
+                document,
+                "Interchange Import / Append-only: semantic +" +
+                (result.ZonesAdded + result.FloorsAdded + result.FamiliesAdded + result.ElementsAdded).ToString(CultureInfo.InvariantCulture) +
+                " • source handles discarded " + result.SourceHandlesDiscarded.ToString(CultureInfo.InvariantCulture) +
+                ". Chưa tự lưu .qsdb.");
+        }
+
+        private static void RunKeepTarget(Document document, QS3D.Core.Domain.ProjectState project, string json)
+        {
+            EnsureActive(document, "Interchange KeepTarget import");
+            var result = ProjectInterchangeKeepTargetImporter.Import(project, json);
+            FinishSemanticOnlyImport(
+                document,
+                "Interchange Import / KeepTarget: semantic +" +
+                (result.ZonesAdded + result.FloorsAdded + result.FamiliesAdded + result.ElementsAdded).ToString(CultureInfo.InvariantCulture) +
+                " • target identities kept " + result.TargetIdentitiesKept.ToString(CultureInfo.InvariantCulture) +
+                " • source handles discarded " + result.SourceHandlesDiscarded.ToString(CultureInfo.InvariantCulture) +
+                ". Chưa tự lưu .qsdb.");
+        }
+
+        private static void RunUseSourceElement(Document document, string json)
+        {
+            EnsureActive(document, "Interchange UseSource element import");
+            var result = InterchangeUseSourceElementImportService.Import(document, json);
+            try { PaletteCoordinator.RefreshProject(); } catch { }
+            var status =
+                "Interchange Import / UseSource Element: replaced " + result.ElementsReplaced.ToString(CultureInfo.InvariantCulture) +
+                " • Element +" + result.ElementsAdded.ToString(CultureInfo.InvariantCulture) +
+                " • catalog +" + (result.ZonesAdded + result.FloorsAdded + result.FamiliesAdded).ToString(CultureInfo.InvariantCulture) +
+                " • generated closure invalidated " + result.GeneratedElementsInvalidated.ToString(CultureInfo.InvariantCulture) +
+                ". Rebuild explicit; chưa tự lưu .qsdb.";
+            try { PaletteCoordinator.SetStatus(status); } catch { }
+            document.Editor.WriteMessage("\nQS3D " + status);
+        }
+
+        private static void RunUseSourceCatalog(Document document, string json)
+        {
+            EnsureActive(document, "Interchange UseSource catalog import");
+            var result = InterchangeUseSourceCatalogImportService.Import(document, json);
+            try { PaletteCoordinator.RefreshProject(); } catch { }
+            var status =
+                "Interchange Import / UseSource Catalog: Zone " + result.ZonesReplaced.ToString(CultureInfo.InvariantCulture) +
+                " • Floor " + result.FloorsReplaced.ToString(CultureInfo.InvariantCulture) +
+                " • Family " + result.FamiliesReplaced.ToString(CultureInfo.InvariantCulture) +
+                " replaced • Element collisions kept " + result.ElementCollisionsKept.ToString(CultureInfo.InvariantCulture) +
+                " • generated closure invalidated " + result.GeneratedElementsInvalidated.ToString(CultureInfo.InvariantCulture) +
+                ". Rebuild explicit; chưa tự lưu .qsdb.";
+            try { PaletteCoordinator.SetStatus(status); } catch { }
+            document.Editor.WriteMessage("\nQS3D " + status);
         }
 
         private static void FinishSemanticOnlyImport(Document document, string status)
