@@ -30,6 +30,7 @@ namespace QS3D.BricsCAD.V25
                 var shapeHandles = PropertyHandles(project, "GeneratedShapeRebarHandles");
                 var tieHandles = PropertyHandles(project, "GeneratedTieRebarHandles");
                 var stirrupHandles = PropertyHandles(project, "GeneratedBeamStirrupHandles");
+                var slabMeshHandles = PropertyHandles(project, "GeneratedSlabMeshHandles");
 
                 var liveSources = CadHandleService.GetLiveHandles(document, sourceHandles);
                 var liveMain = CadHandleService.GetLiveSolidHandles(document, mainHandles);
@@ -37,6 +38,7 @@ namespace QS3D.BricsCAD.V25
                 var liveShape = CadHandleService.GetLiveSolidHandles(document, shapeHandles);
                 var liveTies = CadHandleService.GetLiveSolidHandles(document, tieHandles);
                 var liveStirrups = CadHandleService.GetLiveSolidHandles(document, stirrupHandles);
+                var liveSlabMesh = CadHandleService.GetLiveSolidHandles(document, slabMeshHandles);
 
                 var combined = new List<ModelHealthIssue>();
                 combined.AddRange(new ModelHealthService().Inspect(project, liveSources, liveMain));
@@ -44,6 +46,7 @@ namespace QS3D.BricsCAD.V25
                 combined.AddRange(new GeneratedRebarHealthService().InspectAll(project, liveLongitudinal, liveShape));
                 combined.AddRange(new GeneratedTieRebarHealthService().Inspect(project, liveTies));
                 combined.AddRange(new GeneratedBeamStirrupHealthService().Inspect(project, liveStirrups));
+                combined.AddRange(new GeneratedSlabMeshHealthService().Inspect(project, liveSlabMesh));
 
                 var issues = combined
                     .GroupBy(x => x.Severity + "|" + x.Code + "|" + x.ElementId + "|" + x.Message, StringComparer.Ordinal)
@@ -88,6 +91,7 @@ namespace QS3D.BricsCAD.V25
         private static IEnumerable<string> LocateHandles(ProjectElement element, string code)
         {
             var normalized = (code ?? string.Empty).ToUpperInvariant();
+            if (normalized.Contains("SLAB_MESH")) return SplitPropertyHandles(element, "GeneratedSlabMeshHandles");
             if (normalized.Contains("BEAM_STIRRUP")) return SplitPropertyHandles(element, "GeneratedBeamStirrupHandles");
             if (normalized.Contains("TIE_REBAR")) return SplitPropertyHandles(element, "GeneratedTieRebarHandles");
             if (normalized.Contains("SHAPE_REBAR")) return SplitPropertyHandles(element, "GeneratedShapeRebarHandles");
