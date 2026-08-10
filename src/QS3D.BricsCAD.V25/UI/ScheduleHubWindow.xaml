@@ -112,6 +112,7 @@
                             <StackPanel>
                                 <TextBlock Text="BẢNG TỔNG HỢP" Style="{StaticResource PanelTitle}"/>
                                 <Button Content="BQ tổng hợp / Excel" Tag="QS3DBQ" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
+                                <Button Content="Tạo/Cập nhật Semantic DWG Table" Tag="QS3DELEMENTTABLE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Làm mới quantity" Tag="QS3DREGEN" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
@@ -120,6 +121,7 @@
                                 <TextBlock Text="HT_PHÒNG / HOÀN THIỆN" Style="{StaticResource PanelTitle}"/>
                                 <Button Content="Xem HT_Phòng Schedule" Tag="QS3DFINISHSCHEDULE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Xuất HT_Phòng XLSX" Tag="QS3DFINISHXLSX" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
+                                <Button Content="Tạo/Cập nhật HT_Phòng DWG Table" Tag="QS3DFINISHTABLE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Kiểm tra HT_Phòng Health" Tag="QS3DROOMFINISHHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
@@ -128,6 +130,7 @@
                                 <TextBlock Text="VẬT LIỆU" Style="{StaticResource PanelTitle}"/>
                                 <Button Content="Material Catalog" Tag="QS3DMATERIALS" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Xuất Material XLSX" Tag="QS3DMATERIALXLSX" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
+                                <Button Content="Tạo/Cập nhật Material DWG Table" Tag="QS3DMATERIALTABLE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -145,6 +148,7 @@
                                 <TextBlock Text="CỬA / LỖ MỞ" Style="{StaticResource PanelTitle}"/>
                                 <Button Content="Xem Door/Opening Schedule" Tag="QS3DDOORSCHEDULE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Xuất Door/Opening XLSX" Tag="QS3DDOORXLSX" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
+                                <Button Content="Tạo/Cập nhật Door/Opening DWG Table" Tag="QS3DDOOROPENINGTABLE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource ScheduleCard}" Margin="0">
