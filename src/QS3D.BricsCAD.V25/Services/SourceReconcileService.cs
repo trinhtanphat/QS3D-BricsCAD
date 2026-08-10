@@ -21,6 +21,8 @@ namespace QS3D.BricsCAD.V25.Services
 
     internal static class SourceReconcileService
     {
+        private const int MaxStableRegenerationPasses = 8;
+
         private sealed class Target
         {
             public EntitySnapshot Snapshot { get; set; } = null!;
@@ -44,6 +46,7 @@ namespace QS3D.BricsCAD.V25.Services
             EnsureActive(document, "Source reconcile / mutation");
 
             var invalidationTargets = ExpandInvalidationTargets(project, targets.Select(x => x.Element));
+            var sourceTargetIds = new HashSet<string>(targets.Select(x => x.Element.Id), StringComparer.OrdinalIgnoreCase);
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
             var regenerated = 0;
@@ -58,7 +61,10 @@ namespace QS3D.BricsCAD.V25.Services
                     foreach (var target in targets)
                         RefreshSourceDerivedState(project, target.Element, target.Snapshot, units);
 
-                    regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                    foreach (var dependent in invalidationTargets.Where(x => !sourceTargetIds.Contains(x.Id)))
+                        dependent.MarkDirty(ElementDirtyFlags.All);
+
+                    regenerated = RegenerateAffectedToStable(project, invalidationTargets);
                     invalidation.CommitMetadata();
                     project.Touch();
                     transaction.Commit();
@@ -120,15 +126,69 @@ namespace QS3D.BricsCAD.V25.Services
             foreach (var element in sourceTargets)
             {
                 result[element.Id] = element;
-                if (element.Category != ElementCategory.Door && element.Category != ElementCategory.WallOpening) continue;
-                if (!element.Properties.TryGetValue("HostWallId", out var hostId) || string.IsNullOrWhiteSpace(hostId)) continue;
-                var host = project.FindElement(hostId.Trim());
-                if (host == null)
-                    throw new InvalidOperationException("Opening " + element.Id + " references missing host " + hostId + ". Repair host linkage before source reconcile.");
-                result[host.Id] = host;
+                AddOpeningHost(project, element, result);
             }
+
+            var expanded = true;
+            while (expanded)
+            {
+                expanded = false;
+                foreach (var candidate in project.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (result.ContainsKey(candidate.Id)) continue;
+                    if (!candidate.DependsOn.Any(result.ContainsKey)) continue;
+                    result[candidate.Id] = candidate;
+                    AddOpeningHost(project, candidate, result);
+                    expanded = true;
+                }
+            }
+
             return result.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
+
+        private static void AddOpeningHost(ProjectState project, ProjectElement element, IDictionary<string, ProjectElement> result)
+        {
+            if (element.Category != ElementCategory.Door && element.Category != ElementCategory.WallOpening) return;
+            if (!element.Properties.TryGetValue("HostWallId", out var hostId) || string.IsNullOrWhiteSpace(hostId)) return;
+            var normalizedHostId = hostId.Trim();
+            var host = project.FindElement(normalizedHostId);
+            if (host == null)
+                throw new InvalidOperationException("Opening " + element.Id + " references missing host " + hostId + ". Repair host linkage before source reconcile.");
+            result[host.Id] = host;
+        }
+
+        private static int RegenerateAffectedToStable(ProjectState project, IReadOnlyList<ProjectElement> affected)
+        {
+            var affectedIds = new HashSet<string>(affected.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+            var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
+            var total = 0;
+
+            for (var pass = 0; pass < MaxStableRegenerationPasses; pass++)
+            {
+                var pending = project.Elements.Count(x => affectedIds.Contains(x.Id) && HasSemanticDirty(x));
+                if (pending == 0) return total;
+
+                var regenerated = engine.RegenerateDirty(project);
+                total += regenerated;
+
+                var remaining = project.Elements.Count(x => affectedIds.Contains(x.Id) && HasSemanticDirty(x));
+                if (remaining == 0) return total;
+                if (regenerated == 0)
+                    throw new InvalidOperationException("Source reconcile affected semantic closure could not regenerate to a stable state; " + remaining + " element(s) remain dirty.");
+            }
+
+            var unresolved = project.Elements
+                .Where(x => affectedIds.Contains(x.Id) && HasSemanticDirty(x))
+                .Select(x => x.Id)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (unresolved.Length > 0)
+                throw new InvalidOperationException("Source reconcile did not converge within " + MaxStableRegenerationPasses + " passes: " + string.Join(", ", unresolved) + ".");
+            return total;
+        }
+
+        private static bool HasSemanticDirty(ProjectElement element) =>
+            (element.Dirty & (ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity)) != ElementDirtyFlags.None;
 
         private static void RefreshSourceDerivedState(ProjectState project, ProjectElement element, EntitySnapshot snapshot, CadUnitPolicy units)
         {

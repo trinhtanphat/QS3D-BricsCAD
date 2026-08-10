@@ -15,7 +15,7 @@ The command captures selected BricsCAD `LINE` or `ARC` geometry as `ElementCateg
 - malformed/unsupported selection fails before semantic mutation;
 - capture reuses `SemanticCaptureService`, including generated-output rejection, collision checks and project-state rollback;
 - Grid uses the existing `GenericTakeoffRegenerator` and therefore carries semantic `LengthM` and `Count` quantities;
-- the original DWG entity remains the source of truth and keeps its stable CAD Handle provenance;
+- the original DWG entity remains the source of truth and keeps its stable drawing-local CAD Handle provenance;
 - the command does not create or claim native Grid 3D geometry.
 
 ## Product boundary
@@ -29,22 +29,38 @@ This is the first guarded Grid reference surface. It does **not** yet mean the f
 - Direct Draw Grid with transient jig/repeat authoring;
 - automatic snapping/hosting of structure to Grid intersections.
 
-Those features should build on the existing `ElementCategory.Grid` semantic model rather than adding a competing Grid store.
+Those features must extend the existing `ElementCategory.Grid` semantic model rather than adding a competing Grid store. Source-only agents may advance deterministic Core/reference semantics; real bubbles, DrawJig/editor interaction and native visualization remain subject to the V25 runtime boundary in `docs/REMOTE-AGENT-SCOPE.md`.
 
-## Floor / Level relation
+## Floor / Level relation — current source
 
-QS3D already has `FloorDefinition` with stable ID/name/elevation and element `FloorId`; do not introduce a duplicate `LevelDefinition` merely to resemble another product. Future top/bottom reference semantics should extend the current Floor model with an explicit migration and regeneration contract.
+QS3D reuses the existing `ProjectFloor` / `FloorDefinition` catalog as its Level model; do not introduce a duplicate `LevelDefinition` merely for product parity.
+
+Current Core now supports opt-in vertical references:
+
+- `BottomLevelId`
+- `BottomLevelOffsetM`
+- `TopLevelId`
+- `TopLevelOffsetM`
+
+`ProjectFloorService` owns Level reference assignment/lifecycle and `ElementVerticalPlacementService` defines the legacy-compatible bottom/top/effective-height resolution contract. `LevelReferenceHealthService` participates in Health All and Release Check.
+
+This semantic Level contract is **source-implemented**, but native host/opening/curtain/rebar placement and Floor/Level assignment UI are intentionally not exposed as complete until all dependent native systems consume the same resolver. That integration is parked as P0 LOCAL_ONLY/runtime-sensitive work in `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`.
+
+## Native source-edit relation
+
+If a tracked Grid `LINE`/`ARC` is edited with native BricsCAD tools, the authoritative-source reconcile path is `QS3DSYNCSOURCE`. The command refreshes tracked source-derived semantic state through the guarded source-reconcile contract; it does not turn Grid into generated native 3D geometry or imply grip/jig parity.
 
 ## Local V25 validation
 
-A local-capable agent should add Grid to the exact-SHA runtime matrix:
+A local-capable agent should include Grid in the exact-SHA runtime matrix:
 
 1. capture one LINE and one ARC;
 2. verify Grid semantic ownership and `LengthM`/`Count` after `QS3DREGEN`;
-3. save/reopen and verify source Handle provenance;
-4. select generated/unrelated QS3D output and verify it cannot be recaptured as Grid;
-5. select POLYLINE/Solid3d/text and verify the entire Grid operation fails before mutation;
-6. test millimeter and metre drawings;
-7. verify UI/selection sync and Locate behavior.
+3. edit/move a tracked Grid source and verify `QS3DSYNCSOURCE` preserves ownership while refreshing semantic state;
+4. save/reopen and verify drawing-local source Handle provenance;
+5. select generated/unrelated QS3D output and verify it cannot be recaptured as Grid;
+6. select POLYLINE/Solid3d/text and verify the entire Grid operation fails before mutation;
+7. test millimeter and metre drawings;
+8. verify UI/selection sync and Locate behavior.
 
-Until that runtime pass exists, describe `QS3DGRID` as source-implemented/statically guarded, not V25-runtime-certified.
+Until that runtime pass exists, describe `QS3DGRID` as `REMOTE_DONE` / source-implemented and statically guarded, not `LOCAL_PASS` or V25-runtime-certified.
