@@ -24,10 +24,10 @@ Door/Opening Direct Draw is now implemented as a separate guarded extension docu
 ### `QS3DDRAWWALLPIER` — Trụ Tường
 
 - Requires Model Space.
-- Accepts 2+ plan-view points as LINE/open POLYLINE source.
+- Accepts exactly a two-point **LINE** plan-view source in the current Direct Draw contract.
 - Prompts thickness, height and source-relative bottom offset with the same fail-closed Family numeric rule.
-- Captures `WallPier` semantic state and reuses guarded canonical `QS3DBUILD3D`, including the specialized WallPier dispatch where the current native source path supports it.
-- Does not broaden the specialized profile contract into arbitrary freeform geometry.
+- Captures `WallPier` semantic state and reuses guarded canonical `QS3DBUILD3D`; LINE dispatch goes through `WallPierProfileSolidBuilder` so current Rectangular/Chamfered profile semantics are preserved.
+- Direct Draw deliberately rejects arbitrary open-POLYLINE WallPier paths. A multi-segment path would need a separate deterministic profile/path/corner contract rather than silently falling back to generic wall-prism behavior.
 
 ### `QS3DDRAWSTRUCTWALL` — Vách BTCT
 
@@ -127,8 +127,9 @@ Legacy Capture/Bóc chọn and `QS3DBUILD3D` remain supported for drawings that 
 ## Static guards
 
 - `scripts/preflight-direct-draw.py` continues to own the current P0 and shared `QS3DBUILD3D` hardening contract.
-- `scripts/preflight-direct-draw-p1.py` guards the four native P1 commands, command uniqueness, Ribbon/Hub discoverability, Model-Space/unit-aware behavior, source-relative offsets, fail-closed Family numerics, canonical `SetProperty` writes, active-DWG revalidation, live-generated verification, ownership/XData-aware rollback ordering, finite persisted paths and non-destructive post-commit UI synchronization.
+- `scripts/preflight-direct-draw-p1.py` guards the four native P1 commands, command uniqueness, Ribbon/Hub discoverability, Model-Space/unit-aware behavior, source-relative offsets, fail-closed Family numerics, canonical `SetProperty` writes, active-DWG revalidation, live-generated verification, ownership/XData-aware rollback ordering, finite persisted paths, WallPier LINE-only authoring and non-destructive post-commit UI synchronization.
 - `scripts/preflight-direct-draw-openings.py` guards Door/Opening command uniqueness, Model-Space/unit-aware source creation, canonical `SetProperty` writes, fail-closed Family numerics, active-DWG checks, selection-scoped Auto Host, post-link regeneration, exact source cleanup before project restore, non-destructive UI sync, Ribbon/Hub wiring and the prohibition on implicit global physical cutting.
+- `scripts/preflight-auto-host-atomic.py` guards project-atomic application/regeneration of planned Auto Host links while preserving non-mutating ambiguity/unmatched review semantics.
 - `scripts/preflight-all.py` auto-discovers the feature gates.
 
 GitHub Actions remain manual-only. A `continue all` source/docs request does not authorize workflow dispatch.
@@ -143,7 +144,7 @@ Source implementation is not BricsCAD runtime proof. Before these commands are c
 4. cancel-at-each-prompt behavior with no orphan CAD/project state;
 5. source → semantic → native solid success for all four native P1 categories;
 6. GlassWall backing host followed by Curtain-frame workflow;
-7. WallPier LINE/open-POLYLINE compatibility and specialized-profile boundary;
+7. WallPier LINE Rectangular/Chamfered profile behavior plus explicit rejection of unsupported multi-segment Direct Draw paths;
 8. StructuralWall near-planar LINE tolerance and source-relative offset behavior;
 9. Foundation closed-POLYLINE extrusion, drawing-unit behavior and save/reopen;
 10. forced native-build failure followed by verified source/generated CAD cleanup and project rollback;
