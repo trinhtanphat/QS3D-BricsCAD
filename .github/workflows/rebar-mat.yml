@@ -19,6 +19,8 @@ jobs:
           dotnet-version: "8.0.x"
       - name: Rebar mat source guard
         run: python scripts/preflight-rebar-mat.py
+      - name: Session final source audit
+        run: python scripts/preflight-session-final-audit.py
       - name: Build Core
         run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
       - name: Run deterministic smoke tests
