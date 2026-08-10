@@ -30,6 +30,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 issues,
                 "GeneratedSemanticTagRuntimeHealthService",
                 () => GeneratedSemanticTagRuntimeHealthService.Inspect(document, project));
+            AddProviderSafely(
+                issues,
+                "GeneratedSemanticElementTableRuntimeHealthService",
+                () => GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project));
             return issues.AsReadOnly();
         }
 
