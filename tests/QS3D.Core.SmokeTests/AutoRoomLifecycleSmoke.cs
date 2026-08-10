@@ -71,7 +71,7 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject();
             var old = AutoRoom("OLD-CORRUPT", "A;B;C;D", project);
             project.Elements.Add(old);
-            project.Elements.Add(null);
+            project.Elements.Add(null!);
 
             Throws<InvalidOperationException>(() => AutoRoomLifecycle.MarkStaleForSelection(
                 project,

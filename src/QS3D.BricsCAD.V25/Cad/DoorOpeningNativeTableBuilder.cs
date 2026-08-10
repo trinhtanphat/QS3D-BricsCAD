@@ -52,8 +52,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         public static IReadOnlyList<ModelHealthIssue> Inspect(Document document, ProjectState project)
         {
-            return ProjectOwnedNativeTableArtifactService
-                .Inspect(document, project, Definition, () => BuildSnapshot(project))
+            return ProjectOwnedNativeTableArtifactService.Inspect(document, project, Definition, () => BuildSnapshot(project))
                 .Select(x => new ModelHealthIssue(
                     "DOOR_OPENING_" + x.Code,
                     x.Severity,
