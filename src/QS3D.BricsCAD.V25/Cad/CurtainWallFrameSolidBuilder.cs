@@ -176,11 +176,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 AuditTrail.ForProject(project).Record("geometry.curtain.frames", update.Element.Id,
                     update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " frame fragments • base=" + update.BaseFrameCount.ToString(CultureInfo.InvariantCulture) + " • openings=" + update.OpeningCount.ToString(CultureInfo.InvariantCulture));
             }
-            if (pending.Count > 0)
-            {
-                project.Touch();
-                document.Editor.Regen();
-            }
+            if (pending.Count > 0) project.Touch();
             return new CurtainFrameBuildResult { Elements = pending.Count, Frames = pending.Sum(x => x.Handles.Count) };
         }
 
