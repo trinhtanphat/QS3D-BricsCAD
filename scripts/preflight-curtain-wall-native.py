@@ -61,9 +61,8 @@ checks = {
         "CadGeometryGuard.Subtract", "CadGeometryGuard.Multiply", "CadGeometryGuard.Add", "CadGeometryGuard.Hypot",
     ],
     "owner": [
-        'GeneratedCurtainFrameHandles', 'GeneratedSolidHandle', 'PhysicalOpeningCutSolidHandle',
-        'GeneratedRebarHandles', 'GeneratedShapeRebarHandles', 'GeneratedTieRebarHandles',
-        'GeneratedBeamStirrupHandles', 'GeneratedSlabMeshHandles', 'GeneratedWallMeshHandles', 'GeneratedFoundationMeshHandles',
+        'GeneratedCurtainFrameHandles', 'CoreOwnershipPolicy.IsOwnerSlot(property.Key)',
+        'string.Equals(property.Key, HandlesKey, StringComparison.OrdinalIgnoreCase)', 'Refusing destructive erase',
     ],
     "invalidator": [
         'GeneratedCurtainFrameHandles', 'GeneratedCurtainFrameCount', 'GeneratedCurtainFrameBaseCount',
@@ -134,4 +133,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: GlassWall keeps its backing host and adds bounded, finite, selectable opening-aware curtain-frame overlays with deterministic fingerprint stale detection, relation/property stale propagation, Foundation-aware ownership health, complete invalidation metadata cleanup and UI/build command wiring. Curved frame overlay remains intentionally unsupported/runtime-gated.")
+print("PASS: GlassWall keeps its backing host and adds bounded, finite, selectable opening-aware curtain-frame overlays with deterministic fingerprint stale detection, relation/property stale propagation, policy-driven destructive ownership protection, Foundation-aware health, complete invalidation metadata cleanup and UI/build command wiring. Curved frame overlay remains intentionally unsupported/runtime-gated.")
