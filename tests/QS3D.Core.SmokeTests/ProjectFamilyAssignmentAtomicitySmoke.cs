@@ -1,5 +1,6 @@
 using System;
 using QS3D.Core.Domain;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -8,33 +9,26 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             DuplicatePreviousFamilyBlocksWholeAssignmentBatch();
+            DuplicatePreviousFamilyBlocksBulkEditBatch();
             CorruptProjectElementListBlocksPropertyPropagationBeforeMutation();
         }
 
         private static void DuplicatePreviousFamilyBlocksWholeAssignmentBatch()
         {
-            var project = new ProjectState("family-atomic", "Family atomicity");
-            var target = new ProjectFamily("TARGET", "Target", ElementCategory.Wall);
-            target.Properties["ThicknessM"] = "0.3";
-            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.Wall);
-            previous.Properties["ThicknessM"] = "0.2";
-            project.Families.Add(target);
-            project.Families.Add(previous);
-            project.Families.Add(new ProjectFamily("DUP", "Duplicate A", ElementCategory.Wall));
-            project.Families.Add(new ProjectFamily("dup", "Duplicate B", ElementCategory.Wall));
+            var setup = CreateDuplicatePreviousFamilyProject("family-atomic");
+            var beforeUpdated = setup.Project.UpdatedUtc;
 
-            var first = new ProjectElement("E1", ElementCategory.Wall, previous.Id, string.Empty, string.Empty);
-            first.Properties["ThicknessM"] = "0.2";
-            var second = new ProjectElement("E2", ElementCategory.Wall, "DUP", string.Empty, string.Empty);
-            project.Elements.Add(first);
-            project.Elements.Add(second);
-            var beforeUpdated = project.UpdatedUtc;
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(setup.Project, setup.Target.Id, new[] { setup.First, setup.Second }));
+            AssertUnchanged(setup, beforeUpdated, "ProjectFamilyService.Assign");
+        }
 
-            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(project, target.Id, new[] { first, second }));
-            Equal(previous.Id, first.FamilyId, "First element changed family before later duplicate-family validation failed.");
-            Equal("0.2", first.Properties["ThicknessM"], "First element inherited properties changed before whole batch validation completed.");
-            Equal("DUP", second.FamilyId, "Second element changed despite failed batch.");
-            if (project.UpdatedUtc != beforeUpdated) throw new Exception("Failed Family assignment touched project timestamp.");
+        private static void DuplicatePreviousFamilyBlocksBulkEditBatch()
+        {
+            var setup = CreateDuplicatePreviousFamilyProject("bulk-family-atomic");
+            var beforeUpdated = setup.Project.UpdatedUtc;
+
+            Throws<InvalidOperationException>(() => new BulkEditService().AssignFamily(setup.Project, new[] { setup.First.Id, setup.Second.Id }, setup.Target.Id));
+            AssertUnchanged(setup, beforeUpdated, "BulkEditService.AssignFamily");
         }
 
         private static void CorruptProjectElementListBlocksPropertyPropagationBeforeMutation()
@@ -49,6 +43,34 @@ namespace QS3D.Core.SmokeTests
             Equal("0.2", family.Properties["WidthM"], "Family property mutated before corrupt member list validation completed.");
         }
 
+        private static Setup CreateDuplicatePreviousFamilyProject(string id)
+        {
+            var project = new ProjectState(id, "Family atomicity");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.Wall);
+            target.Properties["ThicknessM"] = "0.3";
+            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.Wall);
+            previous.Properties["ThicknessM"] = "0.2";
+            project.Families.Add(target);
+            project.Families.Add(previous);
+            project.Families.Add(new ProjectFamily("DUP", "Duplicate A", ElementCategory.Wall));
+            project.Families.Add(new ProjectFamily("dup", "Duplicate B", ElementCategory.Wall));
+
+            var first = new ProjectElement("E1", ElementCategory.Wall, previous.Id, string.Empty, string.Empty);
+            first.Properties["ThicknessM"] = "0.2";
+            var second = new ProjectElement("E2", ElementCategory.Wall, "DUP", string.Empty, string.Empty);
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+            return new Setup(project, target, previous, first, second);
+        }
+
+        private static void AssertUnchanged(Setup setup, DateTime beforeUpdated, string operation)
+        {
+            Equal(setup.Previous.Id, setup.First.FamilyId, operation + " changed the first element before later duplicate-family validation failed.");
+            Equal("0.2", setup.First.Properties["ThicknessM"], operation + " changed inherited properties before whole-batch validation completed.");
+            Equal("DUP", setup.Second.FamilyId, operation + " changed the second element despite failed batch.");
+            if (setup.Project.UpdatedUtc != beforeUpdated) throw new Exception(operation + " touched project timestamp on a rejected batch.");
+        }
+
         private static void Equal(string expected, string actual, string message)
         {
             if (!string.Equals(expected, actual, StringComparison.Ordinal)) throw new Exception(message + " Expected " + expected + ", got " + actual + ".");
@@ -59,6 +81,24 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (T) { return; }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private sealed class Setup
+        {
+            public Setup(ProjectState project, ProjectFamily target, ProjectFamily previous, ProjectElement first, ProjectElement second)
+            {
+                Project = project;
+                Target = target;
+                Previous = previous;
+                First = first;
+                Second = second;
+            }
+
+            public ProjectState Project { get; }
+            public ProjectFamily Target { get; }
+            public ProjectFamily Previous { get; }
+            public ProjectElement First { get; }
+            public ProjectElement Second { get; }
         }
     }
 }
