@@ -80,6 +80,7 @@ namespace QS3D.Core.Export
         private const int MaxPropertyValueLength = 32768;
         private const int MaxSourceHandleLength = 128;
         private const int MaxDependenciesPerElement = 4096;
+        private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static ProjectInterchangeValidationResult ValidateFile(string path)
         {
@@ -88,7 +89,18 @@ namespace QS3D.Core.Export
             var info = new FileInfo(fullPath);
             if (!info.Exists) throw new FileNotFoundException("Semantic snapshot file does not exist.", fullPath);
             if (info.Length > MaxFileBytes) throw new InvalidDataException("Semantic snapshot exceeds the guarded " + MaxFileBytes.ToString(CultureInfo.InvariantCulture) + " byte limit.");
-            return Validate(File.ReadAllText(fullPath, Encoding.UTF8));
+
+            var bytes = File.ReadAllBytes(fullPath);
+            try
+            {
+                return Validate(StrictUtf8.GetString(bytes));
+            }
+            catch (DecoderFallbackException ex)
+            {
+                var issues = new IssueCollector();
+                issues.Error("JSON_UTF8", "Semantic snapshot is not valid UTF-8: " + ex.Message, "$.");
+                return Result(null, issues);
+            }
         }
 
         public static ProjectInterchangeValidationResult Validate(string json)
@@ -130,6 +142,10 @@ namespace QS3D.Core.Export
 
             ValidateHeader(snapshot, issues);
             ValidateProject(snapshot.Project, issues);
+            RequireCollection(snapshot.Zones, "zones", issues);
+            RequireCollection(snapshot.Floors, "floors", issues);
+            RequireCollection(snapshot.Families, "families", issues);
+            RequireCollection(snapshot.Elements, "elements", issues);
 
             var zones = snapshot.Zones ?? new List<ZoneContract>();
             var floors = snapshot.Floors ?? new List<FloorContract>();
@@ -187,11 +203,17 @@ namespace QS3D.Core.Export
                 return;
             }
             ValidateId(project.Id, "$.project.id", issues);
-            ValidateOptionalString(project.Name, MaxNameLength, "PROJECT_NAME_TOO_LONG", "$.project.name", issues);
+            ValidateRequiredString(project.Name, MaxNameLength, "PROJECT_NAME_EMPTY", "PROJECT_NAME_TOO_LONG", "$.project.name", issues);
             if (project.SchemaVersion <= 0)
                 issues.Error("PROJECT_SCHEMA", "Project schemaVersion must be positive.", "$.project.schemaVersion");
             ValidateOptionalString(project.DrawingFingerprint, MaxNameLength, "PROJECT_FINGERPRINT_TOO_LONG", "$.project.drawingFingerprint", issues);
             ValidateTimestamp(project.UpdatedUtc, "$.project.updatedUtc", issues);
+        }
+
+        private static void RequireCollection<T>(IReadOnlyList<T>? collection, string name, IssueCollector issues)
+        {
+            if (collection == null)
+                issues.Error("COLLECTION_MISSING", "Semantic snapshot collection is required: " + name + ".", "$." + name);
         }
 
         private static void ValidateCounts(int zones, int floors, int families, int elements, IssueCollector issues)
@@ -212,7 +234,7 @@ namespace QS3D.Core.Export
                 var itemPath = "$." + path + "[" + index.ToString(CultureInfo.InvariantCulture) + "]";
                 var id = NormalizeId(definition.Id, itemPath + ".id", issues);
                 if (id.Length > 0 && !ids.Add(id)) issues.Error("ID_DUPLICATE", "Duplicate id: " + id, itemPath + ".id");
-                ValidateOptionalString(definition.Name, MaxNameLength, "NAME_TOO_LONG", itemPath + ".name", issues);
+                ValidateRequiredString(definition.Name, MaxNameLength, "NAME_EMPTY", "NAME_TOO_LONG", itemPath + ".name", issues);
                 index++;
             }
             return ids;
@@ -232,7 +254,7 @@ namespace QS3D.Core.Export
                 }
                 var id = NormalizeId(floor.Id, path + ".id", issues);
                 if (id.Length > 0 && !ids.Add(id)) issues.Error("ID_DUPLICATE", "Duplicate floor id: " + id, path + ".id");
-                ValidateOptionalString(floor.Name, MaxNameLength, "NAME_TOO_LONG", path + ".name", issues);
+                ValidateRequiredString(floor.Name, MaxNameLength, "NAME_EMPTY", "NAME_TOO_LONG", path + ".name", issues);
                 if (!Finite(floor.ElevationM)) issues.Error("FLOOR_ELEVATION", "Floor elevationM must be finite.", path + ".elevationM");
             }
             return ids;
@@ -256,8 +278,9 @@ namespace QS3D.Core.Export
                     if (index.ContainsKey(id)) issues.Error("ID_DUPLICATE", "Duplicate Family id: " + id, path + ".id");
                     else index[id] = family;
                 }
-                ValidateOptionalString(family.Name, MaxNameLength, "NAME_TOO_LONG", path + ".name", issues);
+                ValidateRequiredString(family.Name, MaxNameLength, "NAME_EMPTY", "NAME_TOO_LONG", path + ".name", issues);
                 if (!TryCategory(family.Category, out _)) issues.Error("FAMILY_CATEGORY", "Unknown Family category: " + (family.Category ?? string.Empty), path + ".category");
+                if (family.Properties == null) issues.Error("PROPERTIES_MISSING", "Family properties object is required, even when empty.", path + ".properties");
                 ValidateProperties(family.Properties, path + ".properties", issues);
             }
             return index;
@@ -308,6 +331,10 @@ namespace QS3D.Core.Export
                 if (!string.Equals((element.SourceRefScope ?? string.Empty).Trim(), "drawing-local", StringComparison.Ordinal))
                     issues.Error("SOURCE_SCOPE", "sourceRefScope must be exactly 'drawing-local'; source handles are provenance only and are not import authority.", path + ".sourceRefScope");
 
+                if (element.SourceHandles == null) issues.Error("SOURCE_HANDLES_MISSING", "sourceHandles array is required, even when empty.", path + ".sourceHandles");
+                if (element.Dependencies == null) issues.Error("DEPENDENCIES_MISSING", "dependencies array is required, even when empty.", path + ".dependencies");
+                if (element.Properties == null) issues.Error("PROPERTIES_MISSING", "properties object is required, even when empty.", path + ".properties");
+                if (element.Quantities == null) issues.Error("QUANTITIES_MISSING", "quantities object is required, even when empty.", path + ".quantities");
                 ValidateSourceHandles(element.SourceHandles, path + ".sourceHandles", issues);
                 ValidateProperties(element.Properties, path + ".properties", issues);
                 ValidateQuantities(element.Quantities, path + ".quantities", issues);
@@ -476,6 +503,13 @@ namespace QS3D.Core.Export
         private static void ValidateId(string? value, string path, IssueCollector issues)
         {
             NormalizeId(value, path, issues);
+        }
+
+        private static void ValidateRequiredString(string? value, int maxLength, string emptyCode, string tooLongCode, string path, IssueCollector issues)
+        {
+            var raw = value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(raw)) issues.Error(emptyCode, "Value is required.", path);
+            if (raw.Length > maxLength) issues.Error(tooLongCode, "Value exceeds " + maxLength.ToString(CultureInfo.InvariantCulture) + " characters.", path);
         }
 
         private static void ValidateOptionalString(string? value, int maxLength, string code, string path, IssueCollector issues)
