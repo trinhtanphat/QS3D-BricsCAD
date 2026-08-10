@@ -425,6 +425,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
         private static bool IsBooleanProperty(string key, string? current)
         {
+            if (IsNumericProperty(key)) return false;
             if (TryBoolean(current ?? string.Empty, out _)) return true;
             if (string.IsNullOrWhiteSpace(key)) return false;
             return key.StartsWith("Is", StringComparison.OrdinalIgnoreCase) ||
