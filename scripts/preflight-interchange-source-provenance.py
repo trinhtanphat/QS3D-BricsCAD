@@ -32,6 +32,7 @@ if not errors:
         "target.Metadata[sourcePrefix + ProjectRecordSuffix]",
         "target.Metadata[sourcePrefix + ElementRecordSegment + Token(element.Id)]",
         "No imported handle was assigned to target DWG ownership",
+        "ToUpperInvariant()",
         "target.Touch();",
     ]
     for needle in required_store:
@@ -88,4 +89,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-source-provenance: PASS")
-print("Imported source handles are stored only as project provenance metadata; they cannot become target DWG source/generated ownership and are not re-exported by SemanticSnapshot v1.")
+print("Imported source handles are stored only as project provenance metadata; identity lookup is case-stable, they cannot become target DWG source/generated ownership, and they are not re-exported by SemanticSnapshot v1.")
