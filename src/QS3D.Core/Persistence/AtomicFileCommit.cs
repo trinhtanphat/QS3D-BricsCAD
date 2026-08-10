@@ -56,7 +56,7 @@ namespace QS3D.Core.Persistence
             }
         }
 
-        public static void TryDelete(string path)
+        public static void TryDelete(string? path)
         {
             try { if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) File.Delete(path); }
             catch (IOException) { }
