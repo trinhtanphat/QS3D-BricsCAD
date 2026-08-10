@@ -74,6 +74,15 @@ namespace QS3D.BricsCAD.V25.Cad
                 Remove(element, "GeneratedWallMeshHorizontalActualSpacingM");
                 Remove(element, "GeneratedWallMeshVerticalActualSpacingM");
                 Remove(element, "GeneratedWallMeshFaces");
+
+                Remove(element, "GeneratedCurtainFrameHandles");
+                Remove(element, "GeneratedCurtainFrameCount");
+                Remove(element, "GeneratedCurtainFrameColumns");
+                Remove(element, "GeneratedCurtainFrameRows");
+                Remove(element, "GeneratedCurtainFrameDepthM");
+                Remove(element, "GeneratedCurtainFrameSourceLengthM");
+                Remove(element, "GeneratedCurtainFrameHeightM");
+                Remove(element, "GeneratedCurtainFrameMode");
                 element.ClearGeneratedGeometryStale();
             }
         }
@@ -115,12 +124,15 @@ namespace QS3D.BricsCAD.V25.Cad
             if (targets.Count == 0) return new GeneratedGeometryInvalidation(targets);
 
             var needsRebarOwnership = targets.Any(HasGeneratedRebar);
-            var ownership = needsRebarOwnership ? GeneratedRebarOwnershipGuard.Build(project) : null;
+            var rebarOwnership = needsRebarOwnership ? GeneratedRebarOwnershipGuard.Build(project) : null;
+            var needsCurtainOwnership = targets.Any(HasCurtainFrames);
+            var curtainOwnership = needsCurtainOwnership ? GeneratedCurtainFrameOwnershipGuard.Build(project) : null;
             foreach (var element in targets)
             {
                 GeneratedGeometryService.PrepareReplacement(document, transaction, element);
-                if (ownership == null) continue;
-                foreach (var key in RebarHandleKeys) EraseRebarSet(document, transaction, element, key, ownership);
+                if (rebarOwnership != null)
+                    foreach (var key in RebarHandleKeys) EraseRebarSet(document, transaction, element, key, rebarOwnership);
+                if (curtainOwnership != null) EraseCurtainFrames(document, transaction, element, curtainOwnership);
             }
             return new GeneratedGeometryInvalidation(targets);
         }
@@ -132,27 +144,39 @@ namespace QS3D.BricsCAD.V25.Cad
             return false;
         }
 
-        private static void EraseRebarSet(
-            Document document,
-            Transaction transaction,
-            ProjectElement element,
-            string propertyKey,
-            GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
+        private static bool HasCurtainFrames(ProjectElement element) =>
+            element.Properties.TryGetValue("GeneratedCurtainFrameHandles", out var raw) && !string.IsNullOrWhiteSpace(raw);
+
+        private static void EraseRebarSet(Document document, Transaction transaction, ProjectElement element, string propertyKey, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(propertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in SplitHandles(raw))
             {
                 ownership.EnsureOwned(handle, element, propertyKey);
-                var ids = CadHandleService.Resolve(document, new[] { handle });
-                if (ids.Count == 0) continue;
-                if (ids.Count > 1) throw new InvalidOperationException("Generated geometry handle " + handle + " resolves to multiple live CAD objects.");
-                var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
-                if (entity == null || entity.IsErased) continue;
-                var solid = entity as Solid3d;
-                if (solid == null)
-                    throw new InvalidOperationException("Generated " + propertyKey + " handle " + handle + " is live but is not a Solid3d. Refusing destructive invalidation.");
-                solid.Erase();
+                EraseSolid(document, transaction, handle, propertyKey);
             }
+        }
+
+        private static void EraseCurtainFrames(Document document, Transaction transaction, ProjectElement element, GeneratedCurtainFrameOwnershipGuard.OwnershipIndex ownership)
+        {
+            if (!element.Properties.TryGetValue("GeneratedCurtainFrameHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            foreach (var handle in SplitHandles(raw))
+            {
+                ownership.EnsureOwned(handle, element);
+                EraseSolid(document, transaction, handle, "GeneratedCurtainFrameHandles");
+            }
+        }
+
+        private static void EraseSolid(Document document, Transaction transaction, string handle, string propertyKey)
+        {
+            var ids = CadHandleService.Resolve(document, new[] { handle });
+            if (ids.Count == 0) return;
+            if (ids.Count > 1) throw new InvalidOperationException("Generated geometry handle " + handle + " resolves to multiple live CAD objects.");
+            var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
+            if (entity == null || entity.IsErased) return;
+            var solid = entity as Solid3d;
+            if (solid == null) throw new InvalidOperationException("Generated " + propertyKey + " handle " + handle + " is live but is not a Solid3d. Refusing destructive invalidation.");
+            solid.Erase();
         }
 
         private static IEnumerable<string> SplitHandles(string raw) =>
