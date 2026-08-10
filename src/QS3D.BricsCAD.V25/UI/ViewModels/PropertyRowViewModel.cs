@@ -64,7 +64,10 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         {
             var text = (value ?? string.Empty).Trim();
             if (bool.TryParse(text, out var parsed)) return parsed;
-            return text == "1" || text.Equals("yes", StringComparison.OrdinalIgnoreCase) || text.Equals("on", StringComparison.OrdinalIgnoreCase);
+            return text == "1" ||
+                   text.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+                   text.Equals("on", StringComparison.OrdinalIgnoreCase) ||
+                   text.Equals("bật", StringComparison.CurrentCultureIgnoreCase);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
