@@ -16,6 +16,8 @@ jobs:
           python-version: "3.12"
       - name: Generic source guard
         run: python scripts/preflight.py
+      - name: Full-domain and release source guard
+        run: python scripts/preflight-full-domain.py
       - name: All discovered feature source guards
         run: python scripts/preflight-all.py
       - name: Validate release PowerShell syntax
