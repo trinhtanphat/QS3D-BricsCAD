@@ -48,9 +48,41 @@ namespace QS3D.BricsCAD.V25.Cad
                 transaction.Commit();
             }
 
-            issues.AddRange(GeneratedGridAnnotationRuntimeHealthService.Inspect(document, project));
-            issues.AddRange(GeneratedSemanticTagRuntimeHealthService.Inspect(document, project));
+            AddProviderSafely(
+                issues,
+                "GeneratedGridAnnotationRuntimeHealthService",
+                () => GeneratedGridAnnotationRuntimeHealthService.Inspect(document, project));
+            AddProviderSafely(
+                issues,
+                "GeneratedSemanticTagRuntimeHealthService",
+                () => GeneratedSemanticTagRuntimeHealthService.Inspect(document, project));
             return issues.AsReadOnly();
+        }
+
+        private static void AddProviderSafely(
+            ICollection<ModelHealthIssue> target,
+            string providerName,
+            Func<IReadOnlyList<ModelHealthIssue>> provider)
+        {
+            try
+            {
+                foreach (var issue in provider())
+                    if (issue != null) target.Add(issue);
+            }
+            catch (System.Exception ex) when (IsRecoverableDiagnosticFailure(ex))
+            {
+                target.Add(new ModelHealthIssue(
+                    "RUNTIME_HEALTH_PROVIDER_FAILED",
+                    HealthSeverity.Error,
+                    providerName + " không thể hoàn tất native diagnostic: " + ex.Message));
+            }
+        }
+
+        private static bool IsRecoverableDiagnosticFailure(System.Exception exception)
+        {
+            return !(exception is OutOfMemoryException) &&
+                   !(exception is StackOverflowException) &&
+                   !(exception is AccessViolationException);
         }
     }
 }
