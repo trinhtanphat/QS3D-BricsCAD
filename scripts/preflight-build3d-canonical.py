@@ -17,6 +17,23 @@ expected = "src/QS3D.BricsCAD.V25/Build3DCommands.cs"
 if owners != [expected]:
     errors.append("QS3DBUILD3D must have exactly one canonical registration in Build3DCommands.cs; found: " + ", ".join(owners))
 
+capability = SRC / "Cad/NativeBuildCapability.cs"
+if not capability.is_file():
+    errors.append("missing centralized native build capability: src/QS3D.BricsCAD.V25/Cad/NativeBuildCapability.cs")
+else:
+    capability_text = capability.read_text(encoding="utf-8")
+    for token in (
+        "internal static class NativeBuildCapability",
+        "Supports(ElementCategory category)",
+        "IsWallCategory(ElementCategory category)",
+        "StructuralSolidBuilder.Supports(category)",
+        "ElementCategory.ArchitecturalWall",
+        "ElementCategory.GlassWall",
+        "ElementCategory.WallPier",
+    ):
+        if token not in capability_text:
+            errors.append("NativeBuildCapability missing contract: " + token)
+
 build = ROOT / expected
 if not build.is_file():
     errors.append("missing canonical Build3DCommands.cs")
@@ -24,6 +41,8 @@ else:
     text = build.read_text(encoding="utf-8")
     required = (
         "SemanticReferenceHandles.MatchesSelection(x, handles)",
+        "NativeBuildCapability.Supports(x.Category)",
+        "NativeBuildCapability.IsWallCategory(category)",
         "ValidateWallSourceBatch(selectedElements, sourceSnapshots, category",
         "RegenerateDirty(project)",
         "BuildCategory(document, project, category, sourceType)",
@@ -41,13 +60,24 @@ else:
         if token not in text:
             errors.append("canonical Build3D missing contract: " + token)
 
-    body = text[text.find("private static int BuildCategory"):text.find("private static void FinalizeUi")]
-    if "CurtainWallFrameSolidBuilder" in body or "CurtainWallPathFrameSolidBuilder" in body:
-        errors.append("canonical host Build3D must not append curtain detail transactions without a shared rollback contract; use QS3DCURTAIN3D for frame overlays")
+    if re.search(r"private\s+static\s+bool\s+IsNativeBuildCategory\s*\(", text):
+        errors.append("Build3DCommands must not duplicate NativeBuildCapability.Supports")
+    if re.search(r"private\s+static\s+bool\s+IsWallCategory\s*\(", text):
+        errors.append("Build3DCommands must not duplicate NativeBuildCapability.IsWallCategory")
 
-    finalize = text[text.find("private static void FinalizeUi"):text.find("private static bool IsWallCategory")]
-    if "catch (Exception ex)" not in finalize or "TryWriteMessage" not in finalize:
-        errors.append("post-commit Build3D UI synchronization must be non-fatal and best-effort")
+    body_start = text.find("private static int BuildCategory")
+    finalize_start = text.find("private static void FinalizeUi")
+    if body_start < 0 or finalize_start < 0 or finalize_start <= body_start:
+        errors.append("canonical Build3D dispatch/finalize boundaries are missing or out of order")
+    else:
+        body = text[body_start:finalize_start]
+        if "CurtainWallFrameSolidBuilder" in body or "CurtainWallPathFrameSolidBuilder" in body:
+            errors.append("canonical host Build3D must not append curtain detail transactions without a shared rollback contract; use QS3DCURTAIN3D for frame overlays")
+
+        report_start = text.find("private static void Report", finalize_start)
+        finalize = text[finalize_start:report_start if report_start > finalize_start else len(text)]
+        if "catch (Exception ex)" not in finalize or "TryWriteMessage" not in finalize:
+            errors.append("post-commit Build3D UI synchronization must be non-fatal and best-effort")
 
 review = SRC / "ReviewCommands.cs"
 if review.is_file() and 'CommandMethod("QS3DBUILD3D"' in review.read_text(encoding="utf-8"):
@@ -60,4 +90,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DBUILD3D has one canonical owner, validates one wall source type, dispatches WallPier deterministically and keeps post-commit UI failures non-fatal.")
+print("PASS: QS3DBUILD3D has one canonical owner, consumes centralized native category capability, validates one wall source type, dispatches WallPier deterministically and keeps post-commit UI failures non-fatal.")
