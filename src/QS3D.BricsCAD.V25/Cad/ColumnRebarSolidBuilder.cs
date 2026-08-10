@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
             var pending = new List<PendingUpdate>();
             var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ownership = GeneratedRebarOwnershipGuard.Build(project);
             var totalBars = 0;
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
@@ -113,7 +114,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     var centerY = (p0.Y + p1.Y + p2.Y + p3.Y) / 4d;
                     var baseZ = CadGeometryGuard.Add(polyline.Elevation, bottom, element.Id + "/rebar base Z");
 
-                    ErasePrevious(document, transaction, element);
+                    ErasePrevious(document, transaction, element, ownership);
                     var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, CoverM = coverM };
                     foreach (var local in layout.BarCenters)
                     {
@@ -188,18 +189,19 @@ namespace QS3D.BricsCAD.V25.Cad
             return value;
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue("GeneratedRebarHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                ownership.EnsureOwned(handle, element, "GeneratedRebarHandles");
                 var ids = CadHandleService.Resolve(document, new[] { handle });
                 if (ids.Count == 0) continue;
                 if (ids.Count > 1) throw new InvalidOperationException("Generated rebar handle " + handle + " resolves to multiple live CAD objects.");
                 var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
                 if (entity == null || entity.IsErased) continue;
                 var solid = entity as Solid3d;
-                if (solid == null) throw new InvalidOperationException("Generated rebar handle " + handle + " is live but is not a Solid3d. Refusing to orphan or overwrite rebar ownership.");
+                if (solid == null) throw new InvalidOperationException("Generated rebar handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
                 solid.Erase();
             }
         }
