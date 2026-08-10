@@ -64,11 +64,14 @@ checks = {
         'Click="OnApplyClick"',
     ],
     "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs": [
+        "private readonly Document _document",
+        "MaterialCatalogWindow(Document document)",
         "_document = document",
-        "ReferenceEquals",
+        "ProjectContextCoordinator.GetOrCreate(_document)",
+        "ReferenceEquals(",
+        "SemanticSelectionResolver.ResolveImplied(_document, project)",
         "ProjectMaterialCatalog.UpsertCustom",
         "ProjectMaterialCatalog.DeleteCustom",
-        "SemanticSelectionResolver.ResolveImplied",
         'element.SetProperty(target, material.Name)',
         '"CurtainFrameMaterial"',
         "ElementCategory.GlassWall",
@@ -89,7 +92,12 @@ checks = {
         "KHÔNG tự Move/Translate source CAD",
     ],
     "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs": [
-        "SemanticSelectionResolver.ResolveImplied",
+        "private readonly Document _document",
+        "FloorLevelWindow(Document document)",
+        "ProjectContextCoordinator.GetOrCreate(_document)",
+        "EnsureBoundDrawingIsActive",
+        "ReferenceEquals(",
+        "SemanticSelectionResolver.ResolveImplied(_document, project)",
         "project.ActiveFloorId = floor.Id",
         "element.FloorId = floor.Id",
         "element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity)",
@@ -98,7 +106,7 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/FloorLevelCommands.cs": [
         'CommandMethod("QS3DLEVELS"',
-        "new FloorLevelWindow()",
+        "new FloorLevelWindow(document)",
         "ShowModelessWindow",
     ],
     "tests/QS3D.Core.SmokeTests/ProjectMaterialCatalogSmoke.cs": [
@@ -125,6 +133,17 @@ for relative, needles in checks.items():
         if needle not in text:
             errors.append(relative + " missing material/floor guard/token: " + needle)
 
+# Modeless project editors must be document-bound rather than resolving MDI document on every click.
+for relative in (
+    "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs",
+    "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs",
+):
+    path = ROOT / relative
+    if path.is_file():
+        text = path.read_text(encoding="utf-8")
+        if "var document = Application.DocumentManager.MdiActiveDocument" in text:
+            errors.append(relative + " must not switch project ownership through MdiActiveDocument inside modeless event handlers")
+
 commands = []
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
 if adapter.is_dir():
@@ -140,4 +159,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: persisted material catalog, inherited/reference-safe rename+delete, ownership-safe semantic selection, material assignment and semantic floor/active-level pickers are present.")
+print("PASS: persisted material catalog, inherited/reference-safe rename+delete, ownership-safe semantic selection, and document-bound material/floor modeless pickers are present.")

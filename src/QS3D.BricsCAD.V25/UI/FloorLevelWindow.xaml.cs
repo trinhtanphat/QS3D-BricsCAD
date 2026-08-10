@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -11,10 +12,12 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class FloorLevelWindow : Window
     {
+        private readonly Document _document;
         private bool _loading;
 
-        public FloorLevelWindow()
+        public FloorLevelWindow(Document document)
         {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             InitializeComponent();
             Loaded += (_, __) => RefreshAll();
         }
@@ -29,11 +32,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnActivateClick(object sender, RoutedEventArgs e)
         {
-            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var floor = RequireSelectedFloor(project);
                 if (!string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
                 {
@@ -50,13 +51,12 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnAssignClick(object sender, RoutedEventArgs e)
         {
-            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                EnsureBoundDrawingIsActive("gán tầng cho selection");
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var floor = RequireSelectedFloor(project);
-                var elements = SemanticSelectionResolver.ResolveImplied(document, project).ToList();
+                var elements = SemanticSelectionResolver.ResolveImplied(_document, project).ToList();
                 if (elements.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
 
                 var changed = 0;
@@ -83,12 +83,11 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnInspectSelectionClick(object sender, RoutedEventArgs e)
         {
-            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var elements = SemanticSelectionResolver.ResolveImplied(document, project).ToList();
+                EnsureBoundDrawingIsActive("kiểm tra selection");
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var elements = SemanticSelectionResolver.ResolveImplied(_document, project).ToList();
                 SelectionCountText.Text = elements.Count.ToString(CultureInfo.InvariantCulture);
                 var floors = elements
                     .GroupBy(x => x.FloorId ?? string.Empty, StringComparer.OrdinalIgnoreCase)
@@ -101,11 +100,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshAll(string selectedFloorId = "")
         {
-            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var previous = string.IsNullOrWhiteSpace(selectedFloorId)
                     ? (FloorList.SelectedItem as FloorDefinition)?.Id
                     : selectedFloorId;
@@ -123,6 +120,7 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 finally { _loading = false; }
                 RefreshLabels();
+                Title = "QS3D • Level Picker • " + DrawingLabel(_document);
                 if (floors.Count == 0) SetStatus("Project chưa có tầng. Tạo tầng trong Project Setup trước khi dùng Level Picker.");
             }
             catch (System.Exception ex) { SetStatus("Đọc Floor/Level lỗi: " + ex.Message); }
@@ -138,24 +136,41 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshLabels()
         {
-            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var project = ProjectContextCoordinator.GetOrCreate(_document);
             var active = project.Floors.FirstOrDefault(x => string.Equals(x.Id, project.ActiveFloorId, StringComparison.OrdinalIgnoreCase));
             var selected = FloorList.SelectedItem as FloorDefinition;
             ActiveFloorText.Text = active == null ? "—" : active.Name + " • " + active.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m";
             SelectedFloorText.Text = selected == null ? "—" : selected.Name + " • " + selected.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m";
+            if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
+            {
+                SelectionCountText.Text = "—";
+                return;
+            }
             try
             {
-                SelectionCountText.Text = SemanticSelectionResolver.ResolveImplied(document, project).Count.ToString(CultureInfo.InvariantCulture);
+                SelectionCountText.Text = SemanticSelectionResolver.ResolveImplied(_document, project).Count.ToString(CultureInfo.InvariantCulture);
             }
             catch { SelectionCountText.Text = "!"; }
+        }
+
+        private void EnsureBoundDrawingIsActive(string operation)
+        {
+            if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
+                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Level Picker trước khi " + operation + ".");
         }
 
         private static string FloorLabel(ProjectState project, string floorId)
         {
             var floor = project.Floors.FirstOrDefault(x => string.Equals(x.Id, floorId ?? string.Empty, StringComparison.OrdinalIgnoreCase));
             return floor == null ? (string.IsNullOrWhiteSpace(floorId) ? "Chưa gán" : floorId) : floor.Name;
+        }
+
+        private static string DrawingLabel(Document document)
+        {
+            var name = document.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
+            try { return System.IO.Path.GetFileName(name); }
+            catch { return name; }
         }
 
         private void SetStatus(string text)
