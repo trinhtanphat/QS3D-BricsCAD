@@ -27,6 +27,7 @@ namespace QS3D.Core.Persistence
             var backupPath = fullPath + ".bak";
             var previousSchemaVersion = project.SchemaVersion;
             var previousUpdatedUtc = project.UpdatedUtc;
+            var previousChangeVersion = project.ChangeVersion;
             var committed = false;
 
             try
@@ -44,7 +45,7 @@ namespace QS3D.Core.Persistence
                 if (!committed)
                 {
                     project.SchemaVersion = previousSchemaVersion;
-                    project.UpdatedUtc = previousUpdatedUtc;
+                    project.RestorePersistenceState(previousUpdatedUtc, previousChangeVersion);
                 }
                 AtomicFileCommit.TryDelete(tempPath);
             }
