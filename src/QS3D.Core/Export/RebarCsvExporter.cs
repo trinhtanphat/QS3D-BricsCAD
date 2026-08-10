@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 
 namespace QS3D.Core.Export
@@ -12,10 +13,26 @@ namespace QS3D.Core.Export
         public static void Export(string path, IEnumerable<RebarScheduleRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path is required.", nameof(path));
+            var content = ToCsv(rows);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-            File.WriteAllText(fullPath, ToCsv(rows), new UTF8Encoding(true));
+            var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
+            try
+            {
+                using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (var writer = new StreamWriter(stream, new UTF8Encoding(true)))
+                {
+                    writer.Write(content);
+                    writer.Flush();
+                    stream.Flush(true);
+                }
+                AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
+            }
+            finally
+            {
+                AtomicFileCommit.TryDelete(tempPath);
+            }
         }
 
         public static string ToCsv(IEnumerable<RebarScheduleRow> rows)
@@ -25,7 +42,7 @@ namespace QS3D.Core.Export
             sb.AppendLine("ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg");
             foreach (var row in rows)
             {
-                if (row == null) throw new ArgumentException("BBS row cannot be null.", nameof(rows));
+                ValidateRow(row ?? throw new ArgumentException("BBS row cannot be null.", nameof(rows)));
                 sb.Append(Q(row.ElementId)).Append(',')
                     .Append(Q(row.BarMark)).Append(',')
                     .Append(Q(row.ShapeCode)).Append(',')
@@ -42,11 +59,29 @@ namespace QS3D.Core.Export
             return sb.ToString();
         }
 
-        private static string F(double value)
+        private static void ValidateRow(RebarScheduleRow row)
         {
-            if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value));
-            return value.ToString("0.######", CultureInfo.InvariantCulture);
+            if (row.Quantity <= 0) throw new ArgumentOutOfRangeException(nameof(row.Quantity), "BBS quantity must be greater than zero.");
+            Positive(row.DiameterMm, nameof(row.DiameterMm));
+            Positive(row.CuttingLengthM, nameof(row.CuttingLengthM));
+            Positive(row.TotalLengthM, nameof(row.TotalLengthM));
+            Positive(row.UnitWeightKgM, nameof(row.UnitWeightKgM));
+            NonNegative(row.NetWeightKg, nameof(row.NetWeightKg));
+            NonNegative(row.WastePercent, nameof(row.WastePercent));
+            NonNegative(row.TotalWeightKg, nameof(row.TotalWeightKg));
         }
+
+        private static void Positive(double value, string name)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0d) throw new ArgumentOutOfRangeException(name, "BBS CSV numeric value must be finite and greater than zero.");
+        }
+
+        private static void NonNegative(double value, string name)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) throw new ArgumentOutOfRangeException(name, "BBS CSV numeric value must be finite and non-negative.");
+        }
+
+        private static string F(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
         private static string Q(string value)
         {
