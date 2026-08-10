@@ -16,6 +16,7 @@ files = {
     "door_schedule": UI / "DoorOpeningScheduleWindow.xaml.cs",
     "room_schedule": UI / "RoomFinishScheduleWindow.xaml.cs",
     "domain_hub": UI / "DomainHubWindow.xaml.cs",
+    "rebar_hub": UI / "Rebar3DHubWindow.xaml.cs",
     "commands": ADAPTER / "Commands.cs",
     "review": ADAPTER / "ReviewCommands.cs",
     "families": ADAPTER / "FamilyManagerCommands.cs",
@@ -89,12 +90,20 @@ if not errors:
         if "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
             errors.append(key + " launcher must show the same registered window instance")
 
-    # DomainHub is intentionally an active-document command launcher, not a source-DWG-bound editor.
-    # Binding it to the document that happened to be active when the hub opened would break intended multi-DWG UX.
-    if "Application.DocumentManager.MdiActiveDocument" not in text["domain_hub"]:
-        errors.append("DomainHub must continue resolving the active DWG at command-click time")
-    if "DocumentBoundWindowLifetime.Attach" in text["domain_hub"] or "private readonly Document _document" in text["domain_hub"]:
-        errors.append("DomainHub must remain active-document dynamic, not source-DWG-bound")
+    # These command hubs are intentionally active-document dynamic. Binding either hub to the
+    # document that happened to be active when the hub opened would break intended multi-DWG UX.
+    dynamic_hubs = {
+        "domain_hub": "DomainHub",
+        "rebar_hub": "Rebar3DHub",
+    }
+    for key, label in dynamic_hubs.items():
+        source = text[key]
+        if "MdiActiveDocument" not in source:
+            errors.append(label + " must continue resolving the active DWG at command-click time")
+        if "DocumentBoundWindowLifetime.Attach" in source:
+            errors.append(label + " must remain active-document dynamic, not source-DWG-bound")
+        if "private readonly Document _document" in source or "private Document _document" in source:
+            errors.append(label + " must not retain a source Document across DWG switches")
 
 print("QS3D document-bound modeless lifetime preflight")
 if errors:
@@ -103,4 +112,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: document-bound review/health/BQ/BBS/schedule/manager/hub windows close with their source DWG, while the intentionally active-document Domain Hub remains dynamic across DWGs.")
+print("PASS: document-bound review/health/BQ/BBS/schedule/manager/hub windows close with their source DWG, while Domain Hub and Rebar 3D Hub remain intentionally active-document dynamic across DWGs.")
