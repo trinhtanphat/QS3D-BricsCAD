@@ -8,6 +8,7 @@ errors = []
 
 command = ROOT / "src/QS3D.BricsCAD.V25/HealthAllCommands.cs"
 services = [
+    ROOT / "src/QS3D.Core/Diagnostics/RoomFinishHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedGeometryStaleHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedTieRebarHealthService.cs",
@@ -35,6 +36,7 @@ if command.is_file():
     for needle in (
         'CommandMethod("QS3DHEALTHALL"',
         "new ModelHealthService().Inspect",
+        "new RoomFinishHealthService().Inspect(project)",
         "new GeneratedGeometryStaleHealthService().Inspect",
         "new GeneratedRebarHealthService().InspectAll",
         "new GeneratedTieRebarHealthService().Inspect",
@@ -59,12 +61,19 @@ if command.is_file():
         'normalized.Contains("WALL_MESH")',
         'normalized.Contains("FOUNDATION_MESH")',
         'normalized.Contains("CURTAIN_FRAME")',
+        "SourceHandleResolver.Resolve(project, new[] { element.Id })",
         "GroupBy(x => x.Severity +",
         "LocateHandles",
         "QS3DZOOMSELECTED",
         "ModelHealthWindow",
     ):
         if needle not in text: errors.append("unified health command missing: " + needle)
+
+room_health = ROOT / "src/QS3D.Core/Diagnostics/RoomFinishHealthService.cs"
+if room_health.is_file():
+    text = room_health.read_text(encoding="utf-8")
+    for needle in ("ROOM_PROVENANCE_CONFLICT", "ORPHAN_ROOM_FINISH", "ROOM_FINISH_SCOPE_MISMATCH", "STALE_ROOM_FINISH"):
+        if needle not in text: errors.append("room-finish health missing unified diagnostic code: " + needle)
 
 ownership = ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs"
 if ownership.is_file():
@@ -97,4 +106,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: full model/generated/rebar/curtain health aggregation covers longitudinal, shape, tie, stirrup, slab mesh, wall mesh, foundation mesh, curtain frames with policy-driven ownership, mode semantics, dedupe and Locate wiring.")
+print("PASS: full health aggregates HT_Phòng provenance plus generated/rebar/curtain ownership/stale checks with dependency-aware Locate wiring.")
