@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             SingleFaceCountModeIsDeterministic();
             ThinWallIsRejected();
             AmbiguousDistributionIsRejected();
+            OversizedAggregateMeshIsRejected();
         }
 
         private static void TwoFaceMeshUsesBothDirections()
@@ -101,6 +102,23 @@ namespace QS3D.Core.SmokeTests
                 HorizontalCount = 10,
                 VerticalSpacingMm = 200d,
                 IncludeNear = true
+            }));
+        }
+
+        private static void OversizedAggregateMeshIsRejected()
+        {
+            Throws<InvalidOperationException>(() => RectangularWallMeshPlanner.Plan(new RectangularWallMeshInput
+            {
+                LengthM = 100d,
+                HeightM = 100d,
+                ThicknessM = .3d,
+                CoverM = .02d,
+                HorizontalDiameterMm = 8d,
+                VerticalDiameterMm = 8d,
+                HorizontalCount = 3000,
+                VerticalCount = 2000,
+                IncludeNear = true,
+                IncludeFar = true
             }));
         }
 

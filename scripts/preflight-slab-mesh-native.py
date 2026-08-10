@@ -37,6 +37,7 @@ if builder.is_file():
         'Mode = "SlabMeshXY"',
         "GeneratedRebarOwnershipGuard.Build(project)",
         "ownership.EnsureOwned(handle, element, HandlesKey)",
+        "duplicateSelectedSource",
         "MaxBarsPerBatch = 12000",
         "RebarSlabXNotation",
         "RebarSlabYNotation",
@@ -49,6 +50,10 @@ if builder.is_file():
         "GeneratedSlabMeshXActualSpacingM",
         "GeneratedSlabMeshYActualSpacingM",
         '"GeneratedSlabMeshMode"] = Mode',
+        "CadGeometryGuard.Midpoint",
+        "CadGeometryGuard.Subtract",
+        "CadGeometryGuard.Multiply",
+        "CadGeometryGuard.Hypot3",
         "CreateFrustum",
     ):
         if needle not in text: errors.append("native slab-mesh builder guard missing: " + needle)
@@ -80,9 +85,19 @@ if health.is_file():
     for needle in ("GeneratedSlabMeshXDiameterMm", "GeneratedSlabMeshYDiameterMm", "GeneratedSlabMeshFaces", "ElementCategory.Slab"):
         if needle not in text: errors.append("slab mesh health missing: " + needle)
 
+planner = ROOT / "src/QS3D.Core/Rebar/RectangularSlabMeshPlanner.cs"
+if planner.is_file():
+    text = planner.read_text(encoding="utf-8")
+    for needle in ("MaxBars = 8192", "projectedBars", "new List<SlabMeshBarPlacement>((int)projectedBars)"):
+        if needle not in text: errors.append("slab mesh planner allocation guard missing: " + needle)
+
+smoke = ROOT / "tests/QS3D.Core.SmokeTests/SlabMeshRegressionSmoke.cs"
+if smoke.is_file() and "OversizedAggregateMeshIsRejected();" not in smoke.read_text(encoding="utf-8"):
+    errors.append("slab mesh aggregate allocation regression is missing")
+
 print("QS3D native slab-mesh preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: rectangular Slab X/Y mesh planner-to-Solid3d wiring uses dedicated ownership, independent X/Y diameters, invalidation, health and command registration; runtime remains V25-gated.")
+print("PASS: rectangular Slab X/Y mesh planner-to-Solid3d wiring uses dedicated ownership, independent X/Y diameters, invalidation, health, finite CAD transforms and pre-allocation limits; runtime remains V25-gated.")
