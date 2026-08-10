@@ -76,24 +76,16 @@ namespace QS3D.BricsCAD.V25.Cad
                             throw new InvalidOperationException("Host source không còn là LINE/POLYLINE hợp lệ.");
 
                         var sourceIsCurved = source is Polyline polyline && PhysicalOpeningCutLiveFingerprint.HasBulge(polyline);
-                        IReadOnlyList<ProjectElement> fingerprintOpenings;
-                        if (sourceIsCurved)
+                        if (!PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds))
                         {
-                            fingerprintOpenings = LinkedOpenings(project, host.Id).ToList().AsReadOnly();
+                            issues.Add(new ModelHealthIssue(
+                                "PHYSICAL_OPENING_CUT_TARGET_STATE_MISSING",
+                                HealthSeverity.Warning,
+                                "Host physical-cut thiếu tập opening chính xác đã thực sự được khoét; Build 3D + Cut lại để nâng metadata trước khi phát hành.",
+                                host.Id));
+                            continue;
                         }
-                        else
-                        {
-                            if (!PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds))
-                            {
-                                issues.Add(new ModelHealthIssue(
-                                    "PHYSICAL_OPENING_CUT_TARGET_STATE_MISSING",
-                                    HealthSeverity.Warning,
-                                    "Host straight-cut thiếu tập opening đã thực sự được khoét; Build 3D + Cut lại để nâng metadata trước khi phát hành.",
-                                    host.Id));
-                                continue;
-                            }
-                            fingerprintOpenings = PhysicalOpeningCutTargetState.Resolve(project, host, cutOpeningIds);
-                        }
+                        var fingerprintOpenings = PhysicalOpeningCutTargetState.Resolve(project, host, cutOpeningIds);
 
                         var current = PhysicalOpeningCutLiveFingerprint.Compute(document, transaction, project, host, source, fingerprintOpenings);
                         if (!string.Equals(current, stored.Trim(), StringComparison.OrdinalIgnoreCase))
@@ -175,17 +167,8 @@ namespace QS3D.BricsCAD.V25.Cad
                         continue;
                     }
 
-                    IReadOnlyList<ProjectElement> fingerprintOpenings;
-                    if (curved)
-                    {
-                        fingerprintOpenings = group.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
-                    }
-                    else
-                    {
-                        if (!PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds)) continue;
-                        fingerprintOpenings = PhysicalOpeningCutTargetState.Resolve(project, host, cutOpeningIds);
-                    }
-
+                    if (!PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds)) continue;
+                    var fingerprintOpenings = PhysicalOpeningCutTargetState.Resolve(project, host, cutOpeningIds);
                     var fingerprint = PhysicalOpeningCutLiveFingerprint.Compute(document, transaction, project, host, source, fingerprintOpenings);
                     pending.Add(new PendingStamp
                     {
@@ -212,13 +195,6 @@ namespace QS3D.BricsCAD.V25.Cad
             if (changed > 0) project.Touch();
             return changed;
         }
-
-        private static IEnumerable<ProjectElement> LinkedOpenings(ProjectState project, string hostId) =>
-            project.Elements
-                .Where(IsOpening)
-                .Where(x => x.Properties.TryGetValue("HostWallId", out var linkedHostId) &&
-                            string.Equals(linkedHostId?.Trim(), hostId, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
         private static bool IsOpening(ProjectElement element) =>
             element.Category == ElementCategory.Door || element.Category == ElementCategory.WallOpening;
