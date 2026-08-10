@@ -61,6 +61,7 @@ namespace QS3D.Core.SmokeTests
         {
             var directory = TempDirectory("excel-handle-roundtrip");
             var qs3dPath = Path.Combine(directory, "qs3d.xlsx");
+            var qs3dBlankHandlePath = Path.Combine(directory, "qs3d-blank-handle.xlsx");
             var bltPath = Path.Combine(directory, "blt.xlsx");
             try
             {
@@ -70,6 +71,12 @@ namespace QS3D.Core.SmokeTests
                 var exported = XlsxHandleReader.ReadHandleLookup(qs3dPath, 2);
                 Equal(2, exported.Handles.Count); Equal("AB12", exported.Handles[0]); Equal("30DE", exported.Handles[1]);
                 Equal("DWG-FINGERPRINT-1", exported.DrawingFingerprint); True(!exported.UsesLegacyDecimalHandles);
+
+                var blankHandleRow = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "$12510 cost note", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
+                blankHandleRow.ElementIds.Add("WF-2");
+                XlsxQuantityExporter.Export(qs3dBlankHandlePath, new[] { blankHandleRow });
+                var blankHandle = XlsxHandleReader.ReadHandleLookup(qs3dBlankHandlePath, 2);
+                Equal(0, blankHandle.Handles.Count); Equal("DWG-FINGERPRINT-1", blankHandle.DrawingFingerprint); True(!blankHandle.UsesLegacyDecimalHandles);
 
                 using (var stream = new FileStream(bltPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
                 using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))

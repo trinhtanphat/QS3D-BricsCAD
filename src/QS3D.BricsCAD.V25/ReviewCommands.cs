@@ -53,7 +53,8 @@ namespace QS3D.BricsCAD.V25
                 Action<RecognitionResult> apply = result =>
                 {
                     var candidate = result.TopCandidate; if (candidate == null) return;
-                    var collision = project.Elements.FirstOrDefault(x => x.Category != candidate.Category && x.SourceHandles.Any(h => string.Equals(h, result.Handle, StringComparison.OrdinalIgnoreCase)));
+                    var collision = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, result.Handle);
+                    if (collision != null && collision.Category == candidate.Category) collision = null;
                     if (collision != null) throw new InvalidOperationException("CAD handle " + result.Handle + " đã thuộc " + collision.Category + ".");
                     if (!SemanticCaptureService.CaptureSnapshot(doc, result.Snapshot, candidate.Category)) return;
                     applied++;

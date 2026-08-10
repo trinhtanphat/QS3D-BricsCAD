@@ -73,7 +73,7 @@ namespace QS3D.Core.Export
                 var drawingFingerprint = ReadDrawingFingerprint(targetCells, fingerprintColumns);
                 var decimalHandles = ParseDecimalHandles(targetCells.Values);
                 var preferLegacy = decimalHandles.Count > 0 && string.IsNullOrWhiteSpace(drawingFingerprint) && !hasQs3dElementIdHeader;
-                if (preferLegacy || (explicitHandles.Count == 0 && decimalHandles.Count > 0))
+                if (preferLegacy)
                     return new XlsxHandleLookupResult(decimalHandles, drawingFingerprint, true);
                 return new XlsxHandleLookupResult(explicitHandles, drawingFingerprint, false);
             }

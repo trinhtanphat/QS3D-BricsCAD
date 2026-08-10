@@ -22,6 +22,9 @@ namespace QS3D.Core.SmokeTests
             ReferenceHandleIsNotGeneratedOwner();
             OwnerCollectionDedupesAndIncludesOpeningCut();
             AmbiguousGeneratedOwnerIsRejected();
+            StableIdSourceOwnerIsReused();
+            DuplicateSourceOwnerIsRejected();
+            CanonicalSourceRebindIsRejected();
         }
 
         private static void UnrelatedAmbiguityDoesNotBlockCleanSelection()
@@ -114,6 +117,44 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(left);
             project.Elements.Add(right);
             Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "DUP", out _, out _));
+        }
+
+        private static void StableIdSourceOwnerIsReused()
+        {
+            var project = new ProjectState("stable-source", "Stable Source");
+            var wall = new ProjectElement("wall-10", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            wall.SourceHandles.Add("22A");
+            project.Elements.Add(wall);
+
+            var owner = SemanticHandleOwnershipResolver.ResolveCaptureTarget(
+                project, "22a", ElementCategory.ArchitecturalWall, "ARCHITECTURALWALL-22A");
+            if (!ReferenceEquals(wall, owner))
+                throw new Exception("B4D rescan did not reuse the existing stable-ID source owner.");
+        }
+
+        private static void DuplicateSourceOwnerIsRejected()
+        {
+            var project = new ProjectState("duplicate-source", "Duplicate Source");
+            var left = new ProjectElement("wall-10", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            var right = new ProjectElement("wall-11", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            left.SourceHandles.Add("22A");
+            right.SourceHandles.Add("22a");
+            project.Elements.Add(left);
+            project.Elements.Add(right);
+
+            Throws<InvalidOperationException>(() => SemanticHandleOwnershipResolver.ResolveCaptureTarget(
+                project, "22A", ElementCategory.ArchitecturalWall, "ARCHITECTURALWALL-22A"));
+        }
+
+        private static void CanonicalSourceRebindIsRejected()
+        {
+            var project = new ProjectState("canonical-rebind", "Canonical Rebind");
+            var canonical = new ProjectElement("ARCHITECTURALWALL-22A", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            canonical.SourceHandles.Add("99B");
+            project.Elements.Add(canonical);
+
+            Throws<InvalidOperationException>(() => SemanticHandleOwnershipResolver.ResolveCaptureTarget(
+                project, "22A", ElementCategory.ArchitecturalWall, canonical.Id));
         }
 
         private static ProjectState Project()
