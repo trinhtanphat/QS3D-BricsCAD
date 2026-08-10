@@ -84,6 +84,10 @@ See [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for shape metadata and curren
 - `QS3DHIGHLIGHT`, `QS3DUNHIGHLIGHT` — transient selected-object highlighting.
 - `QS3DFOCUS` — focus/zoom the current selection with review emphasis.
 - `QS3DISOLATE`, `QS3DUNISOLATE` — temporarily isolate selected objects and restore hidden objects.
+- `QS3DSECTIONBOX` — launch BricsCAD's native `BIMSECTION` **Detail** workflow to create an interactive detail-section volume/box. Existing implied selection is highlighted as visual context only. This command requires an edition/runtime that provides `BIMSECTION`; source presence is not treated as proof that the current BricsCAD license exposes the BIM command.
+- `QS3DSECTIONPLANE` — launch native `SECTIONPLANE` for a standard interactive section entity when a full BIM Detail volume is not desired.
+- `QS3DCLIPDISPLAY` — launch native `CLIPDISPLAY` to toggle clipping for a selected/prompted section entity.
+- Native command wrappers deliberately use English command/option names with the `_` localization prefix (`_BIMSECTION _Detail`, `_SECTIONPLANE`, `_CLIPDISPLAY`) rather than hard-coding localized command text.
 - `QS3DVIEW3D`, `QS3DVIEWTOP`, `QS3DORBIT`, `QS3DZOOMSELECTED`, `QS3DZOOMALL` — viewport controls.
 - `QS3DLOCATE` — locate a semantic element by ID/reference handles.
 - `QS3DUNTRACK`, `QS3DUNTRACKFINISH` — remove semantic tracking without deleting source CAD.
@@ -94,7 +98,7 @@ See [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for shape metadata and curren
 
 ## UI entry points
 
-The main palette, Ribbon and Full Domain Hub expose the major product flows consistently: Room Auto, Tường KT, Giao tường + review-gated snap cleanup, Auto/Manual Door-Opening host linking, physical cuts, Build 3D, Focus/Isolate, BQ/BBS, column rebar, shape rebar, health checks and revision tools. The goal is to minimize command-line memorization while preserving explicit commands for power users and test harnesses.
+The main palette, Ribbon and Full Domain Hub expose the major product flows consistently: Room Auto, Tường KT, Giao tường + review-gated snap cleanup, Auto/Manual Door-Opening host linking, physical cuts, Build 3D, Focus/Isolate/Section Box, BQ/BBS, column rebar, shape rebar, health checks and revision tools. The goal is to minimize command-line memorization while preserving explicit commands for power users and test harnesses.
 
 ## Packaging and autoload
 
