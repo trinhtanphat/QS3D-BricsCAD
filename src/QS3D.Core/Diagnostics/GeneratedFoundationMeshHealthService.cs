@@ -18,6 +18,7 @@ namespace QS3D.Core.Diagnostics
             var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var validCount = 0;
@@ -63,9 +64,6 @@ namespace QS3D.Core.Diagnostics
                 if (!element.Properties.TryGetValue("GeneratedFoundationMeshMode", out var mode) || !string.Equals(mode, "FoundationMeshXY", StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("FOUNDATION_MESH_MODE_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshMode thiếu hoặc không hợp lệ.", element.Id));
 
-                // Foundation meshes generated before footprint-mode metadata existed were rectangle-only,
-                // so a missing key is a valid legacy RectangleLocalXY state. Newly generated meshes always
-                // write an explicit footprint mode; if the key is present it must be one of the reviewed modes.
                 if (element.Properties.TryGetValue("GeneratedFoundationMeshFootprintMode", out var footprintMode) &&
                     !(string.Equals(footprintMode, "RectangleLocalXY", StringComparison.OrdinalIgnoreCase) ||
                       string.Equals(footprintMode, "PolygonGlobalXY", StringComparison.OrdinalIgnoreCase)))
@@ -77,7 +75,7 @@ namespace QS3D.Core.Diagnostics
                 if (element.IsGeneratedFoundationMeshStale())
                     issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_STALE", HealthSeverity.Warning, "Generated foundation mesh snapshot không còn khớp semantic/source hiện tại; rebuild lưới thép móng 3D trước khi phát hành bản vẽ.", element.Id));
             }
-            return issues;
+            return issues.AsReadOnly();
         }
 
         private static void ValidatePositive(ProjectElement element, string key, string code, List<ModelHealthIssue> issues)
@@ -119,6 +117,7 @@ namespace QS3D.Core.Diagnostics
             var index = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 foreach (var handle in element.SourceHandles)
                     Reserve(index, handle, element.Id + "/SourceHandles");
 
