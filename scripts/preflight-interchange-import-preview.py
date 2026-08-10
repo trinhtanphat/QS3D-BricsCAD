@@ -20,7 +20,12 @@ if PREVIEW.is_file():
         "public const int MaxDetailedItems = 10000",
         "var validation = ProjectInterchangeJsonValidator.Validate(json);",
         "if (!validation.IsValid)",
-        "var manifest = ParseValidatedManifest(json);",
+        "var source = ProjectInterchangeValidatedSnapshotReader.Read(json);",
+        "var sourceProjectId = source.Project.Id;",
+        "foreach (var zone in source.Zones)",
+        "foreach (var floor in source.Floors)",
+        "foreach (var family in source.Families)",
+        "foreach (var element in source.Elements)",
         "InterchangeIdentityDisposition.New",
         "InterchangeIdentityDisposition.ExistingNeedsPolicy",
         "InterchangeIdentityDisposition.ExistingIncompatible",
@@ -30,21 +35,24 @@ if PREVIEW.is_file():
         "Import preview refuses ambiguous target identity",
         "total > items.Count",
         "Items = (items ?? Enumerable.Empty<InterchangeImportPreviewItem>()).ToList().AsReadOnly()",
-        "Enum.TryParse<ElementCategory>((raw ?? string.Empty).Trim(), false, out var category)",
-        "Enum.IsDefined(typeof(ElementCategory), category)",
     )
     for token in required:
         if token not in text:
             errors.append("ProjectInterchangeImportPreview.cs missing preview/fail-closed token: " + token)
-    if text.find("var validation = ProjectInterchangeJsonValidator.Validate(json);") > text.find("var manifest = ParseValidatedManifest(json);"):
-        errors.append("import preview must validate before parsing its collision manifest")
+    validation_index = text.find("var validation = ProjectInterchangeJsonValidator.Validate(json);")
+    reader_index = text.find("var source = ProjectInterchangeValidatedSnapshotReader.Read(json);")
+    if validation_index < 0 or reader_index < 0 or validation_index > reader_index:
+        errors.append("import preview must validate before consuming the canonical typed snapshot")
     for token in (
+        "ParseValidatedManifest",
+        "DataContractJsonSerializer",
+        "ManifestContract",
         "targetProject.Zones.Add(", "targetProject.Floors.Add(", "targetProject.Families.Add(", "targetProject.Elements.Add(",
         "targetProject.Name =", "targetProject.DrawingFingerprint =", "targetProject.ActiveZoneId =", "targetProject.ActiveFloorId =",
         "targetProject.Touch(", "ProjectStateSnapshot.Restore(", "GeneratedSolidHandle", "sourceHandles",
     ):
         if token in text:
-            errors.append("read-only import preview contains forbidden mutation/ownership authority token: " + token)
+            errors.append("read-only import preview contains forbidden second-parser/mutation/ownership token: " + token)
 
 if VALIDATOR.is_file():
     text = VALIDATOR.read_text(encoding="utf-8")
@@ -93,4 +101,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Semantic Snapshot v1 collision preview is validation-first, bounded, immutable-output and target-read-only; merge/import, source-handle rebinding and native ownership reconstruction remain explicitly unimplemented.")
+print("PASS: Semantic Snapshot v1 collision preview validates first, consumes the canonical typed snapshot directly, stays bounded/immutable-output/target-read-only, and carries no second identity parser or native ownership authority.")
