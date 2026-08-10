@@ -19,7 +19,7 @@ if SOURCE.is_file():
         'ValidateOptionalCanonicalValue(element.FamilyId, "element " + element.Id + " family id");',
         'ValidateOptionalCanonicalValue(element.FloorId, "element " + element.Id + " floor id");',
         'ValidateOptionalCanonicalValue(element.ZoneId, "element " + element.Id + " zone id");',
-        'if (string.IsNullOrEmpty(value)) return;',
+        'if (value == null || value.Length == 0) return;',
         'if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))',
     ):
         if token not in text:
