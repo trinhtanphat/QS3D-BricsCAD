@@ -86,11 +86,11 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             Properties.Add(nameRow);
             var categoryRow = new PropertyRowViewModel { Group = "THÔNG TIN", Name = "Loại cấu kiện", IsReadOnly = true };
             categoryRow.Value = family.Category.ToString(); Properties.Add(categoryRow);
-            foreach (var pair in family.Properties.OrderBy(x => x.Key))
+            foreach (var pair in family.Properties.OrderBy(x => GroupFor(x.Key)).ThenBy(x => DisplayNameFor(x.Key)))
             {
                 var key = pair.Key;
                 var unit = UnitFor(key);
-                var row = new PropertyRowViewModel { Group = "THUỘC TÍNH", Name = key, Unit = unit };
+                var row = new PropertyRowViewModel { Group = GroupFor(key), Name = DisplayNameFor(key), Unit = unit };
                 row.Value = pair.Value;
                 row.Apply = value => ApplyFamilyProperty(family, key, unit, value);
                 Properties.Add(row);
@@ -121,11 +121,11 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         private string ApplyFamilyProperty(ProjectFamily family, string key, string unit, string value)
         {
             var next = (value ?? string.Empty).Trim();
-            if (unit.Length > 0)
+            if (unit.Length > 0 || IsNumericProperty(key))
             {
                 if (!TryFiniteNumber(next, out var number))
                 {
-                    Status = key + ": giá trị số không hợp lệ; đã giữ giá trị cũ.";
+                    Status = DisplayNameFor(key) + ": giá trị số không hợp lệ; đã giữ giá trị cũ.";
                     return family.Properties.TryGetValue(key, out var previous) ? previous : string.Empty;
                 }
                 next = number.ToString("R", CultureInfo.InvariantCulture);
@@ -143,7 +143,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             }
 
             _project.Touch();
-            Status = "Đã cập nhật " + key + " cho Family • " + affected + " cấu kiện cần tính lại";
+            Status = "Đã cập nhật " + DisplayNameFor(key) + " cho Family • " + affected + " cấu kiện cần tính lại";
             return next;
         }
 
@@ -154,11 +154,80 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             return !double.IsNaN(number) && !double.IsInfinity(number);
         }
 
+        private static bool IsNumericProperty(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            if (key.EndsWith("M", StringComparison.OrdinalIgnoreCase) || key.EndsWith("M2", StringComparison.OrdinalIgnoreCase) || key.EndsWith("M3", StringComparison.OrdinalIgnoreCase) ||
+                key.EndsWith("Mm", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Deg", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Count", StringComparison.OrdinalIgnoreCase) ||
+                key.EndsWith("Ratio", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Factor", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Percent", StringComparison.OrdinalIgnoreCase)) return true;
+            return key.IndexOf("BarsAlong", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   key.IndexOf("MiterLimit", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   key.IndexOf("Tolerance", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   key.IndexOf("Confidence", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string GroupFor(string key)
+        {
+            if (key.IndexOf("Rebar", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Bar", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.IndexOf("Diameter", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Spacing", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.IndexOf("Cover", StringComparison.OrdinalIgnoreCase) >= 0) return "CỐT THÉP";
+            if (key.IndexOf("Material", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Classification", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.EndsWith("Code", StringComparison.OrdinalIgnoreCase)) return "VẬT LIỆU / PHÂN LOẠI";
+            if (key.IndexOf("Offset", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Elevation", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.IndexOf("Level", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Sill", StringComparison.OrdinalIgnoreCase) >= 0) return "VỊ TRÍ / CAO ĐỘ";
+            if (key.IndexOf("Display", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Color", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.IndexOf("Layer", StringComparison.OrdinalIgnoreCase) >= 0) return "HIỂN THỊ";
+            if (key.IndexOf("Length", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Width", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.IndexOf("Height", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Depth", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.IndexOf("Thickness", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Area", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.IndexOf("Volume", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Perimeter", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.IndexOf("Profile", StringComparison.OrdinalIgnoreCase) >= 0 || key.IndexOf("Axis", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.IndexOf("Radius", StringComparison.OrdinalIgnoreCase) >= 0) return "HÌNH HỌC";
+            return "THUỘC TÍNH";
+        }
+
+        private static string DisplayNameFor(string key)
+        {
+            switch (key)
+            {
+                case "ThicknessM": return "Bề dày";
+                case "WidthM": return "Bề rộng";
+                case "DepthM": return "Chiều sâu";
+                case "HeightM": return "Chiều cao";
+                case "LengthM": return "Chiều dài";
+                case "AreaM2": return "Diện tích";
+                case "VolumeM3": return "Thể tích";
+                case "PerimeterM": return "Chu vi";
+                case "BottomOffsetM": return "Cao độ đáy";
+                case "TopOffsetM": return "Cao độ đỉnh";
+                case "SillHeightM": return "Cao độ bậu";
+                case "AxisLeftOffsetM": return "Lệch tim trái";
+                case "AxisRightOffsetM": return "Lệch tim phải";
+                case "ProfileMode": return "Biên dạng";
+                case "CloseProfile": return "Đóng biên dạng";
+                case "FreeformProfile": return "Biên dạng tự do";
+                case "Material": return "Vật liệu";
+                case "ClassificationCode": return "Mã phân loại";
+                case "RebarNotation": return "Ký hiệu cốt thép";
+                case "CoverM": return "Lớp bê tông bảo vệ";
+                case "RebarDiameterMm": return "Đường kính cốt thép";
+                case "DiameterMm": return "Đường kính";
+                case "SpacingMm": return "Khoảng cách";
+                case "BooleanClearanceM": return "Dung sai khoét";
+                case "WallMiterLimit": return "Giới hạn nối góc";
+                case "WallArcSagittaM": return "Sai số cung tường";
+                default: return key;
+            }
+        }
+
         private static string UnitFor(string key)
         {
+            if (key.EndsWith("Mm", StringComparison.OrdinalIgnoreCase)) return "mm";
             if (key.EndsWith("M2", StringComparison.OrdinalIgnoreCase)) return "m²";
             if (key.EndsWith("M3", StringComparison.OrdinalIgnoreCase)) return "m³";
             if (key.EndsWith("M", StringComparison.OrdinalIgnoreCase)) return "m";
+            if (key.EndsWith("Deg", StringComparison.OrdinalIgnoreCase)) return "°";
+            if (key.EndsWith("Percent", StringComparison.OrdinalIgnoreCase)) return "%";
             return string.Empty;
         }
 
