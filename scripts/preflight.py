@@ -153,6 +153,8 @@ if registration.exists():
     text = registration.read_text(encoding="utf-8")
     for needle in ("LogicRegressionSmoke.Run();", "WorkflowPersistenceSmoke.Run();"):
         if needle not in text: errors.append("registered smoke suite missing: " + needle)
+    program_text = (ROOT / "tests/QS3D.Core.SmokeTests/Program.cs").read_text(encoding="utf-8")
+    if "SmokeTestRegistration.RunAll();" not in program_text: errors.append("smoke suites must run from Main instead of a module initializer")
 
 units = ROOT / "src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs"
 if units.exists():
@@ -177,7 +179,8 @@ for rel in ("src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs", "src/QS3D.BricsCAD.
     if path.exists():
         text = path.read_text(encoding="utf-8")
         if "transaction.Commit();" not in text or "CommitReplacement" not in text: errors.append(rel + ": two-phase generated geometry commit missing")
-        if "double.IsNaN" not in text or "double.IsInfinity" not in text: errors.append(rel + ": non-finite dimension guard missing")
+        has_inline_finite_guard = "double.IsNaN" in text and "double.IsInfinity" in text
+        if not has_inline_finite_guard and "CadGeometryGuard." not in text: errors.append(rel + ": non-finite dimension guard missing")
 
 health = ROOT / "src/QS3D.Core/Diagnostics/ModelHealthService.cs"
 if health.exists():
@@ -232,6 +235,14 @@ if commands.exists():
     if "new QuantitySummaryWindow(rows, locate, recalculate)" not in text: errors.append("BQ command does not wire recalculation callback")
     if "CadUnitService.GetDrawingUnit(doc)" not in text: errors.append("BQ snapshot fallback still assumes millimeters")
     if "GetLiveSolidHandles" not in text or "liveGeneratedSolids" not in text: errors.append("QS3DHEALTH must verify generated Solid3d liveness")
+    if "QS3DED2" not in text or "QS3DEXCELLOCATE" not in text or "XlsxHandleReader.ReadHandles" not in text: errors.append("ED2 Excel/Handle round-trip workflow missing")
+
+review_commands = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+snapshot_reader = ROOT / "src/QS3D.BricsCAD.V25/Cad/EntitySnapshotReader.cs"
+if review_commands.exists() and snapshot_reader.exists():
+    review_text = review_commands.read_text(encoding="utf-8")
+    snapshot_text = snapshot_reader.read_text(encoding="utf-8")
+    if "QS3DB4D" not in review_text or "ReadCurrentSpace" not in review_text or "ReadCurrentSpace" not in snapshot_text: errors.append("B4D whole-Current-Space scan missing")
 
 ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 if ribbon.exists():

@@ -179,9 +179,10 @@ namespace QS3D.Core.SmokeTests
                         Require(xml.Contains("DT đáy (m²)"), "Excel bottom-area header missing.");
                         Require(xml.Contains("DT đỉnh (m²)"), "Excel top-area header missing.");
                         Require(xml.Contains("DT khác (m²)"), "Excel other-area header missing.");
+                        Require(xml.Contains("CAD Handle (hex)"), "Excel CAD Handle header missing.");
                         Require(!xml.Contains("Đỉnh cửa"), "Stale mismatched Excel header is still present.");
                         Require(xml.Contains("state=\"frozen\""), "Excel header row is not frozen.");
-                        Require(xml.Contains("<autoFilter ref=\"A1:P2\"/>"), "Excel autofilter range is missing.");
+                        Require(xml.Contains("<autoFilter ref=\"A1:R2\"/>"), "Excel autofilter range is missing.");
                     }
                 }
             }

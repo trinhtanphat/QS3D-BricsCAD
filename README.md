@@ -42,7 +42,8 @@ The repository is beyond prototype stage. Source currently includes:
 - `QS3DFINISH`, `QS3DTAKEOFF`, `QS3DBUILD3D`
 
 ### Quantity / rebar / review
-- `QS3DBQ`
+- `QS3DB4D`
+- `QS3DBQ`, `QS3DED2`, `QS3DEXCELLOCATE`
 - `QS3DBBSVIEW`, `QS3DBBS`, `QS3DBBSCSV`, `QS3DREBAR3D`
 - `QS3DRECOGNIZE`, `QS3DRECOGNIZEAUTO`
 - `QS3DREVBASE`, `QS3DREVDIFF`
