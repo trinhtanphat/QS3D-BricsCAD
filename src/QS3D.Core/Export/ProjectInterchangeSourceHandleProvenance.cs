@@ -180,7 +180,11 @@ namespace QS3D.Core.Export
 
         private static string Token(string value)
         {
-            var bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
+            // Project/element semantic IDs are resolved OrdinalIgnoreCase everywhere else in the
+            // model. Canonicalizing before encoding keeps provenance lookup stable when caller casing
+            // differs from the snapshot while leaving the original identity preserved inside records.
+            var canonicalIdentity = (value ?? string.Empty).Trim().ToUpperInvariant();
+            var bytes = Encoding.UTF8.GetBytes(canonicalIdentity);
             return Convert.ToBase64String(bytes)
                 .TrimEnd('=')
                 .Replace('+', '-')
