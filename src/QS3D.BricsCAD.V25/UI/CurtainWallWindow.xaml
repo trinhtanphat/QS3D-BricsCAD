@@ -1,7 +1,7 @@
 <Window x:Class="QS3D.BricsCAD.V25.UI.CurtainWallWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="QS3D • Vách Kính" Width="680" Height="720"
+        Title="QS3D • Vách Kính" Width="700" Height="760"
         WindowStartupLocation="CenterOwner" Background="#17191C">
     <Window.Resources>
         <ResourceDictionary>
@@ -22,7 +22,7 @@
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel>
                     <TextBlock Text="VÁCH KÍNH / CURTAIN WALL" FontWeight="Bold" FontSize="19"/>
-                    <TextBlock Text="Family • panel grid • khung • kính net • Excel" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/>
+                    <TextBlock Text="Family • panel grid • khung 3D • kính net • Excel" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/>
                 </StackPanel>
                 <Button Grid.Column="1" Content="Làm mới" Margin="8,0,0,0" Click="OnRefreshClick"/>
             </Grid>
@@ -43,16 +43,17 @@
                     <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,0,0,0"><TextBlock Text="Vật liệu khung" Foreground="{StaticResource MutedBrush}"/><TextBox x:Name="FrameMaterialBox"/></StackPanel>
                 </Grid>
 
-                <TextBlock Text="PANEL GRID" Style="{StaticResource SectionLabel}"/>
+                <TextBlock Text="PANEL / FRAME GRID" Style="{StaticResource SectionLabel}"/>
                 <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,8"><TextBlock Text="Panel rộng tối đa (m)" Foreground="{StaticResource MutedBrush}"/><TextBox x:Name="MaxPanelWidthBox"/></StackPanel>
                     <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,8"><TextBlock Text="Panel cao tối đa (m)" Foreground="{StaticResource MutedBrush}"/><TextBox x:Name="MaxPanelHeightBox"/></StackPanel>
                     <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,8"><TextBlock Text="Khung biên (m)" Foreground="{StaticResource MutedBrush}"/><TextBox x:Name="PerimeterFrameBox"/></StackPanel>
                     <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,0,0,8"><TextBlock Text="Mullion đứng (m)" Foreground="{StaticResource MutedBrush}"/><TextBox x:Name="MullionBox"/></StackPanel>
-                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,0"><TextBlock Text="Transom ngang (m)" Foreground="{StaticResource MutedBrush}"/><TextBox x:Name="TransomBox"/></StackPanel>
-                    <Button Grid.Row="2" Grid.Column="1" Content="Lưu Family" Style="{StaticResource AccentButton}" Margin="8,18,0,0" Click="OnSaveClick"/>
+                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,8"><TextBlock Text="Transom ngang (m)" Foreground="{StaticResource MutedBrush}"/><TextBox x:Name="TransomBox"/></StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="1" Margin="8,0,0,8"><TextBlock Text="Độ sâu khung 3D (m)" Foreground="{StaticResource MutedBrush}"/><TextBox x:Name="FrameDepthBox"/></StackPanel>
+                    <Button Grid.Row="3" Grid.ColumnSpan="2" Content="Lưu Family + Regenerate" Style="{StaticResource AccentButton}" Margin="0,4,0,0" Click="OnSaveClick"/>
                 </Grid>
 
                 <TextBlock Text="TỔNG HỢP HIỆN TẠI" Style="{StaticResource SectionLabel}"/>
@@ -70,13 +71,15 @@
                 <WrapPanel>
                     <Button Content="1. Bóc Vách Kính" Tag="QS3DGLASSWALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
                     <Button Content="2. Tính lại" Click="OnRecalculateClick"/>
-                    <Button Content="3. Vẽ/Cập nhật 3D host" Tag="QS3DBUILD3D" Click="OnCommandClick"/>
-                    <Button Content="4. Auto Host Cửa/Lỗ" Tag="QS3DAUTOLINKHOSTS" Click="OnCommandClick"/>
-                    <Button Content="5. Khoét thẳng" Tag="QS3DCUTOPENINGS" Click="OnCommandClick"/>
-                    <Button Content="6. Khoét cong" Tag="QS3DCUTOPENINGSCURVED" Click="OnCommandClick"/>
-                    <Button Content="7. Xuất Excel" Tag="QS3DCURTAINXLSX" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="3. Dựng host 3D" Tag="QS3DBUILD3D" Click="OnCommandClick"/>
+                    <Button Content="4. Dựng mullion/transom 3D" Tag="QS3DCURTAINFRAMES3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="5. Health khung" Tag="QS3DCURTAINFRAMEHEALTH" Click="OnCommandClick"/>
+                    <Button Content="6. Auto Host Cửa/Lỗ" Tag="QS3DAUTOLINKHOSTS" Click="OnCommandClick"/>
+                    <Button Content="7. Khoét thẳng" Tag="QS3DCUTOPENINGS" Click="OnCommandClick"/>
+                    <Button Content="8. Khoét cong" Tag="QS3DCUTOPENINGSCURVED" Click="OnCommandClick"/>
+                    <Button Content="9. Xuất Excel" Tag="QS3DCURTAINXLSX" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
                 </WrapPanel>
-                <TextBlock Text="Native curtain panel/frame solids là bước riêng sau semantic schedule; nút 3D hiện dựng host Vách Kính theo source Tường KT hiện có." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+                <TextBlock Text="Khung 3D hiện hỗ trợ GlassWall semantic có source LINE nằm ngang. Open/curved POLYLINE vẫn dùng host 3D chung cho tới khi Gate V25 chứng minh frame sweep theo curve." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
             </StackPanel>
         </ScrollViewer>
 

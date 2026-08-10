@@ -67,8 +67,8 @@ namespace QS3D.Core.Diagnostics
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_MODE_INVALID", HealthSeverity.Warning, "GeneratedCurtainFrameMode thiếu hoặc không hợp lệ.", element.Id));
                 if (element.Category != ElementCategory.GlassWall)
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated curtain frame metadata chỉ hợp lệ trên GlassWall element.", element.Id));
-                if (element.Dirty != ElementDirtyFlags.None)
-                    issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_STALE", HealthSeverity.Warning, "GlassWall đang dirty nhưng vẫn còn curtain frame solids; rebuild trước khi phát hành bản vẽ.", element.Id));
+                if (element.IsGeneratedCurtainFrameStale())
+                    issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_STALE", HealthSeverity.Warning, "Curtain frame snapshot không còn khớp Family/Instance/source hiện tại; rebuild curtain frames trước khi phát hành bản vẽ.", element.Id));
             }
             return issues;
         }
