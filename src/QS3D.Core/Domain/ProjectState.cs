@@ -10,25 +10,42 @@ namespace QS3D.Core.Domain
 {
     public sealed class ZoneDefinition
     {
-        public ZoneDefinition(string id, string name) { Id = Require(id, nameof(id)); Name = Require(name, nameof(name)); }
+        private string _name;
+
+        public ZoneDefinition(string id, string name)
+        {
+            Id = Require(id, nameof(id));
+            _name = Require(name, nameof(name));
+        }
+
         public string Id { get; }
-        public string Name { get; set; }
+        public string Name
+        {
+            get => _name;
+            set => _name = Require(value, nameof(value));
+        }
+
         private static string Require(string value, string name) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Value is required.", name) : value.Trim();
     }
 
     public sealed class FloorDefinition
     {
+        private string _name;
         private double _elevationM;
 
         public FloorDefinition(string id, string name, double elevationM)
         {
             Id = Require(id, nameof(id));
-            Name = Require(name, nameof(name));
+            _name = Require(name, nameof(name));
             ElevationM = elevationM;
         }
 
         public string Id { get; }
-        public string Name { get; set; }
+        public string Name
+        {
+            get => _name;
+            set => _name = Require(value, nameof(value));
+        }
         public double ElevationM
         {
             get => _elevationM;
