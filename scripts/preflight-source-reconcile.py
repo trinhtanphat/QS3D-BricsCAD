@@ -8,6 +8,7 @@ errors = []
 
 service = ROOT / "src/QS3D.BricsCAD.V25/Services/SourceReconcileService.cs"
 command = ROOT / "src/QS3D.BricsCAD.V25/SourceReconcileCommands.cs"
+ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/ProjectRibbonAugmenter.cs"
 doc = ROOT / "docs/SOURCE-EDIT-WORKFLOW.md"
 
 checks = {
@@ -49,6 +50,11 @@ checks = {
         "UI sync warning: ",
         "ReportOperationFailure",
         "TryWriteMessage",
+    ],
+    ribbon: [
+        '"QS3D_PROJECT_SYNCSOURCE"',
+        '"Đồng bộ source CAD"',
+        '"QS3DSYNCSOURCE"',
     ],
     doc: [
         "`QS3DSYNCSOURCE`",
@@ -98,4 +104,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE reconciles only tracked authoritative source CAD, rejects generated/ambiguous/untracked selection, expands linked-host/DependsOn invalidation closure, removes generated dependents ownership-safely, refreshes source-derived semantic state, converges the affected closure before commit, rolls project state back on pre-commit failure, and keeps native rebuild explicit.")
+print("PASS: QS3DSYNCSOURCE reconciles only tracked authoritative source CAD, rejects generated/ambiguous/untracked selection, expands linked-host/DependsOn invalidation closure, removes generated dependents ownership-safely, refreshes source-derived semantic state, converges the affected closure before commit, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
