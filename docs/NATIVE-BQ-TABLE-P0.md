@@ -17,27 +17,28 @@ Create/refresh regenerate dirty semantic quantities before rendering the authori
 
 ## Exact BQ/XLSX parity
 
-Rows come directly from `ProjectQuantityReportBuilder.Group(project)`. `XlsxQuantityExporter` consumes the same `QuantityReportRow` model. The native Table therefore mirrors the same **19 columns**:
+Rows come directly from `ProjectQuantityReportBuilder.Group(project)`. `XlsxQuantityExporter` consumes the same `QuantityReportRow` model. The native Table therefore mirrors the same **20 columns** (including `Zone`):
 
 1. Tầng;
-2. Loại;
-3. Tên cấu kiện / Family;
-4. SL;
-5. BT gộp (m³);
-6. Trừ giao (m³);
-7. BT còn (m³);
-8. Cốp pha (m²);
-9. Dài (m);
-10. Chu vi ngoài (m);
-11. Chu vi trong (m);
-12. DT cửa (m²);
-13. Thành bên (m²);
-14. DT đáy (m²);
-15. DT đỉnh (m²);
-16. DT khác (m²);
-17. QS3D Element ID;
-18. CAD Handle (hex);
-19. QS3D Drawing Fingerprint.
+2. Zone;
+3. Loại;
+4. Tên cấu kiện / Family;
+5. SL;
+6. BT gộp (m³);
+7. Trừ giao (m³);
+8. BT còn (m³);
+9. Cốp pha (m²);
+10. Dài (m);
+11. Chu vi ngoài (m);
+12. Chu vi trong (m);
+13. DT cửa (m²);
+14. Thành bên (m²);
+15. DT đáy (m²);
+16. DT đỉnh (m²);
+17. DT khác (m²);
+18. QS3D Element ID;
+19. CAD Handle (hex);
+20. QS3D Drawing Fingerprint.
 
 The last three columns preserve the same traceability available in the XLSX report. The adapter does not invent another quantity or traceability formula.
 
