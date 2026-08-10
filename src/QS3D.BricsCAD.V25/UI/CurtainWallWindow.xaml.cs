@@ -22,6 +22,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
             InitializeComponent();
+            DocumentBoundWindowLifetime.Attach(this, _document);
             Loaded += (_, __) => RefreshAll();
         }
 
@@ -45,7 +46,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("lưu Family Vách Kính");
-                if (!(FamilyCombo.SelectedItem is ProjectFamily family)) return;
+                if (!(FamilyCombo.SelectedItem is ProjectFamily selectedFamily)) return;
                 var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["ThicknessM"] = Positive(ThicknessBox.Text, "Bề dày kính").ToString("R", CultureInfo.InvariantCulture),
@@ -61,6 +62,10 @@ namespace QS3D.BricsCAD.V25.UI
                 };
 
                 var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var family = project.FindFamily(selectedFamily.Id)
+                    ?? throw new InvalidOperationException("Family Vách Kính đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại Family.");
+                if (family.Category != ElementCategory.GlassWall)
+                    throw new InvalidOperationException("Family đã chọn không còn là Family Vách Kính trong project hiện tại. Hãy Refresh và chọn lại Family.");
                 var rollback = ProjectStateSnapshot.Capture(project);
                 var inherited = 0;
                 var overrides = 0;
@@ -122,13 +127,14 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnCommandClick(object sender, RoutedEventArgs e)
         {
             if (!(sender is Button button) || !(button.Tag is string command) || string.IsNullOrWhiteSpace(command)) return;
+            var normalizedCommand = command.Trim();
             try
             {
-                EnsureActive("chạy " + command);
-                SetStatus("Chạy " + command + "…");
-                _document.SendStringToExecute(command + " ", true, false, false);
+                EnsureActive("chạy " + normalizedCommand);
+                _document.SendStringToExecute(normalizedCommand + " ", true, false, false);
+                SetStatus("Đã gửi lệnh " + normalizedCommand + " sang “" + DrawingLabel(_document) + "”.");
             }
-            catch (Exception ex) { SetStatus("Chạy " + command + " lỗi: " + ex.Message); }
+            catch (Exception ex) { SetStatus("Chạy " + normalizedCommand + " lỗi: " + ex.Message); }
         }
 
         private void RefreshAll()
@@ -314,7 +320,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void SetStatus(string text)
         {
             StatusText.Text = text ?? string.Empty;
-            PaletteCoordinator.SetStatus(StatusText.Text);
+            try { PaletteCoordinator.SetStatus(StatusText.Text); } catch { }
         }
     }
 }
