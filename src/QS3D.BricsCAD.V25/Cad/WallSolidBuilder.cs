@@ -60,8 +60,14 @@ namespace QS3D.BricsCAD.V25.Cad
                     var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .2d), element.Id + "/ThicknessM");
                     var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
                     var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                    var dx = CadGeometryGuard.Finite(line.EndPoint.X - line.StartPoint.X, element.Id + "/dx");
-                    var dy = CadGeometryGuard.Finite(line.EndPoint.Y - line.StartPoint.Y, element.Id + "/dy");
+                    var dx = CadGeometryGuard.Subtract(line.EndPoint.X, line.StartPoint.X, element.Id + "/dx");
+                    var dy = CadGeometryGuard.Subtract(line.EndPoint.Y, line.StartPoint.Y, element.Id + "/dy");
+                    var dz = CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z, element.Id + "/dz");
+                    var planTolerance = CadGeometryGuard.Positive(
+                        CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/wall planarity tolerance"),
+                        element.Id + "/wall planarity tolerance drawing units");
+                    if (Math.Abs(dz) > planTolerance)
+                        throw new InvalidOperationException("Wall source LINE hiện yêu cầu gần ngang (|ΔZ| <= 0.005 m): " + element.Id);
                     var length = CadGeometryGuard.Hypot(dx, dy, element.Id + "/source length");
                     if (length <= 1e-6) throw new InvalidOperationException("Wall source LINE quá ngắn: " + element.Id);
 
