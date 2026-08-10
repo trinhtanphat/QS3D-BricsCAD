@@ -18,6 +18,11 @@ namespace QS3D.Core.Diagnostics
             var included = new List<ProjectElement>();
             foreach (var element in project.Elements)
             {
+                if (element == null)
+                {
+                    issues.Add(new ModelHealthIssue("BOM_NULL_ELEMENT", HealthSeverity.Error, "Project chứa semantic element null; phát hành BQ bị chặn cho tới khi project được repair."));
+                    continue;
+                }
                 try
                 {
                     if (!AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) included.Add(element);
