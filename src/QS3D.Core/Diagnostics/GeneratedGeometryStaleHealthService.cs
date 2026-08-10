@@ -42,6 +42,24 @@ namespace QS3D.Core.Diagnostics
                         HealthSeverity.Warning,
                         Message(element, "Generated beam stirrups không còn khớp thông số/cấu kiện hiện tại; rebuild đai dầm 3D."),
                         element.Id));
+                if (element.IsGeneratedSlabMeshStale())
+                    issues.Add(new ModelHealthIssue(
+                        "SLAB_MESH_GENERATED_STALE",
+                        HealthSeverity.Warning,
+                        Message(element, "Generated slab mesh không còn khớp thông số/sàn hiện tại; rebuild lưới thép sàn 3D."),
+                        element.Id));
+                if (element.IsGeneratedWallMeshStale())
+                    issues.Add(new ModelHealthIssue(
+                        "WALL_MESH_GENERATED_STALE",
+                        HealthSeverity.Warning,
+                        Message(element, "Generated structural-wall mesh không còn khớp thông số/vách hiện tại; rebuild lưới thép vách 3D."),
+                        element.Id));
+                if (element.IsGeneratedCurtainFrameStale())
+                    issues.Add(new ModelHealthIssue(
+                        "CURTAIN_FRAME_GENERATED_STALE",
+                        HealthSeverity.Warning,
+                        Message(element, "Generated curtain-wall frame detail không còn khớp Family/Instance/source hiện tại; rebuild khung Vách Kính 3D."),
+                        element.Id));
             }
             return issues.AsReadOnly();
         }
