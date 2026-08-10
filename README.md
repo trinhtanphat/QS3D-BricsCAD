@@ -31,4 +31,8 @@ Clean-room BricsCAD V25 quantity takeoff / 3D QS plugin inspired by the workflow
 ## Build policy
 Do not commit `BrxMgd.dll`, `TD_Mgd.dll`, BLT/BLT3D folders, or private DWG/DOCX fixtures. The BricsCAD plugin resolves V25 assemblies through `BRICSCAD_V25_DIR` with `Private=false`.
 
-Read `docs/CI-READINESS.md` before running any GitHub Action.
+GitHub Actions on `main` are **manual-only and owner-controlled**. Documentation/Markdown, `docs:` and `chore:` commits do not need GitHub CI, and no commit/push/merge should dispatch Actions automatically. Even source changes run GitHub CI only when the repository owner explicitly requests it.
+
+This is a multi-agent repository. Agents must sync the latest `main` before work and again before commit/push so concurrent changes are not overwritten. Agents with real local-machine access should prioritize tasks that require BricsCAD/Windows/private local resources; ordinary repository work should be handled by remote/hybrid agents where possible.
+
+Read `CI_POLICY.md` and `AGENTS.md` first, then `docs/CI-READINESS.md`, before changing CI or running any GitHub Action.
