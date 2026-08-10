@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
-using Bricscad.EditorInput;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
@@ -21,6 +20,12 @@ namespace QS3D.BricsCAD.V25
             public ProjectElement Opening { get; set; } = null!;
             public string HostId { get; set; } = string.Empty;
             public double GapM { get; set; }
+        }
+
+        private sealed class OpeningLocation
+        {
+            public Point2 Plan { get; set; }
+            public double ReferenceElevationM { get; set; }
         }
 
         [CommandMethod("QS3DAUTOLINKHOSTS", CommandFlags.UsePickSet)]
@@ -50,6 +55,7 @@ namespace QS3D.BricsCAD.V25
 
                 var maxGapM = MetadataNumber(project, "AutoHostMaxGapM", 0.25d, allowZero: true);
                 var ambiguityM = MetadataNumber(project, "AutoHostAmbiguityM", 0.02d, allowZero: true);
+                var elevationToleranceM = MetadataNumber(project, "AutoHostElevationToleranceM", 0.25d, allowZero: true);
                 var sagittaM = MetadataNumber(project, "WallArcSagittaM", 0.002d, allowZero: false);
                 var matcher = new OpeningHostMatcher();
                 var planned = new List<PlannedLink>();
@@ -63,9 +69,9 @@ namespace QS3D.BricsCAD.V25
                     {
                         try
                         {
-                            var center = ReadOpeningCenter(document, transaction, opening);
-                            var candidates = ReadHostSegments(document, transaction, project, opening, sagittaM);
-                            var result = matcher.Match(center, candidates, maxGapM, ambiguityM);
+                            var location = ReadOpeningLocation(document, transaction, opening);
+                            var candidates = ReadHostSegments(document, transaction, project, opening, location.ReferenceElevationM, elevationToleranceM, sagittaM);
+                            var result = matcher.Match(location.Plan, candidates, maxGapM, ambiguityM);
                             if (result.Status == OpeningHostMatchStatus.Ambiguous)
                             {
                                 ambiguous++;
@@ -75,7 +81,7 @@ namespace QS3D.BricsCAD.V25
                             if (result.Status != OpeningHostMatchStatus.Matched)
                             {
                                 unmatched++;
-                                document.Editor.WriteMessage("\n  " + opening.Id + ": không có host trong phạm vi " + maxGapM.ToString("0.###", CultureInfo.InvariantCulture) + " m.");
+                                document.Editor.WriteMessage("\n  " + opening.Id + ": không có host cùng scope/elevation trong phạm vi " + maxGapM.ToString("0.###", CultureInfo.InvariantCulture) + " m.");
                                 continue;
                             }
                             planned.Add(new PlannedLink { Opening = opening, HostId = result.HostElementId, GapM = result.GapM });
@@ -127,20 +133,24 @@ namespace QS3D.BricsCAD.V25
             return new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
         }
 
-        private static Point2 ReadOpeningCenter(Document document, Transaction transaction, ProjectElement opening)
+        private static OpeningLocation ReadOpeningLocation(Document document, Transaction transaction, ProjectElement opening)
         {
-            var ids = CadHandleService.Resolve(document, opening.SourceHandles);
+            var ids = ResolveLiveIds(document, transaction, opening.SourceHandles);
             if (ids.Count != 1) throw new InvalidOperationException("Opening cần đúng một live CAD source để tự xác định host.");
             var entity = transaction.GetObject(ids[0], OpenMode.ForRead, false) as Entity;
             if (entity == null || entity.IsErased) throw new InvalidOperationException("Opening source không còn tồn tại.");
             var extents = entity.GeometricExtents;
             var units = CadUnitService.GetPolicy(document);
-            return new Point2(
-                units.ToMeters(Midpoint(extents.MinPoint.X, extents.MaxPoint.X)),
-                units.ToMeters(Midpoint(extents.MinPoint.Y, extents.MaxPoint.Y)));
+            return new OpeningLocation
+            {
+                Plan = new Point2(
+                    units.ToMeters(Midpoint(extents.MinPoint.X, extents.MaxPoint.X)),
+                    units.ToMeters(Midpoint(extents.MinPoint.Y, extents.MaxPoint.Y))),
+                ReferenceElevationM = units.ToMeters(extents.MinPoint.Z)
+            };
         }
 
-        private static IReadOnlyList<OpeningHostSegment> ReadHostSegments(Document document, Transaction transaction, ProjectState project, ProjectElement opening, double sagittaM)
+        private static IReadOnlyList<OpeningHostSegment> ReadHostSegments(Document document, Transaction transaction, ProjectState project, ProjectElement opening, double openingElevationM, double elevationToleranceM, double sagittaM)
         {
             var result = new List<OpeningHostSegment>();
             var units = CadUnitService.GetPolicy(document);
@@ -148,12 +158,16 @@ namespace QS3D.BricsCAD.V25
             {
                 var family = project.FindFamily(wall.FamilyId);
                 var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(wall, family, "ThicknessM", 0.2d), wall.Id + "/ThicknessM");
-                foreach (var id in CadHandleService.Resolve(document, wall.SourceHandles))
+                foreach (var id in ResolveLiveIds(document, transaction, wall.SourceHandles))
                 {
                     var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
                     if (entity == null || entity.IsErased) continue;
                     if (entity is Line line)
                     {
+                        var startZM = units.ToMeters(line.StartPoint.Z);
+                        var endZM = units.ToMeters(line.EndPoint.Z);
+                        if (Math.Abs(startZM - endZM) > elevationToleranceM) continue;
+                        if (Math.Abs(Midpoint(startZM, endZM) - openingElevationM) > elevationToleranceM) continue;
                         result.Add(new OpeningHostSegment(wall.Id,
                             new Point2(units.ToMeters(line.StartPoint.X), units.ToMeters(line.StartPoint.Y)),
                             new Point2(units.ToMeters(line.EndPoint.X), units.ToMeters(line.EndPoint.Y)), thicknessM));
@@ -162,6 +176,8 @@ namespace QS3D.BricsCAD.V25
                     if (!(entity is Polyline polyline) || polyline.Closed || polyline.NumberOfVertices < 2) continue;
                     var normal = polyline.Normal;
                     if (Math.Abs(normal.X) > 1e-9d || Math.Abs(normal.Y) > 1e-9d || normal.Z < 1d - 1e-9d) continue;
+                    var elevationM = units.ToMeters(polyline.Elevation);
+                    if (Math.Abs(elevationM - openingElevationM) > elevationToleranceM) continue;
                     for (var index = 0; index < polyline.NumberOfVertices - 1; index++)
                     {
                         var a = polyline.GetPoint2dAt(index);
@@ -176,6 +192,26 @@ namespace QS3D.BricsCAD.V25
                             result.Add(new OpeningHostSegment(wall.Id, points[part - 1], points[part], thicknessM));
                     }
                 }
+            }
+            return result.AsReadOnly();
+        }
+
+        private static IReadOnlyList<ObjectId> ResolveLiveIds(Document document, Transaction transaction, IEnumerable<string> handles)
+        {
+            var result = new List<ObjectId>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in handles)
+            {
+                var text = (raw ?? string.Empty).Trim();
+                if (text.Length == 0 || !seen.Add(text) || !long.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) continue;
+                try
+                {
+                    var id = document.Database.GetObjectId(false, new Handle(value), 0);
+                    if (id.IsNull || !id.IsValid) continue;
+                    var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                    if (entity != null && !entity.IsErased) result.Add(id);
+                }
+                catch { }
             }
             return result.AsReadOnly();
         }
@@ -203,9 +239,9 @@ namespace QS3D.BricsCAD.V25
 
         private static double Midpoint(double left, double right)
         {
-            if (double.IsNaN(left) || double.IsInfinity(left) || double.IsNaN(right) || double.IsInfinity(right)) throw new InvalidOperationException("Entity extents chứa tọa độ không hữu hạn.");
+            if (double.IsNaN(left) || double.IsInfinity(left) || double.IsNaN(right) || double.IsInfinity(right)) throw new InvalidOperationException("Midpoint input chứa giá trị không hữu hạn.");
             var value = left / 2d + right / 2d;
-            if (double.IsNaN(value) || double.IsInfinity(value)) throw new OverflowException("Entity extent midpoint overflowed.");
+            if (double.IsNaN(value) || double.IsInfinity(value)) throw new OverflowException("Midpoint overflowed.");
             return value;
         }
 
