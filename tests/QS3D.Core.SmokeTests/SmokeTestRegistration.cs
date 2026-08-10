@@ -27,6 +27,7 @@ namespace QS3D.Core.SmokeTests
             ProjectRebarShapeSmoke.Run();
             RebarOwnershipHealthSmoke.Run();
             GeneratedGeometryStaleSmoke.Run();
+            CurtainWallLayoutSmoke.Run();
         }
     }
 }

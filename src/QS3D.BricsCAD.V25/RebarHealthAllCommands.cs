@@ -24,15 +24,18 @@ namespace QS3D.BricsCAD.V25
                 var shapeHandles = Collect(project, "GeneratedShapeRebarHandles");
                 var tieHandles = Collect(project, "GeneratedTieRebarHandles");
                 var stirrupHandles = Collect(project, "GeneratedBeamStirrupHandles");
+                var slabMeshHandles = Collect(project, "GeneratedSlabMeshHandles");
                 var liveColumn = CadHandleService.GetLiveSolidHandles(document, columnHandles);
                 var liveShape = CadHandleService.GetLiveSolidHandles(document, shapeHandles);
                 var liveTie = CadHandleService.GetLiveSolidHandles(document, tieHandles);
                 var liveStirrup = CadHandleService.GetLiveSolidHandles(document, stirrupHandles);
+                var liveSlabMesh = CadHandleService.GetLiveSolidHandles(document, slabMeshHandles);
 
                 var issues = new List<ModelHealthIssue>();
                 issues.AddRange(new GeneratedRebarHealthService().InspectAll(project, liveColumn, liveShape));
                 issues.AddRange(new GeneratedTieRebarHealthService().Inspect(project, liveTie));
                 issues.AddRange(new GeneratedBeamStirrupHealthService().Inspect(project, liveStirrup));
+                issues.AddRange(new GeneratedSlabMeshHealthService().Inspect(project, liveSlabMesh));
                 var summary = new HealthSummary(issues);
                 var message = "Rebar Health All: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
@@ -62,6 +65,7 @@ namespace QS3D.BricsCAD.V25
 
         private static IEnumerable<string> HandlesForIssue(ProjectElement element, string code)
         {
+            if (code.IndexOf("SLAB_MESH", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedSlabMeshHandles");
             if (code.IndexOf("BEAM_STIRRUP", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedBeamStirrupHandles");
             if (code.IndexOf("TIE_REBAR", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedTieRebarHandles");
             if (code.IndexOf("SHAPE_REBAR", StringComparison.OrdinalIgnoreCase) >= 0) return Parse(element, "GeneratedShapeRebarHandles");

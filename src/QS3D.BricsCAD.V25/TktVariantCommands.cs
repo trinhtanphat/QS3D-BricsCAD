@@ -37,6 +37,12 @@ namespace QS3D.BricsCAD.V25
                 {
                     EnsureDefault(family, "ThicknessM", "0.012");
                     EnsureDefault(family, "Material", "Kính");
+                    EnsureDefault(family, "CurtainMaxPanelWidthM", "1.2");
+                    EnsureDefault(family, "CurtainMaxPanelHeightM", "1.5");
+                    EnsureDefault(family, "CurtainPerimeterFrameWidthM", "0.05");
+                    EnsureDefault(family, "CurtainMullionWidthM", "0.05");
+                    EnsureDefault(family, "CurtainTransomWidthM", "0.05");
+                    EnsureDefault(family, "CurtainFrameMaterial", "Nhôm");
                 }
                 else
                 {
