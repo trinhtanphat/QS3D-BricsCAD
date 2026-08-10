@@ -59,6 +59,7 @@ if COORDINATOR.is_file():
     if not body:
         errors.append("ProjectContextCoordinator must expose TryGetReadOnly")
     for token in (
+        "project = null!;",
         "TryGetExistingProjectPath(document, out var path)",
         "ValidateDrawingIdentityReadOnly(existing, document)",
         "ValidateDrawingIdentityReadOnly(project, document)",

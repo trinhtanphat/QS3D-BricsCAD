@@ -54,7 +54,9 @@ namespace QS3D.BricsCAD.V25
                 return true;
             }
 
-            project = null;
+            // Match the standard Try-pattern contract: callers must only consume
+            // the non-null out value when this method returns true.
+            project = null!;
             if (!TryGetExistingProjectPath(document, out var path)) return false;
             if (!File.Exists(path) && !File.Exists(path + ".bak")) return false;
 
