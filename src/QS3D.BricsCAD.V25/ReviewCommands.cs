@@ -33,16 +33,22 @@ namespace QS3D.BricsCAD.V25
                 if (snapshots.Count == 0) { doc.Editor.WriteMessage("\nQS3D: chọn source CAD cần tạo/cập nhật 3D."); return; }
                 if (tracked == null) SemanticCaptureService.Capture(doc, category.Value);
                 int solids;
+                var detailSolids = 0;
                 if (IsTktWall(category.Value))
                 {
                     solids = category.Value == ElementCategory.WallPier
                         ? WallPierProfileSolidBuilder.BuildSelectedLinePiers(doc, project)
                         : WallSolidBuilder.BuildSelectedLineWalls(doc, project, category.Value);
                     solids += PolylineWallSolidBuilder.BuildSelected(doc, project, category.Value);
+                    if (category.Value == ElementCategory.GlassWall)
+                    {
+                        var curtain = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(doc, project);
+                        detailSolids = curtain.Frames;
+                    }
                 }
                 else if (StructuralSolidBuilder.Supports(category.Value)) solids = StructuralSolidBuilder.BuildSelected(doc, project, category.Value);
                 else { PaletteCoordinator.SetStatus("Vẽ 3D native hiện hỗ trợ Tường KT (Gạch/Kính/Trụ), Dầm, Sàn, Cột, Vách BTCT, Móng, Cầu thang, Lan can và Đào đất."); return; }
-                if (solids == 0)
+                if (solids == 0 && detailSolids == 0)
                 {
                     var hint = GeometryHint(category.Value);
                     PaletteCoordinator.SetStatus("Không tạo được solid cho " + category + ". " + hint);
@@ -50,8 +56,9 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
                 var regenerated = Regenerate(project); PaletteCoordinator.RefreshProject();
-                PaletteCoordinator.SetStatus("3D " + category + ": " + solids + " solid • regenerate " + regenerated + " lượt.");
-                doc.Editor.WriteMessage("\nQS3D 3D " + category + ": " + solids + " solid(s)."); doc.SendStringToExecute("QS3DVIEW3D ", true, false, false);
+                var detailText = detailSolids > 0 ? " • curtain frame " + detailSolids : string.Empty;
+                PaletteCoordinator.SetStatus("3D " + category + ": " + solids + " host/solid" + detailText + " • regenerate " + regenerated + " lượt.");
+                doc.Editor.WriteMessage("\nQS3D 3D " + category + ": " + solids + " host/solid(s)" + detailText + "."); doc.SendStringToExecute("QS3DVIEW3D ", true, false, false);
             });
         }
 
@@ -168,8 +175,9 @@ namespace QS3D.BricsCAD.V25
                     return "Dùng closed POLYLINE làm footprint.";
                 case ElementCategory.WallPier:
                     return "Dùng LINE cho profile Rectangular/Chamfered của Trụ Tường; open POLYLINE vẫn dùng footprint Tường KT.";
-                case ElementCategory.ArchitecturalWall:
                 case ElementCategory.GlassWall:
+                    return "Dùng LINE để dựng host kính + mullion/transom frame; open POLYLINE vẫn dựng generic host GlassWall.";
+                case ElementCategory.ArchitecturalWall:
                     return "Dùng LINE hoặc open plan-view POLYLINE làm tim Tường KT; bulge được tessellate trước khi tạo footprint.";
                 default:
                     return "Source CAD hiện chưa có native solid adapter.";
