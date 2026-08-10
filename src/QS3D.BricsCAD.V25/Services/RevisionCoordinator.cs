@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Revisions;
@@ -36,7 +37,9 @@ namespace QS3D.BricsCAD.V25.Services
 
         public static IReadOnlyList<RevisionDelta> Compare(Document document, out RevisionSnapshot before, out RevisionSnapshot after)
         {
-            before = LoadBaseline(document); after = CaptureCurrent(document); return Service.Compare(before, after);
+            before = LoadBaseline(document);
+            after = CaptureCurrent(document);
+            return Service.Compare(before, after);
         }
 
         public static string GetPath(Document document) => Path.ChangeExtension(ProjectContextCoordinator.GetProjectPath(document), ".qsrev");
