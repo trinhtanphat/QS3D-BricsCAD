@@ -194,10 +194,18 @@ finally {
         catch { $pluginHash = "" }
     }
     $runtimeMetadata = Join-Path $runtimeArtifacts "runtime-metadata.json"
-    $status = if ($null -eq $fatal) { "PASS" } else { "FAIL" }
+    $automatedGateStatus = if ($null -eq $fatal) { "PASS" } else { "FAIL" }
+    $runtimeSmokeStatus = if ($SkipRuntime) { "NOT_RUN" } elseif ($null -eq $fatal) { "PASS" } else { "FAIL_OR_INCOMPLETE" }
+    $qualificationScope = if ($SkipRuntime) { "source-build" } else { "source-build+runtime-smoke" }
     $report = [ordered]@{
-        schema = 1
-        status = $status
+        schema = 2
+        status = $automatedGateStatus
+        automatedGateStatus = $automatedGateStatus
+        sourceBuildStatus = $automatedGateStatus
+        runtimeSmokeStatus = $runtimeSmokeStatus
+        fullInteractiveMatrixStatus = "NOT_RUN"
+        customerReleaseQualified = $false
+        qualificationScope = $qualificationScope
         exactSha = $headSha
         branch = $branchName
         startedUtc = $startedAt.ToString("O")
@@ -217,7 +225,7 @@ finally {
     }
     $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath -Encoding UTF8
     Write-Host ""
-    Write-Host "Qualification report: $reportPath"
+    Write-Host "Qualification evidence report: $reportPath"
 }
 
 if ($null -ne $fatal) {
@@ -225,5 +233,11 @@ if ($null -ne $fatal) {
 }
 
 Write-Host ""
-Write-Host "AUTOMATED LOCAL V25 QUALIFICATION PASS for exact SHA $headSha"
-Write-Host "This does not replace the manual/private-DWG scenario checklist in docs/LOCAL-V25-QUALIFICATION.md."
+if ($SkipRuntime) {
+    Write-Host "AUTOMATED SOURCE/BUILD GATES PASS for exact SHA $headSha; licensed V25 runtime smoke NOT RUN."
+}
+else {
+    Write-Host "AUTOMATED SOURCE/BUILD + LICENSED V25 NETLOAD/RIBBON/PALETTE SMOKE PASS for exact SHA $headSha."
+}
+Write-Host "FULL INTERACTIVE/PRIVATE-DWG PRODUCT MATRIX: NOT RUN by this script."
+Write-Host "Customer release qualification remains false until docs/LOCAL-V25-QUALIFICATION.md is executed and recorded for the same SHA/package."
