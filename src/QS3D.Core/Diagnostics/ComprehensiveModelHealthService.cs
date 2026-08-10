@@ -6,6 +6,17 @@ namespace QS3D.Core.Diagnostics
 {
     public sealed class ComprehensiveModelHealthService
     {
+        private static readonly string[] GeneratedOutputCodeTokens =
+        {
+            "SHAPE_REBAR",
+            "TIE_REBAR",
+            "BEAM_STIRRUP",
+            "SLAB_MESH",
+            "WALL_MESH",
+            "FOUNDATION_MESH",
+            "CURTAIN_FRAME"
+        };
+
         public IReadOnlyList<ModelHealthIssue> Inspect(
             ProjectState project,
             ISet<string>? liveSourceHandles = null,
@@ -34,6 +45,17 @@ namespace QS3D.Core.Diagnostics
             Add(issues, seen, new GeneratedCurtainFrameHealthService().Inspect(project, liveGeneratedSolidHandles));
 
             return issues.AsReadOnly();
+        }
+
+        public static bool TargetsGeneratedOutput(ModelHealthIssue issue)
+        {
+            if (issue == null) throw new ArgumentNullException(nameof(issue));
+            var code = (issue.Code ?? string.Empty).Trim();
+            if (code.Length == 0) return false;
+            if (code.IndexOf("GENERATED", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            foreach (var token in GeneratedOutputCodeTokens)
+                if (code.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
         }
 
         private static void Add(
