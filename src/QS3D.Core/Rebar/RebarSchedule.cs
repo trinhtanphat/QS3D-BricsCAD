@@ -97,6 +97,7 @@ namespace QS3D.Core.Rebar
             if (group.SpacingMm.HasValue)
             {
                 if (group.SpacingMm.Value <= 0d) throw new InvalidOperationException("Rebar spacing must be greater than zero.");
+                if (input.DistributionLengthM <= 0d) throw new InvalidOperationException("Rebar distribution length must be greater than zero for spacing notation.");
                 return checked((int)Math.Ceiling(input.DistributionLengthM * 1000d / group.SpacingMm.Value) + 1);
             }
             throw new InvalidOperationException("Rebar quantity cannot be inferred. Provide count notation, spacing + distribution length, or CountOverride.");
@@ -151,6 +152,6 @@ namespace QS3D.Core.Rebar
             return result;
         }
 
-        private static double Quantity(ProjectElement element, string key) => element.Quantities.TryGetValue(key, out var value) && value >= 0d ? value : 0d;
+        private static double Quantity(ProjectElement element, string key) => element.Quantities.TryGetValue(key, out var value) && value >= 0d && !double.IsNaN(value) && !double.IsInfinity(value) ? value : 0d;
     }
 }

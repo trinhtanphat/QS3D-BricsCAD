@@ -78,7 +78,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             if (family == null) return;
             var nameRow = new PropertyRowViewModel { Group = "INFORMATION", Name = "Tên Family" };
             nameRow.Value = family.Name;
-            nameRow.Apply = value => { var next = value.Trim(); if (next.Length == 0) return; family.Name = next; _project?.Touch(); SelectedFamilyName = next; };
+            nameRow.Apply = value => ApplyFamilyName(family, value);
             Properties.Add(nameRow);
             var categoryRow = new PropertyRowViewModel { Group = "INFORMATION", Name = "Loại cấu kiện", IsReadOnly = true };
             categoryRow.Value = family.Category.ToString(); Properties.Add(categoryRow);
@@ -92,11 +92,32 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             }
         }
 
-        private void ApplyFamilyProperty(ProjectFamily family, string key, string value)
+        private string ApplyFamilyName(ProjectFamily family, string value)
+        {
+            var next = (value ?? string.Empty).Trim();
+            if (next.Length == 0)
+            {
+                Status = "Tên Family không được để trống.";
+                return family.Name;
+            }
+            if (_project != null && _project.Families.Any(x => !ReferenceEquals(x, family) && string.Equals(x.Name, next, StringComparison.CurrentCultureIgnoreCase)))
+            {
+                Status = "Tên Family đã tồn tại: " + next;
+                return family.Name;
+            }
+
+            family.Name = next;
+            _project?.Touch();
+            SelectedFamilyName = family.Name;
+            Status = "Đã đổi tên Family: " + family.Name;
+            return family.Name;
+        }
+
+        private string ApplyFamilyProperty(ProjectFamily family, string key, string value)
         {
             var next = value ?? string.Empty;
             family.Properties[key] = next;
-            if (_project == null) return;
+            if (_project == null) return next;
 
             var affected = 0;
             foreach (var element in _project.Elements.Where(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)))
@@ -107,6 +128,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
             _project.Touch();
             Status = "Đã cập nhật " + key + " cho Family • " + affected + " cấu kiện cần tính lại";
+            return next;
         }
 
         private static string UnitFor(string key)

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace QS3D.Core.Domain
 {
@@ -21,19 +23,46 @@ namespace QS3D.Core.Domain
         private static string Require(string value, string name) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Value is required.", name) : value.Trim();
     }
 
-    public sealed class ProjectFamily
+    public sealed class ProjectFamily : INotifyPropertyChanged
     {
+        private string _name;
+        private ElementCategory _category;
+
         public ProjectFamily(string id, string name, ElementCategory category)
         {
             Id = string.IsNullOrWhiteSpace(id) ? throw new ArgumentException("Family id is required.", nameof(id)) : id.Trim();
-            Name = string.IsNullOrWhiteSpace(name) ? throw new ArgumentException("Family name is required.", nameof(name)) : name.Trim();
-            Category = category;
+            _name = RequireName(name);
+            _category = category;
             Properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
+
         public string Id { get; }
-        public string Name { get; set; }
-        public ElementCategory Category { get; set; }
+        public string Name
+        {
+            get => _name;
+            set
+            {
+                var next = RequireName(value);
+                if (string.Equals(_name, next, StringComparison.Ordinal)) return;
+                _name = next;
+                OnPropertyChanged();
+            }
+        }
+        public ElementCategory Category
+        {
+            get => _category;
+            set
+            {
+                if (_category == value) return;
+                _category = value;
+                OnPropertyChanged();
+            }
+        }
         public IDictionary<string, string> Properties { get; }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private static string RequireName(string value) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Family name is required.", nameof(value)) : value.Trim();
+        private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
     public sealed class ProjectState
