@@ -19,22 +19,25 @@ Before starting substantive work, read in this order:
 3. `CI_POLICY.md`;
 4. fetch the latest `main`;
 5. `docs/REMOTE-AGENT-SCOPE.md` — **canonical remote/local execution boundary; remote agents must filter LOCAL_ONLY work out of their backlog instead of rechecking it**;
-6. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2037.md` — **newest short canonical current-state delta for fast-moving source**;
-7. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — broader current-source baseline/handoff retained for detail;
-8. `docs/IMPLEMENTATION-STATUS.md`;
-9. `docs/PLAN.md` and `docs/COMMANDS.md`;
-10. `docs/DIRECT-DRAW-WORKFLOW.md` — **owner-required BLT-style direct authoring direction**;
-11. `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` — current P0 source/rollback/runtime boundary;
-12. `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md` — guarded GlassWall/WallPier/StructuralWall/Foundation plus current Direct Draw extension summary;
-13. `docs/DIRECT-DRAW-OPENINGS.md` — **current Door/WallOpening source + Auto Host + explicit physical-cut boundary and V25 runtime checklist**;
-14. `docs/LOCAL-V25-QUALIFICATION.md` — **LOCAL_ONLY execution handoff for agents with interactive Windows + licensed BricsCAD V25; remote agents do not re-run/re-audit it**;
-15. `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` — **LOCAL_ONLY remaining Curtain-panel, physical wall-junction, standard-specific rebar and production-signing gates**;
-16. `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` — **LOCAL_ONLY/runtime/policy work including whole-command Curtain recovery, native DrawJig/repeated authoring, commercial-license policy/wiring, legal distribution and performance/UX gates**;
-17. `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md` — **consolidated newest LOCAL_ONLY execution matrix for Interchange JSON, documentation, polygon mesh, Level Z-chain, Source Reconcile, Curtain, L/T/X, Direct Draw, signing/licensing and performance**;
-18. `docs/DOCUMENTATION-LAYER.md` — semantic-tag and native documentation-table source/runtime boundaries;
-19. `docs/INTERCHANGE-JSON.md` — read-only semantic interchange format and runtime qualification boundary;
-20. `docs/INTERCHANGE-IMPORT-RESOLUTION-POLICY.md` — **explicit non-mutating collision/provenance/generated-output policy planning; never import authority**;
-21. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
+6. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2306.md` — **newest short canonical current-state delta for Rule/Regen Preview, Health baseline/diff, privacy-safe diagnostics and current source/product logic**;
+7. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2037.md` — previous fast-moving source delta retained for concurrent persistence/interchange/documentation context;
+8. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — broader current-source baseline/handoff retained for detail;
+9. `docs/IMPLEMENTATION-STATUS.md`;
+10. `docs/PLAN.md`, `docs/SOURCE-PRODUCT-PLAN-2026-08-10.md` and `docs/COMMANDS.md`;
+11. `docs/COMMANDS-PREVIEW-DIAGNOSTICS.md` — Rule Preview, Regen Preview, privacy-safe Diagnostic Summary and guarded Core Apply boundaries;
+12. `docs/DIRECT-DRAW-WORKFLOW.md` — **owner-required BLT-style direct authoring direction**;
+13. `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` — current P0 source/rollback/runtime boundary;
+14. `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md` — guarded GlassWall/WallPier/StructuralWall/Foundation plus current Direct Draw extension summary;
+15. `docs/DIRECT-DRAW-OPENINGS.md` — **current Door/WallOpening source + Auto Host + explicit physical-cut boundary and V25 runtime checklist**;
+16. `docs/LOCAL-V25-QUALIFICATION.md` — **LOCAL_ONLY execution handoff for agents with interactive Windows + licensed BricsCAD V25; remote agents do not re-run/re-audit it**;
+17. `docs/LOCAL-PREVIEW-DIAGNOSTIC-QUALIFICATION-2026-08-10.md` — **LOCAL_ONLY exact-SHA qualification for read-only previews, privacy-safe diagnostic export and future guarded Apply confirmation/Undo/session behavior**;
+18. `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` — **LOCAL_ONLY remaining Curtain-panel, physical wall-junction, standard-specific rebar and production-signing gates**;
+19. `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` — **LOCAL_ONLY/runtime/policy work including whole-command Curtain recovery, native DrawJig/repeated authoring, commercial-license policy/wiring, legal distribution and performance/UX gates**;
+20. `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md` — **consolidated LOCAL_ONLY execution matrix for Interchange JSON, documentation, polygon mesh, Level Z-chain, Source Reconcile, Curtain, L/T/X, Direct Draw, signing/licensing and performance**;
+21. `docs/DOCUMENTATION-LAYER.md` — semantic-tag and native documentation-table source/runtime boundaries;
+22. `docs/INTERCHANGE-JSON.md` — read-only semantic interchange format and runtime qualification boundary;
+23. `docs/INTERCHANGE-IMPORT-RESOLUTION-POLICY.md` — **explicit collision/provenance/generated-output policy planning and execution boundaries**;
+24. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
 
 The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the current handoff or current source, current `main` wins. For product-form/hosting ambiguity, `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes that requirement.
 
@@ -84,7 +87,7 @@ If an agent has permission and tooling to operate a real/local machine, that age
 - runner registration, environment variables, installed SDK/runtime inspection;
 - reproducing machine-specific crashes, DPI/layout issues, file-lock behavior, or native CAD behavior.
 
-Start local qualification from `docs/LOCAL-V25-QUALIFICATION.md`. Run `scripts/run-local-v25-qualification.ps1` against a **clean exact SHA** before manual scenario testing. For feature work that is intentionally deferred to a real V25/engineering/signing environment, also read `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` and the consolidated `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`, then close only the gates for which the local agent can produce the required evidence or owner-supplied policy. Keep generated runtime evidence under `artifacts/` or another explicitly local folder; `artifacts/` is intentionally gitignored. Do not claim a customer-release qualification when the runner used `-SkipRuntime`.
+Start local qualification from `docs/LOCAL-V25-QUALIFICATION.md`. Run `scripts/run-local-v25-qualification.ps1` against a **clean exact SHA** before manual scenario testing. For the new preview/diagnostic workflow also read `docs/LOCAL-PREVIEW-DIAGNOSTIC-QUALIFICATION-2026-08-10.md`. For feature work intentionally deferred to a real V25/engineering/signing environment, also read `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` and the consolidated `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`, then close only the gates for which the local agent can produce the required evidence or owner-supplied policy. Keep generated runtime evidence under `artifacts/` or another explicitly local folder; `artifacts/` is intentionally gitignored. Do not claim a customer-release qualification when the runner used `-SkipRuntime`.
 
 Do not spend scarce local-machine access on ordinary repository editing, documentation cleanup, broad source review, or other tasks that remote agents can perform equally well unless those tasks directly unblock local validation.
 
@@ -106,11 +109,11 @@ Remote agents may still implement or strengthen source contracts, static guards,
 
 ## Handoff rule
 
-When a remote agent reaches a new task that requires local-only access, leave the repository in a runnable/testable state and document the exact local validation needed. The canonical local execution handoff is `docs/LOCAL-V25-QUALIFICATION.md`; remaining implementation/engineering/signing gates are tracked in `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, with additional runtime/product-policy gaps tracked in `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` and the current consolidated delta in `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`. Extend the appropriate handoff only when a new source change materially changes or introduces a local scenario. Do not repeatedly re-audit an already parked LOCAL_ONLY gate from a remote environment.
+When a remote agent reaches a new task that requires local-only access, leave the repository in a runnable/testable state and document the exact local validation needed. The canonical local execution handoff is `docs/LOCAL-V25-QUALIFICATION.md`; preview/diagnostic runtime work is tracked in `docs/LOCAL-PREVIEW-DIAGNOSTIC-QUALIFICATION-2026-08-10.md`; remaining implementation/engineering/signing gates are tracked in `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, with additional runtime/product-policy gaps tracked in `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` and the current consolidated delta in `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`. Extend the appropriate handoff only when a new source change materially changes or introduces a local scenario. Do not repeatedly re-audit an already parked LOCAL_ONLY gate from a remote environment.
 
 When a local agent finishes validation, commit only reusable source/scripts/docs and a sanitized text summary if useful; never commit proprietary BricsCAD DLLs, private fixtures, screenshots containing private drawings, signing secrets or raw machine evidence.
 
-When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2037.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
+When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2306.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
 
 ## GitHub Actions / release
 
