@@ -41,13 +41,14 @@ namespace QS3D.Core.Diagnostics
             return false;
         }
 
-        public static bool AreSameLogicalOwnerSlots(string left, string right)
+        public static string CanonicalOwnerSlot(string key)
         {
-            var leftNormalized = (left ?? string.Empty).Trim();
-            var rightNormalized = (right ?? string.Empty).Trim();
-            if (string.Equals(leftNormalized, rightNormalized, StringComparison.OrdinalIgnoreCase)) return true;
-            return IsHostSolidAlias(leftNormalized) && IsHostSolidAlias(rightNormalized);
+            var normalized = (key ?? string.Empty).Trim();
+            return IsHostSolidAlias(normalized) ? GeneratedSolidOwnerKey : normalized;
         }
+
+        public static bool AreSameLogicalOwnerSlots(string left, string right) =>
+            string.Equals(CanonicalOwnerSlot(left), CanonicalOwnerSlot(right), StringComparison.OrdinalIgnoreCase);
 
         public static IEnumerable<KeyValuePair<string, string>> EnumerateOwnerHandles(ProjectElement element)
         {
@@ -60,11 +61,24 @@ namespace QS3D.Core.Diagnostics
             }
         }
 
+        public static IEnumerable<KeyValuePair<string, string>> EnumerateLogicalOwnerHandles(ProjectElement element)
+        {
+            if (element == null) throw new ArgumentNullException(nameof(element));
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in EnumerateOwnerHandles(element))
+            {
+                var slot = CanonicalOwnerSlot(entry.Value);
+                var token = entry.Key + "\n" + slot;
+                if (!seen.Add(token)) continue;
+                yield return new KeyValuePair<string, string>(entry.Key, slot);
+            }
+        }
+
         public static IReadOnlyList<string> CollectOwnerHandles(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             return project.Elements
-                .SelectMany(EnumerateOwnerHandles)
+                .SelectMany(EnumerateLogicalOwnerHandles)
                 .Select(x => x.Key)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
@@ -82,7 +96,7 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
-                foreach (var entry in EnumerateOwnerHandles(element))
+                foreach (var entry in EnumerateLogicalOwnerHandles(element))
                 {
                     if (!string.Equals(entry.Key, normalized, StringComparison.OrdinalIgnoreCase)) continue;
                     if (owner != null)
