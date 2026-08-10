@@ -63,7 +63,7 @@ if not errors:
         "MessageBoxButton.YesNo",
         "ProjectInterchangeJsonValidator.MaxFileBytes",
         "new UTF8Encoding(false, true)",
-        "không tự chạy QS3DBUILD3D",
+        "Không tự chạy QS3DBUILD3D",
     ]:
         if needle not in c:
             errors.append(f"command missing guarded UX contract: {needle}")
