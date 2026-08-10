@@ -86,7 +86,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnZoomSelectionClick(object sender, RoutedEventArgs e) => Send("QS3DZOOMSELECTED");
         private void OnTopViewClick(object sender, RoutedEventArgs e) => Send("QS3DVIEWTOP");
         private void OnAddFinishClick(object sender, RoutedEventArgs e) => Send("QS3DFINISH");
-        private void OnRemoveFinishClick(object sender, RoutedEventArgs e) => Send("QS3DUNTRACK");
+        private void OnRemoveFinishClick(object sender, RoutedEventArgs e) => Send("QS3DUNTRACKFINISH");
         private void OnPickRoomClick(object sender, RoutedEventArgs e) => Send("QS3DROOM");
         private void OnQuantityClick(object sender, RoutedEventArgs e) => Send("QS3DBQ");
         private void OnHealthClick(object sender, RoutedEventArgs e) => Send("QS3DHEALTH");

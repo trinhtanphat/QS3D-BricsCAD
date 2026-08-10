@@ -27,8 +27,22 @@ namespace QS3D.BricsCAD.V25.Cad
             }
         }
 
+        public static DrawingUnit GetDrawingUnit(Document document)
+        {
+            switch (GetLengthUnit(document))
+            {
+                case LengthUnit.Inch: return DrawingUnit.Inch;
+                case LengthUnit.Foot: return DrawingUnit.Foot;
+                case LengthUnit.Centimeter: return DrawingUnit.Centimeter;
+                case LengthUnit.Meter: return DrawingUnit.Meter;
+                case LengthUnit.Yard: return DrawingUnit.Yard;
+                default: return DrawingUnit.Millimeter;
+            }
+        }
+
         public static bool IsAssumedMillimeter(Document document)
         {
+            if (document == null) throw new ArgumentNullException(nameof(document));
             var code = (int)document.Database.Insunits;
             return code != 1 && code != 2 && code != 4 && code != 5 && code != 6 && code != 10;
         }
