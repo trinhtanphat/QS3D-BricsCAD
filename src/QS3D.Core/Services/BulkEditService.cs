@@ -18,14 +18,15 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             if (string.IsNullOrWhiteSpace(propertyName)) throw new ArgumentException("Property name is required.", nameof(propertyName));
+            var key = propertyName.Trim();
             var changed = new List<string>();
             foreach (var element in OwnedDistinct(project, elements))
             {
-                element.Properties.TryGetValue(propertyName, out var before);
+                element.Properties.TryGetValue(key, out var before);
                 var next = value ?? string.Empty;
                 if (string.Equals(before ?? string.Empty, next, StringComparison.Ordinal)) continue;
-                element.Properties[propertyName] = next;
-                element.MarkDirty(DirtyFlags(element, propertyName));
+                element.Properties[key] = next;
+                element.MarkDirty(DirtyFlags(element, key));
                 changed.Add(element.Id);
             }
             if (changed.Count > 0) project.Touch();
@@ -38,15 +39,16 @@ namespace QS3D.Core.Services
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             if (string.IsNullOrWhiteSpace(propertyName)) throw new ArgumentException("Property name is required.", nameof(propertyName));
             if (double.IsNaN(factor) || double.IsInfinity(factor)) throw new ArgumentOutOfRangeException(nameof(factor));
+            var key = propertyName.Trim();
 
             var updates = new List<PendingPropertyUpdate>();
             foreach (var element in OwnedDistinct(project, elements))
             {
-                if (!element.Properties.TryGetValue(propertyName, out var text)) continue;
+                if (!element.Properties.TryGetValue(key, out var text)) continue;
                 if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var current) || double.IsNaN(current) || double.IsInfinity(current))
-                    throw new FormatException("Invalid numeric property " + propertyName + " on " + element.Id + ": " + text);
+                    throw new FormatException("Invalid numeric property " + key + " on " + element.Id + ": " + text);
                 var next = current * factor;
-                if (double.IsNaN(next) || double.IsInfinity(next)) throw new OverflowException("Bulk property multiplication overflow for " + element.Id + "/" + propertyName);
+                if (double.IsNaN(next) || double.IsInfinity(next)) throw new OverflowException("Bulk property multiplication overflow for " + element.Id + "/" + key);
                 var formatted = next.ToString("R", CultureInfo.InvariantCulture);
                 if (string.Equals(text, formatted, StringComparison.Ordinal)) continue;
                 updates.Add(new PendingPropertyUpdate { Element = element, Value = formatted });
@@ -56,8 +58,8 @@ namespace QS3D.Core.Services
             var changed = new List<string>(updates.Count);
             foreach (var update in updates)
             {
-                update.Element.Properties[propertyName] = update.Value;
-                update.Element.MarkDirty(DirtyFlags(update.Element, propertyName));
+                update.Element.Properties[key] = update.Value;
+                update.Element.MarkDirty(DirtyFlags(update.Element, key));
                 changed.Add(update.Element.Id);
             }
             project.Touch();
@@ -89,8 +91,8 @@ namespace QS3D.Core.Services
                         if (element.Properties.TryGetValue(property.Key, out var current) && string.Equals(current, property.Value ?? string.Empty, StringComparison.Ordinal))
                             inheritedKeys.Add(property.Key);
 
-                foreach (var key in inheritedKeys)
-                    if (!family.Properties.ContainsKey(key)) element.Properties.Remove(key);
+                foreach (var inheritedKey in inheritedKeys)
+                    if (!family.Properties.ContainsKey(inheritedKey)) element.Properties.Remove(inheritedKey);
                 foreach (var property in family.Properties)
                     if (inheritedKeys.Contains(property.Key) || !element.Properties.ContainsKey(property.Key))
                         element.Properties[property.Key] = property.Value ?? string.Empty;
