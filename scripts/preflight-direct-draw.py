@@ -8,17 +8,22 @@ errors = []
 
 required = {
     "src/QS3D.BricsCAD.V25/DirectDrawCommands.cs": [
+        'using QS3D.Core.Persistence;',
         'CommandMethod("QS3DDRAWWALL"',
         'CommandMethod("QS3DDRAWBEAM"',
         'CommandMethod("QS3DDRAWCOLUMN"',
         'CommandMethod("QS3DDRAWSLAB"',
         "SemanticCaptureService.Capture(document, category)",
         "ProjectStateSnapshot.Capture(project)",
-        "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
-        "GeneratedGeometryService.FindMatchingOwnedHandles(document, project.ProjectId, elementId, category)",
+        "ProjectElement? createdElement",
+        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(createdElement)",
+        "GeneratedGeometryService.FindMatchingOwnedHandles(document, project.ProjectId, createdElement.Id, createdElement.Category)",
+        "GeneratedGeometryService.RequireMatchingOwnership",
         "ownershipDiscoveryError",
+        "EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles)",
         "rollback.Restore(project)",
-        "EraseHandles(document, cleanupHandles)",
+        "FinalizeUi(document, createdElement!",
+        "EnsureActive(document",
         "RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
         "WallSolidBuilder.BuildSelectedLineWalls",
         "PolylineWallSolidBuilder.BuildSelected",
@@ -46,8 +51,11 @@ required = {
         "CadGeometryGuard.ToMeters(document, deltaDrawingUnits",
         "RequireModelSpace(document)",
         "document.Database.CurrentSpaceId.Equals(modelSpaceId)",
+        "CadGeometryGuard.Subtract(center.X, halfWidth",
+        "CadGeometryGuard.Add(center.X, halfWidth",
         "CadHandleService.GetLiveHandles(document, normalized)",
-        "Direct Draw rollback còn CAD handle chưa xóa",
+        "Direct Draw rollback còn generated CAD handle chưa xóa",
+        "Direct Draw rollback còn source CAD chưa xóa",
         'element.Properties.TryGetValue("GeneratedSolidHandle"',
         "QS3DVIEW3D",
     ],
@@ -56,6 +64,7 @@ required = {
         "GetXDataForApplication(RegAppName)",
         "BlockTableRecord.ModelSpace",
         "HasMatchingOwnership(entity, normalizedProjectId, normalizedElementId, category)",
+        "RequireMatchingOwnership",
     ],
     "src/QS3D.BricsCAD.V25/Build3DCommands.cs": [
         'CommandMethod("QS3DBUILD3D"',
@@ -186,38 +195,62 @@ if source.is_file():
         "Cao độ đáy Sàn (m)",
         "Cao độ đáy Cột (m)",
         "return value > 0d ? value : fallback;",
+        "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
+        "priorGenerated.Contains(handle)",
+        "EraseHandles(document, cleanupHandles)",
+        "Math.Abs(points[index].Z - z) > 1e-6d",
     )
     for token in forbidden:
         if token in text:
             errors.append("DirectDrawCommands contains stale/unsafe authoring behavior: " + token)
+
     create = text.find("sourceId = createSource();")
     capture = text.find("SemanticCaptureService.Capture(document, category)")
-    regenerate = text.find("var regenerated = new RegenerationEngine")
+    regenerate = text.find("regenerated = new RegenerationEngine")
     build = text.find("BuildSelected(document, project, category)")
-    discover = text.find("GeneratedGeometryService.FindMatchingOwnedHandles")
-    restore = text.find("rollback.Restore(project)")
-    erase = text.find("EraseHandles(document, cleanupHandles)")
-    if min(create, capture, regenerate, build, discover, restore, erase) < 0:
+    catch_pos = text.find("catch (Exception operationError)")
+    metadata_discovery = text.find("GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(createdElement)", catch_pos)
+    xdata_discovery = text.find("GeneratedGeometryService.FindMatchingOwnedHandles", catch_pos)
+    cleanup = text.find("EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles)", catch_pos)
+    restore = text.find("rollback.Restore(project)", catch_pos)
+    finalize = text.find("FinalizeUi(document, createdElement!", catch_pos)
+    if min(create, capture, regenerate, build, catch_pos, metadata_discovery, xdata_discovery, cleanup, restore, finalize) < 0:
         errors.append("Direct Draw transaction/rollback ordering tokens are incomplete")
-    elif not (create < capture < regenerate < build < discover < restore < erase):
-        errors.append("Direct Draw must create source -> capture -> semantic regen -> build; failure discovers tagged output before semantic restore and CAD cleanup")
-    if "priorGenerated.Contains(handle)" not in text:
-        errors.append("Direct Draw rollback must preserve generated handles that existed before the operation")
+    else:
+        if not (create < capture < regenerate < build < catch_pos):
+            errors.append("Direct Draw must create source -> capture -> semantic regen -> native build before rollback handling")
+        if not (catch_pos < metadata_discovery < xdata_discovery < cleanup < restore < finalize):
+            errors.append("Direct Draw failure must discover only the new owner's output, clean ownership-verified CAD before project restore, then run UI sync only after the atomic boundary")
+
     if text.count("RequireModelSpace(document);") < 4:
         errors.append("Every P0 Direct Draw command must fail closed outside Model Space")
-    if "Math.Abs(points[index].Z - z) > 1e-6d" in text:
-        errors.append("Direct Draw planarity must be unit-aware rather than using raw drawing-unit tolerance")
     if text.count('element.Properties["BottomOffsetM"]') < 4:
         errors.append("All P0 Direct Draw commands must persist the prompted source-relative bottom offset")
     if text.count("PromptPositiveMeters(document.Editor") < 7:
         errors.append("P0 Direct Draw must prompt key positive dimensions instead of silently using all Family defaults")
     if "Sửa Family trước khi Direct Draw." not in text or "if (!(value > 0d))" not in text:
         errors.append("Existing invalid Family numeric values must fail closed rather than being silently replaced by Direct Draw fallbacks")
-    erase_body = text.split("private static void EraseHandles", 1)[-1].split("private static Document? Active", 1)[0]
-    if "catch { }" in erase_body or "catch{}" in erase_body.replace(" ", ""):
-        errors.append("Direct Draw CAD rollback must not swallow per-entity erase failures")
-    if "transaction.Commit();" not in erase_body or "CadHandleService.GetLiveHandles(document, normalized)" not in erase_body:
-        errors.append("Direct Draw CAD rollback must commit erase transaction and verify no requested handles remain live")
+
+    cleanup_start = text.find("private static void EraseDirectDrawCad(")
+    cleanup_end = text.find("private static void FinalizeUi(", cleanup_start)
+    if cleanup_start < 0 or cleanup_end < 0:
+        errors.append("Direct Draw ownership-scoped CAD rollback helper is missing")
+    else:
+        cleanup_body = text[cleanup_start:cleanup_end]
+        if "catch { }" in cleanup_body or "catch{}" in cleanup_body.replace(" ", ""):
+            errors.append("Direct Draw CAD rollback must not swallow per-entity destructive erase failures")
+        for token in (
+            "GeneratedGeometryService.RequireMatchingOwnership",
+            "CadHandleService.Resolve(document, normalized)",
+            "transaction.Commit();",
+            "CadHandleService.GetLiveHandles(document, normalized)",
+        ):
+            if token not in cleanup_body:
+                errors.append("Direct Draw CAD rollback missing safety token: " + token)
+        resolve_pos = cleanup_body.find("CadHandleService.Resolve(document, normalized)")
+        transaction_pos = cleanup_body.find("using (document.LockDocument())")
+        if resolve_pos < 0 or transaction_pos < 0 or resolve_pos > transaction_pos:
+            errors.append("Direct Draw must resolve generated ObjectIds before opening the destructive write transaction")
 
 build3d = ROOT / "src/QS3D.BricsCAD.V25/Build3DCommands.cs"
 if build3d.is_file():
@@ -266,4 +299,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw P0 uses source-relative offsets, rejects invalid configured Family numerics, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and wall/QS3DBUILD3D/Workspace source batches fail closed before partial native rebuilds.")
+print("PASS: Direct Draw P0 uses source-relative offsets, fail-closed Family numerics, semantic validation before CAD mutation, Model-Space/unit-aware authoring, ownership-scoped/XData-complete rollback before project restore, non-destructive UI finalization, and guarded QS3DBUILD3D/Workspace source batches.")

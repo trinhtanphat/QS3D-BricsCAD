@@ -8,7 +8,7 @@ This document records the current source implementation of the owner-required Di
 
 QS3D remains a **BricsCAD V25 x64 .NET plugin**. Direct Draw operates inside the native BricsCAD editor/DWG database and does not introduce a standalone CAD engine.
 
-Current status is **source-implemented / static-regression-source-present**, with Ribbon + Domain Hub discoverability and BLT-style parameter prompts wired on `main`. This is **not** a claim that the exact current SHA has passed licensed BricsCAD V25 interactive runtime qualification.
+Current status is **source-implemented / static-regression-source-present**, with Ribbon + Domain Hub discoverability, BLT-style parameter prompts and ownership-scoped failure rollback wired on `main`. This is **not** a claim that the exact current SHA has passed licensed BricsCAD V25 interactive runtime qualification.
 
 ## Implemented commands
 
@@ -33,7 +33,9 @@ P0 deliberately fails closed instead of silently changing user geometry:
 - picked Wall/Beam/Slab path points must remain plan-view within **5 mm vertical tolerance**, evaluated after converting drawing units to meters rather than using a raw drawing-unit epsilon;
 - existing wall/structural native builders retain their own source-type, planarity, finite-number and geometry guards;
 - unsupported/mixed `QS3DBUILD3D` batches are rejected before the first native builder commit;
-- active/compatible Family defaults are reused, while prompted P0 values become instance properties for the new semantic element.
+- active/compatible Family defaults are reused, while prompted P0 values become instance properties for the new semantic element;
+- if a configured Family property exists but is blank, malformed, non-finite or invalid for a positive-only dimension, Direct Draw fails closed instead of silently substituting a fallback;
+- Column footprint coordinates use checked finite add/subtract operations rather than raw coordinate arithmetic.
 
 Rotated/non-world UCS behavior is intentionally left in the licensed runtime qualification gate rather than guessed in source without a real BricsCAD V25 session.
 
@@ -53,34 +55,33 @@ BricsCAD Editor point acquisition
 -> deterministic semantic regeneration before native mutation
 -> existing WallSolidBuilder / PolylineWallSolidBuilder / StructuralSolidBuilder
 -> generated ownership + quantity/state updates
--> select generated host when available
--> switch/show 3D view
+-> non-critical selection/palette/Regen/View3D finalization
 ```
 
 This keeps Direct Draw and legacy capture workflows converged on the same semantic/native model. `QS3DWALL`, `QS3DBEAM`, `QS3DCOLUMN`, `QS3DSLAB` and `QS3DBUILD3D` remain supported for pre-existing CAD.
 
 ## Transaction and rollback contract
 
-Direct Draw creates persistent CAD source geometry before semantic capture because the existing model uses real DWG Handles as source provenance. Therefore the command owns an outer rollback boundary around the complete authoring operation.
+Direct Draw creates persistent CAD source geometry before semantic capture because the existing model uses real DWG Handles as source provenance. Therefore the command owns an outer rollback boundary around source creation, semantic capture, semantic regeneration and native generation.
 
-Before creating source CAD it captures:
-
-- `ProjectStateSnapshot` of the current project;
-- the project-wide set of existing generated-owner handles.
+Before creating source CAD it captures a full `ProjectStateSnapshot`. During the operation it retains the exact new source `ObjectId` and, after capture, the exact new semantic `ProjectElement`.
 
 The command performs semantic regeneration **before** calling a native builder so dependency/rule failures happen before Solid3d mutation whenever possible.
 
 If capture, semantic regeneration or native generation fails:
 
-1. collect the just-created source Handle plus generated handles newly visible in project ownership;
-2. when the semantic element id is known, scan Model Space for QS3D XData ownership matching that exact project/element/category via `GeneratedGeometryService.FindMatchingOwnedHandles(...)`; this also finds tagged native output that may have committed before project handle metadata was written;
-3. restore the project snapshot;
-4. erase only the failed operation's source/new owned output;
-5. verify requested cleanup handles are no longer live instead of swallowing per-entity erase failures;
-6. clear implied selection;
-7. preserve/report ownership-discovery, project-restore and CAD-cleanup errors together with the original operation error.
+1. collect owner handles recorded on **that new semantic element only** via `GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(...)`;
+2. scan Model Space for QS3D XData ownership matching that exact project/element/category via `GeneratedGeometryService.FindMatchingOwnedHandles(...)`; this also finds tagged native output that may have committed before project handle metadata was written;
+3. while the semantic owner metadata is still available, erase the exact source object created by the command and only the discovered generated output;
+4. require `GeneratedGeometryService.RequireMatchingOwnership(...)` before any generated entity is erased;
+5. verify both generated handles and the exact source Handle are no longer live;
+6. restore the full project snapshot only after ownership-aware CAD cleanup has completed;
+7. clear implied selection best-effort;
+8. preserve/report ownership-discovery, CAD-cleanup and project-restore failures together with the original operation error.
 
-Existing generated geometry that predates the Direct Draw operation remains protected through the pre-operation generated-handle snapshot and the established generated ownership checks.
+The rollback no longer computes a project-wide generated-handle delta. This prevents unrelated generated output created elsewhere from being selected for cleanup merely because its Handle did not exist when Direct Draw started.
+
+Palette refresh, result selection, editor Regen, status text and `QS3DVIEW3D` run **after** the atomic model/native operation. If one of these UI/view synchronization steps fails, QS3D reports a warning without deleting an otherwise valid source + semantic + generated model.
 
 ## Reused product invariants
 
@@ -88,8 +89,9 @@ P0 deliberately reuses:
 
 - `SemanticCaptureService` for category-safe active Family/starter Family behavior;
 - `ProjectStateSnapshot` for project rollback;
-- `GeneratedHandleOwnershipPolicy` for project-wide generated-handle classification;
-- `GeneratedGeometryService` XData ownership for native generated-host provenance and orphan discovery;
+- `GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles` for semantic owner metadata;
+- `GeneratedGeometryService.FindMatchingOwnedHandles` for tagged output that is not yet represented in project metadata;
+- `GeneratedGeometryService.RequireMatchingOwnership` before destructive rollback of generated CAD;
 - `WallSolidBuilder` for two-point/LINE ArchitecturalWall;
 - `PolylineWallSolidBuilder` for open-POLYLINE ArchitecturalWall;
 - `StructuralSolidBuilder` for Beam/Column/Slab;
@@ -98,20 +100,38 @@ P0 deliberately reuses:
 
 Do not replace these with a Direct-Draw-specific parallel model or geometry engine.
 
+## `QS3DBUILD3D` compatibility path
+
+`QS3DBUILD3D` remains the rebuild path for already-captured CAD. Current source guards deliberately reject hazards before native mutation:
+
+- unsupported categories;
+- mixed native categories in one logical batch;
+- missing/stale semantic source Handles;
+- source CAD outside Model Space;
+- incomplete source snapshot resolution;
+- mixed wall LINE/open-POLYLINE batches that would require two independent builder transactions.
+
+Semantic regeneration occurs before the native builder transaction. A failed native build therefore does not partially commit one category/source-type CAD batch. Semantic regeneration is retained as a valid model operation rather than being rolled back merely because native generation later fails.
+
 ## Static regression gate
 
 `scripts/preflight-direct-draw.py` guards the P0 architecture. The current contract checks include, among other things:
 
 - all four Direct Draw commands and legacy capture/build commands remain uniquely registered;
 - Direct Draw still enters through `SemanticCaptureService` and performs semantic regeneration before native mutation;
+- `QS3D.Core.Persistence` remains imported for the outer `ProjectStateSnapshot`;
 - all four P0 entry points retain the Model Space guard;
 - the planarity threshold is unit-aware and remains 5 mm;
 - established wall/structural builders are reused rather than duplicating `CreateBox`/`CreateExtrudedSolid` inside Direct Draw;
-- generated XData ownership discovery remains wired into failed-operation cleanup;
-- project restore occurs before final CAD cleanup;
-- CAD cleanup does not swallow erase failures and verifies requested handles are no longer live;
+- rollback is scoped to the newly-created semantic owner rather than a project-wide generated-handle delta;
+- metadata owner handles and XData-discovered output are both considered;
+- generated CAD ownership is verified before destructive erase;
+- generated ObjectIds are resolved before the destructive write transaction;
+- CAD cleanup completes before project snapshot restore;
+- cleanup does not swallow destructive erase failures and verifies requested source/generated Handles are no longer live;
+- UI/View3D finalization remains outside the atomic model/native mutation boundary;
 - Ribbon and Domain Hub keep the P0 creation actions visible;
-- `QS3DBUILD3D` rejects mixed atomicity hazards before native commit.
+- `QS3DBUILD3D`, Workspace source restoration and wall source batches retain their current fail-closed preconditions.
 
 `preflight-all.py` auto-discovers `preflight-*.py`. Repository policy remains manual-only: source/docs work and `continue all` do **not** authorize GitHub Actions or release workflows.
 
@@ -127,7 +147,7 @@ Product implication retained from the sample: Direct Draw must create real Brics
 
 ## Current validation boundary
 
-The current source could not be freshly cloned/executed in the available container because that environment could not resolve `github.com`. GitHub Actions were intentionally **not** dispatched. Therefore static regression source is present, but this handoff does not claim a freshly executed green preflight/build for the latest `main`.
+GitHub Actions were intentionally **not** dispatched. This handoff therefore does not claim a freshly executed green manual V25 build/runtime gate for the latest `main`.
 
 Before describing P0 as runtime-verified, a local agent with licensed interactive BricsCAD V25 must validate the exact source SHA for:
 
@@ -143,9 +163,10 @@ Before describing P0 as runtime-verified, a local agent with licensed interactiv
 10. selection/workspace synchronization, including generated-host selection and rebuild back to the live semantic source;
 11. `QS3DHEALTHALL`, ownership checks, BQ/quantities and supported rebar downstream workflows;
 12. save/reopen and `QS3DREGEN` / `QS3DBUILD3D` rebuild;
-13. ESC/cancel and forced semantic/native-build failure cleanup, including proof that no tagged orphan Solid3d remains;
-14. representative testing against a copy of the owner-provided `MB MONG.dwg` without committing that drawing;
-15. Unicode/HiDPI and screenshots of the real BricsCAD runtime.
+13. ESC/cancel and forced semantic/native-build failure cleanup, including ownership mismatch, XData-only orphan output and failing erase paths;
+14. proof that a non-critical palette/View3D synchronization failure does not roll back a successfully created model;
+15. representative testing against a copy of the owner-provided `MB MONG.dwg` without committing that drawing;
+16. Unicode/HiDPI and screenshots of the real BricsCAD runtime.
 
 ## Next implementation priorities
 
