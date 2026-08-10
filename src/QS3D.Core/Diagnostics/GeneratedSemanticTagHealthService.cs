@@ -23,7 +23,7 @@ namespace QS3D.Core.Diagnostics
         public const string OwnershipVersion = "1";
         public const string DrawingLocalWcs = "DrawingLocalWcs";
 
-        public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
+        public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
@@ -34,6 +34,12 @@ namespace QS3D.Core.Diagnostics
                 var handles = ParseHandles(element, rawHandles, issues);
                 if (handles.Count == 0)
                     issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_INVALID", HealthSeverity.Error, "Semantic tag không còn generated handle hợp lệ.", element.Id));
+
+                foreach (var handle in handles)
+                {
+                    if (liveHandles != null && !liveHandles.Contains(handle))
+                        issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated semantic tag CAD entity: " + handle + ". Chạy QS3DTAGREFRESH để rebuild.", element.Id));
+                }
 
                 if (element.SourceHandles.Any(source => handles.Contains((source ?? string.Empty).Trim())))
                     issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated semantic tag handle không được nằm trong SourceHandles.", element.Id));
