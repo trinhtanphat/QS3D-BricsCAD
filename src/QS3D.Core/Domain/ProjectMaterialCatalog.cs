@@ -1,0 +1,170 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+
+namespace QS3D.Core.Domain
+{
+    public sealed class ProjectMaterial
+    {
+        public ProjectMaterial(string id, string name, string unit, string description, bool builtIn)
+        {
+            Id = Required(id, nameof(id), 64);
+            Name = Required(name, nameof(name), 120);
+            Unit = Optional(unit, nameof(unit), 24);
+            Description = Optional(description, nameof(description), 240);
+            IsBuiltIn = builtIn;
+        }
+
+        public string Id { get; }
+        public string Name { get; }
+        public string Unit { get; }
+        public string Description { get; }
+        public bool IsBuiltIn { get; }
+
+        private static string Required(string value, string name, int max)
+        {
+            var text = (value ?? string.Empty).Trim();
+            if (text.Length == 0 || text.Length > max) throw new ArgumentException(name + " must contain 1.." + max + " characters.", name);
+            return text;
+        }
+
+        private static string Optional(string value, string name, int max)
+        {
+            var text = (value ?? string.Empty).Trim();
+            if (text.Length > max) throw new ArgumentException(name + " must contain at most " + max + " characters.", name);
+            return text;
+        }
+    }
+
+    public static class ProjectMaterialCatalog
+    {
+        public const string MetadataKey = "QS3D.MaterialCatalog.v1";
+        private const int MaxCustomMaterials = 500;
+
+        private static readonly ProjectMaterial[] BuiltIns =
+        {
+            new ProjectMaterial("builtin-concrete", "Bê tông", "m³", "", true),
+            new ProjectMaterial("builtin-steel", "Thép", "kg", "", true),
+            new ProjectMaterial("builtin-brick", "Gạch", "m²", "", true),
+            new ProjectMaterial("builtin-glass", "Kính", "m²", "", true),
+            new ProjectMaterial("builtin-aluminium", "Nhôm", "m", "", true),
+            new ProjectMaterial("builtin-waterproof", "Chống thấm", "m²", "", true),
+            new ProjectMaterial("builtin-paint", "Sơn", "m²", "", true),
+            new ProjectMaterial("builtin-wood", "Gỗ", "m²", "", true),
+            new ProjectMaterial("builtin-earth", "Đất", "m³", "", true)
+        };
+
+        public static IReadOnlyList<ProjectMaterial> GetAll(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var result = new List<ProjectMaterial>(BuiltIns);
+            result.AddRange(ReadCustom(project));
+            return result
+                .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.First())
+                .OrderBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ToList()
+                .AsReadOnly();
+        }
+
+        public static IReadOnlyList<ProjectMaterial> GetCustom(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            return ReadCustom(project).AsReadOnly();
+        }
+
+        public static ProjectMaterial UpsertCustom(ProjectState project, string id, string name, string unit, string description)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var material = new ProjectMaterial(id, name, unit, description, false);
+            if (BuiltIns.Any(x => string.Equals(x.Id, material.Id, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Built-in material ids cannot be overwritten.");
+            if (BuiltIns.Any(x => string.Equals(x.Name, material.Name, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("A built-in material already uses the name '" + material.Name + "'.");
+
+            var custom = ReadCustom(project);
+            var byId = custom.FindIndex(x => string.Equals(x.Id, material.Id, StringComparison.OrdinalIgnoreCase));
+            var duplicateName = custom.FirstOrDefault(x => !string.Equals(x.Id, material.Id, StringComparison.OrdinalIgnoreCase) && string.Equals(x.Name, material.Name, StringComparison.OrdinalIgnoreCase));
+            if (duplicateName != null) throw new InvalidOperationException("Another custom material already uses the name '" + material.Name + "'.");
+            if (byId >= 0) custom[byId] = material;
+            else
+            {
+                if (custom.Count >= MaxCustomMaterials) throw new InvalidOperationException("Project material catalog supports at most " + MaxCustomMaterials + " custom materials.");
+                custom.Add(material);
+            }
+            WriteCustom(project, custom);
+            project.Touch();
+            return material;
+        }
+
+        public static bool DeleteCustom(ProjectState project, string id)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var normalized = (id ?? string.Empty).Trim();
+            if (normalized.Length == 0) return false;
+            var custom = ReadCustom(project);
+            var removed = custom.RemoveAll(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
+            if (removed == 0) return false;
+            WriteCustom(project, custom);
+            project.Touch();
+            return true;
+        }
+
+        public static IReadOnlyList<string> ReferencedMaterialNames(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in project.Families)
+                AddMaterial(family.Properties, names);
+            foreach (var element in project.Elements)
+                AddMaterial(element.Properties, names);
+            return names.OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static void AddMaterial(IDictionary<string, string> properties, ISet<string> names)
+        {
+            if (properties.TryGetValue("Material", out var material) && !string.IsNullOrWhiteSpace(material)) names.Add(material.Trim());
+            if (properties.TryGetValue("CurtainFrameMaterial", out var frame) && !string.IsNullOrWhiteSpace(frame)) names.Add(frame.Trim());
+        }
+
+        private static List<ProjectMaterial> ReadCustom(ProjectState project)
+        {
+            if (!project.Metadata.TryGetValue(MetadataKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return new List<ProjectMaterial>();
+            var lines = raw.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length > MaxCustomMaterials) throw new InvalidOperationException("Stored material catalog exceeds the supported custom-material limit.");
+            var result = new List<ProjectMaterial>(lines.Length);
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var index = 0; index < lines.Length; index++)
+            {
+                var fields = lines[index].Split('|');
+                if (fields.Length != 4) throw new InvalidOperationException("Invalid material catalog record at line " + (index + 1) + ".");
+                var material = new ProjectMaterial(Decode(fields[0]), Decode(fields[1]), Decode(fields[2]), Decode(fields[3]), false);
+                if (!ids.Add(material.Id)) throw new InvalidOperationException("Duplicate material id in project catalog: " + material.Id);
+                if (!names.Add(material.Name)) throw new InvalidOperationException("Duplicate material name in project catalog: " + material.Name);
+                result.Add(material);
+            }
+            return result;
+        }
+
+        private static void WriteCustom(ProjectState project, IEnumerable<ProjectMaterial> source)
+        {
+            var custom = source.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList();
+            if (custom.Count == 0)
+            {
+                project.Metadata.Remove(MetadataKey);
+                return;
+            }
+            project.Metadata[MetadataKey] = string.Join("\n", custom.Select(x => string.Join("|", Encode(x.Id), Encode(x.Name), Encode(x.Unit), Encode(x.Description))));
+        }
+
+        private static string Encode(string value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
+
+        private static string Decode(string value)
+        {
+            try { return Encoding.UTF8.GetString(Convert.FromBase64String(value ?? string.Empty)); }
+            catch (FormatException ex) { throw new InvalidOperationException("Material catalog contains invalid Base64 data.", ex); }
+        }
+    }
+}
