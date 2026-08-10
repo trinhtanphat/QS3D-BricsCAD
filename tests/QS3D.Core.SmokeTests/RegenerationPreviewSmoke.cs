@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             PreviewRunsOnDetachedState();
+            SubsetPreviewAndApplyRespectScope();
+            MalformedSubsetTargetsFailClosed();
             StalePreviewFailsBeforeLiveMutation();
             ChangeVersionInvalidatesEquivalentPreview();
             FreshPreviewCanApplyWithoutNewHealthErrors();
@@ -29,6 +31,8 @@ namespace QS3D.Core.SmokeTests
             var preview = new RegenerationPreviewService().Preview(project);
             True(preview.RegeneratedElementCount >= 1);
             True(preview.HasSemanticChanges);
+            True(!preview.IsSubset);
+            Equal(0, preview.TargetElementIds.Count);
             Equal(projectVersion, preview.SourceChangeVersion);
             True(preview.Deltas.Any(x => x.ElementId == "B1" && x.Fields.Any(f => f.Field == "Quantity:NetVolumeM3")));
             True(!beam.Quantities.ContainsKey("NetVolumeM3"));
@@ -36,6 +40,40 @@ namespace QS3D.Core.SmokeTests
             Equal(originalUpdated, beam.UpdatedUtc);
             Equal(projectUpdated, project.UpdatedUtc);
             Equal(projectVersion, project.ChangeVersion);
+        }
+
+        private static void SubsetPreviewAndApplyRespectScope()
+        {
+            var project = Fixture();
+            var service = new RegenerationPreviewService();
+            var preview = service.PreviewSubset(project, new[] { "B1" });
+            True(preview.IsSubset);
+            Equal(1, preview.TargetElementIds.Count);
+            Equal("B1", preview.TargetElementIds[0]);
+            True(preview.Deltas.Any(x => x.ElementId == "B1"));
+            True(!preview.Deltas.Any(x => x.ElementId == "B2"));
+            True(!project.FindElement("B1")!.Quantities.ContainsKey("NetVolumeM3"));
+            True(!project.FindElement("B2")!.Quantities.ContainsKey("NetVolumeM3"));
+
+            var result = service.Apply(project, preview);
+            True(result.RegeneratedElementCount >= 1);
+            Near(0.9d, project.FindElement("B1")!.Quantities["NetVolumeM3"]);
+            True(!project.FindElement("B2")!.Quantities.ContainsKey("NetVolumeM3"));
+        }
+
+        private static void MalformedSubsetTargetsFailClosed()
+        {
+            var project = Fixture();
+            var service = new RegenerationPreviewService();
+            Throws<ArgumentException>(() => service.PreviewSubset(project, Array.Empty<string>()));
+            Throws<ArgumentException>(() => service.PreviewSubset(project, new[] { " " }));
+            Throws<ArgumentException>(() => service.PreviewSubset(project, new[] { " B1 " }));
+            Throws<ArgumentException>(() => service.PreviewSubset(project, new[] { "B1", "b1" }));
+
+            var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
+            Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { " " }));
+            Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { " B1 " }));
+            Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { "B1", "b1" }));
         }
 
         private static void StalePreviewFailsBeforeLiveMutation()
@@ -72,6 +110,7 @@ namespace QS3D.Core.SmokeTests
             True(result.RegeneratedElementCount >= 1);
             Equal(0, result.HealthDiff.NewErrorCount);
             Near(0.9d, project.FindElement("B1")!.Quantities["NetVolumeM3"]);
+            Near(0.48d, project.FindElement("B2")!.Quantities["NetVolumeM3"]);
         }
 
         private static ProjectState Fixture()
@@ -88,6 +127,12 @@ namespace QS3D.Core.SmokeTests
             beam.Properties["WidthM"] = "0.3";
             beam.Properties["HeightM"] = "0.5";
             project.Elements.Add(beam);
+
+            var second = new ProjectElement("B2", ElementCategory.Beam, "FAM", "F", "Z");
+            second.Properties["LengthM"] = "4";
+            second.Properties["WidthM"] = "0.3";
+            second.Properties["HeightM"] = "0.4";
+            project.Elements.Add(second);
             return project;
         }
 
