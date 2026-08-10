@@ -10,6 +10,7 @@ required = [
     "scripts/new-v25-update-manifest.ps1",
     "scripts/finalize-v25-signed-package.ps1",
     "scripts/install-v25-autoload.ps1",
+    "scripts/uninstall-v25-autoload.ps1",
     "scripts/package-v25.ps1",
     "scripts/sign-v25.ps1",
 ]
@@ -35,6 +36,10 @@ checks = {
         "MaxArchiveEntries",
         "$SignedPayloadNames",
         "embedded credentials",
+        "Read-InstalledVersion",
+        "Installed QS3D plugin assembly version is unreadable",
+        "does not match installed plugin assembly version",
+        "Refusing update until installed state is repaired",
         "Refusing downgrade",
         "AllowSameVersion",
         "65536",
@@ -117,6 +122,17 @@ checks = {
         "Move-Item -LiteralPath $backup -Destination $installFull",
         "throw $originalError",
     ],
+    "scripts/uninstall-v25-autoload.ps1": [
+        "Assert-InstallDirectorySafeToRemove",
+        "Join-Path $env:LOCALAPPDATA 'QS3D'",
+        "PACKAGE-METADATA.json",
+        "QS3D.BricsCAD.V25.dll",
+        "BricsCAD V25 x64",
+        "Refusing recursive removal",
+        "$installFull = Assert-InstallDirectorySafeToRemove",
+        "$root = 'HKCU:\\Software\\Bricsys\\BricsCAD'",
+        "Remove-Item -LiteralPath $installFull -Recurse -Force",
+    ],
     "scripts/package-v25.ps1": [
         "update-v25.ps1",
         "[Reflection.AssemblyName]::GetAssemblyName",
@@ -166,6 +182,11 @@ if updater.is_file():
     for token in ("http://", "-skipcertificatecheck", "trustallcertificates", "certificatepolicy", "executionpolicy bypass"):
         if token in lower:
             errors.append("updater contains forbidden insecure token: " + token)
+    installed_state = text.find("$installedVersion = Read-InstalledVersion -Directory $InstallDirectory")
+    downgrade_check = text.find("if ($targetVersion -lt $installedVersion)")
+    should_process = text.find("$PSCmdlet.ShouldProcess($InstallDirectory")
+    if min(installed_state, downgrade_check, should_process) < 0 or not (installed_state < downgrade_check < should_process):
+        errors.append("updater must reconcile installed DLL/metadata before downgrade/same-version decisions and before mutation")
     archive_check = text.find("Assert-SafeArchive -ZipPath $zipPath")
     extraction = text.find("Expand-Archive -LiteralPath $zipPath")
     if archive_check < 0 or extraction < 0 or archive_check > extraction:
@@ -219,10 +240,21 @@ if installer.is_file():
     if "elseif ($payloadCommitted -and (Test-Path -LiteralPath $installFull))" not in original:
         errors.append("fresh-install failure must remove the newly committed payload")
 
+uninstaller = ROOT / "scripts/uninstall-v25-autoload.ps1"
+if uninstaller.is_file():
+    original = uninstaller.read_text(encoding="utf-8")
+    safety = original.find("$installFull = Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory")
+    registry_scan = original.find("$root = 'HKCU:\\Software\\Bricsys\\BricsCAD'")
+    recursive_delete = original.find("Remove-Item -LiteralPath $installFull -Recurse -Force")
+    if min(safety, registry_scan, recursive_delete) < 0 or not (safety < registry_scan < recursive_delete):
+        errors.append("uninstaller must validate install scope/package identity before registry or recursive file deletion")
+    if "IndexOf('\\QS3D\\'" in original:
+        errors.append("uninstaller must scope normal deletion to the canonical LocalAppData/QS3D root, not any path containing a QS3D segment")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: secure V25 updates bind versions to the signed plugin, and the installer snapshots/rolls back DemandLoad registry plus payload atomically on failure.")
+print("PASS: secure V25 updates reconcile installed DLL/metadata before downgrade decisions; installer rollback stays transactional; uninstall validates canonical scope and QS3D package identity before destructive cleanup.")
