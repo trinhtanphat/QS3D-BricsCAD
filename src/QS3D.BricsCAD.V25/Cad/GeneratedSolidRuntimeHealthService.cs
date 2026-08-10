@@ -18,6 +18,24 @@ namespace QS3D.BricsCAD.V25.Cad
             if (project == null) throw new ArgumentNullException(nameof(project));
 
             var issues = new List<ModelHealthIssue>();
+            AddProviderSafely(
+                issues,
+                "GeneratedSolidOwnershipRuntimeHealth",
+                () => InspectGeneratedSolidOwnership(document, project));
+            AddProviderSafely(
+                issues,
+                "GeneratedGridAnnotationRuntimeHealthService",
+                () => GeneratedGridAnnotationRuntimeHealthService.Inspect(document, project));
+            AddProviderSafely(
+                issues,
+                "GeneratedSemanticTagRuntimeHealthService",
+                () => GeneratedSemanticTagRuntimeHealthService.Inspect(document, project));
+            return issues.AsReadOnly();
+        }
+
+        private static IReadOnlyList<ModelHealthIssue> InspectGeneratedSolidOwnership(Document document, ProjectState project)
+        {
+            var issues = new List<ModelHealthIssue>();
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 foreach (var element in project.Elements)
@@ -47,15 +65,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 }
                 transaction.Commit();
             }
-
-            AddProviderSafely(
-                issues,
-                "GeneratedGridAnnotationRuntimeHealthService",
-                () => GeneratedGridAnnotationRuntimeHealthService.Inspect(document, project));
-            AddProviderSafely(
-                issues,
-                "GeneratedSemanticTagRuntimeHealthService",
-                () => GeneratedSemanticTagRuntimeHealthService.Inspect(document, project));
             return issues.AsReadOnly();
         }
 
