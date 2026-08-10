@@ -57,7 +57,7 @@ namespace QS3D.Core.SmokeTests
             {
                 Segment("A", 0, 0, 0.003, 0),
                 Segment("B", 0, 0, 0, 1)
-            }, 0.005d, 0.004d));
+            }, 0.005d, 1e-6d));
         }
 
         private static WallAxisSegment Segment(string id, double x1, double y1, double x2, double y2) =>
