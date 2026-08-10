@@ -78,7 +78,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             return project.Elements
-                .SelectMany(EnumerateLogicalOwnerHandles)
+                .SelectMany(EnumerateOwnerHandles)
                 .Select(x => x.Key)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
@@ -96,7 +96,7 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
-                foreach (var entry in EnumerateLogicalOwnerHandles(element))
+                foreach (var entry in EnumerateOwnerHandles(element))
                 {
                     if (!string.Equals(entry.Key, normalized, StringComparison.OrdinalIgnoreCase)) continue;
                     if (owner != null)
