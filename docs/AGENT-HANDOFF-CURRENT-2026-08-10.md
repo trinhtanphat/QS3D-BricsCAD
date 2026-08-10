@@ -66,6 +66,7 @@ Read:
 Do not overclaim these paths:
 
 - GlassWall Direct Draw builds/captures the backing GlassWall host. Curtain frame/panel behavior remains governed by `QS3DCURTAIN3D` / Curtain Hub and its dedicated source/runtime contracts.
+- **Curtain path-frame support is source-implemented** for guarded horizontal LINE and open/bulged WCS-XY POLYLINE paths using bounded tessellation/station mapping, generated ownership and live-fingerprint checks. This is not licensed-runtime proof and does not create panel-by-panel backing glass solids. Read `docs/CURTAIN-PATH-FRAMES.md`.
 - WallPier P1 follows the currently supported wall dispatch, including specialized behavior where the current builder supports it. Do not claim arbitrary freeform profile parity.
 - StructuralWall P1 uses the existing supported LINE structural path.
 - Foundation P1 uses the existing supported closed-POLYLINE structural path.
@@ -90,13 +91,15 @@ Concurrent `main` hardening around `QS3DBUILD3D` must be preserved:
 
 Do not regress these invariants while extending Direct Draw.
 
-## 5. Plugin UI discoverability
+## 5. Plugin UI discoverability and Family / Type
 
 The BricsCAD Ribbon contains a `TẠO MỚI` authoring tab and Full Domain Hub contains `TẠO MỚI / DIRECT DRAW`. These are plugin UI hosted by BricsCAD, not a separate application shell.
 
-The current authoring UI includes P0, guarded P1 native categories, plus **Vẽ Cửa** / **Vẽ Lỗ Mở** actions. Door/Opening UI text must continue to distinguish Auto Host completion from the separate intentional physical-cut step.
+The current authoring UI includes **Family / Type** wired to canonical `QS3DFAMILIES`, plus P0, guarded P1 native categories, **Vẽ Cửa** and **Vẽ Lỗ Mở**. Users can activate/edit the compatible Family first; Direct Draw then consumes the active Family and prompts/validates required instance values. Do not create a competing Direct-Draw-only family store/editor.
 
-Keep major Direct Draw commands discoverable in both Ribbon and Domain Hub while avoiding an overcrowded generic Workspace palette.
+Current point acquisition already uses BricsCAD base-point rubber-band feedback where applicable. A richer thickness/profile `DrawJig` preview or persistent repeated-authoring reactor still requires exact V25 managed-API compile and interactive proof; do not claim it from static source alone.
+
+Door/Opening UI text must continue to distinguish Auto Host completion from the separate intentional physical-cut step. Keep major Direct Draw commands discoverable in both Ribbon and Domain Hub while avoiding an overcrowded generic Workspace palette.
 
 ## 6. Validation boundary
 
@@ -110,7 +113,7 @@ Still required for Direct Draw and the broader plugin before production claims:
 
 - exact current V25 adapter compile against the installed managed assemblies;
 - NETLOAD/DemandLoad unique command registration;
-- real Ribbon/palette/Domain Hub behavior;
+- real Ribbon/palette/Domain Hub behavior, including Family / Type activation;
 - successful and forced-failure rollback tests;
 - representative private-DWG save/reopen/multi-DWG regression;
 - GlassWall/Curtain, WallPier, StructuralWall and Foundation native geometry checks;
@@ -118,6 +121,7 @@ Still required for Direct Draw and the broader plugin before production claims:
 - Door/Opening valid-host, no-host and ambiguous-host behavior, including Floor/Zone/elevation/gap gates;
 - Door/Opening sill/bottom offset and boolean-clearance persistence;
 - explicit `QS3DCUTOPENINGS` after Direct Draw, including host fingerprint/rebuild behavior;
+- guarded LINE/open/bulged Curtain path-frame generation in real V25;
 - World UCS and representative rotated-UCS authoring behavior;
 - representative testing against a private copy of owner-provided `MB MONG.dwg` without committing that file;
 - Unicode/HiDPI visual tests and large-model performance.
@@ -133,8 +137,8 @@ Do not add automatic push/tag/PR triggers and do not publish a release without e
 After current Direct Draw runtime qualification, the most useful remaining authoring/product gaps are:
 
 1. targeted Door/Opening subset physical-cut API if one-shot authoring + boolean is desired, with explicit host-Solid3d rollback proof;
-2. transient preview + repeated authoring mode proven against BricsCAD V25 editor/jig behavior;
-3. richer Family/type chooser in Direct Draw without duplicating project editors;
+2. transient thickness/profile preview + repeated authoring mode proven against BricsCAD V25 editor/jig behavior;
+3. optional compact in-command Family picker only if real UX testing shows the existing Family / Type launcher is too slow; canonical `QS3DFAMILIES` remains source of truth;
 4. physical multi-owner wall-solid L/T/X reconciliation under a safe ownership model;
 5. richer WallPier profile authoring and further Curtain/product geometry only where existing guarded planners/builders support it safely;
 6. real-runtime Ribbon/icon/context-menu/DPI polish;
