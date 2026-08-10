@@ -16,7 +16,8 @@ namespace QS3D.BricsCAD.V25
         {
             KeepTarget = 0,
             UseSourceElement = 1,
-            UseSourceCatalog = 2
+            UseSourceCatalog = 2,
+            UseSourceAll = 3
         }
 
         private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
@@ -76,13 +77,28 @@ namespace QS3D.BricsCAD.V25
                     catalogBlock = ex.Message;
                 }
 
+                InterchangeUseSourceAllImportPlan? allPlan = null;
+                string allBlock = string.Empty;
+                try
+                {
+                    var candidate = InterchangeUseSourceAllImportService.Plan(project, json);
+                    if (candidate.ZonesToReplace + candidate.FloorsToReplace + candidate.FamiliesToReplace + candidate.ElementsToReplace > 0)
+                        allPlan = candidate;
+                }
+                catch (Exception ex)
+                {
+                    allBlock = ex.Message;
+                }
+
                 var choice = ChooseCollisionPolicy(
                     preview,
                     keepPlan,
                     elementPlan,
                     catalogPlan,
+                    allPlan,
                     elementBlock,
-                    catalogBlock);
+                    catalogBlock,
+                    allBlock);
                 if (!choice.HasValue) return;
 
                 switch (choice.Value)
@@ -95,6 +111,9 @@ namespace QS3D.BricsCAD.V25
                         return;
                     case CollisionPolicyChoice.UseSourceCatalog:
                         RunUseSourceCatalog(document, json);
+                        return;
+                    case CollisionPolicyChoice.UseSourceAll:
+                        RunUseSourceAll(document, json);
                         return;
                     default:
                         throw new InvalidOperationException("Unsupported interchange collision policy choice.");
@@ -112,17 +131,20 @@ namespace QS3D.BricsCAD.V25
             ProjectInterchangeKeepTargetImportPlan keepPlan,
             InterchangeUseSourceElementImportPlan? elementPlan,
             InterchangeUseSourceCatalogImportPlan? catalogPlan,
+            InterchangeUseSourceAllImportPlan? allPlan,
             string elementBlock,
-            string catalogBlock)
+            string catalogBlock,
+            string allBlock)
         {
             if (elementPlan == null && catalogPlan == null)
             {
                 var keepOnly =
-                    "Snapshot có " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s), nhưng không có executable UseSource replacement.\n\n" +
+                    "Snapshot có " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s), nhưng không có executable partial UseSource replacement.\n\n" +
                     "Policy khả dụng hiện tại: KEEP TARGET.\n" +
                     "Target identity trùng ID giữ nguyên; chỉ semantic identity mới được thêm. Incoming source handles bị discard.\n" +
                     BlockText("Element UseSource", elementBlock) +
                     BlockText("Catalog UseSource", catalogBlock) +
+                    BlockText("ALL UseSource", allBlock) +
                     "\nTiếp tục KeepTarget?";
                 return System.Windows.MessageBox.Show(
                            keepOnly,
@@ -161,18 +183,49 @@ namespace QS3D.BricsCAD.V25
 
             var first = System.Windows.MessageBox.Show(
                 "Snapshot có " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s).\n\n" +
-                "YES — chọn một USE SOURCE policy ở bước tiếp theo.\n" +
+                "YES — chọn USE SOURCE policy ở bước tiếp theo.\n" +
                 "NO — KEEP TARGET cho toàn bộ collisions (" + keepPlan.TotalSemanticIdentitiesToKeep.ToString(CultureInfo.InvariantCulture) + ").\n" +
                 "CANCEL — không import.\n\n" +
-                "UseSource Element và UseSource Catalog là hai mutation policy tách biệt; chưa tự gộp cả hai trong một import. Incoming source CAD handles vẫn không trở thành target ownership.",
+                "Incoming source CAD handles không trở thành target ownership. Provenance retention là authorization riêng.",
                 "QS3D — Interchange Import Policy",
                 System.Windows.MessageBoxButton.YesNoCancel,
                 System.Windows.MessageBoxImage.Warning);
             if (first == System.Windows.MessageBoxResult.Cancel) return null;
             if (first == System.Windows.MessageBoxResult.No) return CollisionPolicyChoice.KeepTarget;
 
-            var second = System.Windows.MessageBox.Show(
-                "Chọn USE SOURCE policy:\n\n" +
+            if (allPlan != null)
+            {
+                var allOrPartial = System.Windows.MessageBox.Show(
+                    "Chọn phạm vi USE SOURCE:\n\n" +
+                    "YES — REPLACE ALL SEMANTIC (ATOMIC)\n" +
+                    "• Zone: " + allPlan.ZonesToReplace.ToString(CultureInfo.InvariantCulture) +
+                    " • Floor: " + allPlan.FloorsToReplace.ToString(CultureInfo.InvariantCulture) +
+                    " • Family: " + allPlan.FamiliesToReplace.ToString(CultureInfo.InvariantCulture) +
+                    " • Element: " + allPlan.ElementsToReplace.ToString(CultureInfo.InvariantCulture) + "\n" +
+                    "• Catalog + Element replacement dùng MỘT ProjectStateSnapshot và MỘT native CAD transaction.\n" +
+                    "• Union generated-output closure invalidated ownership-safely; target source handles/fingerprint vẫn giữ nguyên.\n\n" +
+                    "NO — chọn PARTIAL scope (Element hoặc Catalog) ở bước tiếp theo.\n" +
+                    "CANCEL — không import.\n\n" +
+                    "ALL không sequentially chạy hai importer partial, nên không tạo split transaction/partial-commit window.",
+                    "QS3D — UseSource ALL hay Partial",
+                    System.Windows.MessageBoxButton.YesNoCancel,
+                    System.Windows.MessageBoxImage.Warning);
+                if (allOrPartial == System.Windows.MessageBoxResult.Cancel) return null;
+                if (allOrPartial == System.Windows.MessageBoxResult.Yes) return CollisionPolicyChoice.UseSourceAll;
+            }
+            else if (!string.IsNullOrWhiteSpace(allBlock))
+            {
+                var continuePartial = System.Windows.MessageBox.Show(
+                    "UseSource ALL một-transaction bị chặn:\n" + allBlock +
+                    "\n\nHai partial policy vẫn có thể chọn riêng. Tiếp tục chọn partial?",
+                    "QS3D — UseSource ALL unavailable",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Warning);
+                if (continuePartial != System.Windows.MessageBoxResult.Yes) return null;
+            }
+
+            var partial = System.Windows.MessageBox.Show(
+                "Chọn PARTIAL USE SOURCE policy:\n\n" +
                 "YES — REPLACE ELEMENT SEMANTIC\n" +
                 "• Element same-category collisions: " + elementPlan!.ElementsToReplace.ToString(CultureInfo.InvariantCulture) + "\n" +
                 "• Zone/Floor/Family collisions giữ target\n" +
@@ -183,12 +236,12 @@ namespace QS3D.BricsCAD.V25
                 " • Family: " + catalogPlan.FamiliesToReplace.ToString(CultureInfo.InvariantCulture) + "\n" +
                 "• Element collisions giữ target\n\n" +
                 "CANCEL — không import.\n\n" +
-                "Cả hai UseSource path đều ownership-safe invalidate generated closure trong CAD transaction và yêu cầu rebuild explicit.",
-                "QS3D — Chọn UseSource scope",
+                "Mỗi partial path có transaction riêng của chính nó; selector chỉ chạy đúng một path được chọn và không sequence hai partial importer.",
+                "QS3D — Chọn partial UseSource scope",
                 System.Windows.MessageBoxButton.YesNoCancel,
                 System.Windows.MessageBoxImage.Warning);
-            if (second == System.Windows.MessageBoxResult.Cancel) return null;
-            return second == System.Windows.MessageBoxResult.Yes
+            if (partial == System.Windows.MessageBoxResult.Cancel) return null;
+            return partial == System.Windows.MessageBoxResult.Yes
                 ? CollisionPolicyChoice.UseSourceElement
                 : CollisionPolicyChoice.UseSourceCatalog;
         }
@@ -301,6 +354,22 @@ namespace QS3D.BricsCAD.V25
                 " • Family " + result.FamiliesReplaced.ToString(CultureInfo.InvariantCulture) +
                 " replaced • Element collisions kept " + result.ElementCollisionsKept.ToString(CultureInfo.InvariantCulture) +
                 " • generated closure invalidated " + result.GeneratedElementsInvalidated.ToString(CultureInfo.InvariantCulture) +
+                ". Rebuild explicit; chưa tự lưu .qsdb.";
+            try { PaletteCoordinator.SetStatus(status); } catch { }
+            document.Editor.WriteMessage("\nQS3D " + status);
+        }
+
+        private static void RunUseSourceAll(Document document, string json)
+        {
+            EnsureActive(document, "Interchange UseSource all-scope import");
+            var result = InterchangeUseSourceAllImportService.Import(document, json);
+            try { PaletteCoordinator.RefreshProject(); } catch { }
+            var status =
+                "Interchange Import / UseSource ALL: Zone " + result.ZonesReplaced.ToString(CultureInfo.InvariantCulture) +
+                " • Floor " + result.FloorsReplaced.ToString(CultureInfo.InvariantCulture) +
+                " • Family " + result.FamiliesReplaced.ToString(CultureInfo.InvariantCulture) +
+                " • Element " + result.ElementsReplaced.ToString(CultureInfo.InvariantCulture) +
+                " replaced in one CAD transaction • generated closure invalidated " + result.GeneratedElementsInvalidated.ToString(CultureInfo.InvariantCulture) +
                 ". Rebuild explicit; chưa tự lưu .qsdb.";
             try { PaletteCoordinator.SetStatus(status); } catch { }
             document.Editor.WriteMessage("\nQS3D " + status);
