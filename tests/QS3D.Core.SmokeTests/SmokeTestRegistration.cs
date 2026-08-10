@@ -51,6 +51,7 @@ namespace QS3D.Core.SmokeTests
             DependencyGraphDirectDependentsSmoke.Run();
             ProjectStateLookupSmoke.Run();
             SelectionStateSmoke.Run();
+            BulkEditCanonicalizationSmoke.Run();
         }
     }
 }
