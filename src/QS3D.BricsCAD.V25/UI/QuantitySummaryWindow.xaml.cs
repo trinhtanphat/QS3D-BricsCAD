@@ -24,14 +24,15 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly ProjectState _project;
         private bool _loadingColumnPreferences;
 
-        public QuantitySummaryWindow(IReadOnlyList<QuantityReportRow> rows, Action<QuantityReportRow>? locate = null, Func<IReadOnlyList<QuantityReportRow>>? recalculate = null)
+        public QuantitySummaryWindow(Document document, IReadOnlyList<QuantityReportRow> rows, Action<QuantityReportRow>? locate = null, Func<IReadOnlyList<QuantityReportRow>>? recalculate = null)
         {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _locate = locate;
             _recalculate = recalculate;
-            _document = BcadApplication.DocumentManager.MdiActiveDocument ?? throw new InvalidOperationException("Không có DWG active khi mở bảng khối lượng.");
             _project = ProjectContextCoordinator.GetOrCreate(_document);
             InitializeComponent();
+            DocumentBoundWindowLifetime.Attach(this, _document);
             ReloadFloors();
             ReloadCategories();
             LoadColumnPreferences();
