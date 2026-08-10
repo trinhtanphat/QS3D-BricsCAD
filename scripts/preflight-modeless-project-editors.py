@@ -27,6 +27,10 @@ contracts = {
         "guard": "EnsureBoundDrawingIsActive",
         "handlers": ["OnSaveFloorClick", "OnDeleteFloorClick", "OnActivateClick", "OnAssignClick", "OnInspectSelectionClick"],
     },
+    "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml.cs": {
+        "guard": "EnsureActive",
+        "handlers": ["OnSaveClick", "OnRecalculateClick", "OnCommandClick"],
+    },
 }
 
 for relative, contract in contracts.items():
@@ -38,6 +42,9 @@ for relative, contract in contracts.items():
     guard = contract["guard"]
     if "MdiActiveDocument" not in text:
         errors.append(relative + " must compare its bound document to MdiActiveDocument")
+    if relative.endswith("CurtainWallWindow.xaml.cs"):
+        if "private readonly Document _document" not in text or "CurtainWallWindow(Document document)" not in text:
+            errors.append(relative + " must be constructed with and retain its source drawing")
     for handler in contract["handlers"]:
         match = re.search(r"private\s+void\s+" + re.escape(handler) + r"\s*\([^)]*\)\s*\{", text)
         if not match:
@@ -51,7 +58,8 @@ for relative, contract in contracts.items():
         project_pos = body.find("ProjectContextCoordinator.GetOrCreate(_document)")
         mutation_markers = (
             "ProjectZoneService.", "ProjectFamilyService.", "ProjectFamilyActivationService.",
-            "ProjectMaterialCatalog.", "element.SetProperty(", "ProjectFloorService.", "SendStringToExecute("
+            "ProjectMaterialCatalog.", "element.SetProperty(", "ProjectFloorService.", "SendStringToExecute(",
+            "ApplyFamilyValue(", "RegenerateDirty("
         )
         first_mutation = min((body.find(token) for token in mutation_markers if body.find(token) >= 0), default=-1)
         if guard_pos < 0:
@@ -61,10 +69,16 @@ for relative, contract in contracts.items():
         elif first_mutation >= 0 and guard_pos > first_mutation:
             errors.append(relative + "/" + handler + " must guard before project/CAD mutation")
 
+curtain_hub = ROOT / "src/QS3D.BricsCAD.V25/CurtainWallHubCommands.cs"
+if not curtain_hub.is_file():
+    errors.append("missing CurtainWallHubCommands.cs")
+elif "new CurtainWallWindow(document)" not in curtain_hub.read_text(encoding="utf-8"):
+    errors.append("Curtain Wall Hub must pass the source drawing into its modeless editor")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: modeless Floor/Zone/Family/Material editors require their bound DWG to be active before every project or selection mutation/export action.")
+print("PASS: modeless Floor/Zone/Family/Material/Curtain editors require their bound DWG to be active before every project or CAD mutation/export action.")
