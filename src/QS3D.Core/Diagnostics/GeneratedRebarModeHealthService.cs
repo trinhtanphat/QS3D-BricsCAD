@@ -13,6 +13,7 @@ namespace QS3D.Core.Diagnostics
             var issues = new List<ModelHealthIssue>();
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 InspectLongitudinal(element, issues);
                 InspectSlabMesh(element, issues);
                 InspectWallMesh(element, issues);
