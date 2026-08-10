@@ -18,14 +18,14 @@ The repository is beyond prototype stage. Source currently includes:
 - Category-aware **Bóc chọn** flow so a user can select a model group/Family and capture the current CAD selection without memorizing commands.
 - Vietnamese property labels/groups with finite-number validation and units for common geometry/rebar properties.
 - Semantic Project/Zone/Floor/Family/Element model, `.qsdb` schema migration, deterministic regeneration, audit, revision baseline/diff, template import/export and Model Health.
-- Tường KT workflows for Tường Gạch plus explicit Vách Kính and Trụ Tường semantic capture commands.
-- Architectural wall 3D source paths for LINE and open POLYLINE centerlines; polyline bulges are tessellated and converted through the deterministic wall-footprint engine.
+- Tường KT workflows for Tường Gạch, Vách Kính and Trụ Tường, including explicit semantic capture commands and a shared guarded 3D pipeline.
+- Tường KT 3D source paths accept LINE and open POLYLINE centerlines for all three variants; polyline bulges are tessellated and converted through the deterministic wall-footprint engine.
 - Room capture plus `QS3DROOMAUTO` bounded-face discovery from LINE/POLYLINE networks, including curved bulge segments, intersection/T-junction handling and non-destructive stale-room lifecycle.
 - Door/Opening host linking and physical boolean subtraction source path for supported generated LINE-host solids. The cut fingerprint includes live host/opening geometry so moving an opening cannot be silently treated as an already-applied cut.
 - Beam/Slab/Column/StructuralWall/Foundation/Stair/Railing/Earthwork semantic quantities and guarded native Solid3d source paths.
 - Rebar notation/BBS, XLSX/CSV export, review/Locate, rectangular column rebar layout and guarded 3D bar source path.
 - BQ grouping/filtering/Locate/XLSX, Quick Takeoff, recognition/review/auto-accept, Layer/Xref adapters, Ribbon, Full Domain Hub, viewport tools and release packaging/DemandLoad scripts.
-- Static preflights and deterministic Core smoke coverage for the geometry/quantity workflows above.
+- Static preflights and deterministic Core smoke coverage for the geometry/quantity workflows above, including regression guards that require the Tường Gạch/Vách Kính/Trụ Tường 3D wiring to remain connected end-to-end.
 
 ## Main commands
 
@@ -64,7 +64,7 @@ Source presence is **not** the same as BricsCAD V25 runtime proof. Before callin
 1. compile the V25 adapter against the exact V25 managed assemblies;
 2. NETLOAD/DemandLoad the produced DLL and run command/Ribbon/palette smoke tests;
 3. test private representative DWGs, save/reopen and multi-DWG lifecycle;
-4. verify native Solid3d boolean/rebar/wall behavior in V25;
+4. verify native Solid3d boolean/rebar/Tường KT behavior in V25, including Tường Gạch/Vách Kính/Trụ Tường LINE and open-POLYLINE cases;
 5. capture visual regressions at 100/125/150/200% DPI with Vietnamese Unicode;
 6. run performance tests on large room-boundary and quantity models.
 
