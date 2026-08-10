@@ -7,6 +7,7 @@ The repository-wide source of truth is `CI_POLICY.md` at the project root. Multi
 GitHub Actions on `main` are owner-controlled and manual-only:
 
 - every workflow must remain `workflow_dispatch` only;
+- every executable workflow job is additionally guarded by `github.event_name == 'workflow_dispatch'`;
 - documentation-only, `*.md`, `docs/**`, `docs:` and `chore:` changes do not need GitHub CI;
 - commits, pushes, merges, reviews, refactors, fixes, handoffs, or `continue all` instructions do not authorize an Actions run by themselves;
 - even source-code changes do not automatically authorize CI;
@@ -40,18 +41,21 @@ No BricsCAD installation is required.
 - manual dispatch only;
 - never dispatch automatically after commit/push/merge;
 - compiles the V25 adapter against a licensed self-hosted BricsCAD V25 installation;
-- can run NETLOAD/runtime/screenshot evidence when explicitly requested.
+- can run NETLOAD/runtime/screenshot evidence when explicitly requested;
+- runtime/artifact paths use the actual x64 Release output `bin/x64/Release/net48`.
 
 ### Focused source gates
 
 - `.github/workflows/curved-opening.yml` — manual curved-opening source/Core validation.
 - `.github/workflows/geometry-extensions.yml` — manual geometry-extension source/Core validation.
+- `.github/workflows/project-data-gate.yml` — manual Zone/Floor/Family/Material/Project Tools/project-assignment-integrity validation plus Core build/smoke tests.
 
 ### Manual build + GitHub Release
 
 `.github/workflows/release-v25.yml`
 
 - manual `workflow_dispatch` only;
+- hard-guarded to the manual event;
 - requires a `release_tag` and explicit `confirm_release=RELEASE`;
 - runs source/preflight/Core/V25 build gates;
 - optionally runs real V25 NETLOAD/runtime validation;
