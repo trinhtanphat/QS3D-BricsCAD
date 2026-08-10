@@ -1,0 +1,61 @@
+using System;
+using System.Linq;
+using QS3D.Core.Domain;
+
+namespace QS3D.Core.SmokeTests
+{
+    internal static class ProjectMaterialCatalogSmoke
+    {
+        public static void Run()
+        {
+            CustomRoundTripAndUpdate();
+            ReferencedMaterialsAreDiscovered();
+            RejectsDuplicateBuiltInAndCorruptStorage();
+        }
+
+        private static void CustomRoundTripAndUpdate()
+        {
+            var project = new ProjectState("p", "Materials");
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-stone", "Đá tự nhiên", "m²", "Mặt hoàn thiện");
+            var all = ProjectMaterialCatalog.GetAll(project);
+            var stone = all.Single(x => x.Id == "mat-stone");
+            if (stone.Name != "Đá tự nhiên" || stone.Unit != "m²" || stone.Description != "Mặt hoàn thiện" || stone.IsBuiltIn)
+                throw new Exception("Custom material round-trip failed.");
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-stone", "Đá tự nhiên", "m²", "Ốp tường");
+            if (ProjectMaterialCatalog.GetCustom(project).Single().Description != "Ốp tường") throw new Exception("Custom material update failed.");
+            if (!ProjectMaterialCatalog.DeleteCustom(project, "mat-stone")) throw new Exception("Custom material delete failed.");
+            if (ProjectMaterialCatalog.GetCustom(project).Count != 0) throw new Exception("Custom material was not deleted.");
+            if (project.Metadata.ContainsKey(ProjectMaterialCatalog.MetadataKey)) throw new Exception("Empty custom catalog metadata should be removed.");
+        }
+
+        private static void ReferencedMaterialsAreDiscovered()
+        {
+            var project = new ProjectState("p2", "Referenced Materials");
+            var family = new ProjectFamily("f", "Vách Kính", ElementCategory.GlassWall);
+            family.Properties["Material"] = "Kính Low-E";
+            family.Properties["CurtainFrameMaterial"] = "Nhôm hệ 55";
+            project.Families.Add(family);
+            var element = new ProjectElement("e", ElementCategory.ArchitecturalWall, "fw", "floor", "zone");
+            element.Properties["Material"] = "Gạch AAC";
+            project.Elements.Add(element);
+            var names = ProjectMaterialCatalog.ReferencedMaterialNames(project);
+            if (!names.Contains("Kính Low-E") || !names.Contains("Nhôm hệ 55") || !names.Contains("Gạch AAC"))
+                throw new Exception("Referenced material discovery failed.");
+        }
+
+        private static void RejectsDuplicateBuiltInAndCorruptStorage()
+        {
+            var project = new ProjectState("p3", "Bad Materials");
+            Throws<InvalidOperationException>(() => ProjectMaterialCatalog.UpsertCustom(project, "custom", "Kính", "m²", ""));
+            project.Metadata[ProjectMaterialCatalog.MetadataKey] = "not-base64|still-bad|x|y";
+            Throws<InvalidOperationException>(() => ProjectMaterialCatalog.GetCustom(project));
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            try { action(); }
+            catch (T) { return; }
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+    }
+}
