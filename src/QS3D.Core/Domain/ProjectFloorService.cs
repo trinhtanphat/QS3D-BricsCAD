@@ -48,7 +48,7 @@ namespace QS3D.Core.Domain
             foreach (var element in project.Elements.Where(x => ReferencesFloor(x, floor.Id)))
             {
                 var flags = ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;
-                if (elevationChanged && ReferencesVerticalLevel(x, floor.Id)) flags |= ElementDirtyFlags.Geometry;
+                if (elevationChanged) flags |= ElementDirtyFlags.Geometry;
                 element.MarkDirty(flags);
             }
             project.Touch();
