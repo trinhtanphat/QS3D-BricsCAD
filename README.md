@@ -16,16 +16,19 @@ The repository is beyond prototype stage. Source currently includes:
 
 - BLT-style three-pane workspace: Model tree, Family/Type list, grouped property inspector, selected-object review, HT_Phòng, Xref/Drawing manager and Layer manager.
 - Category-aware **Bóc chọn** flow so a user can select a model group/Family and capture the current CAD selection without memorizing commands.
-- Vietnamese property labels/groups with finite-number validation and units for common geometry/rebar properties.
+- Property inspector with Vietnamese labels/groups, units, finite-number validation, typed controls (`TextBox`, boolean `CheckBox`, editable choice `ComboBox`) and **Family / Type vs Đối tượng / Instance** scope. A single semantic selection opens Instance scope; overrides can be reset to the Family value, and later Family edits preserve true instance overrides instead of overwriting them.
+- Selected-object review actions for Locate/Zoom, **Focus**, **Cô lập/Khôi phục**, plus semantic-reference matching so Room Auto boundary-derived elements remain discoverable without duplicating source ownership.
 - Semantic Project/Zone/Floor/Family/Element model, `.qsdb` schema migration, deterministic regeneration, audit, revision baseline/diff, template import/export and Model Health.
 - Tường KT workflows for Tường Gạch, Vách Kính and Trụ Tường, including explicit semantic capture commands and a shared guarded 3D pipeline.
 - Tường KT 3D source paths accept LINE and open POLYLINE centerlines for all three variants; polyline bulges are tessellated and converted through the deterministic wall-footprint engine.
-- Room capture plus `QS3DROOMAUTO` bounded-face discovery from planar LINE/POLYLINE/ARC/SPLINE networks. Direct ARC and polyline bulges use configurable sagitta; SPLINE uses bounded chord-length sampling with a segment cap. ARC/POLYLINE plan-view orientation and all sampled source elevations are validated before Core intersection/T-junction topology and non-destructive stale-room lifecycle processing.
-- Door/Opening host linking and physical boolean subtraction source path for generated LINE-host solids across ArchitecturalWall/Tường Gạch, GlassWall/Vách Kính, WallPier/Trụ Tường and StructuralWall/Vách BTCT. The cut fingerprint includes live host/opening geometry so moving an opening cannot be silently treated as an already-applied cut.
+- `QS3DWALLJUNCTIONS` analyzes selected LINE/open-POLYLINE wall centerlines and classifies L/T/X/Straight/End/Multi junction nodes with finite-safe, large-coordinate-aware geometry guards. It is currently an analysis/review workflow, not automatic solid reconciliation.
+- Room capture plus `QS3DROOMAUTO` bounded-face discovery from planar LINE/POLYLINE/ARC/SPLINE networks. Direct ARC and polyline bulges use configurable sagitta; SPLINE uses bounded chord-length sampling with a segment cap. Planarity/elevation checks run before Core intersection/T-junction topology and non-destructive stale-room lifecycle processing.
+- Door/Opening host linking and physical boolean subtraction for generated LINE hosts and guarded straight, non-bulged POLYLINE wall segments where the opening can be projected safely without crossing a corner. Supported wall categories include ArchitecturalWall/Tường Gạch, GlassWall/Vách Kính, WallPier/Trụ Tường and StructuralWall/Vách BTCT. Curved/bulged polyline-host cuts remain rejected rather than guessed.
 - Beam/Slab/Column/StructuralWall/Foundation/Stair/Railing/Earthwork semantic quantities and guarded native Solid3d source paths.
-- Rebar notation/BBS, XLSX/CSV export, review/Locate, rectangular column rebar layout and guarded 3D bar source path.
+- Rebar notation/BBS, XLSX/CSV export, review/Locate, rectangular-column rebar 3D, generated-rebar ownership/health guards, and BBS-shape-driven 3D source paths for supported straight/L/U/Z/custom leg definitions.
 - BQ grouping/filtering/Locate/XLSX, Quick Takeoff, recognition/review/auto-accept, Layer/Xref adapters, Ribbon, Full Domain Hub, viewport tools and release packaging/DemandLoad scripts.
-- Static preflights and deterministic Core smoke coverage for the geometry/quantity workflows above, including regression guards for Tường KT 3D, compatible LINE-wall opening hosts and ARC/SPLINE-aware Room Auto adapters.
+- Ribbon/Workspace/Domain Hub now expose the major BLT-style workflows consistently: Tường KT, Giao tường, Cửa/Lỗ, Room Auto, Focus/Isolate, BQ/BBS, column rebar and shape rebar.
+- Static preflights and deterministic Core smoke coverage include geometry/rebar/Room Auto guards, command uniqueness, typed Family/Instance inspector contracts and XAML well-formedness checks.
 
 ## Main commands
 
@@ -34,20 +37,22 @@ The repository is beyond prototype stage. Source currently includes:
 - `QS3DSAVE`, `QS3DRELOAD`, `QS3DREFRESH`, `QS3DREGEN`
 - `QS3DHEALTH`, `QS3DRUNTIMEPROBE`
 
-### Semantic model
+### Semantic model / geometry
 - `QS3DROOM`, `QS3DROOMAUTO`
-- `QS3DWALL`, `QS3DGLASSWALL`, `QS3DWALLPIER`
+- `QS3DWALL`, `QS3DGLASSWALL`, `QS3DWALLPIER`, `QS3DWALLJUNCTIONS`
 - `QS3DOPENING`, `QS3DDOOR`, `QS3DLINKHOST`, `QS3DCUTOPENINGS`
 - `QS3DBEAM`, `QS3DSLAB`, `QS3DCOLUMN`, `QS3DSTRUCTWALL`, `QS3DFOUNDATION`, `QS3DSTAIR`, `QS3DRAILING`, `QS3DEARTHWORK`
 - `QS3DFINISH`, `QS3DTAKEOFF`, `QS3DBUILD3D`
 
 ### Quantity / rebar / review
 - `QS3DBQ`
-- `QS3DBBSVIEW`, `QS3DBBS`, `QS3DBBSCSV`, `QS3DREBAR3D`
+- `QS3DBBSVIEW`, `QS3DBBS`, `QS3DBBSCSV`
+- `QS3DREBAR3D`, `QS3DREBAR3DSHAPE`, `QS3DREBARHEALTH`, `QS3DREBARSHAPEHEALTH`
+- `QS3DHIGHLIGHT`, `QS3DUNHIGHLIGHT`, `QS3DFOCUS`, `QS3DISOLATE`, `QS3DUNISOLATE`
 - `QS3DRECOGNIZE`, `QS3DRECOGNIZEAUTO`
 - `QS3DREVBASE`, `QS3DREVDIFF`
 
-See [`docs/COMMANDS.md`](docs/COMMANDS.md) for the complete command/workflow reference.
+See [`docs/COMMANDS.md`](docs/COMMANDS.md) and [`docs/ADVANCED-GEOMETRY.md`](docs/ADVANCED-GEOMETRY.md) for detailed workflow constraints.
 
 ## Architecture
 
@@ -64,10 +69,11 @@ Source presence is **not** the same as BricsCAD V25 runtime proof. Before callin
 1. compile the V25 adapter against the exact V25 managed assemblies;
 2. NETLOAD/DemandLoad the produced DLL and run command/Ribbon/palette smoke tests;
 3. test private representative DWGs, save/reopen and multi-DWG lifecycle;
-4. verify native Solid3d boolean/rebar/Tường KT behavior in V25, including Tường Gạch/Vách Kính/Trụ Tường LINE and open-POLYLINE cases;
+4. verify native Solid3d wall/opening/rebar behavior, including LINE/open-POLYLINE Tường KT, guarded straight-polyline opening cuts and supported BBS shape bars;
 5. verify Room Auto with mixed LINE/POLYLINE/ARC/SPLINE plan-view boundaries, chord/sagitta controls and non-planar rejection;
-6. capture visual regressions at 100/125/150/200% DPI with Vietnamese Unicode;
-7. run performance tests on large room-boundary and quantity models.
+6. verify Focus/Isolate/restore lifecycle and Family/Instance property editing in the real V25 palette host;
+7. capture visual regressions at 100/125/150/200% DPI with Vietnamese Unicode;
+8. run performance tests on large room-boundary, wall-junction, quantity and rebar models.
 
 Until those gates are green, runtime-dependent features are described as **implemented source paths**, not as verified production behavior.
 
