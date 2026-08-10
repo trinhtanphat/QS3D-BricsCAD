@@ -9,6 +9,7 @@ required = [
     "tests/QS3D.Core.SmokeTests/BeamStirrupLayoutSmoke.cs",
     "src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs",
     "src/QS3D.Core/Diagnostics/GeneratedBeamStirrupHealthService.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs",
     "src/QS3D.BricsCAD.V25/BeamStirrupCommands.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedTieRebarOwnershipGuard.cs",
@@ -43,10 +44,16 @@ if health.is_file():
     text = health.read_text(encoding="utf-8")
     for needle in (
         "GeneratedBeamStirrupHandles", "BEAM_STIRRUP_GENERATED_OWNERSHIP_CONFLICT",
-        "GeneratedTieRebarHandles", "GeneratedShapeRebarHandles", "GeneratedRebarHandles",
+        "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)",
         "BEAM_STIRRUP_GENERATED_STALE", "ElementCategory.Beam",
     ):
         if needle not in text: errors.append("beam-stirrup health missing: " + needle)
+
+policy = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
+if policy.is_file():
+    text = policy.read_text(encoding="utf-8")
+    for needle in ("RebarHandleKeys", "GeneratedBeamStirrupHandles", "GeneratedTieRebarHandles", "IsOwnerSlot", "IsRebarOwnerSlot"):
+        if needle not in text: errors.append("generated ownership policy missing: " + needle)
 
 commands = ROOT / "src/QS3D.BricsCAD.V25/BeamStirrupCommands.cs"
 if commands.is_file():
@@ -60,12 +67,14 @@ if commands.is_file():
 common_guard = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
 if common_guard.is_file():
     text = common_guard.read_text(encoding="utf-8")
-    for needle in ("GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles", "GeneratedSolidHandle", "SourceHandles"):
-        if needle not in text: errors.append("common rebar ownership set missing: " + needle)
+    for needle in ("CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys", "SourceHandles", "Refusing destructive erase"):
+        if needle not in text: errors.append("common rebar ownership policy contract missing: " + needle)
 
 tie_guard = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedTieRebarOwnershipGuard.cs"
-if tie_guard.is_file() and "GeneratedBeamStirrupHandles" not in tie_guard.read_text(encoding="utf-8"):
-    errors.append("column-tie ownership guard does not protect beam-stirrup handles")
+if tie_guard.is_file():
+    text = tie_guard.read_text(encoding="utf-8")
+    for needle in ("CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys", "EnsureTieOwned"):
+        if needle not in text: errors.append("column-tie ownership policy contract missing: " + needle)
 
 invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
 if invalidator.is_file():
@@ -94,6 +103,6 @@ if ribbon.is_file():
 print("QS3D Beam stirrup/rebar lifecycle preflight")
 if errors:
     for error in errors: print("ERROR:", error)
-    print(f"FAILED with {len(errors)} error(s).")
+    print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Beam longitudinal/stirrup and column-tie UI parity, deterministic stirrup layout, duplicate-source protection, finite transforms, cross-set ownership, health and dependent invalidation are present.")
+print("PASS: Beam longitudinal/stirrup and column-tie UI parity, deterministic stirrup layout, duplicate-source protection, finite transforms, policy-driven cross-set ownership, health and dependent invalidation are present.")
