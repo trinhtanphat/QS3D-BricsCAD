@@ -9,7 +9,9 @@
 
 ## Semantic capture
 
-- `QS3DROOM`, `QS3DWALL`, `QS3DOPENING`, `QS3DDOOR`.
+- `QS3DROOM` — capture an already closed room source as Room semantic data.
+- `QS3DROOMAUTO` — find bounded rooms from a selected planar LINE/POLYLINE segment network, split crossings/T-junctions, and create/update Room elements deterministically. Default snap tolerance is 1 mm and default minimum room area is 0.05 m²; project metadata can override `QS3D.RoomBoundarySnapMm` and `QS3D.RoomBoundaryMinAreaM2`.
+- `QS3DWALL`, `QS3DOPENING`, `QS3DDOOR`.
 - `QS3DBEAM`, `QS3DSLAB`, `QS3DCOLUMN`, `QS3DSTRUCTWALL`, `QS3DFOUNDATION`.
 - `QS3DSTAIR`, `QS3DRAILING`, `QS3DEARTHWORK`.
 - `QS3DFINISH` — generate room finish semantics.
@@ -29,7 +31,7 @@
 - `QS3DBQ` — quantity summary and XLSX workflow.
 - `QS3DBBSVIEW` — BBS review/locate window.
 - `QS3DBBS` — BBS XLSX export.
-- `QS3DBBSCSV` — UTF-8 CSV export with spreadsheet formula-injection guards.
+- `QS3DBBSCSV` — UTF-8 CSV export with spreadsheet formula-injection/control-character/non-finite guards.
 
 ## Revision and viewport
 
