@@ -63,6 +63,11 @@ namespace QS3D.Core.Diagnostics
                 if (!element.Properties.TryGetValue("GeneratedFoundationMeshMode", out var mode) || !string.Equals(mode, "FoundationMeshXY", StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("FOUNDATION_MESH_MODE_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshMode thiếu hoặc không hợp lệ.", element.Id));
 
+                if (!element.Properties.TryGetValue("GeneratedFoundationMeshFootprintMode", out var footprintMode) ||
+                    !(string.Equals(footprintMode, "RectangleLocalXY", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(footprintMode, "PolygonGlobalXY", StringComparison.OrdinalIgnoreCase)))
+                    issues.Add(new ModelHealthIssue("FOUNDATION_MESH_FOOTPRINT_MODE_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshFootprintMode phải là RectangleLocalXY hoặc PolygonGlobalXY.", element.Id));
+
                 if (element.Category != ElementCategory.Foundation)
                     issues.Add(new ModelHealthIssue("FOUNDATION_MESH_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated foundation mesh metadata chỉ hợp lệ trên Foundation element.", element.Id));
 
