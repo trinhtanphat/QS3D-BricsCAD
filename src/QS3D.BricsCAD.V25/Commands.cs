@@ -295,7 +295,15 @@ namespace QS3D.BricsCAD.V25
                 var element = project.FindElement(result.StringResult);
                 if (element == null) { doc.Editor.WriteMessage("\nKhông tìm thấy QS3D element."); return; }
                 var count = Cad.CadHandleService.Select(doc, SourceHandleResolver.Resolve(project, new[] { element.Id }));
-                PaletteCoordinator.SetStatus("Locate " + element.Id + " • " + count + " CAD object");
+                if (count > 0)
+                {
+                    PaletteCoordinator.SetStatus("Locate " + element.Id + " • " + count + " CAD object");
+                    doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                    return;
+                }
+                var status = "Locate " + element.Id + ": không tìm thấy CAD object còn sống; giữ nguyên selection hiện tại.";
+                PaletteCoordinator.SetStatus(status);
+                doc.Editor.WriteMessage("\nQS3D " + status);
             });
         }
 
