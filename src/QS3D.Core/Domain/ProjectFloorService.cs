@@ -43,9 +43,14 @@ namespace QS3D.Core.Domain
             var nameChanged = !string.Equals(floor.Name, normalizedName, StringComparison.Ordinal);
             var elevationChanged = !NearlyEqual(floor.ElevationM, elevationM);
             if (!nameChanged && !elevationChanged) return floor;
+
+            var referencedElements = ResolveProjectElements(project)
+                .Where(x => ReferencesFloor(x, floor.Id))
+                .ToList();
+
             floor.Name = normalizedName;
             floor.ElevationM = elevationM;
-            foreach (var element in project.Elements.Where(x => ReferencesFloor(x, floor.Id)))
+            foreach (var element in referencedElements)
             {
                 var flags = ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;
                 if (elevationChanged) flags |= ElementDirtyFlags.Geometry;
@@ -174,7 +179,7 @@ namespace QS3D.Core.Domain
             var floor = FindRequired(project, floorId);
             if (string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active floor. Activate another floor first.");
-            var references = project.Elements.Count(x => ReferencesFloor(x, floor.Id));
+            var references = ResolveProjectElements(project).Count(x => ReferencesFloor(x, floor.Id));
             if (references > 0)
                 throw new InvalidOperationException("Floor '" + floor.Name + "' is referenced by " + references + " semantic element(s). Reassign or clear Floor/Level references before deletion.");
             var removed = project.Floors.Remove(floor);
@@ -186,7 +191,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var floor = FindRequired(project, floorId);
-            return project.Elements.Count(x => ReferencesFloor(x, floor.Id));
+            return ResolveProjectElements(project).Count(x => ReferencesFloor(x, floor.Id));
         }
 
         public static bool ReferencesFloor(ProjectElement element, string floorId)
@@ -206,14 +211,8 @@ namespace QS3D.Core.Domain
 
         private static IReadOnlyList<ProjectElement> ResolveOwnedElements(ProjectState project, IEnumerable<ProjectElement> elements)
         {
-            var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var projectElement in project.Elements)
-            {
-                if (projectElement == null) continue;
-                if (projectElements.ContainsKey(projectElement.Id))
-                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElement.Id);
-                projectElements[projectElement.Id] = projectElement;
-            }
+            var projectElements = ResolveProjectElements(project)
+                .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
@@ -224,6 +223,24 @@ namespace QS3D.Core.Domain
                 unique[element.Id] = owned;
             }
             return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static IReadOnlyList<ProjectElement> ResolveProjectElements(ProjectState project)
+        {
+            var resolved = new List<ProjectElement>(project.Elements.Count);
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("Project contains an element with a blank semantic id.");
+                if (!ids.Add(elementId))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
+                resolved.Add(element);
+            }
+            return resolved.AsReadOnly();
         }
 
         private static double LevelOffset(ProjectElement element, string key)
