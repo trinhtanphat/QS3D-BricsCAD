@@ -13,6 +13,7 @@ required = {
         'CommandMethod("QS3DDRAWWALLPIER"',
         'CommandMethod("QS3DDRAWSTRUCTWALL"',
         'CommandMethod("QS3DDRAWFOUNDATION"',
+        'AcquireFixedPath(document, "Trụ Tường", 2)',
         "SemanticCaptureService.Capture(document, category)",
         "ProjectStateSnapshot.Capture(project)",
         "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(createdElement)",
@@ -82,6 +83,8 @@ required = {
         "QS3DDRAWFOUNDATION",
         "BricsCAD V25 x64 .NET plugin",
         "QS3DBUILD3D",
+        "exactly a two-point **LINE**",
+        "WallPierProfileSolidBuilder",
         "Door / Opening Direct Draw extension",
         "QS3DDRAWDOOR",
         "QS3DDRAWOPENING",
@@ -148,6 +151,14 @@ if source.is_file():
     if 'CommandMethod("QS3DDRAWOPENING"' in text or 'CommandMethod("QS3DDRAWDOOR"' in text:
         errors.append("Door/Opening Direct Draw belongs in the separate host-aware DirectDrawOpeningCommands lifecycle, not the native P1 builder wrapper")
 
+    wallpier_body = text.split('[CommandMethod("QS3DDRAWWALLPIER"', 1)[-1].split('[CommandMethod("QS3DDRAWSTRUCTWALL"', 1)[0]
+    if 'AcquireFixedPath(document, "Trụ Tường", 2)' not in wallpier_body:
+        errors.append("WallPier Direct Draw must acquire exactly two points")
+    if "() => CreateLine(document, points[0], points[1])" not in wallpier_body:
+        errors.append("WallPier Direct Draw must persist a LINE source")
+    if 'AcquirePath(document, "Trụ Tường"' in wallpier_body or "CreatePolyline(document, points, false)" in wallpier_body:
+        errors.append("WallPier Direct Draw must not accept open-POLYLINE paths until a deterministic profile-around-corners contract exists")
+
     create = text.find("sourceId = createSource();")
     capture = text.find("SemanticCaptureService.Capture(document, category)")
     active_check = text.find('EnsureActive(document, "Direct Draw P1 " + category + " / QS3DBUILD3D")')
@@ -177,4 +188,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Native Direct Draw P1 compiles its project snapshot rollback contract, reuses canonical QS3DBUILD3D and preserves ownership-safe lifecycle invariants; the separately implemented Door/Opening Direct Draw extension is present, uniquely registered, host-aware and guarded by its dedicated preflight with physical boolean kept explicit.")
+print("PASS: Native Direct Draw P1 compiles its project snapshot rollback contract, keeps WallPier Direct Draw on the two-point specialized LINE profile path, reuses canonical QS3DBUILD3D and preserves ownership-safe lifecycle invariants; the separately implemented Door/Opening extension is present, uniquely registered, host-aware and guarded with physical boolean kept explicit.")
