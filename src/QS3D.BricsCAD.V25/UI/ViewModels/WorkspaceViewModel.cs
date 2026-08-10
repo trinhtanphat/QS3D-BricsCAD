@@ -113,6 +113,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 Status = "Tên Family không được để trống.";
                 return family.Name;
             }
+            if (string.Equals(family.Name, next, StringComparison.Ordinal)) return family.Name;
             if (_project != null && _project.Families.Any(x => !ReferenceEquals(x, family) && string.Equals(x.Name, next, StringComparison.CurrentCultureIgnoreCase)))
             {
                 Status = "Tên Family đã tồn tại: " + next;
