@@ -9,6 +9,7 @@ errors = []
 required = [
     "src/QS3D.Core/Geometry/WallFootprintEngine.cs",
     "src/QS3D.Core/Geometry/OpeningCutPlanner.cs",
+    "src/QS3D.Core/Geometry/PolylineOpeningCutPlanner.cs",
     "src/QS3D.Core/Rebar/RectangularRebarLayoutPlanner.cs",
     "src/QS3D.Core/Rebar/LinearRebarLayoutPlanner.cs",
     "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs",
@@ -29,6 +30,7 @@ required = [
     "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs",
     "tests/QS3D.Core.SmokeTests/LinearRebarLayoutSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/PolylineOpeningCutSmoke.cs",
 ]
 for relative in required:
     if not (ROOT / relative).is_file():
@@ -40,6 +42,9 @@ checks = {
     ],
     "src/QS3D.Core/Geometry/OpeningCutPlanner.cs": [
         "HostLengthM", "CenterAlongHostM", "CutterDepthM", "extends beyond the host wall length", "extends above the host wall height", "Midpoint(baseElevation, topElevation"
+    ],
+    "src/QS3D.Core/Geometry/PolylineOpeningCutPlanner.cs": [
+        "MaximumCenterlineOffsetM", "SegmentIndex", "ProjectedCenter", "Tangent", "crosses a polyline wall corner/junction"
     ],
     "src/QS3D.Core/Rebar/RectangularRebarLayoutPlanner.cs": [
         "BarsAlongWidth", "BarsAlongDepth", "CoverM", "DiameterMm", "no usable reinforcement envelope"
@@ -56,7 +61,8 @@ checks = {
         "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelected(Document document, ProjectState project, ElementCategory category)"
     ],
     "src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs": [
-        "OpeningCutPlanner.Plan", "PhysicalOpeningCutSolidHandle", "PhysicalOpeningCutFingerprint", "BooleanOperationType.BoolSubtract", "FingerprintPart", "HostFingerprint",
+        "OpeningCutPlanner.Plan", "PolylineOpeningCutPlanner.Plan", "PreparePolylineHost", "PhysicalOpeningCutSolidHandle", "PhysicalOpeningCutFingerprint",
+        "BooleanOperationType.BoolSubtract", "FingerprintPart", "HostFingerprint", "curved/bulged wall POLYLINE",
         "ElementCategory.ArchitecturalWall", "ElementCategory.GlassWall", "ElementCategory.WallPier", "ElementCategory.StructuralWall"
     ],
     "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs": [
@@ -98,6 +104,9 @@ checks = {
     "tests/QS3D.Core.SmokeTests/LinearRebarLayoutSmoke.cs": [
         "CountDistributionIsSymmetric", "SpacingDistributionRoundsUpSafely", "AmbiguousModeIsRejected", "ExcessiveBarCountIsRejected"
     ],
+    "tests/QS3D.Core.SmokeTests/PolylineOpeningCutSmoke.cs": [
+        "ProjectsOntoHorizontalSegment", "ProjectsOntoVerticalSegment", "RejectsCornerCrossingCut", "RejectsFarOpening"
+    ],
 }
 for relative, needles in checks.items():
     path = ROOT / relative
@@ -115,6 +124,8 @@ if registration.is_file():
         errors.append("GeometryCompletionSmoke is not registered")
     if "LinearRebarLayoutSmoke.Run();" not in registration_text:
         errors.append("LinearRebarLayoutSmoke is not registered")
+    if "PolylineOpeningCutSmoke.Run();" not in registration_text:
+        errors.append("PolylineOpeningCutSmoke is not registered")
 
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
@@ -132,4 +143,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: TKT line/polyline wall variants, compatible opening hosts, far-origin-safe footprint math, rectangular + linear rebar planning/health and BLT-style UI workflow guards are present.")
+print("PASS: TKT line/polyline wall variants, safe LINE + straight-POLYLINE opening cuts, far-origin-safe footprint math, rectangular + linear rebar planning/health and BLT-style UI workflow guards are present.")
