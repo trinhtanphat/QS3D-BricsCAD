@@ -5,54 +5,52 @@ Updated 2026-08-10 for the current `main` source baseline.
 ## Implemented source baseline
 
 - clean-room layered architecture: `QS3D.Core` + BricsCAD V25 adapter + WPF/Ribbon UI;
-- `.qsdb` semantic source-of-truth with schema v3 migration, locking, validated temp save, backup/recovery, persisted dirty state, project QuantityRules and audit provenance;
-- dependency/fixed-point regeneration, formula engine, project rule catalog, Model Health and revision foundations;
-- active Zone/Floor/Family semantic property flow and multi-DWG project cache keyed by `Document` identity;
-- BLT-style three-pane workspace with semantic tree, Family/Type list, grouped Vietnamese property inspector, selected-object review, HT_Phòng, plus live Xref/Drawing and Layer management;
-- category-aware **Bóc chọn** flow in the workspace so model capture no longer depends on memorizing command names;
-- Room / Tường Gạch / Vách Kính / Trụ Tường / Opening / Door / HT_Phòng semantic capture and quantity workflows;
-- Beam / Slab / Column / StructuralWall / Foundation / Stair / Railing / Earthwork deterministic quantity paths;
-- native Tường KT source paths for Tường Gạch, Vách Kính and Trụ Tường from LINE and open POLYLINE centerlines using deterministic wall footprint generation, guarded miter/bevel joining and bulge tessellation;
-- native structural Solid3d source paths isolated behind the V25 adapter and two-phase generated-geometry replacement;
-- Door/Opening host linking plus guarded physical boolean subtraction for compatible generated LINE-host solids across Tường Gạch, Vách Kính, Trụ Tường and Vách BTCT, with live host/opening geometry included in the idempotence fingerprint;
-- rectangular-column longitudinal rebar 3D source path built from deterministic rebar layout planning, plus generated-bar ownership health diagnostics;
-- Quick Takeoff Length/Area/Volume/Count with `INSUNITS` conversion;
-- BQ stable-ID grouping/filtering/Locate/XLSX, real recalc and persisted visible-column preferences;
-- rebar notation/BBS model, XLSX/CSV export and BBS review/Locate UI;
-- persisted revision baseline/diff workflow using `.qsrev`;
-- deterministic recognition review + confident auto-apply, with project layer mappings overriding fallback heuristics;
-- `.qstemplate` company-standard import/export for Families, QuantityRules, layer mappings, BQ columns and generic material/classification properties;
-- deterministic planar room-boundary engine with iterative bridge detection/source lookup: intersection/T-junction subdivision, endpoint snapping, dangling-bridge removal, bounded-face traversal, stable boundary keys and Area/Perimeter calculation;
-- `QS3DROOMAUTO` accepts planar LINE/POLYLINE/ARC/SPLINE networks. Direct ARC and polyline bulges use configurable sagitta; SPLINE uses bounded chord sampling with a hard segment cap; source elevations are checked before face discovery;
-- Room Auto lifecycle is non-destructive and quantity-safe: same normalized source provenance reuses the existing Room, topology split/merge marks superseded Rooms `Stale`, stale Rooms/direct dependents are excluded from BQ, and audit records remain available for review/recovery;
-- Room Auto boundary provenance is resolved by the adapter without claiming duplicate semantic `SourceHandles`; shared semantic reference resolution keeps BQ/Health/Locate/BBS/revision navigation working for boundary-derived elements;
-- Tường KT/Cửa/physical-cut/rebar-3D workflows are exposed consistently through commands, the main palette, Ribbon and Full Domain Hub;
+- `.qsdb` semantic source-of-truth with schema migration, locking, validated temp save, backup/recovery, persisted dirty state, project QuantityRules and audit provenance;
+- dependency/fixed-point regeneration, formula engine, Model Health, revision baseline/diff and company template import/export;
+- multi-DWG project context keyed by live `Document` identity;
+- BLT-style three-pane workspace with semantic tree, Family/Type list, selected-object review, HT_Phòng, Xref/Drawing and Layer management;
+- category-aware **Bóc chọn** flow so semantic capture does not depend on command-line memorization;
+- typed property inspector with Vietnamese groups/units, boolean/choice/text editors and explicit **Family / Type** versus **Đối tượng / Instance** scope;
+- exactly one semantic selection opens Instance scope; instance overrides are preserved when Family defaults change and can be reset to the current Family value;
+- semantic-reference selection matching supports normal sources, Auto Room boundary provenance and generated-solid fallback without duplicating ownership handles;
+- review actions are available in Workspace/Ribbon/Domain Hub: Highlight, Focus, Cô lập and Khôi phục;
+- Room / Tường Gạch / Vách Kính / Trụ Tường / Opening / Door / HT_Phòng semantic workflows;
+- Beam / Slab / Column / StructuralWall / Foundation / Stair / Railing / Earthwork deterministic quantity paths and guarded native adapters;
+- native Tường KT source paths for all three variants from LINE/open POLYLINE centerlines using deterministic wall-footprint generation, guarded miter/bevel joining and bulge tessellation;
+- `QS3DWALLJUNCTIONS` classifies L/T/X/Straight/End/Multi nodes and produces reviewable endpoint-cleanup plans;
+- `QS3DWALLSNAPPREVIEW` / `QS3DWALLSNAPAPPLY` implement review-gated centerline endpoint cleanup for tracked wall LINE/open straight POLYLINE source. Preview hashes geometry/targets/tolerances; Apply rejects stale previews, curved/bulged sources and nonsemantic wall geometry. Affected semantic owners are dirtied after mutation, and generated geometry can be invalidated atomically before safe rebuild;
+- manual Door/Opening host linking plus `QS3DAUTOLINKHOSTS`, which matches selected openings to compatible semantic walls using surface gap, Floor/Zone scope, ambiguity rejection and an independent elevation gate; automatic host matching never silently executes the physical boolean cut;
+- guarded physical Door/Opening subtraction for compatible LINE hosts and safe straight/non-bulged POLYLINE segments; curved/bulged/corner-crossing cuts fail closed;
+- Quick Takeoff, BQ stable-ID grouping/filtering/Locate/XLSX and deterministic recognition/review/auto-apply;
+- Room Auto from planar LINE/POLYLINE/ARC/SPLINE with sagitta/chord controls, planarity checks, bounded sampling, topology split/merge lifecycle, stale-room handling and rollback;
+- rebar notation/BBS, XLSX/CSV, rectangular-column 3D bars, linear distribution planning, protected ownership/health checks and BBS-shape-driven 3D bars for supported straight/L/U/Z/custom leg/turn paths;
+- Ribbon, Workspace and Full Domain Hub expose the main product workflows consistently, including Giao tường/snap preview+apply, Auto/Manual Host, Focus/Isolate and both rebar geometry paths;
 - V25 release package + per-user DemandLoad install/uninstall source with hashes/signature policy and proprietary-runtime exclusion;
-- generic/full-domain/room-lifecycle/geometry-completion/room-curve static preflights plus deterministic Core smoke coverage, including end-to-end guards for all three Tường KT native 3D variants, compatible LINE-wall opening hosts and direct ARC/SPLINE Room Auto wiring;
-- manual-only GitHub Actions and V25 self-hosted NETLOAD/runtime/screenshot harness.
+- generic/full-domain/room/geometry/advanced static preflights and deterministic Core smoke coverage, including safe Auto Host, wall-snap review gating, XAML well-formedness and Family/Instance inspector contracts;
+- GitHub Actions on `main` remain manual-only.
 
 ## Next validation gates
 
-1. Run all static/source preflights on the newest head when an explicitly approved validation run is requested.
-2. Core Release build + deterministic smoke suite on the newest geometry/Room/UI head. Earlier green runs do not automatically validate later commits.
-3. Licensed Windows BricsCAD V25 compile on `[self-hosted, windows, x64, bricscad-v25]`.
-4. `NETLOAD`/DemandLoad and command/Ribbon/palette regression, including `QS3DROOMAUTO`, `QS3DCUTOPENINGS`, `QS3DREBAR3D`, Tường Gạch/Vách Kính/Trụ Tường capture + `QS3DBUILD3D`, recognition/template/revision/BBS/domain/audit workflows.
-5. Private sample DWG regression: Tường KT LINE/open-POLYLINE/curved centerlines for all three variants; Room Auto mixed LINE/POLYLINE/ARC/SPLINE plus non-planar rejection; physical cuts on all supported LINE-wall hosts; room/finish/structural/takeoff/BQ/BBS/rebar/template/save/reopen; Room Auto split/merge/reuse and moved-opening rebuild/re-cut cases.
-6. Visual regression at 100/125/150/200% DPI with Vietnamese Unicode and narrow/wide palette sizes.
-7. Performance/multi-DWG open-activate-SaveAs-close corpus plus large planar boundary-network/SPLINE sampling and large BQ/rebar corpus.
-8. Only after these gates are green, consider automatic PR CI/release-candidate automation.
+1. Run all source/static preflights on the newest head only when an explicitly approved validation run is requested.
+2. Core Release build + deterministic smoke suite on the newest Room/wall/opening/rebar/UI head; older green runs do not validate later commits automatically.
+3. Compile the V25 adapter on `[self-hosted, windows, x64, bricscad-v25]` against the exact installed BricsCAD V25 managed assemblies.
+4. NETLOAD/DemandLoad regression for workspace, Ribbon, Domain Hub, Family/Instance property scope, Focus/Isolate, Giao tường, wall-snap preview/apply, Auto Host, Room Auto, opening cuts, recognition/template/revision/BQ/BBS and both rebar 3D paths.
+5. Private-DWG regression: Tường KT LINE/open-POLYLINE/curved centerlines; L/T/X networks and snap cleanup; Door/Opening Auto Host with ambiguous/elevation cases; Room Auto mixed LINE/POLYLINE/ARC/SPLINE; opening cuts on LINE and safe straight-POLYLINE hosts; structure/takeoff/BQ/BBS; shape rebar; save/reopen and multi-DWG lifecycle.
+6. Visual regression at 100/125/150/200% DPI with Vietnamese Unicode, narrow/wide palettes, Family/Instance selector, typed controls and error/disabled states.
+7. Performance tests for large room-boundary networks, wall-junction graphs, Auto Host candidate sets, BQ tables, SPLINE sampling and rebar batches.
+8. Only after these gates are green, consider broader automatic PR/release validation.
 
 ## Runtime/product completion still remaining
 
-- production-grade Vách Kính curtain-wall framing/panel semantics and specialized Trụ Tường profiles/material/display behavior beyond the current generic Tường KT centerline extrusion path;
-- wall-to-wall automatic joins/T-junction cleanup, closed-loop/freeform wall profiles and complex elevation/level constraints beyond the current guarded centerline extrusion path;
-- generalized physical opening/door cutting beyond compatible LINE-host solids, especially curved/polyline hosts and edit/rebuild UX proven on V25;
-- V25/private-DWG proof and performance tuning of automatic room-boundary discovery; direct planar ARC and bounded SPLINE sampling are implemented in source, while native non-planar curve projection remains future work;
-- general rebar authoring beyond the current rectangular-column longitudinal-bar path: beam/slab/wall bars, stirrups, hooks/bends, shape editing and broader BBS-to-geometry synchronization;
-- transient highlight/isolate/section-box UX proven against V25 editions;
-- further BLT parity polish after real user screenshots: Ribbon grouping/icons, palette density, keyboard focus, context menus, empty/error states and DPI behavior;
-- Authenticode production signing and signed updater;
-- optional Cloudflare license/update/team-sync backend;
+- production-grade Vách Kính curtain-wall framing/panel semantics and specialized Trụ Tường profiles/material presentation beyond the generic Tường KT extrusion;
+- **physical wall-solid reconciliation/union** at L/T/X/Multi junctions; guarded source-centerline endpoint cleanup is implemented, but generated solids are not yet automatically unioned/reshaped as a complete junction system;
+- closed-loop/freeform wall profiles and more complex level/elevation constraints;
+- physical opening/door cutting on curved/bulged polyline wall hosts and complex corner-spanning openings;
+- broader rebar authoring/editing for beam/slab/wall bars, stirrups, hooks, bend radii and interactive shape manipulation beyond the deterministic current source paths;
+- section-box and deeper transient isolate/highlight workflows proven against V25;
+- richer specialized editors such as level picker/material catalog rather than generic editable choices;
+- context menus, shortcuts, commercial icon set/Ribbon grouping, persisted palette splitter sizes, accessibility/focus order and DPI polish from real V25 screenshots;
+- Authenticode production signing, signed updater and optional commercial licensing/team-sync backend;
 - future AutoCAD adapter reusing `QS3D.Core`.
 
-These remaining items must not be marked complete from source review alone when their correctness depends on BricsCAD V25 runtime, private DWG data, signing infrastructure or external deployment.
+Items depending on BricsCAD V25 runtime, private drawings, signing infrastructure or external services must not be marked complete from repository inspection alone.
