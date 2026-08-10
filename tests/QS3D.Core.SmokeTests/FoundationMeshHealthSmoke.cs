@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             HealthyFoundation();
             DetectsWrongCategoryAndStaleSnapshot();
             DetectsCrossKeyOwnershipConflict();
+            DetectsLaterOwnerConflictAndFutureGeneratedSlot();
             ClearsFoundationStaleIndependently();
             DedicatedModeHealthReadsFoundationSlot();
         }
@@ -50,6 +51,20 @@ namespace QS3D.Core.SmokeTests
             var issues = new GeneratedFoundationMeshHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" });
             Require(issues.Any(x => x.Code == "FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT"), "foundation health missed cross-key ownership conflict");
             Require(new GeneratedRebarOwnershipHealthService().Inspect(project).Any(x => x.Code == "REBAR_GENERATED_CROSS_KEY_OWNERSHIP_CONFLICT"), "global rebar ownership health missed foundation conflict");
+        }
+
+        private static void DetectsLaterOwnerConflictAndFutureGeneratedSlot()
+        {
+            var project = new ProjectState("P-order", "Ownership order");
+            var foundation = MeshElement("F1", ElementCategory.Foundation, "AA", "1");
+            project.Elements.Add(foundation);
+            var later = new ProjectElement("FUTURE", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
+            later.Properties["GeneratedFutureMeshHandles"] = "AA";
+            project.Elements.Add(later);
+
+            var issues = new GeneratedFoundationMeshHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" });
+            Require(issues.Any(x => x.Code == "FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT" && x.ElementId == foundation.Id),
+                "foundation health must detect a later conflicting owner regardless of project order or future generated slot name");
         }
 
         private static void ClearsFoundationStaleIndependently()
