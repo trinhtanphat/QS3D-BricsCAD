@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
             CreateUpdateAssignAndDelete();
             ElevationChangeMarksGeneratedGeometryStale();
             DeleteGuardsActiveAndReferencedFloors();
+            CorruptElementCollectionFailsClosed();
             RejectsDuplicateNamesAndInvalidElevation();
             RejectsDetachedSameIdElements();
         }
@@ -60,6 +61,27 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("e", ElementCategory.Slab, "fam", f1.Id, "z");
             project.Elements.Add(element);
             Throws<InvalidOperationException>(() => ProjectFloorService.Delete(project, f1.Id));
+        }
+
+        private static void CorruptElementCollectionFailsClosed()
+        {
+            var project = new ProjectState("p-corrupt", "Floor atomicity");
+            var f1 = ProjectFloorService.Create(project, "f1", "Tầng 1", 0d);
+            var f2 = ProjectFloorService.Create(project, "f2", "Tầng 2", 3.6d);
+            project.Elements.Add(null);
+
+            Throws<InvalidOperationException>(() => ProjectFloorService.Update(project, f2.Id, "Tầng 2 mới", 4d));
+            if (f2.Name != "Tầng 2" || Math.Abs(f2.ElevationM - 3.6d) > 1e-12d)
+                throw new Exception("Rejected floor update must not partially mutate floor state.");
+
+            Throws<InvalidOperationException>(() => ProjectFloorService.ReferenceCount(project, f2.Id));
+            Throws<InvalidOperationException>(() => ProjectFloorService.Delete(project, f2.Id));
+            if (!ReferenceEquals(project.FindFloor(f2.Id), f2))
+                throw new Exception("Rejected floor delete must preserve project ownership.");
+
+            Throws<InvalidOperationException>(() => ProjectFloorService.Assign(project, f2.Id, Array.Empty<ProjectElement>()));
+            if (project.ActiveFloorId != f1.Id)
+                throw new Exception("Rejected floor operations must not change active floor.");
         }
 
         private static void RejectsDuplicateNamesAndInvalidElevation()
