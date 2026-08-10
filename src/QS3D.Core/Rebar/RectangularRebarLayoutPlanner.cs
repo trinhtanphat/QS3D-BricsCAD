@@ -30,6 +30,8 @@ namespace QS3D.Core.Rebar
 
     public static class RectangularRebarLayoutPlanner
     {
+        private const int MaxBars = 10000;
+
         public static RectangularRebarLayout Plan(RectangularRebarLayoutInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
@@ -40,12 +42,15 @@ namespace QS3D.Core.Rebar
             if (input.BarsAlongWidth < 2) throw new ArgumentOutOfRangeException(nameof(input.BarsAlongWidth));
             if (input.BarsAlongDepth < 2) throw new ArgumentOutOfRangeException(nameof(input.BarsAlongDepth));
 
+            var projectedBars = 2L * input.BarsAlongWidth + 2L * Math.Max(0, input.BarsAlongDepth - 2);
+            if (projectedBars > MaxBars) throw new InvalidOperationException("Rectangular rebar layout exceeds the supported bar count.");
+
             var radiusM = input.DiameterMm / 2000d;
             var halfWidth = input.WidthM / 2d - input.CoverM - radiusM;
             var halfDepth = input.DepthM / 2d - input.CoverM - radiusM;
             if (!(halfWidth > 0d) || !(halfDepth > 0d)) throw new InvalidOperationException("Cover + bar radius leaves no usable reinforcement envelope inside the host section.");
 
-            var points = new List<Point2>();
+            var points = new List<Point2>((int)projectedBars);
             for (var i = 0; i < input.BarsAlongWidth; i++)
             {
                 var x = Interpolate(-halfWidth, halfWidth, i, input.BarsAlongWidth);
