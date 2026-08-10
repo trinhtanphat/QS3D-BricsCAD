@@ -44,7 +44,8 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public string Name { get; set; } = string.Empty;
         public string Path { get; set; } = string.Empty;
         public string Kind { get; set; } = "DWG";
-        public bool IsLocked { get; set; }
+        public string LockState { get; set; } = "—";
+        public string InstanceText { get; set; } = "—";
         public bool IsXref { get; set; }
     }
 
