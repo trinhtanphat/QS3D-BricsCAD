@@ -1,0 +1,26 @@
+name: QS3D Latest Main Integration Gate
+
+on:
+  push:
+    branches:
+      - ci/beam-stirrup-final-latest4-20260810
+
+jobs:
+  integration:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Remove temporary trigger before release-policy checks
+        shell: pwsh
+        run: Remove-Item .github/workflows/beam-stirrup-final-latest.yml -Force
+      - name: Generic preflight
+        run: python scripts/preflight.py
+      - name: Aggregate feature preflight
+        run: python scripts/preflight-all.py
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic Core smoke suite
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
