@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   source-and-core:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +18,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Manual-only CI policy gate
+        run: python scripts/preflight-ci-manual-only.py
       - name: Generic preflight
         run: python scripts/preflight.py
       - name: Geometry preflight
