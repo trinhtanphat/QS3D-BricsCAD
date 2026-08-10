@@ -25,19 +25,27 @@ namespace QS3D.Core.Persistence
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
             var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             var backupPath = fullPath + ".bak";
-
-            project.SchemaVersion = ProjectState.CurrentSchemaVersion;
-            project.Touch();
-            var document = Serialize(project);
+            var previousSchemaVersion = project.SchemaVersion;
+            var previousUpdatedUtc = project.UpdatedUtc;
+            var committed = false;
 
             try
             {
+                project.SchemaVersion = ProjectState.CurrentSchemaVersion;
+                project.Touch();
+                var document = Serialize(project);
                 document.Save(tempPath, SaveOptions.DisableFormatting);
                 ValidateSerializedFile(tempPath);
                 AtomicFileCommit.ReplaceWithBackup(tempPath, fullPath, backupPath);
+                committed = true;
             }
             finally
             {
+                if (!committed)
+                {
+                    project.SchemaVersion = previousSchemaVersion;
+                    project.UpdatedUtc = previousUpdatedUtc;
+                }
                 AtomicFileCommit.TryDelete(tempPath);
             }
         }
