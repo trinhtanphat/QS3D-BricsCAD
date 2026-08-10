@@ -13,6 +13,8 @@ files = {
     "health": UI / "ModelHealthWindow.xaml.cs",
     "bq": UI / "QuantitySummaryWindow.xaml.cs",
     "bbs": UI / "RebarScheduleWindow.xaml.cs",
+    "door_schedule": UI / "DoorOpeningScheduleWindow.xaml.cs",
+    "room_schedule": UI / "RoomFinishScheduleWindow.xaml.cs",
     "commands": ADAPTER / "Commands.cs",
     "review": ADAPTER / "ReviewCommands.cs",
 }
@@ -35,7 +37,7 @@ if not errors:
         if needle not in text["lifetime"]:
             errors.append("document-bound lifetime coordinator missing: " + needle)
 
-    for key in ("recognition", "revision", "health", "bq", "bbs"):
+    for key in ("recognition", "revision", "health", "bq", "bbs", "door_schedule", "room_schedule"):
         if "DocumentBoundWindowLifetime.Attach(this, _document);" not in text[key]:
             errors.append(key + " window must auto-close when its source DWG is destroyed")
 
@@ -43,6 +45,8 @@ if not errors:
         ("bq", "QuantitySummaryWindow(Document document"),
         ("bbs", "RebarScheduleWindow(Document document"),
         ("health", "ModelHealthWindow(Document document"),
+        ("door_schedule", "DoorOpeningScheduleWindow(Document document"),
+        ("room_schedule", "RoomFinishScheduleWindow(Document document"),
     ):
         if signature not in text[key]:
             errors.append(key + " must require an explicit source Document")
@@ -66,4 +70,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: core modeless review/health/BQ/BBS windows are explicitly bound to their source Document and unregister/close when that DWG is destroyed, preventing stale Document/project retention after close.")
+print("PASS: core modeless review/health/BQ/BBS/Door/HT_Phòng windows are explicitly bound to their source Document and unregister/close when that DWG is destroyed, preventing stale Document/project retention after close.")
