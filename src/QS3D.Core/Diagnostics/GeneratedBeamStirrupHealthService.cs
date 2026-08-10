@@ -92,6 +92,8 @@ namespace QS3D.Core.Diagnostics
 
             // Old generated snapshots predate bend/hook length metadata. Keep them valid until rebuilt.
             if (!hasAdvancedMetadata) return;
+            if (mode.Length == 0)
+                issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_INVALID", HealthSeverity.Warning, ModeKey + " bắt buộc khi advanced stirrup metadata đã tồn tại.", element.Id));
 
             if (!TryNumber(element, CenterlineKey, out var centerline) || centerline <= 0d)
             {
