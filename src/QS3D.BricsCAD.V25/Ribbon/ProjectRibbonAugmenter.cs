@@ -32,7 +32,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
             new ButtonSpec("QS3D_PROJECT_ZONES", "Khu vực / Zone", "QS3DZONES"),
             new ButtonSpec("QS3D_PROJECT_MATERIALS", "Vật liệu", "QS3DMATERIALS"),
             new ButtonSpec("QS3D_PROJECT_GRID", "Grid / Trục", "QS3DGRID"),
-            new ButtonSpec("QS3D_PROJECT_GRIDNUMBER", "Đánh số Grid", "QS3DGRIDNUMBER")
+            new ButtonSpec("QS3D_PROJECT_GRIDNUMBER", "Đánh số Grid", "QS3DGRIDNUMBER"),
+            new ButtonSpec("QS3D_PROJECT_GRIDANNOTATE", "Gắn nhãn Grid", "QS3DGRIDANNOTATE"),
+            new ButtonSpec("QS3D_PROJECT_GRIDANNOTATEALL", "Gắn nhãn tất cả Grid", "QS3DGRIDANNOTATEALL")
         };
 
         public static bool TryInitialize()
