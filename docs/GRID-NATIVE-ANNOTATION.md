@@ -50,9 +50,13 @@ This prevents the failure window where DWG annotation is committed while `.qsdb`
 
 `GeneratedGridAnnotationHealthService` validates persisted annotation integrity without pretending that Core can inspect a live BricsCAD database. It reports malformed/duplicate handles, generated handles leaking into `SourceHandles`, stale built labels, owner project/element/version mismatches, and invalid bubble/text sizing.
 
-`ComprehensiveModelHealthService` includes these checks and classifies `GRID_ANNOTATION` issue codes as generated-output issues. This means the existing generated-output health/locate routing can prefer generated CAD when a tracked handle is available, while retaining semantic/source fallback when the generated entity itself is missing.
+`GeneratedGridAnnotationRuntimeHealthService` is the V25 read-only counterpart. For each persisted annotation handle it verifies that the object still resolves in the active DWG, that the deterministic six-slot layout is still `Line/Circle/DBText` at both endpoints, that the live entity still carries matching QS3D XData ownership, and that each live `DBText` still equals the current semantic `GridLabel`.
 
-Live entity type/XData verification still belongs to the V25 layer and remains a separate qualification step; persisted metadata health is not presented as proof that a DBText/Circle is actually live in a particular DWG.
+The runtime checker never repairs, erases or silently reclaims mismatched CAD entities. Missing objects and ownership/type/text mismatches are surfaced as `GRID_ANNOTATION_CAD_*` health issues.
+
+`GeneratedSolidRuntimeHealthService` aggregates this V25 read-only checker, so the existing `QS3DHEALTH` command includes live Grid annotation integrity without requiring another command path. `ComprehensiveModelHealthService` handles persisted metadata checks and classifies `GRID_ANNOTATION` issue codes as generated-output issues. The existing generated-output locate routing can therefore prefer generated CAD handles and fall back to the authoritative source when generated entities are missing.
+
+Persisted Core health and live V25 health remain deliberately separate: a healthy `.qsdb` record is not proof that the corresponding CAD object still exists, and a live CAD object is not trusted unless its XData ownership matches the current project/Grid.
 
 ## Explicit exclusions
 
@@ -78,10 +82,10 @@ The V25 runtime matrix must include at least:
 3. label change followed by replacement;
 4. bubble/text size overrides and drawing-unit conversion;
 5. ownership mismatch refusal after intentionally replacing one generated handle with a non-QS3D entity;
-6. Undo/Redo around a completed batch;
-7. cancel/exception before commit with no partial semantic or CAD mutation;
-8. save/reopen and rebuild from persisted `GeneratedGridAnnotationHandles`;
-9. multi-DWG isolation and source owner-space behavior;
-10. Unicode labels and HiDPI visual review.
+6. live health after erase, entity-type replacement, XData ownership corruption and manual DBText editing;
+7. Undo/Redo around a completed batch;
+8. cancel/exception before commit with no partial semantic or CAD mutation;
+9. save/reopen and rebuild from persisted `GeneratedGridAnnotationHandles`;
+10. multi-DWG isolation, Unicode labels and HiDPI visual review.
 
 Do not describe native Grid annotation as BricsCAD V25 runtime-certified until that matrix is actually executed.
