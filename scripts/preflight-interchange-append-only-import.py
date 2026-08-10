@@ -5,12 +5,13 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 IMPORTER = ROOT / "src/QS3D.Core/Export/ProjectInterchangeAppendOnlyImporter.cs"
 COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeCommands.cs"
+PROJECT_TOOLS = ROOT / "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectInterchangeAppendOnlyImporterSmoke.cs"
 REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 DOC = ROOT / "docs/INTERCHANGE-APPEND-ONLY-IMPORT.md"
 errors = []
 
-for path in (IMPORTER, COMMANDS, SMOKE, REGISTRATION, DOC):
+for path in (IMPORTER, COMMANDS, PROJECT_TOOLS, SMOKE, REGISTRATION, DOC):
     if not path.is_file():
         errors.append("missing append-only interchange contract file: " + str(path.relative_to(ROOT)))
 
@@ -56,6 +57,13 @@ if COMMANDS.is_file():
     if '[CommandMethod("QS3DINTERCHANGEIMPORT"' in text:
         errors.append("generic interchange import command must not be introduced by the append-only slice")
 
+if PROJECT_TOOLS.is_file():
+    text = PROJECT_TOOLS.read_text(encoding="utf-8")
+    if 'Tag="QS3DINTERCHANGEAPPEND"' not in text:
+        errors.append("Project Tools must expose the guarded append-only command explicitly")
+    if 'Tag="QS3DINTERCHANGEIMPORT"' in text:
+        errors.append("Project Tools must not present append-only as a generic interchange import")
+
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
@@ -87,4 +95,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: append-only interchange mutation uses bounded strict input, read-only confirmation planning, collision blocking, rollback and non-portable CAD ownership discard. Runtime V25 qualification is still required.")
+print("PASS: append-only interchange mutation uses bounded strict input, read-only confirmation planning, collision blocking, rollback, explicit UI discoverability and non-portable CAD ownership discard. Runtime V25 qualification is still required.")
