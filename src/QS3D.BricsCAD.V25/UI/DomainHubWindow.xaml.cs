@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
@@ -23,8 +24,24 @@ namespace QS3D.BricsCAD.V25.UI
                 StatusText.Text = "Chưa có bản vẽ BricsCAD đang active.";
                 return;
             }
-            document.SendStringToExecute(command + " ", true, false, false);
-            StatusText.Text = "Đã gửi lệnh " + command + " sang " + System.IO.Path.GetFileName(document.Name) + ".";
+
+            try
+            {
+                document.SendStringToExecute(command + " ", true, false, false);
+                StatusText.Text = "Đã gửi lệnh " + command + " sang " + DrawingLabel(document) + ".";
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = "Không thể gửi lệnh " + command + ": " + ex.Message;
+            }
+        }
+
+        private static string DrawingLabel(Document document)
+        {
+            var name = document.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) return "bản vẽ chưa lưu";
+            try { return System.IO.Path.GetFileName(name); }
+            catch { return name; }
         }
     }
 }
