@@ -41,8 +41,10 @@ checks = {
     "src/QS3D.BricsCAD.V25/UI/Rebar3DHubWindow.xaml": ["QS3DFOUNDATIONREBAR3D", "QS3DFOUNDATIONREBARHEALTH", "QS3DREBARMESHSETUP"],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": ["QS3DFOUNDATIONREBAR3D", "QS3DFOUNDATIONREBARHEALTH", "QS3DREBARMESHSETUP"],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": ["QS3DFOUNDATIONREBAR3D", "QS3DFOUNDATIONREBARHEALTH", "QS3DREBARMESHSETUP"],
-    "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": ["GeneratedFoundationMeshHandles"],
-    "src/QS3D.BricsCAD.V25/Cad/GeneratedTieRebarOwnershipGuard.cs": ["GeneratedFoundationMeshHandles"],
+    "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": ["GeneratedFoundationMeshHandles", "RebarHandleKeys", "IsOwnerSlot", "IsRebarOwnerSlot"],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedTieRebarOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedCurtainFrameOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "GeneratedCurtainFrameHandles"],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs": ["GeneratedFoundationMeshHandles", "GeneratedFoundationMeshMode"],
     "src/QS3D.Core/Domain/ProjectElement.cs": [
         "GeneratedFoundationMeshStateKey", "GeneratedFoundationMeshStaleSnapshotKey", "IsGeneratedFoundationMeshStale", "ClearGeneratedFoundationMeshStale"
@@ -50,14 +52,18 @@ checks = {
     "src/QS3D.Core/Diagnostics/GeneratedGeometryStaleHealthService.cs": ["FOUNDATION_MESH_GENERATED_STALE"],
     "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs": ["GeneratedFoundationMeshHandles"],
     "src/QS3D.Core/Diagnostics/GeneratedRebarModeHealthService.cs": ["FoundationMeshXY", "GeneratedFoundationMeshHandles", "GeneratedSlabMeshHandles", "GeneratedWallMeshHandles"],
+    "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs": ["GeneratedFoundationMeshHandles"],
     "src/QS3D.BricsCAD.V25/RebarHealthAllCommands.cs": ["GeneratedFoundationMeshHealthService", "FoundationMeshSolidBuilder.HandlesKey"],
     "src/QS3D.BricsCAD.V25/HealthAllCommands.cs": ["GeneratedFoundationMeshHealthService", "FoundationMeshSolidBuilder.HandlesKey"],
+    "src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs": ["GeneratedFoundationMeshHealthService().Inspect", "GeneratedRebarModeHealthService().Inspect"],
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": ["CollectGeneratedHandles(project)", "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)"],
     "src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs": ["0.005d", "beam horizontal tolerance"],
     "tests/QS3D.Core.SmokeTests/FoundationMeshHealthSmoke.cs": [
         "IsGeneratedFoundationMeshStale", "GeneratedRebarModeHealthService", "GeneratedRebarOwnershipHealthService",
         "DetectsLaterOwnerConflictAndFutureGeneratedSlot", "GeneratedFutureMeshHandles"
     ],
     "tests/QS3D.Core.SmokeTests/FoundationMeshHealthSmokeRegistration.cs": ["FoundationMeshHealthSmoke.Run();"],
+    "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipSmoke.cs": ["FoundationMeshGeneratedHandleResolvesOwner", "GeneratedFoundationMeshHandles"],
     "tests/QS3D.Core.SmokeTests/GeneratedGeometryStaleSmoke.cs": ["FOUNDATION_MESH_GENERATED_STALE", "GeneratedFoundationMeshHandles"],
     "tests/QS3D.Core.SmokeTests/GeneratedOutputHealthStaleSmoke.cs": ["FoundationMeshUsesSnapshotState"],
 }
@@ -96,4 +102,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Foundation mesh reuses the Slab mesh planner with dedicated stale lifecycle, order-independent future-proof ownership health, invalidation, independent X/Y setup and UI contracts.")
+print("PASS: Foundation mesh uses dedicated stale/health metadata, policy-driven destructive ownership, semantic-selection/B4D exclusion, independent X/Y setup, unified health/release-readiness and UI contracts.")
