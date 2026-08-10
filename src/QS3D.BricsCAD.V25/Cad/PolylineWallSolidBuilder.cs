@@ -25,10 +25,14 @@ namespace QS3D.BricsCAD.V25.Cad
             public bool UsedBevelJoin { get; set; }
         }
 
-        public static int BuildSelected(Document document, ProjectState project)
+        public static int BuildSelected(Document document, ProjectState project) =>
+            BuildSelected(document, project, ElementCategory.ArchitecturalWall);
+
+        public static int BuildSelected(Document document, ProjectState project, ElementCategory category)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!IsSupportedWall(category)) throw new ArgumentOutOfRangeException(nameof(category), "Unsupported architectural wall category: " + category);
             var selection = document.Editor.SelectImplied();
             if (selection.Status != PromptStatus.OK || selection.Value == null) return 0;
             var selectedIds = selection.Value.GetObjectIds();
@@ -50,7 +54,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
                     var handle = polyline.Handle.ToString();
                     var matches = project.Elements
-                        .Where(x => x.Category == ElementCategory.ArchitecturalWall && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
+                        .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
                         .Take(2)
                         .ToList();
                     if (matches.Count == 0) continue;
@@ -124,7 +128,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
             foreach (var update in pending)
             {
-                GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, ElementCategory.ArchitecturalWall);
+                GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, category);
                 update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["FootprintAreaM2"] = update.FootprintAreaM2.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
@@ -170,5 +174,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw new InvalidOperationException("Project metadata " + key + " không hợp lệ: " + text);
             return value;
         }
+
+        private static bool IsSupportedWall(ElementCategory category) =>
+            category == ElementCategory.ArchitecturalWall || category == ElementCategory.GlassWall || category == ElementCategory.WallPier;
     }
 }

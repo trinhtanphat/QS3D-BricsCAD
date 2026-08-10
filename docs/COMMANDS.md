@@ -24,9 +24,10 @@ Updated for the current source baseline on 2026-08-10. Commands that create nati
 
 ### Tường KT / Cửa
 
-- `QS3DWALL` — capture Tường Gạch / ArchitecturalWall semantics. The current 3D builder supports LINE and open plan-view POLYLINE centerlines.
-- `QS3DGLASSWALL` — explicit Vách Kính semantic capture with safe default family properties if no GlassWall family exists yet.
-- `QS3DWALLPIER` — explicit Trụ Tường semantic capture with safe default family properties if no WallPier family exists yet.
+- `QS3DWALL` — capture Tường Gạch / ArchitecturalWall semantics.
+- `QS3DGLASSWALL` — capture Vách Kính / GlassWall semantics and create safe starter Family properties if no GlassWall family exists yet.
+- `QS3DWALLPIER` — capture Trụ Tường / WallPier semantics and create safe starter Family properties if no WallPier family exists yet.
+- All three Tường KT variants use the guarded `QS3DBUILD3D` LINE/open-POLYLINE centerline pipeline. Polyline bulges are tessellated before the deterministic wall-footprint engine constructs the extrusion profile.
 - `QS3DOPENING` — capture Lỗ Mở Vách.
 - `QS3DDOOR` — capture Cửa Đi.
 - `QS3DLINKHOST` — link a selected Door/Opening semantic element to a selected wall host.
@@ -41,11 +42,11 @@ Updated for the current source baseline on 2026-08-10. Commands that create nati
 ## Native 3D
 
 - `QS3DBUILD3D` — create/update generated `Solid3d` for supported selected semantic elements.
-- ArchitecturalWall/Tường Gạch: LINE or open POLYLINE centerline. Polyline bulges are tessellated; the Core wall-footprint engine handles deterministic miter joins with guarded bevel fallback.
+- Tường Gạch / Vách Kính / Trụ Tường: LINE or open POLYLINE centerline. Polyline bulges are tessellated; the Core wall-footprint engine handles deterministic miter joins with guarded bevel fallback.
+- The current Vách Kính/Trụ Tường geometry path intentionally reuses the generic Tường KT centerline extrusion. Dedicated curtain-wall framing/panel systems or specialized pier profiles/material display behavior remain later product/runtime work.
 - LINE source: beam, structural wall, railing.
 - Closed POLYLINE source: slab, column, foundation, stair footprint mass, earthwork footprint mass.
 - Earthwork is extruded downward by `DepthM`.
-- Vách Kính and Trụ Tường currently have explicit semantic capture/UI workflow; their dedicated production-grade native 3D profiles remain a later runtime/product completion item.
 - Native 3D commands remain release-gated until tested by NETLOAD on licensed BricsCAD V25.
 
 ## Recognition, quantity and rebar

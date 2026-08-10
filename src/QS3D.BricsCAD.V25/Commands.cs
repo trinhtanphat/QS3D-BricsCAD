@@ -133,14 +133,15 @@ namespace QS3D.BricsCAD.V25
                 var captured = SemanticCaptureService.Capture(doc, ElementCategory.ArchitecturalWall);
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
                 var solids = Cad.WallSolidBuilder.BuildSelectedLineWalls(doc, project);
+                solids += Cad.PolylineWallSolidBuilder.BuildSelected(doc, project);
                 foreach (var wall in project.Elements.Where(x => x.Category == ElementCategory.ArchitecturalWall && x.Dirty != ElementDirtyFlags.None))
                 {
                     new WallRegenerator().Regenerate(project, wall);
                     wall.MarkClean(ElementDirtyFlags.All);
                 }
                 PaletteCoordinator.RefreshProject();
-                PaletteCoordinator.SetStatus("Tường KT: " + captured + " semantic • " + solids + " solid 3D từ LINE.");
-                doc.Editor.WriteMessage("\nQS3D Tường KT: captured " + captured + ", created " + solids + " line-wall solid(s).");
+                PaletteCoordinator.SetStatus("Tường KT: " + captured + " semantic • " + solids + " solid 3D từ LINE/open POLYLINE.");
+                doc.Editor.WriteMessage("\nQS3D Tường KT: captured " + captured + ", created " + solids + " wall solid(s) from LINE/open POLYLINE.");
             });
         }
 
@@ -194,9 +195,15 @@ namespace QS3D.BricsCAD.V25
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
+                var generatedRebarHandles = project.Elements
+                    .SelectMany(ParseGeneratedRebarHandles)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
                 var liveSources = Cad.CadHandleService.GetLiveHandles(doc, sourceHandles);
                 var liveGeneratedSolids = Cad.CadHandleService.GetLiveSolidHandles(doc, generatedHandles);
-                var issues = new ModelHealthService().Inspect(project, liveSources, liveGeneratedSolids);
+                var liveGeneratedRebar = Cad.CadHandleService.GetLiveSolidHandles(doc, generatedRebarHandles);
+                var issues = new List<ModelHealthIssue>(new ModelHealthService().Inspect(project, liveSources, liveGeneratedSolids));
+                issues.AddRange(new GeneratedRebarHealthService().Inspect(project, liveGeneratedRebar));
                 var summary = new HealthSummary(issues);
                 var text = "Model Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(text); doc.Editor.WriteMessage("\nQS3D " + text);
@@ -204,10 +211,13 @@ namespace QS3D.BricsCAD.V25
                 {
                     var element = project.FindElement(issue.ElementId); if (element == null) return;
                     IEnumerable<string> locateHandles = SemanticReferenceHandles.Get(element);
-                    if (issue.Code.IndexOf("GENERATED", StringComparison.OrdinalIgnoreCase) >= 0 && element.Properties.TryGetValue("GeneratedSolidHandle", out var generated) && !string.IsNullOrWhiteSpace(generated))
+                    if (issue.Code.IndexOf("REBAR_GENERATED", StringComparison.OrdinalIgnoreCase) >= 0 || issue.Code.IndexOf("GENERATED_REBAR", StringComparison.OrdinalIgnoreCase) >= 0)
+                        locateHandles = ParseGeneratedRebarHandles(element);
+                    else if (issue.Code.IndexOf("GENERATED", StringComparison.OrdinalIgnoreCase) >= 0 && element.Properties.TryGetValue("GeneratedSolidHandle", out var generated) && !string.IsNullOrWhiteSpace(generated))
                         locateHandles = new[] { generated };
                     var count = Cad.CadHandleService.Select(doc, locateHandles);
                     PaletteCoordinator.SetStatus("Health Định vị " + element.Id + " • " + count + " đối tượng CAD");
+                    if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
                 });
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
             });
@@ -242,6 +252,12 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(label + ": đã ghi " + count + " cấu kiện.");
                 doc.Editor.WriteMessage("\nQS3D " + label + ": " + count + " element(s).");
             });
+        }
+
+        private static IEnumerable<string> ParseGeneratedRebarHandles(ProjectElement element)
+        {
+            if (!element.Properties.TryGetValue("GeneratedRebarHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
+            return raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0);
         }
 
         private static int RegenerateProject(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);

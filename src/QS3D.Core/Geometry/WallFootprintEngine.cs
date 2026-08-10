@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace QS3D.Core.Geometry
 {
@@ -79,8 +78,7 @@ namespace QS3D.Core.Geometry
             if (polygon.Count < 4) throw new InvalidOperationException("Wall footprint collapsed to fewer than four vertices.");
             if (HasPolygonSelfIntersection(polygon, tolerance)) throw new InvalidOperationException("Wall footprint self-intersects. Reduce thickness, split the centerline, or simplify the corner geometry.");
 
-            var signedArea = SignedArea(polygon);
-            var area = Math.Abs(signedArea);
+            var area = Math.Abs(SignedAreaRelative(polygon));
             if (!Finite(area) || area <= tolerance * tolerance) throw new InvalidOperationException("Wall footprint area is degenerate.");
             var perimeter = ClosedPerimeter(polygon);
             return new WallFootprintResult(polygon.AsReadOnly(), centerlineLength, area, perimeter, leftBevel || rightBevel);
@@ -104,7 +102,7 @@ namespace QS3D.Core.Geometry
                 var determinant = Cross(previous.Dx, previous.Dy, next.Dx, next.Dy);
                 if (Math.Abs(determinant) <= tolerance)
                 {
-                    result.Add(new Point2((previousOffset.X + nextOffset.X) / 2d, (previousOffset.Y + nextOffset.Y) / 2d));
+                    result.Add(Midpoint(previousOffset, nextOffset));
                     continue;
                 }
 
@@ -134,6 +132,13 @@ namespace QS3D.Core.Geometry
         {
             var result = new Point2(point.X + segment.Nx * half * side, point.Y + segment.Ny * half * side);
             Validate(result, "wall offset point");
+            return result;
+        }
+
+        private static Point2 Midpoint(Point2 a, Point2 b)
+        {
+            var result = new Point2(a.X + (b.X - a.X) / 2d, a.Y + (b.Y - a.Y) / 2d);
+            Validate(result, "wall midpoint");
             return result;
         }
 
@@ -213,14 +218,19 @@ namespace QS3D.Core.Geometry
             return Math.Max(min1, min2) <= Math.Min(max1, max2) + tolerance;
         }
 
-        private static double SignedArea(IReadOnlyList<Point2> polygon)
+        private static double SignedAreaRelative(IReadOnlyList<Point2> polygon)
         {
+            var origin = polygon[0];
             var twice = 0d;
-            for (var i = 0; i < polygon.Count; i++)
+            for (var i = 1; i < polygon.Count - 1; i++)
             {
-                var a = polygon[i];
-                var b = polygon[(i + 1) % polygon.Count];
-                twice = CheckedAdd(twice, a.X * b.Y - b.X * a.Y, "wall footprint area");
+                var ax = polygon[i].X - origin.X;
+                var ay = polygon[i].Y - origin.Y;
+                var bx = polygon[i + 1].X - origin.X;
+                var by = polygon[i + 1].Y - origin.Y;
+                var cross = ax * by - ay * bx;
+                if (!Finite(cross)) throw new OverflowException("wall footprint area overflowed.");
+                twice = CheckedAdd(twice, cross, "wall footprint area");
             }
             return twice / 2d;
         }
