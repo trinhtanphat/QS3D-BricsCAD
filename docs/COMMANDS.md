@@ -17,7 +17,8 @@ Updated for the current source baseline on 2026-08-10. Commands that create nati
 ### Room / finishes
 
 - `QS3DROOM` — capture selected CAD source as Room.
-- `QS3DROOMAUTO` — discover bounded room faces from selected LINE/POLYLINE networks. Straight segments and polyline bulges are converted to metric planar segments; bulges are tessellated deterministically before the Core engine splits intersections/T-junctions, snaps endpoints, removes dangling bridges and calculates room area/perimeter.
+- `QS3DROOMAUTO` — discover bounded room faces from selected planar LINE/POLYLINE/ARC networks. Direct ARC and polyline bulges are tessellated deterministically before the Core engine splits intersections/T-junctions, snaps endpoints, removes dangling bridges and calculates room area/perimeter.
+- The BricsCAD adapter rejects non-plan-view ARC/POLYLINE inputs and requires selected boundary geometry to remain within `RoomBoundaryToleranceM` elevation tolerance, preventing mixed-Z geometry from being flattened silently.
 - Room Auto project metadata: `RoomBoundaryToleranceM` (default `0.005`), `RoomBoundaryMinimumAreaM2` (default `0.5`), `RoomBoundaryArcSagittaM` (default `0.002`).
 - Room Auto lifecycle: a changed boundary with the same normalized source-handle set reuses the existing Room record; a topology split/merge marks superseded auto Rooms `Stale` instead of deleting them. Stale Rooms and direct dependents are excluded from BQ while remaining in `.qsdb` for audit/recovery.
 - `QS3DFINISH` — generate/synchronize room finish semantics. For an auto Room, select the full boundary source set so a shared wall does not accidentally target both adjacent rooms.
