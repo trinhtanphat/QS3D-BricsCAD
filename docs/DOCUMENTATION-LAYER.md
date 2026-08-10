@@ -1,8 +1,10 @@
 # QS3D documentation layer
 
-The documentation layer must remain connected to QS3D semantic identity. A DWG text object that cannot be traced back to a semantic element is not a completed QS3D tag workflow.
+The documentation layer must remain connected to QS3D semantic identity. A DWG text/table object that cannot be traced back to semantic source data is not a completed QS3D documentation workflow.
 
 ## Source-implemented Core foundation
+
+### Semantic tag rendering
 
 `QS3D.Core.Documentation.SemanticTagRenderer` renders bounded deterministic labels from a real `ProjectElement` that belongs to the supplied `ProjectState`.
 
@@ -30,17 +32,34 @@ Unknown tokens fail closed. Missing referenced Family/Floor/Zone fails closed. M
 
 Generated/native runtime ownership is not documentable through `P:`. The renderer rejects canonical generated owner slots plus `Generated*`, `QS3D.Generated*` and `PhysicalOpeningCut*` properties. Native object handles are not semantic annotation values.
 
+### Semantic documentation table model
+
+`SemanticDocumentationTableBuilder` adds a CAD-independent table model that deliberately reuses `SemanticTagRenderer` for every cell instead of creating another property/quantity interpretation engine.
+
+Current contract:
+
+- caller supplies an explicit ordered semantic element-ID list; Core preserves that order and does not infer CAD/table sort order;
+- caller supplies bounded column definitions as `Header + SemanticTagRenderer template`;
+- title, row count, column count, headers and element IDs are bounded;
+- duplicate element IDs and duplicate headers are rejected case-insensitively;
+- every element ID must resolve uniquely in the supplied project before rows are rendered;
+- generated/native ownership properties remain blocked because cell rendering passes through `SemanticTagRenderer`;
+- the builder is read-only: it returns `SemanticDocumentationTable` / row/cell data and never creates CAD entities or changes semantic state.
+
+This is intended as a reusable input to a future native BricsCAD Table adapter or to other documentation exporters. It is **not** a second BQ/BBS/schedule calculation engine and must not be used to bypass the existing schedule models where a specialized schedule already exists.
+
 Source checks:
 
 ```text
 python scripts/preflight-semantic-tags.py
+python scripts/preflight-semantic-documentation-table.py
 ```
 
-The Core smoke suite includes `SemanticTagRendererSmoke`.
+The Core smoke suite includes `SemanticTagRendererSmoke` and `SemanticDocumentationTableSmoke`.
 
 ## Native V25 work that remains
 
-Do not mark #77 complete from the renderer alone. A local agent with the exact BricsCAD V25 assemblies/runtime must design and qualify native annotation/document behavior.
+Do not mark #77 complete from the Core renderers/models alone. A local agent with the exact BricsCAD V25 assemblies/runtime must design and qualify native annotation/document behavior.
 
 ### Semantic tag placement
 
@@ -60,7 +79,9 @@ Use native MText/MLeader/Table APIs only after compiling against the installed V
 
 ### DWG tables
 
-A first native table slice should reuse an existing QS3D schedule model (for example BQ, Door/Opening, Room Finish, Material or BBS) rather than create a second calculation engine. The table should carry schedule kind/version/project ID and generated ownership, with deterministic refresh/replacement.
+A first native table slice should reuse an existing QS3D schedule model (for example BQ, Door/Opening, Room Finish, Material or BBS) or the bounded `SemanticDocumentationTable` model where a generic semantic table is explicitly desired. Do not create a second quantity calculation engine.
+
+The native table should carry schedule/table kind, schema/version, project identity and generated ownership, with deterministic refresh/replacement. If a specialized QS3D schedule already exists, that schedule remains authoritative for its calculated rows/units; `SemanticDocumentationTableBuilder` is not a substitute for BQ/BBS logic.
 
 Local acceptance must cover table styles, Unicode Vietnamese, row/column bounds, long values, units, page/layout behavior and update after semantic changes.
 
