@@ -10,9 +10,11 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CommonAndMixedValuesAreStable();
+            FamilyDefaultsParticipateInEffectiveValues();
             InternalOwnershipPropertiesStayHidden();
             MissingSelectionFailsClosed();
             MissingSemanticReferenceFailsClosed();
+            FamilyCategoryMismatchFailsClosed();
             DuplicateProjectIdentityFailsClosed();
             EmptySelectionIsSupported();
         }
@@ -49,16 +51,36 @@ namespace QS3D.Core.SmokeTests
             Equal(2, length.PresentCount);
         }
 
+        private static void FamilyDefaultsParticipateInEffectiveValues()
+        {
+            var project = BuildProject();
+            var result = SemanticSelectionInspector.Inspect(project, new[] { "B-001", "B-002" });
+
+            var fireRating = result.Properties.Single(x => x.Name == "FireRating");
+            Equal(false, fireRating.IsMixed);
+            Equal("R60", fireRating.Value);
+            Equal(2, fireRating.PresentCount);
+
+            var material = result.Properties.Single(x => x.Name == "Material");
+            Equal(true, material.IsMixed);
+            Equal(null, material.Value);
+            Equal(2, material.PresentCount);
+        }
+
         private static void InternalOwnershipPropertiesStayHidden()
         {
             var project = BuildProject();
             project.Elements[0].Properties["GeneratedSolidHandle"] = "AB12";
             project.Elements[0].Properties[ProjectElement.GeneratedGeometryStateKey] = "stale";
+            project.Elements[0].Properties["PhysicalOpeningCutHandle"] = "CD34";
+            project.Families[0].Properties["GeneratedFamilyHandle"] = "EF56";
             var result = SemanticSelectionInspector.Inspect(project, new[] { project.Elements[0].Id });
             if (result.Properties.Any(x => x.Name.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0))
                 throw new Exception("Property inspector must not expose native ownership handles.");
             if (result.Properties.Any(x => x.Name.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)))
                 throw new Exception("Property inspector must not expose internal generated-state keys as editable semantic properties.");
+            if (result.Properties.Any(x => x.Name.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)))
+                throw new Exception("Property inspector must not expose physical opening cut ownership state.");
         }
 
         private static void MissingSelectionFailsClosed()
@@ -76,6 +98,15 @@ namespace QS3D.Core.SmokeTests
             MustFail(
                 () => SemanticSelectionInspector.Inspect(project, new[] { project.Elements[0].Id }),
                 "Missing selected floor references must fail closed.");
+        }
+
+        private static void FamilyCategoryMismatchFailsClosed()
+        {
+            var project = BuildProject();
+            project.Families[0].Category = ElementCategory.Column;
+            MustFail(
+                () => SemanticSelectionInspector.Inspect(project, new[] { project.Elements[0].Id }),
+                "Selected element/family category mismatch must fail closed.");
         }
 
         private static void DuplicateProjectIdentityFailsClosed()
@@ -104,12 +135,16 @@ namespace QS3D.Core.SmokeTests
             project.Floors.Add(new FloorDefinition("F-02", "L02", 3.6d));
             project.Zones.Add(new ZoneDefinition("Z-A", "Zone A"));
             project.Zones.Add(new ZoneDefinition("Z-B", "Zone B"));
-            project.Families.Add(new ProjectFamily("FAM-B", "Beam 300x500", ElementCategory.Beam));
+            var family = new ProjectFamily("FAM-B", "Beam 300x500", ElementCategory.Beam);
+            family.Properties["FireRating"] = "R60";
+            family.Properties["Material"] = "C30";
+            project.Families.Add(family);
 
             var first = new ProjectElement("B-002", ElementCategory.Beam, "FAM-B", "F-02", "Z-B");
             first.SetProperty("ThicknessM", "0.3");
             first.SetProperty("Mark", "B2");
             first.SetProperty("Note", "Edge");
+            first.SetProperty("Material", "C35");
             first.SetQuantity("LengthM", 5d);
 
             var second = new ProjectElement("B-001", ElementCategory.Beam, "FAM-B", "F-02", "Z-A");
