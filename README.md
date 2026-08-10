@@ -19,7 +19,8 @@ The repository is beyond prototype stage. Source currently includes:
 - Property inspector with Vietnamese labels/groups, units, finite-number validation, typed controls (`TextBox`, boolean `CheckBox`, editable choice `ComboBox`) and **Family / Type vs Đối tượng / Instance** scope. A single semantic selection opens Instance scope; overrides can be reset to the Family value, and later Family edits preserve true instance overrides instead of overwriting them.
 - Selected-object review actions for Locate/Zoom, **Focus**, **Cô lập/Khôi phục**, plus semantic-reference matching so Room Auto boundary-derived elements remain discoverable without duplicating source ownership. Guarded Section Box / Section Plane / clip display review commands are also exposed through Ribbon/Hub.
 - Semantic Project/Zone/Floor/Family/Element model, `.qsdb` schema migration, deterministic regeneration, audit, revision baseline/diff, template import/export and Model Health.
-- **Project Tools** entry point `QS3DPROJECTTOOLS` consolidates drawing-bound Floor/Level, Material Catalog, Template/module/health shortcuts. Modeless level/material pickers are bound to the drawing that opened them so switching active DWGs does not silently edit the wrong project.
+- **Project Tools** entry point `QS3DPROJECTTOOLS` consolidates drawing-bound **Zone Manager (`QS3DZONES`)**, **Floor/Level**, **Family Manager (`QS3DFAMILIES`)**, Material Catalog, Template/module/health shortcuts. Modeless project editors are bound to the drawing that opened them so switching active DWGs does not silently edit the wrong project.
+- Zone/Floor/Family assignment services enforce project-instance ownership instead of trusting an element ID alone. Foreign/spoofed `ProjectElement` objects with the same ID are rejected; Bulk Edit object-based APIs follow the same invariant. Family reassignment remains inheritance-safe: old inherited defaults are replaced while true instance overrides are preserved.
 - Tường KT workflows for Tường Gạch, Vách Kính and Trụ Tường, including explicit semantic capture commands, wall-junction analysis and guarded native 3D paths.
 - Tường Gạch and generic Tường KT source paths accept LINE and open POLYLINE centerlines; polyline bulges are tessellated and converted through the deterministic wall-footprint engine.
 - **Vách Kính / Curtain Wall** has deterministic panel-grid quantities/schedule/XLSX plus a dedicated native LINE workflow. `QS3DCURTAIN3D` keeps one backing GlassWall host solid for Door/Opening booleans and adds ownership-protected mullion/transom/perimeter-frame `Solid3d` overlays. Frame depth is Family-editable, generated frame metadata carries deterministic configuration/live-geometry fingerprints, and Full Health detects missing/stale frame snapshots. Core planning can interrupt curtain-frame runs around hosted openings instead of treating the façade grid as opening-blind. Open/curved POLYLINE still uses the generic backing host and does not yet generate curved frame overlays.
@@ -38,14 +39,15 @@ The repository is beyond prototype stage. Source currently includes:
 - Structural-wall mesh source path: `QS3DWALLREBAR3D` generates horizontal/vertical Near/Far/Both mesh for supported StructuralWall LINE hosts. Horizontal/vertical diameters and distribution are independent and stored under dedicated `GeneratedWallMesh*` metadata; `QS3DWALLREBARHEALTH` performs dedicated health checks.
 - `QS3DREBARHEALTHALL` aggregates longitudinal, BBS-shape, column-tie, beam-stirrup, slab-mesh and wall-mesh health plus cross-family ownership diagnostics. `QS3DHEALTHALL` additionally aggregates core model/generated-solid/stale-state/mode and curtain-frame diagnostics in one review window with Locate support.
 - Current beam stirrup/column tie geometry intentionally uses segmented-cylinder rectangular loops. Production fabrication hooks, bend radii and code-specific detailing are **not** inferred without explicit dimensions.
-- BQ grouping/filtering/Locate/XLSX, Quick Takeoff, recognition/review/auto-accept, Layer/Xref adapters, Ribbon, Full Domain Hub, Project Tools, Curtain Hub, Geometry Extensions, viewport tools and release packaging/DemandLoad scripts.
+- BQ grouping/filtering/Locate/XLSX, Quick Takeoff, recognition/review/auto-accept, Layer/Xref adapters, Ribbon, Full Domain Hub, Project Tools, Zone/Family/Floor/Material managers, Curtain Hub, Geometry Extensions, viewport tools and release packaging/DemandLoad scripts.
 - Ribbon/Workspace/Domain Hub expose the major BLT-style workflows consistently: Tường KT, Vách Kính Hub/Curtain 3D, Giao tường, Snap xem/áp, Auto/Manual Host, Cửa/Lỗ, Room Auto, Focus/Isolate, Section review, BQ/BBS, column/beam longitudinal rebar, BBS shape rebar, beam stirrups, column ties, slab mesh, wall mesh and unified health.
-- Static preflights and deterministic Core smoke coverage include geometry/rebar/Room Auto/Auto Host/wall-snap/curtain guards, command uniqueness, typed Family/Instance inspector contracts, generated ownership/invalidation, modeless drawing-affinity and XAML well-formedness checks. `scripts/preflight-all.py` auto-discovers feature preflights, including `scripts/preflight-ci-manual-only.py`, which rejects any GitHub Actions trigger other than `workflow_dispatch`.
+- Static preflights and deterministic Core smoke coverage include geometry/rebar/Room Auto/Auto Host/wall-snap/curtain guards, command uniqueness, typed Family/Instance inspector contracts, generated ownership/invalidation, project-editor drawing affinity/assignment integrity and XAML well-formedness checks. `scripts/preflight-all.py` auto-discovers feature preflights, including `scripts/preflight-ci-manual-only.py`, which rejects any GitHub Actions trigger other than `workflow_dispatch`.
 
 ## Main commands
 
 ### Workspace / project
 - `QS3D`, `QS3DHIDE`, `QS3DDOMAIN`, `QS3DPROJECTTOOLS`
+- `QS3DZONES`, `QS3DFAMILIES`
 - `QS3DSAVE`, `QS3DRELOAD`, `QS3DREFRESH`, `QS3DREGEN`
 - `QS3DHEALTH`, `QS3DHEALTHALL`, `QS3DRUNTIMEPROBE`
 
@@ -94,7 +96,7 @@ Source presence is **not** the same as BricsCAD V25 runtime proof. Before callin
 4. verify native Solid3d wall/opening/rebar/curtain behavior, including LINE/open-POLYLINE Tường KT, WallPier profile LINE, curtain backing host + frame overlay/opening interruption, wall snap preview/apply, straight/curved opening cuts, beam/column longitudinal bars, BBS shape bars, beam stirrups, column ties, slab mesh and wall mesh;
 5. verify Auto Host against ambiguous/nearby/multi-level real drawings without accidental host assignment;
 6. verify Room Auto with mixed LINE/POLYLINE/ARC/SPLINE plan-view boundaries, chord/sagitta controls and non-planar rejection;
-7. verify Focus/Isolate/Section review lifecycle and Family/Instance/Floor-Level/Material editing in the real V25 palette host;
+7. verify Focus/Isolate/Section review lifecycle and Family/Instance/Zone/Floor-Level/Material editing in the real V25 palette host;
 8. verify curtain-frame rebuild/fingerprint behavior after panel-grid/Family/source/opening changes;
 9. capture visual regressions at 100/125/150/200% DPI with Vietnamese Unicode;
 10. run performance tests on large room-boundary, wall-junction/Auto Host, curtain-grid, quantity and rebar models.
@@ -113,7 +115,7 @@ Current manual workflows:
 - `geometry-extensions.yml` — focused geometry gate;
 - `release-v25.yml` — owner-approved build/package/GitHub Release workflow.
 
-`scripts/preflight-ci-manual-only.py` fails if any workflow adds an automatic/event trigger such as `push`, `pull_request`, `schedule`, `workflow_run`, `workflow_call`, `repository_dispatch`, release/deployment events, or anything other than `workflow_dispatch`.
+`scripts/preflight-ci-manual-only.py` fails if any workflow adds an automatic/event trigger such as `push`, `pull_request`, `schedule`, `workflow_run`, `workflow_call`, `repository_dispatch`, release/deployment events, or anything other than `workflow_dispatch`. Executable jobs are additionally hard-guarded to `github.event_name == 'workflow_dispatch'`; the release job also requires `confirm_release=RELEASE`.
 
 When the repository owner explicitly asks to **build and release**, use `release-v25.yml` for the chosen commit/tag. Publishing additionally requires `confirm_release=RELEASE`. The workflow runs source gates, Core build/smoke tests, V25 adapter build, optional real V25 runtime validation, packaging, SHA-256 generation and GitHub Release publication. Merely preparing the workflow or pushing code never authorizes running it.
 
