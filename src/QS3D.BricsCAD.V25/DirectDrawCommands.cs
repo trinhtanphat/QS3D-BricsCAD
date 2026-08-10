@@ -57,6 +57,74 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
+        [CommandMethod("QS3DDRAWGLASSWALL", CommandFlags.Modal)]
+        public void DrawGlassWall()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWGLASSWALL", () =>
+            {
+                RequireModelSpace(document);
+                var points = AcquirePath(document, "Vách Kính", minimumPoints: 2, close: false);
+                if (points == null) return;
+
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Vách Kính (m)", FamilyNumber(project, ElementCategory.GlassWall, "ThicknessM", 0.012d));
+                if (!thicknessM.HasValue) return;
+                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Vách Kính (m)", FamilyNumber(project, ElementCategory.GlassWall, "HeightM", 3.6d));
+                if (!heightM.HasValue) return;
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Vách Kính so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.GlassWall, "BottomOffsetM", 0d));
+                if (!bottomOffsetM.HasValue) return;
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.GlassWall,
+                    () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
+                    element =>
+                    {
+                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
+            });
+        }
+
+        [CommandMethod("QS3DDRAWWALLPIER", CommandFlags.Modal)]
+        public void DrawWallPier()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWWALLPIER", () =>
+            {
+                RequireModelSpace(document);
+                var points = AcquirePath(document, "Trụ Tường", minimumPoints: 2, close: false);
+                if (points == null) return;
+
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Trụ Tường (m)", FamilyNumber(project, ElementCategory.WallPier, "ThicknessM", 0.2d));
+                if (!thicknessM.HasValue) return;
+                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Trụ Tường (m)", FamilyNumber(project, ElementCategory.WallPier, "HeightM", 3.6d));
+                if (!heightM.HasValue) return;
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Trụ Tường so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.WallPier, "BottomOffsetM", 0d));
+                if (!bottomOffsetM.HasValue) return;
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.WallPier,
+                    // Always persist an open POLYLINE, including the two-point case, so the current
+                    // WallPierPathProfilePlanner owns rectangular/chamfered path-profile semantics.
+                    () => CreatePolyline(document, points, false),
+                    element =>
+                    {
+                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
+            });
+        }
+
         [CommandMethod("QS3DDRAWBEAM", CommandFlags.Modal)]
         public void DrawBeam()
         {
@@ -90,6 +158,39 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
+        [CommandMethod("QS3DDRAWSTRUCTWALL", CommandFlags.Modal)]
+        public void DrawStructuralWall()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWSTRUCTWALL", () =>
+            {
+                RequireModelSpace(document);
+                var points = AcquireFixedPath(document, "Vách BTCT", 2);
+                if (points == null) return;
+
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Vách BTCT (m)", FamilyNumber(project, ElementCategory.StructuralWall, "ThicknessM", 0.2d));
+                if (!thicknessM.HasValue) return;
+                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Vách BTCT (m)", FamilyNumber(project, ElementCategory.StructuralWall, "HeightM", 3.6d));
+                if (!heightM.HasValue) return;
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Vách BTCT so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.StructuralWall, "BottomOffsetM", 0d));
+                if (!bottomOffsetM.HasValue) return;
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.StructuralWall,
+                    () => CreateLine(document, points[0], points[1]),
+                    element =>
+                    {
+                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
+            });
+        }
+
         [CommandMethod("QS3DDRAWSLAB", CommandFlags.Modal)]
         public void DrawSlab()
         {
@@ -110,6 +211,36 @@ namespace QS3D.BricsCAD.V25
                 ExecuteDirect(
                     document,
                     ElementCategory.Slab,
+                    () => CreatePolyline(document, points, true),
+                    element =>
+                    {
+                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
+            });
+        }
+
+        [CommandMethod("QS3DDRAWFOUNDATION", CommandFlags.Modal)]
+        public void DrawFoundation()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWFOUNDATION", () =>
+            {
+                RequireModelSpace(document);
+                var points = AcquirePath(document, "Móng", minimumPoints: 3, close: true);
+                if (points == null) return;
+
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Móng (m)", FamilyNumber(project, ElementCategory.Foundation, "ThicknessM", 0.5d));
+                if (!thicknessM.HasValue) return;
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Móng so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.Foundation, "BottomOffsetM", 0d));
+                if (!bottomOffsetM.HasValue) return;
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.Foundation,
                     () => CreatePolyline(document, points, true),
                     element =>
                     {
@@ -250,14 +381,15 @@ namespace QS3D.BricsCAD.V25
 
         private static int BuildSelected(Document document, ProjectState project, ElementCategory category)
         {
-            if (category == ElementCategory.ArchitecturalWall)
+            if (category == ElementCategory.ArchitecturalWall || category == ElementCategory.GlassWall || category == ElementCategory.WallPier)
             {
                 var count = WallSolidBuilder.BuildSelectedLineWalls(document, project, category);
                 return count + PolylineWallSolidBuilder.BuildSelected(document, project, category);
             }
-            if (category == ElementCategory.Beam || category == ElementCategory.Slab || category == ElementCategory.Column)
+            if (category == ElementCategory.Beam || category == ElementCategory.Slab || category == ElementCategory.Column ||
+                category == ElementCategory.StructuralWall || category == ElementCategory.Foundation)
                 return StructuralSolidBuilder.BuildSelected(document, project, category);
-            throw new InvalidOperationException("Direct Draw P0 chưa hỗ trợ category " + category + ".");
+            throw new InvalidOperationException("Direct Draw chưa hỗ trợ category " + category + ".");
         }
 
         private static IReadOnlyList<Point3d>? AcquireFixedPath(Document document, string label, int count)
@@ -454,7 +586,7 @@ namespace QS3D.BricsCAD.V25
                 var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
                 var modelSpaceId = blockTable[BlockTableRecord.ModelSpace];
                 if (!document.Database.CurrentSpaceId.Equals(modelSpaceId))
-                    throw new InvalidOperationException("Direct Draw P0 hiện chỉ hỗ trợ Model Space. Chuyển sang tab Model trước khi vẽ.");
+                    throw new InvalidOperationException("Direct Draw hiện chỉ hỗ trợ Model Space. Chuyển sang tab Model trước khi vẽ.");
                 transaction.Commit();
             }
         }
