@@ -6,6 +6,7 @@ using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
+using QS3D.Core.Model;
 using QS3D.Core.Services;
 using Teigha.Runtime;
 
@@ -77,6 +78,12 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 var category = categories[0];
+                if (!ValidateWallSourceBatch(selectedElements, snapshots, category, out var wallSourceError))
+                {
+                    Write(document, wallSourceError);
+                    return;
+                }
+
                 var built = BuildCategory(document, project, category);
 
                 if (built <= 0)
@@ -100,9 +107,45 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static bool ValidateWallSourceBatch(
+            IReadOnlyCollection<ProjectElement> selectedElements,
+            IReadOnlyCollection<EntitySnapshot> snapshots,
+            ElementCategory category,
+            out string error)
+        {
+            error = string.Empty;
+            if (!IsWallCategory(category)) return true;
+
+            var sourceHandles = new HashSet<string>(
+                selectedElements.SelectMany(x => x.SourceHandles).Where(x => !string.IsNullOrWhiteSpace(x)),
+                StringComparer.OrdinalIgnoreCase);
+            var sourceTypes = snapshots
+                .Where(x => sourceHandles.Contains(x.Handle))
+                .Select(x => x.EntityType)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var unsupportedTypes = sourceTypes
+                .Where(x => !string.Equals(x, "Line", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(x, "Polyline", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (unsupportedTypes.Count > 0)
+            {
+                error = "QS3DBUILD3D: Tường KT selection chứa source type chưa hỗ trợ native build: " + string.Join(", ", unsupportedTypes) + ".";
+                return false;
+            }
+            if (sourceTypes.Count > 1)
+            {
+                error = "QS3DBUILD3D: không build chung LINE và open POLYLINE trong một lần vì hai builder có transaction riêng. Chọn một source type mỗi lần để giữ atomic/fail-closed.";
+                return false;
+            }
+            return true;
+        }
+
         private static int BuildCategory(Document document, ProjectState project, ElementCategory category)
         {
-            if (category == ElementCategory.ArchitecturalWall || category == ElementCategory.GlassWall || category == ElementCategory.WallPier)
+            if (IsWallCategory(category))
             {
                 var count = WallSolidBuilder.BuildSelectedLineWalls(document, project, category);
                 return count + PolylineWallSolidBuilder.BuildSelected(document, project, category);
@@ -113,11 +156,13 @@ namespace QS3D.BricsCAD.V25
                 : 0;
         }
 
-        private static bool IsNativeBuildCategory(ElementCategory category) =>
+        private static bool IsWallCategory(ElementCategory category) =>
             category == ElementCategory.ArchitecturalWall ||
             category == ElementCategory.GlassWall ||
-            category == ElementCategory.WallPier ||
-            StructuralSolidBuilder.Supports(category);
+            category == ElementCategory.WallPier;
+
+        private static bool IsNativeBuildCategory(ElementCategory category) =>
+            IsWallCategory(category) || StructuralSolidBuilder.Supports(category);
 
         private static void Write(Document document, string message)
         {
