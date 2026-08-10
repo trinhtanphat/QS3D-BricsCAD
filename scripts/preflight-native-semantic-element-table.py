@@ -49,9 +49,17 @@ if COMMANDS.is_file():
         'if (!document.Database.TileMode)',
         'CurrentUserCoordinateSystem',
         'SemanticElementTableBuilder.StoredPosition(project)',
+        'GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project)',
+        'issues.Take(100)',
+        'x.Severity + " " + x.Code + ": " + x.Message',
     ):
         if token not in text:
-            errors.append("SemanticElementTableCommands.cs missing command/scope token: " + token)
+            errors.append("SemanticElementTableCommands.cs missing command/scope/live-health token: " + token)
+    health_start = text.find('[CommandMethod("QS3DELEMENTTABLEHEALTH"')
+    health_end = text.find('private static void RequireModelSpace', health_start)
+    health = text[health_start:health_end if health_end >= 0 else len(text)]
+    if 'SemanticElementTableBuilder.ValidateRuntime(document, project)' in health:
+        errors.append("QS3DELEMENTTABLEHEALTH regressed to the persisted/base checker instead of the full live runtime-health service.")
 
 if CORE.is_file():
     text = CORE.read_text(encoding="utf-8")
@@ -94,4 +102,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: native Semantic Element Table uses bounded Core rendering, project-level QS3DDOC ownership, ModelSpace P0 scope, unit-aware sizing, rollback-safe replacement plus read-only live shape/text/position drift health wired into Release Check. Runtime V25 qualification is still required.")
+print("PASS: native Semantic Element Table uses bounded Core rendering, project-level QS3DDOC ownership, ModelSpace P0 scope, unit-aware sizing, rollback-safe replacement plus read-only live shape/text/position drift health shared by its direct health command, Health All and Release Check. Runtime V25 qualification is still required.")
