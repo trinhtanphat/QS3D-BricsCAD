@@ -50,13 +50,22 @@ namespace QS3D.BricsCAD.V25.Cad
             public double CenterYM { get; set; }
         }
 
-        public static int CutLinkedOpenings(Document document, ProjectState project)
+        public static int CutLinkedOpenings(Document document, ProjectState project) =>
+            CutLinkedOpenings(document, project, null);
+
+        public static int CutLinkedOpenings(Document document, ProjectState project, IReadOnlyCollection<string>? openingIds)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
 
+            var requested = NormalizeRequestedOpenings(project, openingIds);
+            if (requested != null && requested.Count == 0) return 0;
+
             var linked = project.Elements
-                .Where(x => (x.Category == ElementCategory.WallOpening || x.Category == ElementCategory.Door) && x.Properties.TryGetValue("HostWallId", out var hostId) && !string.IsNullOrWhiteSpace(hostId))
+                .Where(x => IsOpening(x) &&
+                            x.Properties.TryGetValue("HostWallId", out var hostId) &&
+                            !string.IsNullOrWhiteSpace(hostId) &&
+                            (requested == null || requested.Contains(x.Id)))
                 .GroupBy(x => x.Properties["HostWallId"], StringComparer.OrdinalIgnoreCase)
                 .ToList();
             if (linked.Count == 0) return 0;
@@ -149,6 +158,25 @@ namespace QS3D.BricsCAD.V25.Cad
             }
             return totalCuts;
         }
+
+        private static HashSet<string>? NormalizeRequestedOpenings(ProjectState project, IReadOnlyCollection<string>? openingIds)
+        {
+            if (openingIds == null) return null;
+            var requested = new HashSet<string>(
+                openingIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var id in requested)
+            {
+                var opening = project.FindElement(id) ?? throw new InvalidOperationException("Target opening not found: " + id);
+                if (!IsOpening(opening)) throw new InvalidOperationException("Target element is not Door/WallOpening: " + id);
+                if (!opening.Properties.TryGetValue("HostWallId", out var hostId) || string.IsNullOrWhiteSpace(hostId))
+                    throw new InvalidOperationException("Target opening is not linked to a host: " + id);
+            }
+            return requested;
+        }
+
+        private static bool IsOpening(ProjectElement element) =>
+            element.Category == ElementCategory.WallOpening || element.Category == ElementCategory.Door;
 
         private static PreparedHost PrepareLineHost(
             Document document,
