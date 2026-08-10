@@ -23,7 +23,7 @@ namespace QS3D.BricsCAD.V25
                 Application.ShowModelessWindow(IntPtr.Zero, _window, true);
                 PaletteCoordinator.SetStatus("Đã mở Nhật ký thay đổi • " + project.AuditEvents.Count + " sự kiện.");
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 document.Editor.WriteMessage("\nQS3DAUDIT error: " + ex.Message);
                 PaletteCoordinator.SetStatus("Nhật ký thay đổi lỗi: " + ex.Message);
