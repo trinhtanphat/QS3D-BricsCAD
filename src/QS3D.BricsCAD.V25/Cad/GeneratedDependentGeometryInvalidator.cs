@@ -53,6 +53,12 @@ namespace QS3D.BricsCAD.V25.Cad
                 Remove(element, "GeneratedBeamStirrupCount");
                 Remove(element, "GeneratedBeamStirrupDiameterMm");
                 Remove(element, "GeneratedBeamStirrupActualSpacingM");
+                Remove(element, "GeneratedBeamStirrupCenterlineLengthM");
+                Remove(element, "GeneratedBeamStirrupTotalCenterlineLengthM");
+                Remove(element, "GeneratedBeamStirrupPolylineLengthM");
+                Remove(element, "GeneratedBeamStirrupBendRadiusM");
+                Remove(element, "GeneratedBeamStirrupHookLengthM");
+                Remove(element, "GeneratedBeamStirrupHookTailAngleDeg");
                 Remove(element, "GeneratedBeamStirrupNotation");
                 Remove(element, "GeneratedBeamStirrupMode");
 
