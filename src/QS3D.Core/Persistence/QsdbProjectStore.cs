@@ -129,11 +129,11 @@ namespace QS3D.Core.Persistence
                     project.AuditEvents.Add(new AuditEvent
                     {
                         Utc = Date(item.Attribute("utc")?.Value),
-                        Action = Value(item, "action"),
-                        ElementId = Value(item, "elementId"),
-                        Detail = Value(item, "detail"),
-                        Actor = Value(item, "actor"),
-                        CorrelationId = Value(item, "correlationId")
+                        Action = RawValue(item, "action"),
+                        ElementId = RawValue(item, "elementId"),
+                        Detail = RawValue(item, "detail"),
+                        Actor = RawValue(item, "actor"),
+                        CorrelationId = RawValue(item, "correlationId")
                     });
                 }
             }
@@ -319,12 +319,13 @@ namespace QS3D.Core.Persistence
             {
                 var key = Required(item, "name");
                 if (target.ContainsKey(key)) throw new InvalidDataException("Duplicate QSDB map key: " + key);
-                target[key] = Value(item, "value");
+                target[key] = RawValue(item, "value");
             }
         }
 
         private static string Required(XElement element, string attribute) => element.Attribute(attribute)?.Value is string value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new InvalidDataException("Missing attribute: " + attribute);
         private static string Value(XElement element, string attribute) => element.Attribute(attribute)?.Value?.Trim() ?? string.Empty;
+        private static string RawValue(XElement element, string attribute) => element.Attribute(attribute)?.Value ?? string.Empty;
 
         private static double Double(string? value)
         {
