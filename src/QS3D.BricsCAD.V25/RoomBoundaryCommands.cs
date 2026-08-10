@@ -36,13 +36,18 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var minimumArea = MetadataNumber(project, "RoomBoundaryMinimumAreaM2", 0.5d, minimumExclusive: -1d);
+                var minimumArea = MetadataNonNegative(project, "RoomBoundaryMinimumAreaM2", 0.5d);
                 var boundaries = new RoomBoundaryEngine().Discover(segments, tolerance, minimumArea);
                 if (boundaries.Count == 0)
                 {
                     document.Editor.WriteMessage("\nQS3DROOMAUTO: chưa phát hiện face kín hợp lệ trong selection.");
                     return;
                 }
+
+                var signatureCounts = boundaries
+                    .Select(x => AutoRoomLifecycle.NormalizeSourceHandles(x.SourceIds))
+                    .GroupBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(x => x.Key, x => x.Count(), StringComparer.OrdinalIgnoreCase);
 
                 var rollback = ProjectStateSnapshot.Capture(project);
                 try
@@ -58,8 +63,26 @@ namespace QS3D.BricsCAD.V25
                     foreach (var boundary in boundaries)
                     {
                         var sourceSignature = AutoRoomLifecycle.NormalizeSourceHandles(boundary.SourceIds);
-                        var expectedId = "ROOMAUTO-" + StableToken(boundary.Key);
-                        var element = project.FindElement(expectedId) ?? AutoRoomLifecycle.FindBySourceSignature(project, sourceSignature, project.ActiveFloorId, project.ActiveZoneId);
+                        var expectedId = "ROOMAUTO-" + StableToken(IdentitySeed(project.ActiveFloorId, project.ActiveZoneId, boundary.Key));
+                        var legacyId = "ROOMAUTO-" + StableToken(boundary.Key);
+                        var element = project.FindElement(expectedId);
+                        var resolvedById = element != null;
+
+                        if (element == null && !string.Equals(legacyId, expectedId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var legacy = project.FindElement(legacyId);
+                            if (legacy != null &&
+                                string.Equals(legacy.FloorId, project.ActiveFloorId, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(legacy.ZoneId, project.ActiveZoneId, StringComparison.OrdinalIgnoreCase))
+                            {
+                                element = legacy;
+                                resolvedById = true;
+                            }
+                        }
+
+                        if (element == null && sourceSignature.Length > 0 && signatureCounts.TryGetValue(sourceSignature, out var signatureCount) && signatureCount == 1)
+                            element = AutoRoomLifecycle.FindBySourceSignature(project, sourceSignature, project.ActiveFloorId, project.ActiveZoneId);
+
                         var isNew = element == null;
                         if (element == null)
                         {
@@ -69,18 +92,25 @@ namespace QS3D.BricsCAD.V25
                         }
                         else
                         {
-                            if (element.Category != ElementCategory.Room || (!AutoRoomLifecycle.IsAutoRoom(element) && !string.Equals(element.Id, expectedId, StringComparison.OrdinalIgnoreCase)))
+                            if (element.Category != ElementCategory.Room || !AutoRoomLifecycle.IsAutoRoom(element))
                                 throw new InvalidOperationException("Boundary id/provenance collision with non-auto Room element: " + element.Id);
+                            if (resolvedById && element.Properties.TryGetValue("BoundaryKey", out var existingBoundaryKey) &&
+                                !string.IsNullOrWhiteSpace(existingBoundaryKey) &&
+                                !string.Equals(existingBoundaryKey, boundary.Key, StringComparison.Ordinal))
+                                throw new InvalidOperationException("Auto-room id hash collision detected: " + element.Id);
                             updated++;
                         }
 
+                        if (!activeRoomIds.Add(element.Id))
+                            throw new InvalidOperationException("Multiple discovered boundaries resolved to the same auto Room: " + element.Id);
+
                         element.Category = ElementCategory.Room;
-                        element.FamilyId = family.Id;
                         element.FloorId = project.ActiveFloorId;
                         element.ZoneId = project.ActiveZoneId;
                         element.DrawingFingerprint = project.DrawingFingerprint;
                         element.Properties[AutoRoomLifecycle.BoundaryModeKey] = AutoRoomLifecycle.BoundaryModeAutoNetwork;
                         AutoRoomLifecycle.MarkActive(element, sourceSignature);
+                        AutoRoomLifecycle.SyncFamilyDefaults(project, element, family);
                         element.Properties["BoundaryKey"] = boundary.Key;
                         element.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = sourceSignature;
                         element.Properties["BoundaryVertexCount"] = boundary.Vertices.Count.ToString(CultureInfo.InvariantCulture);
@@ -88,10 +118,7 @@ namespace QS3D.BricsCAD.V25
                         element.Properties["BoundarySplineChordM"] = splineChord.ToString("R", CultureInfo.InvariantCulture);
                         element.Properties["AreaM2"] = boundary.Area.ToString("R", CultureInfo.InvariantCulture);
                         element.Properties["PerimeterM"] = boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture);
-                        foreach (var property in family.Properties)
-                            if (!element.Properties.ContainsKey(property.Key)) element.Properties[property.Key] = property.Value;
                         element.MarkDirty(ElementDirtyFlags.All);
-                        activeRoomIds.Add(element.Id);
                         refreshedFinishes += SemanticCaptureService.SyncExistingRoomFinishes(project, element);
                         audit.Record(isNew ? "RoomBoundaryCreate" : "RoomBoundaryUpdate", element.Id,
                             "area=" + boundary.Area.ToString("R", CultureInfo.InvariantCulture) +
@@ -155,6 +182,19 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException(key + " không hợp lệ: " + raw);
             return value;
         }
+
+        private static double MetadataNonNegative(ProjectState project, string key, double fallback)
+        {
+            if (!project.Metadata.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return fallback;
+            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new InvalidOperationException(key + " không hợp lệ: " + raw);
+            return value;
+        }
+
+        private static string IdentitySeed(string floorId, string zoneId, string boundaryKey)
+            => (floorId ?? string.Empty).Trim().ToUpperInvariant() + "|" +
+               (zoneId ?? string.Empty).Trim().ToUpperInvariant() + "|" +
+               (boundaryKey ?? string.Empty);
 
         private static string StableToken(string value)
         {
