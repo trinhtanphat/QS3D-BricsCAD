@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             ElevationChangeMarksGeneratedGeometryStale();
             DeleteGuardsActiveAndReferencedFloors();
             RejectsDuplicateNamesAndInvalidElevation();
+            RejectsDetachedSameIdElements();
         }
 
         private static void CreateUpdateAssignAndDelete()
@@ -67,6 +68,20 @@ namespace QS3D.Core.SmokeTests
             ProjectFloorService.Create(project, "f1", "Tầng 1", 0d);
             Throws<InvalidOperationException>(() => ProjectFloorService.Create(project, "f2", "tầng 1", 3d));
             Throws<ArgumentOutOfRangeException>(() => ProjectFloorService.Create(project, "f3", "Tầng 3", double.NaN));
+        }
+
+        private static void RejectsDetachedSameIdElements()
+        {
+            var project = new ProjectState("p5", "Detached member guard");
+            var f1 = ProjectFloorService.Create(project, "f1", "Tầng 1", 0d);
+            var f2 = ProjectFloorService.Create(project, "f2", "Tầng 2", 3.6d);
+            var owned = new ProjectElement("e", ElementCategory.Beam, "fam", f1.Id, "z");
+            project.Elements.Add(owned);
+            var detached = new ProjectElement("e", ElementCategory.Beam, "fam", f1.Id, "z");
+
+            Throws<InvalidOperationException>(() => ProjectFloorService.Assign(project, f2.Id, new[] { detached }));
+            if (owned.FloorId != f1.Id || detached.FloorId != f1.Id)
+                throw new Exception("Rejected detached assignment must not mutate either object.");
         }
 
         private static void Throws<T>(Action action) where T : Exception
