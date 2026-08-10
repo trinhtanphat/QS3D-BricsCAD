@@ -7,6 +7,7 @@ errors = []
 
 required = [
     "src/QS3D.Core/Domain/AutoRoomLifecycle.cs",
+    "src/QS3D.Core/Services/RoomFinishSynchronizationService.cs",
     "src/QS3D.Core/Geometry/Point2.cs",
     "src/QS3D.Core/Geometry/PolylineMetrics.cs",
     "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs",
@@ -17,6 +18,7 @@ required = [
     "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs",
     "src/QS3D.BricsCAD.V25/Services/SemanticReferenceHandles.cs",
     "tests/QS3D.Core.SmokeTests/AutoRoomLifecycleSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/RoomFinishSynchronizationSmoke.cs",
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs",
     "tests/QS3D.Core.SmokeTests/ProjectQuantitySmoke.cs",
 ]
@@ -35,6 +37,18 @@ if lifecycle.exists():
     ):
         if needle not in text: errors.append("auto-room lifecycle guard missing: " + needle)
 
+sync = ROOT / "src/QS3D.Core/Services/RoomFinishSynchronizationService.cs"
+if sync.exists():
+    text = sync.read_text(encoding="utf-8")
+    for needle in (
+        "RoomFinishSynchronizationService", "SynchronizeExisting", "RoomFinishIdentityService.FindExisting",
+        "AutoRoomLifecycle.ResolveRoomReferenceId", "AutoRoomLifecycle.RoomSourceIdKey",
+        "finish.DependsOn.Add(room.Id)", "finish.DrawingFingerprint = room.DrawingFingerprint",
+        '"OpeningAreaM2"', '"DoorWidthM"', "finish.Properties.Remove(key)",
+        "AutoRoomLifecycle.IsStaleAutoRoom(room)", "ReferenceEquals(owned, element)",
+    ):
+        if needle not in text: errors.append("Room->HT_Phòng synchronization guard missing: " + needle)
+
 command = ROOT / "src/QS3D.BricsCAD.V25/RoomBoundaryCommands.cs"
 if command.exists():
     text = command.read_text(encoding="utf-8")
@@ -43,6 +57,7 @@ if command.exists():
         "AutoRoomLifecycle.FindBySourceSignature", "AutoRoomLifecycle.MarkActive",
         "AutoRoomLifecycle.MarkStaleForSelection", "AutoRoomLifecycle.SyncFamilyDefaults",
         "SyncExistingRoomFinishes", 'audit.Record("RoomBoundaryStale"',
+        "element.MarkDirty(ElementDirtyFlags.All)",
         "RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance, splineChord)",
         "RoomBoundarySplineChordM", "LINE, POLYLINE, ARC hoặc SPLINE plan-view",
         "MetadataNonNegative", "signatureCounts", "legacyId", "activeRoomIds.Add",
@@ -82,14 +97,23 @@ if references.exists():
 source_resolver = ROOT / "src/QS3D.Core/Services/SourceHandleResolver.cs"
 if source_resolver.exists():
     text = source_resolver.read_text(encoding="utf-8")
-    for needle in ("AutoRoomLifecycle.BoundarySourceHandlesKey", "GeneratedSolidHandle", "element.DependsOn"):
-        if needle not in text: errors.append("dependency-aware source Handle resolver missing: " + needle)
+    for needle in (
+        "AutoRoomLifecycle.BoundarySourceHandlesKey", "GeneratedSolidHandle", "element.DependsOn",
+        "AutoRoomLifecycle.IsRoomFinishCategory(element.Category)", "AutoRoomLifecycle.ResolveRoomReferenceId(project, element)",
+    ):
+        if needle not in text: errors.append("dependency/provenance-aware source Handle resolver missing: " + needle)
 
 capture = ROOT / "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs"
 if capture.exists():
     text = capture.read_text(encoding="utf-8")
-    for needle in ("SemanticReferenceHandles.Intersects", "SyncExistingRoomFinishes", "RoomSourceId", "AutoRoomLifecycle.IsStaleAutoRoom"):
+    for needle in (
+        "SemanticReferenceHandles.Intersects", "SyncExistingRoomFinishes", "GenerateRoomFinishes",
+        "RoomFinishSynchronizationService.Categories", "RoomFinishSynchronizationService.Synchronize(project, room, finish)",
+        "RoomFinishSynchronizationService.SynchronizeExisting(project, room)", "AutoRoomLifecycle.IsStaleAutoRoom",
+    ):
         if needle not in text: errors.append("room finish / auto-room integration missing: " + needle)
+    for forbidden in ("private static void SyncFinishFromRoom", "private static void EnsureRoomDependency", "Copy(room, finish"):
+        if forbidden in text: errors.append("adapter must not retain duplicate Room->finish synchronization logic: " + forbidden)
 
 report = ROOT / "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs"
 if report.exists():
@@ -125,6 +149,16 @@ if smoke.exists():
     ):
         if needle not in text: errors.append("auto-room lifecycle regression coverage missing: " + needle)
 
+sync_smoke = ROOT / "tests/QS3D.Core.SmokeTests/RoomFinishSynchronizationSmoke.cs"
+if sync_smoke.exists():
+    text = sync_smoke.read_text(encoding="utf-8")
+    for needle in (
+        "RepairsLegacyDependencyScopeAndFingerprint();", "RemovedRoomMetricsClearOldDeductions();",
+        "QuantityFallbackIsCanonicalized();", "RejectsInvalidRoomMetric();", "RejectsStaleAutoRoom();", "RejectsForeignProjectObject();",
+        "NetFinishAreaM2", "SkirtingLengthM",
+    ):
+        if needle not in text: errors.append("Room->HT_Phòng lifecycle regression coverage missing: " + needle)
+
 quantity_smoke = ROOT / "tests/QS3D.Core.SmokeTests/ProjectQuantitySmoke.cs"
 if quantity_smoke.exists() and "PreferredBqQuantityDoesNotEvaluateUnusedFallbacks();" not in quantity_smoke.read_text(encoding="utf-8"):
     errors.append("BQ lazy-fallback regression coverage missing")
@@ -136,12 +170,14 @@ if geometry_smoke.exists():
         if needle not in text: errors.append("large-coordinate geometry regression coverage missing: " + needle)
 
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
-if registration.exists() and "AutoRoomLifecycleSmoke.Run();" not in registration.read_text(encoding="utf-8"):
-    errors.append("AutoRoomLifecycleSmoke is not registered")
+if registration.exists():
+    registration_text = registration.read_text(encoding="utf-8")
+    for needle in ("AutoRoomLifecycleSmoke.Run();", "RoomFinishSynchronizationSmoke.Run();"):
+        if needle not in registration_text: errors.append("room lifecycle smoke is not registered: " + needle)
 
 print("QS3D auto-room lifecycle preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: auto-room input/identity, room provenance, stale/orphan quantity exclusion, lazy BQ fallbacks, rollback, finish sync, semantic locate and large-coordinate geometry guards are present.")
+print("PASS: auto-room input/identity, Room->finish resynchronization, stale/orphan quantity exclusion, lazy BQ fallbacks, rollback, semantic locate and large-coordinate geometry guards are present.")
