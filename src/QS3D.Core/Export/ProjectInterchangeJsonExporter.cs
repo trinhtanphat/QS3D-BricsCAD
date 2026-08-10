@@ -120,10 +120,10 @@ namespace QS3D.Core.Export
             Property(json, 3, "sourceRefScope", "drawing-local", true);
 
             json.Append("      \"sourceHandles\": ");
-            AppendStringArray(json, element.SourceHandles);
+            AppendStringArray(json, element.SourceHandles, "sourceHandles");
             json.Append(",\n");
             json.Append("      \"dependencies\": ");
-            AppendStringArray(json, element.DependsOn);
+            AppendStringArray(json, element.DependsOn, "dependencies");
             json.Append(",\n");
             json.Append("      \"properties\": ");
             AppendStringMap(json, element.Properties.Where(x => IsInterchangeProperty(x.Key)), 3);
@@ -171,10 +171,26 @@ namespace QS3D.Core.Export
             json.Append('}');
         }
 
-        private static void AppendStringArray(StringBuilder json, IEnumerable<string> values)
+        private static void AppendStringArray(StringBuilder json, IEnumerable<string> values, string label)
         {
-            var items = values.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            if (values == null) throw new InvalidDataException("Interchange export requires " + label + ".");
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var items = new List<string>();
+            var index = 0;
+            foreach (var value in values)
+            {
+                var raw = value ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new InvalidDataException("Interchange export " + label + " contains an empty value at index " + index.ToString(CultureInfo.InvariantCulture) + ".");
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new InvalidDataException("Interchange export " + label + " contains a non-canonical padded value at index " + index.ToString(CultureInfo.InvariantCulture) + ".");
+                if (!seen.Add(raw))
+                    throw new InvalidDataException("Interchange export " + label + " contains a duplicate value: " + raw + ".");
+                items.Add(raw);
+                index++;
+            }
+            items.Sort(StringComparer.OrdinalIgnoreCase);
+
             json.Append('[');
             for (var i = 0; i < items.Count; i++)
             {
