@@ -17,10 +17,11 @@ namespace QS3D.Core.Persistence
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
 
+            ValidateProject(project);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-            var tempPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             var backupPath = fullPath + ".bak";
 
             project.SchemaVersion = ProjectState.CurrentSchemaVersion;
@@ -31,27 +32,11 @@ namespace QS3D.Core.Persistence
             {
                 document.Save(tempPath, SaveOptions.DisableFormatting);
                 ValidateSerializedFile(tempPath);
-
-                if (File.Exists(fullPath))
-                {
-                    try
-                    {
-                        File.Replace(tempPath, fullPath, backupPath, true);
-                    }
-                    catch (PlatformNotSupportedException)
-                    {
-                        File.Copy(fullPath, backupPath, true);
-                        File.Copy(tempPath, fullPath, true);
-                    }
-                }
-                else
-                {
-                    File.Move(tempPath, fullPath);
-                }
+                AtomicFileCommit.ReplaceWithBackup(tempPath, fullPath, backupPath);
             }
             finally
             {
-                TryDelete(tempPath);
+                AtomicFileCommit.TryDelete(tempPath);
             }
         }
 
@@ -202,6 +187,7 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateProject(ProjectState project)
         {
+            if (string.IsNullOrWhiteSpace(project.Name)) throw new InvalidDataException("QSDB project name is required.");
             var duplicateFamily = project.Families.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFamily != null) throw new InvalidDataException("Duplicate family id in QSDB: " + duplicateFamily.Key);
             var duplicateElement = project.Elements.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
@@ -210,6 +196,12 @@ namespace QS3D.Core.Persistence
             if (duplicateZone != null) throw new InvalidDataException("Duplicate zone id in QSDB: " + duplicateZone.Key);
             var duplicateFloor = project.Floors.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFloor != null) throw new InvalidDataException("Duplicate floor id in QSDB: " + duplicateFloor.Key);
+
+            foreach (var floor in project.Floors)
+                if (double.IsNaN(floor.ElevationM) || double.IsInfinity(floor.ElevationM)) throw new InvalidDataException("Floor elevation must be finite: " + floor.Id);
+            foreach (var element in project.Elements)
+                foreach (var quantity in element.Quantities)
+                    if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value)) throw new InvalidDataException("Element quantity must be finite: " + element.Id + "/" + quantity.Key);
         }
 
         private static bool IsRecoverableDataFailure(Exception exception) => exception is InvalidDataException || exception is XmlException || exception is FormatException || exception is FileNotFoundException;
@@ -252,13 +244,10 @@ namespace QS3D.Core.Persistence
             return (ElementDirtyFlags)raw;
         }
 
-        private static void TryDelete(string path)
+        private static string F(double value)
         {
-            try { if (File.Exists(path)) File.Delete(path); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidDataException("QSDB numeric values must be finite.");
+            return value.ToString("R", CultureInfo.InvariantCulture);
         }
-
-        private static string F(double value) => value.ToString("R", CultureInfo.InvariantCulture);
     }
 }

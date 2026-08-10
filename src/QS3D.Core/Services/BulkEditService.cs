@@ -32,6 +32,26 @@ namespace QS3D.Core.Services
             {
                 var element = project.FindElement(id);
                 if (element == null || element.Category != family.Category) continue;
+                if (string.Equals(element.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
+
+                var previousFamily = project.FindFamily(element.FamilyId);
+                var inheritedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (previousFamily != null)
+                {
+                    foreach (var property in previousFamily.Properties)
+                    {
+                        if (element.Properties.TryGetValue(property.Key, out var current) && string.Equals(current, property.Value ?? string.Empty, StringComparison.Ordinal))
+                            inheritedKeys.Add(property.Key);
+                    }
+                }
+
+                foreach (var key in inheritedKeys)
+                    if (!family.Properties.ContainsKey(key)) element.Properties.Remove(key);
+
+                foreach (var property in family.Properties)
+                    if (inheritedKeys.Contains(property.Key) || !element.Properties.ContainsKey(property.Key))
+                        element.Properties[property.Key] = property.Value ?? string.Empty;
+
                 element.FamilyId = family.Id;
                 element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
                 count++;

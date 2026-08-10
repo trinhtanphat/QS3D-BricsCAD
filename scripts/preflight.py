@@ -10,7 +10,9 @@ errors = []
 required = [
     "Directory.Build.props", "README.md", "AGENTS.md", "CI_POLICY.md",
     "src/QS3D.Core/QS3D.Core.csproj", "src/QS3D.Core/Persistence/QsdbProjectStore.cs",
-    "src/QS3D.Core/Services/RegenerationEngine.cs", "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs",
+    "src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs", "src/QS3D.Core/Services/RegenerationEngine.cs",
+    "src/QS3D.Core/Services/BulkEditService.cs", "src/QS3D.Core/Services/WallQuantityCalculator.cs",
+    "src/QS3D.Core/Takeoff/QuantityEngine.cs", "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs",
     "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj", "src/QS3D.BricsCAD.V25/Commands.cs",
     "src/QS3D.BricsCAD.V25/ReviewCommands.cs", "src/QS3D.BricsCAD.V25/ViewportCommands.cs",
     "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs", "src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs",
@@ -20,8 +22,8 @@ required = [
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml", "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml",
     "src/QS3D.BricsCAD.V25/UI/Theme.xaml", "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml",
     "src/QS3D.BricsCAD.V25/UI/RecognitionWindow.xaml", "src/QS3D.BricsCAD.V25/UI/RevisionWindow.xaml",
-    "tests/QS3D.Core.SmokeTests/HardeningRegressionSmoke.cs", "scripts/install-bricscad-v25.ps1",
-    ".github/workflows/ci.yml", ".github/workflows/bricscad-v25.yml"
+    "tests/QS3D.Core.SmokeTests/HardeningRegressionSmoke.cs", "tests/QS3D.Core.SmokeTests/ContinuationRegressionSmoke.cs",
+    "scripts/install-bricscad-v25.ps1", ".github/workflows/ci.yml", ".github/workflows/bricscad-v25.yml"
 ]
 for rel in required:
     if not (ROOT / rel).exists(): errors.append("missing required file: " + rel)
@@ -71,11 +73,42 @@ if store.exists():
         "MaxCharactersInDocument": "QSDB XML character limit missing",
         "MaxProjectFileBytes": "QSDB file-size guard missing",
         "RestorePersistenceState": "QSDB dirty-state restore missing",
+        "ValidateProject(project);": "QSDB must validate in-memory state before replacing the persisted project",
+        "AtomicFileCommit.ReplaceWithBackup": "QSDB atomic replacement/recovery helper missing",
+        "double.IsNaN(quantity.Value)": "QSDB non-finite quantity validation missing",
+        "double.IsNaN(floor.ElevationM)": "QSDB non-finite floor validation missing",
     }.items():
         if needle not in text: errors.append(message)
 
+migrator = ROOT / "src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs"
+if migrator.exists():
+    text = migrator.read_text(encoding="utf-8")
+    if "ElementDirtyFlags.All" not in text or 'element.SetAttributeValue("updatedUtc", LegacyUpdatedUtc)' not in text:
+        errors.append("legacy QSDB elements must migrate dirty and require deterministic regeneration")
+
+bulk = ROOT / "src/QS3D.Core/Services/BulkEditService.cs"
+if bulk.exists():
+    text = bulk.read_text(encoding="utf-8")
+    if "inheritedKeys" not in text or "previousFamily.Properties" not in text:
+        errors.append("family reassignment must refresh inherited defaults without overwriting instance overrides")
+
+wall_quantity = ROOT / "src/QS3D.Core/Services/WallQuantityCalculator.cs"
+if wall_quantity.exists():
+    text = wall_quantity.read_text(encoding="utf-8")
+    if "RequireFiniteNonNegative" not in text or "FiniteProduct" not in text:
+        errors.append("legacy wall quantity path must reject non-finite dimensions and overflow")
+
+takeoff = ROOT / "src/QS3D.Core/Takeoff/QuantityEngine.cs"
+if takeoff.exists() and "ConvertMetric" not in takeoff.read_text(encoding="utf-8"):
+    errors.append("raw snapshot takeoff must reject negative/non-finite metrics")
+
 hardening = ROOT / "tests/QS3D.Core.SmokeTests/HardeningRegressionSmoke.cs"
 if hardening.exists() and "QsdbRejectsDtd();" not in hardening.read_text(encoding="utf-8"): errors.append("DTD rejection regression coverage missing")
+continuation = ROOT / "tests/QS3D.Core.SmokeTests/ContinuationRegressionSmoke.cs"
+if continuation.exists():
+    text = continuation.read_text(encoding="utf-8")
+    for needle in ("LegacyMigrationMarksElementsDirty();", "FamilyAssignmentRefreshesInheritedDefaults();", "QsdbRejectsNonFiniteStateBeforeReplace();", "LegacyWallCalculatorRejectsNonFiniteValues();", "QuantityEngineRejectsInvalidSnapshotMetrics();"):
+        if needle not in text: errors.append("continuation regression coverage missing: " + needle)
 
 units = ROOT / "src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs"
 if units.exists():
@@ -162,4 +195,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, manual CI, proprietary-file guard, QSDB hardening, units, two-phase 3D geometry, document lifecycle, active-document selection sync, compact palettes, Xref selection, family validation, finish safety, dark UI, BQ recalculation and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, manual CI, proprietary-file guard, QSDB migration/persistence hardening, units, two-phase 3D geometry, document lifecycle, active-document selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation and installer verification are present.")

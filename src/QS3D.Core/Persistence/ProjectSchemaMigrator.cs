@@ -46,6 +46,19 @@ namespace QS3D.Core.Persistence
         private static void MigrateV1ToV2(XElement root)
         {
             if (root.Attribute("updatedUtc") == null) root.SetAttributeValue("updatedUtc", LegacyUpdatedUtc);
+
+            var elements = root.Element("elements");
+            if (elements != null)
+            {
+                foreach (var element in elements.Elements("element"))
+                {
+                    if (element.Attribute("dirty") == null)
+                        element.SetAttributeValue("dirty", ((int)ElementDirtyFlags.All).ToString(CultureInfo.InvariantCulture));
+                    if (element.Attribute("updatedUtc") == null)
+                        element.SetAttributeValue("updatedUtc", LegacyUpdatedUtc);
+                }
+            }
+
             var metadata = root.Element("metadata");
             if (metadata == null)
             {
