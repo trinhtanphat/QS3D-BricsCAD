@@ -97,9 +97,14 @@ namespace QS3D.Core.Domain
                 custom.Add(material);
             }
 
+            MaterialReferenceScope? referenceScope = null;
+            var renaming = previousName != null && !string.IsNullOrWhiteSpace(previousName) && !string.Equals(previousName, material.Name, StringComparison.Ordinal);
+            if (renaming)
+                referenceScope = ResolveReferenceScope(project);
+
             WriteCustom(project, custom);
-            if (previousName != null && !string.IsNullOrWhiteSpace(previousName) && !string.Equals(previousName, material.Name, StringComparison.Ordinal))
-                RenameReferences(project, previousName, material.Name);
+            if (renaming)
+                RenameReferences(referenceScope!, previousName!, material.Name);
             project.Touch();
             return material;
         }
@@ -123,28 +128,62 @@ namespace QS3D.Core.Domain
         public static IReadOnlyList<string> ReferencedMaterialNames(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            var scope = ResolveReferenceScope(project);
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var family in project.Families)
+            foreach (var family in scope.Families)
                 AddMaterial(family.Properties, names);
-            foreach (var element in project.Elements)
+            foreach (var element in scope.Elements)
                 AddMaterial(element.Properties, names);
             return names.OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase).ToList().AsReadOnly();
         }
 
-        private static void RenameReferences(ProjectState project, string previousName, string nextName)
+        private static void RenameReferences(MaterialReferenceScope scope, string previousName, string nextName)
         {
             var inheritedMaterialFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var inheritedFrameFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var family in project.Families)
+            foreach (var family in scope.Families)
             {
                 if (RenameReference(family.Properties, "Material", previousName, nextName)) inheritedMaterialFamilies.Add(family.Id);
                 if (RenameReference(family.Properties, "CurtainFrameMaterial", previousName, nextName)) inheritedFrameFamilies.Add(family.Id);
             }
-            foreach (var element in project.Elements)
+            foreach (var element in scope.Elements)
             {
                 RenameElementReference(element, "Material", previousName, nextName, inheritedMaterialFamilies.Contains(element.FamilyId));
                 RenameElementReference(element, "CurtainFrameMaterial", previousName, nextName, inheritedFrameFamilies.Contains(element.FamilyId));
             }
+        }
+
+        private static MaterialReferenceScope ResolveReferenceScope(ProjectState project)
+        {
+            var families = new List<ProjectFamily>(project.Families.Count);
+            var familyIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in project.Families)
+            {
+                if (family == null)
+                    throw new InvalidOperationException("Project contains a null family entry.");
+                var familyId = (family.Id ?? string.Empty).Trim();
+                if (familyId.Length == 0)
+                    throw new InvalidOperationException("Project contains a family with a blank semantic id.");
+                if (!familyIds.Add(familyId))
+                    throw new InvalidOperationException("Project contains duplicate family id: " + familyId);
+                families.Add(family);
+            }
+
+            var elements = new List<ProjectElement>(project.Elements.Count);
+            var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null element entry.");
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("Project contains an element with a blank semantic id.");
+                if (!elementIds.Add(elementId))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + elementId);
+                elements.Add(element);
+            }
+
+            return new MaterialReferenceScope(families, elements);
         }
 
         private static bool RenameReference(IDictionary<string, string> properties, string key, string previousName, string nextName)
@@ -218,6 +257,18 @@ namespace QS3D.Core.Domain
         {
             try { return Encoding.UTF8.GetString(Convert.FromBase64String(value ?? string.Empty)); }
             catch (FormatException ex) { throw new InvalidOperationException("Material catalog contains invalid Base64 data.", ex); }
+        }
+
+        private sealed class MaterialReferenceScope
+        {
+            public MaterialReferenceScope(IReadOnlyList<ProjectFamily> families, IReadOnlyList<ProjectElement> elements)
+            {
+                Families = families;
+                Elements = elements;
+            }
+
+            public IReadOnlyList<ProjectFamily> Families { get; }
+            public IReadOnlyList<ProjectElement> Elements { get; }
         }
     }
 }
