@@ -32,6 +32,25 @@ The Workspace property pane has two scopes:
 
 Typed controls include finite-number/text fields, boolean checkbox and editable choices. Semantic selection resolves source handles and generated owner slots, including slab/wall/Foundation mesh and Curtain frame handles.
 
+## Direct Draw / Tạo mới
+
+Direct Draw is the authoring path for **new geometry**. It creates a real BricsCAD source entity, captures it into the normal QS3D semantic model and immediately reuses the established native 3D builder. The legacy capture commands remain the path for CAD that was already drawn.
+
+- `QS3DDRAWWALL` — draw a new ArchitecturalWall from two or more plan-view points. Two points create a LINE source; longer paths create an open POLYLINE. Prompts/inherits wall thickness, height and bottom offset, then creates semantic + owned native 3D in one operation.
+- `QS3DDRAWBEAM` — draw a new Beam from two plan-view points. Prompts/inherits width, height and bottom offset, then creates the semantic Beam + native prism.
+- `QS3DDRAWCOLUMN` — pick the Column center, then prompt/inherit width, depth, height and bottom offset. QS3D creates a rectangular closed-POLYLINE source + semantic Column + native 3D.
+- `QS3DDRAWSLAB` — interactively pick at least three plan-view boundary points and press Enter. Prompts/inherits slab thickness and bottom offset, then creates a closed-POLYLINE source + semantic Slab + native 3D.
+
+Current P0 Direct Draw is intentionally guarded:
+
+- it runs in **Model Space** only;
+- picked path points must remain plan-view within **5 mm vertical tolerance**, converted through the active drawing unit policy;
+- semantic regeneration occurs before native builder mutation;
+- failure restores project state and cleans the operation-owned source/generated output, including XData-tagged generated output that could otherwise become orphaned;
+- successful creation selects the generated host when available and keeps the normal semantic/source provenance for rebuild, health, quantities and downstream workflows.
+
+Ribbon **TẠO MỚI** and the Full Domain Hub expose these commands directly. See `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` for the exact source/runtime boundary.
+
 ## Room and finish workflow
 
 - `QS3DROOM` — capture selected source as Room.
