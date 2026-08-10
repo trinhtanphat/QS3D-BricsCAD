@@ -44,7 +44,8 @@ checks = {
     required[5]: [
         "private readonly Document _document", "DoorOpeningScheduleWindow(Document document)", "DoorOpeningScheduleBuilder.Build(project)",
         "DoorOpeningXlsxExporter.Export", "RegenerationEngine", "SearchText.Contains(query)", "Distinct(StringComparer.OrdinalIgnoreCase)",
-        "DrawingLabel(_document)",
+        "DrawingLabel(_document)", "EnsureActive", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
+        'EnsureActive("làm mới Door/Opening Schedule")', 'EnsureActive("xuất Door/Opening XLSX")',
     ],
     required[6]: [
         "GroupsDoorsByDimensionsAndDistinctHosts", "InstanceOverrideSplitsFamilyInheritedRow", "RejectsInvalidSemanticDimensions",
@@ -73,4 +74,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: deterministic Door/Opening schedule, Family inheritance, host provenance, real XLSX export and document-bound modeless review UI are present.")
+print("PASS: deterministic Door/Opening schedule, host provenance, XLSX export and cross-DWG-safe modeless review UI are present.")
