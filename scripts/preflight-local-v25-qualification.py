@@ -48,12 +48,20 @@ if runner.is_file():
         "signerThumbprint",
         "packageZipSha256",
         "Signed release qualification requires the real licensed V25 runtime gate.",
+        "Resolve-PythonInterpreter",
+        "QS3D_PYTHON",
+        "-PythonPath",
+        "steps = $steps.ToArray()",
     )
     for needle in required:
         if needle not in text:
             errors.append("local V25 runner missing fail-closed token: " + needle)
     if "-SkipRuntime" not in text:
         errors.append("local V25 runner must expose explicit runtime-skip state for diagnostics")
+    if 'Invoke-ExternalChecked "python"' in text:
+        errors.append("local V25 runner must not invoke the Windows Store python alias directly")
+    if "steps = @($steps)" in text:
+        errors.append("local V25 runner must not trigger PowerShell generic-list array conversion failure")
 
     adapter_pos = text.find('"BricsCAD V25 adapter Release build"')
     wpf_pos = text.find('"Offline WPF theme / Workspace / RightPanel smoke"')
