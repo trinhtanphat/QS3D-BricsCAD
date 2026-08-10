@@ -18,26 +18,29 @@ namespace QS3D.BricsCAD.V25.Cad
             "GeneratedBqTable",
             0.0032d,
             0.0075d,
-            0.024d);
+            0.028d);
 
         private static readonly string[] Headers =
         {
             "Tầng",
             "Loại",
-            "Family",
+            "Tên cấu kiện",
             "SL",
             "BT gộp (m³)",
-            "Khấu trừ (m³)",
-            "BT ròng (m³)",
-            "Ván khuôn (m²)",
+            "Trừ giao (m³)",
+            "BT còn (m³)",
+            "Cốp pha (m²)",
             "Dài (m)",
-            "CV ngoài (m)",
-            "CV trong (m)",
-            "DT cửa/lỗ (m²)",
-            "DT bên (m²)",
+            "Chu vi ngoài (m)",
+            "Chu vi trong (m)",
+            "DT cửa (m²)",
+            "Thành bên (m²)",
             "DT đáy (m²)",
             "DT đỉnh (m²)",
-            "DT khác (m²)"
+            "DT khác (m²)",
+            "QS3D Element ID",
+            "CAD Handle (hex)",
+            "QS3D Drawing Fingerprint"
         };
 
         public static string Build(Document document, ProjectState project, Point3d position)
@@ -107,7 +110,10 @@ namespace QS3D.BricsCAD.V25.Cad
                     Number(row.SideAreaM2, "SideAreaM2"),
                     Number(row.BottomAreaM2, "BottomAreaM2"),
                     Number(row.TopAreaM2, "TopAreaM2"),
-                    Number(row.OtherAreaM2, "OtherAreaM2")
+                    Number(row.OtherAreaM2, "OtherAreaM2"),
+                    row.ElementIdText ?? string.Empty,
+                    row.SourceHandleText ?? string.Empty,
+                    row.DrawingFingerprint ?? string.Empty
                 });
             }
 
@@ -121,7 +127,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (double.IsNaN(value) || double.IsInfinity(value))
                 throw new InvalidOperationException("BQ report " + label + " must be finite.");
-            return value.ToString("0.###", CultureInfo.InvariantCulture);
+            return value.ToString("0.########", CultureInfo.InvariantCulture);
         }
     }
 }

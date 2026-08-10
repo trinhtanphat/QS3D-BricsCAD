@@ -7,14 +7,22 @@ BUILDER = ROOT / "src/QS3D.BricsCAD.V25/Cad/BqNativeTableBuilder.cs"
 COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/BqNativeTableCommands.cs"
 REPORT = ROOT / "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs"
 ROW = ROOT / "src/QS3D.Core/Reporting/QuantityReportRow.cs"
+XLSX = ROOT / "src/QS3D.Core/Export/XlsxQuantityExporter.cs"
 SHARED = ROOT / "src/QS3D.BricsCAD.V25/Cad/ProjectOwnedNativeTableArtifactService.cs"
 AGGREGATOR = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedSolidRuntimeHealthService.cs"
 RELEASE = ROOT / "src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs"
 DOC = ROOT / "docs/NATIVE-BQ-TABLE-P0.md"
 errors = []
 
-for path in (BUILDER, COMMANDS, REPORT, ROW, SHARED, AGGREGATOR, RELEASE, DOC):
+for path in (BUILDER, COMMANDS, REPORT, ROW, XLSX, SHARED, AGGREGATOR, RELEASE, DOC):
     if not path.is_file(): errors.append("missing BQ native Table file: " + str(path.relative_to(ROOT)))
+
+metric_tokens = (
+    'row.GrossConcreteM3', 'row.DeductionM3', 'row.NetConcreteM3',
+    'row.FormworkM2', 'row.LengthM', 'row.OuterPerimeterM', 'row.InnerPerimeterM',
+    'row.DoorAreaM2', 'row.SideAreaM2', 'row.BottomAreaM2', 'row.TopAreaM2', 'row.OtherAreaM2'
+)
+trace_tokens = ('row.ElementIdText', 'row.SourceHandleText', 'row.DrawingFingerprint')
 
 if BUILDER.is_file():
     text = BUILDER.read_text(encoding="utf-8")
@@ -24,12 +32,10 @@ if BUILDER.is_file():
         'ProjectOwnedNativeTableArtifactService.Build',
         'ProjectOwnedNativeTableArtifactService.Remove',
         'ProjectOwnedNativeTableArtifactService.Inspect',
-        'row.GrossConcreteM3', 'row.DeductionM3', 'row.NetConcreteM3',
-        'row.FormworkM2', 'row.LengthM', 'row.OuterPerimeterM', 'row.InnerPerimeterM',
-        'row.DoorAreaM2', 'row.SideAreaM2', 'row.BottomAreaM2', 'row.TopAreaM2', 'row.OtherAreaM2',
+        '"QS3D Element ID"', '"CAD Handle (hex)"', '"QS3D Drawing Fingerprint"',
         '"BQ_" + x.Code', '"BQ_TABLE_PROJECT_DIRTY"',
-    ):
-        if token not in text: errors.append("BqNativeTableBuilder.cs missing authoritative token: " + token)
+    ) + metric_tokens + trace_tokens:
+        if token not in text: errors.append("BqNativeTableBuilder.cs missing authoritative/XLSX-parity token: " + token)
     if 'SemanticDocumentationTableBuilder' in text or 'SemanticTagRenderer' in text:
         errors.append("BQ native Table must consume ProjectQuantityReportBuilder, not generic semantic templates")
 
@@ -55,8 +61,13 @@ if REPORT.is_file():
 
 if ROW.is_file():
     text = ROW.read_text(encoding="utf-8")
-    for token in ('GrossConcreteM3', 'DeductionM3', 'NetConcreteM3', 'FormworkM2', 'OtherAreaM2'):
+    for token in ('GrossConcreteM3', 'DeductionM3', 'NetConcreteM3', 'FormworkM2', 'OtherAreaM2', 'ElementIdText', 'SourceHandleText', 'DrawingFingerprint'):
         if token not in text: errors.append("QuantityReportRow.cs lost BQ field: " + token)
+
+if XLSX.is_file():
+    text = XLSX.read_text(encoding="utf-8")
+    for token in metric_tokens + trace_tokens + ('"QS3D Element ID"', '"CAD Handle (hex)"', '"QS3D Drawing Fingerprint"', 'var range = "A1:S"'):
+        if token not in text: errors.append("XlsxQuantityExporter.cs lost BQ parity token: " + token)
 
 if SHARED.is_file():
     text = SHARED.read_text(encoding="utf-8")
@@ -73,12 +84,12 @@ if RELEASE.is_file() and 'GeneratedSolidRuntimeHealthService.Inspect(document, p
 
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
-    for token in ('QS3DBQTABLE', 'ProjectQuantityReportBuilder', 'QS3DDOC', 'ModelSpace', 'licensed BricsCAD V25'):
-        if token not in text: errors.append("NATIVE-BQ-TABLE-P0.md missing product/runtime boundary: " + token)
+    for token in ('QS3DBQTABLE', 'ProjectQuantityReportBuilder', 'XlsxQuantityExporter', '19 columns', 'QS3DDOC', 'ModelSpace', 'licensed BricsCAD V25'):
+        if token not in text: errors.append("NATIVE-BQ-TABLE-P0.md missing parity/product/runtime boundary: " + token)
 
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BQ native Table consumes authoritative ProjectQuantityReportBuilder rows, regenerates semantic quantities before build/refresh, uses reusable project-level QS3DDOC ownership/rollback/live drift health, reports dirty state read-only, and is wired into Release Check without claiming licensed V25 qualification.")
+print("PASS: BQ native Table consumes authoritative ProjectQuantityReportBuilder rows with all 19 XlsxQuantityExporter quantity/traceability columns, regenerates semantic quantities before build/refresh, uses reusable project-level QS3DDOC ownership/rollback/live drift health, reports dirty state read-only, and is wired into Release Check without claiming licensed V25 qualification.")

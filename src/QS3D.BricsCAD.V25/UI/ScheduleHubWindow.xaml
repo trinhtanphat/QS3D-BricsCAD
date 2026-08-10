@@ -112,6 +112,7 @@
                             <StackPanel>
                                 <TextBlock Text="BẢNG TỔNG HỢP" Style="{StaticResource PanelTitle}"/>
                                 <Button Content="BQ tổng hợp" Tag="QS3DBQ" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Tạo/Cập nhật BQ DWG Table" Tag="QS3DBQTABLE" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
                                 <Button Content="ED2 • Excel ↔ CAD" Tag="QS3DED2" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
                                 <Button Content="Excel → CAD" Tag="QS3DEXCELLOCATE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Tạo/Cập nhật Semantic DWG Table" Tag="QS3DELEMENTTABLE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>

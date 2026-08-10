@@ -8,24 +8,32 @@ The owner explicitly requires **request-scoped commit batching**. Treat one owne
 
 ## Interchange — source-safe pipeline now
 
-Current source provides:
+Current source provides deterministic Semantic Snapshot v1 export, strict read-only validation, immutable typed reading, semantic diff/collision preview and explicit import-resolution policy planning. Current `main` also contains the first deliberately narrow mutating command `QS3DINTERCHANGEAPPEND`: append-only, all-new semantic identities, explicit confirmation, target-authority preservation, source CAD Handle discard, generated/native ownership discard, provenance/audit and semantic rollback.
 
-- deterministic read-only Semantic Snapshot v1 export;
-- strict read-only validation;
-- immutable validation-first typed snapshot reading;
-- deterministic semantic diff;
-- target collision preview;
-- explicit non-mutating import-resolution policy planning from squash-merged PR #153 (`c108ad135fea78c6bb4367c36635eb429c87e331`).
+Append-only is **not** generic import authority. There is still no broad `QS3DINTERCHANGEIMPORT` merge/replace engine. Collision execution (`KeepTarget` / `UseSourceSemanticData`), rename/remap, generated-output clearing/rebuild for replacements, project/drawing identity policy execution and exact-SHA V25 qualification remain separate reviewed work.
 
-`ProjectInterchangeImportResolutionPlanner` requires explicit choices for Zone/Floor/Family/element collisions, project ID, drawing fingerprint and drawing-local source Handle provenance. `Unspecified`/unsupported policy values fail closed. Category-incompatible Family/element identities cannot be forced through replacement. Ambiguous target duplicate IDs fail closed. Replacing an existing element from source semantic data requires the planned generated-output reset `ClearOwnershipAndRequireRebuild`; existing native/generated ownership is never trusted automatically.
-
-`CanProceedToMutationDesign=true` is **not import authority**. There is still no `QS3DINTERCHANGEIMPORT`, no `.qsdb`/DWG mutation, no source Handle rebinding, and no automatic ownership clearing. A real importer still needs semantic precedence/catalog rules, dependency-ordered mutation, version migration, canonical ownership reset/rebuild, rollback/audit, explicit UX confirmation and exact-SHA V25 qualification.
+Portable Semantic Snapshot interchange still does not serialize drawing-local `ProjectState.Metadata`; native documentation Table handles/positions remain `.qsdb`-local state.
 
 ## Documentation / model health
 
-Concurrent `main` now contains native project-owned Semantic Element Table plus authoritative documentation tables including Door/Opening, Room Finish and Material Usage, with native health/source guards evolving alongside them. Keep source status and runtime status separate: landed native source is real, but exact visual/interactive V25 behavior is not remotely qualified.
+Current source contains:
 
-Grid/Floor/Level/polygon work should extend the existing canonical domain models rather than invent parallel stores. Current source includes Grid semantic naming/ordering/intersection/system planning and Floor/Level identity work; native materialization/constraints/host integration and private-DWG behavior remain separate where documented.
+- native semantic MText tag create/refresh/remove plus persisted/live health;
+- project-owned generic Semantic Element native Table;
+- authoritative Door/Opening native Table from `DoorOpeningScheduleBuilder`;
+- authoritative Room Finish native Table from `RoomFinishScheduleBuilder`;
+- authoritative Material Usage native Table from `MaterialUsageScheduleBuilder`;
+- authoritative BQ native Table from `ProjectQuantityReportBuilder`, with create/refresh regeneration and all 19 `XlsxQuantityExporter` quantity + traceability columns.
+
+Project-level Tables use dedicated `QS3DDOC` ownership and distinct artifact IDs/metadata prefixes rather than dummy semantic element ownership. `.qsdb` persists their metadata; portable interchange excludes it. Runtime providers are fail-isolated and the shared runtime-health aggregator is consumed by `QS3DRELEASECHECK`.
+
+`docs/COMMANDS-NATIVE-DOCUMENTATION-TABLES.md` is the low-conflict command addendum. The Schedule Hub exposes generic, BQ, Door/Opening, Room Finish and Material Usage Table creation. BBS native Table, MLeader/associative tags, richer TableStyle and Layout/Sheet/Viewport/title-block workflows remain open.
+
+Keep source status and runtime status separate: landed native source is real, but exact visual/interactive V25 behavior is not remotely qualified.
+
+## Grid/Floor/Level/polygon
+
+Extend existing canonical domain models rather than invent parallel stores. Current source includes Grid semantic naming/ordering/intersection/system planning, Floor/Level identity work and polygon-region/mesh planning. Native materialization/constraints/host integration and private-DWG behavior remain separate where documented.
 
 ## Remote vs local boundary
 
@@ -39,4 +47,4 @@ Real NETLOAD/DemandLoad, private-DWG workflows, native DrawJig/UI/performance, e
 
 ## Continue-next remote priorities
 
-Prefer non-overlapping, source-safe work that moves an explicit contract forward. Before writing code, fetch latest `main` and open PRs because this repository is moving concurrently. Reuse a sound overlapping implementation instead of creating a duplicate. For Interchange, the next mutating step must not be implemented by simply deserializing source data into live state; mutation architecture must first preserve dependency ordering, ownership reset, rollback/audit and user-confirmed policy boundaries.
+Before writing, sync latest `main`/open PRs and reuse sound concurrent work. For documentation, BBS is the next clearly source-resolvable authoritative native Table candidate; do not duplicate BBS fabrication logic—consume `ProjectRebarScheduleBuilder` only and preserve fabrication qualification guards. For Interchange, do not widen append-only into merge/replace without dependency-ordered mutation, ownership reset/rebuild, rollback/audit and explicit user-confirmed policy execution.
