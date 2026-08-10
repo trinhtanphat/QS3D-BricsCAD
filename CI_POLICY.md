@@ -60,6 +60,7 @@ Current workflows are expected to remain manual-only:
 - `.github/workflows/bricscad-v25.yml` — V25 build/runtime integration on the licensed self-hosted runner.
 - `.github/workflows/curved-opening.yml` — focused curved-opening gate.
 - `.github/workflows/geometry-extensions.yml` — focused geometry-extension gate.
+- `.github/workflows/project-data-gate.yml` — focused Zone/Floor/Family/Material/Project Tools/integrity gate.
 - `.github/workflows/release-v25.yml` — owner-approved **build + package + GitHub Release** workflow.
 
 `release-v25.yml` is not a continuous-deployment pipeline. It is a manual release tool. Publishing requires an explicit `workflow_dispatch` plus the `RELEASE` confirmation input. It must not be dispatched until the owner requests the release.
@@ -97,7 +98,7 @@ Repository-local or static checks may be used during review without starting Git
 ## Enforcement
 
 - `scripts/preflight.py` retains the original manual-CI trigger guard.
-- `scripts/preflight-ci-manual-only.py` is the strict policy gate: every workflow must expose `workflow_dispatch` only and any other trigger is rejected.
+- `scripts/preflight-ci-manual-only.py` is the strict policy gate: every workflow must expose `workflow_dispatch` only, every executable workflow must hard-guard the manual event, and any other trigger is rejected.
 - `scripts/preflight-all.py` auto-discovers the strict CI policy gate along with the other feature preflights.
 
 Keep these guards in place unless the repository owner explicitly changes this policy.
