@@ -72,16 +72,35 @@ namespace QS3D.BricsCAD.V25
                     throw;
                 }
 
-                PaletteCoordinator.RefreshProject();
                 var message = "Tie QTY: đã cập nhật " + targets.Count.ToString(CultureInfo.InvariantCulture) + " Column.";
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                FinalizeUi(document, message);
             }
             catch (System.Exception ex)
             {
                 var message = "QS3DREBARTIEQTY lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\n" + message);
+            }
+        }
+
+        private static void FinalizeUi(Document document, string message)
+        {
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                PaletteCoordinator.SetStatus(message);
+                document.Editor.WriteMessage("\nQS3D " + message);
+            }
+            catch (System.Exception ex)
+            {
+                try
+                {
+                    document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau Tie QTY commit: " + ex.Message);
+                }
+                catch
+                {
+                    // Semantic quantities are already committed; UI reporting is best effort only.
+                }
             }
         }
     }
