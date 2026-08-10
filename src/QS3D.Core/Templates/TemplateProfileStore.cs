@@ -7,6 +7,7 @@ using System.Xml.Linq;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
+using QS3D.Core.Recognition;
 using QS3D.Core.Rules;
 
 namespace QS3D.Core.Templates
@@ -226,6 +227,15 @@ namespace QS3D.Core.Templates
             foreach (var source in profile.QuantityRules) projectedRules[source.Id] = source;
             var duplicateOutput = projectedRules.Values.GroupBy(x => x.Category + "\u001f" + x.OutputName, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateOutput != null) throw new InvalidOperationException("Template would create multiple project rules for the same category/output: " + duplicateOutput.Key);
+
+            var projectedMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in project.Metadata.Where(x => x.Key.StartsWith(LayerMappingPrefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                var pattern = item.Key.Substring(LayerMappingPrefix.Length).Trim();
+                if (pattern.Length > 0) projectedMappings[pattern] = item.Value;
+            }
+            foreach (var mapping in profile.LayerMappings) projectedMappings[mapping.Key.Trim()] = mapping.Value;
+            ProjectRecognitionService.ValidateLayerMappings(projectedMappings, "Projected project recognition mappings");
             return plans;
         }
 
@@ -297,6 +307,8 @@ namespace QS3D.Core.Templates
                 if (string.IsNullOrWhiteSpace(mapping.Key)) throw new InvalidDataException("Template layer mapping pattern is empty.");
                 if (!Enum.TryParse(mapping.Value, true, out ElementCategory _)) throw new InvalidDataException("Invalid template layer mapping category: " + mapping.Value);
             }
+            try { ProjectRecognitionService.ValidateLayerMappings(profile.LayerMappings, "Template layer mappings"); }
+            catch (InvalidOperationException ex) { throw new InvalidDataException(ex.Message, ex); }
         }
 
         private static IEnumerable<string> SplitColumns(string value) => (value ?? string.Empty).Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);

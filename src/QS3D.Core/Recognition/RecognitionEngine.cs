@@ -40,7 +40,9 @@ namespace QS3D.Core.Recognition
         public RecognitionResult(EntitySnapshot snapshot, IReadOnlyList<RecognitionCandidate> candidates)
         {
             Snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
-            Candidates = candidates ?? throw new ArgumentNullException(nameof(candidates));
+            if (candidates == null) throw new ArgumentNullException(nameof(candidates));
+            ValidateCandidates(candidates);
+            Candidates = candidates.ToList().AsReadOnly();
         }
         public EntitySnapshot Snapshot { get; }
         public IReadOnlyList<RecognitionCandidate> Candidates { get; }
@@ -51,6 +53,18 @@ namespace QS3D.Core.Recognition
         public string SuggestedCategory => TopCandidate?.Category.ToString() ?? string.Empty;
         public double Confidence => TopCandidate?.Confidence ?? 0d;
         public string Evidence => TopCandidate?.EvidenceText ?? string.Empty;
+
+        internal void ValidateCurrentCandidates() => ValidateCandidates(Candidates);
+
+        private static void ValidateCandidates(IEnumerable<RecognitionCandidate> candidates)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (candidate == null) throw new ArgumentException("Recognition candidate list cannot contain null.", nameof(candidates));
+                if (double.IsNaN(candidate.Confidence) || double.IsInfinity(candidate.Confidence) || candidate.Confidence < 0d || candidate.Confidence > 1d)
+                    throw new ArgumentOutOfRangeException(nameof(candidates), "Recognition confidence must be finite and between 0 and 1.");
+            }
+        }
     }
 
     public sealed class RecognitionBatch
@@ -58,21 +72,38 @@ namespace QS3D.Core.Recognition
         public RecognitionBatch(IEnumerable<RecognitionResult> results, double autoAcceptConfidence = 0.92d, double minimumMargin = 0.15d)
         {
             if (results == null) throw new ArgumentNullException(nameof(results));
-            if (autoAcceptConfidence < 0d || autoAcceptConfidence > 1d) throw new ArgumentOutOfRangeException(nameof(autoAcceptConfidence));
-            if (minimumMargin < 0d || minimumMargin > 1d) throw new ArgumentOutOfRangeException(nameof(minimumMargin));
-            Results = results.ToList();
-            AutoAccepted = Results.Where(x => x.TopCandidate is RecognitionCandidate candidate && candidate.Confidence >= autoAcceptConfidence && x.Margin >= minimumMargin).ToList();
-            ReviewRequired = Results.Except(AutoAccepted).ToList();
+            ValidateProbability(autoAcceptConfidence, nameof(autoAcceptConfidence));
+            ValidateProbability(minimumMargin, nameof(minimumMargin));
+            var materialized = results.ToList();
+            if (materialized.Any(x => x == null)) throw new ArgumentException("Recognition results cannot contain null.", nameof(results));
+            foreach (var result in materialized) result.ValidateCurrentCandidates();
+            Results = materialized.AsReadOnly();
+            AutoAccepted = Results.Where(x => x.TopCandidate is RecognitionCandidate candidate && candidate.Confidence >= autoAcceptConfidence && x.Margin >= minimumMargin).ToList().AsReadOnly();
+            ReviewRequired = Results.Except(AutoAccepted).ToList().AsReadOnly();
         }
         public IReadOnlyList<RecognitionResult> Results { get; }
         public IReadOnlyList<RecognitionResult> AutoAccepted { get; }
         public IReadOnlyList<RecognitionResult> ReviewRequired { get; }
+
+        private static void ValidateProbability(double value, string name)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d || value > 1d)
+                throw new ArgumentOutOfRangeException(name, "Recognition threshold must be finite and between 0 and 1.");
+        }
     }
 
     public sealed class RecognitionEngine
     {
         private readonly IReadOnlyList<RecognitionRule> _rules;
-        public RecognitionEngine(IEnumerable<RecognitionRule>? rules = null) => _rules = (rules ?? DefaultRules()).ToList();
+
+        public RecognitionEngine(IEnumerable<RecognitionRule>? rules = null)
+        {
+            var materialized = (rules ?? DefaultRules()).ToList();
+            if (materialized.Any(x => x == null)) throw new ArgumentException("Recognition rules cannot contain null.", nameof(rules));
+            var duplicate = materialized.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
+            if (duplicate != null) throw new ArgumentException("Duplicate recognition rule id: " + duplicate.Key, nameof(rules));
+            _rules = materialized.AsReadOnly();
+        }
 
         public RecognitionResult Suggest(EntitySnapshot snapshot)
         {

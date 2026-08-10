@@ -32,14 +32,37 @@ namespace QS3D.Core.Recognition
             return new RecognitionBatch(snapshots.Select(x => Suggest(project, x)), autoAcceptConfidence, minimumMargin);
         }
 
+        internal static void ValidateLayerMappings(IEnumerable<KeyValuePair<string, string>> mappings, string label)
+        {
+            if (mappings == null) throw new ArgumentNullException(nameof(mappings));
+            var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in mappings)
+            {
+                var pattern = (item.Key ?? string.Empty).Trim();
+                if (pattern.Length == 0) throw new InvalidOperationException(label + " contains an empty layer mapping pattern.");
+                var key = RecognitionText.Normalize(pattern);
+                if (key.Length == 0) throw new InvalidOperationException(label + " contains a layer mapping pattern that normalizes to empty: " + pattern);
+                if (!Enum.TryParse(item.Value, true, out ElementCategory _)) throw new InvalidOperationException(label + " contains an invalid layer mapping category for " + pattern + ": " + item.Value);
+                if (normalized.TryGetValue(key, out var previous))
+                    throw new InvalidOperationException(label + " contains ambiguous normalized layer mappings: " + previous + " and " + pattern + ".");
+                normalized.Add(key, pattern);
+            }
+        }
+
         private static RecognitionCandidate? ExactLayerMapping(ProjectState project, string layer)
         {
+            var mappings = project.Metadata
+                .Where(x => x.Key.StartsWith(TemplateProfileStore.LayerMappingPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(x => new KeyValuePair<string, string>(x.Key.Substring(TemplateProfileStore.LayerMappingPrefix.Length), x.Value))
+                .ToList();
+            ValidateLayerMappings(mappings, "Project recognition mappings");
+
             var normalizedLayer = RecognitionText.Normalize(layer);
-            foreach (var item in project.Metadata.Where(x => x.Key.StartsWith(TemplateProfileStore.LayerMappingPrefix, StringComparison.OrdinalIgnoreCase)).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            foreach (var item in mappings)
             {
-                var pattern = item.Key.Substring(TemplateProfileStore.LayerMappingPrefix.Length).Trim();
-                if (pattern.Length == 0 || !string.Equals(RecognitionText.Normalize(pattern), normalizedLayer, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!Enum.TryParse(item.Value, true, out ElementCategory category)) continue;
+                var pattern = item.Key.Trim();
+                if (!string.Equals(RecognitionText.Normalize(pattern), normalizedLayer, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!Enum.TryParse(item.Value, true, out ElementCategory category)) throw new InvalidOperationException("Invalid project layer mapping category: " + item.Value);
                 var candidate = new RecognitionCandidate { RuleId = "project-layer:" + pattern, Category = category, Confidence = 0.99d };
                 candidate.Evidence.Add("project-layer:" + pattern);
                 return candidate;
