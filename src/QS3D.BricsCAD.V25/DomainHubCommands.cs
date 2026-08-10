@@ -22,7 +22,7 @@ namespace QS3D.BricsCAD.V25
                 if (!_window.IsVisible) Application.ShowModelessWindow(IntPtr.Zero, _window, true);
                 else _window.Activate();
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var document = Application.DocumentManager.MdiActiveDocument;
                 document?.Editor.WriteMessage("\nQS3DDOMAIN error: " + ex.Message);

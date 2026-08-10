@@ -90,7 +90,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 document.Editor.WriteMessage("\nQS3DROOMAUTO error: " + ex.Message);
                 PaletteCoordinator.SetStatus("QS3DROOMAUTO lỗi: " + ex.Message);
