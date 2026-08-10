@@ -16,6 +16,8 @@ namespace QS3D.Core.SmokeTests
             ExternalDependentBlocksUntrack();
             CompleteDependentBatchCanUntrack();
             PredicateLimitsTargets();
+            DuplicateIdSameHandleFailsClosed();
+            DuplicateIdAcrossSelectedHandlesFailsClosed();
         }
 
         private static void SourceHandleUntracksOwner()
@@ -78,6 +80,24 @@ namespace QS3D.Core.SmokeTests
             Equal(1, result.Count);
             True(project.FindElement("R1") != null);
             True(project.FindElement("F1") == null);
+        }
+
+        private static void DuplicateIdSameHandleFailsClosed()
+        {
+            var project = Project("duplicate-same-handle");
+            project.Elements.Add(Element("W1", ElementCategory.ArchitecturalWall, "10"));
+            project.Elements.Add(Element("W1", ElementCategory.ArchitecturalWall, "10"));
+            Throws<InvalidOperationException>(() => SemanticUntrackService.Untrack(project, new[] { "10" }));
+            Equal(2, project.Elements.Count);
+        }
+
+        private static void DuplicateIdAcrossSelectedHandlesFailsClosed()
+        {
+            var project = Project("duplicate-selected-handles");
+            project.Elements.Add(Element("W1", ElementCategory.ArchitecturalWall, "10"));
+            project.Elements.Add(Element("W1", ElementCategory.ArchitecturalWall, "20"));
+            Throws<InvalidOperationException>(() => SemanticUntrackService.Untrack(project, new[] { "10", "20" }));
+            Equal(2, project.Elements.Count);
         }
 
         private static ProjectState Project(string suffix) => new ProjectState("untrack-" + suffix, "Untrack " + suffix);

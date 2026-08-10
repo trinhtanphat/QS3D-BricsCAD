@@ -29,7 +29,11 @@ checks = {
     "resolver": [
         "element.SourceHandles",
         "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
-        "ambiguously owned by semantic elements",
+        "ReferenceEquals(existing, element)",
+        "matchedById.TryGetValue(element.Id, out var existing)",
+        "is claimed by multiple semantic instances sharing duplicate ID",
+        "is duplicated across multiple project instances selected by CAD handles",
+        "Resolve project semantic ownership before continuing",
     ],
     "command": [
         'CommandMethod("QS3DUNTRACK"',
@@ -44,6 +48,8 @@ checks = {
         "ExternalDependentBlocksUntrack",
         "CompleteDependentBatchCanUntrack",
         "PredicateLimitsTargets",
+        "DuplicateIdSameHandleFailsClosed",
+        "DuplicateIdAcrossSelectedHandlesFailsClosed",
     ],
 }
 for key, needles in checks.items():
@@ -67,4 +73,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: untrack resolves source/generated selection through canonical ownership, blocks external semantic dependents, allows complete batches, and preserves CAD geometry.")
+print("PASS: untrack resolves source/generated selection through canonical ownership, fails closed on duplicate semantic instances, blocks external semantic dependents, allows complete batches, and preserves CAD geometry.")

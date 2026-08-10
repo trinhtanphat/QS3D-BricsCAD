@@ -28,9 +28,23 @@ namespace QS3D.Core.Services
                     Add(entry.Key, element, entry.Value, selected, owners, channels);
             }
 
-            return owners.Values
-                .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                .Select(x => x.First())
+            var matchedById = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in owners.Values)
+            {
+                if (matchedById.TryGetValue(element.Id, out var existing))
+                {
+                    if (!ReferenceEquals(existing, element))
+                    {
+                        throw new InvalidOperationException(
+                            "Semantic element ID " + element.Id +
+                            " is duplicated across multiple project instances selected by CAD handles. Repair duplicate semantic IDs before continuing.");
+                    }
+                    continue;
+                }
+                matchedById[element.Id] = element;
+            }
+
+            return matchedById.Values
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList()
                 .AsReadOnly();
@@ -48,9 +62,17 @@ namespace QS3D.Core.Services
             if (handle.Length == 0 || !selected.Contains(handle)) return;
             if (owners.TryGetValue(handle, out var existing))
             {
-                if (string.Equals(existing.Id, element.Id, StringComparison.OrdinalIgnoreCase)) return;
+                if (ReferenceEquals(existing, element)) return;
                 var existingChannel = channels.TryGetValue(handle, out var value) ? value : "unknown";
-                throw new InvalidOperationException("CAD handle " + handle + " is ambiguously owned by semantic elements " + existing.Id + " (" + existingChannel + ") and " + element.Id + " (" + channel + "). Resolve project ownership before bulk property edits.");
+                if (string.Equals(existing.Id, element.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "CAD handle " + handle + " is claimed by multiple semantic instances sharing duplicate ID " + element.Id +
+                        " (" + existingChannel + " / " + channel + "). Repair duplicate semantic IDs before continuing.");
+                }
+                throw new InvalidOperationException(
+                    "CAD handle " + handle + " is ambiguously owned by semantic elements " + existing.Id + " (" + existingChannel + ") and " +
+                    element.Id + " (" + channel + "). Resolve project semantic ownership before continuing.");
             }
             owners[handle] = element;
             channels[handle] = channel;
