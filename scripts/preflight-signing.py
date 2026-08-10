@@ -59,6 +59,7 @@ if release.is_file():
         "RELEASE_SIGN_PACKAGE: ${{ inputs.sign_package }}",
         "Stable release requires run_runtime=true.",
         "Stable release requires sign_package=true.",
+        "prerelease input must match the release_tag suffix",
         "Release tag $env:RELEASE_TAG does not match plugin package version $packageVersion. Refusing relabelled release.",
         "scripts\\sign-v25.ps1",
         "scripts\\verify-v25-signatures.ps1",
@@ -89,6 +90,8 @@ if release.is_file():
         errors.append("release-v25.yml runtime step must remain explicitly controlled by run_runtime")
     if "prerelease=true for an explicitly unqualified preview" not in text or "prerelease=true for an explicitly unsigned preview" not in text:
         errors.append("release-v25.yml must distinguish explicit prerelease exceptions from stable release requirements")
+    if "(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?" not in text:
+        errors.append("release-v25.yml release tag validation must support separate prerelease/build-metadata components")
 
 for path in ROOT.rglob("*.pfx"):
     errors.append("private signing certificate must not be committed: " + str(path.relative_to(ROOT)))
@@ -101,4 +104,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Authenticode uses the Windows certificate store/SHA-256/HTTPS timestamping, stable releases require real V25 runtime plus signed finalized payloads, and release tags are version-bound before publication.")
+print("PASS: Authenticode uses the Windows certificate store/SHA-256/HTTPS timestamping, stable releases require real V25 runtime plus signed finalized payloads, prerelease flags match tag semantics, and release tags are version-bound before publication.")
