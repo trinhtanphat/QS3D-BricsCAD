@@ -66,7 +66,12 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    Report(document, "Material Usage Table health: BLOCKED • chưa có QS3D project state/sidecar; health check không tạo project mới.");
+                    return;
+                }
+
                 var issues = MaterialUsageNativeTableBuilder.Inspect(document, project);
                 if (issues.Count == 0)
                 {

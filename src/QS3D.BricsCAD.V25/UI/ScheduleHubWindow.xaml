@@ -113,9 +113,15 @@
                                 <TextBlock Text="BẢNG TỔNG HỢP" Style="{StaticResource PanelTitle}"/>
                                 <Button Content="BQ tổng hợp" Tag="QS3DBQ" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Tạo/Cập nhật BQ DWG Table" Tag="QS3DBQTABLE" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
+                                <Button Content="Refresh BQ DWG Table" Tag="QS3DBQTABLEREFRESH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Kiểm tra BQ DWG Table" Tag="QS3DBQTABLEHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Xóa BQ DWG Table" Tag="QS3DBQTABLEREMOVE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="ED2 • Excel ↔ CAD" Tag="QS3DED2" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
                                 <Button Content="Excel → CAD" Tag="QS3DEXCELLOCATE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Tạo/Cập nhật Semantic DWG Table" Tag="QS3DELEMENTTABLE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Refresh Semantic DWG Table" Tag="QS3DELEMENTTABLEREFRESH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Kiểm tra Semantic DWG Table" Tag="QS3DELEMENTTABLEHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Xóa Semantic DWG Table" Tag="QS3DELEMENTTABLEREMOVE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Làm mới quantity" Tag="QS3DREGEN" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
@@ -125,7 +131,10 @@
                                 <Button Content="Xem HT_Phòng Schedule" Tag="QS3DFINISHSCHEDULE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Xuất HT_Phòng XLSX" Tag="QS3DFINISHXLSX" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
                                 <Button Content="Tạo/Cập nhật HT_Phòng DWG Table" Tag="QS3DFINISHTABLE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
-                                <Button Content="Kiểm tra HT_Phòng Health" Tag="QS3DROOMFINISHHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Refresh HT_Phòng DWG Table" Tag="QS3DFINISHTABLEREFRESH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Kiểm tra HT_Phòng DWG Table" Tag="QS3DFINISHTABLEHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Xóa HT_Phòng DWG Table" Tag="QS3DFINISHTABLEREMOVE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Kiểm tra HT_Phòng Semantic Health" Tag="QS3DROOMFINISHHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource ScheduleCard}" Margin="0">
@@ -134,6 +143,9 @@
                                 <Button Content="Material Catalog" Tag="QS3DMATERIALS" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Xuất Material XLSX" Tag="QS3DMATERIALXLSX" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
                                 <Button Content="Tạo/Cập nhật Material DWG Table" Tag="QS3DMATERIALTABLE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Refresh Material DWG Table" Tag="QS3DMATERIALTABLEREFRESH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Kiểm tra Material DWG Table" Tag="QS3DMATERIALTABLEHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Xóa Material DWG Table" Tag="QS3DMATERIALTABLEREMOVE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -152,6 +164,9 @@
                                 <Button Content="Xem Door/Opening Schedule" Tag="QS3DDOORSCHEDULE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Xuất Door/Opening XLSX" Tag="QS3DDOORXLSX" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
                                 <Button Content="Tạo/Cập nhật Door/Opening DWG Table" Tag="QS3DDOOROPENINGTABLE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Refresh Door/Opening DWG Table" Tag="QS3DDOOROPENINGTABLEREFRESH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Kiểm tra Door/Opening DWG Table" Tag="QS3DDOOROPENINGTABLEHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Xóa Door/Opening DWG Table" Tag="QS3DDOOROPENINGTABLEREMOVE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource ScheduleCard}" Margin="0">
@@ -165,7 +180,7 @@
                     </StackPanel>
                 </Grid>
 
-                <TextBlock Text="Các badge dùng cùng builder/validation với schedule &amp; export. Hub khóa theo bản vẽ đã mở; khi chuyển sang DWG khác, snapshot cũ được giữ và command bị từ chối cho tới khi kích hoạt lại đúng bản vẽ."
+                <TextBlock Text="Native DWG Table có vòng đời Create/Refresh/Health/Remove riêng, dùng project-level QS3DDOC ownership. Health/Release chỉ đọc project hiện có và không tạo project state mới. Hub khóa theo bản vẽ đã mở; khi chuyển sang DWG khác, snapshot cũ được giữ và command bị từ chối cho tới khi kích hoạt lại đúng bản vẽ."
                            Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="3,10,3,0"/>
             </StackPanel>
         </ScrollViewer>
