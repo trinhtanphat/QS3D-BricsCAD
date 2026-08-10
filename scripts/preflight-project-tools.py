@@ -24,6 +24,7 @@ checks = {
         'x:Name="FloorText"',
         'Tag="QS3DLEVELS"',
         'Tag="QS3DMATERIALS"',
+        'Tag="QS3DMATERIALXLSX"',
         'Tag="QS3DTEMPLATEEXPORT"',
         'Tag="QS3DTEMPLATEIMPORT"',
         'Tag="QS3DCURTAIN"',
@@ -33,19 +34,26 @@ checks = {
         'Tag="QS3DHEALTHALL"',
         'Tag="QS3DAUDIT"',
         'Click="OnCommandClick"',
+        "Cửa sổ này khóa theo bản vẽ đã mở",
     ],
     "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml.cs": [
-        "ProjectContextCoordinator.GetOrCreate",
+        "private readonly Document _document",
+        "ProjectToolsWindow(Document document)",
+        "ProjectContextCoordinator.GetOrCreate(_document)",
+        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
+        "EnsureBoundDrawingIsActive",
         "project.ActiveFloorId",
         "project.Families.Count",
         "project.Elements.Count",
-        "SendStringToExecute",
+        "_document.SendStringToExecute",
         "Activated +=",
+        "DrawingLabel(_document)",
     ],
     "src/QS3D.BricsCAD.V25/ProjectToolsCommands.cs": [
         'CommandMethod("QS3DPROJECTTOOLS"',
-        "new ProjectToolsWindow()",
+        "new ProjectToolsWindow(document)",
         "ShowModelessWindow",
+        "khóa theo bản vẽ",
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/ProjectRibbonAugmenter.cs": [
         'TabId = "QS3D_PROJECT"',
@@ -73,6 +81,12 @@ for relative, needles in checks.items():
         if needle not in text:
             errors.append(relative + " missing Project Tools guard/token: " + needle)
 
+code = ROOT / "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml.cs"
+if code.is_file():
+    text = code.read_text(encoding="utf-8")
+    if "var document = Application.DocumentManager.MdiActiveDocument" in text:
+        errors.append("ProjectToolsWindow must not switch project ownership through MdiActiveDocument inside modeless event handlers")
+
 # Every command referenced by Project Tools must exist exactly once in the adapter command surface.
 commands = []
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
@@ -80,7 +94,7 @@ if adapter.is_dir():
     for path in adapter.rglob("*.cs"):
         commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', path.read_text(encoding="utf-8"))
 for command in (
-    "QS3DPROJECTTOOLS", "QS3DLEVELS", "QS3DMATERIALS", "QS3DTEMPLATEEXPORT", "QS3DTEMPLATEIMPORT",
+    "QS3DPROJECTTOOLS", "QS3DLEVELS", "QS3DMATERIALS", "QS3DMATERIALXLSX", "QS3DTEMPLATEEXPORT", "QS3DTEMPLATEIMPORT",
     "QS3DSAVE", "QS3DRELOAD", "QS3DCURTAIN", "QS3DGEOMETRYEXT", "QS3DREBARHUB", "QS3DBQ",
     "QS3DREGEN", "QS3DHEALTHALL", "QS3DAUDIT", "QS3D", "QS3DREFRESH"):
     if commands.count(command) != 1:
@@ -92,4 +106,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: consolidated Project Tools hub, live project snapshot, command wiring and additive QS3D_PROJECT ribbon shortcuts are present without rewriting the base ribbon spec.")
+print("PASS: document-bound Project Tools hub, material XLSX shortcut, live project snapshot, command wiring and additive QS3D_PROJECT ribbon shortcuts are present without rewriting the base ribbon spec.")
