@@ -8,28 +8,56 @@ using QS3D.Core.Persistence;
 
 namespace QS3D.Core.Export
 {
-    public sealed class ProjectInterchangeAppendOnlyImportResult
+    public sealed class ProjectInterchangeAppendOnlyImportPlan
     {
-        internal ProjectInterchangeAppendOnlyImportResult(
+        internal ProjectInterchangeAppendOnlyImportPlan(
             string sourceProjectId,
             int sourceSchemaVersion,
             string sourceDrawingFingerprint,
-            int zonesAdded,
-            int floorsAdded,
-            int familiesAdded,
-            int elementsAdded,
-            int sourceHandlesDiscarded,
+            int zonesToAdd,
+            int floorsToAdd,
+            int familiesToAdd,
+            int elementsToAdd,
+            int sourceHandlesToDiscard,
             int validationWarnings)
         {
             SourceProjectId = sourceProjectId;
             SourceSchemaVersion = sourceSchemaVersion;
             SourceDrawingFingerprint = sourceDrawingFingerprint;
-            ZonesAdded = zonesAdded;
-            FloorsAdded = floorsAdded;
-            FamiliesAdded = familiesAdded;
-            ElementsAdded = elementsAdded;
-            SourceHandlesDiscarded = sourceHandlesDiscarded;
+            ZonesToAdd = zonesToAdd;
+            FloorsToAdd = floorsToAdd;
+            FamiliesToAdd = familiesToAdd;
+            ElementsToAdd = elementsToAdd;
+            SourceHandlesToDiscard = sourceHandlesToDiscard;
             ValidationWarnings = validationWarnings;
+        }
+
+        public string SourceProjectId { get; }
+        public int SourceSchemaVersion { get; }
+        public string SourceDrawingFingerprint { get; }
+        public int ZonesToAdd { get; }
+        public int FloorsToAdd { get; }
+        public int FamiliesToAdd { get; }
+        public int ElementsToAdd { get; }
+        public int SourceHandlesToDiscard { get; }
+        public int ValidationWarnings { get; }
+        public int TotalSemanticIdentitiesToAdd => checked(ZonesToAdd + FloorsToAdd + FamiliesToAdd + ElementsToAdd);
+    }
+
+    public sealed class ProjectInterchangeAppendOnlyImportResult
+    {
+        internal ProjectInterchangeAppendOnlyImportResult(ProjectInterchangeAppendOnlyImportPlan plan)
+        {
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            SourceProjectId = plan.SourceProjectId;
+            SourceSchemaVersion = plan.SourceSchemaVersion;
+            SourceDrawingFingerprint = plan.SourceDrawingFingerprint;
+            ZonesAdded = plan.ZonesToAdd;
+            FloorsAdded = plan.FloorsToAdd;
+            FamiliesAdded = plan.FamiliesToAdd;
+            ElementsAdded = plan.ElementsToAdd;
+            SourceHandlesDiscarded = plan.SourceHandlesToDiscard;
+            ValidationWarnings = plan.ValidationWarnings;
         }
 
         public string SourceProjectId { get; }
@@ -45,6 +73,18 @@ namespace QS3D.Core.Export
 
     public static class ProjectInterchangeAppendOnlyImporter
     {
+        private sealed class PreparedImport
+        {
+            public PreparedImport(ProjectInterchangeValidatedSnapshot source, ProjectInterchangeAppendOnlyImportPlan plan)
+            {
+                Source = source;
+                Plan = plan;
+            }
+
+            public ProjectInterchangeValidatedSnapshot Source { get; }
+            public ProjectInterchangeAppendOnlyImportPlan Plan { get; }
+        }
+
         public const string ImportMode = "AppendOnly";
         public const string LastModeKey = "Interchange.LastImport.Mode";
         public const string LastSourceProjectIdKey = "Interchange.LastImport.SourceProjectId";
@@ -54,15 +94,19 @@ namespace QS3D.Core.Export
         public const string LastImportedUtcKey = "Interchange.LastImport.Utc";
         public const string LastSourceHandlesDiscardedKey = "Interchange.LastImport.SourceHandlesDiscarded";
 
+        public static ProjectInterchangeAppendOnlyImportPlan Plan(ProjectState target, string json)
+        {
+            if (target == null) throw new ArgumentNullException(nameof(target));
+            return Prepare(target, json).Plan;
+        }
+
         public static ProjectInterchangeAppendOnlyImportResult Import(ProjectState target, string json)
         {
             if (target == null) throw new ArgumentNullException(nameof(target));
 
-            ValidateTarget(target);
-            var source = ProjectInterchangeValidatedSnapshotReader.Read(json);
-            PreflightCollisions(target, source);
-
-            var sourceHandlesDiscarded = source.Elements.Sum(x => x.SourceHandles.Count);
+            var prepared = Prepare(target, json);
+            var source = prepared.Source;
+            var plan = prepared.Plan;
             var snapshot = ProjectStateSnapshot.Capture(target);
             var targetHadZones = target.Zones.Count > 0;
             var targetHadFloors = target.Floors.Count > 0;
@@ -131,36 +175,49 @@ namespace QS3D.Core.Export
                 target.Metadata[LastSourceDrawingFingerprintKey] = source.Project.DrawingFingerprint;
                 target.Metadata[LastSourceUpdatedUtcKey] = source.Project.UpdatedUtcRaw;
                 target.Metadata[LastImportedUtcKey] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-                target.Metadata[LastSourceHandlesDiscardedKey] = sourceHandlesDiscarded.ToString(CultureInfo.InvariantCulture);
+                target.Metadata[LastSourceHandlesDiscardedKey] = plan.SourceHandlesToDiscard.ToString(CultureInfo.InvariantCulture);
 
                 AuditTrail.ForProject(target).Record(
                     "ImportInterchangeAppendOnly",
                     string.Empty,
                     "Imported semantic snapshot from project " + source.Project.Id +
-                    ": zones=" + source.Zones.Count.ToString(CultureInfo.InvariantCulture) +
-                    ", floors=" + source.Floors.Count.ToString(CultureInfo.InvariantCulture) +
-                    ", families=" + source.Families.Count.ToString(CultureInfo.InvariantCulture) +
-                    ", elements=" + source.Elements.Count.ToString(CultureInfo.InvariantCulture) +
-                    ", discardedDrawingHandles=" + sourceHandlesDiscarded.ToString(CultureInfo.InvariantCulture) + ".");
+                    ": zones=" + plan.ZonesToAdd.ToString(CultureInfo.InvariantCulture) +
+                    ", floors=" + plan.FloorsToAdd.ToString(CultureInfo.InvariantCulture) +
+                    ", families=" + plan.FamiliesToAdd.ToString(CultureInfo.InvariantCulture) +
+                    ", elements=" + plan.ElementsToAdd.ToString(CultureInfo.InvariantCulture) +
+                    ", discardedDrawingHandles=" + plan.SourceHandlesToDiscard.ToString(CultureInfo.InvariantCulture) + ".");
 
                 ValidateTarget(target);
-
-                return new ProjectInterchangeAppendOnlyImportResult(
-                    source.Project.Id,
-                    source.Project.SchemaVersion,
-                    source.Project.DrawingFingerprint,
-                    source.Zones.Count,
-                    source.Floors.Count,
-                    source.Families.Count,
-                    source.Elements.Count,
-                    sourceHandlesDiscarded,
-                    source.Validation.WarningCount);
+                return new ProjectInterchangeAppendOnlyImportResult(plan);
             }
             catch
             {
                 snapshot.Restore(target);
                 throw;
             }
+        }
+
+        private static PreparedImport Prepare(ProjectState target, string json)
+        {
+            ValidateTarget(target);
+            var source = ProjectInterchangeValidatedSnapshotReader.Read(json);
+            PreflightCollisions(target, source);
+
+            var sourceHandlesToDiscard = 0;
+            foreach (var element in source.Elements)
+                sourceHandlesToDiscard = checked(sourceHandlesToDiscard + element.SourceHandles.Count);
+
+            var plan = new ProjectInterchangeAppendOnlyImportPlan(
+                source.Project.Id,
+                source.Project.SchemaVersion,
+                source.Project.DrawingFingerprint,
+                source.Zones.Count,
+                source.Floors.Count,
+                source.Families.Count,
+                source.Elements.Count,
+                sourceHandlesToDiscard,
+                source.Validation.WarningCount);
+            return new PreparedImport(source, plan);
         }
 
         private static void PreflightCollisions(ProjectState target, ProjectInterchangeValidatedSnapshot source)
