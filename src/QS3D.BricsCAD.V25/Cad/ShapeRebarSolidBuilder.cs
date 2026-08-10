@@ -70,7 +70,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (!rows.TryGetValue(element.Id, out var elementRows) || elementRows.Count == 0) continue;
                     var requested = elementRows.Sum(x => (long)x.Quantity);
                     if (requested > MaxBarsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxBarsPerElement + " thanh shape 3D.");
-                    var source = OpenFirstSource(document, transaction, element) ?? throw new InvalidOperationException("Không tìm thấy source CAD cho " + element.Id);
+                    var source = OpenSelectedSource(document, transaction, element, selectedHandles) ?? throw new InvalidOperationException("Không tìm thấy selected live source CAD cho " + element.Id);
                     var placement = ResolvePlacement(document, project, element, source);
                     ErasePrevious(document, transaction, element, ownership);
                     var item = new PendingElement { Element = element };
@@ -172,7 +172,20 @@ namespace QS3D.BricsCAD.V25.Cad
             finally { solid?.Dispose(); }
         }
 
-        private static double DistributionOffset(int index, int count, double span, double cover, double radius) { if (count <= 1) return 0d; var usable = Math.Max(0d, span - 2d * (cover + radius)); return usable * index / (count - 1d); }
+        private static double DistributionOffset(int index, int count, double span, double cover, double radius)
+        {
+            if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count));
+            span = CadGeometryGuard.Positive(span, "shape rebar distribution span");
+            cover = CadGeometryGuard.Finite(cover, "shape rebar distribution cover");
+            radius = CadGeometryGuard.Positive(radius, "shape rebar distribution radius");
+            if (cover < 0d) throw new InvalidOperationException("Shape rebar distribution cover không được âm.");
+            var usable = CadGeometryGuard.Finite(span - 2d * (cover + radius), "shape rebar usable distribution span");
+            if (usable < 0d) throw new InvalidOperationException("Cover + bar radius leaves no usable shape-rebar distribution span inside the host.");
+            if (count == 1) return 0d;
+            if (!(usable > 1e-12d)) throw new InvalidOperationException("Multiple shape rebars require a positive usable distribution span.");
+            return CadGeometryGuard.Finite(usable * index / (count - 1d), "shape rebar distribution offset");
+        }
+
         private static Vector3d Normalize(Vector3d vector, string label) { var length = vector.Length; if (length <= 1e-12 || double.IsNaN(length) || double.IsInfinity(length)) throw new InvalidOperationException("Không xác định được " + label + "."); return new Vector3d(vector.X / length, vector.Y / length, vector.Z / length); }
         private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
@@ -190,14 +203,23 @@ namespace QS3D.BricsCAD.V25.Cad
                 solid.Erase();
             }
         }
-        private static Entity? OpenFirstSource(Document document, Transaction transaction, ProjectElement element)
+        private static Entity? OpenSelectedSource(Document document, Transaction transaction, ProjectElement element, ISet<string> selectedHandles)
         {
-            foreach (var text in element.SourceHandles)
+            Entity? selected = null;
+            foreach (var text in element.SourceHandles.Where(selectedHandles.Contains))
             {
-                if (!long.TryParse(text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) continue;
-                try { var id = document.Database.GetObjectId(false, new Handle(value), 0); if (id.IsNull || !id.IsValid) continue; var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity; if (entity != null && !entity.IsErased) return entity; } catch { }
+                if (!long.TryParse(text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+                    throw new InvalidOperationException("Selected source handle is invalid for " + element.Id + ": " + text);
+                ObjectId id;
+                try { id = document.Database.GetObjectId(false, new Handle(value), 0); }
+                catch { continue; }
+                if (id.IsNull || !id.IsValid) continue;
+                var entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
+                if (entity == null || entity.IsErased) continue;
+                if (selected != null) throw new InvalidOperationException("Element " + element.Id + " có nhiều selected live source. Chọn đúng một source CAD để xác định placement shape rebar 3D.");
+                selected = entity;
             }
-            return null;
+            return selected;
         }
         private static string? Text(ProjectElement element, string key) => element.Properties.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
     }
