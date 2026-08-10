@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             GeneratedOwnershipPropertiesRemainBlocked();
             OutputSnapshotsAreDefensivelyImmutable();
             UnusedReferenceIndexesStayLazy();
+            OversizedEnumerablesStopAtDeclaredBounds();
         }
 
         private static void ExplicitOrderAndTemplatesArePreserved()
@@ -154,6 +155,36 @@ namespace QS3D.Core.SmokeTests
                 new[] { new SemanticDocumentationColumn("Family", "{Family}") }));
         }
 
+        private static void OversizedEnumerablesStopAtDeclaredBounds()
+        {
+            var project = new ProjectState("table", "Table");
+            var element = Element(project, "E-1", ElementCategory.Beam, "B1", 1.0);
+
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                GuardedIds(5001),
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") }), "at most 5000 rows");
+
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                new[] { element.Id },
+                GuardedColumns(33)), "at most 32 columns");
+        }
+
+        private static IEnumerable<string> GuardedIds(int allowedItems)
+        {
+            for (var i = 0; i < allowedItems; i++) yield return "ROW-" + i;
+            throw new Exception("Documentation table enumerated row input beyond its declared hard limit.");
+        }
+
+        private static IEnumerable<SemanticDocumentationColumn> GuardedColumns(int allowedItems)
+        {
+            for (var i = 0; i < allowedItems; i++) yield return new SemanticDocumentationColumn("H-" + i, "{Id}");
+            throw new Exception("Documentation table enumerated column input beyond its declared hard limit.");
+        }
+
         private static ProjectElement Element(ProjectState project, string id, ElementCategory category, string mark, double length)
         {
             var element = new ProjectElement(id, category, string.Empty, string.Empty, string.Empty);
@@ -172,6 +203,17 @@ namespace QS3D.Core.SmokeTests
         {
             try { action(); }
             catch (T) { return; }
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private static void ThrowsMessage<T>(Action action, string expectedMessage) where T : Exception
+        {
+            try { action(); }
+            catch (T ex)
+            {
+                if (ex.Message.IndexOf(expectedMessage, StringComparison.OrdinalIgnoreCase) >= 0) return;
+                throw new Exception("Expected exception message containing '" + expectedMessage + "', got '" + ex.Message + "'.");
+            }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
         }
     }
