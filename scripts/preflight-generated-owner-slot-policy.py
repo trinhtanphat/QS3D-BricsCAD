@@ -12,6 +12,9 @@ checks = {
         "IsRebarOwnerSlot",
         "GeneratedFoundationMeshHandles",
         "PhysicalOpeningCutSolidHandle",
+        "CanonicalOwnerSlot",
+        "AreSameLogicalOwnerSlots",
+        "EnumerateLogicalOwnerHandles",
     ],
     "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs": [
         "GeneratedHandleOwnershipPolicy.RebarHandleKeys",
@@ -32,6 +35,8 @@ checks = {
     "src/QS3D.BricsCAD.V25/GeneratedHandleOwnershipPolicy.cs": [
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.RebarHandleKeys",
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.IsOwnerSlot",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles",
     ],
     "src/QS3D.BricsCAD.V25/HealthAllCommands.cs": [
         "OwnerSlotHandles",
@@ -43,6 +48,9 @@ checks = {
         "GeneratedFoundationMeshHandles",
         "GeneratedCurtainFrameHandles",
         "PreviewHandle",
+        "PhysicalOpeningCutSolidHandle",
+        "CanonicalOwnerSlot",
+        "EnumerateLogicalOwnerHandles",
         "ModuleInitializer",
     ],
 }
@@ -75,4 +83,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: generated owner slots use one Core policy across health, destructive guards, invalidation and Health All locate.")
+print("PASS: generated owner slots use one Core policy across health, destructive guards, invalidation and Health All locate; logical host/opening aliases canonicalize without hiding different generated families.")
