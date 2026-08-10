@@ -14,7 +14,7 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class QuantitySummaryWindow : Window
     {
-        private static readonly string[] ColumnKeys = { "Floor", "Category", "FamilyName", "Count", "GrossConcreteM3", "DeductionM3", "NetConcreteM3", "FormworkM2", "LengthM", "OuterPerimeterM", "InnerPerimeterM", "DoorAreaM2", "SideAreaM2", "BottomAreaM2", "TopAreaM2", "OtherAreaM2" };
+        private static readonly string[] ColumnKeys = { "Floor", "Category", "FamilyName", "Count", "GrossConcreteM3", "DeductionM3", "NetConcreteM3", "FormworkM2", "LengthM", "OuterPerimeterM", "InnerPerimeterM", "DoorAreaM2", "SideAreaM2", "BottomAreaM2", "TopAreaM2", "OtherAreaM2", "SourceHandleText" };
         private IReadOnlyList<QuantityReportRow> _rows;
         private readonly Action<QuantityReportRow>? _locate;
         private readonly Func<IReadOnlyList<QuantityReportRow>>? _recalculate;
@@ -32,9 +32,16 @@ namespace QS3D.BricsCAD.V25.UI
         private void ApplyFilter()
         {
             if (QuantityGrid == null || TotalsText == null) return;
-            var query = SearchBox == null ? string.Empty : (SearchBox.Text ?? string.Empty).Trim(); var category = CategoryList?.SelectedItem as string ?? "Tất cả"; var floor = FloorCombo?.SelectedItem as string ?? "Tất cả";
-            var filtered = _rows.Where(x => (floor == "Tất cả" || string.Equals(x.Floor, floor, StringComparison.OrdinalIgnoreCase)) && (category == "Tất cả" || string.Equals(x.Category, category, StringComparison.OrdinalIgnoreCase)) && (query.Length == 0 || x.FamilyName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.Category.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.Floor.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
-            QuantityGrid.ItemsSource = filtered; var totals = QuantityReportTotals.FromRows(filtered); TotalsText.Text = $"TỔNG: {totals.Count:N0} cấu kiện  •  Bê tông {totals.NetConcreteM3:N3} m³  •  Cốp pha {totals.FormworkM2:N3} m²  •  Dài {totals.LengthM:N3} m  •  DT cửa {totals.DoorAreaM2:N3} m²";
+            var query = SearchBox == null ? string.Empty : (SearchBox.Text ?? string.Empty).Trim();
+            var category = CategoryList?.SelectedItem as string ?? "Tất cả";
+            var floor = FloorCombo?.SelectedItem as string ?? "Tất cả";
+            var filtered = _rows.Where(x =>
+                (floor == "Tất cả" || string.Equals(x.Floor, floor, StringComparison.OrdinalIgnoreCase)) &&
+                (category == "Tất cả" || string.Equals(x.Category, category, StringComparison.OrdinalIgnoreCase)) &&
+                (query.Length == 0 || x.FamilyName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.Category.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.Floor.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || x.SourceHandleText.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
+            QuantityGrid.ItemsSource = filtered;
+            var totals = QuantityReportTotals.FromRows(filtered);
+            TotalsText.Text = $"TỔNG: {totals.Count:N0} cấu kiện  •  Bê tông {totals.NetConcreteM3:N3} m³  •  Cốp pha {totals.FormworkM2:N3} m²  •  Dài {totals.LengthM:N3} m  •  DT cửa {totals.DoorAreaM2:N3} m²";
         }
 
         private void LoadColumnPreferences()
@@ -50,8 +57,8 @@ namespace QS3D.BricsCAD.V25.UI
             for (var index = 0; index < QuantityGrid.Columns.Count && index < ColumnKeys.Length; index++) if (QuantityGrid.Columns[index].Visibility == Visibility.Visible) visible.Add(ColumnKeys[index]);
             _project.Metadata[TemplateProfileStore.VisibleBqColumnsKey] = string.Join("|", visible); _project.Touch();
         }
-        private IEnumerable<CheckBox> ColumnToggleBoxes() { foreach (var child in LogicalChildren(this)) if (child is CheckBox box && box.Tag != null) yield return box; }
-        private static IEnumerable<object> LogicalChildren(DependencyObject parent) { foreach (var child in LogicalTreeHelper.GetChildren(parent).Cast<object>()) { yield return child; if (child is DependencyObject dependency) foreach (var nested in LogicalChildren(dependency)) yield return nested; } }
+        private IEnumerable<CheckBox> ColumnToggleBoxes() { foreach (var child in EnumerateLogicalChildren(this)) if (child is CheckBox box && box.Tag != null) yield return box; }
+        private static IEnumerable<object> EnumerateLogicalChildren(DependencyObject parent) { foreach (var child in LogicalTreeHelper.GetChildren(parent).Cast<object>()) { yield return child; if (child is DependencyObject dependency) foreach (var nested in EnumerateLogicalChildren(dependency)) yield return nested; } }
         private static bool TryColumnIndex(CheckBox box, out int index) => int.TryParse(box.Tag?.ToString(), out index) && index >= 0;
         private static ProjectState? ResolveProject() { try { var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument; return document == null ? null : ProjectContextCoordinator.GetOrCreate(document); } catch { return null; } }
 
