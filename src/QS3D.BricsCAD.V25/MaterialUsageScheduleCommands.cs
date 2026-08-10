@@ -31,6 +31,10 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
+                var materials = rows.Select(x => x.MaterialName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                var elements = 0;
+                foreach (var row in rows) elements = QuantityReportMath.AddCount(elements, row.ElementCount);
+
                 var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
                 var dialog = new SaveFileDialog
                 {
@@ -43,18 +47,35 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
                 MaterialUsageXlsxExporter.Export(dialog.FileName, rows);
-                var materials = rows.Select(x => x.MaterialName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-                var elements = 0;
-                foreach (var row in rows) elements = QuantityReportMath.AddCount(elements, row.ElementCount);
+
                 var status = "Material XLSX: " + rows.Count + " nhóm • " + materials + " vật liệu • " + elements + " lượt cấu kiện/component.";
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status + "\n" + dialog.FileName);
+                FinalizeUi(document, status, dialog.FileName);
             }
             catch (System.Exception ex)
             {
                 var status = "QS3DMATERIALXLSX lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\n" + status);
+            }
+        }
+
+        private static void FinalizeUi(Document document, string status, string fileName)
+        {
+            try
+            {
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\nQS3D " + status + "\n" + fileName);
+            }
+            catch (System.Exception ex)
+            {
+                try
+                {
+                    document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export: " + ex.Message);
+                }
+                catch
+                {
+                    // Export has already committed; UI reporting is best effort only.
+                }
             }
         }
     }
