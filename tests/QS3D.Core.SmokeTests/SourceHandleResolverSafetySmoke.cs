@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -13,6 +15,9 @@ namespace QS3D.Core.SmokeTests
             DependencyCycleTerminatesDeterministically();
             DuplicateElementIdsFailClosed();
             DirectAndDependencyHandleOrderIsStable();
+            SourceReferenceWinsOverGeneratedFallback();
+            BoundaryReferenceWinsOverGeneratedFallback();
+            CanonicalGeneratedOwnersResolveWhenSourceIsMissing();
         }
 
         private static void DeepDependencyChainDoesNotUseProcessStack()
@@ -78,6 +83,62 @@ namespace QS3D.Core.SmokeTests
             var handles = SourceHandleResolver.Resolve(project, new[] { "ROOT" });
             if (handles.Count != 3 || handles[0] != "ROOT-H" || handles[1] != "FIRST-H" || handles[2] != "SECOND-H")
                 throw new Exception("Iterative source-handle traversal must preserve dependency encounter order.");
+        }
+
+        private static void SourceReferenceWinsOverGeneratedFallback()
+        {
+            var project = new ProjectState("source-priority", "Source Priority");
+            var element = NewElement("E");
+            element.SourceHandles.Add("SOURCE-H");
+            element.Properties["GeneratedTieRebarHandles"] = "TIE-A;TIE-B";
+            project.Elements.Add(element);
+
+            var handles = SourceHandleResolver.Resolve(project, new[] { element.Id });
+            if (handles.Count != 1 || handles[0] != "SOURCE-H")
+                throw new Exception("Source handles must remain authoritative over generated-owner locate fallback.");
+        }
+
+        private static void BoundaryReferenceWinsOverGeneratedFallback()
+        {
+            var project = new ProjectState("boundary-priority", "Boundary Priority");
+            var element = NewElement("E");
+            element.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = "BOUND-A;BOUND-B";
+            element.Properties["GeneratedCurtainFrameHandles"] = "FRAME-A";
+            project.Elements.Add(element);
+
+            var handles = SourceHandleResolver.Resolve(project, new[] { element.Id });
+            if (handles.Count != 2 || handles[0] != "BOUND-A" || handles[1] != "BOUND-B")
+                throw new Exception("Boundary source handles must remain authoritative over generated-owner locate fallback.");
+        }
+
+        private static void CanonicalGeneratedOwnersResolveWhenSourceIsMissing()
+        {
+            var slots = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["GeneratedSolidHandle"] = "A1",
+                ["GeneratedRebarHandles"] = "A2;A3",
+                ["GeneratedShapeRebarHandles"] = "A4",
+                ["GeneratedTieRebarHandles"] = "A5",
+                ["GeneratedBeamStirrupHandles"] = "A6",
+                ["GeneratedSlabMeshHandles"] = "A7",
+                ["GeneratedWallMeshHandles"] = "A8",
+                ["GeneratedFoundationMeshHandles"] = "A9",
+                ["GeneratedCurtainFrameHandles"] = "AA",
+                ["PhysicalOpeningCutSolidHandle"] = "AB"
+            };
+
+            foreach (var pair in slots)
+            {
+                var project = new ProjectState("generated-" + pair.Key, "Generated " + pair.Key);
+                var element = NewElement("E");
+                element.Properties[pair.Key] = pair.Value;
+                project.Elements.Add(element);
+
+                var expected = pair.Value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).ToArray();
+                var handles = SourceHandleResolver.Resolve(project, new[] { element.Id });
+                if (handles.Count != expected.Length || expected.Any(x => !handles.Contains(x, StringComparer.OrdinalIgnoreCase)))
+                    throw new Exception("Canonical generated-owner locate fallback did not resolve slot " + pair.Key + ".");
+            }
         }
 
         private static ProjectElement NewElement(string id) =>

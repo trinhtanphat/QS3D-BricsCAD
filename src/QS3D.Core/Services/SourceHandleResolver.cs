@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Services
@@ -32,7 +33,7 @@ namespace QS3D.Core.Services
                     if (!hasDirectReference)
                         AddBoundaryHandles(element, knownHandles, handles, out hasBoundaryReference);
                     if (!hasDirectReference && !hasBoundaryReference)
-                        AddGeneratedSolidHandle(element, knownHandles, handles);
+                        AddGeneratedOwnerHandles(element, knownHandles, handles);
 
                     if (AutoRoomLifecycle.IsRoomFinishCategory(element.Category))
                     {
@@ -88,11 +89,13 @@ namespace QS3D.Core.Services
             }
         }
 
-        private static void AddGeneratedSolidHandle(ProjectElement element, ISet<string> knownHandles, ICollection<string> handles)
+        private static void AddGeneratedOwnerHandles(ProjectElement element, ISet<string> knownHandles, ICollection<string> handles)
         {
-            if (!element.Properties.TryGetValue("GeneratedSolidHandle", out var generatedHandle)) return;
-            var normalized = (generatedHandle ?? string.Empty).Trim();
-            if (normalized.Length > 0 && knownHandles.Add(normalized)) handles.Add(normalized);
+            foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element))
+            {
+                var normalized = (entry.Key ?? string.Empty).Trim();
+                if (normalized.Length > 0 && knownHandles.Add(normalized)) handles.Add(normalized);
+            }
         }
     }
 }

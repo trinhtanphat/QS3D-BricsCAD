@@ -44,10 +44,13 @@ namespace QS3D.BricsCAD.V25.Cad
             return result;
         }
 
-        public static int Select(Document document, IEnumerable<string> handles)
+        public static int Select(Document document, IEnumerable<string> handles) => SelectIfAny(document, handles);
+
+        public static int SelectIfAny(Document document, IEnumerable<string> handles)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             var ids = Resolve(document, handles);
+            if (ids.Count == 0) return 0;
             document.Editor.SetImpliedSelection(new List<ObjectId>(ids).ToArray());
             return ids.Count;
         }
