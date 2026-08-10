@@ -50,9 +50,15 @@ P1 creates one real DWG source, captures exactly one semantic element, writes us
 - `QS3DDRAWDOOR`
 - `QS3DDRAWOPENING`
 
-These commands are now source-implemented and statically guarded. The user picks two plan-view edge points; QS3D creates a real Model-Space LINE whose plan length becomes `WidthM`, prompts/inherits `HeightM`, non-negative sill/bottom offset and `BooleanClearanceM`, captures exactly one semantic Door/WallOpening, regenerates, selects only that new source, and reuses the established selection-scoped Auto Host path. A valid authoring commit requires a non-empty `HostWallId` plus post-link deterministic regeneration. No-host or ambiguous-host placement rolls back the operation-created source and project state rather than leaving an orphan semantic opening.
+These commands are source-implemented and statically guarded. The user picks two plan-view edge points; QS3D creates a real Model-Space LINE whose plan length becomes `WidthM`, prompts/inherits `HeightM`, non-negative sill/bottom offset and `BooleanClearanceM`, captures exactly one semantic Door/WallOpening, regenerates, selects only that new source, and reuses the established selection-scoped Auto Host path. A valid authoring commit requires a non-empty `HostWallId` plus post-link deterministic regeneration. No-host or ambiguous-host placement rolls back the operation-created source and project state rather than leaving an orphan semantic opening.
 
 Door/Opening instance writes use `SetProperty()`, active-DWG affinity is rechecked before and after nested Auto Host, CAD cleanup uses the exact source `ObjectId`, cleanup occurs before project snapshot restore, and post-commit UI synchronization is best-effort/non-destructive.
+
+A targeted physical-cut follow-up is also source-implemented:
+
+- `QS3DCUTSELECTEDOPENINGS` resolves the current CAD/semantic selection to a deduplicated Door/WallOpening id set and invokes only the targeted `OpeningBooleanService` overload;
+- legacy `QS3DCUTOPENINGS` remains the broader all-linked command;
+- the same host/fingerprint rerun remains idempotent, while trying a different opening set on the same already-cut generated host fails closed until host rebuild.
 
 Read:
 
@@ -70,8 +76,9 @@ Do not overclaim these paths:
 - WallPier P1 follows the currently supported wall dispatch, including specialized behavior where the current builder supports it. Do not claim arbitrary freeform profile parity.
 - StructuralWall P1 uses the existing supported LINE structural path.
 - Foundation P1 uses the existing supported closed-POLYLINE structural path.
-- Door/Opening Direct Draw currently completes **source + semantic + verified Auto Host**. It intentionally does **not** invoke the global `QS3DCUTOPENINGS` path as an implicit side effect. Physical boolean remains an explicit user action because the current cut service processes linked openings by host and could otherwise mutate unrelated pending openings.
-- A future one-shot Door/Opening physical cut must first provide an explicit-target opening-subset transaction plus proven host-Solid3d rollback semantics; do not bypass this by queueing the current global cut command from Direct Draw.
+- Door/Opening Direct Draw completes **source + semantic + verified Auto Host**. It intentionally does **not** invoke physical boolean as an implicit side effect.
+- `QS3DCUTSELECTEDOPENINGS` solves explicit-target selection so the user can cut only chosen Door/WallOpening elements instead of sending every explicit cut through the broader all-linked path. It does **not** yet turn physical boolean history into an incremental journal: a different cut set on the same already-cut generated solid still requires rebuild before a new cut fingerprint can be committed.
+- Do not auto-call targeted cut from Direct Draw until licensed V25 proves the host-Solid3d transaction/rollback behavior and product UX explicitly opts into automatic destructive mutation.
 
 Legacy Bóc chọn/capture and `QS3DBUILD3D` remain fully supported for existing CAD drawings. Existing `QS3DDOOR`, `QS3DOPENING`, Auto/Manual Host and physical cut commands remain the conversion/review path.
 
@@ -95,7 +102,7 @@ Do not regress these invariants while extending Direct Draw.
 
 The BricsCAD Ribbon contains a `TẠO MỚI` authoring tab and Full Domain Hub contains `TẠO MỚI / DIRECT DRAW`. These are plugin UI hosted by BricsCAD, not a separate application shell.
 
-The current authoring UI includes **Family / Type** wired to canonical `QS3DFAMILIES`, plus P0, guarded P1 native categories, **Vẽ Cửa** and **Vẽ Lỗ Mở**. Users can activate/edit the compatible Family first; Direct Draw then consumes the active Family and prompts/validates required instance values. Do not create a competing Direct-Draw-only family store/editor.
+The current authoring UI includes **Family / Type** wired to canonical `QS3DFAMILIES`, plus P0, guarded P1 native categories, **Vẽ Cửa**, **Vẽ Lỗ Mở**, and **Khoét Cửa/Lỗ đang chọn** wired to `QS3DCUTSELECTEDOPENINGS`. Users can activate/edit the compatible Family first; Direct Draw then consumes the active Family and prompts/validates required instance values. Do not create a competing Direct-Draw-only family store/editor.
 
 Current point acquisition already uses BricsCAD base-point rubber-band feedback where applicable. A richer thickness/profile `DrawJig` preview or persistent repeated-authoring reactor still requires exact V25 managed-API compile and interactive proof; do not claim it from static source alone.
 
@@ -103,9 +110,9 @@ Door/Opening UI text must continue to distinguish Auto Host completion from the 
 
 ## 6. Validation boundary
 
-This continuation work is based on GitHub source/static review. The execution environment used for this pass does not provide licensed interactive BricsCAD V25 runtime proof, and GitHub Actions were not dispatched.
+This continuation work is based on GitHub source/static review. The execution environment used for this pass does not provide licensed interactive BricsCAD V25 runtime proof, GitHub Actions were not dispatched, and a local container clone attempt could not resolve GitHub networking. Therefore the newly added static preflight source is present but was not executable-run from that container in this pass.
 
-Therefore use precise status language:
+Use precise status language:
 
 **source-implemented / statically guarded ≠ compiled and NETLOAD/runtime-verified on the exact current SHA.**
 
@@ -113,14 +120,15 @@ Still required for Direct Draw and the broader plugin before production claims:
 
 - exact current V25 adapter compile against the installed managed assemblies;
 - NETLOAD/DemandLoad unique command registration;
-- real Ribbon/palette/Domain Hub behavior, including Family / Type activation;
+- real Ribbon/palette/Domain Hub behavior, including Family / Type activation and selected-opening cut;
 - successful and forced-failure rollback tests;
 - representative private-DWG save/reopen/multi-DWG regression;
 - GlassWall/Curtain, WallPier, StructuralWall and Foundation native geometry checks;
 - Door/Opening width correctness in millimeter and meter drawings;
 - Door/Opening valid-host, no-host and ambiguous-host behavior, including Floor/Zone/elevation/gap gates;
 - Door/Opening sill/bottom offset and boolean-clearance persistence;
-- explicit `QS3DCUTOPENINGS` after Direct Draw, including host fingerprint/rebuild behavior;
+- `QS3DCUTSELECTEDOPENINGS` with one/multiple selected openings, multiple hosts, mixed unrelated CAD selection, same-fingerprint rerun and different-fingerprint fail-closed behavior;
+- legacy `QS3DCUTOPENINGS` behavior after adding the overload;
 - guarded LINE/open/bulged Curtain path-frame generation in real V25;
 - World UCS and representative rotated-UCS authoring behavior;
 - representative testing against a private copy of owner-provided `MB MONG.dwg` without committing that file;
@@ -134,9 +142,9 @@ Do not add automatic push/tag/PR triggers and do not publish a release without e
 
 ## 8. Next safe product work
 
-After current Direct Draw runtime qualification, the most useful remaining authoring/product gaps are:
+After current runtime qualification, the most useful remaining authoring/product gaps are:
 
-1. targeted Door/Opening subset physical-cut API if one-shot authoring + boolean is desired, with explicit host-Solid3d rollback proof;
+1. if one-shot Door/Opening authoring + boolean is desired, add an explicit opt-in UX only after the new targeted subset transaction is proven on V25; do not silently auto-cut;
 2. transient thickness/profile preview + repeated authoring mode proven against BricsCAD V25 editor/jig behavior;
 3. optional compact in-command Family picker only if real UX testing shows the existing Family / Type launcher is too slow; canonical `QS3DFAMILIES` remains source of truth;
 4. physical multi-owner wall-solid L/T/X reconciliation under a safe ownership model;
