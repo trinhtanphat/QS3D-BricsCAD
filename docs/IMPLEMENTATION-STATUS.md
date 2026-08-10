@@ -23,14 +23,25 @@
 - HT_Phòng semantic generation for floor finish, waterproofing, skirting, wall finish and ceiling finish.
 - live Xref/Layer listing, controls, selection inspection and handle-based Locate/select.
 - semantic BQ groups by stable Floor/Family IDs, supports filtering/Locate/XLSX, has a real recalculate callback, and persists visible-column preferences in project metadata.
+- BQ XLSX rows now include QS3D Element IDs and CAD handles; `QS3DED2` aliases the BQ/export workflow and `QS3DEXCELLOCATE` performs the reverse workbook-row → handle → live CAD selection path. The reader also supports the supplied BLT hidden `$<decimal handle>` convention.
+- derived finish semantics resolve source handles transitively through their room dependency, so BQ export, Locate and finish-only untrack operate on the actual room geometry without duplicating handle ownership.
 - deterministic rebar notation/BBS calculation; `QS3DBBS` exports XLSX and `QS3DBBSVIEW` opens the existing review/Locate UI.
 - revision snapshot persistence (`.qsrev`) plus `QS3DREVBASE` / `QS3DREVDIFF` wiring to the existing revision comparison UI.
 - deterministic recognition core is wired to `QS3DRECOGNIZE` review UI and `QS3DRECOGNIZEAUTO`; auto mode only applies high-confidence/margin results and refuses semantic category collisions.
+- `QS3DB4D` is a whole-Current-Space scan rather than a selection alias; the V25 adapter reads curve length, Polyline/Region/Hatch/Solid3d area and Solid3d volume before deterministic recognition.
 - project/company layer mappings can override recognition deterministically at confidence 0.99 before fallback heuristics.
 - `.qstemplate` import/export is implemented for Families, QuantityRules, layer mappings and BQ column layout. Template files use size/DTD guards, validated temp writes and `.bak` replacement. Import marks affected elements dirty, regenerates deterministically, records audit provenance, and deliberately does not auto-save `.qsdb` before review.
 - generic Family properties can carry material/classification codes, so company classification data round-trips through templates without hard-coding a vendor classification schema.
 - expanded preflight and smoke-source guards cover schema v3 migration, rule/audit roundtrip, rule-driven regeneration, template roundtrip/apply, project layer recognition overrides and missing Ribbon command wiring.
 - `main` GitHub Actions workflows remain `workflow_dispatch` only.
+- save hardening now rejects empty mutable map keys/Zone/Floor names before replacement; revision temp files are deep-loaded before replacement; explicit zero-valued quantity additions/removals remain visible in revision reports; malformed compound rebar notation with empty `+` segments is rejected.
+
+## Locally verified on 2026-08-10
+
+- Core smoke suite: `ALL PASS`.
+- Exact installed BricsCAD V25.2.10 managed references: Release/x64 plugin build succeeded with 0 warnings and 0 errors.
+- Read-only check of the supplied `DGKL.xlsx`: Excel row 5 resolved decimal handles `12510,12512` to hexadecimal `30DE,30E0`; row 6 resolved to `30DF,30E1`.
+- Both repository preflight suites pass. No GitHub Action was dispatched.
 
 ## Previously verified in GitHub-hosted CI
 
@@ -44,7 +55,6 @@ Historical BricsCAD V25 integration probe run `31341184031` remained queued beca
 
 These still require the actual BricsCAD V25 environment or external release infrastructure:
 
-- full plugin compile against the exact installed V25 `BrxMgd.dll` / `TD_Mgd.dll` after the newest source changes;
 - `NETLOAD`, Ribbon/palette and all newly wired recognition/template/revision/BBS commands on V25.1/V25.2;
 - private sample-DWG regression and Unicode/HiDPI visual comparison;
 - robust polyline wall corners/joins/T-junctions/freeform profiles;

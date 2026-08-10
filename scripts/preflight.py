@@ -232,6 +232,14 @@ if commands.exists():
     if "new QuantitySummaryWindow(rows, locate, recalculate)" not in text: errors.append("BQ command does not wire recalculation callback")
     if "CadUnitService.GetDrawingUnit(doc)" not in text: errors.append("BQ snapshot fallback still assumes millimeters")
     if "GetLiveSolidHandles" not in text or "liveGeneratedSolids" not in text: errors.append("QS3DHEALTH must verify generated Solid3d liveness")
+    if "QS3DED2" not in text or "QS3DEXCELLOCATE" not in text or "XlsxHandleReader.ReadHandles" not in text: errors.append("ED2 Excel/Handle round-trip workflow missing")
+
+review_commands = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+snapshot_reader = ROOT / "src/QS3D.BricsCAD.V25/Cad/EntitySnapshotReader.cs"
+if review_commands.exists() and snapshot_reader.exists():
+    review_text = review_commands.read_text(encoding="utf-8")
+    snapshot_text = snapshot_reader.read_text(encoding="utf-8")
+    if "QS3DB4D" not in review_text or "ReadCurrentSpace" not in review_text or "ReadCurrentSpace" not in snapshot_text: errors.append("B4D whole-Current-Space scan missing")
 
 ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 if ribbon.exists():

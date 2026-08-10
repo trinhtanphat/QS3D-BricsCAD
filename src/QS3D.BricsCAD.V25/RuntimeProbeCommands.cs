@@ -51,7 +51,7 @@ namespace QS3D.BricsCAD.V25
 
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nQS3D runtime probe PASS. Marker: " + resultPath);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 TryWriteFailure(resultPath, ex);
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nQS3D runtime probe FAIL: " + ex.Message);
@@ -59,7 +59,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void TryWriteFailure(string resultPath, Exception error)
+        private static void TryWriteFailure(string resultPath, System.Exception error)
         {
             try
             {
