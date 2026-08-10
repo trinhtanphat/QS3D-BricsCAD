@@ -142,19 +142,25 @@ namespace QS3D.Core.Services
             var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var projectElement in project.Elements)
             {
-                if (projectElement == null) continue;
-                if (projectElements.ContainsKey(projectElement.Id))
-                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElement.Id);
-                projectElements[projectElement.Id] = projectElement;
+                if (projectElement == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                var projectElementId = (projectElement.Id ?? string.Empty).Trim();
+                if (projectElementId.Length == 0)
+                    throw new InvalidOperationException("Project contains a semantic element with a blank id.");
+                if (!projectElements.TryAdd(projectElementId, projectElement))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElementId);
             }
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
                 if (element == null) continue;
-                if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
-                    throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
-                unique[owned.Id] = owned;
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("Bulk edit target contains an element with a blank semantic id.");
+                if (!projectElements.TryGetValue(elementId, out var owned) || !ReferenceEquals(owned, element))
+                    throw new InvalidOperationException("Element does not belong to the project instance: " + elementId);
+                unique[elementId] = owned;
             }
             return new List<ProjectElement>(unique.Values).AsReadOnly();
         }
