@@ -18,6 +18,8 @@ if IMPORTER.is_file():
     text = IMPORTER.read_text(encoding="utf-8")
     for token in (
         'ImportMode = "AppendOnly"',
+        'public static ProjectInterchangeAppendOnlyImportPlan Plan',
+        'return Prepare(target, json).Plan',
         'ProjectInterchangeValidatedSnapshotReader.Read(json)',
         'ProjectStateSnapshot.Capture(target)',
         'PreflightCollisions(target, source)',
@@ -26,6 +28,7 @@ if IMPORTER.is_file():
         'snapshot.Restore(target)',
         '"ImportInterchangeAppendOnly"',
         'LastSourceHandlesDiscardedKey',
+        'sourceHandlesToDiscard = checked(',
     ):
         if token not in text:
             errors.append("append-only importer missing contract token: " + token)
@@ -36,15 +39,20 @@ if COMMANDS.is_file():
     text = COMMANDS.read_text(encoding="utf-8")
     for token in (
         '[CommandMethod("QS3DINTERCHANGEAPPEND", CommandFlags.Modal)]',
-        'ProjectInterchangeJsonValidator.ValidateFile(dialog.FileName)',
+        'ReadGuardedSnapshotText(dialog.FileName)',
+        'ProjectInterchangeJsonValidator.MaxFileBytes',
+        'new UTF8Encoding(false, true)',
         'ProjectInterchangeImportPreview.Plan(project, json)',
         'preview.CollisionCount > 0',
+        'ProjectInterchangeAppendOnlyImporter.Plan(project, json)',
         'MessageBoxButton.YesNo',
         'ProjectInterchangeAppendOnlyImporter.Import(project, json)',
         'Chưa tự lưu .qsdb',
     ):
         if token not in text:
             errors.append("interchange append command missing safety token: " + token)
+    if 'File.ReadAllText(dialog.FileName)' in text:
+        errors.append("append command must not re-read the selected file through an unbounded second path")
     if '[CommandMethod("QS3DINTERCHANGEIMPORT"' in text:
         errors.append("generic interchange import command must not be introduced by the append-only slice")
 
@@ -52,8 +60,11 @@ if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
         'ImportAppendsPortableStateAndDiscardsCadOwnership()',
+        'AppendPlanIsReadOnlyAndRejectsNameCollision()',
         'CollisionFailsBeforeMutation()',
         'InvalidSnapshotFailsBeforeMutation()',
+        'ApplyFailureRollsBackPartialMutation()',
+        'ProjectInterchangeAppendOnlyImporter.Plan(target, sourceJson)',
         'Equal(string.Empty, importedBase.DrawingFingerprint)',
         'Equal(0, importedBase.SourceHandles.Count)',
         '"ImportInterchangeAppendOnly"',
@@ -76,4 +87,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: append-only interchange mutation is validated, collision-blocked, rollback-protected, explicitly confirmed and does not claim portable CAD ownership. Runtime V25 qualification is still required.")
+print("PASS: append-only interchange mutation uses bounded strict input, read-only confirmation planning, collision blocking, rollback and non-portable CAD ownership discard. Runtime V25 qualification is still required.")

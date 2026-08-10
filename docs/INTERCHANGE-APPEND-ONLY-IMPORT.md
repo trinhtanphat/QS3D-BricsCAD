@@ -8,7 +8,9 @@ This is the first deliberately narrow mutating path for `QS3D.SemanticSnapshot` 
 
 `QS3DINTERCHANGEAPPEND`
 
-The adapter validates the file with the guarded interchange validator, builds a read-only collision preview, requires explicit Yes/No confirmation, and then calls `ProjectInterchangeAppendOnlyImporter`.
+The adapter reads the selected file once through a bounded, strict UTF-8 path using the validator's 16 MiB limit. It validates that exact in-memory text, builds the existing read-only ID collision preview, then builds `ProjectInterchangeAppendOnlyImporter.Plan(...)`. The append plan is also read-only and applies the stricter all-new ID **and name** rules before any Yes/No confirmation is shown.
+
+After confirmation, `Import(...)` repeats the same append preflight immediately before mutation. If target state changed while the dialog was open, the second preflight fails closed rather than applying stale intent.
 
 The command does **not** auto-save `.qsdb` and does not claim that imported semantic objects already have native geometry in the current DWG.
 
@@ -24,6 +26,8 @@ The importer rejects before mutation when any incoming:
 - element ID collides.
 
 There is no implicit rename, merge, replace or skip behavior. Those operations remain behind the explicit `ProjectInterchangeImportResolutionPlanner` policy boundary and require a separate reviewed mutation contract.
+
+`ProjectInterchangeAppendOnlyImportPlan` reports source project/schema/fingerprint, exact counts to add, validation warnings and the number of source CAD handles that will be discarded. Planning never touches project timestamps, metadata or audit history.
 
 ## Target authority
 
@@ -79,9 +83,11 @@ Smoke coverage is registered through `ProjectInterchangeAppendOnlyImporterSmoke`
 - successful append while preserving target identity/context;
 - dependency/property/quantity transfer;
 - source-handle and source-drawing ownership discard;
+- read-only append planning and name-collision rejection;
 - provenance/audit output;
 - collision rejection before mutation;
-- invalid snapshot rejection before mutation.
+- invalid snapshot rejection before mutation;
+- rollback after a deliberately induced partial apply failure.
 
 Static contract guard:
 
