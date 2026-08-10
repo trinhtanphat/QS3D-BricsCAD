@@ -39,6 +39,8 @@ if not errors:
         "x.FamilyId",
         "GetDirectDependents",
         "HostWallId",
+        "InterchangeFamilySemanticApplier.Add(project, snapshot.Id, snapshot.Name, snapshot.Category, snapshot.Properties)",
+        "InterchangeFamilySemanticApplier.Replace(project, snapshot.Id, snapshot.Name, snapshot.Category, snapshot.Properties)",
         "target.FamilyId = snapshot.FamilyId;",
         "target.FloorId = snapshot.FloorId;",
         "target.ZoneId = snapshot.ZoneId;",
@@ -62,6 +64,20 @@ if not errors:
         errors.append("all-scope invalidation must be prepared before element mutation")
     if s.index("invalidation.CommitMetadata();") > s.index("transaction.Commit();"):
         errors.append("all-scope generated ownership metadata must clear before CAD commit")
+
+    catalog_section = re.search(r"private static void ApplyCatalogState\(.*?\n        private static void ApplyElementState", s, re.S)
+    if not catalog_section:
+        errors.append("all-scope ApplyCatalogState section not found")
+    elif "target.Properties.Clear();" in catalog_section.group(0):
+        errors.append("all-scope Family replacement must not clear Family.Properties directly; use inheritance-aware applier")
+
+    element_section = re.search(r"private static void ApplyElementState\(.*?\n        private static IReadOnlyList<ProjectElement> ExpandInvalidationTargets", s, re.S)
+    if not element_section:
+        errors.append("all-scope ApplyElementState section not found")
+    else:
+        for needle in ("target.Properties.Clear();", "target.Quantities.Clear();", "target.MarkDirty(ElementDirtyFlags.All);"):
+            if needle not in element_section.group(0):
+                errors.append("all-scope Element replacement lost portable-state overwrite contract: " + needle)
 
     forbidden_service = [
         "InterchangeUseSourceElementImportService.Import",
@@ -110,4 +126,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-use-source-all: PASS")
-print("All executable catalog + element UseSource collisions share one native transaction and one semantic rollback snapshot; target source ownership is preserved and rebuild remains explicit.")
+print("All executable catalog + element UseSource collisions share one native transaction and one semantic rollback snapshot; Family inheritance/overrides and target source ownership are preserved while rebuild remains explicit.")
