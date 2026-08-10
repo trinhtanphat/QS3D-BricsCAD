@@ -35,6 +35,7 @@ internal sealed class Program
             {
                 SchemaVersion = 1,
                 RecordedUtc = DateTime.UtcNow,
+                SourceRevision = options.Revision,
                 Runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
                 OperatingSystem = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
                 ProcessorCount = Environment.ProcessorCount,
@@ -97,26 +98,29 @@ internal sealed class Program
 
     private static BenchmarkResult RunMarkChanged(Options options)
     {
-        for (var i = 0; i < options.Warmups; i++) MeasureMarkChangedOnce(options.Elements);
-        return Measure("mark-changed", options.Iterations, () => MeasureMarkChangedOnce(options.Elements));
+        for (var i = 0; i < options.Warmups; i++) PrepareMarkChanged(options.Elements)();
+        return MeasurePrepared("mark-changed", options.Iterations, () => PrepareMarkChanged(options.Elements));
     }
 
-    private static void MeasureMarkChangedOnce(int elements)
+    private static Action PrepareMarkChanged(int elements)
     {
         var project = BuildChain(elements);
         var engine = new RegenerationEngine(new DependencyGraph(), new[] { new NoOpRegenerator() });
-        engine.MarkChanged(project, "E0", ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
-        if (project.Elements.Count > 1 && project.Elements[project.Elements.Count - 1].Dirty == ElementDirtyFlags.None)
-            throw new InvalidOperationException("MarkChanged benchmark fixture did not dirty the transitive tail.");
+        return () =>
+        {
+            engine.MarkChanged(project, "E0", ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
+            if (project.Elements.Count > 1 && project.Elements[project.Elements.Count - 1].Dirty == ElementDirtyFlags.None)
+                throw new InvalidOperationException("MarkChanged benchmark fixture did not dirty the transitive tail.");
+        };
     }
 
     private static BenchmarkResult RunTargetedRegeneration(Options options)
     {
-        for (var i = 0; i < options.Warmups; i++) MeasureTargetedRegenerationOnce(options.Elements, options.Targets);
-        return Measure("targeted-regeneration", options.Iterations, () => MeasureTargetedRegenerationOnce(options.Elements, options.Targets));
+        for (var i = 0; i < options.Warmups; i++) PrepareTargetedRegeneration(options.Elements, options.Targets)();
+        return MeasurePrepared("targeted-regeneration", options.Iterations, () => PrepareTargetedRegeneration(options.Elements, options.Targets));
     }
 
-    private static void MeasureTargetedRegenerationOnce(int elements, int targets)
+    private static Action PrepareTargetedRegeneration(int elements, int targets)
     {
         var project = BuildChain(elements);
         var actualTargets = Math.Min(targets, elements);
@@ -129,8 +133,11 @@ internal sealed class Program
         }
 
         var engine = new RegenerationEngine(new DependencyGraph(), new[] { new NoOpRegenerator() });
-        var regenerated = engine.RegenerateDirtySubset(project, ids);
-        RequireCount(regenerated, actualTargets, "targeted regeneration");
+        return () =>
+        {
+            var regenerated = engine.RegenerateDirtySubset(project, ids);
+            RequireCount(regenerated, actualTargets, "targeted regeneration");
+        };
     }
 
     private static ProjectState BuildChain(int count)
@@ -146,7 +153,10 @@ internal sealed class Program
         return project;
     }
 
-    private static BenchmarkResult Measure(string name, int iterations, Action action)
+    private static BenchmarkResult Measure(string name, int iterations, Action action) =>
+        MeasurePrepared(name, iterations, () => action);
+
+    private static BenchmarkResult MeasurePrepared(string name, int iterations, Func<Action> prepare)
     {
         var timings = new double[iterations];
         var allocations = new long[iterations];
@@ -154,6 +164,7 @@ internal sealed class Program
 
         for (var i = 0; i < iterations; i++)
         {
+            var action = prepare();
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
@@ -172,6 +183,7 @@ internal sealed class Program
 
         Array.Sort(timings);
         Array.Sort(allocations);
+        var allocationSamples = allocations.Select(x => (double)x).ToArray();
         return new BenchmarkResult
         {
             Name = name,
@@ -179,8 +191,8 @@ internal sealed class Program
             P95Milliseconds = Percentile(timings, 0.95),
             MinMilliseconds = timings[0],
             MaxMilliseconds = timings[timings.Length - 1],
-            MedianAllocatedBytes = (long)Percentile(allocations.Select(x => (double)x).ToArray(), 0.50),
-            P95AllocatedBytes = (long)Percentile(allocations.Select(x => (double)x).ToArray(), 0.95),
+            MedianAllocatedBytes = (long)Percentile(allocationSamples, 0.50),
+            P95AllocatedBytes = (long)Percentile(allocationSamples, 0.95),
             PeakWorkingSetBytes = peakWorkingSet
         };
     }
@@ -212,6 +224,7 @@ internal sealed class Program
         public int Warmups { get; private set; } = 2;
         public string Scenario { get; private set; } = "all";
         public string JsonPath { get; private set; } = string.Empty;
+        public string Revision { get; private set; } = string.Empty;
 
         public static Options Parse(string[] args)
         {
@@ -233,8 +246,9 @@ internal sealed class Program
                     case "--warmups": options.Warmups = ParseNonNegative(Next(), arg); break;
                     case "--scenario": options.Scenario = Next().Trim().ToLowerInvariant(); break;
                     case "--json": options.JsonPath = Next(); break;
+                    case "--revision": options.Revision = Next().Trim(); break;
                     case "--help":
-                    case "-h": throw new ArgumentException("Usage: dotnet run -c Release --project tests/QS3D.Core.PerfHarness -- [--elements N] [--targets N] [--iterations N] [--warmups N] [--scenario all|dependency-rebuild|dependency-closure|mark-changed|targeted-regeneration] [--json PATH|-]");
+                    case "-h": throw new ArgumentException("Usage: dotnet run -c Release --project tests/QS3D.Core.PerfHarness -- [--elements N] [--targets N] [--iterations N] [--warmups N] [--scenario all|dependency-rebuild|dependency-closure|mark-changed|targeted-regeneration] [--revision SHA] [--json PATH|-]");
                     default: throw new ArgumentException("Unknown argument: " + arg);
                 }
             }
@@ -263,6 +277,7 @@ internal sealed class Program
     {
         public int SchemaVersion { get; set; }
         public DateTime RecordedUtc { get; set; }
+        public string SourceRevision { get; set; } = string.Empty;
         public string Runtime { get; set; } = string.Empty;
         public string OperatingSystem { get; set; } = string.Empty;
         public int ProcessorCount { get; set; }
