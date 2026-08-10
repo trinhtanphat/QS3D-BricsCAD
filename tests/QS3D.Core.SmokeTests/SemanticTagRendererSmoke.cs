@@ -13,6 +13,9 @@ namespace QS3D.Core.SmokeTests
             GeneratedOwnershipCannotLeakIntoTag();
             UnsupportedTokenFailsClosed();
             MissingReferenceFailsClosed();
+            DetachedElementWithSameIdFailsClosed();
+            DuplicateElementIdFailsClosed();
+            AmbiguousReferencesFailClosed();
         }
 
         private static void StableSemanticReferencesRender()
@@ -59,6 +62,49 @@ namespace QS3D.Core.SmokeTests
             try { SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{Family}"); }
             catch (InvalidOperationException) { failed = true; }
             if (!failed) throw new Exception("Missing semantic references must not render as valid documentation.");
+        }
+
+        private static void DetachedElementWithSameIdFailsClosed()
+        {
+            var fixture = BuildFixture();
+            var detached = new ProjectElement("e-001", ElementCategory.Beam, "FAM-B", "F-02", "Z-A");
+            var failed = false;
+            try { SemanticTagRenderer.Render(fixture.Project, detached, "{Id}"); }
+            catch (InvalidOperationException) { failed = true; }
+            if (!failed) throw new Exception("A detached semantic instance must not be accepted only because its ID matches a project element.");
+        }
+
+        private static void DuplicateElementIdFailsClosed()
+        {
+            var fixture = BuildFixture();
+            fixture.Project.Elements.Add(new ProjectElement("e-001", ElementCategory.Beam, "FAM-B", "F-02", "Z-A"));
+            var failed = false;
+            try { SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{Id}"); }
+            catch (InvalidOperationException) { failed = true; }
+            if (!failed) throw new Exception("Ambiguous semantic element IDs must not produce documentation labels.");
+        }
+
+        private static void AmbiguousReferencesFailClosed()
+        {
+            var familyFixture = BuildFixture();
+            familyFixture.Project.Families.Add(new ProjectFamily("fam-b", "Duplicate Family", ElementCategory.Beam));
+            MustFail(() => SemanticTagRenderer.Render(familyFixture.Project, familyFixture.Element, "{Family}"), "Ambiguous Family IDs must fail closed.");
+
+            var floorFixture = BuildFixture();
+            floorFixture.Project.Floors.Add(new FloorDefinition("f-02", "Duplicate Floor", 7.2d));
+            MustFail(() => SemanticTagRenderer.Render(floorFixture.Project, floorFixture.Element, "{Floor}"), "Ambiguous Floor IDs must fail closed.");
+
+            var zoneFixture = BuildFixture();
+            zoneFixture.Project.Zones.Add(new ZoneDefinition("z-a", "Duplicate Zone"));
+            MustFail(() => SemanticTagRenderer.Render(zoneFixture.Project, zoneFixture.Element, "{Zone}"), "Ambiguous Zone IDs must fail closed.");
+        }
+
+        private static void MustFail(Action action, string message)
+        {
+            var failed = false;
+            try { action(); }
+            catch (InvalidOperationException) { failed = true; }
+            if (!failed) throw new Exception(message);
         }
 
         private static Fixture BuildFixture()
