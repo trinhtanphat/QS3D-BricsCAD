@@ -26,6 +26,7 @@ namespace QS3D.Core.SmokeTests
             LinearRebarLayoutSmoke.Run();
             WallJunctionRegressionSmoke.Run();
             PolylineOpeningCutSmoke.Run();
+            ProjectRebarShapeSmoke.Run();
         }
     }
 }
