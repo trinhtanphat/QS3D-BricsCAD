@@ -43,7 +43,6 @@ namespace QS3D.Core.Diagnostics
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var handles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var familyIds = new HashSet<string>(project.Families.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             var floorIds = new HashSet<string>(project.Floors.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             var zoneIds = new HashSet<string>(project.Zones.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
 
@@ -66,6 +65,7 @@ namespace QS3D.Core.Diagnostics
 
                 ValidateHost(project, element, issues);
                 ValidateDependencies(project, element, issues);
+                ValidateDimensions(element, issues);
                 if (RequiresMaterial(element.Category) && !HasMaterial(project, element)) issues.Add(new ModelHealthIssue("MISSING_MATERIAL", HealthSeverity.Warning, "Cấu kiện chưa có vật liệu.", element.Id));
                 ValidateRebar(element, issues);
 
@@ -111,6 +111,88 @@ namespace QS3D.Core.Diagnostics
                 }
                 if (project.FindElement(dependencyId) == null) issues.Add(new ModelHealthIssue("MISSING_DEPENDENCY", HealthSeverity.Error, "Không tìm thấy cấu kiện phụ thuộc: " + dependencyId, element.Id));
             }
+        }
+
+        private static void ValidateDimensions(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            switch (element.Category)
+            {
+                case ElementCategory.ArchitecturalWall:
+                case ElementCategory.GlassWall:
+                case ElementCategory.WallPier:
+                case ElementCategory.StructuralWall:
+                    RequirePositive(element, issues, "LengthM");
+                    RequirePositive(element, issues, "HeightM");
+                    RequirePositive(element, issues, "ThicknessM");
+                    break;
+                case ElementCategory.Beam:
+                    RequirePositive(element, issues, "LengthM");
+                    RequirePositive(element, issues, "WidthM");
+                    RequirePositive(element, issues, "HeightM");
+                    break;
+                case ElementCategory.Slab:
+                    RequirePositive(element, issues, "AreaM2");
+                    RequirePositive(element, issues, "ThicknessM");
+                    break;
+                case ElementCategory.Column:
+                    RequirePositive(element, issues, "WidthM");
+                    RequirePositive(element, issues, "HeightM");
+                    ValidateOptionalPositive(element, issues, "DepthM");
+                    break;
+                case ElementCategory.Foundation:
+                    RequireAnyPositive(element, issues, "BaseAreaM2", "AreaM2", "BaseAreaM2/AreaM2");
+                    RequireAnyPositive(element, issues, "ThicknessM", "HeightM", "ThicknessM/HeightM");
+                    break;
+                case ElementCategory.Stair:
+                    RequirePositive(element, issues, "AreaM2");
+                    RequirePositive(element, issues, "ThicknessM");
+                    break;
+                case ElementCategory.Railing:
+                    RequirePositive(element, issues, "LengthM");
+                    break;
+                case ElementCategory.Earthwork:
+                    RequireAnyPositive(element, issues, "ExcavationAreaM2", "AreaM2", "ExcavationAreaM2/AreaM2");
+                    RequirePositive(element, issues, "DepthM");
+                    break;
+                case ElementCategory.WallOpening:
+                case ElementCategory.Door:
+                    RequirePositive(element, issues, "WidthM");
+                    RequirePositive(element, issues, "HeightM");
+                    break;
+            }
+        }
+
+        private static void RequirePositive(ProjectElement element, ICollection<ModelHealthIssue> issues, string key)
+        {
+            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw))
+            {
+                issues.Add(new ModelHealthIssue("MISSING_DIMENSION", HealthSeverity.Error, "Thiếu kích thước bắt buộc " + key + ".", element.Id));
+                return;
+            }
+            if (!TryPositiveFinite(raw, out _)) issues.Add(new ModelHealthIssue("INVALID_DIMENSION", HealthSeverity.Error, "Kích thước " + key + " phải là số hữu hạn > 0.", element.Id));
+        }
+
+        private static void ValidateOptionalPositive(ProjectElement element, ICollection<ModelHealthIssue> issues, string key)
+        {
+            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            if (!TryPositiveFinite(raw, out _)) issues.Add(new ModelHealthIssue("INVALID_DIMENSION", HealthSeverity.Error, "Kích thước " + key + " phải là số hữu hạn > 0 khi được khai báo.", element.Id));
+        }
+
+        private static void RequireAnyPositive(ProjectElement element, ICollection<ModelHealthIssue> issues, string first, string second, string label)
+        {
+            var hasFirst = element.Properties.TryGetValue(first, out var firstRaw) && !string.IsNullOrWhiteSpace(firstRaw);
+            var hasSecond = element.Properties.TryGetValue(second, out var secondRaw) && !string.IsNullOrWhiteSpace(secondRaw);
+            if ((hasFirst && TryPositiveFinite(firstRaw!, out _)) || (hasSecond && TryPositiveFinite(secondRaw!, out _))) return;
+            if (!hasFirst && !hasSecond)
+                issues.Add(new ModelHealthIssue("MISSING_DIMENSION", HealthSeverity.Error, "Thiếu kích thước bắt buộc " + label + ".", element.Id));
+            else
+                issues.Add(new ModelHealthIssue("INVALID_DIMENSION", HealthSeverity.Error, "Kích thước " + label + " phải có ít nhất một giá trị hữu hạn > 0.", element.Id));
+        }
+
+        private static bool TryPositiveFinite(string value, out double number)
+        {
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number)) return false;
+            return IsPositiveFinite(number);
         }
 
         private static void ValidateRebar(ProjectElement element, ICollection<ModelHealthIssue> issues)

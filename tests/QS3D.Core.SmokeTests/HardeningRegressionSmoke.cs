@@ -21,6 +21,7 @@ namespace QS3D.Core.SmokeTests
             SemanticQuantityHardening();
             RebarSpacingRequiresDistribution();
             ModelHealthReferenceIntegrity();
+            ModelHealthDimensionIntegrity();
             FamilyChangeNotification();
             FormulaEvaluatorIsConcurrent();
             FormulaEvaluatorHasResourceGuards();
@@ -97,6 +98,34 @@ namespace QS3D.Core.SmokeTests
             True(issues.Any(x => x.Code == "MISSING_DEPENDENCY" && x.ElementId == "D1"));
             True(issues.Any(x => x.Code == "FAMILY_CATEGORY_MISMATCH" && x.ElementId == "BAD-FAMILY"));
             True(issues.Any(x => x.Code == "REBAR_DISTRIBUTION_MISSING" && x.ElementId == "B1"));
+        }
+
+        private static void ModelHealthDimensionIntegrity()
+        {
+            var project = NewProject();
+
+            var beam = new ProjectElement("B-DIM", ElementCategory.Beam, "beam", "f", "z");
+            beam.Properties["LengthM"] = "5";
+            beam.Properties["WidthM"] = "NaN";
+            beam.Properties["HeightM"] = "-0.5";
+            project.Elements.Add(beam);
+
+            var slabFamily = new ProjectFamily("slab", "Slab", ElementCategory.Slab); slabFamily.Properties["Material"] = "Concrete"; project.Families.Add(slabFamily);
+            var slab = new ProjectElement("S-DIM", ElementCategory.Slab, "slab", "f", "z");
+            slab.Properties["AreaM2"] = "12";
+            project.Elements.Add(slab);
+
+            var foundationFamily = new ProjectFamily("foundation", "Foundation", ElementCategory.Foundation); foundationFamily.Properties["Material"] = "Concrete"; project.Families.Add(foundationFamily);
+            var foundation = new ProjectElement("F-DIM", ElementCategory.Foundation, "foundation", "f", "z");
+            foundation.Properties["AreaM2"] = "4";
+            foundation.Properties["ThicknessM"] = "0.5";
+            project.Elements.Add(foundation);
+
+            var issues = new ModelHealthService().Inspect(project);
+            True(issues.Any(x => x.Code == "INVALID_DIMENSION" && x.ElementId == "B-DIM" && x.Message.Contains("WidthM")));
+            True(issues.Any(x => x.Code == "INVALID_DIMENSION" && x.ElementId == "B-DIM" && x.Message.Contains("HeightM")));
+            True(issues.Any(x => x.Code == "MISSING_DIMENSION" && x.ElementId == "S-DIM" && x.Message.Contains("ThicknessM")));
+            True(!issues.Any(x => (x.Code == "MISSING_DIMENSION" || x.Code == "INVALID_DIMENSION") && x.ElementId == "F-DIM"));
         }
 
         private static void FamilyChangeNotification()
