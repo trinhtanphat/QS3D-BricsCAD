@@ -91,8 +91,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     var frame = BuildFrame(source, element.Id);
                     var width = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, widthM, element.Id + "/width"), element.Id + "/width drawing units");
                     var depth = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, depthM, element.Id + "/depth"), element.Id + "/depth drawing units");
-                    var dimensionTolerance = Math.Max(width, depth) * 1e-4d + 1e-6d;
-                    dimensionTolerance = CadGeometryGuard.Finite(dimensionTolerance, element.Id + "/dimension tolerance");
+                    var dimensionTolerance = AddFinite(MultiplyFinite(Math.Max(width, depth), 1e-4d, element.Id + "/dimension tolerance scale"), 1e-6d, element.Id + "/dimension tolerance");
                     if (Math.Abs(frame.Width - width) > dimensionTolerance || Math.Abs(frame.Depth - depth) > dimensionTolerance)
                         throw new InvalidOperationException("Kích thước POLYLINE source không khớp WidthM/DepthM của " + element.Id + ".");
                     var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/height"), element.Id + "/height drawing units");
@@ -167,8 +166,8 @@ namespace QS3D.BricsCAD.V25.Cad
             var e2x = SubtractFinite(p3.X, p0.X, elementId + "/edge2 X"); var e2y = SubtractFinite(p3.Y, p0.Y, elementId + "/edge2 Y");
             var l1 = CadGeometryGuard.Hypot(e1x, e1y, elementId + "/edge1"); var l2 = CadGeometryGuard.Hypot(e2x, e2y, elementId + "/edge2");
             if (l1 <= 1e-9d || l2 <= 1e-9d) throw new InvalidOperationException("Column source rectangle có cạnh rỗng: " + elementId);
-            var dot = Math.Abs((e1x * e2x + e1y * e2y) / (l1 * l2));
-            dot = CadGeometryGuard.Finite(dot, elementId + "/rectangle orthogonality");
+            var ux = e1x / l1; var uy = e1y / l1; var vx = e2x / l2; var vy = e2y / l2;
+            var dot = Math.Abs(AddFinite(MultiplyFinite(ux, vx, elementId + "/rectangle dot X"), MultiplyFinite(uy, vy, elementId + "/rectangle dot Y"), elementId + "/rectangle orthogonality"));
             if (dot > 1e-6d) throw new InvalidOperationException("Column source POLYLINE phải là hình chữ nhật trực giao: " + elementId);
             var expectedP2X = AddFinite(AddFinite(p0.X, e1x, elementId + "/expected P2 X"), e2x, elementId + "/expected P2 X");
             var expectedP2Y = AddFinite(AddFinite(p0.Y, e1y, elementId + "/expected P2 Y"), e2y, elementId + "/expected P2 Y");
@@ -181,10 +180,10 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 CenterX = centerX,
                 CenterY = centerY,
-                Ux = e1x / l1,
-                Uy = e1y / l1,
-                Vx = e2x / l2,
-                Vy = e2y / l2,
+                Ux = ux,
+                Uy = uy,
+                Vx = vx,
+                Vy = vy,
                 Width = l1,
                 Depth = l2,
                 Elevation = CadGeometryGuard.Finite(polyline.Elevation, elementId + "/elevation")
