@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Manual-only CI policy preflight
+        run: python scripts/preflight-ci-manual-only.py
       - name: Generic source preflight
         run: python scripts/preflight.py
       - name: Material usage preflight
