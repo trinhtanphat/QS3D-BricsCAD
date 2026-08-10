@@ -25,12 +25,9 @@ if planner.is_file():
         "bendRadiusM <= 1e-12d && hookLengthM <= 1e-12d"
     ):
         if needle not in text: errors.append("beam stirrup bend planner missing: " + needle)
-    if re.search(r"BendRadiusM\s*\{\s*get;\s*set;\s*\}\s*=", text):
-        errors.append("BendRadiusM must not have a non-project engineering default")
-    if re.search(r"HookLengthM\s*\{\s*get;\s*set;\s*\}\s*=", text):
-        errors.append("HookLengthM must not have a non-project engineering default")
-    if re.search(r"HookTailAngleDeg\s*\{\s*get;\s*set;\s*\}\s*=", text):
-        errors.append("HookTailAngleDeg must not have a non-project engineering default")
+    if re.search(r"BendRadiusM\s*\{\s*get;\s*set;\s*\}\s*=", text): errors.append("BendRadiusM must not have a non-project engineering default")
+    if re.search(r"HookLengthM\s*\{\s*get;\s*set;\s*\}\s*=", text): errors.append("HookLengthM must not have a non-project engineering default")
+    if re.search(r"HookTailAngleDeg\s*\{\s*get;\s*set;\s*\}\s*=", text): errors.append("HookTailAngleDeg must not have a non-project engineering default")
 
 if builder.is_file():
     text = builder.read_text(encoding="utf-8")
@@ -59,19 +56,25 @@ if health.is_file():
         "Beam.Line.RectangularClosedLoop", "Beam.Line.RectangularRoundedLoop", "Beam.Line.RectangularHookedPath",
         "BEAM_STIRRUP_GENERATED_LENGTH_MISMATCH", "BEAM_STIRRUP_GENERATED_MODE_MISMATCH",
         "BEAM_STIRRUP_GENERATED_MODE_INVALID", "advanced stirrup metadata",
-        "Old generated snapshots predate bend/hook length metadata"
+        "Old generated snapshots predate bend/hook length metadata", "GeneratedHandleOwnershipPolicy.IsOwnerSlot"
     ):
         if needle not in text: errors.append("beam stirrup advanced health missing: " + needle)
 
 if invalidator.is_file():
     text = invalidator.read_text(encoding="utf-8")
-    for key in (
-        "GeneratedBeamStirrupCenterlineLengthM", "GeneratedBeamStirrupTotalCenterlineLengthM",
-        "GeneratedBeamStirrupPolylineLengthM", "GeneratedBeamStirrupBendRadiusM",
-        "GeneratedBeamStirrupHookLengthM", "GeneratedBeamStirrupHookTailAngleDeg"
-    ):
-        if 'Remove(element, "' + key + '")' not in text:
-            errors.append("beam stirrup invalidation does not clear: " + key)
+    prefix_cleanup = (
+        "CoreOwnershipPolicy.RebarHandleKeys" in text
+        and "MetadataPrefixForHandleKey" in text
+        and "RemoveByPrefix(element, MetadataPrefixForHandleKey(key))" in text
+    )
+    if not prefix_cleanup:
+        for key in (
+            "GeneratedBeamStirrupCenterlineLengthM", "GeneratedBeamStirrupTotalCenterlineLengthM",
+            "GeneratedBeamStirrupPolylineLengthM", "GeneratedBeamStirrupBendRadiusM",
+            "GeneratedBeamStirrupHookLengthM", "GeneratedBeamStirrupHookTailAngleDeg"
+        ):
+            if 'Remove(element, "' + key + '")' not in text:
+                errors.append("beam stirrup invalidation does not clear: " + key)
 
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
@@ -95,4 +98,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: legacy compatibility, explicit bend/hook geometry, exact length metadata, endpoint-safe V25 path, health consistency and invalidation cleanup are present.")
+print("PASS: legacy compatibility, explicit bend/hook geometry, exact length metadata, endpoint-safe V25 path, health consistency and prefix-safe invalidation cleanup are present.")
