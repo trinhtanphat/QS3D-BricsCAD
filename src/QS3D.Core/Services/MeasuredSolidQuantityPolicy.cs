@@ -47,6 +47,7 @@ namespace QS3D.Core.Services
                 case ElementCategory.StructuralWall:
                 case ElementCategory.ArchitecturalWall:
                 case ElementCategory.GlassWall:
+                case ElementCategory.WallFinish:
                 case ElementCategory.WallPier:
                 case ElementCategory.Stair:
                 case ElementCategory.Foundation:

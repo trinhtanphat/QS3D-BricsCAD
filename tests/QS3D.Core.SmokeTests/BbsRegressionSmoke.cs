@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -17,6 +18,8 @@ namespace QS3D.Core.SmokeTests
             MalformedCompoundNotationRejected();
             ScheduleRejectsArithmeticOverflow();
             SpacingRejectsArithmeticOverflow();
+            SpacingNearIntegerDoesNotAddPhantomBar();
+            DecimalNotationIsInvariantAndRoundTrips();
             AggregateRejectsOverflow();
             CuttingLengthFallbackIsLazy();
             FabricationProvenanceFlowsToExports();
@@ -57,6 +60,42 @@ namespace QS3D.Core.SmokeTests
             {
                 new RebarScheduleInput { ElementId = "SPACE", Notation = "D8@100", CuttingLengthM = 1d, DistributionLengthM = double.MaxValue }
             }));
+        }
+
+        private static void SpacingNearIntegerDoesNotAddPhantomBar()
+        {
+            var exact = RebarScheduleBuilder.Build(new[]
+            {
+                new RebarScheduleInput { ElementId = "EXACT", Notation = "D8@150", CuttingLengthM = 1d, DistributionLengthM = 16.35d }
+            }).Single();
+            Equal(110, exact.Quantity);
+
+            var actualOverrun = RebarScheduleBuilder.Build(new[]
+            {
+                new RebarScheduleInput { ElementId = "OVER", Notation = "D8@150", CuttingLengthM = 1d, DistributionLengthM = 16.350001d }
+            }).Single();
+            Equal(111, actualOverrun.Quantity);
+        }
+
+        private static void DecimalNotationIsInvariantAndRoundTrips()
+        {
+            var previousCulture = CultureInfo.CurrentCulture;
+            var previousUiCulture = CultureInfo.CurrentUICulture;
+            try
+            {
+                CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("vi-VN");
+                CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("vi-VN");
+                var text = RebarNotationParser.Parse("D12.5@150.5").Single().ToString();
+                Equal("D12.5@150.5", text);
+                var reparsed = RebarNotationParser.Parse(text).Single();
+                Near(12.5d, reparsed.DiameterMm);
+                Near(150.5d, reparsed.SpacingMm!.Value);
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = previousCulture;
+                CultureInfo.CurrentUICulture = previousUiCulture;
+            }
         }
 
         private static void AggregateRejectsOverflow()

@@ -17,8 +17,8 @@ namespace QS3D.BricsCAD.V25.Cad
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var text in handles)
             {
-                var normalized = (text ?? string.Empty).Trim();
-                if (normalized.Length == 0 || !seen.Add(normalized) || !long.TryParse(normalized, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) continue;
+                var normalized = NormalizeHexHandle(text);
+                if (normalized == null || !seen.Add(normalized) || !long.TryParse(normalized, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) continue;
                 try
                 {
                     var id = document.Database.GetObjectId(false, new Handle(value), 0);
@@ -42,6 +42,14 @@ namespace QS3D.BricsCAD.V25.Cad
                 transaction.Commit();
             }
             return result;
+        }
+
+        public static string? NormalizeHexHandle(string? text)
+        {
+            var normalized = (text ?? string.Empty).Trim();
+            if (normalized.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) normalized = normalized.Substring(2);
+            if (normalized.Length == 0 || !long.TryParse(normalized, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) || value <= 0L) return null;
+            return value.ToString("X", CultureInfo.InvariantCulture);
         }
 
         public static int Select(Document document, IEnumerable<string> handles) => SelectIfAny(document, handles);
