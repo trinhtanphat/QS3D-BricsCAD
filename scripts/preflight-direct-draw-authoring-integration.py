@@ -15,7 +15,7 @@ required = {
         'CommandMethod("QS3DDRAWOPENING"',
         "ProjectStateSnapshot.Capture(project)",
         "new AutoHostLinkCommands().AutoLinkHosts()",
-        'Properties.TryGetValue("HostElementId"',
+        'Properties.TryGetValue("HostWallId"',
     ],
     "src/QS3D.BricsCAD.V25/FamilyManagerCommands.cs": ['CommandMethod("QS3DFAMILIES"'],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
