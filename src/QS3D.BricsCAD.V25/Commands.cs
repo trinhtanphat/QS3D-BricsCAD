@@ -244,21 +244,15 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DHEALTH", () =>
             {
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
-                var sourceHandles = project.Elements.SelectMany(x => x.SourceHandles).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                var generatedHandles = project.Elements
-                    .Select(x => x.Properties.TryGetValue("GeneratedSolidHandle", out var handle) ? handle : string.Empty)
+                var sourceHandles = project.Elements
+                    .SelectMany(x => x.SourceHandles)
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
-                var generatedRebarHandles = project.Elements
-                    .SelectMany(ParseGeneratedRebarHandles)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
+                var generatedHandles = GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project);
                 var liveSources = Cad.CadHandleService.GetLiveHandles(doc, sourceHandles);
                 var liveGeneratedSolids = Cad.CadHandleService.GetLiveSolidHandles(doc, generatedHandles);
-                var liveGeneratedRebar = Cad.CadHandleService.GetLiveSolidHandles(doc, generatedRebarHandles);
-                var issues = new List<ModelHealthIssue>(new ModelHealthService().Inspect(project, liveSources, liveGeneratedSolids));
-                issues.AddRange(new GeneratedRebarHealthService().Inspect(project, liveGeneratedRebar));
+                var issues = new ComprehensiveModelHealthService().Inspect(project, liveSources, liveGeneratedSolids);
                 var summary = new HealthSummary(issues);
                 var text = "Model Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(text); doc.Editor.WriteMessage("\nQS3D " + text);
@@ -266,10 +260,14 @@ namespace QS3D.BricsCAD.V25
                 {
                     var element = project.FindElement(issue.ElementId); if (element == null) return;
                     IEnumerable<string> locateHandles = SemanticReferenceHandles.Get(element);
-                    if (issue.Code.IndexOf("REBAR_GENERATED", StringComparison.OrdinalIgnoreCase) >= 0 || issue.Code.IndexOf("GENERATED_REBAR", StringComparison.OrdinalIgnoreCase) >= 0)
-                        locateHandles = ParseGeneratedRebarHandles(element);
-                    else if (issue.Code.IndexOf("GENERATED", StringComparison.OrdinalIgnoreCase) >= 0 && element.Properties.TryGetValue("GeneratedSolidHandle", out var generated) && !string.IsNullOrWhiteSpace(generated))
-                        locateHandles = new[] { generated };
+                    if (issue.Code.IndexOf("GENERATED", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        var generated = GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element)
+                            .Select(x => x.Key)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToArray();
+                        if (generated.Length > 0) locateHandles = generated;
+                    }
                     var count = Cad.CadHandleService.Select(doc, locateHandles);
                     PaletteCoordinator.SetStatus("Health Định vị " + element.Id + " • " + count + " đối tượng CAD");
                     if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
@@ -346,12 +344,6 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(label + ": đã ghi " + count + " cấu kiện.");
                 doc.Editor.WriteMessage("\nQS3D " + label + ": " + count + " element(s).");
             });
-        }
-
-        private static IEnumerable<string> ParseGeneratedRebarHandles(ProjectElement element)
-        {
-            if (!element.Properties.TryGetValue("GeneratedRebarHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
-            return raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0);
         }
 
         private static int RegenerateProject(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
