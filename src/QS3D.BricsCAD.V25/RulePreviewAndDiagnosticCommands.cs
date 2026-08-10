@@ -6,6 +6,7 @@ using Microsoft.Win32;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Rules;
+using QS3D.Core.Services;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -40,6 +41,40 @@ namespace QS3D.BricsCAD.V25
             {
                 try { document.Editor.WriteMessage("\nQS3DRULEPREVIEW error: " + ex.Message); } catch { }
                 TrySetStatus("QS3DRULEPREVIEW lỗi: " + ex.Message);
+            }
+        }
+
+        [CommandMethod("QS3DREGENPREVIEW", CommandFlags.Modal)]
+        public void PreviewRegeneration()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+            try
+            {
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var preview = new RegenerationPreviewService().Preview(project);
+                document.Editor.WriteMessage(
+                    "\nQS3D Regen Preview: " + preview.RegeneratedElementCount + " lượt regen • " +
+                    preview.ChangedElementCount + " element đổi • " + preview.ChangedFieldCount + " field đổi • " +
+                    preview.HealthDiff.NewErrorCount + " Health error mới. Không mutate project.");
+
+                foreach (var delta in preview.Deltas.Take(20))
+                {
+                    var fields = string.Join(", ", delta.Fields.Take(8).Select(x => x.Field));
+                    if (delta.Fields.Count > 8) fields += ", ...";
+                    document.Editor.WriteMessage("\n  " + delta.ElementId + " [" + delta.Change + "]: " + fields);
+                }
+                if (preview.Deltas.Count > 20)
+                    document.Editor.WriteMessage("\n  ... còn " + (preview.Deltas.Count - 20) + " element có delta.");
+
+                TrySetStatus(
+                    "Regen Preview: " + preview.ChangedElementCount + " element • " + preview.ChangedFieldCount +
+                    " field • " + preview.HealthDiff.NewErrorCount + " error mới • read-only.");
+            }
+            catch (System.Exception ex)
+            {
+                try { document.Editor.WriteMessage("\nQS3DREGENPREVIEW error: " + ex.Message); } catch { }
+                TrySetStatus("QS3DREGENPREVIEW lỗi: " + ex.Message);
             }
         }
 
