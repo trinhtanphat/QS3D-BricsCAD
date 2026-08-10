@@ -49,6 +49,26 @@ Current contract includes:
 
 Transient thickness/profile DrawJig preview, repeated authoring UX and broader native interaction proof remain LOCAL_ONLY/runtime-sensitive and are already parked in the local addendum.
 
+### Manual host-link atomicity
+
+`QS3DLINKHOST` now snapshots the full `ProjectState` before `HostLinkService.LinkOpening(...)`. Manual link mutation plus deterministic regeneration share one rollback boundary. If link/regeneration fails, the project snapshot is restored; if rollback itself fails, both failures are surfaced instead of silently leaving a half-mutated semantic project.
+
+Keep palette/status refresh outside the semantic commit boundary. A post-commit UI failure must not turn a valid host-link commit into an apparent semantic failure.
+
+### Physical opening-cut live freshness
+
+Straight/selected and curved physical cuts now stamp live-input freshness metadata after a successful cut. `PhysicalOpeningCutLiveStateService` recomputes the current inputs so Health/Release can detect a host that still carries an older physical hole after host/opening CAD geometry, linked-opening membership or effective cut parameters changed.
+
+The live fingerprint covers host source geometry and effective host dimensions; linked opening source extents plus Width/Height/Sill/Clearance; and curved-host project settings that affect cutter construction. Generated-host rebuild invalidation clears the whole `PhysicalOpeningCut*` family.
+
+Keep this service wired into `QS3DHEALTHALL` and `QS3DRELEASECHECK`. Missing/stale/mismatched live-cut metadata is intentionally release-blocking; do not “upgrade” an old cut by stamping metadata without actually rebuilding/cutting it.
+
+### Comprehensive Core health
+
+`QS3DHEALTH` uses `ComprehensiveModelHealthService`. Its Core-only aggregate includes model/source health, Room Finish integrity, dependency health, Level-reference health, generated ownership/stale/mode health, fabrication qualification and all current generated rebar/mesh/curtain output-family diagnostics.
+
+Live BricsCAD-state checks such as curtain-frame live fingerprints and physical-opening live-cut freshness stay in `QS3DHEALTHALL` / `QS3DRELEASECHECK`; do not introduce BricsCAD runtime dependencies into Core just to make the composite broader.
+
 ## 3. Grid / reference model — partially advanced
 
 `QS3DGRID` is source-implemented as guarded semantic capture for finite positive `LINE` / `ARC` Grid references. It reuses `ElementCategory.Grid`, transactional `SemanticCaptureService` and generic semantic quantities (`LengthM`, `Count`).
@@ -68,11 +88,11 @@ Current Core supports opt-in:
 - `TopLevelId`
 - `TopLevelOffsetM`
 
-`ProjectFloorService` owns assignment/lifecycle, `ElementVerticalPlacementService` defines legacy-compatible bottom/top/effective-height resolution, and `LevelReferenceHealthService` is wired into Health All / Release Check.
+`ProjectFloorService` owns assignment/lifecycle, `ElementVerticalPlacementService` defines legacy-compatible bottom/top/effective-height resolution, and `LevelReferenceHealthService` is wired into comprehensive Health, Health All and Release Check.
 
 Legacy elements without Level references preserve source-relative placement semantics.
 
-Native host/opening/curtain/rebar placement and Level assignment UI are **not** to be exposed as complete until all dependent native systems use the same resolver. That coherent integration and exact-V25 proof is P0 in `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`.
+Native host/opening/curtain/rebar placement and Level assignment UI are **not** to be exposed as complete until all dependent native systems use the same resolver. `LevelReferenceNativeIntegrationPolicy` currently keeps every category unqualified; semantically valid Level refs therefore surface `LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING` and keep release blocked until coherent native integration plus exact-V25 proof exists.
 
 Read `docs/LEVEL-REFERENCES.md`.
 
