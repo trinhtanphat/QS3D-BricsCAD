@@ -64,7 +64,11 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWWALLPIER", () =>
             {
                 RequireModelSpace(document);
-                var points = AcquirePath(document, "Trụ Tường", 2, false);
+                // WallPier Direct Draw is intentionally LINE-only so QS3DBUILD3D reaches the
+                // specialized WallPierProfileSolidBuilder and preserves Rectangular/Chamfered
+                // profile semantics. Multi-segment paths need a separate deterministic profile-
+                // around-corners contract rather than silently falling back to generic wall prism.
+                var points = AcquireFixedPath(document, "Trụ Tường", 2);
                 if (points == null) return;
 
                 var project = ProjectContextCoordinator.GetOrCreate(document);
@@ -78,7 +82,7 @@ namespace QS3D.BricsCAD.V25
                 Execute(
                     document,
                     ElementCategory.WallPier,
-                    () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
+                    () => CreateLine(document, points[0], points[1]),
                     element =>
                     {
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
