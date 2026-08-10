@@ -107,12 +107,42 @@ A missing semantic Grid label is not itself an error because capture and naming 
 
 This planner reports intersection geometry only. Native extraction from V25 sources, intersection markers, constraints, dimensions and automatic structural hosting/snapping remain separate work.
 
+## Spatial ordering Core contract
+
+`GridSpatialOrderingPlanner` can deterministically order an explicit family of parallel `LINE` Grid references along a caller-provided ordering axis. It rejects ARC input, non-parallel families, duplicate semantic IDs, degenerate lines and overlapping/ambiguous projected coordinates rather than inventing an arbitrary order.
+
+This is a reusable Core primitive. It does not change `QS3DGRIDNUMBER`: the current command still treats explicit user click order as authoritative until a reviewed native interaction chooses to consume the spatial-ordering planner.
+
+## Rectangular and radial Grid systems — Core
+
+`GridSystemPlanner` now provides a bounded CAD-independent construction contract over the existing `GridReferenceCurve` model. It **does not** create a second semantic Grid store and it never invents semantic IDs or labels.
+
+`PlanRectangular(...)` accepts:
+
+- explicit origin and U/V axes;
+- explicit semantic element IDs plus coordinates for U and V stations;
+- explicit U/V extents;
+- finite coordinate and orthogonality tolerances.
+
+The axes are normalized and must be orthogonal within the requested tolerance. Stations must be finite, unique within tolerance, lie inside their declared extents and have globally unique element IDs. The combined system is capped at 2000 curves. U stations become finite LINE references parallel to V; V stations become finite LINE references parallel to U. Rotated rectangular systems are supported because the planner works from explicit local axes rather than assuming WCS X/Y.
+
+`PlanRadial(...)` accepts:
+
+- an explicit center;
+- explicit ray element IDs + angles;
+- explicit ring element IDs + radii;
+- explicit inner/outer radius and tolerances.
+
+Ray angles are normalized modulo `2π` and ambiguous duplicates such as `0` versus `2π` fail closed. Ring radii must be finite, positive, unique within tolerance and inside the declared radial extent. Rays become finite LINE references; rings become full-circle ARC references. The output feeds the existing `GridIntersectionPlanner`, so ray/ring intersections reuse the canonical Grid intersection engine rather than a second radial calculation path.
+
+`GridSystemPlanner` + its deterministic smoke/preflight are `REMOTE_DONE`. **Native rectangular/radial system authoring, creation/capture of actual Grid elements, automatic ID/label assignment, source ownership, editor UX and V25 runtime proof are `LOCAL_ONLY`.** Remote agents must not re-audit or reimplement those runtime/native steps under `docs/REMOTE-AGENT-SCOPE.md`.
+
 ## Product boundary
 
 Current Grid source still does **not** mean the following are complete:
 
-- automatic CAD spatial ordering for renumbering;
-- rectangular/radial Grid-system authoring/discovery;
+- automatic native CAD spatial ordering/renumber UX that consumes the Core ordering planner;
+- native rectangular/radial Grid-system authoring/materialization from the Core system plan;
 - Grid intersection constraints or associative dimensions;
 - automatic native Grid intersection markers;
 - Direct Draw Grid with transient jig/repeat authoring;
@@ -159,6 +189,7 @@ A local-capable agent should include Grid in the exact-SHA runtime matrix:
 12. verify tilted ARC annotation stays on its native plane and 3D-sloped LINE fails with zero residue;
 13. corrupt one generated ownership marker and verify replacement refuses to erase it;
 14. verify save/reopen, Undo/Redo, multi-DWG isolation, Unicode labels and HiDPI visuals;
-15. verify comprehensive Health reports malformed/duplicate naming and stale/corrupt generated annotation without mutating the model.
+15. verify comprehensive Health reports malformed/duplicate naming and stale/corrupt generated annotation without mutating the model;
+16. when native rectangular/radial authoring is implemented locally, verify it materializes the reviewed Core plan without changing station IDs/order/geometry and preserves ownership/rollback.
 
-Until that runtime pass exists, describe Grid capture/naming/intersection/native-annotation code as source-implemented/statically guarded, not `LOCAL_PASS` or V25-runtime-certified.
+Remote agents stop at the Core/source contracts above and do not re-run or re-audit this matrix. Until a local agent records actual evidence, native Grid behavior must not be called `LOCAL_PASS` or V25-runtime-certified.
