@@ -25,6 +25,7 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 if (element.Category != ElementCategory.Grid) continue;
                 if (!element.Properties.TryGetValue(HandlesKey, out var rawHandles)) continue;
 
