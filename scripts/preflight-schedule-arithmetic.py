@@ -18,10 +18,27 @@ if not bq.is_file():
     errors.append("missing BQ builder")
 else:
     text = bq.read_text(encoding="utf-8")
-    for needle in ("QFirst(ProjectElement", "QFirstOrFallback", 'QFirst(element, "GrossConcreteM3", "GrossVolumeM3")'):
-        if needle not in text: errors.append("BQ lazy-fallback guard missing: " + needle)
-    for forbidden in ('Q(element, "GrossConcreteM3", Q(', 'Q(element, "NetConcreteM3", Q('):
-        if forbidden in text: errors.append("BQ still eagerly evaluates a legacy fallback: " + forbidden)
+    for needle in (
+        "QFirst(ProjectElement",
+        "QFirstOrFallback",
+        'QFirst(element, "GrossConcreteM3", "GrossVolumeM3")',
+        'QFirst(element, "NetFinishAreaM2", "SideAreaM2")',
+    ):
+        if needle not in text: errors.append("BQ lazy/preferred-quantity guard missing: " + needle)
+    for forbidden in (
+        'Q(element, "GrossConcreteM3", Q(',
+        'Q(element, "NetConcreteM3", Q(',
+        'QFirst(element, "SideAreaM2", "NetFinishAreaM2")',
+    ):
+        if forbidden in text: errors.append("BQ still eagerly evaluates or prefers a legacy fallback: " + forbidden)
+
+quantity_smoke = ROOT / "tests/QS3D.Core.SmokeTests/ProjectQuantitySmoke.cs"
+if not quantity_smoke.is_file():
+    errors.append("missing ProjectQuantity smoke")
+else:
+    text = quantity_smoke.read_text(encoding="utf-8")
+    for needle in ("WallFinishPrefersRegeneratedNetArea", 'finish.Quantities["SideAreaM2"] = 99d', 'finish.Quantities["NetFinishAreaM2"] = 12.5d'):
+        if needle not in text: errors.append("WallFinish BQ precedence smoke missing: " + needle)
 
 safe_summary_files = [
     "src/QS3D.BricsCAD.V25/RoomFinishScheduleCommands.cs",
@@ -62,4 +79,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: BQ fallbacks are lazy; BQ export refreshes its bound drawing; schedule/Curtain/BBS UI-export totals use shared checked finite arithmetic with room provenance exclusion.")
+print("PASS: BQ fallbacks are lazy; WallFinish BQ prefers regenerated net finish area; BQ export refreshes its bound drawing; schedule/Curtain/BBS UI-export totals use shared checked finite arithmetic with room provenance exclusion.")

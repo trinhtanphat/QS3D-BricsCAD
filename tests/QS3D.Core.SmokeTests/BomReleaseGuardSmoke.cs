@@ -10,6 +10,12 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            BasicBomGuard();
+            RoomFinishProvenanceReachesReleaseGuard();
+        }
+
+        private static void BasicBomGuard()
+        {
             var project = new ProjectState("bom", "BOM release guard");
             project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
             var element = new ProjectElement("beam-1", ElementCategory.Beam, "beam", string.Empty, string.Empty);
@@ -43,6 +49,23 @@ namespace QS3D.Core.SmokeTests
             var allFuture = new HashSet<string>(new[] { "2B", "3C", "3D" }, StringComparer.OrdinalIgnoreCase);
             if (BomReleaseGuardService.Inspect(project, allFuture).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
                 throw new Exception("Future Generated*Handles owner slot must use the shared BOM liveness registry without a hard-coded family update.");
+        }
+
+        private static void RoomFinishProvenanceReachesReleaseGuard()
+        {
+            var project = new ProjectState("finish-release", "Finish release guard");
+            project.Floors.Add(new FloorDefinition("f1", "Tầng 1", 0d));
+            project.Zones.Add(new ZoneDefinition("z1", "Zone 1"));
+            project.Families.Add(new ProjectFamily("finish", "Sơn", ElementCategory.WallFinish));
+            var orphan = new ProjectElement("finish-orphan", ElementCategory.WallFinish, "finish", "f1", "z1");
+            orphan.Properties[AutoRoomLifecycle.RoomSourceIdKey] = "missing-room";
+            orphan.SetQuantity("NetFinishAreaM2", 12d);
+            orphan.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(orphan);
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Has(issues, "ORPHAN_ROOM_FINISH");
+            Has(issues, "BOM_EMPTY");
         }
 
         private static void Empty(IReadOnlyList<ModelHealthIssue> issues)

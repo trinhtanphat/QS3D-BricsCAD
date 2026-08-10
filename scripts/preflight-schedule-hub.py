@@ -21,9 +21,10 @@ checks = {
         'x:Name="DoorCountText"', 'x:Name="CurtainCountText"', 'x:Name="MaterialCountText"',
         'Text="SCHEDULE-SAFE SNAPSHOT"', 'Text="Cấu kiện BQ"', 'Text="Vật liệu dùng"',
         'Tag="QS3DBQ"', 'Tag="QS3DREGEN"', 'Tag="QS3DFINISHSCHEDULE"', 'Tag="QS3DFINISHXLSX"',
-        'Tag="QS3DMATERIALS"', 'Tag="QS3DMATERIALXLSX"', 'Tag="QS3DCURTAIN"', 'Tag="QS3DCURTAINXLSX"',
-        'Tag="QS3DDOORSCHEDULE"', 'Tag="QS3DDOORXLSX"', 'Tag="QS3DREBARHUB"', 'Tag="QS3DBBS"', 'Tag="QS3DBBSCSV"',
-        'Click="OnCommandClick"', "Các badge dùng cùng builder/validation với schedule",
+        'Tag="QS3DROOMFINISHHEALTH"', 'Tag="QS3DMATERIALS"', 'Tag="QS3DMATERIALXLSX"',
+        'Tag="QS3DCURTAIN"', 'Tag="QS3DCURTAINXLSX"', 'Tag="QS3DDOORSCHEDULE"', 'Tag="QS3DDOORXLSX"',
+        'Tag="QS3DREBARHUB"', 'Tag="QS3DBBS"', 'Tag="QS3DBBSCSV"', 'Click="OnCommandClick"',
+        "Các badge dùng cùng builder/validation với schedule",
     ],
     required[1]: [
         "private readonly Document _document", "ScheduleHubWindow(Document document)", "ProjectContextCoordinator.GetOrCreate(_document)",
@@ -58,12 +59,13 @@ commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
     commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', path.read_text(encoding="utf-8"))
 for command in (
-    "QS3DSCHEDULES", "QS3DBQ", "QS3DREGEN", "QS3DFINISHSCHEDULE", "QS3DFINISHXLSX", "QS3DMATERIALS", "QS3DMATERIALXLSX",
-    "QS3DCURTAIN", "QS3DCURTAINXLSX", "QS3DDOORSCHEDULE", "QS3DDOORXLSX", "QS3DREBARHUB", "QS3DBBS", "QS3DBBSCSV"):
+    "QS3DSCHEDULES", "QS3DBQ", "QS3DREGEN", "QS3DFINISHSCHEDULE", "QS3DFINISHXLSX", "QS3DROOMFINISHHEALTH",
+    "QS3DMATERIALS", "QS3DMATERIALXLSX", "QS3DCURTAIN", "QS3DCURTAINXLSX", "QS3DDOORSCHEDULE", "QS3DDOORXLSX",
+    "QS3DREBARHUB", "QS3DBBS", "QS3DBBSCSV"):
     if commands.count(command) != 1: errors.append(command + " must be declared exactly once for Schedule Hub wiring")
 
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: document-bound Schedule Hub uses the same validated BQ/finish/material/curtain/door builders for badges and exposes all schedule/export workflows without recomputing a background DWG.")
+print("PASS: document-bound Schedule Hub uses validated builders for badges, exposes HT_Phòng repair health, and exposes all schedule/export workflows without recomputing a background DWG.")

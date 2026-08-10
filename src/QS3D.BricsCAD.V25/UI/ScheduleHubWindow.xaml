@@ -35,6 +35,7 @@
                 <UniformGrid Columns="2" Margin="0,0,0,14">
                     <Button Content="Xem HT_Phòng Schedule" Tag="QS3DFINISHSCHEDULE" Click="OnCommandClick"/>
                     <Button Content="Xuất HT_Phòng XLSX" Tag="QS3DFINISHXLSX" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Kiểm tra HT_Phòng Health" Tag="QS3DROOMFINISHHEALTH" Click="OnCommandClick"/>
                 </UniformGrid>
 
                 <TextBlock Text="VẬT LIỆU" Style="{StaticResource SectionLabel}"/>
