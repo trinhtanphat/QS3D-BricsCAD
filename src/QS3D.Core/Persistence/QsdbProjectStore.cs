@@ -100,8 +100,10 @@ namespace QS3D.Core.Persistence
                     {
                         DrawingFingerprint = Value(item, "drawingFingerprint")
                     };
-                    foreach (var handle in item.Element("handles")?.Elements("h") ?? Enumerable.Empty<XElement>()) if (!string.IsNullOrWhiteSpace(handle.Value)) element.SourceHandles.Add(handle.Value.Trim());
-                    foreach (var dep in item.Element("dependencies")?.Elements("d") ?? Enumerable.Empty<XElement>()) if (!string.IsNullOrWhiteSpace(dep.Value)) element.DependsOn.Add(dep.Value.Trim());
+                    foreach (var handle in item.Element("handles")?.Elements("h") ?? Enumerable.Empty<XElement>())
+                        if (!string.IsNullOrWhiteSpace(handle.Value)) element.SourceHandles.Add(handle.Value.Trim());
+                    foreach (var dep in item.Element("dependencies")?.Elements("d") ?? Enumerable.Empty<XElement>())
+                        if (!string.IsNullOrWhiteSpace(dep.Value)) element.DependsOn.Add(dep.Value.Trim());
                     ReadStringMap(item.Element("properties"), "p", element.Properties);
                     var quantities = item.Element("quantities");
                     if (quantities != null)
@@ -273,7 +275,12 @@ namespace QS3D.Core.Persistence
         private static void ReadStringMap(XElement? container, string itemName, System.Collections.Generic.IDictionary<string, string> target)
         {
             if (container == null) return;
-            foreach (var item in container.Elements(itemName)) target[Required(item, "name")] = Value(item, "value");
+            foreach (var item in container.Elements(itemName))
+            {
+                var key = Required(item, "name");
+                if (target.ContainsKey(key)) throw new InvalidDataException("Duplicate QSDB map key: " + key);
+                target[key] = Value(item, "value");
+            }
         }
 
         private static string Required(XElement element, string attribute) => element.Attribute(attribute)?.Value is string value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new InvalidDataException("Missing attribute: " + attribute);
