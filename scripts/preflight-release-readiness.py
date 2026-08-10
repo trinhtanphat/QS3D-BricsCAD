@@ -15,7 +15,7 @@ checks = {
         "BOM_GENERATED_HANDLE_MISSING",
         "BOM_ROW_MISSING",
         "ProjectQuantityReportBuilder.Group",
-        "GeneratedHandleOwnershipPolicy.IsOwnerSlot",
+        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
     ],
     "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": [
         "public static class GeneratedHandleOwnershipPolicy",
@@ -31,6 +31,7 @@ checks = {
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.IsOwnerSlot(key)",
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
         "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.TryFindOwner(project, handle",
     ],
     "src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs": [
         'CommandMethod("QS3DRELEASECHECK"',
