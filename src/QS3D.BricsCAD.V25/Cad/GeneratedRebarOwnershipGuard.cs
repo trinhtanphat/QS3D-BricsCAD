@@ -28,15 +28,12 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
             foreach (var element in project.Elements)
             {
-                foreach (var handle in element.SourceHandles)
-                    AddProtected(handle, element.Id + "/SourceHandles", owners);
+                foreach (var handle in element.SourceHandles) AddProtected(handle, element.Id + "/SourceHandles", owners);
                 AddProtectedProperty(element, "GeneratedSolidHandle", owners);
                 AddProtectedProperty(element, "PhysicalOpeningCutSolidHandle", owners);
             }
-
             foreach (var element in project.Elements)
             {
                 Add(element, "GeneratedRebarHandles", owners);
@@ -45,6 +42,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 Add(element, "GeneratedBeamStirrupHandles", owners);
                 Add(element, "GeneratedSlabMeshHandles", owners);
                 Add(element, "GeneratedWallMeshHandles", owners);
+                Add(element, "GeneratedFoundationMeshHandles", owners);
             }
             return new OwnershipIndex(owners);
         }
@@ -78,12 +76,9 @@ namespace QS3D.BricsCAD.V25.Cad
             owners[normalized] = token;
         }
 
-        private static IEnumerable<string> SplitHandles(string raw) =>
-            (raw ?? string.Empty)
-                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => x.Trim())
-                .Where(x => x.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase);
+        private static IEnumerable<string> SplitHandles(string raw) => (raw ?? string.Empty)
+            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);
 
         private static string OwnerToken(ProjectElement element, string propertyKey) => element.Id + "/" + propertyKey;
     }
