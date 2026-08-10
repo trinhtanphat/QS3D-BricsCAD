@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 
 namespace QS3D.Core.Export
 {
@@ -88,39 +89,21 @@ namespace QS3D.Core.Export
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-            var tempPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            var backupPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".replace.bak";
+            var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
-                File.WriteAllText(tempPath, Build(project), new UTF8Encoding(false));
-                if (!File.Exists(fullPath))
+                using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
                 {
-                    File.Move(tempPath, fullPath);
-                    return;
+                    writer.Write(Build(project));
+                    writer.Flush();
+                    stream.Flush(true);
                 }
-                try
-                {
-                    File.Replace(tempPath, fullPath, backupPath, true);
-                }
-                catch (PlatformNotSupportedException)
-                {
-                    File.Copy(fullPath, backupPath, true);
-                    try
-                    {
-                        File.Copy(tempPath, fullPath, true);
-                        File.Delete(tempPath);
-                    }
-                    catch
-                    {
-                        try { if (File.Exists(backupPath)) File.Copy(backupPath, fullPath, true); } catch { }
-                        throw;
-                    }
-                }
+                AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
             }
             finally
             {
-                TryDelete(tempPath);
-                TryDelete(backupPath);
+                AtomicFileCommit.TryDelete(tempPath);
             }
         }
 
@@ -225,7 +208,12 @@ namespace QS3D.Core.Export
             return value.ToString("R", CultureInfo.InvariantCulture);
         }
 
-        private static string Utc(DateTime value) => (value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime()).ToString("O", CultureInfo.InvariantCulture);
+        private static string Utc(DateTime value)
+        {
+            if (value.Kind != DateTimeKind.Utc)
+                throw new InvalidDataException("Interchange export timestamps must have DateTimeKind.Utc for deterministic output.");
+            return value.ToString("O", CultureInfo.InvariantCulture);
+        }
 
         private static string Escape(string value)
         {
@@ -249,13 +237,6 @@ namespace QS3D.Core.Export
                 }
             }
             return result.ToString();
-        }
-
-        private static void TryDelete(string path)
-        {
-            try { if (File.Exists(path)) File.Delete(path); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
         }
     }
 }
