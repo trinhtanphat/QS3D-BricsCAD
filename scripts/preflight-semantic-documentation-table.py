@@ -23,10 +23,13 @@ if BUILDER.is_file():
         "var headers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)",
         "Documentation table semantic element id is ambiguous",
         "SemanticTagRenderer.Render(project, element, column.Template, allowEmpty: true)",
+        "Cells = new List<string>(cells).AsReadOnly()",
+        "Headers = new List<string>(headers).AsReadOnly()",
+        "Rows = new List<SemanticDocumentationRow>(rows).AsReadOnly()",
         "return new SemanticDocumentationTable(",
     ):
         if token not in text:
-            errors.append("SemanticDocumentationTableBuilder.cs missing bounded/fail-closed token: " + token)
+            errors.append("SemanticDocumentationTableBuilder.cs missing bounded/fail-closed/immutable token: " + token)
 
 if RENDERER.is_file():
     text = RENDERER.read_text(encoding="utf-8")
@@ -48,6 +51,10 @@ if SMOKE.is_file():
         "DuplicateElementIdsFailClosed",
         "DuplicateHeadersFailClosed",
         "GeneratedOwnershipPropertiesRemainBlocked",
+        "OutputSnapshotsAreDefensivelyImmutable",
+        "sourceCells[0] = \"MUTATED\"",
+        "((IList<string>)row.Cells)[0] = \"MUTATED\"",
+        "((IList<SemanticDocumentationRow>)table.Rows).Clear()",
     ):
         if token not in text:
             errors.append("SemanticDocumentationTableSmoke.cs missing regression scenario: " + token)
@@ -61,11 +68,12 @@ if DOC.is_file():
         "SemanticDocumentationTableBuilder",
         "caller supplies an explicit ordered semantic element-ID list",
         "never creates CAD entities",
+        "defensively copied",
         "not a second BQ/BBS/schedule calculation engine",
         "Native V25 work that remains",
     ):
         if token not in text:
-            errors.append("DOCUMENTATION-LAYER.md missing table/runtime boundary: " + token)
+            errors.append("DOCUMENTATION-LAYER.md missing table/runtime/immutability boundary: " + token)
 
 print("QS3D semantic documentation table preflight")
 if errors:
@@ -74,4 +82,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: generic semantic documentation tables are bounded, explicitly ordered, blank-cell capable, generated-handle-safe and read-only while normal tag labels remain non-empty and native DWG table ownership remains a V25 gate.")
+print("PASS: generic semantic documentation tables are bounded, explicitly ordered, deep read-only snapshots, blank-cell capable, generated-handle-safe and non-mutating while normal tag labels remain non-empty and native DWG table ownership remains a V25 gate.")
