@@ -9,6 +9,7 @@ errors = []
 checks = {
     "src/QS3D.Core/Diagnostics/BomReleaseGuardService.cs": [
         "BomReleaseGuardService",
+        "new RoomFinishHealthService().Inspect(project)",
         "BOM_QUANTITY_DIRTY",
         "BOM_QUANTITY_NONFINITE",
         "BOM_TRACEABILITY_MISSING",
@@ -16,6 +17,13 @@ checks = {
         "BOM_ROW_MISSING",
         "ProjectQuantityReportBuilder.Group",
         "GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element)",
+    ],
+    "src/QS3D.Core/Diagnostics/RoomFinishHealthService.cs": [
+        "ROOM_PROVENANCE_CONFLICT",
+        "ORPHAN_ROOM_FINISH",
+        "INVALID_ROOM_FINISH_PARENT",
+        "ROOM_FINISH_SCOPE_MISMATCH",
+        "STALE_ROOM_FINISH",
     ],
     "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": [
         "public static class GeneratedHandleOwnershipPolicy",
@@ -73,11 +81,14 @@ checks = {
         "BOM_QUANTITY_NONFINITE",
         "BOM_TRACEABILITY_MISSING",
         "BOM_GENERATED_HANDLE_MISSING",
+        "ORPHAN_ROOM_FINISH",
+        "RoomFinishProvenanceReachesReleaseGuard",
         "PhysicalOpeningCutSolidHandle",
         "GeneratedFuturePanelHandles",
     ],
     "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs": [
         "BomReleaseGuardSmoke.Run();",
+        "RoomFinishHealthSmoke.Run();",
     ],
 }
 
@@ -120,4 +131,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DRELEASECHECK consumes shared logical ownership, dependency, Foundation/mode, stale/live CAD and BOM health; runtime/private-DWG remains a separate V25 gate.")
+print("PASS: QS3DRELEASECHECK consumes shared ownership, dependency, HT_Phòng provenance, Foundation/mode, stale/live CAD and BOM health; runtime/private-DWG remains a separate V25 gate.")
