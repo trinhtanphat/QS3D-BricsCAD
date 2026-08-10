@@ -87,6 +87,10 @@ namespace QS3D.Core.Rebar
                 Count = input.VerticalCount
             });
 
+            var faceCount = (input.IncludeNear ? 1L : 0L) + (input.IncludeFar ? 1L : 0L);
+            var projectedBars = faceCount * ((long)horizontalDistribution.OffsetsM.Count + verticalDistribution.OffsetsM.Count);
+            if (projectedBars > MaxBars) throw new InvalidOperationException("Structural wall mesh exceeds the supported " + MaxBars + " bar limit.");
+
             var half = RebarMath.Divide(thickness, 2d, "wall half thickness");
             double nearHorizontal;
             double nearVertical;
@@ -118,12 +122,11 @@ namespace QS3D.Core.Rebar
                 if (!(farInner > nearInner)) throw new InvalidOperationException("Structural wall thickness is insufficient for the requested two-face mesh and cover.");
             }
 
-            var bars = new List<WallMeshBarPlacement>();
+            var bars = new List<WallMeshBarPlacement>((int)projectedBars);
             if (input.IncludeNear)
                 AppendFace(bars, WallMeshFace.Near, horizontalDistribution.OffsetsM, verticalDistribution.OffsetsM, nearHorizontal, nearVertical, horizontalLength, verticalLength, horizontalDiameter, verticalDiameter);
             if (input.IncludeFar)
                 AppendFace(bars, WallMeshFace.Far, horizontalDistribution.OffsetsM, verticalDistribution.OffsetsM, farHorizontal, farVertical, horizontalLength, verticalLength, horizontalDiameter, verticalDiameter);
-            if (bars.Count > MaxBars) throw new InvalidOperationException("Structural wall mesh exceeds the supported " + MaxBars + " bar limit.");
             return new RectangularWallMeshLayout(bars.AsReadOnly(), horizontalDistribution.ActualSpacingM, verticalDistribution.ActualSpacingM);
         }
 
