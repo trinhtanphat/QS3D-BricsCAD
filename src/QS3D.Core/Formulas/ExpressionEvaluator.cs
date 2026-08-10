@@ -10,9 +10,70 @@ namespace QS3D.Core.Formulas
 
         public double Evaluate(string expression, IReadOnlyDictionary<string, double>? variables = null)
         {
+            ValidateExpression(expression);
+            return new Parser(expression, variables ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)).Parse();
+        }
+
+        public IReadOnlyCollection<string> GetReferencedVariables(string expression)
+        {
+            ValidateExpression(expression);
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var index = 0;
+            while (index < expression.Length)
+            {
+                var current = expression[index];
+                if (char.IsWhiteSpace(current)) { index++; continue; }
+                if (char.IsDigit(current) || current == '.')
+                {
+                    SkipNumberToken(expression, ref index);
+                    continue;
+                }
+                if (char.IsLetter(current) || current == '_')
+                {
+                    var start = index++;
+                    while (index < expression.Length)
+                    {
+                        var c = expression[index];
+                        if (char.IsLetterOrDigit(c) || c == '_' || c == '.') index++;
+                        else break;
+                    }
+                    var name = expression.Substring(start, index - start);
+                    var probe = index;
+                    while (probe < expression.Length && char.IsWhiteSpace(expression[probe])) probe++;
+                    if (probe >= expression.Length || expression[probe] != '(')
+                        if (seen.Add(name)) result.Add(name);
+                    continue;
+                }
+                index++;
+            }
+            return result;
+        }
+
+        private static void ValidateExpression(string expression)
+        {
             if (string.IsNullOrWhiteSpace(expression)) throw new ArgumentException("Expression is required.", nameof(expression));
             if (expression.Length > MaxExpressionLength) throw new InvalidOperationException("Expression is too long.");
-            return new Parser(expression, variables ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)).Parse();
+        }
+
+        private static void SkipNumberToken(string text, ref int index)
+        {
+            var seenDot = false;
+            var seenExponent = false;
+            while (index < text.Length)
+            {
+                var c = text[index];
+                if (char.IsDigit(c)) { index++; continue; }
+                if (c == '.' && !seenDot && !seenExponent) { seenDot = true; index++; continue; }
+                if ((c == 'e' || c == 'E') && !seenExponent)
+                {
+                    seenExponent = true;
+                    index++;
+                    if (index < text.Length && (text[index] == '+' || text[index] == '-')) index++;
+                    continue;
+                }
+                break;
+            }
         }
 
         private sealed class Parser

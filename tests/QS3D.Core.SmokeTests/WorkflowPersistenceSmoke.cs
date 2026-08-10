@@ -19,6 +19,8 @@ namespace QS3D.Core.SmokeTests
             SchemaV2MigratesToV3();
             RuleAuditRoundTrip();
             RuleDrivenRegeneration();
+            RuleDependenciesAreDeterministic();
+            RuleCyclesAreAtomic();
             TemplateRoundTripApply();
             ProjectLayerMappingWins();
         }
@@ -59,6 +61,45 @@ namespace QS3D.Core.SmokeTests
             True(count > 0); Near(0.3d, element.Quantities["NetVolumeM3"]); Near(0.6d, element.Quantities["DoubleVolume"]); Equal(ElementDirtyFlags.None, element.Dirty);
         }
 
+        private static void RuleDependenciesAreDeterministic()
+        {
+            var project = NewBeamProject();
+            var element = project.Elements.Single();
+            element.Quantities["NetVolumeM3"] = 0.3d;
+            element.Quantities["AdjustedVolume"] = 999d;
+            element.Quantities["FinalCost"] = 99900d;
+            element.Properties["Rule:AdjustedVolume"] = "old-adjust@0";
+            element.Properties["Rule:FinalCost"] = "old-final@0";
+
+            project.QuantityRules.Add(new QuantityRule("a-final", ElementCategory.Beam, "FinalCost", "AdjustedVolume*100", "1"));
+            project.QuantityRules.Add(new QuantityRule("z-adjust", ElementCategory.Beam, "AdjustedVolume", "NetVolumeM3*2", "1"));
+
+            var applied = new QuantityRuleEngine().ApplyMatching(project, element);
+            Equal(2, applied);
+            Near(0.6d, element.Quantities["AdjustedVolume"]);
+            Near(60d, element.Quantities["FinalCost"]);
+            Equal("z-adjust@1", element.Properties["Rule:AdjustedVolume"]);
+            Equal("a-final@1", element.Properties["Rule:FinalCost"]);
+        }
+
+        private static void RuleCyclesAreAtomic()
+        {
+            var project = NewBeamProject();
+            var element = project.Elements.Single();
+            element.Quantities["A"] = 10d;
+            element.Quantities["B"] = 20d;
+            element.Properties["Rule:A"] = "old-a@0";
+            element.Properties["Rule:B"] = "old-b@0";
+            project.QuantityRules.Add(new QuantityRule("rule-a", ElementCategory.Beam, "A", "B+1", "1"));
+            project.QuantityRules.Add(new QuantityRule("rule-b", ElementCategory.Beam, "B", "A+1", "1"));
+
+            Throws<InvalidOperationException>(() => new QuantityRuleEngine().ApplyMatching(project, element));
+            Near(10d, element.Quantities["A"]);
+            Near(20d, element.Quantities["B"]);
+            Equal("old-a@0", element.Properties["Rule:A"]);
+            Equal("old-b@0", element.Properties["Rule:B"]);
+        }
+
         private static void TemplateRoundTripApply()
         {
             var directory = TempDirectory("template"); var path = Path.Combine(directory, "company.qstemplate");
@@ -97,5 +138,6 @@ namespace QS3D.Core.SmokeTests
         private static void Near(double expected, double actual) { if (Math.Abs(expected - actual) > 1e-9) throw new Exception("Expected " + expected + ", got " + actual); }
         private static void Equal<T>(T expected, T actual) { if (!Equals(expected, actual)) throw new Exception("Expected " + expected + ", got " + actual); }
         private static void True(bool value) { if (!value) throw new Exception("Expected true."); }
+        private static void Throws<T>(Action action) where T : Exception { try { action(); } catch (T) { return; } throw new Exception("Expected exception " + typeof(T).Name + "."); }
     }
 }

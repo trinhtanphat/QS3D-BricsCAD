@@ -65,14 +65,38 @@ namespace QS3D.Core.Rules
             }
 
             var variables = BuildVariables(project, element);
+            foreach (var output in activeOutputs) variables.Remove(output);
             foreach (var stale in staleOutputs) variables.Remove(stale);
 
+            var references = new Dictionary<QuantityRule, IReadOnlyCollection<string>>();
+            foreach (var rule in rules) references[rule] = _evaluator.GetReferencedVariables(rule.Expression);
+
+            var pending = new List<QuantityRule>(rules);
+            var resolvedOutputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var staged = new List<KeyValuePair<QuantityRule, double>>(rules.Count);
-            foreach (var rule in rules)
+            while (pending.Count > 0)
             {
-                var value = _evaluator.Evaluate(rule.Expression, variables);
-                staged.Add(new KeyValuePair<QuantityRule, double>(rule, value));
-                variables[rule.OutputName] = value;
+                var progressed = false;
+                for (var index = 0; index < pending.Count;)
+                {
+                    var rule = pending[index];
+                    if (WaitsForManagedOutput(rule, references[rule], activeOutputs, resolvedOutputs))
+                    {
+                        index++;
+                        continue;
+                    }
+
+                    var value = _evaluator.Evaluate(rule.Expression, variables);
+                    staged.Add(new KeyValuePair<QuantityRule, double>(rule, value));
+                    variables[rule.OutputName] = value;
+                    resolvedOutputs.Add(rule.OutputName);
+                    pending.RemoveAt(index);
+                    progressed = true;
+                }
+
+                if (progressed) continue;
+                var unresolved = string.Join(", ", pending.Select(x => x.OutputName).OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+                throw new InvalidOperationException("Circular quantity rule dependency for " + element.Category + ": " + unresolved + ".");
             }
 
             CleanupStaleOutputs(element, staleOutputs);
@@ -82,6 +106,17 @@ namespace QS3D.Core.Rules
                 element.Properties[ProvenancePrefix + item.Key.OutputName] = item.Key.Id + "@" + item.Key.Version;
             }
             return rules.Count + staleOutputs.Count;
+        }
+
+        private static bool WaitsForManagedOutput(QuantityRule rule, IEnumerable<string> references, ISet<string> activeOutputs, ISet<string> resolvedOutputs)
+        {
+            foreach (var reference in references)
+            {
+                if (!activeOutputs.Contains(reference)) continue;
+                if (string.Equals(reference, rule.OutputName, StringComparison.OrdinalIgnoreCase)) return true;
+                if (!resolvedOutputs.Contains(reference)) return true;
+            }
+            return false;
         }
 
         private static void ValidateOutputs(IReadOnlyList<QuantityRule> rules, ElementCategory category)
