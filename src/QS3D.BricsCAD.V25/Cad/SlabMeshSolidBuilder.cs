@@ -6,6 +6,7 @@ using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
+using QS3D.Core.Geometry;
 using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using Teigha.DatabaseServices;
@@ -23,6 +24,8 @@ namespace QS3D.BricsCAD.V25.Cad
     {
         private const string HandlesKey = "GeneratedSlabMeshHandles";
         private const string Mode = "SlabMeshXY";
+        private const string RectangleFootprintMode = "RectangleLocalXY";
+        private const string PolygonFootprintMode = "PolygonGlobalXY";
         private const int MaxBarsPerBatch = 12000;
 
         private sealed class PendingUpdate
@@ -35,6 +38,7 @@ namespace QS3D.BricsCAD.V25.Cad
             public double XSpacingM { get; set; }
             public double YSpacingM { get; set; }
             public string Faces { get; set; } = string.Empty;
+            public string FootprintMode { get; set; } = string.Empty;
         }
 
         public static SlabMeshBuildResult BuildSelected(Document document, ProjectState project)
@@ -88,8 +92,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         var family = project.FindFamily(element.FamilyId);
                         var xGroup = ParseDirection(element, "RebarSlabXNotation");
                         var yGroup = ParseDirection(element, "RebarSlabYNotation");
-
-                        var frame = ReadRectangle(document, element, polyline);
                         var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .15d), element.Id + "/ThicknessM");
                         var coverM = CadGeometryGuard.Number(element, family, "RebarSlabCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .02d));
                         if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarSlabCoverM phải >= 0.");
@@ -98,11 +100,44 @@ namespace QS3D.BricsCAD.V25.Cad
                         var includeTop = string.Equals(faces, "Top", StringComparison.OrdinalIgnoreCase) || string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase);
                         if (!includeBottom && !includeTop) throw new InvalidOperationException(element.Id + "/RebarSlabFaces phải là Bottom, Top hoặc Both.");
                         var xClosest = Boolean(element, family, "RebarSlabXClosestToFace", true);
+                        var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var centerOffsetM = CadGeometryGuard.Add(bottomM, thicknessM / 2d, element.Id + "/slab mesh center offset Z");
+                        var centerZ = CadGeometryGuard.Add(
+                            polyline.Elevation,
+                            CadGeometryGuard.ToDrawingUnits(document, centerOffsetM, element.Id + "/slab mesh center Z"),
+                            element.Id + "/slab mesh world center Z");
 
-                        var layout = RectangularSlabMeshPlanner.Plan(new RectangularSlabMeshInput
+                        var rectangle = TryReadRectangle(document, element, polyline);
+                        if (rectangle != null)
                         {
-                            SpanXM = frame.SpanXM,
-                            SpanYM = frame.SpanYM,
+                            var layout = RectangularSlabMeshPlanner.Plan(new RectangularSlabMeshInput
+                            {
+                                SpanXM = rectangle.SpanXM,
+                                SpanYM = rectangle.SpanYM,
+                                ThicknessM = thicknessM,
+                                CoverM = coverM,
+                                XDiameterMm = xGroup.DiameterMm,
+                                YDiameterMm = yGroup.DiameterMm,
+                                XSpacingMm = xGroup.SpacingMm,
+                                XCount = xGroup.Quantity,
+                                YSpacingMm = yGroup.SpacingMm,
+                                YCount = yGroup.Quantity,
+                                IncludeBottom = includeBottom,
+                                IncludeTop = includeTop,
+                                XClosestToFace = xClosest
+                            });
+                            ReserveBatchBars(ref batchBars, layout.Count);
+                            ErasePrevious(document, transaction, element, ownership);
+                            var update = CreateUpdate(element, xGroup, yGroup, coverM, layout.XActualSpacingM, layout.YActualSpacingM, includeBottom, includeTop, RectangleFootprintMode);
+                            AppendRectangleBars(document, transaction, modelSpace, polyline, element, rectangle, centerZ, layout, update);
+                            pending.Add(update);
+                            continue;
+                        }
+
+                        var footprintM = ReadPolygonFootprint(document, element, polyline);
+                        var polygonLayout = PolygonalSlabMeshPlanner.Plan(new PolygonalSlabMeshInput
+                        {
+                            FootprintM = footprintM,
                             ThicknessM = thicknessM,
                             CoverM = coverM,
                             XDiameterMm = xGroup.DiameterMm,
@@ -115,55 +150,11 @@ namespace QS3D.BricsCAD.V25.Cad
                             IncludeTop = includeTop,
                             XClosestToFace = xClosest
                         });
-                        if (batchBars > MaxBarsPerBatch - layout.Count) throw new InvalidOperationException("Slab mesh batch vượt giới hạn " + MaxBarsPerBatch + " bar.");
-                        batchBars = checked(batchBars + layout.Count);
-
+                        ReserveBatchBars(ref batchBars, polygonLayout.Count);
                         ErasePrevious(document, transaction, element, ownership);
-                        var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var centerOffsetM = CadGeometryGuard.Add(bottomM, thicknessM / 2d, element.Id + "/slab mesh center offset Z");
-                        var centerZ = CadGeometryGuard.Add(
-                            polyline.Elevation,
-                            CadGeometryGuard.ToDrawingUnits(document, centerOffsetM, element.Id + "/slab mesh center Z"),
-                            element.Id + "/slab mesh world center Z");
-                        var update = new PendingUpdate
-                        {
-                            Element = element,
-                            XDiameterMm = xGroup.DiameterMm,
-                            YDiameterMm = yGroup.DiameterMm,
-                            CoverM = coverM,
-                            XSpacingM = layout.XActualSpacingM,
-                            YSpacingM = layout.YActualSpacingM,
-                            Faces = includeBottom && includeTop ? "Both" : (includeTop ? "Top" : "Bottom")
-                        };
-                        foreach (var placement in layout.Bars)
-                        {
-                            var run = placement.Direction == SlabMeshDirection.X ? frame.XAxis : frame.YAxis;
-                            var distribution = placement.Direction == SlabMeshDirection.X ? frame.YAxis : frame.XAxis;
-                            var distributionOffset = CadGeometryGuard.ToDrawingUnits(document, placement.DistributionOffsetM, element.Id + "/mesh distribution");
-                            var elevationOffset = CadGeometryGuard.ToDrawingUnits(document, placement.ElevationOffsetM, element.Id + "/mesh elevation");
-                            var length = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.LengthM, element.Id + "/mesh bar length"), element.Id + "/mesh bar length drawing");
-                            var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.DiameterMm / 2000d, element.Id + "/mesh bar radius"), element.Id + "/mesh bar radius drawing");
-                            var center = new Point3d(
-                                CadGeometryGuard.Add(frame.Center.X, CadGeometryGuard.Multiply(distribution.X, distributionOffset, element.Id + "/mesh distribution X"), element.Id + "/mesh center X"),
-                                CadGeometryGuard.Add(frame.Center.Y, CadGeometryGuard.Multiply(distribution.Y, distributionOffset, element.Id + "/mesh distribution Y"), element.Id + "/mesh center Y"),
-                                CadGeometryGuard.Add(centerZ, elevationOffset, element.Id + "/mesh center Z"));
-                            var half = length / 2d;
-                            var start = new Point3d(
-                                CadGeometryGuard.Subtract(center.X, CadGeometryGuard.Multiply(run.X, half, element.Id + "/mesh start X offset"), element.Id + "/mesh start X"),
-                                CadGeometryGuard.Subtract(center.Y, CadGeometryGuard.Multiply(run.Y, half, element.Id + "/mesh start Y offset"), element.Id + "/mesh start Y"),
-                                CadGeometryGuard.Finite(center.Z, element.Id + "/mesh start Z"));
-                            Solid3d? bar = CreateCylinder(document, start, run, length, radius, element.Id + "/slab mesh bar");
-                            try
-                            {
-                                bar.Layer = polyline.Layer;
-                                modelSpace.AppendEntity(bar);
-                                transaction.AddNewlyCreatedDBObject(bar, true);
-                                update.Handles.Add(bar.Handle.ToString());
-                                bar = null;
-                            }
-                            finally { bar?.Dispose(); }
-                        }
-                        pending.Add(update);
+                        var polygonUpdate = CreateUpdate(element, xGroup, yGroup, coverM, polygonLayout.XActualSpacingM, polygonLayout.YActualSpacingM, includeBottom, includeTop, PolygonFootprintMode);
+                        AppendPolygonBars(document, transaction, modelSpace, polyline, element, centerZ, polygonLayout, polygonUpdate);
+                        pending.Add(polygonUpdate);
                     }
 
                     foreach (var update in pending) CommitSemanticUpdate(project, update);
@@ -190,6 +181,121 @@ namespace QS3D.BricsCAD.V25.Cad
             return new SlabMeshBuildResult { Elements = pending.Count, Bars = pending.Sum(x => x.Handles.Count) };
         }
 
+        private static PendingUpdate CreateUpdate(
+            ProjectElement element,
+            RebarGroup xGroup,
+            RebarGroup yGroup,
+            double coverM,
+            double xSpacingM,
+            double ySpacingM,
+            bool includeBottom,
+            bool includeTop,
+            string footprintMode)
+        {
+            return new PendingUpdate
+            {
+                Element = element,
+                XDiameterMm = xGroup.DiameterMm,
+                YDiameterMm = yGroup.DiameterMm,
+                CoverM = coverM,
+                XSpacingM = xSpacingM,
+                YSpacingM = ySpacingM,
+                Faces = includeBottom && includeTop ? "Both" : (includeTop ? "Top" : "Bottom"),
+                FootprintMode = footprintMode
+            };
+        }
+
+        private static void AppendRectangleBars(
+            Document document,
+            Transaction transaction,
+            BlockTableRecord modelSpace,
+            Polyline source,
+            ProjectElement element,
+            RectangleFrame frame,
+            double centerZ,
+            RectangularSlabMeshLayout layout,
+            PendingUpdate update)
+        {
+            foreach (var placement in layout.Bars)
+            {
+                var run = placement.Direction == SlabMeshDirection.X ? frame.XAxis : frame.YAxis;
+                var distribution = placement.Direction == SlabMeshDirection.X ? frame.YAxis : frame.XAxis;
+                var distributionOffset = CadGeometryGuard.ToDrawingUnits(document, placement.DistributionOffsetM, element.Id + "/mesh distribution");
+                var elevationOffset = CadGeometryGuard.ToDrawingUnits(document, placement.ElevationOffsetM, element.Id + "/mesh elevation");
+                var length = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.LengthM, element.Id + "/mesh bar length"), element.Id + "/mesh bar length drawing");
+                var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.DiameterMm / 2000d, element.Id + "/mesh bar radius"), element.Id + "/mesh bar radius drawing");
+                var center = new Point3d(
+                    CadGeometryGuard.Add(frame.Center.X, CadGeometryGuard.Multiply(distribution.X, distributionOffset, element.Id + "/mesh distribution X"), element.Id + "/mesh center X"),
+                    CadGeometryGuard.Add(frame.Center.Y, CadGeometryGuard.Multiply(distribution.Y, distributionOffset, element.Id + "/mesh distribution Y"), element.Id + "/mesh center Y"),
+                    CadGeometryGuard.Add(centerZ, elevationOffset, element.Id + "/mesh center Z"));
+                var half = length / 2d;
+                var start = new Point3d(
+                    CadGeometryGuard.Subtract(center.X, CadGeometryGuard.Multiply(run.X, half, element.Id + "/mesh start X offset"), element.Id + "/mesh start X"),
+                    CadGeometryGuard.Subtract(center.Y, CadGeometryGuard.Multiply(run.Y, half, element.Id + "/mesh start Y offset"), element.Id + "/mesh start Y"),
+                    CadGeometryGuard.Finite(center.Z, element.Id + "/mesh start Z"));
+                AppendBar(document, transaction, modelSpace, source, element, start, run, length, radius, update);
+            }
+        }
+
+        private static void AppendPolygonBars(
+            Document document,
+            Transaction transaction,
+            BlockTableRecord modelSpace,
+            Polyline source,
+            ProjectElement element,
+            double centerZ,
+            PolygonalSlabMeshLayout layout,
+            PendingUpdate update)
+        {
+            foreach (var placement in layout.Bars)
+            {
+                var startX = CadGeometryGuard.ToDrawingUnits(document, placement.StartM.X, element.Id + "/polygon mesh start X");
+                var startY = CadGeometryGuard.ToDrawingUnits(document, placement.StartM.Y, element.Id + "/polygon mesh start Y");
+                var endX = CadGeometryGuard.ToDrawingUnits(document, placement.EndM.X, element.Id + "/polygon mesh end X");
+                var endY = CadGeometryGuard.ToDrawingUnits(document, placement.EndM.Y, element.Id + "/polygon mesh end Y");
+                var elevationOffset = CadGeometryGuard.ToDrawingUnits(document, placement.ElevationOffsetM, element.Id + "/polygon mesh elevation");
+                var startZ = CadGeometryGuard.Add(centerZ, elevationOffset, element.Id + "/polygon mesh start Z");
+                var run = new Vector3d(
+                    CadGeometryGuard.Subtract(endX, startX, element.Id + "/polygon mesh run X"),
+                    CadGeometryGuard.Subtract(endY, startY, element.Id + "/polygon mesh run Y"),
+                    0d);
+                var length = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.LengthM, element.Id + "/polygon mesh bar length"), element.Id + "/polygon mesh bar length drawing");
+                var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.DiameterMm / 2000d, element.Id + "/polygon mesh bar radius"), element.Id + "/polygon mesh bar radius drawing");
+                var start = new Point3d(startX, startY, startZ);
+                AppendBar(document, transaction, modelSpace, source, element, start, run, length, radius, update);
+            }
+        }
+
+        private static void AppendBar(
+            Document document,
+            Transaction transaction,
+            BlockTableRecord modelSpace,
+            Polyline source,
+            ProjectElement element,
+            Point3d start,
+            Vector3d direction,
+            double length,
+            double radius,
+            PendingUpdate update)
+        {
+            Solid3d? bar = CreateCylinder(document, start, direction, length, radius, element.Id + "/slab mesh bar");
+            try
+            {
+                bar.Layer = source.Layer;
+                modelSpace.AppendEntity(bar);
+                transaction.AddNewlyCreatedDBObject(bar, true);
+                update.Handles.Add(bar.Handle.ToString());
+                bar = null;
+            }
+            finally { bar?.Dispose(); }
+        }
+
+        private static void ReserveBatchBars(ref int batchBars, int count)
+        {
+            if (count < 0 || batchBars > MaxBarsPerBatch - count) throw new InvalidOperationException("Slab mesh batch vượt giới hạn " + MaxBarsPerBatch + " bar.");
+            batchBars = checked(batchBars + count);
+        }
+
         private static void CommitSemanticUpdate(ProjectState project, PendingUpdate update)
         {
             update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
@@ -198,10 +304,11 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedSlabMeshYDiameterMm"] = update.YDiameterMm.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedSlabMeshCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedSlabMeshMode"] = Mode;
+            update.Element.Properties["GeneratedSlabMeshFootprintMode"] = update.FootprintMode;
             update.Element.Properties["GeneratedSlabMeshXActualSpacingM"] = update.XSpacingM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedSlabMeshYActualSpacingM"] = update.YSpacingM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedSlabMeshFaces"] = update.Faces;
-            AuditTrail.ForProject(project).Record("geometry.rebar.slab.mesh", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
+            AuditTrail.ForProject(project).Record("geometry.rebar.slab.mesh", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars • " + update.FootprintMode);
         }
 
         private sealed class RectangleFrame
@@ -213,35 +320,38 @@ namespace QS3D.BricsCAD.V25.Cad
             public double SpanYM { get; set; }
         }
 
-        private static RectangleFrame ReadRectangle(Document document, ProjectElement element, Polyline polyline)
+        private static RectangleFrame? TryReadRectangle(Document document, ProjectElement element, Polyline polyline)
         {
-            if (!polyline.Closed || polyline.NumberOfVertices != 4) throw new InvalidOperationException(element.Id + ": QS3DSLABREBAR3D yêu cầu closed 4-vertex rectangular POLYLINE.");
-            var normal = polyline.Normal;
-            if (Math.Abs(normal.X) > 1e-9d || Math.Abs(normal.Y) > 1e-9d || Math.Abs(Math.Abs(normal.Z) - 1d) > 1e-9d)
-                throw new InvalidOperationException(element.Id + ": Slab mesh footprint phải nằm trên mặt phẳng XY.");
-            for (var i = 0; i < 4; i++) if (Math.Abs(polyline.GetBulgeAt(i)) > 1e-12d) throw new InvalidOperationException(element.Id + ": Slab mesh rectangle không hỗ trợ bulge.");
-            CadGeometryGuard.Finite(polyline.Elevation, element.Id + "/slab elevation");
-            var p0 = polyline.GetPoint2dAt(0); var p1 = polyline.GetPoint2dAt(1); var p2 = polyline.GetPoint2dAt(2); var p3 = polyline.GetPoint2dAt(3);
+            ValidateCommonFootprint(element, polyline);
+            if (polyline.NumberOfVertices != 4) return null;
+            var p0 = polyline.GetPoint2dAt(0);
+            var p1 = polyline.GetPoint2dAt(1);
+            var p2 = polyline.GetPoint2dAt(2);
+            var p3 = polyline.GetPoint2dAt(3);
             var xdx = CadGeometryGuard.Subtract(p1.X, p0.X, element.Id + "/slab X dx");
             var xdy = CadGeometryGuard.Subtract(p1.Y, p0.Y, element.Id + "/slab X dy");
             var ydx = CadGeometryGuard.Subtract(p2.X, p1.X, element.Id + "/slab Y dx");
             var ydy = CadGeometryGuard.Subtract(p2.Y, p1.Y, element.Id + "/slab Y dy");
             var spanXDrawing = CadGeometryGuard.Hypot(xdx, xdy, element.Id + "/slab X span");
             var spanYDrawing = CadGeometryGuard.Hypot(ydx, ydy, element.Id + "/slab Y span");
-            if (spanXDrawing <= 1e-9d || spanYDrawing <= 1e-9d) throw new InvalidOperationException(element.Id + ": Slab rectangle bị suy biến.");
-            var ux = xdx / spanXDrawing; var uy = xdy / spanXDrawing; var vx = ydx / spanYDrawing; var vy = ydy / spanYDrawing;
+            if (spanXDrawing <= 1e-9d || spanYDrawing <= 1e-9d) return null;
+            var ux = xdx / spanXDrawing;
+            var uy = xdy / spanXDrawing;
+            var vx = ydx / spanYDrawing;
+            var vy = ydy / spanYDrawing;
             var orthogonality = Math.Abs(CadGeometryGuard.Add(
                 CadGeometryGuard.Multiply(ux, vx, element.Id + "/slab dot X"),
                 CadGeometryGuard.Multiply(uy, vy, element.Id + "/slab dot Y"),
                 element.Id + "/slab orthogonality"));
-            if (orthogonality > 1e-6d) throw new InvalidOperationException(element.Id + ": Slab footprint không vuông góc.");
+            if (orthogonality > 1e-6d) return null;
             var tolerance = CadGeometryGuard.Add(CadGeometryGuard.Multiply(Math.Max(spanXDrawing, spanYDrawing), 1e-6d, element.Id + "/slab tolerance scale"), 1e-8d, element.Id + "/slab tolerance");
             var expectedP2X = CadGeometryGuard.Add(CadGeometryGuard.Add(p0.X, xdx, element.Id + "/slab expected P2 X"), ydx, element.Id + "/slab expected P2 X");
             var expectedP2Y = CadGeometryGuard.Add(CadGeometryGuard.Add(p0.Y, xdy, element.Id + "/slab expected P2 Y"), ydy, element.Id + "/slab expected P2 Y");
             var expectedP3X = CadGeometryGuard.Add(p0.X, ydx, element.Id + "/slab expected P3 X");
             var expectedP3Y = CadGeometryGuard.Add(p0.Y, ydy, element.Id + "/slab expected P3 Y");
-            if (Distance(p2.X, p2.Y, expectedP2X, expectedP2Y, element.Id + "/slab P2 closure") > tolerance || Distance(p3.X, p3.Y, expectedP3X, expectedP3Y, element.Id + "/slab P3 closure") > tolerance)
-                throw new InvalidOperationException(element.Id + ": Slab footprint phải là rectangle kín theo thứ tự vertex.");
+            if (Distance(p2.X, p2.Y, expectedP2X, expectedP2Y, element.Id + "/slab P2 closure") > tolerance ||
+                Distance(p3.X, p3.Y, expectedP3X, expectedP3Y, element.Id + "/slab P3 closure") > tolerance)
+                return null;
             return new RectangleFrame
             {
                 Center = new Point3d(
@@ -253,6 +363,35 @@ namespace QS3D.BricsCAD.V25.Cad
                 SpanXM = CadGeometryGuard.ToMeters(document, spanXDrawing, element.Id + "/slab X span"),
                 SpanYM = CadGeometryGuard.ToMeters(document, spanYDrawing, element.Id + "/slab Y span")
             };
+        }
+
+        private static IReadOnlyList<Point2> ReadPolygonFootprint(Document document, ProjectElement element, Polyline polyline)
+        {
+            ValidateCommonFootprint(element, polyline);
+            if (polyline.Normal.Z < 1d - 1e-9d)
+                throw new InvalidOperationException(element.Id + ": polygonal Slab mesh hiện yêu cầu plan-view POLYLINE có normal +Z.");
+            var points = new List<Point2>(polyline.NumberOfVertices);
+            for (var index = 0; index < polyline.NumberOfVertices; index++)
+            {
+                var point = polyline.GetPoint2dAt(index);
+                points.Add(new Point2(
+                    CadGeometryGuard.ToMeters(document, point.X, element.Id + "/polygon X"),
+                    CadGeometryGuard.ToMeters(document, point.Y, element.Id + "/polygon Y")));
+            }
+            return points.AsReadOnly();
+        }
+
+        private static void ValidateCommonFootprint(ProjectElement element, Polyline polyline)
+        {
+            if (!polyline.Closed || polyline.NumberOfVertices < 3)
+                throw new InvalidOperationException(element.Id + ": QS3DSLABREBAR3D yêu cầu closed POLYLINE có ít nhất 3 vertex.");
+            var normal = polyline.Normal;
+            if (Math.Abs(normal.X) > 1e-9d || Math.Abs(normal.Y) > 1e-9d || Math.Abs(Math.Abs(normal.Z) - 1d) > 1e-9d)
+                throw new InvalidOperationException(element.Id + ": Slab mesh footprint phải nằm trên mặt phẳng XY.");
+            for (var index = 0; index < polyline.NumberOfVertices; index++)
+                if (Math.Abs(CadGeometryGuard.Finite(polyline.GetBulgeAt(index), element.Id + "/slab bulge")) > 1e-12d)
+                    throw new InvalidOperationException(element.Id + ": polygonal Slab mesh chưa hỗ trợ bulge/curved boundary; dùng straight-segment closed POLYLINE.");
+            CadGeometryGuard.Finite(polyline.Elevation, element.Id + "/slab elevation");
         }
 
         private static RebarGroup ParseDirection(ProjectElement element, string key)
@@ -323,7 +462,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (id.IsNull || !id.IsValid) continue;
                 var entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
                 if (entity == null || entity.IsErased) continue;
-                if (!(entity is Polyline polyline)) throw new InvalidOperationException(element.Id + " cần source POLYLINE chữ nhật để dựng slab mesh 3D.");
+                if (!(entity is Polyline polyline)) throw new InvalidOperationException(element.Id + " cần source closed plan-view POLYLINE để dựng slab mesh 3D.");
                 if (selected != null) throw new InvalidOperationException(element.Id + " có nhiều selected live source. Chọn đúng một Slab POLYLINE.");
                 selected = polyline;
             }
