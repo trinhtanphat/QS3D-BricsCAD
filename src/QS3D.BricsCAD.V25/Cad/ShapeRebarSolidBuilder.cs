@@ -80,10 +80,18 @@ namespace QS3D.BricsCAD.V25.Cad
                     {
                         var path = RebarShapePathBuilder.Build(row.ShapeCode, row.CuttingLengthM, Text(element, "RebarShapeLegsM"), Text(element, "RebarShapeTurnsDeg"));
                         var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, row.DiameterMm / 2000d, element.Id + "/bar radius"), element.Id + "/bar radius drawing units");
-                        var clearance = AddFinite(placement.Cover, radius, element.Id + "/shape rebar center clearance");
+                        var distributionPlan = ShapeRebarDistributionPlanner.Plan(new ShapeRebarDistributionInput
+                        {
+                            Span = placement.Span,
+                            Cover = placement.Cover,
+                            Radius = radius,
+                            Count = row.Quantity,
+                            Centered = placement.DistributionCentered
+                        });
+                        var clearance = distributionPlan.CenterClearance;
                         for (var index = 0; index < row.Quantity; index++)
                         {
-                            var offset = DistributionOffset(index, row.Quantity, placement.Span, placement.Cover, radius, placement.DistributionCentered);
+                            var offset = distributionPlan.Offsets[index];
                             var axialOffset = placement.OffsetAxisFromMinimum ? clearance : 0d;
                             var origin = OffsetPoint(placement.Origin, placement.Axis, axialOffset, placement.Distribution, offset, clearance, element.Id + "/shape rebar origin");
                             var solid = BuildShape(document, origin, placement.Axis, placement.Distribution, path, radius, element.Id + "/" + row.BarMark);
@@ -197,24 +205,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 solid.TransformBy(Matrix3d.Displacement(new Vector3d(start.X, start.Y, start.Z))); var completed = solid; solid = null!; return completed;
             }
             finally { solid?.Dispose(); }
-        }
-
-        private static double DistributionOffset(int index, int count, double span, double cover, double radius, bool centered)
-        {
-            if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count));
-            if (index < 0 || index >= count) throw new ArgumentOutOfRangeException(nameof(index));
-            span = CadGeometryGuard.Positive(span, "shape rebar distribution span");
-            cover = CadGeometryGuard.Finite(cover, "shape rebar distribution cover");
-            radius = CadGeometryGuard.Positive(radius, "shape rebar distribution radius");
-            if (cover < 0d) throw new InvalidOperationException("Shape rebar distribution cover không được âm.");
-            var clearance = AddFinite(cover, radius, "shape rebar center clearance");
-            var usable = SubtractFinite(span, MultiplyFinite(clearance, 2d, "shape rebar two-side clearance"), "shape rebar usable distribution span");
-            if (usable < 0d) throw new InvalidOperationException("Cover + bar radius leaves no usable shape-rebar distribution span inside the host.");
-            if (count == 1) return centered ? 0d : CadGeometryGuard.Midpoint(0d, span, "shape rebar single distribution offset");
-            if (!(usable > 1e-12d)) throw new InvalidOperationException("Multiple shape rebars require a positive usable distribution span.");
-            var step = usable / (count - 1d);
-            var local = AddFinite(clearance, MultiplyFinite(step, index, "shape rebar distribution step"), "shape rebar edge distribution offset");
-            return centered ? SubtractFinite(local, span / 2d, "shape rebar centered distribution offset") : local;
         }
 
         private static Point3d OffsetPoint(Point3d origin, Vector3d axis, double axial, Vector3d distribution, double distributed, double zOffset, string label)
