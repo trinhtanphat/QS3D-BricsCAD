@@ -6,10 +6,11 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
-policy = ROOT / "src/QS3D.BricsCAD.V25/GeneratedHandleOwnershipPolicy.cs"
+adapter_policy = ROOT / "src/QS3D.BricsCAD.V25/GeneratedHandleOwnershipPolicy.cs"
+core_policy = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
 semantic = ROOT / "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs"
 
-for path in (review, policy, semantic):
+for path in (review, adapter_policy, core_policy, semantic):
     if not path.is_file():
         errors.append("missing B4D/generated ownership file: " + str(path.relative_to(ROOT)))
 
@@ -22,26 +23,34 @@ if review.is_file():
     ):
         if needle not in text:
             errors.append("ReviewCommands missing future-proof generated-source exclusion: " + needle)
-    for stale in (
-        'foreach (var key in new[]\n                {\n                    "GeneratedSolidHandle"',
-        '"GeneratedBeamStirrupHandles"\n                })',
-    ):
-        if stale in text:
-            errors.append("B4D still uses a hard-coded generated handle list that can miss future generated families.")
 
-if policy.is_file():
-    text = policy.read_text(encoding="utf-8")
+if adapter_policy.is_file():
+    text = adapter_policy.read_text(encoding="utf-8")
     for needle in (
-        'string.Equals(normalized, "PhysicalOpeningCutSolidHandle"',
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.IsOwnerSlot(key)",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
+    ):
+        if needle not in text:
+            errors.append("adapter ownership facade must delegate to Core policy: " + needle)
+    if 'StartsWith("Generated"' in text or 'PhysicalOpeningCutSolidHandle' in text:
+        errors.append("adapter ownership facade must not duplicate owner-slot classification logic")
+
+if core_policy.is_file():
+    text = core_policy.read_text(encoding="utf-8")
+    for needle in (
+        'string.Equals(normalized, OpeningCutOwnerKey',
         'normalized.StartsWith("Generated"',
         'normalized.EndsWith("Handle"',
         'normalized.EndsWith("Handles"',
+        "EnumerateOwnerHandles",
+        "CollectOwnerHandles",
     ):
         if needle not in text:
-            errors.append("GeneratedHandleOwnershipPolicy missing owner-slot contract: " + needle)
+            errors.append("Core GeneratedHandleOwnershipPolicy missing owner-slot contract: " + needle)
 
-if semantic.is_file() and "GeneratedFoundationMeshHandles" not in semantic.read_text(encoding="utf-8"):
-    errors.append("Semantic generated-handle ownership must include Foundation mesh.")
+if semantic.is_file() and "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)" not in semantic.read_text(encoding="utf-8"):
+    errors.append("Semantic generated-handle ownership must consume the shared Core policy dynamically.")
 
 print("QS3D B4D generated-source exclusion preflight")
 if errors:
@@ -50,4 +59,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DB4D excludes every generated owner-slot handle via the shared adapter policy, including current and future generated geometry families.")
+print("PASS: QS3DB4D excludes generated owner-slot handles through the shared Core ownership contract; adapter code no longer duplicates classification semantics.")
