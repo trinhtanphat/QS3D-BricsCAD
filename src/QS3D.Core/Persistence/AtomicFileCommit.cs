@@ -47,18 +47,12 @@ namespace QS3D.Core.Persistence
             var safetyBackup = destination + "." + Guid.NewGuid().ToString("N") + ".replace.bak";
             try
             {
-                try
-                {
-                    File.Replace(tempPath, destination, safetyBackup, true);
-                }
-                catch (PlatformNotSupportedException)
-                {
-                    MoveWithRecovery(tempPath, destination, safetyBackup, keepBackup: false);
-                }
-            }
-            finally
-            {
+                File.Replace(tempPath, destination, safetyBackup, true);
                 TryDelete(safetyBackup);
+            }
+            catch (PlatformNotSupportedException)
+            {
+                MoveWithRecovery(tempPath, destination, safetyBackup, keepBackup: false);
             }
         }
 
