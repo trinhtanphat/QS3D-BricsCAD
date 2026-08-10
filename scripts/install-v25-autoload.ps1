@@ -7,7 +7,9 @@ param(
     [string[]]$VersionKeys,
     [string[]]$LanguageKeys,
     [switch]$Force,
-    [switch]$RequireSigned
+    [switch]$RequireSigned,
+    [ValidatePattern('^[0-9A-Fa-f]{40}$')]
+    [string]$ExpectedSignerThumbprint
 )
 
 Set-StrictMode -Version Latest
@@ -45,8 +47,14 @@ function Get-RegistryTargets {
     return $targets
 }
 
+function Normalize-Thumbprint {
+    param([string]$Thumbprint)
+    if ([string]::IsNullOrWhiteSpace($Thumbprint)) { return '' }
+    return $Thumbprint.Replace(' ', '').ToUpperInvariant()
+}
+
 function Assert-PackageIntegrity {
-    param([string]$Directory, [switch]$SignedRequired)
+    param([string]$Directory, [switch]$SignedRequired, [string]$SignerThumbprint)
 
     $manifest = Join-Path $Directory 'SHA256SUMS.txt'
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Missing hash manifest: $manifest" }
@@ -57,6 +65,9 @@ function Assert-PackageIntegrity {
         $expected = $Matches[1].ToUpperInvariant()
         $name = $Matches[2].Trim()
         if ($name -eq 'SHA256SUMS.txt') { throw 'SHA256SUMS.txt must not hash itself.' }
+        if ([IO.Path]::IsPathRooted($name) -or $name.Contains('..') -or $name.Contains('/') -or $name.Contains('\')) {
+            throw "SHA256SUMS entry must be a package-root filename: $name"
+        }
         $file = Join-Path $Directory $name
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing package payload: $name" }
         $actual = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -67,9 +78,19 @@ function Assert-PackageIntegrity {
 
     $dll = Join-Path $Directory 'QS3D.BricsCAD.V25.dll'
     if (-not (Test-Path -LiteralPath $dll -PathType Leaf)) { throw 'QS3D.BricsCAD.V25.dll is missing.' }
-    if ($SignedRequired) {
+    $expectedSigner = Normalize-Thumbprint $SignerThumbprint
+    if ($SignedRequired -or $expectedSigner.Length -gt 0) {
         $signature = Get-AuthenticodeSignature -FilePath $dll
-        if ($signature.Status -ne 'Valid') { throw "QS3D plugin signature is not valid: $($signature.Status)" }
+        if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "QS3D plugin signature is not valid: $($signature.Status)"
+        }
+        if (-not $signature.SignerCertificate) { throw 'QS3D plugin signature has no signer certificate.' }
+        if ($expectedSigner.Length -gt 0) {
+            $actualSigner = Normalize-Thumbprint $signature.SignerCertificate.Thumbprint
+            if ($actualSigner -ne $expectedSigner) {
+                throw "QS3D plugin signer mismatch. Expected $expectedSigner, got $actualSigner."
+            }
+        }
     }
 
     $commandsPath = Join-Path $Directory 'COMMANDS.txt'
@@ -84,7 +105,7 @@ if (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {
 }
 
 $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
-$commands = Assert-PackageIntegrity -Directory $package -SignedRequired:$RequireSigned
+$commands = Assert-PackageIntegrity -Directory $package -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
 $targets = @(Get-RegistryTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)
 
 foreach ($target in $targets) {
@@ -105,7 +126,8 @@ $payload = @(
     'PACKAGE-METADATA.json',
     'README.txt',
     'SHA256SUMS.txt',
-    'uninstall-v25-autoload.ps1'
+    'uninstall-v25-autoload.ps1',
+    'update-v25.ps1'
 )
 
 try {
