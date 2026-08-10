@@ -4,6 +4,7 @@ using System.Windows;
 using Bricscad.ApplicationServices;
 using Application = Bricscad.ApplicationServices.Application;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -91,19 +92,59 @@ namespace QS3D.BricsCAD.V25.UI
                 if (element.Category != _element.Category || KeysFor(element.Category) == null)
                     throw new InvalidOperationException("Semantic element " + _element.Id + " đã đổi category. Đóng và mở lại Rebar Mesh Setup.");
 
-                element.SetProperty(_keys.Direction1Key, Direction1Text.Text.Trim());
-                element.SetProperty(_keys.Direction2Key, Direction2Text.Text.Trim());
-                element.SetProperty(_keys.CoverKey, cover.ToString("R", CultureInfo.InvariantCulture));
-                element.SetProperty(_keys.FacesKey, faces.Trim());
-                element.SetProperty(_keys.ClosestKey, ClosestToFaceCheck.IsChecked.Value ? "true" : "false");
-                project.Touch();
-                _saved();
+                var rollback = ProjectStateSnapshot.Capture(project);
+                try
+                {
+                    element.SetProperty(_keys.Direction1Key, Direction1Text.Text.Trim());
+                    element.SetProperty(_keys.Direction2Key, Direction2Text.Text.Trim());
+                    element.SetProperty(_keys.CoverKey, cover.ToString("R", CultureInfo.InvariantCulture));
+                    element.SetProperty(_keys.FacesKey, faces.Trim());
+                    element.SetProperty(_keys.ClosestKey, ClosestToFaceCheck.IsChecked.Value ? "true" : "false");
+                    project.Touch();
+                }
+                catch (Exception operationError)
+                {
+                    RestoreOrThrow(project, rollback, operationError);
+                    throw;
+                }
+
+                NotifySavedAfterCommit();
                 ValidationText.Text = "Đã lưu thông số explicit. Hai phương có thể dùng diameter/count/spacing độc lập; generated mesh cũ (nếu có) đã stale và cần rebuild.";
                 Close();
             }
             catch (Exception ex)
             {
                 ValidationText.Text = ex.Message;
+            }
+        }
+
+        private void NotifySavedAfterCommit()
+        {
+            try
+            {
+                _saved();
+            }
+            catch (Exception callbackError)
+            {
+                try
+                {
+                    _document.Editor.WriteMessage("\nQS3D Rebar Mesh Setup đã commit; UI sync warning: " + callbackError.Message);
+                }
+                catch { }
+            }
+        }
+
+        private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError)
+        {
+            try
+            {
+                rollback.Restore(project);
+            }
+            catch (Exception restoreError)
+            {
+                throw new InvalidOperationException(
+                    "Lưu Rebar Mesh Setup thất bại và rollback project cũng không hoàn tất.",
+                    new AggregateException(operationError, restoreError));
             }
         }
 
