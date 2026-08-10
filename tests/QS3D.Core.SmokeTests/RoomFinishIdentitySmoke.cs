@@ -1,5 +1,6 @@
 using System;
 using QS3D.Core.Domain;
+using QS3D.Core.Reporting;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -12,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ReusesPropertyLinkedLegacyFinish();
             ReusesDependencyLinkedLegacyFinish();
             RejectsCanonicalAndLegacyDuplicate();
+            DuplicateFinishesFailClosedAcrossSchedules();
             RejectsCanonicalLinkedToAnotherRoom();
             RejectsCanonicalIdCategoryCollision();
             RejectsConflictingLegacyProvenance();
@@ -57,13 +59,29 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsCanonicalAndLegacyDuplicate()
         {
             var project = BaseProject(out var room, out _);
-            var canonical = Legacy(RoomFinishIdentityService.CanonicalId(room.Id, ElementCategory.Skirting), ElementCategory.Skirting, room);
+            AddDuplicateSkirting(project, room);
+            Throws<InvalidOperationException>(() => RoomFinishIdentityService.FindExisting(project, room, ElementCategory.Skirting), "Multiple Skirting finishes reference Room");
+        }
+
+        private static void DuplicateFinishesFailClosedAcrossSchedules()
+        {
+            var project = BaseProject(out var room, out _);
+            var family = project.FindFamily("finish") ?? throw new Exception("Missing finish family.");
+            family.Properties["Material"] = "Sơn";
+            var canonical = Legacy(RoomFinishIdentityService.CanonicalId(room.Id, ElementCategory.WallFinish), ElementCategory.WallFinish, room);
             canonical.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
-            var legacy = Legacy("LEGACY-SKIRT", ElementCategory.Skirting, room);
+            canonical.Quantities["NetFinishAreaM2"] = 10d;
+            canonical.MarkClean(ElementDirtyFlags.All);
+            var legacy = Legacy("LEGACY-WALL-FINISH", ElementCategory.WallFinish, room);
             legacy.Properties["ParentRoomId"] = room.Id;
+            legacy.Quantities["NetFinishAreaM2"] = 12d;
+            legacy.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(canonical);
             project.Elements.Add(legacy);
-            Throws<InvalidOperationException>(() => RoomFinishIdentityService.FindExisting(project, room, ElementCategory.Skirting), "Multiple Skirting finishes reference Room");
+
+            Throws<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project), "Multiple WallFinish finishes reference Room");
+            Throws<InvalidOperationException>(() => RoomFinishScheduleBuilder.Build(project), "Multiple WallFinish finishes reference Room");
+            Throws<InvalidOperationException>(() => MaterialUsageScheduleBuilder.Build(project), "Multiple WallFinish finishes reference Room");
         }
 
         private static void RejectsCanonicalLinkedToAnotherRoom()
@@ -101,6 +119,16 @@ namespace QS3D.Core.SmokeTests
         {
             var project = BaseProject(out var room, out _);
             Throws<ArgumentOutOfRangeException>(() => RoomFinishIdentityService.FindExisting(project, room, ElementCategory.Door), "HT_Phòng finish category");
+        }
+
+        private static void AddDuplicateSkirting(ProjectState project, ProjectElement room)
+        {
+            var canonical = Legacy(RoomFinishIdentityService.CanonicalId(room.Id, ElementCategory.Skirting), ElementCategory.Skirting, room);
+            canonical.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
+            var legacy = Legacy("LEGACY-SKIRT", ElementCategory.Skirting, room);
+            legacy.Properties["ParentRoomId"] = room.Id;
+            project.Elements.Add(canonical);
+            project.Elements.Add(legacy);
         }
 
         private static ProjectState BaseProject(out ProjectElement room, out ProjectElement secondRoom)
