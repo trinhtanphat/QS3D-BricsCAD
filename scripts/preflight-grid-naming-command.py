@@ -33,8 +33,6 @@ if COMMAND.is_file():
     if "GetSelection(" in text or "SelectImplied(" in text:
         errors.append("QS3DGRIDNUMBER must not rely on selection-set ordering; explicit GetEntity order is required")
     if text.index("GridNamingService.Renumber(project, orderedIds, options)") > text.index("AuditTrail.ForProject(project).Record("):
-        pass
-    else:
         errors.append("Grid semantic renumber must occur before its audit record")
     if text.index("FinalizeUi(document, assignments, options)") < text.index("GridNamingService.Renumber(project, orderedIds, options)"):
         errors.append("Grid UI finalization must happen only after semantic renumber succeeds")
