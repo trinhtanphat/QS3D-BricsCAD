@@ -24,6 +24,7 @@ namespace QS3D.Core.Diagnostics
             var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var validCount = 0;
@@ -103,7 +104,7 @@ namespace QS3D.Core.Diagnostics
                 if (element.IsGeneratedCurtainFrameStale())
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_STALE", HealthSeverity.Warning, "Curtain frame snapshot không còn khớp Family/Instance/source hiện tại; rebuild curtain frames trước khi phát hành bản vẽ.", element.Id));
             }
-            return issues;
+            return issues.AsReadOnly();
         }
 
         private static void ValidateConfigFingerprint(ProjectState project, ProjectElement element, double? storedLength, double? storedHeight, double? storedDepth, List<ModelHealthIssue> issues)
@@ -114,9 +115,9 @@ namespace QS3D.Core.Diagnostics
                 return;
             }
             if (!storedLength.HasValue || !storedHeight.HasValue || !storedDepth.HasValue) return;
-            var family = project.FindFamily(element.FamilyId);
             try
             {
+                var family = project.FindFamily(element.FamilyId);
                 var current = CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
                 {
                     LengthM = Number(element, family, "LengthM", storedLength.Value, true),
@@ -197,6 +198,7 @@ namespace QS3D.Core.Diagnostics
             var ownership = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 foreach (var handle in element.SourceHandles) Reserve(ownership, handle, element.Id + "/SourceHandles");
                 foreach (var property in element.Properties)
                 {
