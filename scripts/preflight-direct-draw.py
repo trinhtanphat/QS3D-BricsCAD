@@ -30,6 +30,12 @@ required = {
         "PromptFiniteMeters",
         "FamilyNumber",
         "FamilyFiniteNumber",
+        "PreferredFamily",
+        "Sửa Family trước khi Direct Draw.",
+        "Offset đáy Tường so với Z source (m)",
+        "Offset đáy Dầm so với Z source (m)",
+        "Offset đáy Sàn so với Z source (m)",
+        "Offset đáy Cột so với Z source (m)",
         'element.Properties["ThicknessM"]',
         'element.Properties["WidthM"]',
         'element.Properties["DepthM"]',
@@ -169,10 +175,15 @@ if source.is_file():
         "new WallFootprintEngine()",
         "CreateBox(",
         "CreateExtrudedSolid(",
+        "Cao độ đáy Tường (m)",
+        "Cao độ đáy Dầm (m)",
+        "Cao độ đáy Sàn (m)",
+        "Cao độ đáy Cột (m)",
+        "return value > 0d ? value : fallback;",
     )
     for token in forbidden:
         if token in text:
-            errors.append("DirectDrawCommands must reuse established builders instead of duplicating native geometry: " + token)
+            errors.append("DirectDrawCommands contains stale/unsafe authoring behavior: " + token)
     create = text.find("sourceId = createSource();")
     capture = text.find("SemanticCaptureService.Capture(document, category)")
     regenerate = text.find("var regenerated = new RegenerationEngine")
@@ -191,9 +202,11 @@ if source.is_file():
     if "Math.Abs(points[index].Z - z) > 1e-6d" in text:
         errors.append("Direct Draw planarity must be unit-aware rather than using raw drawing-unit tolerance")
     if text.count('element.Properties["BottomOffsetM"]') < 4:
-        errors.append("All P0 Direct Draw commands must persist the prompted base elevation/offset")
+        errors.append("All P0 Direct Draw commands must persist the prompted source-relative bottom offset")
     if text.count("PromptPositiveMeters(document.Editor") < 7:
         errors.append("P0 Direct Draw must prompt key positive dimensions instead of silently using all Family defaults")
+    if "Sửa Family trước khi Direct Draw." not in text or "if (!(value > 0d))" not in text:
+        errors.append("Existing invalid Family numeric values must fail closed rather than being silently replaced by Direct Draw fallbacks")
     erase_body = text.split("private static void EraseHandles", 1)[-1].split("private static Document? Active", 1)[0]
     if "catch { }" in erase_body or "catch{}" in erase_body.replace(" ", ""):
         errors.append("Direct Draw CAD rollback must not swallow per-entity erase failures")
@@ -234,4 +247,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw prompts BLT-style P0 dimensions, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and QS3DBUILD3D/Workspace resolve semantic/generated selections back to complete live Model-Space source batches before rebuilding.")
+print("PASS: Direct Draw P0 uses source-relative offsets, rejects invalid configured Family numerics, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and QS3DBUILD3D/Workspace resolve complete live Model-Space source batches before rebuilding.")
