@@ -64,6 +64,7 @@ namespace QS3D.BricsCAD.V25
                 combined.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
                 combined.AddRange(new GeneratedHandleOwnershipHealthService().Inspect(project));
                 combined.AddRange(new GeneratedRebarModeHealthService().Inspect(project));
+                combined.AddRange(new RebarFabricationQualificationHealthService().Inspect(project));
 
                 var issues = combined
                     .GroupBy(x => x.Severity + "|" + x.Code + "|" + x.ElementId + "|" + x.Message, StringComparer.Ordinal)
@@ -110,6 +111,7 @@ namespace QS3D.BricsCAD.V25
             var normalized = (code ?? string.Empty).ToUpperInvariant();
             if (normalized.Contains("PHYSICAL_OPENING_CUT")) return SplitPropertyHandles(element, "PhysicalOpeningCutSolidHandle");
             if (normalized.Contains("CURTAIN_FRAME")) return SplitPropertyHandles(element, "GeneratedCurtainFrameHandles");
+            if (normalized.Contains("REBAR_FAB")) return RebarOwnerSlotHandles(element);
             if (normalized.Contains("FOUNDATION_MESH")) return SplitPropertyHandles(element, FoundationMeshSolidBuilder.HandlesKey);
             if (normalized.Contains("WALL_MESH")) return SplitPropertyHandles(element, "GeneratedWallMeshHandles");
             if (normalized.Contains("SLAB_MESH")) return SplitPropertyHandles(element, "GeneratedSlabMeshHandles");
@@ -121,6 +123,14 @@ namespace QS3D.BricsCAD.V25
             if (normalized.Contains("GENERATED_SOLID") || normalized.Contains("GENERATED_HANDLE"))
                 return SplitPropertyHandles(element, "GeneratedSolidHandle");
             return Array.Empty<string>();
+        }
+
+        private static IEnumerable<string> RebarOwnerSlotHandles(ProjectElement element)
+        {
+            return GeneratedHandleOwnershipPolicy.RebarHandleKeys
+                .SelectMany(key => SplitPropertyHandles(element, key))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
         private static IEnumerable<string> OwnerSlotHandles(ProjectElement element)
