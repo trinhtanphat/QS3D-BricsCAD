@@ -1,7 +1,7 @@
 <Window x:Class="QS3D.BricsCAD.V25.UI.ProjectToolsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="QS3D • Thiết lập dự án" Width="720" Height="620"
+        Title="QS3D • Thiết lập dự án" Width="720" Height="650"
         WindowStartupLocation="CenterOwner" Background="#17191C">
     <Window.Resources>
         <ResourceDictionary>
@@ -40,6 +40,7 @@
                 <UniformGrid Columns="2" Margin="0,0,0,14">
                     <Button Content="Tầng / Cao độ" Tag="QS3DLEVELS" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
                     <Button Content="Material Catalog" Tag="QS3DMATERIALS" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Xuất bảng vật liệu" Tag="QS3DMATERIALXLSX" Click="OnCommandClick"/>
                     <Button Content="Xuất Template" Tag="QS3DTEMPLATEEXPORT" Click="OnCommandClick"/>
                     <Button Content="Nạp Template" Tag="QS3DTEMPLATEIMPORT" Click="OnCommandClick"/>
                     <Button Content="Lưu project" Tag="QS3DSAVE" Click="OnCommandClick"/>
@@ -61,7 +62,7 @@
                     <Button Content="Audit log" Tag="QS3DAUDIT" Click="OnCommandClick"/>
                     <Button Content="Workspace" Tag="QS3D" Click="OnCommandClick"/>
                 </UniformGrid>
-                <TextBlock Text="Tầng/Cao độ và Material Catalog sửa semantic/project data; generated geometry liên quan sẽ được đánh stale qua dirty/invalidation model thay vì âm thầm sửa CAD source." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,10,0,0"/>
+                <TextBlock Text="Cửa sổ này khóa theo bản vẽ đã mở. Nếu chuyển sang DWG khác, các nút command sẽ từ chối chạy cho đến khi kích hoạt lại đúng bản vẽ. Tầng/Cao độ và Material Catalog sửa semantic/project data; generated geometry liên quan được đánh stale thay vì âm thầm sửa CAD source." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,10,0,0"/>
             </StackPanel>
         </ScrollViewer>
 
