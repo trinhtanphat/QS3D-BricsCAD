@@ -58,8 +58,12 @@ namespace QS3D.BricsCAD.V25
                 Action<QuantityReportRow> locate = row =>
                 {
                     var project = ProjectContextCoordinator.GetOrCreate(doc);
-                    var handles = row.ElementIds.SelectMany(id => project.FindElement(id)?.SourceHandles ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                    if (handles.Length == 0) { PaletteCoordinator.SetStatus("BQ Định vị: dòng này chưa có semantic handle để chọn trong CAD."); return; }
+                    var handles = row.ElementIds.SelectMany(id =>
+                    {
+                        var element = project.FindElement(id);
+                        return element == null ? Enumerable.Empty<string>() : SemanticReferenceHandles.Get(element).AsEnumerable();
+                    }).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                    if (handles.Length == 0) { PaletteCoordinator.SetStatus("BQ Định vị: dòng này chưa có semantic reference handle để chọn trong CAD."); return; }
                     var count = Cad.CadHandleService.Select(doc, handles);
                     PaletteCoordinator.SetStatus("BQ Định vị: " + count + " đối tượng CAD");
                     if (count > 0) doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
@@ -206,7 +210,7 @@ namespace QS3D.BricsCAD.V25
                 var window = new ModelHealthWindow(issues, issue =>
                 {
                     var element = project.FindElement(issue.ElementId); if (element == null) return;
-                    IEnumerable<string> locateHandles = element.SourceHandles;
+                    IEnumerable<string> locateHandles = SemanticReferenceHandles.Get(element);
                     if (issue.Code.IndexOf("REBAR_GENERATED", StringComparison.OrdinalIgnoreCase) >= 0 || issue.Code.IndexOf("GENERATED_REBAR", StringComparison.OrdinalIgnoreCase) >= 0)
                         locateHandles = ParseGeneratedRebarHandles(element);
                     else if (issue.Code.IndexOf("GENERATED", StringComparison.OrdinalIgnoreCase) >= 0 && element.Properties.TryGetValue("GeneratedSolidHandle", out var generated) && !string.IsNullOrWhiteSpace(generated))
@@ -229,7 +233,7 @@ namespace QS3D.BricsCAD.V25
             {
                 var element = ProjectContextCoordinator.GetOrCreate(doc).FindElement(result.StringResult);
                 if (element == null) { doc.Editor.WriteMessage("\nKhông tìm thấy QS3D element."); return; }
-                var count = Cad.CadHandleService.Select(doc, element.SourceHandles);
+                var count = Cad.CadHandleService.Select(doc, SemanticReferenceHandles.Get(element));
                 PaletteCoordinator.SetStatus("Locate " + element.Id + " • " + count + " CAD object");
             });
         }
