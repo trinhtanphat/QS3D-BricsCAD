@@ -22,7 +22,8 @@ namespace QS3D.BricsCAD.V25.Cad
 
         public static bool Supports(ElementCategory category) =>
             category == ElementCategory.Beam || category == ElementCategory.Slab || category == ElementCategory.Column ||
-            category == ElementCategory.StructuralWall || category == ElementCategory.Foundation;
+            category == ElementCategory.StructuralWall || category == ElementCategory.Foundation || category == ElementCategory.Stair ||
+            category == ElementCategory.Railing || category == ElementCategory.Earthwork;
 
         public static int BuildSelected(Document document, ProjectState project, ElementCategory category)
         {
@@ -51,9 +52,9 @@ namespace QS3D.BricsCAD.V25.Cad
                     Solid3d? solid = null;
                     try
                     {
-                        if ((category == ElementCategory.Beam || category == ElementCategory.StructuralWall) && entity is Line line)
+                        if ((category == ElementCategory.Beam || category == ElementCategory.StructuralWall || category == ElementCategory.Railing) && entity is Line line)
                             solid = BuildLinePrism(document, line, element, project.FindFamily(element.FamilyId), category);
-                        else if ((category == ElementCategory.Slab || category == ElementCategory.Column || category == ElementCategory.Foundation) && entity is Polyline polyline && polyline.Closed)
+                        else if ((category == ElementCategory.Slab || category == ElementCategory.Column || category == ElementCategory.Foundation || category == ElementCategory.Stair || category == ElementCategory.Earthwork) && entity is Polyline polyline && polyline.Closed)
                             solid = BuildClosedPolylinePrism(document, polyline, element, project.FindFamily(element.FamilyId), category);
                         if (solid == null) continue;
 
@@ -79,7 +80,10 @@ namespace QS3D.BricsCAD.V25.Cad
             }
 
             foreach (var update in pending)
+            {
                 GeneratedGeometryService.CommitReplacement(update.Element, update.PreviousHandle, update.GeneratedHandle, update.Category);
+                update.Element.Properties["GeneratedSolidMode"] = GeometryMode(update.Category);
+            }
 
             if (pending.Count > 0)
             {
@@ -91,13 +95,31 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static Solid3d BuildLinePrism(Document document, Line line, ProjectElement element, ProjectFamily? family, ElementCategory category)
         {
-            var widthM = category == ElementCategory.Beam ? Number(element, family, "WidthM", .3d) : Number(element, family, "ThicknessM", .2d);
-            var heightM = Number(element, family, "HeightM", category == ElementCategory.Beam ? .5d : 3.6d);
+            double widthM;
+            double heightM;
+            switch (category)
+            {
+                case ElementCategory.Beam:
+                    widthM = Number(element, family, "WidthM", .3d);
+                    heightM = Number(element, family, "HeightM", .5d);
+                    break;
+                case ElementCategory.StructuralWall:
+                    widthM = Number(element, family, "ThicknessM", .2d);
+                    heightM = Number(element, family, "HeightM", 3.6d);
+                    break;
+                case ElementCategory.Railing:
+                    widthM = Number(element, family, "ProfileWidthM", .05d);
+                    heightM = Number(element, family, "HeightM", 1.1d);
+                    break;
+                default:
+                    throw new InvalidOperationException("Category không hỗ trợ LINE prism: " + category);
+            }
             var bottomM = Number(element, family, "BottomOffsetM", 0d);
             var dx = line.EndPoint.X - line.StartPoint.X;
             var dy = line.EndPoint.Y - line.StartPoint.Y;
             var length = Math.Sqrt(dx * dx + dy * dy);
-            if (length <= 1e-6 || widthM <= 0d || heightM <= 0d) throw new InvalidOperationException("Kích thước structural LINE không hợp lệ.");
+            if (length <= 1e-6 || widthM <= 0d || heightM <= 0d || double.IsNaN(length) || double.IsInfinity(length))
+                throw new InvalidOperationException("Kích thước structural LINE không hợp lệ.");
 
             var width = CadUnitService.MetersToDrawingUnits(document, widthM);
             var height = CadUnitService.MetersToDrawingUnits(document, heightM);
@@ -115,21 +137,39 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static Solid3d BuildClosedPolylinePrism(Document document, Polyline polyline, ProjectElement element, ProjectFamily? family, ElementCategory category)
         {
-            var heightM = category == ElementCategory.Slab
-                ? Number(element, family, "ThicknessM", .12d)
-                : category == ElementCategory.Foundation
-                    ? Number(element, family, "ThicknessM", .5d)
-                    : Number(element, family, "HeightM", 3.6d);
-            var bottomM = Number(element, family, "BottomOffsetM", 0d);
-            if (heightM <= 0d) throw new InvalidOperationException("Chiều cao extrusion phải lớn hơn 0.");
+            var direction = 1d;
+            double heightM;
+            switch (category)
+            {
+                case ElementCategory.Slab: heightM = Number(element, family, "ThicknessM", .12d); break;
+                case ElementCategory.Foundation: heightM = Number(element, family, "ThicknessM", .5d); break;
+                case ElementCategory.Stair: heightM = Number(element, family, "ThicknessM", .15d); break;
+                case ElementCategory.Earthwork: heightM = Number(element, family, "DepthM", 1d); direction = -1d; break;
+                case ElementCategory.Column: heightM = Number(element, family, "HeightM", 3.6d); break;
+                default: throw new InvalidOperationException("Category không hỗ trợ closed polyline prism: " + category);
+            }
+            var offsetKey = category == ElementCategory.Earthwork ? "TopOffsetM" : "BottomOffsetM";
+            var offsetM = Number(element, family, offsetKey, 0d);
+            if (heightM <= 0d || double.IsNaN(heightM) || double.IsInfinity(heightM)) throw new InvalidOperationException("Chiều cao/depth extrusion phải lớn hơn 0.");
 
-            var height = CadUnitService.MetersToDrawingUnits(document, heightM);
-            var bottom = CadUnitService.MetersToDrawingUnits(document, bottomM);
+            var height = CadUnitService.MetersToDrawingUnits(document, heightM) * direction;
+            var offset = CadUnitService.MetersToDrawingUnits(document, offsetM);
             var solid = new Solid3d();
             solid.SetDatabaseDefaults(document.Database);
             solid.CreateExtrudedSolid(polyline, new Vector3d(0d, 0d, height), new SweepOptions());
-            if (Math.Abs(bottom) > 1e-12) solid.TransformBy(Matrix3d.Displacement(new Vector3d(0d, 0d, bottom)));
+            if (Math.Abs(offset) > 1e-12) solid.TransformBy(Matrix3d.Displacement(new Vector3d(0d, 0d, offset)));
             return solid;
+        }
+
+        private static string GeometryMode(ElementCategory category)
+        {
+            switch (category)
+            {
+                case ElementCategory.Railing: return "LinePrism";
+                case ElementCategory.Stair: return "FootprintMass";
+                case ElementCategory.Earthwork: return "DownwardFootprintMass";
+                default: return "NativePrism";
+            }
         }
 
         private static double Number(ProjectElement element, ProjectFamily? family, string name, double fallback)

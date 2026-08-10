@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             HardeningRegressionSmoke.Run();
             ReviewHardeningSmoke.Run();
             ContinuationRegressionSmoke.Run();
+            CompletionRegressionSmoke.Run();
         }
     }
 }
