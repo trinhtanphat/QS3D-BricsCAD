@@ -45,6 +45,14 @@ namespace QS3D.Core.Services
                 _dependents[entry.Key] = entry.Value;
         }
 
+        public IReadOnlyList<string> GetDirectDependents(string sourceId)
+        {
+            var normalized = (sourceId ?? string.Empty).Trim();
+            if (normalized.Length == 0 || !_dependents.TryGetValue(normalized, out var dependents))
+                return Array.Empty<string>();
+            return dependents.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
         public IReadOnlyList<string> GetDependentsTransitive(string sourceId)
         {
             if (string.IsNullOrWhiteSpace(sourceId)) return Array.Empty<string>();
