@@ -44,6 +44,7 @@ namespace QS3D.BricsCAD.V25
                 issues.AddRange(new GeneratedFoundationMeshHealthService().Inspect(project, liveFoundationMesh));
                 issues.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
                 issues.AddRange(new RebarFabricationQualificationHealthService().Inspect(project));
+                issues.AddRange(BbsNativeTableBuilder.Inspect(document, project));
                 var summary = new HealthSummary(issues);
                 var message = "Rebar Health All: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
