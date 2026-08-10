@@ -49,9 +49,10 @@ if COMMANDS.is_file():
         'if (!document.Database.TileMode)',
         'CurrentUserCoordinateSystem',
         'SemanticElementTableBuilder.StoredPosition(project)',
+        'GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project)',
     ):
         if token not in text:
-            errors.append("SemanticElementTableCommands.cs missing command/scope token: " + token)
+            errors.append("SemanticElementTableCommands.cs missing command/scope/health token: " + token)
 
 if CORE.is_file():
     text = CORE.read_text(encoding="utf-8")
@@ -94,4 +95,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: native Semantic Element Table uses bounded Core rendering, project-level QS3DDOC ownership, ModelSpace P0 scope, unit-aware sizing, rollback-safe replacement plus read-only live shape/text/position drift health wired into Release Check. Runtime V25 qualification is still required.")
+print("PASS: native Semantic Element Table uses bounded Core rendering, project-level QS3DDOC ownership, ModelSpace P0 scope, unit-aware sizing, rollback-safe replacement plus read-only live shape/text/position drift health wired into command + Release Check. Runtime V25 qualification is still required.")
