@@ -65,6 +65,11 @@
                     <Button Content="Xuất BBS CSV UTF-8" Tag="QS3DBBSCSV" Click="OnCommandClick"/>
                     <Button Content="Bảng tổng hợp khối lượng" Tag="QS3DBQ" Click="OnCommandClick"/>
 
+                    <TextBlock Text="XEM / CẮT 3D" Style="{StaticResource SectionLabel}" Margin="0,14,0,4"/>
+                    <Button Content="Section Box BIM (Detail)" Tag="QS3DSECTIONBOX" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Section Plane" Tag="QS3DSECTIONPLANE" Click="OnCommandClick"/>
+                    <Button Content="Bật / tắt Clip Display" Tag="QS3DCLIPDISPLAY" Click="OnCommandClick"/>
+
                     <TextBlock Text="BẢN SỬA ĐỔI" Style="{StaticResource SectionLabel}" Margin="0,14,0,4"/>
                     <Button Content="Chốt mốc so sánh" Tag="QS3DREVBASE" Click="OnCommandClick"/>
                     <Button Content="So sánh với mốc" Tag="QS3DREVDIFF" Click="OnCommandClick"/>
