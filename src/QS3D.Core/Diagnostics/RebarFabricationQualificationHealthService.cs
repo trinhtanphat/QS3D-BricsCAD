@@ -20,9 +20,20 @@ namespace QS3D.Core.Diagnostics
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (!QualificationRequired(project)) return Array.Empty<ModelHealthIssue>();
 
             var issues = new List<ModelHealthIssue>();
+            var requirement = Read(project.Metadata, RequireQualificationMetadataKey);
+            var required = ParseRequirement(requirement, out var validRequirement);
+            if (!validRequirement)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "REBAR_FAB_REQUIREMENT_INVALID",
+                    HealthSeverity.Error,
+                    "QS3D.RebarFabrication.RequireQualification chỉ chấp nhận true/yes/1 hoặc false/no/0. Giá trị không hợp lệ không được phép âm thầm tắt fabrication qualification."));
+                required = true;
+            }
+            if (!required) return issues.AsReadOnly();
+
             var standardCode = Read(project.Metadata, StandardCodeMetadataKey);
             var detailingRevision = Read(project.Metadata, DetailingRevisionMetadataKey);
 
@@ -39,7 +50,7 @@ namespace QS3D.Core.Diagnostics
                     "Fabrication qualification đã được bật nhưng project chưa khai báo revision hồ sơ/detailing thép."));
 
             var rebarElements = project.Elements
-                .Where(HasGeneratedRebarOutput)
+                .Where(x => x != null && HasGeneratedRebarOutput(x))
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
@@ -84,12 +95,29 @@ namespace QS3D.Core.Diagnostics
             return issues.AsReadOnly();
         }
 
-        private static bool QualificationRequired(ProjectState project)
+        private static bool ParseRequirement(string value, out bool valid)
         {
-            var value = Read(project.Metadata, RequireQualificationMetadataKey);
-            return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(value, "1", StringComparison.OrdinalIgnoreCase);
+            if (value.Length == 0)
+            {
+                valid = true;
+                return false;
+            }
+            if (string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "1", StringComparison.OrdinalIgnoreCase))
+            {
+                valid = true;
+                return true;
+            }
+            if (string.Equals(value, "false", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "no", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "0", StringComparison.OrdinalIgnoreCase))
+            {
+                valid = true;
+                return false;
+            }
+            valid = false;
+            return true;
         }
 
         private static bool HasGeneratedRebarOutput(ProjectElement element)
