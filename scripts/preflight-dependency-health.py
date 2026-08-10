@@ -14,7 +14,8 @@ checks = {
         "activeIndex",
         "dependencyState == 0",
         "dependencyState != 1",
-        "byId.ContainsKey(dependencyId)",
+        "byId.Contains(dependencyId)",
+        "graph.ContainsKey(element.Id)",
     ],
     "tests/QS3D.Core.SmokeTests/DependencyHealthSmoke.cs": [
         "AcyclicChainPasses",
@@ -57,6 +58,8 @@ if service.is_file():
         errors.append("DependencyHealthService must inspect the complete existing-element graph")
     if "new DependencyGraph" in text or "TopologicalDirtyOrder" in text:
         errors.append("Dependency health must not depend on dirty-only regeneration ordering")
+    if "ToDictionary(x => x.Id" in text:
+        errors.append("Dependency health must remain inspectable even if in-memory duplicate element ids exist")
 
 if errors:
     for error in errors:
