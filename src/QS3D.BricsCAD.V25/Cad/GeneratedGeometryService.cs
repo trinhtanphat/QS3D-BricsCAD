@@ -87,12 +87,20 @@ namespace QS3D.BricsCAD.V25.Cad
             return result.AsReadOnly();
         }
 
+        public static bool HasMatchingOwnership(Entity entity, ProjectState project, ProjectElement element)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (element == null) throw new ArgumentNullException(nameof(element));
+            return HasMatchingOwnership(entity, project.ProjectId, element.Id, element.Category);
+        }
+
         public static void RequireMatchingOwnership(Entity entity, ProjectState project, ProjectElement element, string operation)
         {
             if (entity == null) throw new ArgumentNullException(nameof(entity));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
-            if (HasMatchingOwnership(entity, project.ProjectId, element.Id, element.Category)) return;
+            if (HasMatchingOwnership(entity, project, element)) return;
             throw new InvalidOperationException(
                 "Refusing to " + (string.IsNullOrWhiteSpace(operation) ? "modify generated geometry" : operation.Trim()) +
                 " because its QS3D ownership marker does not match project " + project.ProjectId + ", element " + element.Id + ".");
