@@ -7,11 +7,16 @@ Updated for the current source baseline on 2026-08-10. Commands that create or m
 - `QS3D` — open the docked QS3D workspace.
 - `QS3DHIDE` — hide QS3D palettes.
 - `QS3DDOMAIN` — open the Full Domain Hub.
+- `QS3DPROJECTTOOLS` — open the drawing-bound Project Tools hub for Zone/Floor/Family/Material/template/module/health workflows.
+- `QS3DZONES` — open the drawing-bound Zone Manager. Supports create/rename/activate/delete and semantic assignment with reference guards; assignment only accepts the exact project-owned `ProjectElement` instance, not a foreign object that merely reuses the same ID.
+- `QS3DFAMILIES` — open the drawing-bound Family Manager. Supports create/duplicate/rename/delete, property editing and category-safe semantic assignment while preserving true instance overrides; assignment also requires the exact project-owned element instance.
 - `QS3DSAVE`, `QS3DRELOAD`, `QS3DREFRESH`, `QS3DREGEN` — project persistence and deterministic regeneration.
 - `QS3DINSPECT` — inspect current/prompted CAD selection and synchronize the workspace review/property pane.
 - `QS3DHEALTH` — run the basic Model Health checks.
 - `QS3DHEALTHALL` — aggregate model/source/generated-solid/stale-state, generated-rebar ownership/mode, slab/wall mesh and curtain-frame health into one review window with Locate support.
 - `QS3DRUNTIMEPROBE` — inspect V25 runtime availability/identity.
+
+Project management mutation APIs follow a shared integrity rule: Floor/Zone/Family object-based assignment and Bulk Edit object-based property mutation reject foreign/spoofed `ProjectElement` objects even when their IDs match an element already stored in the project. ID-based Bulk Edit APIs resolve the canonical project element first.
 
 ## BLT-style property workflow
 
@@ -56,11 +61,11 @@ Common boolean fields use a checkbox, mode/material/classification-like fields u
 - `QS3DCURTAIN` — open the dedicated Curtain Wall Hub/Family editor.
 - `QS3DCURTAINXLSX` — export deterministic curtain schedule data.
 - `QS3DCURTAINFRAMES3D` — generate/update mullion/transom/perimeter-frame `Solid3d` overlays for supported horizontal GlassWall `LINE` sources. Generated frames use dedicated ownership and do **not** replace the backing wall host.
-- `QS3DCURTAINFRAMEHEALTH` — review generated curtain-frame handles, live solids, ownership, frame/grid counts, stored dimensions and deterministic configuration fingerprint.
+- `QS3DCURTAINFRAMEHEALTH` — review generated curtain-frame handles, live solids, ownership, frame/grid counts, stored dimensions and deterministic configuration/live-geometry fingerprints.
 - `QS3DCURTAIN3D` — one-shot GlassWall workflow: build/update the backing host for selected GlassWall LINE/open-POLYLINE sources, then add frame overlays for supported LINE sources and regenerate semantic quantities.
 - Curtain Family controls include `CurtainMaxPanelWidthM`, `CurtainMaxPanelHeightM`, `CurtainPerimeterFrameWidthM`, `CurtainMullionWidthM`, `CurtainTransomWidthM`, `CurtainFrameDepthM` and `CurtainFrameMaterial`.
-- Frame metadata uses `GeneratedCurtainFrameHandles` plus a `GeneratedCurtainFrameConfigFingerprint`. Changing panel grid/frame depth/bottom offset/current dimensions is detected as a stale frame snapshot even if semantic quantity regeneration has already completed.
-- The current native curtain implementation intentionally keeps **one backing GlassWall host** for Door/Opening booleans and a separate frame overlay. Door/Opening cuts do not yet interrupt frame solids, and open/curved POLYLINE hosts do not yet get curved frame overlays.
+- Frame metadata uses dedicated generated-frame handles and deterministic config/live-geometry fingerprints. Family/source geometry drift is reported instead of silently treating old frame solids as current.
+- Core curtain planning includes deterministic opening-interruption planning for mullion/transom runs around hosted openings. Native BricsCAD frame interruption remains subject to the current adapter path and V25/private-DWG runtime validation; open/curved POLYLINE hosts still do not receive curved frame overlays.
 
 ### Structure / earthwork
 
@@ -124,10 +129,11 @@ See [`ADVANCED-GEOMETRY.md`](ADVANCED-GEOMETRY.md) for shape/stirrup/tie/mesh/cu
 
 ## UI entry points
 
-The main palette, Ribbon and Full Domain Hub expose the major product flows consistently: Room Auto, Tường KT, Curtain Hub/Curtain 3D, WallPier profile workflow, Giao tường + review-gated snap cleanup, Auto/Manual Door-Opening host linking, straight/curved physical cuts, Build 3D, Focus/Isolate/Section Box, BQ/BBS, column/beam longitudinal rebar, BBS-shape rebar, beam stirrups, column ties, slab mesh, wall mesh and unified health. The goal is to minimize command-line memorization while preserving explicit commands for power users and test harnesses.
+The main palette, Ribbon and Full Domain Hub expose the major product flows consistently: Project Tools with Zone/Floor/Family/Material managers, Room Auto, Tường KT, Curtain Hub/Curtain 3D, WallPier profile workflow, Giao tường + review-gated snap cleanup, Auto/Manual Door-Opening host linking, straight/curved physical cuts, Build 3D, Focus/Isolate/Section Box, BQ/BBS, column/beam longitudinal rebar, BBS-shape rebar, beam stirrups, column ties, slab mesh, wall mesh and unified health. The goal is to minimize command-line memorization while preserving explicit commands for power users and test harnesses.
 
 ## Packaging and autoload
 
-- `scripts/package-v25.ps1` creates the V25 release ZIP, excludes proprietary BricsCAD assemblies, generates `COMMANDS.txt` from current QS3D `CommandMethod` declarations, records metadata and SHA-256 hashes.
+- `scripts/package-v25.ps1` creates the V25 release ZIP from the x64 Release/net48 output, excludes proprietary BricsCAD assemblies, generates `COMMANDS.txt` from current QS3D `CommandMethod` declarations, records metadata and SHA-256 hashes.
 - The package includes DemandLoad install/uninstall helpers with hash verification and optional Authenticode enforcement.
+- GitHub Actions remain owner-triggered/manual-only; the prepared V25 release workflow requires both `workflow_dispatch` and explicit `confirm_release=RELEASE` before it can publish.
 - DemandLoad/NETLOAD remain part of the licensed V25 runtime gate; source presence is not treated as runtime verification.
