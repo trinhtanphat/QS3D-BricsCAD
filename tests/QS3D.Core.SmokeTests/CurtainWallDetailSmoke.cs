@@ -33,6 +33,7 @@ namespace QS3D.Core.SmokeTests
             var area = 0d;
             foreach (var panel in detail.Panels) area += panel.AreaM2;
             Near(detail.Layout.ClearGlassAreaM2, area);
+            Near(detail.PanelAreaM2, area);
             Near(0.05d, detail.VerticalFrames[0].WidthM);
             Near(0.05d, detail.HorizontalFrames[0].HeightM);
         }

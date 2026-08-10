@@ -38,6 +38,7 @@ namespace QS3D.Core.Geometry
         public IReadOnlyList<CurtainWallRect> Panels { get; }
         public IReadOnlyList<CurtainWallRect> VerticalFrames { get; }
         public IReadOnlyList<CurtainWallRect> HorizontalFrames { get; }
+        public double PanelAreaM2 => Layout.ClearGlassAreaM2;
         public int DetailSolidCount => checked(Panels.Count + VerticalFrames.Count + HorizontalFrames.Count);
     }
 
