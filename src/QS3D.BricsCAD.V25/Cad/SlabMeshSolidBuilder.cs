@@ -20,7 +20,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
     internal static class SlabMeshSolidBuilder
     {
-        private const string HandlesKey = "GeneratedRebarHandles";
+        private const string HandlesKey = "GeneratedSlabMeshHandles";
         private const string Mode = "SlabMeshXY";
         private const int MaxBarsPerBatch = 12000;
 
@@ -28,7 +28,8 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             public ProjectElement Element { get; set; } = null!;
             public List<string> Handles { get; } = new List<string>();
-            public double DiameterMm { get; set; }
+            public double XDiameterMm { get; set; }
+            public double YDiameterMm { get; set; }
             public double CoverM { get; set; }
             public double XSpacingM { get; set; }
             public double YSpacingM { get; set; }
@@ -68,12 +69,9 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var polyline = OpenSelectedSlabSource(document, transaction, element, selectedHandles);
                     if (polyline == null) continue;
-                    EnsureSlabMeshOwnsGenericRebarSlot(element);
                     var family = project.FindFamily(element.FamilyId);
                     var xGroup = ParseDirection(element, "RebarSlabXNotation");
                     var yGroup = ParseDirection(element, "RebarSlabYNotation");
-                    if (Math.Abs(xGroup.DiameterMm - yGroup.DiameterMm) > 1e-9d)
-                        throw new InvalidOperationException(element.Id + ": Slab mesh adapter hiện yêu cầu RebarSlabXNotation và RebarSlabYNotation cùng đường kính để dùng chung GeneratedRebar ownership/health contract.");
 
                     var frame = ReadRectangle(document, element, polyline);
                     var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .15d), element.Id + "/ThicknessM");
@@ -113,7 +111,8 @@ namespace QS3D.BricsCAD.V25.Cad
                     var update = new PendingUpdate
                     {
                         Element = element,
-                        DiameterMm = xGroup.DiameterMm,
+                        XDiameterMm = xGroup.DiameterMm,
+                        YDiameterMm = yGroup.DiameterMm,
                         CoverM = coverM,
                         XSpacingM = layout.XActualSpacingM,
                         YSpacingM = layout.YActualSpacingM,
@@ -155,13 +154,14 @@ namespace QS3D.BricsCAD.V25.Cad
             foreach (var update in pending)
             {
                 update.Element.Properties[HandlesKey] = string.Join(";", update.Handles);
-                update.Element.Properties["GeneratedRebarCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedRebarDiameterMm"] = update.DiameterMm.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedRebarCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedRebarMode"] = Mode;
-                update.Element.Properties["GeneratedRebarSlabXActualSpacingM"] = update.XSpacingM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedRebarSlabYActualSpacingM"] = update.YSpacingM.ToString("R", CultureInfo.InvariantCulture);
-                update.Element.Properties["GeneratedRebarSlabFaces"] = update.Faces;
+                update.Element.Properties["GeneratedSlabMeshCount"] = update.Handles.Count.ToString(CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedSlabMeshXDiameterMm"] = update.XDiameterMm.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedSlabMeshYDiameterMm"] = update.YDiameterMm.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedSlabMeshCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedSlabMeshMode"] = Mode;
+                update.Element.Properties["GeneratedSlabMeshXActualSpacingM"] = update.XSpacingM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedSlabMeshYActualSpacingM"] = update.YSpacingM.ToString("R", CultureInfo.InvariantCulture);
+                update.Element.Properties["GeneratedSlabMeshFaces"] = update.Faces;
                 AuditTrail.ForProject(project).Record("geometry.rebar.slab.mesh", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
             }
             if (pending.Count > 0)
@@ -217,13 +217,6 @@ namespace QS3D.BricsCAD.V25.Cad
             var group = groups[0];
             if (!group.Quantity.HasValue && !group.SpacingMm.HasValue) throw new InvalidOperationException(element.Id + "/" + key + " phải có count hoặc spacing.");
             return group;
-        }
-
-        private static void EnsureSlabMeshOwnsGenericRebarSlot(ProjectElement element)
-        {
-            if (!element.Properties.TryGetValue("GeneratedRebarMode", out var mode) || string.IsNullOrWhiteSpace(mode)) return;
-            if (!string.Equals(mode.Trim(), Mode, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(element.Id + ": GeneratedRebarHandles đang thuộc mode " + mode + ". Refusing to replace it with slab mesh without explicit cleanup/review.");
         }
 
         private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)

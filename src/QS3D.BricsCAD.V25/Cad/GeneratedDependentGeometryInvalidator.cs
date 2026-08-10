@@ -54,6 +54,16 @@ namespace QS3D.BricsCAD.V25.Cad
                 Remove(element, "GeneratedBeamStirrupActualSpacingM");
                 Remove(element, "GeneratedBeamStirrupNotation");
                 Remove(element, "GeneratedBeamStirrupMode");
+
+                Remove(element, "GeneratedSlabMeshHandles");
+                Remove(element, "GeneratedSlabMeshCount");
+                Remove(element, "GeneratedSlabMeshXDiameterMm");
+                Remove(element, "GeneratedSlabMeshYDiameterMm");
+                Remove(element, "GeneratedSlabMeshCoverM");
+                Remove(element, "GeneratedSlabMeshMode");
+                Remove(element, "GeneratedSlabMeshXActualSpacingM");
+                Remove(element, "GeneratedSlabMeshYActualSpacingM");
+                Remove(element, "GeneratedSlabMeshFaces");
                 element.ClearGeneratedGeometryStale();
             }
         }
@@ -71,7 +81,8 @@ namespace QS3D.BricsCAD.V25.Cad
             "GeneratedRebarHandles",
             "GeneratedShapeRebarHandles",
             "GeneratedTieRebarHandles",
-            "GeneratedBeamStirrupHandles"
+            "GeneratedBeamStirrupHandles",
+            "GeneratedSlabMeshHandles"
         };
 
         public static GeneratedGeometryInvalidation Prepare(
