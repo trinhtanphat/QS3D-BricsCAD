@@ -66,8 +66,8 @@ namespace QS3D.Core.Diagnostics
                 if (element.Category != ElementCategory.Slab)
                     issues.Add(new ModelHealthIssue("SLAB_MESH_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated slab mesh metadata chỉ hợp lệ trên Slab element.", element.Id));
 
-                if (element.Dirty != ElementDirtyFlags.None)
-                    issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_STALE", HealthSeverity.Warning, "Slab đang dirty nhưng vẫn còn generated slab mesh; rebuild/health-check trước khi phát hành bản vẽ.", element.Id));
+                if (element.IsGeneratedSlabMeshStale())
+                    issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_STALE", HealthSeverity.Warning, "Generated slab mesh snapshot không còn khớp semantic/source hiện tại; rebuild slab mesh trước khi phát hành bản vẽ.", element.Id));
             }
             return issues;
         }
