@@ -1,13 +1,17 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Model;
+using QS3D.Core.Persistence;
 using QS3D.Core.Recognition;
 using QS3D.Core.Rebar;
 using QS3D.Core.Reporting;
 using QS3D.Core.Revisions;
+using QS3D.Core.Services;
 using QS3D.Core.Units;
 
 namespace QS3D.Core.SmokeTests
@@ -18,8 +22,13 @@ namespace QS3D.Core.SmokeTests
         {
             UnitConversions();
             RecognitionRules();
+            ExcelHandleRoundTrip();
+            SourceHandlesFollowDependencies();
             RevisionRoundTrip();
             RevisionPersistenceHardening();
+            RevisionZeroQuantityChanges();
+            QsdbRejectsUnsavableMutableState();
+            RebarNotationRejectsEmptySegments();
             ExportFailurePreservesDestination();
         }
 
@@ -42,6 +51,33 @@ namespace QS3D.Core.SmokeTests
             var snapshot = new EntitySnapshot("AB", "Line", "KC-DAM"); snapshot.Metadata["Text"] = "Dầm chính";
             var result = new RecognitionEngine().Suggest(snapshot);
             True(result.TopCandidate != null); Equal(ElementCategory.Beam, result.TopCandidate!.Category); True(result.Confidence >= .92d); True(!result.RequiresReview);
+
+            var blt = new EntitySnapshot("30DC", "Solid3d", "blt_raft_foundation");
+            var bltResult = new RecognitionEngine().Suggest(blt);
+            True(bltResult.TopCandidate != null); Equal(ElementCategory.Foundation, bltResult.TopCandidate!.Category); True(bltResult.Confidence >= .92d); True(!bltResult.RequiresReview);
+        }
+
+        private static void ExcelHandleRoundTrip()
+        {
+            var directory = TempDirectory("excel-handle-roundtrip");
+            var qs3dPath = Path.Combine(directory, "qs3d.xlsx");
+            var bltPath = Path.Combine(directory, "blt.xlsx");
+            try
+            {
+                var row = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "WF", Count = 1 };
+                row.ElementIds.Add("WF-1"); row.SourceHandles.Add("AB12"); row.SourceHandles.Add("30DE");
+                XlsxQuantityExporter.Export(qs3dPath, new[] { row });
+                var exported = XlsxHandleReader.ReadHandles(qs3dPath, 2);
+                Equal(2, exported.Count); Equal("AB12", exported[0]); Equal("30DE", exported[1]);
+
+                using (var stream = new FileStream(bltPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+                using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
+                using (var writer = new StreamWriter(archive.CreateEntry("xl/worksheets/sheet1.xml").Open(), new UTF8Encoding(false)))
+                    writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"E1\" t=\"inlineStr\"><is><t>Handle</t></is></c></row><row r=\"5\"><c r=\"A5\" t=\"inlineStr\"><is><t>$12510$12512</t></is></c><c r=\"E5\" t=\"inlineStr\"><is><t>CF4</t></is></c></row></sheetData></worksheet>");
+                var legacy = XlsxHandleReader.ReadHandles(bltPath, 5);
+                Equal(2, legacy.Count); Equal("30DE", legacy[0]); Equal("30E0", legacy[1]);
+            }
+            finally { DeleteDirectory(directory); }
         }
 
         private static void RevisionRoundTrip()
@@ -57,6 +93,18 @@ namespace QS3D.Core.SmokeTests
                 element.SetQuantity("NetVolumeM3", 1.5d); var after = service.Capture(project, "CURRENT"); var row = new QuantityRevisionReport().Build(loaded, after).Single(x => x.QuantityName == "NetVolumeM3"); Near(.25d, row.Delta);
             }
             finally { DeleteDirectory(directory); }
+        }
+
+        private static void SourceHandlesFollowDependencies()
+        {
+            var project = NewRevisionProject();
+            var room = project.Elements.Single();
+            var finish = new ProjectElement("FINISH", ElementCategory.WallFinish, string.Empty, "f", "z");
+            finish.DependsOn.Add(room.Id); room.DependsOn.Add(finish.Id); project.Elements.Add(finish);
+            var handles = SourceHandleResolver.Resolve(project, new[] { finish.Id });
+            Equal(1, handles.Count); Equal("A1", handles[0]);
+            var report = ProjectQuantityReportBuilder.Group(project).Single(x => x.Category == ElementCategory.WallFinish.ToString());
+            Equal("A1", report.SourceHandles.Single());
         }
 
         private static void RevisionPersistenceHardening()
@@ -77,6 +125,52 @@ namespace QS3D.Core.SmokeTests
             finally { DeleteDirectory(directory); }
         }
 
+        private static void RevisionZeroQuantityChanges()
+        {
+            var before = new RevisionSnapshot { Id = "before", CreatedUtc = DateTime.UtcNow };
+            var beforeElement = new RevisionElementSnapshot { ElementId = "E1", Category = "Beam" };
+            before.Elements.Add(beforeElement);
+            var after = new RevisionSnapshot { Id = "after", CreatedUtc = DateTime.UtcNow };
+            var afterElement = new RevisionElementSnapshot { ElementId = "E1", Category = "Beam" };
+            afterElement.Quantities["Zero"] = 0d; after.Elements.Add(afterElement);
+            var added = new QuantityRevisionReport().Build(before, after).Single();
+            Equal("Added", added.Change); Equal("Zero", added.QuantityName);
+            var removed = new QuantityRevisionReport().Build(after, before).Single();
+            Equal("Removed", removed.Change); Equal("Zero", removed.QuantityName);
+        }
+
+        private static void QsdbRejectsUnsavableMutableState()
+        {
+            var directory = TempDirectory("qsdb-mutable-validation"); var path = Path.Combine(directory, "project.qsdb");
+            try
+            {
+                var project = NewRevisionProject(); var store = new QsdbProjectStore(); store.Save(project, path);
+                var original = File.ReadAllText(path);
+                project.Metadata[string.Empty] = "invalid";
+                Throws<InvalidDataException>(() => store.Save(project, path));
+                Equal(original, File.ReadAllText(path));
+                project.Metadata.Remove(string.Empty); project.Zones.Single().Name = string.Empty;
+                Throws<InvalidDataException>(() => store.Save(project, path));
+                Equal(original, File.ReadAllText(path));
+
+                var revisionPath = Path.Combine(directory, "baseline.qsrev");
+                var snapshot = new RevisionService().Capture(NewRevisionProject(), "valid");
+                var revisionStore = new RevisionSnapshotStore(); revisionStore.Save(snapshot, revisionPath);
+                var revisionOriginal = File.ReadAllText(revisionPath);
+                snapshot.Elements.Add(new RevisionElementSnapshot { ElementId = snapshot.Elements[0].ElementId, Category = "Beam" });
+                Throws<InvalidDataException>(() => revisionStore.Save(snapshot, revisionPath));
+                Equal(revisionOriginal, File.ReadAllText(revisionPath));
+            }
+            finally { DeleteDirectory(directory); }
+        }
+
+        private static void RebarNotationRejectsEmptySegments()
+        {
+            Throws<FormatException>(() => RebarNotationParser.Parse("4D20++2D16"));
+            Throws<FormatException>(() => RebarNotationParser.Parse("+4D20"));
+            Throws<FormatException>(() => RebarNotationParser.Parse("4D20+"));
+        }
+
         private static void ExportFailurePreservesDestination()
         {
             var directory = TempDirectory("export-atomic");
@@ -88,6 +182,12 @@ namespace QS3D.Core.SmokeTests
                 Throws<ArgumentOutOfRangeException>(() => XlsxQuantityExporter.Export(quantityPath, new[]
                 {
                     new QuantityReportRow { Floor = "F", Category = "Beam", FamilyName = "B", Count = 1, GrossConcreteM3 = double.NaN }
+                }));
+                Equal("quantity-sentinel", File.ReadAllText(quantityPath));
+
+                Throws<System.Xml.XmlException>(() => XlsxQuantityExporter.Export(quantityPath, new[]
+                {
+                    new QuantityReportRow { Floor = "F", Category = "Beam", FamilyName = "Bad\u0001Name", Count = 1 }
                 }));
                 Equal("quantity-sentinel", File.ReadAllText(quantityPath));
 
