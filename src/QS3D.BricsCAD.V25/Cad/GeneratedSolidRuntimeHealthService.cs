@@ -47,6 +47,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 }
                 transaction.Commit();
             }
+
+            issues.AddRange(GeneratedGridAnnotationRuntimeHealthService.Inspect(document, project));
             return issues.AsReadOnly();
         }
     }
