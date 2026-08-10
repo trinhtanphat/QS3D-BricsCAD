@@ -1,178 +1,200 @@
-# QS3D-BricsCAD — current agent handoff (2026-08-10 17:10 UTC+7)
+# QS3D-BricsCAD — current agent handoff (refreshed 2026-08-10)
 
 **Repository:** `trinhtanphat/QS3D-BricsCAD`  
 **Canonical branch:** `main`
 
-This is the newest short current-state delta for fast-moving work. Fetch `main` before every write. If current source conflicts with this note, current source wins.
+This is the short canonical current-state delta for fast-moving work. Fetch `main` before every write. If this note conflicts with current source, current source wins.
 
-Read this together with `docs/AGENT-HANDOFF-LATEST-2026-08-10.md`, `docs/LOCAL-V25-QUALIFICATION.md`, `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` and `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`.
+Read first:
 
-## 1. Product boundary
+- `AGENTS.md`
+- `docs/PRODUCT-BOUNDARY.md`
+- `docs/REMOTE-AGENT-SCOPE.md`
+- `CI_POLICY.md`
+- `docs/AGENT-HANDOFF-LATEST-2026-08-10.md`
+- `docs/IMPLEMENTATION-STATUS.md`
 
-QS3D remains a clean-room **BricsCAD V25 x64 .NET plugin**. BricsCAD owns the DWG/editor/viewport/native CAD lifecycle. Do not create a standalone QS3D CAD application or duplicate BricsCAD runtime assemblies.
-
-`BLT-like` means workflow/UX familiarity and independently implemented quantity/semantic/native behavior, not proprietary source/assets.
-
-## 2. New source capability in the latest continue-all review
-
-### Dependency-safe semantic untrack
-
-`QS3DUNTRACK` / `QS3DUNTRACKFINISH` now resolve both source and generated selections through canonical semantic ownership, reject ambiguous ownership and block removal while transitive semantic dependents remain outside the selected batch. A complete dependent batch can be untracked together. CAD geometry remains untouched by untrack.
-
-### Grid semantic reference capture
-
-New command:
-
-```text
-QS3DGRID
-```
-
-Current contract:
-
-- selection-only semantic capture;
-- accepts only `LINE` / `ARC` sources with finite positive length;
-- validates the whole selection before semantic mutation;
-- reuses transactional `SemanticCaptureService` and canonical generated-output rejection;
-- reuses existing `ElementCategory.Grid` + `GenericTakeoffRegenerator` (`LengthM`, `Count`);
-- post-capture Workspace/UI refresh is non-fatal and must not turn a valid committed semantic capture into a reported command failure;
-- does not claim native 3D Grid geometry.
-
-Read `docs/GRID-WORKFLOW.md`.
-
-Still not implemented/qualified: Grid bubbles/naming/renumbering, rectangular/radial systems, Grid constraints, Direct Draw Grid jig/repeat mode, structure-to-grid hosting.
-
-### Runtime diagnostics truthfulness
-
-`QS3DRUNTIMECHECK` reports V25/x64/version/package consistency. Package signing information shown there is explicitly **recorded metadata only**; cryptographic Authenticode publisher/timestamp verification remains the responsibility of the signed installer/release gate. Do not change this command back into a misleading `signature=signed` claim based only on JSON metadata.
-
-### Privacy-safe support diagnostics
-
-New command:
-
-```text
-QS3DSUPPORTBUNDLE
-```
-
-Default report may contain runtime/product/schema/category/count/dirty-state information, but intentionally excludes DWG names/paths, CAD handles, semantic IDs, Family identity, project metadata, user name, machine name, private geometry and secrets. Read `docs/SUPPORT-DIAGNOSTICS.md` and preserve `preflight-support-bundle.py`.
-
-## 3. Local exact-SHA V25 qualification is now a first-class handoff
-
-Canonical local runner:
-
-```text
-scripts/run-local-v25-qualification.ps1
-```
-
-Canonical runtime matrix:
-
-```text
-docs/LOCAL-V25-QUALIFICATION.md
-```
-
-The runner requires a clean exact SHA and coordinates source preflights, Core build/smoke, V25 adapter build against installed `BrxMgd.dll`/`TD_Mgd.dll`, licensed runtime probing and scoped local evidence. `-SkipRuntime` is diagnostic only and cannot qualify a customer release.
-
-Runtime evidence belongs under the gitignored `artifacts/` tree. Use only sanitized evidence handoff files for Git commits.
-
-Recent concurrent work also added scoped signed-package qualification support and sanitized exact-SHA evidence export. Inspect the current runner/scripts before changing their schema or status semantics.
-
-## 4. Rebar/native replacement state
-
-Preserve recent cross-layer atomicity hardening across generated rebar/mesh families. Semantic ownership/audit state is updated inside the same pre-CAD-commit logical operation and restored from project snapshots if the native transaction fails before commit. Post-commit UI refresh failures must remain non-fatal.
-
-Shape Rebar now records the canonical audit event:
-
-```text
-geometry.rebar.shape
-```
-
-alongside its generated handle/count/mode/stale update before the CAD transaction commits. Static audit guards cover generated rebar/mesh families.
-
-The standards-neutral fabrication qualification gate is evidence/provenance validation only. It is not an engineering-code compliance engine. Standard-specific hooks/laps/anchorage/bend rules require an explicit approved governing standard + revision and engineering sign-off.
-
-## 5. Curtain boundary remains intentionally truthful
-
-Individual GlassWall host and Curtain LINE/path frame replacement families have guarded transaction/project rollback contracts. However:
-
-```text
-QS3DCURTAIN3D
-```
-
-still orchestrates multiple independent native phases. A later phase can fail after an earlier phase legitimately committed; current source reports `Curtain 3D PARTIAL COMMIT` rather than pretending whole-command rollback.
-
-Do not remove the warning. Whole-command completion needs either a shared native transaction orchestration or a persisted ownership-safe compensation/recovery journal proven on real V25. See `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`.
-
-Panel-by-panel native backing glass also remains a local/native architecture gate; do not add it as an unrelated best-effort third transaction.
-
-## 6. Floor / Level model clarification
-
-Do not add a duplicate `LevelDefinition` merely for visual parity with another product.
-
-Current Core already has:
-
-- `FloorDefinition` with stable ID/name/elevation;
-- `ActiveFloorId`;
-- element `FloorId`;
-- dirty propagation for Relations + Quantity + Geometry when a referenced Floor elevation changes;
-- deletion guards for active/referenced Floors.
-
-Future top/bottom level-reference semantics should extend this existing model with explicit migration/dependency behavior.
-
-## 7. Diagnostics Hub integration — source resolved
-
-Keep these commands distinct:
-
-- `QS3DRUNTIMECHECK` — customer/runtime diagnostic;
-- `QS3DRUNTIMEPROBE` — automation probe used by the local runtime harness.
-
-Current `main` now wires the Full Domain Hub user-facing `Kiểm tra runtime V25` action to `QS3DRUNTIMECHECK` and exposes `QS3DSUPPORTBUNDLE` as `Tạo Support Bundle` in the same `KIỂM TRA / RELEASE` section. The automation-only `QS3DRUNTIMEPROBE` command remains separate for the local runtime harness.
-
-Preserve `scripts/preflight-domain-hub-diagnostics.py`: it parses the XAML, guards the customer-facing command tags, confirms both command implementations still exist and fails if the runtime button is accidentally routed back to `QS3DRUNTIMEPROBE`.
-
-This is a **source/static integration result**. Real button execution, host-theme rendering and diagnostic output still belong to the exact-SHA local V25 matrix.
-
-## 8. Remaining local / native / policy gates
-
-Source-only agents must not fake completion of:
-
-- exact-current-SHA V25 build/NETLOAD/DemandLoad/runtime proof;
-- Direct Draw/planar-UCS/ESC/UNDO/repeat authoring and future DrawJig behavior;
-- Curtain whole-command recovery and panel-by-panel native glass;
-- physical ownership-safe L/T/X/Multi wall-junction solids;
-- representative private-DWG save/reopen/multi-DWG regression;
-- Unicode/HiDPI and large-model performance;
-- clean install/upgrade/uninstall;
-- actual Authenticode certificate/timestamp/package trust evidence;
-- commercial-license enforcement until owner supplies real SKU/seat/trial/binding/offline/rotation policy;
-- standard-specific fabrication-grade rebar until governing standard/revision + engineering inputs exist;
-- legal/public/source distribution model until owner/legal policy is chosen;
-- Grid bubbles/naming/renumbering, rectangular/radial systems, constraints, Direct Draw Grid and structure-to-grid hosting beyond the current semantic capture source;
-- broader documentation/interoperability only after explicit supported semantics/formats are defined.
-
-Canonical details:
+Local/runtime work is parked in:
 
 - `docs/LOCAL-V25-QUALIFICATION.md`
 - `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`
 - `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`
 
-GitHub tracking created for continuation/local agents:
+## 1. Product and execution boundary
+
+QS3D remains a clean-room **BricsCAD V25 x64 .NET plugin**. BricsCAD owns the DWG/editor/viewport/native CAD lifecycle. Do not create a standalone QS3D CAD engine or commit BricsCAD runtime assemblies.
+
+`BLT-like` / `BLT-style` means independently implemented workflow/UX familiarity only.
+
+`docs/REMOTE-AGENT-SCOPE.md` is authoritative for remote work:
+
+- source/Core/static contracts may move to `REMOTE_DONE`;
+- real V25/Windows/native/private-DWG/signing/performance evidence is `LOCAL_ONLY`;
+- remote `continue all` must not repeatedly re-audit parked LOCAL_ONLY gates;
+- only exact local evidence may create `LOCAL_PASS`.
+
+## 2. Direct Draw / Door / Opening — source state
+
+Source authoring exists for the guarded P0/P1 set including Wall, Beam, Column, Slab, GlassWall, WallPier, StructuralWall, Foundation, Door and WallOpening.
+
+Current contract includes:
+
+- real BricsCAD source entity first, then semantic capture, then canonical native builder where applicable;
+- active compatible Family/Type reuse;
+- project/native rollback guards;
+- planar translated/in-plane-rotated UCS support with tilted/3D UCS fail-closed;
+- Door/Opening source + semantic + verified Auto Host without implicit physical cutting;
+- `QS3DCUTSELECTEDOPENINGS` for explicit selected-only physical cut;
+- post-commit UI refresh/regen failures are non-fatal.
+
+Transient thickness/profile DrawJig preview, repeated authoring UX and broader native interaction proof remain LOCAL_ONLY/runtime-sensitive and are already parked in the local addendum.
+
+## 3. Grid / reference model — partially advanced
+
+`QS3DGRID` is source-implemented as guarded semantic capture for finite positive `LINE` / `ARC` Grid references. It reuses `ElementCategory.Grid`, transactional `SemanticCaptureService` and generic semantic quantities (`LengthM`, `Count`).
+
+Grid naming/renumbering bubbles, rectangular/radial systems, intersection constraints, Direct Draw Grid and structure-to-grid hosting are not complete. Extend the existing Grid semantic model rather than creating a second store.
+
+Read `docs/GRID-WORKFLOW.md`.
+
+## 4. Floor / Level semantics — Core implemented, native integration parked
+
+Do **not** add a competing `LevelDefinition`. QS3D reuses the existing `ProjectFloor` / `FloorDefinition` catalog as the Level model.
+
+Current Core supports opt-in:
+
+- `BottomLevelId`
+- `BottomLevelOffsetM`
+- `TopLevelId`
+- `TopLevelOffsetM`
+
+`ProjectFloorService` owns assignment/lifecycle, `ElementVerticalPlacementService` defines legacy-compatible bottom/top/effective-height resolution, and `LevelReferenceHealthService` is wired into Health All / Release Check.
+
+Legacy elements without Level references preserve source-relative placement semantics.
+
+Native host/opening/curtain/rebar placement and Level assignment UI are **not** to be exposed as complete until all dependent native systems use the same resolver. That coherent integration and exact-V25 proof is P0 in `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`.
+
+Read `docs/LEVEL-REFERENCES.md`.
+
+## 5. Authoritative source edit / reconcile — source implemented
+
+`QS3DSYNCSOURCE` is the guarded reconcile bridge after a user edits authoritative tracked CAD with native BricsCAD tools.
+
+Current source contract:
+
+- rejects generated output and ambiguous/unknown ownership;
+- snapshots full project state;
+- invalidates owned dependent generated geometry while CAD is rollback-capable;
+- refreshes source-derived semantic measurements/metadata;
+- marks/regenerates semantics deterministically;
+- restores project state on pre-CAD-commit failure;
+- keeps post-commit Workspace/viewport sync best-effort;
+- intentionally does **not** silently rebuild destructive/native downstream output.
+
+Do not compose `QS3DSYNCSOURCE` + `QS3DBUILD3D` and call the combination atomic without a real shared/recovery contract.
+
+Read `docs/SOURCE-EDIT-WORKFLOW.md`. Interactive MOVE/ROTATE/STRETCH/grip, UNDO, document-switch and save/reopen proof remains LOCAL_ONLY.
+
+## 6. Semantic interchange JSON — source implemented, read-only boundary
+
+`QS3DINTERCHANGEJSON` exports deterministic `QS3D.SemanticSnapshot` format version 1 as UTF-8 semantic JSON.
+
+The snapshot includes stable semantic project/catalog/element/reference/quantity data and excludes generated native ownership/runtime state. Drawing CAD handles remain explicitly drawing-local provenance; semantic element IDs are the portable identity.
+
+Version 1 does **not** claim JSON re-import/round-trip, IFC/Revit/BCF exchange or cloud/team synchronization. Any future importer must define identity collision, unit/schema validation, provenance, ownership reconstruction, migration and rollback before mutating live data.
+
+Read `docs/INTERCHANGE-JSON.md`.
+
+## 7. Semantic documentation layer — Core foundation implemented
+
+`QS3D.Core.Documentation.SemanticTagRenderer` is source-implemented as the deterministic semantic-label renderer. It resolves bounded templates from a real project-owned semantic element and supports stable semantic tokens for ID/category/Family/Floor/Zone plus `P:` properties and `Q:` quantities.
+
+Generated native ownership/runtime properties are intentionally not documentable semantic values. Unknown tokens and invalid referenced catalog identities fail closed.
+
+This Core renderer does **not** mean native BricsCAD MText/MLeader/Table/Layout/Viewport workflows are complete. Native semantic tag placement, generated annotation ownership/replacement, DWG table generation and sheet/view lifecycle require exact V25 API/runtime design and qualification described in `docs/DOCUMENTATION-LAYER.md`.
+
+Do not mark documentation issue #77 complete from the renderer alone.
+
+## 8. Rebar/generated replacement hardening
+
+Preserve cross-layer atomicity across generated rebar/mesh families: generated semantic ownership/count/mode/stale/audit state is published while the CAD transaction is still rollback-capable and project state is restored on pre-commit native failure.
+
+Shape Rebar canonical audit event is:
+
+```text
+geometry.rebar.shape
+```
+
+The legacy post-commit `geometry.rebar3d.shape` command-layer audit has been removed. `scripts/preflight-generated-rebar-audit.py` guards all current generated rebar/mesh canonical audit paths and forbids reintroducing the duplicate Shape audit in the UI/post-commit layer.
+
+Post-commit Palette/Editor refresh remains best-effort and must not convert a successful native/semantic commit into a false operation failure.
+
+Fabrication-grade standards remain evidence/provenance only until an explicit governing standard/revision plus engineering approval exists.
+
+## 9. Curtain truthfulness
+
+Individual GlassWall host and Curtain LINE/path frame replacement families have guarded internal transaction/project rollback contracts.
+
+`QS3DCURTAIN3D` still orchestrates multiple independent native phases. Keep the `Curtain 3D PARTIAL COMMIT` truthfulness boundary until either:
+
+- one shared native transaction orchestration exists; or
+- an ownership-safe persisted compensation/recovery journal exists and is proven on real V25.
+
+Panel-by-panel backing glass and broader unsupported/freeform native path parity also remain separate native architecture/runtime gates. See the local addendum.
+
+## 10. Customer diagnostics / support
+
+Keep these commands distinct:
+
+- `QS3DRUNTIMECHECK` — customer/runtime diagnostic;
+- `QS3DRUNTIMEPROBE` — automation probe for the local harness;
+- `QS3DSUPPORTBUNDLE` — privacy-safe support summary.
+
+The Full Domain Hub user action uses `QS3DRUNTIMECHECK`, not the automation probe, and exposes `QS3DSUPPORTBUNDLE`. Preserve the diagnostics preflights.
+
+Do not turn recorded package signing metadata into a claim of cryptographically verified Authenticode publisher/timestamp trust; real signing trust belongs to the release/local signing gate.
+
+## 11. LOCAL_ONLY / external-policy gates already parked
+
+Remote agents should not repeatedly re-audit these during normal `continue all`:
+
+- exact-current-SHA V25 adapter build, NETLOAD/DemandLoad and interactive runtime proof;
+- private-DWG save/reopen/multi-DWG regression;
+- real Windows Ribbon/Palette/WPF/Unicode/HiDPI behavior;
+- Direct Draw DrawJig/repeat/OSNAP/ORTHO/ESC/UNDO runtime behavior;
+- coherent Level-reference native placement/UI integration;
+- Curtain whole-command recovery and panel-by-panel backing glass;
+- physical ownership-safe L/T/X/Multi wall-solid reconciliation;
+- native semantic tag/MLeader/Table/Layout/Viewport documentation workflows;
+- clean install/upgrade/uninstall and real Authenticode/timestamp trust;
+- commercial license enforcement until real SKU/seat/trial/binding/offline/key-rotation policy is supplied;
+- standard-specific fabrication-grade rebar until approved engineering inputs exist;
+- legal/public/source distribution model until owner/legal policy is chosen;
+- real large-model performance profiling.
+
+Do not mark any of these `LOCAL_PASS` from source inspection.
+
+## 12. Open product tracking — inspect current source before acting
+
+Current issues include:
 
 - #72 exact V25 qualification;
 - #73 multi-owner wall solids / advanced geometry;
 - #74 Direct Draw transient preview / repeated authoring;
-- #75 production signing/install/update + optional licensing boundary;
+- #75 production signing/install/update + licensing boundary;
 - #76 fabrication-grade rebar / structural depth;
-- #77 documentation layer;
-- #79 Grid/reference model + richer level constraints — **partially advanced by current `QS3DGRID` semantic capture; inspect current source before planning more**;
-- #80 native semantic modify/edit workflow;
+- #77 documentation layer — **partially advanced by `SemanticTagRenderer`; native tag/table/sheet workflows remain**;
+- #79 Grid/reference model + richer Level constraints — **partially advanced by `QS3DGRID` and current Bottom/Top Level Core semantics**;
+- #80 native semantic modify/edit workflow — **materially advanced by `QS3DSYNCSOURCE`; richer interactive edit UX/runtime proof remains**;
 - #81 large-model performance;
 - #82 real V25 UI/DPI/context-menu/Ribbon polish;
 - #83 generalized polygonal Slab/Foundation mesh;
-- #84 broader interoperability/import-export.
+- #84 interoperability/import-export — **partially advanced by read-only `QS3DINTERCHANGEJSON`; import/round-trip and broader formats remain**.
 
-Before acting on any issue, inspect current `main` because concurrent source work may have partially or fully advanced it beyond the issue's original description. Do not close runtime/engineering/external issues from source inspection alone.
+Do not close runtime/engineering/external-policy issues from source inspection alone.
 
-## 9. CI / release rule
+## 13. CI / release
 
-GitHub Actions remain manual-only. `continue all`, source review, commits, merges, docs or handoff updates do **not** authorize workflow dispatch or GitHub Release publication.
+GitHub Actions remain manual-only under `CI_POLICY.md`. `continue all`, source review, docs/preflight changes, commits or local handoff preparation do **not** authorize workflow dispatch, rerun or GitHub Release publication.
 
-A separate explicit owner instruction is required for CI/build/runtime/release execution. Never weaken BricsCAD `SECURELOAD`, Windows trust or signature validation to force a package/runtime test to pass.
+A separate explicit owner instruction is required for CI/build/runtime/release execution. Never weaken BricsCAD `SECURELOAD`, Windows trust or signature validation to force a test to pass.
