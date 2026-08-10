@@ -21,6 +21,8 @@ def require(text: str, token: str, label: str) -> None:
 
 core = read("src/QS3D.Core/Export/ProjectInterchangeJsonExporter.cs")
 adapter = read("src/QS3D.BricsCAD.V25/ProjectInterchangeCommands.cs")
+smoke = read("tests/QS3D.Core.SmokeTests/ProjectInterchangeJsonSmoke.cs")
+registration = read("tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs")
 
 for token in [
     'FormatName = "QS3D.SemanticSnapshot"',
@@ -55,6 +57,14 @@ for token in [
 ]:
     require(adapter, token, "BricsCAD interchange command")
 
+for token in [
+    "SnapshotIsDeterministicAndUsesStableIds",
+    "GeneratedOwnershipIsExcluded",
+    "NumericContractFailsClosed",
+]:
+    require(smoke, token, "interchange smoke")
+require(registration, "ProjectInterchangeJsonSmoke.Run();", "smoke registration")
+
 for forbidden in [
     "QS3DINTERCHANGEIMPORT",
     "IFC",
@@ -66,4 +76,4 @@ for forbidden in [
         print(f"[FAIL] adapter overclaims or exposes unsafe round-trip contract: {forbidden}")
         sys.exit(1)
 
-print("[PASS] semantic JSON interchange is stable-ID/SI/read-only and excludes generated CAD ownership handles")
+print("[PASS] semantic JSON interchange is stable-ID/SI/read-only, smoke-covered and excludes generated CAD ownership handles")
