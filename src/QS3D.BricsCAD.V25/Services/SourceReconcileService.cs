@@ -10,6 +10,7 @@ using QS3D.Core.Domain;
 using QS3D.Core.Model;
 using QS3D.Core.Persistence;
 using QS3D.Core.Services;
+using QS3D.Core.Units;
 
 namespace QS3D.BricsCAD.V25.Services
 {
@@ -223,7 +224,7 @@ namespace QS3D.BricsCAD.V25.Services
         private static bool HasSemanticDirty(ProjectElement element) =>
             (element.Dirty & (ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity)) != ElementDirtyFlags.None;
 
-        private static void RefreshSourceDerivedState(ProjectState project, ProjectElement element, EntitySnapshot snapshot, CadUnitPolicy units)
+        private static void RefreshSourceDerivedState(ProjectState project, ProjectElement element, EntitySnapshot snapshot, ProjectUnitPolicy units)
         {
             if (string.IsNullOrWhiteSpace(snapshot.Handle) || string.IsNullOrWhiteSpace(snapshot.EntityType))
                 throw new InvalidOperationException("Source snapshot is missing required Handle/EntityType for " + element.Id + ".");

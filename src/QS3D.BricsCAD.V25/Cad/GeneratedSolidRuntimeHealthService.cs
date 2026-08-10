@@ -31,7 +31,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     catch { continue; }
                     if (id.IsNull || !id.IsValid) continue;
 
-                    Entity entity;
+                    Entity? entity;
                     try { entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity; }
                     catch { continue; }
                     if (entity == null || entity.IsErased || !(entity is Solid3d)) continue;

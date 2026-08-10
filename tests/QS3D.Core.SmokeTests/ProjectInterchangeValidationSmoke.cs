@@ -50,7 +50,7 @@ namespace QS3D.Core.SmokeTests
         private static void BrokenDependencyFailsClosed()
         {
             var json = ProjectInterchangeJsonExporter.Build(BuildFixture())
-                .Replace("\"dependencies\":[\"E-ROOT\"]", "\"dependencies\":[\"E-MISSING\"]");
+                .Replace("\"dependencies\": [\"E-ROOT\"]", "\"dependencies\": [\"E-MISSING\"]");
             RequireError(ProjectInterchangeJsonValidator.Validate(json), "DEPENDENCY_REF_MISSING");
         }
 

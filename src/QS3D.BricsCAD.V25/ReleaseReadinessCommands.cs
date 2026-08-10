@@ -63,7 +63,7 @@ namespace QS3D.BricsCAD.V25
                     : "Release Check: BLOCKED • " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin.";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
-                Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(issues, issue => Locate(document, project, issue)), true);
+                Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue => Locate(document, project, issue)), true);
             }
             catch (System.Exception ex)
             {

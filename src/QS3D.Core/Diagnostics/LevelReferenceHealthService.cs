@@ -37,12 +37,12 @@ namespace QS3D.Core.Diagnostics
                     continue;
                 }
 
-                FloorDefinition bottom;
-                if (!floors.TryGetValue(bottomId, out bottom))
+                FloorDefinition? bottom = null;
+                if (!floors.TryGetValue(bottomId, out var resolvedBottom))
                 {
-                    bottom = null;
                     issues.Add(new ModelHealthIssue("BOTTOM_LEVEL_REFERENCE_INVALID", HealthSeverity.Error, "BottomLevelId không trỏ tới Level/Tầng còn tồn tại: " + bottomId, element.Id));
                 }
+                else bottom = resolvedBottom;
 
                 var bottomOffsetValid = TryOffset(element, ProjectFloorService.BottomLevelOffsetKey, out var bottomOffset);
                 if (!bottomOffsetValid)
@@ -56,12 +56,12 @@ namespace QS3D.Core.Diagnostics
                     continue;
                 }
 
-                FloorDefinition top;
-                if (!floors.TryGetValue(topId, out top))
+                FloorDefinition? top = null;
+                if (!floors.TryGetValue(topId, out var resolvedTop))
                 {
-                    top = null;
                     issues.Add(new ModelHealthIssue("TOP_LEVEL_REFERENCE_INVALID", HealthSeverity.Error, "TopLevelId không trỏ tới Level/Tầng còn tồn tại: " + topId, element.Id));
                 }
+                else top = resolvedTop;
 
                 var topOffsetValid = TryOffset(element, ProjectFloorService.TopLevelOffsetKey, out var topOffset);
                 if (!topOffsetValid)

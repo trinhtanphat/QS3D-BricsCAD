@@ -121,7 +121,7 @@ namespace QS3D.BricsCAD.V25.Services
             catch (ArgumentException) { }
             finally
             {
-                if (!string.IsNullOrWhiteSpace(temp)) TryDelete(temp);
+                if (!string.IsNullOrWhiteSpace(temp)) TryDelete(temp!);
             }
         }
 
