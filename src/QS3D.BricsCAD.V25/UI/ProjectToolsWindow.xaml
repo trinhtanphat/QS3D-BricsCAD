@@ -43,7 +43,11 @@
                 </UniformGrid>
                 <TextBlock Text="MODULE CHUYÊN NGÀNH" Style="{StaticResource SectionLabel}"/>
                 <UniformGrid Columns="2" Margin="0,0,0,14">
-                    <Button Content="Vách Kính / Curtain" Tag="QS3DCURTAIN" Click="OnCommandClick"/><Button Content="Geometry Extensions" Tag="QS3DGEOMETRYEXT" Click="OnCommandClick"/><Button Content="Rebar 3D Hub" Tag="QS3DREBARHUB" Click="OnCommandClick"/><Button Content="Bảng khối lượng" Tag="QS3DBQ" Click="OnCommandClick"/>
+                    <Button Content="Schedule / Bóc khối lượng" Tag="QS3DSCHEDULES" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Vách Kính / Curtain" Tag="QS3DCURTAIN" Click="OnCommandClick"/>
+                    <Button Content="Geometry Extensions" Tag="QS3DGEOMETRYEXT" Click="OnCommandClick"/>
+                    <Button Content="Rebar 3D Hub" Tag="QS3DREBARHUB" Click="OnCommandClick"/>
+                    <Button Content="Bảng khối lượng" Tag="QS3DBQ" Click="OnCommandClick"/>
                 </UniformGrid>
                 <TextBlock Text="KIỂM TRA / BẢO TRÌ" Style="{StaticResource SectionLabel}"/>
                 <UniformGrid Columns="2"><Button Content="Regenerate dirty" Tag="QS3DREGEN" Click="OnCommandClick"/><Button Content="Health All" Tag="QS3DHEALTHALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/><Button Content="Audit log" Tag="QS3DAUDIT" Click="OnCommandClick"/><Button Content="Workspace" Tag="QS3D" Click="OnCommandClick"/></UniformGrid>
