@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             FamilyMaterialAndInstanceOverrideSplitRows();
             SameRoomLabelsRemainSeparateByStableId();
             PreferredQuantityDoesNotEvaluateUnusedLegacyFallbacks();
+            GeneratedRoomSourceIdAndDependencyResolveRoom();
+            OrphanLinkedFinishIsExcluded();
             UnlinkedFinishRemainsSchedulable();
         }
 
@@ -99,6 +101,35 @@ namespace QS3D.Core.SmokeTests
             var row = RoomFinishScheduleBuilder.Build(project).Single(x => x.Category == "WallFinish");
             Near(9d, row.AreaM2);
             Near(9d, row.PrimaryQuantity);
+        }
+
+        private static void GeneratedRoomSourceIdAndDependencyResolveRoom()
+        {
+            var project = BaseProject();
+            var family = new ProjectFamily("wf-generated", "Sơn generated", ElementCategory.WallFinish);
+            project.Families.Add(family);
+            var finish = new ProjectElement("room-1-WallFinish", ElementCategory.WallFinish, family.Id, "f1", "z");
+            finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = "room-1";
+            finish.DependsOn.Add("room-1");
+            finish.Quantities["NetFinishAreaM2"] = 11d;
+            project.Elements.Add(finish);
+
+            var row = RoomFinishScheduleBuilder.Build(project).Single();
+            if (row.Room != "Phòng 101" || row.RoomIds.Count != 1 || row.RoomIds[0] != "room-1")
+                throw new Exception("Generated RoomSourceId/DependsOn provenance must resolve to the semantic room.");
+            Near(11d, row.PrimaryQuantity);
+        }
+
+        private static void OrphanLinkedFinishIsExcluded()
+        {
+            var project = BaseProject();
+            var family = new ProjectFamily("wf-orphan", "Sơn orphan", ElementCategory.WallFinish);
+            project.Families.Add(family);
+            var orphan = new ProjectElement("wf-orphan-1", ElementCategory.WallFinish, family.Id, "f1", "z");
+            orphan.Properties[AutoRoomLifecycle.RoomSourceIdKey] = "missing-room";
+            orphan.Quantities["NetFinishAreaM2"] = 99d;
+            project.Elements.Add(orphan);
+            if (RoomFinishScheduleBuilder.Build(project).Count != 0) throw new Exception("Orphan room-linked finishes must be excluded from schedule quantities.");
         }
 
         private static void UnlinkedFinishRemainsSchedulable()

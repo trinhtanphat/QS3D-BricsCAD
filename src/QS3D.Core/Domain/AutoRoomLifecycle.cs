@@ -13,7 +13,17 @@ namespace QS3D.Core.Domain
         public const string BoundaryStateStale = "Stale";
         public const string BoundarySourceHandlesKey = "BoundarySourceHandles";
         public const string BoundarySourceSignatureKey = "BoundarySourceSignature";
+        public const string RoomSourceIdKey = "RoomSourceId";
         private const string FamilyDefaultSnapshotPrefix = "AutoRoomFamilyDefault:";
+
+        private static readonly string[] RoomReferencePropertyKeys =
+        {
+            RoomSourceIdKey,
+            "ParentRoomId",
+            "SourceRoomId",
+            "GeneratedFromRoomId",
+            "RoomId"
+        };
 
         public static bool IsAutoRoom(ProjectElement element)
         {
@@ -28,6 +38,15 @@ namespace QS3D.Core.Domain
             if (!IsAutoRoom(element)) return false;
             return element.Properties.TryGetValue(BoundaryStateKey, out var state) &&
                    string.Equals(state, BoundaryStateStale, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsRoomFinishCategory(ElementCategory category)
+        {
+            return category == ElementCategory.FloorFinish ||
+                   category == ElementCategory.Waterproofing ||
+                   category == ElementCategory.Skirting ||
+                   category == ElementCategory.WallFinish ||
+                   category == ElementCategory.CeilingFinish;
         }
 
         public static string NormalizeSourceHandles(IEnumerable<string> handles)
@@ -47,6 +66,33 @@ namespace QS3D.Core.Domain
                 return NormalizeSourceHandles(signature.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries));
             if (!element.Properties.TryGetValue(BoundarySourceHandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return string.Empty;
             return NormalizeSourceHandles(raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        public static string ResolveRoomReferenceId(ProjectState project, ProjectElement element)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (element == null) throw new ArgumentNullException(nameof(element));
+
+            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in RoomReferencePropertyKeys)
+            {
+                if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                candidates.Add(raw.Trim());
+            }
+
+            foreach (var dependencyRaw in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)))
+            {
+                var dependencyId = dependencyRaw.Trim();
+                var dependency = project.FindElement(dependencyId);
+                if (dependency != null && dependency.Category == ElementCategory.Room)
+                    candidates.Add(dependency.Id);
+                else if (dependency == null && IsRoomFinishCategory(element.Category))
+                    candidates.Add(dependencyId);
+            }
+
+            if (candidates.Count > 1)
+                throw new InvalidOperationException("Conflicting room provenance on " + element.Id + ": " + string.Join(";", candidates.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)));
+            return candidates.Count == 1 ? candidates.First() : string.Empty;
         }
 
         public static ProjectElement? FindBySourceSignature(ProjectState project, string signature, string floorId, string zoneId)
@@ -192,10 +238,30 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
             if (IsStaleAutoRoom(element)) return true;
-            foreach (var dependencyId in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)))
+            if (HasStaleAutoRoomAncestor(project, element, new HashSet<string>(StringComparer.OrdinalIgnoreCase))) return true;
+
+            if (IsRoomFinishCategory(element.Category))
             {
-                var dependency = project.FindElement(dependencyId.Trim());
-                if (dependency != null && IsStaleAutoRoom(dependency)) return true;
+                var roomId = ResolveRoomReferenceId(project, element);
+                if (roomId.Length > 0)
+                {
+                    var room = project.FindElement(roomId);
+                    if (room == null || room.Category != ElementCategory.Room) return true;
+                    if (IsStaleAutoRoom(room)) return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool HasStaleAutoRoomAncestor(ProjectState project, ProjectElement element, ISet<string> visited)
+        {
+            if (!visited.Add(element.Id)) return false;
+            foreach (var dependencyId in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()))
+            {
+                var dependency = project.FindElement(dependencyId);
+                if (dependency == null) continue;
+                if (IsStaleAutoRoom(dependency)) return true;
+                if (HasStaleAutoRoomAncestor(project, dependency, visited)) return true;
             }
             return false;
         }

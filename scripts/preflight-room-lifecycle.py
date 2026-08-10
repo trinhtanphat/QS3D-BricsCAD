@@ -18,6 +18,7 @@ required = [
     "src/QS3D.BricsCAD.V25/Services/SemanticReferenceHandles.cs",
     "tests/QS3D.Core.SmokeTests/AutoRoomLifecycleSmoke.cs",
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/ProjectQuantitySmoke.cs",
 ]
 for rel in required:
     if not (ROOT / rel).exists(): errors.append("missing auto-room lifecycle file: " + rel)
@@ -28,7 +29,9 @@ if lifecycle.exists():
     for needle in (
         "FindBySourceSignature", "MarkStaleForSelection", "IsExcludedFromQuantity",
         "BoundaryStateStale", "NormalizeSourceHandles", "BoundarySourceSignatureKey",
-        "SyncFamilyDefaults", "FamilyDefaultSnapshotPrefix",
+        "SyncFamilyDefaults", "FamilyDefaultSnapshotPrefix", "RoomSourceIdKey",
+        "ResolveRoomReferenceId", "IsRoomFinishCategory", "HasStaleAutoRoomAncestor",
+        "Conflicting room provenance",
     ):
         if needle not in text: errors.append("auto-room lifecycle guard missing: " + needle)
 
@@ -89,8 +92,14 @@ if capture.exists():
         if needle not in text: errors.append("room finish / auto-room integration missing: " + needle)
 
 report = ROOT / "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs"
-if report.exists() and "AutoRoomLifecycle.IsExcludedFromQuantity(project, element)" not in report.read_text(encoding="utf-8"):
-    errors.append("BQ must exclude stale auto rooms and direct dependents")
+if report.exists():
+    text = report.read_text(encoding="utf-8")
+    if "AutoRoomLifecycle.IsExcludedFromQuantity(project, element)" not in text:
+        errors.append("BQ must exclude stale auto rooms and room-linked dependents")
+    for needle in ("QFirst(element, \"GrossConcreteM3\", \"GrossVolumeM3\")", "QFirstOrFallback", "QFirst(element, \"BottomAreaM2\", \"AreaM2\")"):
+        if needle not in text: errors.append("BQ lazy quantity fallback guard missing: " + needle)
+    if 'Q(element, "GrossConcreteM3", Q(' in text or 'Q(element, "NetConcreteM3", Q(' in text:
+        errors.append("BQ must not eagerly evaluate unused legacy quantity fallbacks")
 
 commands = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
 if commands.exists():
@@ -110,10 +119,15 @@ if smoke.exists():
     for needle in (
         "SourceSignatureIsDeterministic();", "ReusesMatchingProvenance();",
         "DuplicateProvenanceIsRejected();", "TopologyChangeMarksStale();",
-        "StaleRoomsAndDependentsAreExcludedFromBq();", "ReactivationClearsStaleState();",
+        "StaleRoomsAndDependentsAreExcludedFromBq();", "RoomFinishProvenanceUsesCanonicalPropertyAndDependency();",
+        "OrphanAndConflictingRoomFinishProvenanceAreSafe();", "ReactivationClearsStaleState();",
         "FamilyDefaultsPreserveInstanceOverrides();",
     ):
         if needle not in text: errors.append("auto-room lifecycle regression coverage missing: " + needle)
+
+quantity_smoke = ROOT / "tests/QS3D.Core.SmokeTests/ProjectQuantitySmoke.cs"
+if quantity_smoke.exists() and "PreferredBqQuantityDoesNotEvaluateUnusedFallbacks();" not in quantity_smoke.read_text(encoding="utf-8"):
+    errors.append("BQ lazy-fallback regression coverage missing")
 
 geometry_smoke = ROOT / "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs"
 if geometry_smoke.exists():
@@ -130,4 +144,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: auto-room LINE/POLYLINE/ARC/SPLINE input, scoped identity, override-safe family sync, stale reconciliation, rollback, quantity exclusion, finish sync, semantic locate and large-coordinate geometry guards are present.")
+print("PASS: auto-room input/identity, room provenance, stale/orphan quantity exclusion, lazy BQ fallbacks, rollback, finish sync, semantic locate and large-coordinate geometry guards are present.")

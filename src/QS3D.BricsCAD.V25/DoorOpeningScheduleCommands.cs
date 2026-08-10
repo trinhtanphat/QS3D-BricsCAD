@@ -43,8 +43,14 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
                 DoorOpeningXlsxExporter.Export(dialog.FileName, rows);
-                var count = rows.Sum(x => x.Count);
-                var area = rows.Sum(x => x.OpeningAreaM2);
+
+                var count = 0;
+                var area = 0d;
+                foreach (var row in rows)
+                {
+                    count = QuantityReportMath.AddCount(count, row.Count);
+                    area = QuantityReportMath.Add(area, row.OpeningAreaM2, "Door/Opening export area");
+                }
                 var hosts = rows.SelectMany(x => x.HostIds).Distinct(StringComparer.OrdinalIgnoreCase).Count();
                 var status = "Door XLSX: " + rows.Count + " nhóm • " + count + " Cửa/Lỗ • " + area.ToString("0.###") + " m² • " + hosts + " host.";
                 PaletteCoordinator.SetStatus(status);

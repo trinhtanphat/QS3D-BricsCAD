@@ -50,7 +50,7 @@ namespace QS3D.Core.Reporting
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
                 families.TryGetValue(element.FamilyId, out var family);
                 var material = Effective(element, family, "Material");
-                var roomId = ResolveRoomId(element);
+                var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, element);
                 var roomLabel = RoomLabel(roomId, rooms);
                 var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
                 var familyName = family?.Name ?? element.FamilyId;
@@ -59,8 +59,6 @@ namespace QS3D.Core.Reporting
                 if (material.Length > 0 && units.TryGetValue(material, out var unit) && SameDimension(unit, metrics.DefaultUnit)) unitHint = unit;
                 var primary = Primary(unitHint, metrics.LengthM, metrics.AreaM2);
 
-                // Group by the stable semantic room id, never by its display label. Two rooms are
-                // allowed to have the same name/number and must still remain separate schedule rows.
                 var roomKey = roomId.Length > 0 ? roomId : "(unlinked)";
                 var key = string.Join("\u001f", element.FloorId, roomKey, element.Category.ToString(), element.FamilyId, material, unitHint);
                 if (!rows.TryGetValue(key, out var row))
@@ -127,13 +125,6 @@ namespace QS3D.Core.Reporting
                 default:
                     throw new InvalidOperationException("Unsupported room-finish category: " + element.Category);
             }
-        }
-
-        private static string ResolveRoomId(ProjectElement element)
-        {
-            foreach (var key in new[] { "ParentRoomId", "SourceRoomId", "GeneratedFromRoomId", "RoomId" })
-                if (element.Properties.TryGetValue(key, out var raw) && !string.IsNullOrWhiteSpace(raw)) return raw.Trim();
-            return string.Empty;
         }
 
         private static string RoomLabel(string roomId, IDictionary<string, ProjectElement> rooms)

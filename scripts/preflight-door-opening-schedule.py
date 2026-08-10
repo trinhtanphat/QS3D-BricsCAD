@@ -33,7 +33,7 @@ checks = {
     ],
     required[2]: [
         'CommandMethod("QS3DDOORXLSX"', "RegenerationEngine", "DoorOpeningScheduleBuilder.Build(project)",
-        "DoorOpeningXlsxExporter.Export", "SaveFileDialog", "Cua-Lo-Mo.xlsx",
+        "DoorOpeningXlsxExporter.Export", "SaveFileDialog", "Cua-Lo-Mo.xlsx", "QuantityReportMath.AddCount", "QuantityReportMath.Add",
     ],
     required[3]: ['CommandMethod("QS3DDOORSCHEDULE"', "new DoorOpeningScheduleWindow(document)", "ShowModelessWindow"],
     required[4]: [
@@ -46,6 +46,7 @@ checks = {
         "DoorOpeningXlsxExporter.Export", "RegenerationEngine", "SearchText.Contains(query)", "Distinct(StringComparer.OrdinalIgnoreCase)",
         "DrawingLabel(_document)", "EnsureActive", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
         'EnsureActive("làm mới Door/Opening Schedule")', 'EnsureActive("xuất Door/Opening XLSX")',
+        "QuantityReportMath.AddCount", "QuantityReportMath.Add", '"Door/Opening visible area"',
     ],
     required[6]: [
         "GroupsDoorsByDimensionsAndDistinctHosts", "InstanceOverrideSplitsFamilyInheritedRow", "RejectsInvalidSemanticDimensions",
@@ -64,6 +65,11 @@ for relative, needles in checks.items():
     for needle in needles:
         if needle not in text: errors.append(relative + " missing door/opening schedule guard/token: " + needle)
 
+for relative in (required[2], required[5]):
+    path = ROOT / relative
+    if path.is_file() and ".Sum(" in path.read_text(encoding="utf-8"):
+        errors.append(relative + " must not use unchecked LINQ Sum for schedule totals")
+
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
     commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', path.read_text(encoding="utf-8"))
@@ -74,4 +80,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: deterministic Door/Opening schedule, host provenance, XLSX export and cross-DWG-safe modeless review UI are present.")
+print("PASS: deterministic Door/Opening schedule, host provenance, overflow-safe summaries, XLSX export and cross-DWG-safe modeless review UI are present.")
