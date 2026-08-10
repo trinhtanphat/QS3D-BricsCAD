@@ -62,8 +62,10 @@ if not errors:
     if "new ModelHealthWindow(document, issues" not in health_all_text:
         errors.append("HealthAllCommands must pass the source Document explicitly")
 
+    explicit_doc_first = r"doc(?:ument)?\b"
+
     # Production adapter call sites must not use the legacy ambient ModelHealthWindow overload.
-    old_health_call = re.compile(r"new\s+ModelHealthWindow\s*\(\s*(?!document\b)")
+    old_health_call = re.compile(r"new\s+ModelHealthWindow\s*\(\s*(?!" + explicit_doc_first + r")")
     for path in sorted(ADAPTER.rglob("*.cs")):
         if path == health:
             continue
@@ -74,8 +76,8 @@ if not errors:
             errors.append("ambient ModelHealthWindow call site remains: " + str(path.relative_to(ROOT)))
 
     # Recognition/Revision production call sites must use an explicit source Document as first argument.
-    old_recognition_call = re.compile(r"new\s+RecognitionWindow\s*\(\s*(?!doc(?:ument)?\b)")
-    old_revision_call = re.compile(r"new\s+RevisionWindow\s*\(\s*(?!doc(?:ument)?\b)")
+    old_recognition_call = re.compile(r"new\s+RecognitionWindow\s*\(\s*(?!" + explicit_doc_first + r")")
+    old_revision_call = re.compile(r"new\s+RevisionWindow\s*\(\s*(?!" + explicit_doc_first + r")")
     for path in sorted(ADAPTER.rglob("*.cs")):
         if path in (recognition, revision):
             continue
