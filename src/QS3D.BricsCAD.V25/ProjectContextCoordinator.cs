@@ -12,6 +12,7 @@ namespace QS3D.BricsCAD.V25
     {
         private const string RecoveryRequiredKey = "QS3D.ReadOnlyRecoveryRequired";
         private static readonly Dictionary<Document, ProjectState> Projects = new Dictionary<Document, ProjectState>();
+        private static readonly Dictionary<Document, string> UnsavedProjectKeys = new Dictionary<Document, string>();
         private static readonly QsdbProjectStore Store = new QsdbProjectStore();
 
         public static ProjectState GetOrCreate(Document document)
@@ -79,13 +80,19 @@ namespace QS3D.BricsCAD.V25
 
         public static void Forget(Document document)
         {
-            if (document != null) Projects.Remove(document);
+            if (document == null) return;
+            Projects.Remove(document);
+            UnsavedProjectKeys.Remove(document);
         }
 
         public static void ForgetByName(string? drawingName)
         {
             if (string.IsNullOrWhiteSpace(drawingName)) return;
-            foreach (var document in Projects.Keys.Where(x => SameDrawingName(x.Name, drawingName)).ToArray()) Projects.Remove(document);
+            foreach (var document in Projects.Keys.Where(x => SameDrawingName(x.Name, drawingName)).ToArray())
+            {
+                Projects.Remove(document);
+                UnsavedProjectKeys.Remove(document);
+            }
         }
 
         public static string GetProjectPath(Document document)
@@ -95,7 +102,12 @@ namespace QS3D.BricsCAD.V25
             if (string.IsNullOrWhiteSpace(drawing) || !Path.IsPathRooted(drawing))
             {
                 var stem = SafeFileStem(string.IsNullOrWhiteSpace(drawing) ? "Untitled" : Path.GetFileNameWithoutExtension(drawing));
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QS3D", "Projects", stem + ".qsdb");
+                if (!UnsavedProjectKeys.TryGetValue(document, out var key))
+                {
+                    key = Guid.NewGuid().ToString("N");
+                    UnsavedProjectKeys[document] = key;
+                }
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QS3D", "Projects", stem + "-" + key + ".qsdb");
             }
             return Path.ChangeExtension(drawing, ".qsdb");
         }
