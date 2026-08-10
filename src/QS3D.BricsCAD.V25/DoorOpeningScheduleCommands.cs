@@ -31,6 +31,15 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
+                var count = 0;
+                var area = 0d;
+                foreach (var row in rows)
+                {
+                    count = QuantityReportMath.AddCount(count, row.Count);
+                    area = QuantityReportMath.Add(area, row.OpeningAreaM2, "Door/Opening export area");
+                }
+                var hosts = rows.SelectMany(x => x.HostIds).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
                 var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
                 var dialog = new SaveFileDialog
                 {
@@ -44,23 +53,34 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
                 DoorOpeningXlsxExporter.Export(dialog.FileName, rows);
 
-                var count = 0;
-                var area = 0d;
-                foreach (var row in rows)
-                {
-                    count = QuantityReportMath.AddCount(count, row.Count);
-                    area = QuantityReportMath.Add(area, row.OpeningAreaM2, "Door/Opening export area");
-                }
-                var hosts = rows.SelectMany(x => x.HostIds).Distinct(StringComparer.OrdinalIgnoreCase).Count();
                 var status = "Door XLSX: " + rows.Count + " nhóm • " + count + " Cửa/Lỗ • " + area.ToString("0.###") + " m² • " + hosts + " host.";
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status + "\n" + dialog.FileName);
+                FinalizeUi(document, status, dialog.FileName);
             }
             catch (System.Exception ex)
             {
                 var status = "QS3DDOORXLSX lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\n" + status);
+            }
+        }
+
+        private static void FinalizeUi(Document document, string status, string fileName)
+        {
+            try
+            {
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\nQS3D " + status + "\n" + fileName);
+            }
+            catch (System.Exception ex)
+            {
+                try
+                {
+                    document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export: " + ex.Message);
+                }
+                catch
+                {
+                    // Export has already committed; UI reporting is best effort only.
+                }
             }
         }
     }
