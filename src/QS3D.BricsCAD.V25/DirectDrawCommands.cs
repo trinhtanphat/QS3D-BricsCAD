@@ -456,6 +456,9 @@ namespace QS3D.BricsCAD.V25
             var normalized = new HashSet<string>(
                 (generatedHandles ?? Array.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
                 StringComparer.OrdinalIgnoreCase);
+            if (normalized.Count > 0 && createdElement == null)
+                throw new InvalidOperationException("Direct Draw rollback found generated CAD without the newly-created semantic owner.");
+            var ids = CadHandleService.Resolve(document, normalized);
 
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
@@ -466,15 +469,13 @@ namespace QS3D.BricsCAD.V25
                     if (source != null && !source.IsErased) source.Erase(true);
                 }
 
-                var ids = CadHandleService.Resolve(document, normalized);
                 foreach (var id in ids)
                 {
-                    if (createdElement == null) throw new InvalidOperationException("Direct Draw rollback found generated CAD without the newly-created semantic owner.");
                     if (id.IsNull || !id.IsValid || id == sourceId) continue;
                     var entity = transaction.GetObject(id, OpenMode.ForWrite, true) as Entity;
                     if (entity == null) throw new InvalidOperationException("Direct Draw rollback generated handle " + id.Handle + " không còn trỏ tới Entity hợp lệ.");
                     if (entity.IsErased) continue;
-                    GeneratedGeometryService.RequireMatchingOwnership(entity, project, createdElement, "rollback Direct Draw generated CAD " + id.Handle);
+                    GeneratedGeometryService.RequireMatchingOwnership(entity, project, createdElement!, "rollback Direct Draw generated CAD " + id.Handle);
                     entity.Erase(true);
                 }
                 transaction.Commit();
