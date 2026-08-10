@@ -61,14 +61,17 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public void Load(ProjectState project)
         {
             _project = project ?? throw new ArgumentNullException(nameof(project));
+            ValidateWorkspaceCatalogs(project);
+            SynchronizeActiveCatalogs(project);
+
             _selectedElement = null;
             _selectedPropertyScope = FamilyScope;
             OnChanged(nameof(SelectedPropertyScope));
             Zones.Clear(); foreach (var item in project.Zones) Zones.Add(item.Name);
             Floors.Clear(); foreach (var item in project.Floors.OrderBy(x => x.ElevationM)) Floors.Add(item.Name);
             Families.Clear(); foreach (var item in project.Families.OrderBy(x => x.Category).ThenBy(x => x.Name)) Families.Add(item);
-            var activeFamilyId = project.Metadata.TryGetValue("ActiveFamilyId", out var stored) ? stored : string.Empty;
-            _selectedFamily = Families.FirstOrDefault(x => string.Equals(x.Id, activeFamilyId, StringComparison.OrdinalIgnoreCase)) ?? Families.FirstOrDefault();
+
+            _selectedFamily = ProjectFamilyActivationService.GetActive(project) ?? Families.FirstOrDefault();
             SelectedFamilyName = _selectedFamily?.Name ?? string.Empty;
             LoadCurrentProperties();
             Status = project.Elements.Count + " cấu kiện • " + project.Families.Count + " family";
@@ -77,31 +80,45 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public int ActiveZoneIndex()
         {
             if (_project == null) return 0;
-            var zone = _project.Zones.FirstOrDefault(x => string.Equals(x.Id, _project.ActiveZoneId, StringComparison.OrdinalIgnoreCase));
+            var zone = _project.FindZone(_project.ActiveZoneId);
             return zone == null ? 0 : Math.Max(0, Zones.IndexOf(zone.Name));
         }
 
         public int ActiveFloorIndex()
         {
             if (_project == null) return 0;
-            var floor = _project.Floors.FirstOrDefault(x => string.Equals(x.Id, _project.ActiveFloorId, StringComparison.OrdinalIgnoreCase));
+            var floor = _project.FindFloor(_project.ActiveFloorId);
             return floor == null ? 0 : Math.Max(0, Floors.IndexOf(floor.Name));
         }
 
         public void SetActiveZone(string? name)
         {
             if (_project == null || string.IsNullOrWhiteSpace(name)) return;
-            var zone = _project.Zones.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.CurrentCultureIgnoreCase));
+            var matches = _project.Zones.Where(x => string.Equals(x.Name, name, StringComparison.CurrentCultureIgnoreCase)).Take(2).ToList();
+            if (matches.Count > 1)
+            {
+                Status = "Không thể chọn Zone vì tên bị trùng: " + name;
+                return;
+            }
+            var zone = matches.Count == 1 ? matches[0] : null;
             if (zone == null || string.Equals(_project.ActiveZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)) return;
-            _project.ActiveZoneId = zone.Id; _project.Touch(); Status = "Zone làm việc: " + zone.Name;
+            ProjectZoneService.SetActive(_project, zone.Id);
+            Status = "Zone làm việc: " + zone.Name;
         }
 
         public void SetActiveFloor(string? name)
         {
             if (_project == null || string.IsNullOrWhiteSpace(name)) return;
-            var floor = _project.Floors.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.CurrentCultureIgnoreCase));
+            var matches = _project.Floors.Where(x => string.Equals(x.Name, name, StringComparison.CurrentCultureIgnoreCase)).Take(2).ToList();
+            if (matches.Count > 1)
+            {
+                Status = "Không thể chọn tầng vì tên bị trùng: " + name;
+                return;
+            }
+            var floor = matches.Count == 1 ? matches[0] : null;
             if (floor == null || string.Equals(_project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase)) return;
-            _project.ActiveFloorId = floor.Id; _project.Touch(); Status = "Tầng làm việc: " + floor.Name;
+            ProjectFloorService.SetActive(_project, floor.Id);
+            Status = "Tầng làm việc: " + floor.Name;
         }
 
         public void SetActiveFamily(ProjectFamily? family)
@@ -131,11 +148,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 _selectedPropertyScope = FamilyScope;
                 OnChanged(nameof(SelectedPropertyScope));
             }
-            if (!_project.Metadata.TryGetValue("ActiveFamilyId", out var activeId) || !string.Equals(activeId, family.Id, StringComparison.OrdinalIgnoreCase))
-            {
-                _project.Metadata["ActiveFamilyId"] = family.Id;
-                _project.Touch();
-            }
+            ProjectFamilyActivationService.SetActive(_project, family.Id);
             SelectedFamilyName = family.Name;
             LoadCurrentProperties();
         }
@@ -191,11 +204,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             _selectedElement = ownedElement;
             _selectedFamily = family;
             SelectedFamilyName = family.Name;
-            if (!_project.Metadata.TryGetValue("ActiveFamilyId", out var activeId) || !string.Equals(activeId, family.Id, StringComparison.OrdinalIgnoreCase))
-            {
-                _project.Metadata["ActiveFamilyId"] = family.Id;
-                _project.Touch();
-            }
+            ProjectFamilyActivationService.SetActive(_project, family.Id);
             _selectedPropertyScope = InstanceScope;
             OnChanged(nameof(SelectedPropertyScope));
             LoadCurrentProperties();
@@ -522,6 +531,67 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             return key.Equals("SillHeightM", StringComparison.OrdinalIgnoreCase) ||
                    key.Equals("BooleanClearanceM", StringComparison.OrdinalIgnoreCase) ||
                    key.Equals("CoverM", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void ValidateWorkspaceCatalogs(ProjectState project)
+        {
+            var zoneIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var zoneNames = new HashSet<string>(StringComparer.CurrentCultureIgnoreCase);
+            foreach (var zone in project.Zones)
+            {
+                if (zone == null) throw new InvalidOperationException("Project contains a null Zone entry.");
+                if (!zoneIds.Add(zone.Id)) throw new InvalidOperationException("Project contains duplicate Zone id: " + zone.Id);
+                if (!zoneNames.Add(zone.Name)) throw new InvalidOperationException("Project contains duplicate Zone name: " + zone.Name);
+            }
+
+            var floorIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var floorNames = new HashSet<string>(StringComparer.CurrentCultureIgnoreCase);
+            foreach (var floor in project.Floors)
+            {
+                if (floor == null) throw new InvalidOperationException("Project contains a null Floor entry.");
+                if (double.IsNaN(floor.ElevationM) || double.IsInfinity(floor.ElevationM))
+                    throw new InvalidOperationException("Project contains a Floor with non-finite elevation: " + floor.Id);
+                if (!floorIds.Add(floor.Id)) throw new InvalidOperationException("Project contains duplicate Floor id: " + floor.Id);
+                if (!floorNames.Add(floor.Name)) throw new InvalidOperationException("Project contains duplicate Floor name: " + floor.Name);
+            }
+
+            var familyIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var familyNames = new HashSet<string>(StringComparer.CurrentCultureIgnoreCase);
+            foreach (var family in project.Families)
+            {
+                if (family == null) throw new InvalidOperationException("Project contains a null Family entry.");
+                if (!familyIds.Add(family.Id)) throw new InvalidOperationException("Project contains duplicate Family id: " + family.Id);
+                var nameKey = family.Category + "\u001f" + family.Name;
+                if (!familyNames.Add(nameKey))
+                    throw new InvalidOperationException("Project contains duplicate " + family.Category + " Family name: " + family.Name);
+            }
+        }
+
+        private static void SynchronizeActiveCatalogs(ProjectState project)
+        {
+            var zone = project.FindZone(project.ActiveZoneId);
+            if (zone == null)
+            {
+                if (project.Zones.Count > 0) ProjectZoneService.SetActive(project, project.Zones[0].Id);
+                else if (!string.IsNullOrWhiteSpace(project.ActiveZoneId)) { project.ActiveZoneId = string.Empty; project.Touch(); }
+            }
+
+            var floor = project.FindFloor(project.ActiveFloorId);
+            if (floor == null)
+            {
+                if (project.Floors.Count > 0) ProjectFloorService.SetActive(project, project.Floors.OrderBy(x => x.ElevationM).First().Id);
+                else if (!string.IsNullOrWhiteSpace(project.ActiveFloorId)) { project.ActiveFloorId = string.Empty; project.Touch(); }
+            }
+
+            ProjectFamily? family = null;
+            if (project.Metadata.TryGetValue("ActiveFamilyId", out var activeFamilyId) && !string.IsNullOrWhiteSpace(activeFamilyId))
+                family = project.FindFamily(activeFamilyId);
+            if (family == null)
+            {
+                if (project.Families.Count > 0)
+                    ProjectFamilyActivationService.SetActive(project, project.Families.OrderBy(x => x.Category).ThenBy(x => x.Name).First().Id);
+                else if (project.Metadata.Remove("ActiveFamilyId")) project.Touch();
+            }
         }
 
         private static string GroupFor(string key)
