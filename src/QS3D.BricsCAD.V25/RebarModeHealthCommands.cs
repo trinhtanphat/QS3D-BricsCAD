@@ -23,7 +23,7 @@ namespace QS3D.BricsCAD.V25
                 var message = "Rebar Mode Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
-                var window = new ModelHealthWindow(issues, issue =>
+                var window = new ModelHealthWindow(document, issues, issue =>
                 {
                     var element = project.FindElement(issue.ElementId);
                     if (element == null) return;

@@ -15,13 +15,13 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly Action<QuantityRevisionRow>? _locate;
         private readonly Document _document;
 
-        public RevisionWindow(RevisionSnapshot before, RevisionSnapshot after, IReadOnlyList<QuantityRevisionRow> rows, Action<QuantityRevisionRow>? locate = null)
+        public RevisionWindow(Document document, RevisionSnapshot before, RevisionSnapshot after, IReadOnlyList<QuantityRevisionRow> rows, Action<QuantityRevisionRow>? locate = null)
         {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _locate = locate;
-            _document = BcadApplication.DocumentManager.MdiActiveDocument ?? throw new InvalidOperationException("Không có DWG active khi mở Revision.");
             InitializeComponent();
             Grid.ItemsSource = _rows;
             Header.Text = before.Id + " → " + after.Id;

@@ -27,7 +27,7 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.WriteMessage("\nQS3D " + status);
 
                 if (issues.Count == 0) return;
-                var window = new ModelHealthWindow(issues, issue =>
+                var window = new ModelHealthWindow(document, issues, issue =>
                 {
                     if (string.IsNullOrWhiteSpace(issue.ElementId)) return;
                     var handles = SourceHandleResolver.Resolve(project, new[] { issue.ElementId });
