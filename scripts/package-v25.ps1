@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$source = Join-Path $root 'src/QS3D.BricsCAD.V25/bin/Release/net48'
+$source = Join-Path $root 'src/QS3D.BricsCAD.V25/bin/x64/Release/net48'
 $distRoot = Join-Path $root 'dist'
 $dist = Join-Path $distRoot 'QS3D-BricsCAD-V25'
 $zip = Join-Path $distRoot 'QS3D-BricsCAD-V25.zip'

@@ -44,7 +44,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 document.Editor.WriteMessage("\nQS3DBBSCSV error: " + ex.Message);
                 PaletteCoordinator.SetStatus("QS3DBBSCSV lỗi: " + ex.Message);

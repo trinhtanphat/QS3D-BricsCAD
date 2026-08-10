@@ -38,11 +38,21 @@ namespace QS3D.BricsCAD.V25.Services
             var collision = project.Elements.FirstOrDefault(x => x.Category != category && x.SourceHandles.Any(h => string.Equals(h, snapshot.Handle, StringComparison.OrdinalIgnoreCase)));
             if (collision != null) throw new InvalidOperationException("CAD handle " + snapshot.Handle + " đang được QS3D theo dõi dưới loại " + collision.Category + ". Bỏ theo dõi trước khi đổi loại cấu kiện.");
 
-            var family = ResolveFamily(project, category);
             var id = category.ToString().ToUpperInvariant() + "-" + snapshot.Handle;
             var element = project.FindElement(id);
-            if (element == null) { element = new ProjectElement(id, category, family.Id, project.ActiveFloorId, project.ActiveZoneId); project.Elements.Add(element); }
-            element.Category = category; element.FamilyId = family.Id; element.FloorId = project.ActiveFloorId; element.ZoneId = project.ActiveZoneId;
+            ProjectFamily family;
+            if (element == null)
+            {
+                family = ResolveFamily(project, category);
+                element = new ProjectElement(id, category, family.Id, project.ActiveFloorId, project.ActiveZoneId);
+                project.Elements.Add(element);
+            }
+            else
+            {
+                family = project.FindFamily(element.FamilyId) ?? ResolveFamily(project, category);
+                if (string.IsNullOrWhiteSpace(element.FamilyId)) element.FamilyId = family.Id;
+            }
+            element.Category = category;
             element.SourceHandles.Clear(); element.SourceHandles.Add(snapshot.Handle); element.DrawingFingerprint = project.DrawingFingerprint;
             element.Properties["Layer"] = snapshot.Layer;
             foreach (var item in snapshot.Metadata) element.Properties["CAD." + item.Key] = item.Value ?? string.Empty;

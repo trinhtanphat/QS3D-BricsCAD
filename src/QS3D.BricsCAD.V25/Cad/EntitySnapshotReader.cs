@@ -12,6 +12,20 @@ namespace QS3D.BricsCAD.V25.Cad
         public static IReadOnlyList<EntitySnapshot> ReadCurrentSelection(Document document) => ReadSelection(document, true);
         public static IReadOnlyList<EntitySnapshot> ReadImpliedSelection(Document document) => ReadSelection(document, false);
 
+        public static IReadOnlyList<EntitySnapshot> ReadCurrentSpace(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var result = new List<EntitySnapshot>();
+            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                var space = transaction.GetObject(document.Database.CurrentSpaceId, OpenMode.ForRead, false) as BlockTableRecord;
+                if (space != null)
+                    foreach (ObjectId id in space) AddSnapshot(transaction, id, result);
+                transaction.Commit();
+            }
+            return result;
+        }
+
         private static IReadOnlyList<EntitySnapshot> ReadSelection(Document document, bool promptIfEmpty)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -25,14 +39,21 @@ namespace QS3D.BricsCAD.V25.Cad
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 foreach (var id in selection.Value.GetObjectIds())
-                {
-                    var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity; if (entity == null) continue;
-                    var snapshot = new EntitySnapshot(entity.Handle.ToString(), entity.GetType().Name, entity.Layer);
-                    PopulateMetrics(entity, snapshot); PopulateMetadata(transaction, entity, snapshot); result.Add(snapshot);
-                }
+                    AddSnapshot(transaction, id, result);
                 transaction.Commit();
             }
             return result;
+        }
+
+        private static void AddSnapshot(Transaction transaction, ObjectId id, ICollection<EntitySnapshot> result)
+        {
+            if (id.IsNull || id.IsErased) return;
+            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+            if (entity == null) return;
+            var snapshot = new EntitySnapshot(entity.Handle.ToString(), entity.GetType().Name, entity.Layer);
+            PopulateMetrics(entity, snapshot);
+            PopulateMetadata(transaction, entity, snapshot);
+            result.Add(snapshot);
         }
 
         private static void PopulateMetrics(Entity entity, EntitySnapshot snapshot)
@@ -44,6 +65,19 @@ namespace QS3D.BricsCAD.V25.Cad
             if (entity is Polyline polyline && polyline.Closed)
             {
                 try { var area = Math.Abs(polyline.Area); if (!double.IsNaN(area) && !double.IsInfinity(area)) snapshot.AreaDrawingUnitsSquared = area; } catch { }
+            }
+            if (entity is Region region)
+            {
+                try { var area = Math.Abs(region.Area); if (!double.IsNaN(area) && !double.IsInfinity(area)) snapshot.AreaDrawingUnitsSquared = area; } catch { }
+            }
+            if (entity is Hatch hatch)
+            {
+                try { var area = Math.Abs(hatch.Area); if (!double.IsNaN(area) && !double.IsInfinity(area)) snapshot.AreaDrawingUnitsSquared = area; } catch { }
+            }
+            if (entity is Solid3d solid)
+            {
+                try { var area = Math.Abs(solid.Area); if (!double.IsNaN(area) && !double.IsInfinity(area)) snapshot.AreaDrawingUnitsSquared = area; } catch { }
+                try { var volume = Math.Abs(solid.MassProperties.Volume); if (!double.IsNaN(volume) && !double.IsInfinity(volume)) snapshot.VolumeDrawingUnitsCubed = volume; } catch { }
             }
         }
 
