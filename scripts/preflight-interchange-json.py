@@ -53,7 +53,10 @@ for token in [
     'normalized.StartsWith("QS3D.Generated"',
     'normalized.StartsWith("PhysicalOpeningCut"',
     "OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)",
-    "File.Replace(tempPath, fullPath, backupPath, true)",
+    "AtomicFileCommit.CreateTempPath(fullPath)",
+    "stream.Flush(true);",
+    "AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);",
+    "AtomicFileCommit.TryDelete(tempPath);",
 ]:
     require(core, token, "interchange core contract")
 
@@ -104,4 +107,4 @@ for token in [
     require(smoke, token, "interchange smoke")
 require(registration, "ProjectInterchangeJsonSmoke.Run();", "smoke registration")
 
-print("[PASS] semantic JSON interchange is stable-ID/SI/read-only, detached from live state, smoke-covered and excludes generated CAD ownership handles")
+print("[PASS] semantic JSON interchange is stable-ID/SI/read-only, detached from live state, atomically published through the shared file commit path, smoke-covered and excludes generated CAD ownership handles")

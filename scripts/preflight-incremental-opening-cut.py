@@ -74,10 +74,12 @@ for token in [
     'PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds)',
     'PhysicalOpeningCutTargetState.Resolve(project, host, cutOpeningIds)',
     '"PHYSICAL_OPENING_CUT_TARGET_STATE_MISSING"',
-    'fingerprintOpenings = LinkedOpenings(project, host.Id).ToList().AsReadOnly()',
 ]:
     if token not in live:
-        errors.append("PhysicalOpeningCutLiveStateService missing cut-set health contract: " + token)
+        errors.append("PhysicalOpeningCutLiveStateService missing persisted cut-set health contract: " + token)
+
+if "LinkedOpenings(project, host.Id)" in live:
+    errors.append("PhysicalOpeningCutLiveStateService must fingerprint the persisted exact cut target-set, not the current HostWallId relationship set")
 
 if 'RemoveByPrefix(element, "PhysicalOpeningCut")' not in invalidator:
     errors.append("host rebuild must invalidate PhysicalOpeningCut* metadata, including incremental target state")
@@ -110,4 +112,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: straight-host selected opening cuts preserve a bounded explicit accumulated cut set through the shared Core codec, validate prior state before mutation, subtract only newly selected openings, keep live-health aligned with the actual cut set, and invalidate all physical-cut metadata on host rebuild.")
+print("PASS: straight-host selected opening cuts preserve a bounded explicit accumulated cut set through the shared Core codec, validate prior state before mutation, subtract only newly selected openings, fingerprint the persisted exact cut set, and invalidate all physical-cut metadata on host rebuild.")
