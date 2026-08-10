@@ -32,6 +32,7 @@ namespace QS3D.BricsCAD.V25.Cad
             if (ids.Length == 0) return 0;
 
             var pending = new List<PendingUpdate>();
+            var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var totalBars = 0;
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
@@ -57,6 +58,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (matches.Count == 0) continue;
                     if (matches.Count > 1) throw new InvalidOperationException("Column source " + handle + " đang thuộc nhiều QS3D element.");
                     var element = matches[0];
+                    if (!processedElements.Add(element.Id)) throw new InvalidOperationException("Column element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi tạo rebar 3D.");
                     var family = project.FindFamily(element.FamilyId);
                     if (!element.Properties.TryGetValue("RebarNotation", out var notation) || string.IsNullOrWhiteSpace(notation))
                         throw new InvalidOperationException(element.Id + " chưa có RebarNotation.");
