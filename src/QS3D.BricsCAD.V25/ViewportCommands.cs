@@ -5,6 +5,7 @@ using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Domain;
+using QS3D.Core.Services;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 using Teigha.Runtime;
@@ -50,7 +51,9 @@ namespace QS3D.BricsCAD.V25
 
             var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
             var project = ProjectContextCoordinator.GetOrCreate(doc);
-            var matched = project.Elements.Where(x => x.SourceHandles.Any(handles.Contains) && (predicate == null || predicate(x))).ToList();
+            var matched = project.Elements.Where(x =>
+                (predicate == null ? x.SourceHandles.Any(handles.Contains) : SourceHandleResolver.Resolve(project, new[] { x.Id }).Any(handles.Contains)) &&
+                (predicate == null || predicate(x))).ToList();
             foreach (var element in matched) project.Elements.Remove(element);
             if (matched.Count > 0) project.Touch();
             PaletteCoordinator.RefreshProject();

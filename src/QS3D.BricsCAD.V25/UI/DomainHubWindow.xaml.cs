@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
+using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {
