@@ -164,6 +164,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 update.Element.Properties["GeneratedBeamStirrupActualSpacingM"] = update.ActualSpacingM.ToString("R", CultureInfo.InvariantCulture);
                 update.Element.Properties["GeneratedBeamStirrupNotation"] = update.Notation;
                 update.Element.Properties["GeneratedBeamStirrupMode"] = "Beam.Line.RectangularClosedLoop";
+                update.Element.ClearGeneratedBeamStirrupStale();
             }
 
             var count = pending.Sum(x => x.Handles.Count);

@@ -30,7 +30,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(summary);
                 document.Editor.WriteMessage("\nQS3D " + summary);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DGENERATEDHEALTH lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);

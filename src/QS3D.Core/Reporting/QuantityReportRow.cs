@@ -9,6 +9,7 @@ namespace QS3D.Core.Reporting
         public string Floor { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;
         public string FamilyName { get; set; } = string.Empty;
+        public string DrawingFingerprint { get; set; } = string.Empty;
         public int Count { get; set; }
         public double GrossConcreteM3 { get; set; }
         public double DeductionM3 { get; set; }

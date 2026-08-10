@@ -115,6 +115,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 item.Element.Properties[HandlesKey] = string.Join(";", item.Handles);
                 item.Element.Properties["GeneratedShapeRebarCount"] = item.Handles.Count.ToString(CultureInfo.InvariantCulture);
                 item.Element.Properties["GeneratedShapeRebarMode"] = "BBS.ShapePath.SegmentedCylinder";
+                item.Element.ClearGeneratedShapeRebarStale();
             }
             var bars = pending.Sum(x => x.Handles.Count);
             if (bars > 0) { project.Touch(); document.Editor.Regen(); }

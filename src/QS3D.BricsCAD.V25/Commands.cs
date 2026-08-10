@@ -52,7 +52,9 @@ namespace QS3D.BricsCAD.V25
                     if (project.Elements.Count > 0) return ProjectQuantityReportBuilder.Group(project);
                     var unit = Cad.CadUnitService.GetDrawingUnit(doc);
                     if (Cad.CadUnitService.IsAssumedMillimeter(doc)) PaletteCoordinator.SetStatus("BQ: INSUNITS chưa hỗ trợ/không xác định, tạm dùng millimeter.");
-                    return SnapshotQuantityAdapter.Build(Cad.EntitySnapshotReader.ReadCurrentSelection(doc), unit);
+                    var snapshotRows = SnapshotQuantityAdapter.Build(Cad.EntitySnapshotReader.ReadCurrentSelection(doc), unit);
+                    foreach (var snapshotRow in snapshotRows) snapshotRow.DrawingFingerprint = project.DrawingFingerprint;
+                    return snapshotRows;
                 };
 
                 Action<QuantityReportRow> locate = row =>
@@ -136,7 +138,7 @@ namespace QS3D.BricsCAD.V25
                 foreach (var wall in project.Elements.Where(x => x.Category == ElementCategory.ArchitecturalWall && x.Dirty != ElementDirtyFlags.None))
                 {
                     new WallRegenerator().Regenerate(project, wall);
-                    wall.MarkClean(ElementDirtyFlags.All);
+                    wall.MarkClean(ElementGeometryPolicy.SemanticCleanFlags(wall.Category));
                 }
                 PaletteCoordinator.RefreshProject();
                 PaletteCoordinator.SetStatus("Tường KT: " + captured + " semantic • " + solids + " solid 3D từ LINE/open POLYLINE.");
@@ -248,8 +250,27 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
                 var prompt = new PromptIntegerOptions("\nNhập số dòng Excel cần định vị: ") { AllowNone = false, LowerLimit = 1, UseDefaultValue = true, DefaultValue = 2 };
                 var row = doc.Editor.GetInteger(prompt); if (row.Status != PromptStatus.OK) return;
-                var handles = XlsxHandleReader.ReadHandles(dialog.FileName, row.Value);
+                var lookup = XlsxHandleReader.ReadHandleLookup(dialog.FileName, row.Value);
+                var handles = lookup.Handles;
                 if (handles.Count == 0) { doc.Editor.WriteMessage("\nQS3D: dòng Excel không có CAD Handle hợp lệ."); return; }
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                if (!string.IsNullOrWhiteSpace(lookup.DrawingFingerprint) &&
+                    !string.Equals(lookup.DrawingFingerprint, project.DrawingFingerprint, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "Excel drawing fingerprint does not match the active DWG. Workbook=" + lookup.DrawingFingerprint +
+                        ", current=" + project.DrawingFingerprint + ".");
+                if (string.IsNullOrWhiteSpace(lookup.DrawingFingerprint))
+                {
+                    var warning = lookup.UsesLegacyDecimalHandles
+                        ? "\nLegacy BLT row has no DWG fingerprint. Type YES to locate these Handles in the active drawing: "
+                        : "\nExcel row has no DWG fingerprint. Type YES to locate these Handles in the active drawing: ";
+                    var confirmation = doc.Editor.GetString(new PromptStringOptions(warning) { AllowSpaces = false });
+                    if (confirmation.Status != PromptStatus.OK || !string.Equals(confirmation.StringResult?.Trim(), "YES", StringComparison.OrdinalIgnoreCase))
+                    {
+                        doc.Editor.WriteMessage("\nQS3D Excel Locate cancelled; no CAD selection was changed.");
+                        return;
+                    }
+                }
                 var count = Cad.CadHandleService.Select(doc, handles);
                 PaletteCoordinator.SetStatus("Excel dòng " + row.Value + ": " + handles.Count + " Handle • " + count + " đối tượng CAD");
                 doc.Editor.WriteMessage("\nQS3D Excel Locate: resolved " + count + "/" + handles.Count + " handle(s).");

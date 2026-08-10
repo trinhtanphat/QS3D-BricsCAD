@@ -11,6 +11,9 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class BeamStirrupCommands
     {
+        [CommandMethod("QS3DBEAMSTIRRUP3D", CommandFlags.UsePickSet)]
+        public void BuildBeamStirrupsWorkspaceAlias() => BuildBeamStirrups();
+
         [CommandMethod("QS3DREBARSTIRRUP3D", CommandFlags.UsePickSet)]
         public void BuildBeamStirrups()
         {
@@ -27,13 +30,16 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DREBARSTIRRUP3D lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\n" + message);
             }
         }
+
+        [CommandMethod("QS3DBEAMSTIRRUPHEALTH", CommandFlags.Modal)]
+        public void BeamStirrupHealthWorkspaceAlias() => BeamStirrupHealth();
 
         [CommandMethod("QS3DREBARSTIRRUPHEALTH", CommandFlags.Modal)]
         public void BeamStirrupHealth()
@@ -59,7 +65,7 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
                 if (issues.Count > 50) document.Editor.WriteMessage("\n  … health output truncated.");
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 var message = "QS3DREBARSTIRRUPHEALTH lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);
