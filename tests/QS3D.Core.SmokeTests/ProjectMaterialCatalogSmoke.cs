@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
             CustomRoundTripAndUpdate();
             RenamePreservesReferences();
             ReferencedMaterialsAreDiscovered();
+            RenamePropagatesReferencesAndStaleState();
+            ReferencedMaterialCannotBeDeleted();
             RejectsDuplicateBuiltInAndCorruptStorage();
         }
 
@@ -59,6 +61,46 @@ namespace QS3D.Core.SmokeTests
             var names = ProjectMaterialCatalog.ReferencedMaterialNames(project);
             if (!names.Contains("Kính Low-E") || !names.Contains("Nhôm hệ 55") || !names.Contains("Gạch AAC"))
                 throw new Exception("Referenced material discovery failed.");
+        }
+
+        private static void RenamePropagatesReferencesAndStaleState()
+        {
+            var project = new ProjectState("p4", "Rename Materials");
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-glass", "Kính A", "m²", "");
+            var family = new ProjectFamily("f-glass", "Vách Kính", ElementCategory.GlassWall);
+            family.Properties["Material"] = "Kính A";
+            family.Properties["CurtainFrameMaterial"] = "Kính A";
+            project.Families.Add(family);
+            var element = new ProjectElement("e-glass", ElementCategory.GlassWall, family.Id, "floor", "zone");
+            element.Properties["Material"] = "Kính A";
+            element.Properties["CurtainFrameMaterial"] = "Kính A";
+            element.Properties["GeneratedSolidHandle"] = "AA";
+            element.Properties["GeneratedCurtainFrameHandles"] = "BB";
+            project.Elements.Add(element);
+
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-glass", "Kính B", "m²", "Đổi tên");
+
+            if (family.Properties["Material"] != "Kính B" || family.Properties["CurtainFrameMaterial"] != "Kính B")
+                throw new Exception("Family material references were not renamed.");
+            if (element.Properties["Material"] != "Kính B" || element.Properties["CurtainFrameMaterial"] != "Kính B")
+                throw new Exception("Instance material references were not renamed.");
+            if (!element.IsGeneratedSolidStale() || !element.IsGeneratedCurtainFrameStale())
+                throw new Exception("Renaming an instance-referenced material must stale generated geometry outputs.");
+        }
+
+        private static void ReferencedMaterialCannotBeDeleted()
+        {
+            var project = new ProjectState("p5", "Referenced Delete");
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-aac", "Gạch AAC", "m²", "");
+            var family = new ProjectFamily("f-wall", "Tường", ElementCategory.ArchitecturalWall);
+            family.Properties["Material"] = "Gạch AAC";
+            project.Families.Add(family);
+            Throws<InvalidOperationException>(() => ProjectMaterialCatalog.DeleteCustom(project, "mat-aac"));
+            if (ProjectMaterialCatalog.GetCustom(project).Single().Name != "Gạch AAC")
+                throw new Exception("Referenced material must remain in the catalog after rejected deletion.");
+
+            family.Properties["Material"] = "Gạch";
+            if (!ProjectMaterialCatalog.DeleteCustom(project, "mat-aac")) throw new Exception("Unreferenced custom material should be deletable.");
         }
 
         private static void RejectsDuplicateBuiltInAndCorruptStorage()
