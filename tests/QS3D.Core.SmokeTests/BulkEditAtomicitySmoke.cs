@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             InvalidLaterElementDoesNotPartiallyMutateBatch();
             ValidBatchStillAppliesAllChanges();
+            AssignFamilyRejectsDuplicateProjectIdsWithoutMutation();
         }
 
         private static void InvalidLaterElementDoesNotPartiallyMutateBatch()
@@ -59,6 +60,44 @@ namespace QS3D.Core.SmokeTests
             if (!string.Equals(first.Properties["Factor"], "6", StringComparison.Ordinal) ||
                 !string.Equals(second.Properties["Factor"], "12", StringComparison.Ordinal))
                 throw new Exception("Valid numeric bulk edit did not apply the staged values.");
+        }
+
+        private static void AssignFamilyRejectsDuplicateProjectIdsWithoutMutation()
+        {
+            var project = new ProjectState("bulk-family-duplicate", "Bulk Family Duplicate");
+            var oldFamily = new ProjectFamily("old", "Old", ElementCategory.Room);
+            oldFamily.Properties["HeightM"] = "3";
+            var nextFamily = new ProjectFamily("next", "Next", ElementCategory.Room);
+            nextFamily.Properties["HeightM"] = "4";
+            project.Families.Add(oldFamily);
+            project.Families.Add(nextFamily);
+
+            var first = new ProjectElement("DUP", ElementCategory.Room, oldFamily.Id, string.Empty, string.Empty);
+            var second = new ProjectElement("DUP", ElementCategory.Room, oldFamily.Id, string.Empty, string.Empty);
+            first.Properties["HeightM"] = "3";
+            second.Properties["HeightM"] = "3";
+            first.MarkClean(ElementDirtyFlags.All);
+            second.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+
+            var threw = false;
+            try
+            {
+                new BulkEditService().AssignFamily(project, new[] { "DUP" }, nextFamily.Id);
+            }
+            catch (InvalidOperationException ex)
+            {
+                threw = ex.Message.IndexOf("duplicate semantic element id", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            if (!threw) throw new Exception("AssignFamily must fail closed when the project contains duplicate semantic element IDs.");
+            if (!string.Equals(first.FamilyId, oldFamily.Id, StringComparison.Ordinal) || !string.Equals(second.FamilyId, oldFamily.Id, StringComparison.Ordinal))
+                throw new Exception("Rejected duplicate-ID family assignment mutated an element FamilyId.");
+            if (!string.Equals(first.Properties["HeightM"], "3", StringComparison.Ordinal) || !string.Equals(second.Properties["HeightM"], "3", StringComparison.Ordinal))
+                throw new Exception("Rejected duplicate-ID family assignment mutated inherited properties.");
+            if (first.Dirty != ElementDirtyFlags.None || second.Dirty != ElementDirtyFlags.None)
+                throw new Exception("Rejected duplicate-ID family assignment dirtied project elements.");
         }
     }
 
