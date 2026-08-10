@@ -51,7 +51,7 @@ if DOC.is_file():
         "GridNamingHealthService",
         "GRID_LABEL_DUPLICATE",
         "Health does not invent labels or mutate the model",
-        "Core/source functionality only",
+        "Core health intentionally does not pretend",
     ):
         if token not in text:
             errors.append("GRID-WORKFLOW.md missing naming health/runtime boundary: " + token)
@@ -63,4 +63,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: comprehensive Core health detects duplicate/malformed Grid naming state without inventing labels or claiming native Grid annotation completion.")
+print("PASS: comprehensive Core health detects duplicate/malformed Grid naming state without inventing labels or claiming native Grid annotation runtime certification.")

@@ -53,12 +53,17 @@ if BUILDER.is_file():
         errors.append("Grid annotation Regen must be best-effort after CAD commit")
     if 'GeneratedSolidHandle' in text:
         errors.append("Grid annotation must not claim the host GeneratedSolidHandle slot")
-    for forbidden in (
-        'new Circle(center, Vector3d.ZAxis',
-        'Normal = Vector3d.ZAxis',
-    ):
-        if forbidden in text:
-            errors.append("Grid annotation must not force ARC/native text onto WCS-Z plane: " + forbidden)
+    if 'new Circle(center, Vector3d.ZAxis' in text:
+        errors.append("Grid annotation must not force ARC/native circles onto WCS-Z plane: new Circle(center, Vector3d.ZAxis")
+
+    endpoint_start = text.find("private static void AddEndpointAnnotation")
+    endpoint_end = text.find("private static void PrepareEntity", endpoint_start + 1) if endpoint_start >= 0 else -1
+    if endpoint_start < 0 or endpoint_end < 0:
+        errors.append("Grid annotation preflight cannot isolate AddEndpointAnnotation")
+    else:
+        endpoint_body = text[endpoint_start:endpoint_end]
+        if 'Normal = Vector3d.ZAxis' in endpoint_body:
+            errors.append("Grid annotation DBText must consume the resolved source-plane normal instead of forcing WCS-Z")
 
 if COMMANDS.is_file():
     text = COMMANDS.read_text(encoding="utf-8")

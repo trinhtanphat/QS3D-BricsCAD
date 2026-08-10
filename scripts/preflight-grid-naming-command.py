@@ -55,7 +55,7 @@ if DOC.is_file():
         "QS3DGRIDNUMBER",
         "explicit click order",
         "does not infer spatial order",
-        "native Grid bubble/label drawing",
+        "does not move/rotate source CAD",
     ):
         if token not in text:
             errors.append("GRID-WORKFLOW.md missing command/runtime boundary: " + token)

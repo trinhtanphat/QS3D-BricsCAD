@@ -16,7 +16,7 @@ else:
         "ProjectStateSnapshot.Capture(project)",
         "var cadCommitted = false;",
         "ErasePrevious(document, transaction, element, ownership)",
-        "foreach (var item in pending) CommitSemanticUpdate(item);",
+        "foreach (var item in pending) CommitSemanticUpdate(project, item);",
         "if (pending.Count > 0) project.Touch();",
         "transaction.Commit();\n                    cadCommitted = true;",
         "catch (Exception operationError)",
@@ -33,7 +33,7 @@ else:
         errors.append("cannot isolate Shape Rebar BuildSelected method")
     else:
         body = text[start:end]
-        semantic_token = "foreach (var item in pending) CommitSemanticUpdate(item);"
+        semantic_token = "foreach (var item in pending) CommitSemanticUpdate(project, item);"
         touch_token = "if (pending.Count > 0) project.Touch();"
         commit_token = "transaction.Commit();\n                    cadCommitted = true;"
         semantic = body.find(semantic_token)
@@ -55,7 +55,7 @@ else:
     helper_end = text.find("private static Placement ResolvePlacement", helper_start + 1) if helper_start >= 0 else -1
     helper = text[helper_start:helper_end] if helper_start >= 0 and helper_end > helper_start else ""
     for token in (
-        "GeneratedShapeRebarHandles",
+        "Properties[HandlesKey]",
         "GeneratedShapeRebarCount",
         "GeneratedShapeRebarMode",
         "ClearGeneratedShapeRebarStale()",

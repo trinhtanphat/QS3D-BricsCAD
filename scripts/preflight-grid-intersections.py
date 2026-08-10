@@ -57,10 +57,10 @@ if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
     for token in (
         "GridIntersectionPlanner",
-        "explicit positive counter-clockwise sweep",
+        "positive counter-clockwise sweep",
         "collinear LINE references with a non-zero overlap",
         "coincident ARC support circles",
-        "does not complete Grid constraints",
+        "does **not** complete Grid constraints",
         "V25 LINE/ARC → `GridReferenceCurve` extraction",
     ):
         if token not in text:

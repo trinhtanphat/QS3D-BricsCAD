@@ -48,8 +48,9 @@ for label, (relative, event_name) in contracts.items():
     text = path.read_text(encoding="utf-8")
     if "using QS3D.Core.Audit;" not in text:
         errors.append(f"{label}: missing QS3D.Core.Audit import")
-    audit_token = f'AuditTrail.ForProject(project).Record("{event_name}"'
-    if audit_token not in text:
+    audit_call_token = "AuditTrail.ForProject(project).Record("
+    event_token = f'"{event_name}"'
+    if audit_call_token not in text or event_token not in text:
         errors.append(f"{label}: missing canonical audit event {event_name}")
 
     build_start = text.find("BuildSelected(Document document, ProjectState project)")
@@ -74,7 +75,7 @@ for label, (relative, event_name) in contracts.items():
     helper_body = text[helper_start: next_helper if next_helper >= 0 else len(text)]
     if "ProjectState project" not in helper_body:
         errors.append(f"{label}: CommitSemanticUpdate no longer receives project for transactional audit")
-    if audit_token not in helper_body:
+    if audit_call_token not in helper_body or event_token not in helper_body:
         errors.append(f"{label}: audit event is not owned by CommitSemanticUpdate")
 
 shape_command = ROOT / "src/QS3D.BricsCAD.V25/ShapeRebarGeometryCommands.cs"

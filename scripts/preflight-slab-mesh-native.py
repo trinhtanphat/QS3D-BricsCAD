@@ -32,11 +32,12 @@ builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs"
 if builder.is_file():
     text = builder.read_text(encoding="utf-8")
     for needle in (
-        "ElementCategory.Slab", "RectangularSlabMeshPlanner.Plan", 'HandlesKey = "GeneratedSlabMeshHandles"',
+        "ElementCategory.Slab", "RectangularSlabMeshPlanner.Plan", "PolygonalSlabMeshPlanner.Plan", 'HandlesKey = "GeneratedSlabMeshHandles"',
         'Mode = "SlabMeshXY"', "GeneratedRebarOwnershipGuard.Build(project)",
         "ownership.EnsureOwned(handle, element, HandlesKey)", "duplicateSelectedSource", "MaxBarsPerBatch = 12000",
         "RebarSlabXNotation", "RebarSlabYNotation", "RebarSlabCoverM", "RebarSlabFaces", "RebarSlabXClosestToFace",
-        "closed 4-vertex rectangular POLYLINE", "GeneratedSlabMeshXDiameterMm", "GeneratedSlabMeshYDiameterMm",
+        "TryReadRectangle", "ReadPolygonFootprint", "closed POLYLINE có ít nhất 3 vertex",
+        "GeneratedSlabMeshFootprintMode", "GeneratedSlabMeshXDiameterMm", "GeneratedSlabMeshYDiameterMm",
         "GeneratedSlabMeshXActualSpacingM", "GeneratedSlabMeshYActualSpacingM", '"GeneratedSlabMeshMode"] = Mode',
         "CadGeometryGuard.Midpoint", "CadGeometryGuard.Subtract", "CadGeometryGuard.Multiply", "CadGeometryGuard.Hypot3", "CreateFrustum",
     ):
@@ -95,4 +96,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: rectangular Slab X/Y mesh planner-to-Solid3d wiring uses dedicated ownership, policy-driven cross-family health/erase protection, independent X/Y diameters, invalidation, finite CAD transforms and pre-allocation limits; runtime remains V25-gated.")
+print("PASS: rectangular-local and guarded simple-polygon Slab X/Y mesh planner-to-Solid3d wiring uses dedicated ownership, policy-driven cross-family health/erase protection, independent X/Y diameters, invalidation, finite CAD transforms and pre-allocation limits; runtime remains V25-gated.")

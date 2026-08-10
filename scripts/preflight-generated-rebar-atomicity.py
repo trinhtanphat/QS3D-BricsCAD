@@ -13,7 +13,7 @@ families = {
     "foundation mesh": ("src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs", "CommitSemanticUpdate(project, update)"),
     "beam stirrup": ("src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs", "CommitSemanticUpdate(project, update)"),
     "column tie": ("src/QS3D.BricsCAD.V25/Cad/ColumnTieSolidBuilder.cs", "CommitSemanticUpdate(project, update)"),
-    "BBS shape": ("src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs", "CommitSemanticUpdate(item)"),
+    "BBS shape": ("src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs", "CommitSemanticUpdate(project, item)"),
 }
 
 for label, (relative, semantic_call) in families.items():
