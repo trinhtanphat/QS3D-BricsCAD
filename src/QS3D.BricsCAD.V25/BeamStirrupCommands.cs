@@ -12,7 +12,18 @@ namespace QS3D.BricsCAD.V25
     public sealed class BeamStirrupCommands
     {
         [CommandMethod("QS3DREBARSTIRRUP3D", CommandFlags.UsePickSet)]
-        public void BuildBeamStirrups()
+        public void BuildBeamStirrups() => BuildBeamStirrupsCore();
+
+        [CommandMethod("QS3DBEAMSTIRRUP3D", CommandFlags.UsePickSet)]
+        public void BuildBeamStirrupsBltAlias() => BuildBeamStirrupsCore();
+
+        [CommandMethod("QS3DREBARSTIRRUPHEALTH", CommandFlags.Modal)]
+        public void BeamStirrupHealth() => BeamStirrupHealthCore();
+
+        [CommandMethod("QS3DBEAMSTIRRUPHEALTH", CommandFlags.Modal)]
+        public void BeamStirrupHealthBltAlias() => BeamStirrupHealthCore();
+
+        private static void BuildBeamStirrupsCore()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
@@ -29,14 +40,13 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                var message = "QS3DREBARSTIRRUP3D lỗi: " + ex.Message;
+                var message = "Beam Stirrup 3D lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                document.Editor.WriteMessage("\nQS3D " + message);
             }
         }
 
-        [CommandMethod("QS3DREBARSTIRRUPHEALTH", CommandFlags.Modal)]
-        public void BeamStirrupHealth()
+        private static void BeamStirrupHealthCore()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
@@ -61,9 +71,9 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                var message = "QS3DREBARSTIRRUPHEALTH lỗi: " + ex.Message;
+                var message = "Beam Stirrup Health lỗi: " + ex.Message;
                 PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                document.Editor.WriteMessage("\nQS3D " + message);
             }
         }
     }
