@@ -25,6 +25,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private const int MaxLabelLength = 64;
         private const double DefaultBubbleRadiusM = 0.25d;
         private const double DefaultTextHeightM = 0.18d;
+        private const double GeometryTolerance = 1e-9d;
 
         public static int Build(Document document, ProjectState project, IReadOnlyList<ProjectElement> elements)
         {
@@ -91,15 +92,24 @@ namespace QS3D.BricsCAD.V25.Cad
 
             Point3d start;
             Point3d end;
+            Vector3d annotationNormal;
             if (source is Line line)
             {
                 start = line.StartPoint;
                 end = line.EndPoint;
+                if (Math.Abs(start.Z - end.Z) > GeometryTolerance)
+                    throw new InvalidOperationException("Grid LINE 3D nghiêng chưa có annotation plane xác định; source phải nằm trên mặt phẳng WCS-XY tại một cao độ: " + element.Id + ".");
+                annotationNormal = Vector3d.ZAxis;
             }
             else if (source is Arc arc)
             {
                 start = arc.StartPoint;
                 end = arc.EndPoint;
+                annotationNormal = arc.Normal;
+                ValidateVector(annotationNormal, element.Id + "/arc normal");
+                if (annotationNormal.Length <= GeometryTolerance)
+                    throw new InvalidOperationException("Grid ARC có normal suy biến: " + element.Id + ".");
+                annotationNormal = annotationNormal.GetNormal();
             }
             else
             {
@@ -108,7 +118,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
             ValidatePoint(start, element.Id + "/start");
             ValidatePoint(end, element.Id + "/end");
-            if (start.DistanceTo(end) <= 1e-9d) throw new InvalidOperationException("Grid source có endpoints trùng nhau: " + element.Id + ".");
+            if (start.DistanceTo(end) <= GeometryTolerance) throw new InvalidOperationException("Grid source có endpoints trùng nhau: " + element.Id + ".");
 
             var family = string.IsNullOrWhiteSpace(element.FamilyId) ? null : project.FindFamily(element.FamilyId);
             var radiusM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, BubbleRadiusKey, DefaultBubbleRadiusM), element.Id + "/" + BubbleRadiusKey);
@@ -126,8 +136,8 @@ namespace QS3D.BricsCAD.V25.Cad
 
             var centers = BubbleCenters(source, start, end, radius);
             var generatedHandles = new List<string>(6);
-            AddEndpointAnnotation(document, transaction, owner, source, project, element, start, centers.Item1, radius, textHeight, label, generatedHandles);
-            AddEndpointAnnotation(document, transaction, owner, source, project, element, end, centers.Item2, radius, textHeight, label, generatedHandles);
+            AddEndpointAnnotation(document, transaction, owner, source, project, element, start, centers.Item1, annotationNormal, radius, textHeight, label, generatedHandles);
+            AddEndpointAnnotation(document, transaction, owner, source, project, element, end, centers.Item2, annotationNormal, radius, textHeight, label, generatedHandles);
 
             element.Properties[HandlesKey] = string.Join(";", generatedHandles);
             element.Properties[LabelKey] = label;
@@ -148,7 +158,7 @@ namespace QS3D.BricsCAD.V25.Cad
             if (source is Line)
             {
                 var direction = end - start;
-                if (direction.Length <= 1e-9d) return Tuple.Create(start, end);
+                if (direction.Length <= GeometryTolerance) return Tuple.Create(start, end);
                 direction = direction.GetNormal();
                 var offset = direction * (radius * 1.5d);
                 return Tuple.Create(start - offset, end + offset);
@@ -158,8 +168,8 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 var first = start - arc.Center;
                 var second = end - arc.Center;
-                if (first.Length > 1e-9d) first = first.GetNormal() * (radius * 1.5d);
-                if (second.Length > 1e-9d) second = second.GetNormal() * (radius * 1.5d);
+                if (first.Length > GeometryTolerance) first = first.GetNormal() * (radius * 1.5d);
+                if (second.Length > GeometryTolerance) second = second.GetNormal() * (radius * 1.5d);
                 return Tuple.Create(start + first, end + second);
             }
 
@@ -175,19 +185,20 @@ namespace QS3D.BricsCAD.V25.Cad
             ProjectElement element,
             Point3d endpoint,
             Point3d center,
+            Vector3d normal,
             double radius,
             double textHeight,
             string label,
             ICollection<string> handles)
         {
             var extensionVector = center - endpoint;
-            if (extensionVector.Length > 1e-9d)
+            if (extensionVector.Length > GeometryTolerance)
             {
                 var extension = new Line(endpoint, center);
                 PrepareEntity(document, transaction, owner, source, project, element, extension, handles);
             }
 
-            var circle = new Circle(center, Vector3d.ZAxis, radius);
+            var circle = new Circle(center, normal, radius);
             PrepareEntity(document, transaction, owner, source, project, element, circle, handles);
 
             var text = new DBText
@@ -197,7 +208,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 Position = center,
                 AlignmentPoint = center,
                 Justify = AttachmentPoint.MiddleCenter,
-                Normal = Vector3d.ZAxis
+                Normal = normal
             };
             PrepareEntity(document, transaction, owner, source, project, element, text, handles);
             try { text.AdjustAlignment(document.Database); } catch { }
@@ -263,6 +274,13 @@ namespace QS3D.BricsCAD.V25.Cad
             CadGeometryGuard.Finite(point.X, label + "/X");
             CadGeometryGuard.Finite(point.Y, label + "/Y");
             CadGeometryGuard.Finite(point.Z, label + "/Z");
+        }
+
+        private static void ValidateVector(Vector3d vector, string label)
+        {
+            CadGeometryGuard.Finite(vector.X, label + "/X");
+            CadGeometryGuard.Finite(vector.Y, label + "/Y");
+            CadGeometryGuard.Finite(vector.Z, label + "/Z");
         }
     }
 }
