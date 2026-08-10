@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             RecognitionRejectsNonFiniteConfidence();
             RecognitionRejectsDuplicateRuleIds();
             HostUnlinkRejectsNonOpeningElements();
+            OpeningDimensionsRejectNegativeValues();
         }
 
         private static void RecognitionUsesTokenBoundaries()
@@ -89,6 +90,25 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(room);
             Throws<InvalidOperationException>(() => new HostLinkService().UnlinkOpening(project, room.Id));
             True(room.Properties.ContainsKey("HostWallId"));
+        }
+
+        private static void OpeningDimensionsRejectNegativeValues()
+        {
+            Throws<ArgumentOutOfRangeException>(() => WallQuantityCalculator.Calculate(4d, 3d, .2d, new[]
+            {
+                new OpeningCut { WidthM = -0.9d, HeightM = 2.1d }
+            }));
+            Throws<ArgumentOutOfRangeException>(() => WallQuantityCalculator.Calculate(4d, 3d, .2d, new[]
+            {
+                new OpeningCut { WidthM = 0.9d, HeightM = -2.1d }
+            }));
+
+            var valid = WallQuantityCalculator.Calculate(4d, 3d, .2d, new[]
+            {
+                new OpeningCut { WidthM = 0.9d, HeightM = 2.1d }
+            });
+            True(valid.OpeningAreaM2 > 0d);
+            True(valid.NetAreaM2 < valid.GrossAreaM2);
         }
 
         private static void Equal<T>(T expected, T actual) { if (!Equals(expected, actual)) throw new Exception("Expected " + expected + ", got " + actual); }

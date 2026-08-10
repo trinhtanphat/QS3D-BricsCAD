@@ -11,17 +11,18 @@ namespace QS3D.Core.Services
         {
             get
             {
-                RequireFinite(WidthM, nameof(WidthM));
-                RequireFinite(HeightM, nameof(HeightM));
-                var area = Math.Max(0d, WidthM) * Math.Max(0d, HeightM);
+                RequireFiniteNonNegative(WidthM, nameof(WidthM));
+                RequireFiniteNonNegative(HeightM, nameof(HeightM));
+                var area = WidthM * HeightM;
                 if (double.IsNaN(area) || double.IsInfinity(area)) throw new OverflowException("Opening area is not finite.");
                 return area;
             }
         }
 
-        private static void RequireFinite(double value, string name)
+        private static void RequireFiniteNonNegative(double value, string name)
         {
-            if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(name, "Opening dimensions must be finite.");
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new ArgumentOutOfRangeException(name, "Opening dimensions must be finite and non-negative.");
         }
     }
 
