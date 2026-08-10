@@ -9,6 +9,8 @@ required = [
     "src/QS3D.Core/Geometry/WallPierProfilePlanner.cs",
     "src/QS3D.Core/Services/SemanticRegenerators.cs",
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
+    "src/QS3D.BricsCAD.V25/Cad/WallPierProfileSolidBuilder.cs",
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
     "tests/QS3D.Core.SmokeTests/WallPierProfileSmoke.cs",
     "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs",
 ]
@@ -47,6 +49,25 @@ checks = {
         'EnsureDefault(family, "WallPierProfileMode", "Rectangular")',
         'EnsureDefault(family, "WallPierChamferM", "0.02")',
     ],
+    "src/QS3D.BricsCAD.V25/Cad/WallPierProfileSolidBuilder.cs": [
+        "BuildSelectedLinePiers",
+        "WallPierProfilePlanner.Plan",
+        "WallPierProfileMode.Chamfered",
+        "WallPierChamferM",
+        "Region.CreateFromCurves",
+        "CreateExtrudedSolid",
+        "GeneratedGeometryService.PrepareReplacement",
+        "GeneratedGeometryService.CommitReplacement",
+        "source LINE phải nằm trên mặt phẳng ngang",
+        "matches.Count > 1",
+        "processed.Add(element.Id)",
+    ],
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": [
+        "category.Value == ElementCategory.WallPier",
+        "WallPierProfileSolidBuilder.BuildSelectedLinePiers",
+        "PolylineWallSolidBuilder.BuildSelected",
+        "profile Rectangular/Chamfered",
+    ],
     "tests/QS3D.Core.SmokeTests/WallPierProfileSmoke.cs": [
         "RectangularProfileMatchesWallVolume",
         "ChamferedProfileReducesAreaAndVolume",
@@ -72,4 +93,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: WallPier rectangular/chamfered profile planning, family defaults, profile-aware quantities and deterministic smoke registration are present.")
+print("PASS: WallPier rectangular/chamfered profile planning, profile-aware quantities, family defaults and guarded LINE-source native Solid3d dispatch are present.")
