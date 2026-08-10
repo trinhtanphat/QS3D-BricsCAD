@@ -248,6 +248,8 @@ namespace QS3D.Core.Domain
                     var room = project.FindElement(roomId);
                     if (room == null || room.Category != ElementCategory.Room) return true;
                     if (IsStaleAutoRoom(room)) return true;
+                    if (!string.Equals(room.FloorId, element.FloorId, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(room.ZoneId, element.ZoneId, StringComparison.OrdinalIgnoreCase)) return true;
                 }
             }
             return false;
