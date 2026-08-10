@@ -8,6 +8,7 @@ using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
 using QS3D.Core.Services;
+using Teigha.DatabaseServices;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -88,13 +89,19 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var liveSourceCount = CadHandleService.Select(document, sourceHandles);
-                if (liveSourceCount != sourceHandles.Count)
+                var sourceIds = CadHandleService.Resolve(document, sourceHandles);
+                if (sourceIds.Count != sourceHandles.Count)
                 {
-                    Write(document, "QS3DBUILD3D: source CAD bị thiếu/stale (live " + liveSourceCount + "/" + sourceHandles.Count + "). Không rebuild một phần; chạy Health/Locate và sửa source trước.");
+                    Write(document, "QS3DBUILD3D: source CAD bị thiếu/stale (live " + sourceIds.Count + "/" + sourceHandles.Count + "). Không rebuild một phần; chạy Health/Locate và sửa source trước.");
+                    return;
+                }
+                if (!AreAllModelSpaceEntities(document, sourceIds))
+                {
+                    Write(document, "QS3DBUILD3D: native generated geometry được quản lý trong Model Space; source đang nằm ngoài Model Space. Di chuyển/capture source trong Model Space trước khi rebuild.");
                     return;
                 }
 
+                document.Editor.SetImpliedSelection(sourceIds.ToArray());
                 var sourceSnapshots = EntitySnapshotReader.ReadImpliedSelection(document);
                 if (sourceSnapshots.Count != sourceHandles.Count)
                 {
@@ -142,6 +149,24 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
+        }
+
+        private static bool AreAllModelSpaceEntities(Document document, IReadOnlyCollection<ObjectId> ids)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (ids == null) throw new ArgumentNullException(nameof(ids));
+            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                var modelSpaceId = blockTable[BlockTableRecord.ModelSpace];
+                foreach (var id in ids)
+                {
+                    var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                    if (entity == null || entity.IsErased || !entity.OwnerId.Equals(modelSpaceId)) return false;
+                }
+                transaction.Commit();
+            }
+            return true;
         }
 
         private static bool ValidateWallSourceBatch(
