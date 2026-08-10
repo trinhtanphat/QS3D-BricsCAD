@@ -141,14 +141,6 @@ namespace QS3D.BricsCAD.V25.Services
             var graph = new DependencyGraph();
             graph.Rebuild(project.Elements);
 
-            var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in project.Elements)
-            {
-                if (byId.ContainsKey(element.Id))
-                    throw new InvalidOperationException("Source reconcile cannot resolve duplicate semantic element id: " + element.Id + ".");
-                byId.Add(element.Id, element);
-            }
-
             var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var queue = new Queue<ProjectElement>();
             foreach (var element in sourceTargets)
@@ -157,11 +149,11 @@ namespace QS3D.BricsCAD.V25.Services
             while (queue.Count > 0)
             {
                 var current = queue.Dequeue();
-                EnqueueOpeningHost(current, byId, result, queue);
+                EnqueueOpeningHost(current, graph, result, queue);
 
                 foreach (var dependentId in graph.GetDirectDependents(current.Id))
                 {
-                    if (!byId.TryGetValue(dependentId, out var dependent))
+                    if (!graph.TryGetElement(dependentId, out var dependent) || dependent == null)
                         throw new InvalidOperationException("Source reconcile dependency graph returned missing semantic element " + dependentId + ".");
                     EnqueueInvalidationTarget(dependent, result, queue);
                 }
@@ -179,14 +171,14 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static void EnqueueOpeningHost(
             ProjectElement element,
-            IReadOnlyDictionary<string, ProjectElement> byId,
+            DependencyGraph graph,
             IDictionary<string, ProjectElement> result,
             Queue<ProjectElement> queue)
         {
             if (element.Category != ElementCategory.Door && element.Category != ElementCategory.WallOpening) return;
             if (!element.Properties.TryGetValue("HostWallId", out var hostId) || string.IsNullOrWhiteSpace(hostId)) return;
             var normalizedHostId = hostId.Trim();
-            if (!byId.TryGetValue(normalizedHostId, out var host))
+            if (!graph.TryGetElement(normalizedHostId, out var host) || host == null)
                 throw new InvalidOperationException("Opening " + element.Id + " references missing host " + hostId + ". Repair host linkage before source reconcile.");
             EnqueueInvalidationTarget(host, result, queue);
         }
@@ -199,20 +191,20 @@ namespace QS3D.BricsCAD.V25.Services
 
             for (var pass = 0; pass < MaxStableRegenerationPasses; pass++)
             {
-                var pending = project.Elements.Count(x => affectedIds.Contains(x.Id) && HasSemanticDirty(x));
+                var pending = affected.Count(HasSemanticDirty);
                 if (pending == 0) return total;
 
                 var regenerated = engine.RegenerateDirtySubset(project, affectedIds);
                 total += regenerated;
 
-                var remaining = project.Elements.Count(x => affectedIds.Contains(x.Id) && HasSemanticDirty(x));
+                var remaining = affected.Count(HasSemanticDirty);
                 if (remaining == 0) return total;
                 if (regenerated == 0)
                     throw new InvalidOperationException("Source reconcile affected semantic closure could not regenerate to a stable state; " + remaining + " element(s) remain dirty.");
             }
 
-            var unresolved = project.Elements
-                .Where(x => affectedIds.Contains(x.Id) && HasSemanticDirty(x))
+            var unresolved = affected
+                .Where(HasSemanticDirty)
                 .Select(x => x.Id)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
