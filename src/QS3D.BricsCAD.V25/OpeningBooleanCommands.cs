@@ -63,12 +63,21 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (openingIds == null)
+                    OpeningBooleanCutGuard.RequireFreshGeneratedHosts(project, null);
+                else
+                    OpeningBooleanCutGuard.RequireSelectedTargetsReady(document, project, openingIds);
+
                 var count = openingIds == null
                     ? OpeningBooleanService.CutLinkedOpenings(document, project)
                     : OpeningBooleanService.CutLinkedOpenings(document, project, openingIds);
                 var message = count == 0
-                    ? label + ": không có linked opening mới cần khoét, host chưa có generated solid tương thích hoặc fingerprint hiện tại đã khớp."
-                    : label + ": đã khoét " + count + " Cửa/Lỗ Mở vào generated host solid.";
+                    ? openingIds == null
+                        ? label + ": không có linked opening mới cần khoét, host chưa có generated solid tương thích hoặc fingerprint hiện tại đã khớp."
+                        : label + ": target set đã ở đúng physical-cut fingerprint; không cần khoét lại."
+                    : openingIds == null
+                        ? label + ": đã khoét " + count + " Cửa/Lỗ Mở vào generated host solid."
+                        : label + ": đã thực hiện " + count + " phép khoét mới; target có fingerprint đã khớp được giữ nguyên.";
                 FinalizeUi(document, message);
             }
             catch (Exception ex)

@@ -58,7 +58,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private ContextMenu CreateContextMenu()
         {
-            var menu = new ContextMenu
+            return new ContextMenu
             {
                 Background = TryFindResource("Bg2Brush") as Brush,
                 Foreground = TryFindResource("TextBrush") as Brush,
@@ -66,7 +66,6 @@ namespace QS3D.BricsCAD.V25.UI
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(2)
             };
-            return menu;
         }
 
         private MenuItem CreateMenuItem(string header, RoutedEventHandler handler)
@@ -136,9 +135,16 @@ namespace QS3D.BricsCAD.V25.UI
             while (current != null && !ReferenceEquals(current, owner))
             {
                 if (current is T typed) return typed;
-                current = VisualTreeHelper.GetParent(current);
+                current = ParentOf(current);
             }
             return null;
+        }
+
+        private static DependencyObject? ParentOf(DependencyObject child)
+        {
+            if (child is ContentElement content)
+                return ContentOperations.GetParent(content) ?? (content as FrameworkContentElement)?.Parent;
+            return VisualTreeHelper.GetParent(child);
         }
 
         public void RefreshProject()
@@ -180,8 +186,19 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnModelTreeSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (!(e.NewValue is TreeViewItem item)) return;
-            if (item.Tag is string tag && Enum.TryParse(tag, true, out ElementCategory category)) { _categoryFilter = category; ApplyFamilyFilter(); SetStatus("Nhóm mô hình: " + item.Header); }
-            else { _categoryFilter = null; ApplyFamilyFilter(); }
+            if (item.Tag is string tag && Enum.TryParse(tag, true, out ElementCategory category))
+            {
+                _categoryFilter = category;
+                ApplyFamilyFilter();
+                SetStatus(Cad.NativeBuildCapability.Supports(category)
+                    ? "Nhóm mô hình: " + item.Header
+                    : "Nhóm mô hình: " + item.Header + " • " + Cad.NativeBuildCapability.UnsupportedMessage(category));
+            }
+            else
+            {
+                _categoryFilter = null;
+                ApplyFamilyFilter();
+            }
         }
 
         private void OnAddClick(object sender, RoutedEventArgs e)
@@ -215,9 +232,20 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnView3DClick(object sender, RoutedEventArgs e)
         {
             var family = FamilyList.SelectedItem as ProjectFamily;
-            _viewModel.SetActiveFamily(family);
+            var category = _categoryFilter ?? family?.Category;
+            if (!category.HasValue)
+            {
+                SetStatus("Chọn một nhóm mô hình hoặc Family có native builder trước khi Vẽ/Cập nhật 3D.");
+                return;
+            }
+            if (!Cad.NativeBuildCapability.Supports(category.Value))
+            {
+                SetStatus(Cad.NativeBuildCapability.UnsupportedMessage(category.Value));
+                return;
+            }
+            if (family != null && family.Category == category.Value) _viewModel.SetActiveFamily(family);
             var restoredSources = SelectInspectionSemanticSourcesForBuild();
-            SetStatus("Vẽ/Cập nhật 3D: " + (family?.Name ?? "chưa chọn Family") + (restoredSources > 0 ? " • source " + restoredSources : string.Empty));
+            SetStatus("Vẽ/Cập nhật 3D: " + (family?.Name ?? category.Value.ToString()) + (restoredSources > 0 ? " • source " + restoredSources : string.Empty));
             Send("QS3DBUILD3D");
         }
         private void OnWallJunctionsClick(object sender, RoutedEventArgs e) { SetStatus("Phân tích giao tim tường L / T / X trong selection."); Send("QS3DWALLJUNCTIONS"); }
