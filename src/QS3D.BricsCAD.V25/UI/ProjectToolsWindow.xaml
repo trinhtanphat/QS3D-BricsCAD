@@ -50,7 +50,7 @@
                 <UniformGrid Columns="2" Margin="0,0,0,14">
                     <Button Content="Vách Kính / Curtain" Tag="QS3DCURTAIN" Click="OnCommandClick"/>
                     <Button Content="Geometry Extensions" Tag="QS3DGEOMETRYEXT" Click="OnCommandClick"/>
-                    <Button Content="Rebar 3D Hub" Tag="QS3DREBAR3DHUB" Click="OnCommandClick"/>
+                    <Button Content="Rebar 3D Hub" Tag="QS3DREBARHUB" Click="OnCommandClick"/>
                     <Button Content="Bảng khối lượng" Tag="QS3DBQ" Click="OnCommandClick"/>
                 </UniformGrid>
 
