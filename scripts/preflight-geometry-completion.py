@@ -19,6 +19,7 @@ required = [
     "src/QS3D.BricsCAD.V25/RebarGeometryCommands.cs",
     "src/QS3D.BricsCAD.V25/RebarHealthCommands.cs",
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs",
+    "src/QS3D.BricsCAD.V25/Commands.cs",
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml",
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs",
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs",
@@ -33,10 +34,10 @@ for relative in required:
 
 checks = {
     "src/QS3D.Core/Geometry/WallFootprintEngine.cs": [
-        "HasSelfIntersection", "HasPolygonSelfIntersection", "miterLimit", "UsedBevelJoin", "Wall footprint self-intersects"
+        "HasSelfIntersection", "HasPolygonSelfIntersection", "miterLimit", "UsedBevelJoin", "Wall footprint self-intersects", "SignedAreaRelative", "Midpoint(previousOffset, nextOffset)"
     ],
     "src/QS3D.Core/Geometry/OpeningCutPlanner.cs": [
-        "HostLengthM", "CenterAlongHostM", "CutterDepthM", "extends beyond the host wall length", "extends above the host wall height"
+        "HostLengthM", "CenterAlongHostM", "CutterDepthM", "extends beyond the host wall length", "extends above the host wall height", "Midpoint(baseElevation, topElevation"
     ],
     "src/QS3D.Core/Rebar/RectangularRebarLayoutPlanner.cs": [
         "BarsAlongWidth", "BarsAlongDepth", "CoverM", "DiameterMm", "no usable reinforcement envelope"
@@ -63,6 +64,9 @@ checks = {
     "src/QS3D.BricsCAD.V25/TktVariantCommands.cs": [
         "QS3DGLASSWALL", "QS3DWALLPIER", "AxisLeftOffsetM", "AxisRightOffsetM", "ThicknessM"
     ],
+    "src/QS3D.BricsCAD.V25/Commands.cs": [
+        "PolylineWallSolidBuilder.BuildSelected", "GeneratedRebarHealthService().Inspect", "ParseGeneratedRebarHandles"
+    ],
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml": [
         "Bóc chọn", "OnCaptureSelectedClick", "Vẽ 3D"
     ],
@@ -73,7 +77,7 @@ checks = {
         "DisplayNameFor", "GroupFor", "IsNumericProperty", "Bề dày", "CỐT THÉP"
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
-        'Tag="QS3DGLASSWALL"', 'Tag="QS3DWALLPIER"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DREBAR3D"'
+        'Tag="QS3DGLASSWALL"', 'Tag="QS3DWALLPIER"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DREBAR3D"', 'Tag="QS3DREBARHEALTH"'
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
         'new RibbonButtonSpec("Vách Kính", "QS3DGLASSWALL")', 'new RibbonButtonSpec("Trụ Tường", "QS3DWALLPIER")',
@@ -84,7 +88,7 @@ checks = {
         "WallSolidBuilder.BuildSelectedLineWalls(doc, project, category.Value)", "PolylineWallSolidBuilder.BuildSelected(doc, project, category.Value)"
     ],
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs": [
-        "StraightWallFootprint", "PolylineWallCorner", "OpeningCutPlan", "RectangularRebarLayout", "GeneratedRebarHealth"
+        "StraightWallFootprint", "PolylineWallCorner", "FarOriginWallFootprint", "OpeningCutPlan", "RectangularRebarLayout", "GeneratedRebarHealth"
     ],
 }
 for relative, needles in checks.items():
@@ -116,4 +120,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: TKT line/polyline wall variants, all compatible LINE-wall opening hosts, fail-safe rectangular rebar geometry/health and BLT-style UI workflow guards are present.")
+print("PASS: TKT line/polyline wall variants, compatible opening hosts, far-origin-safe footprint math, unified/fail-safe rectangular rebar geometry health and BLT-style UI workflow guards are present.")
