@@ -20,7 +20,7 @@ The command captures selected BricsCAD `LINE` or `ARC` geometry as `ElementCateg
 
 ## Semantic Grid label sequencing — Core source
 
-`GridNamingService` now provides a CAD-independent, fail-closed naming contract over the **existing** `ElementCategory.Grid` elements. It does not create another Grid catalog.
+`GridNamingService` provides a CAD-independent, fail-closed naming contract over the **existing** `ElementCategory.Grid` elements. It does not create another Grid catalog.
 
 Current semantics:
 
@@ -33,6 +33,20 @@ Current semantics:
 - source geometry, source Handles and native CAD ownership are untouched.
 
 This deliberately solves only the reusable semantic sequence layer. A future V25 command/UI may supply a reviewed CAD ordering and call this service, but it must not silently change the Core ordering contract.
+
+## Grid naming health
+
+`GridNamingHealthService` is included in `ComprehensiveModelHealthService`, so normal comprehensive Health/Release paths can surface semantic Grid naming corruption even before a native bubble/annotation layer exists.
+
+Current checks:
+
+- `GRID_LABEL_DUPLICATE` — Error on both Grid owners when labels collide case-insensitively;
+- `GRID_LABEL_EMPTY` — Warning when a Grid explicitly carries an empty label property;
+- `GRID_LABEL_TOO_LONG` — Error when external/manual mutation exceeds the 64-character semantic naming bound;
+- `GRID_SEQUENCE_INVALID` — Error when `GridSequenceIndex` is not an integer in the supported range;
+- `GRID_SEQUENCE_WITHOUT_LABEL` — Warning when a sequence index exists without a valid semantic label.
+
+A missing label is not itself an error because `QS3DGRID` capture and semantic naming are separate workflows. Health does not invent labels or mutate the model.
 
 ## Product boundary
 
@@ -52,7 +66,7 @@ Those features must extend the existing `ElementCategory.Grid` semantic model ra
 
 QS3D reuses the existing `ProjectFloor` / `FloorDefinition` catalog as its Level model; do not introduce a duplicate `LevelDefinition` merely for product parity.
 
-Current Core now supports opt-in vertical references:
+Current Core supports opt-in vertical references:
 
 - `BottomLevelId`
 - `BottomLevelOffsetM`
@@ -81,4 +95,4 @@ A local-capable agent should include Grid in the exact-SHA runtime matrix:
 8. verify UI/selection sync and Locate behavior;
 9. when a local Grid-label UI/command exists, verify reviewed ordering, semantic label persistence, duplicate-label fail-closed behavior and save/reopen before calling native naming complete.
 
-Until that runtime pass exists, describe `QS3DGRID` as `REMOTE_DONE` / source-implemented and statically guarded, not `LOCAL_PASS` or V25-runtime-certified. `GridNamingService` is likewise Core/source functionality only until a V25 interaction layer is explicitly implemented and qualified.
+Until that runtime pass exists, describe `QS3DGRID` as `REMOTE_DONE` / source-implemented and statically guarded, not `LOCAL_PASS` or V25-runtime-certified. `GridNamingService` and `GridNamingHealthService` are likewise Core/source functionality only until a V25 interaction/native visualization layer is explicitly implemented and qualified.

@@ -31,6 +31,7 @@ namespace QS3D.Core.Diagnostics
             Add(issues, seen, new RoomFinishHealthService().Inspect(project));
             Add(issues, seen, new DependencyHealthService().Inspect(project));
             Add(issues, seen, new LevelReferenceHealthService().Inspect(project));
+            Add(issues, seen, new GridNamingHealthService().Inspect(project));
             Add(issues, seen, new GeneratedHandleOwnershipHealthService().Inspect(project));
             Add(issues, seen, new GeneratedRebarOwnershipHealthService().Inspect(project));
             Add(issues, seen, new GeneratedGeometryStaleHealthService().Inspect(project));
