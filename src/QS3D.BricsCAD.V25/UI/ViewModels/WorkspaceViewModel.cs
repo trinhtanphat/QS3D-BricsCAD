@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
@@ -81,8 +82,8 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             Properties.Clear();
             if (family == null) return;
             var nameRow = new PropertyRowViewModel { Group = "THÔNG TIN", Name = "Tên Family" };
-            nameRow.Value = family.Name;
             nameRow.Apply = value => ApplyFamilyName(family, value);
+            nameRow.Value = family.Name;
             Properties.Add(nameRow);
             var categoryRow = new PropertyRowViewModel { Group = "THÔNG TIN", Name = "Loại cấu kiện", IsReadOnly = true };
             categoryRow.Value = family.Category.ToString(); Properties.Add(categoryRow);
@@ -90,9 +91,16 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             {
                 var key = pair.Key;
                 var unit = UnitFor(key);
-                var row = new PropertyRowViewModel { Group = GroupFor(key), Name = DisplayNameFor(key), Unit = unit };
-                row.Value = pair.Value;
+                var row = new PropertyRowViewModel
+                {
+                    Group = GroupFor(key),
+                    Name = DisplayNameFor(key),
+                    Unit = unit,
+                    EditorKind = EditorKindFor(key, pair.Value),
+                    Choices = ChoicesFor(key, pair.Value)
+                };
                 row.Apply = value => ApplyFamilyProperty(family, key, unit, value);
+                row.Value = pair.Value;
                 Properties.Add(row);
             }
         }
@@ -121,30 +129,70 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         private string ApplyFamilyProperty(ProjectFamily family, string key, string unit, string value)
         {
             var next = (value ?? string.Empty).Trim();
-            if (unit.Length > 0 || IsNumericProperty(key))
+            family.Properties.TryGetValue(key, out var previousFamilyValue);
+            if (IsBooleanProperty(key, previousFamilyValue))
+            {
+                if (!TryBoolean(next, out var boolean))
+                {
+                    Status = DisplayNameFor(key) + ": chỉ nhận Bật/Tắt (true/false).";
+                    return previousFamilyValue ?? string.Empty;
+                }
+                next = boolean ? "true" : "false";
+            }
+            else if (unit.Length > 0 || IsNumericProperty(key))
             {
                 if (!TryFiniteNumber(next, out var number))
                 {
                     Status = DisplayNameFor(key) + ": giá trị số không hợp lệ; đã giữ giá trị cũ.";
-                    return family.Properties.TryGetValue(key, out var previous) ? previous : string.Empty;
+                    return previousFamilyValue ?? string.Empty;
                 }
                 next = number.ToString("R", CultureInfo.InvariantCulture);
             }
 
-            if (family.Properties.TryGetValue(key, out var current) && string.Equals(current, next, StringComparison.Ordinal)) return current;
+            if (string.Equals(previousFamilyValue, next, StringComparison.Ordinal)) return previousFamilyValue ?? string.Empty;
             family.Properties[key] = next;
             if (_project == null) return next;
 
-            var affected = 0;
+            var inherited = 0;
+            var overrides = 0;
             foreach (var element in _project.Elements.Where(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)))
             {
-                element.SetProperty(key, next);
-                affected++;
+                var hasInstanceValue = element.Properties.TryGetValue(key, out var instanceValue);
+                var isInherited = !hasInstanceValue || string.Equals(instanceValue, previousFamilyValue, StringComparison.Ordinal);
+                if (isInherited)
+                {
+                    element.SetProperty(key, next);
+                    inherited++;
+                }
+                else
+                {
+                    element.MarkDirty(ElementDirtyFlags.All);
+                    overrides++;
+                }
             }
 
             _project.Touch();
-            Status = "Đã cập nhật " + DisplayNameFor(key) + " cho Family • " + affected + " cấu kiện cần tính lại";
+            Status = "Đã cập nhật " + DisplayNameFor(key) + " • kế thừa " + inherited + " cấu kiện" + (overrides > 0 ? " • giữ " + overrides + " instance override" : string.Empty);
             return next;
+        }
+
+        private IReadOnlyList<string> ChoicesFor(string key, string current)
+        {
+            if (!IsChoiceProperty(key) || _project == null) return Array.Empty<string>();
+            return _project.Families
+                .SelectMany(x => x.Properties.Where(p => string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase)).Select(p => (p.Value ?? string.Empty).Trim()))
+                .Concat(new[] { (current ?? string.Empty).Trim() })
+                .Where(x => x.Length > 0)
+                .Distinct(StringComparer.CurrentCultureIgnoreCase)
+                .OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase)
+                .ToArray();
+        }
+
+        private static string EditorKindFor(string key, string current)
+        {
+            if (IsBooleanProperty(key, current)) return PropertyRowViewModel.BooleanEditor;
+            if (IsChoiceProperty(key)) return PropertyRowViewModel.ChoiceEditor;
+            return PropertyRowViewModel.TextEditor;
         }
 
         private static bool TryFiniteNumber(string value, out double number)
@@ -152,6 +200,40 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number) &&
                 !double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out number)) return false;
             return !double.IsNaN(number) && !double.IsInfinity(number);
+        }
+
+        private static bool TryBoolean(string value, out bool boolean)
+        {
+            var text = (value ?? string.Empty).Trim();
+            if (bool.TryParse(text, out boolean)) return true;
+            if (text == "1" || text.Equals("yes", StringComparison.OrdinalIgnoreCase) || text.Equals("on", StringComparison.OrdinalIgnoreCase) || text.Equals("bật", StringComparison.CurrentCultureIgnoreCase)) { boolean = true; return true; }
+            if (text == "0" || text.Equals("no", StringComparison.OrdinalIgnoreCase) || text.Equals("off", StringComparison.OrdinalIgnoreCase) || text.Equals("tắt", StringComparison.CurrentCultureIgnoreCase)) { boolean = false; return true; }
+            boolean = false;
+            return false;
+        }
+
+        private static bool IsBooleanProperty(string key, string? current)
+        {
+            if (TryBoolean(current ?? string.Empty, out _)) return true;
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            return key.StartsWith("Is", StringComparison.OrdinalIgnoreCase) ||
+                   key.StartsWith("Has", StringComparison.OrdinalIgnoreCase) ||
+                   key.StartsWith("Enable", StringComparison.OrdinalIgnoreCase) ||
+                   key.Equals("CloseProfile", StringComparison.OrdinalIgnoreCase) ||
+                   key.Equals("FreeformProfile", StringComparison.OrdinalIgnoreCase) ||
+                   key.EndsWith("Visible", StringComparison.OrdinalIgnoreCase) ||
+                   key.EndsWith("Enabled", StringComparison.OrdinalIgnoreCase) ||
+                   key.EndsWith("Locked", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsChoiceProperty(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            return key.EndsWith("Mode", StringComparison.OrdinalIgnoreCase) ||
+                   key.EndsWith("Type", StringComparison.OrdinalIgnoreCase) ||
+                   key.Equals("Material", StringComparison.OrdinalIgnoreCase) ||
+                   key.EndsWith("Material", StringComparison.OrdinalIgnoreCase) ||
+                   key.Equals("ClassificationCode", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsNumericProperty(string key)
