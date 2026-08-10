@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.Diagnostics;
+using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
 using QS3D.Core.Rebar;
 
@@ -16,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             OpeningCutRejectsInvalidPlacement();
             RectangularRebarLayout();
             RectangularRebarRejectsImpossibleCover();
+            GeneratedRebarHealth();
         }
 
         private static void StraightWallFootprint()
@@ -121,6 +125,26 @@ namespace QS3D.Core.SmokeTests
                 WidthM = 0.2d, DepthM = 0.2d, CoverM = 0.1d, DiameterMm = 20d,
                 BarsAlongWidth = 2, BarsAlongDepth = 2
             }));
+        }
+
+        private static void GeneratedRebarHealth()
+        {
+            var project = new ProjectState("P", "P");
+            var first = new ProjectElement("C1", ElementCategory.Column, string.Empty, string.Empty, string.Empty);
+            first.Properties["GeneratedRebarHandles"] = "AA;BB";
+            first.Properties["GeneratedRebarCount"] = "2";
+            first.Properties["GeneratedRebarDiameterMm"] = "20";
+            project.Elements.Add(first);
+            var missing = new GeneratedRebarHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA" });
+            True(missing.Any(x => x.Code == "REBAR_GENERATED_SOLID_MISSING"));
+
+            var second = new ProjectElement("C2", ElementCategory.Column, string.Empty, string.Empty, string.Empty);
+            second.Properties["GeneratedRebarHandles"] = "AA";
+            second.Properties["GeneratedRebarCount"] = "1";
+            second.Properties["GeneratedRebarDiameterMm"] = "16";
+            project.Elements.Add(second);
+            var conflict = new GeneratedRebarHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AA", "BB" });
+            True(conflict.Any(x => x.Code == "REBAR_GENERATED_OWNERSHIP_CONFLICT"));
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
