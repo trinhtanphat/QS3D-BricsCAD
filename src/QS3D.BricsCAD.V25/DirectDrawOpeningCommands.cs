@@ -94,7 +94,7 @@ namespace QS3D.BricsCAD.V25
                 element.Properties["BooleanClearanceM"] = clearanceM.ToString("R", CultureInfo.InvariantCulture);
                 element.MarkDirty(ElementDirtyFlags.Properties);
 
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                var regeneratedBeforeLink = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
                 // QS3DAUTOLINKHOSTS is selection-scoped. Keep only this new source selected so the
                 // established elevation/scope/ambiguity matcher cannot mutate unrelated openings.
@@ -104,12 +104,17 @@ namespace QS3D.BricsCAD.V25
                 if (!element.Properties.TryGetValue("HostWallId", out var hostId) || string.IsNullOrWhiteSpace(hostId))
                     throw new InvalidOperationException(label + " chưa tìm được host duy nhất trong phạm vi Auto Host; operation được rollback để không tạo opening mồ côi.");
 
+                // AutoHostLinkCommands intentionally catches command-surface errors. Re-run the
+                // deterministic semantic engine here so a link/regeneration failure propagates into
+                // this command's outer snapshot rollback instead of looking like a successful authoring commit.
+                var regeneratedAfterLink = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+
                 project.Touch();
                 PaletteCoordinator.RefreshProject();
                 document.Editor.SetImpliedSelection(new[] { sourceId });
                 document.Editor.Regen();
                 var status = label + ": width=" + widthM.ToString("0.###", CultureInfo.InvariantCulture) +
-                    " m • host=" + hostId + " • regen=" + regenerated +
+                    " m • host=" + hostId + " • regen=" + (regeneratedBeforeLink + regeneratedAfterLink) +
                     ". Semantic + Auto Host hoàn tất; dùng QS3DCUTOPENINGS khi muốn khoét physical host.";
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
