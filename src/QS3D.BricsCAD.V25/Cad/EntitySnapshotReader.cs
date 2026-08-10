@@ -38,16 +38,28 @@ namespace QS3D.BricsCAD.V25.Cad
         private static IReadOnlyList<EntitySnapshot> ReadSelection(Document document, bool promptIfEmpty)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            var editor = document.Editor; var selection = editor.SelectImplied();
+            var editor = document.Editor;
+            var selection = editor.SelectImplied();
             if (selection.Status != PromptStatus.OK || selection.Value == null)
             {
                 if (!promptIfEmpty) return Array.Empty<EntitySnapshot>();
-                var prompt = editor.GetSelection(); if (prompt.Status != PromptStatus.OK || prompt.Value == null) return Array.Empty<EntitySnapshot>(); selection = prompt;
+                var prompt = editor.GetSelection();
+                if (prompt.Status != PromptStatus.OK || prompt.Value == null) return Array.Empty<EntitySnapshot>();
+                selection = prompt;
             }
+
+            var objectIds = selection.Value.GetObjectIds();
+            if (objectIds.Length == 0) return Array.Empty<EntitySnapshot>();
+
+            // GetSelection() is an interactive selection, not a persistent PICKFIRST set. Native
+            // QS3D builders consume SelectImplied(), so restore the exact source ids before returning.
+            // This keeps the capture -> edit Family/Instance -> QS3DBUILD3D workflow deterministic.
+            editor.SetImpliedSelection(objectIds);
+
             var result = new List<EntitySnapshot>();
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
-                foreach (var id in selection.Value.GetObjectIds())
+                foreach (var id in objectIds)
                     AddSnapshot(transaction, id, result);
                 transaction.Commit();
             }
