@@ -13,6 +13,8 @@ RELEASE = ADAPTER / "ReleaseReadinessCommands.cs"
 HUB = ADAPTER / "UI/ScheduleHubWindow.xaml"
 HUB_CODE = ADAPTER / "UI/ScheduleHubWindow.xaml.cs"
 INTERCHANGE = ROOT / "src/QS3D.Core/Export/ProjectInterchangeJsonExporter.cs"
+QSDB = ROOT / "src/QS3D.Core/Persistence/QsdbProjectStore.cs"
+SNAPSHOT = ROOT / "src/QS3D.Core/Persistence/ProjectStateSnapshot.cs"
 
 artifacts = {
     "door": {
@@ -72,7 +74,7 @@ generic_identity = {
 }
 
 errors = []
-required_paths = [SHARED, GENERIC, GENERIC_COMMANDS, AGGREGATOR, RELEASE, HUB, HUB_CODE, INTERCHANGE]
+required_paths = [SHARED, GENERIC, GENERIC_COMMANDS, AGGREGATOR, RELEASE, HUB, HUB_CODE, INTERCHANGE, QSDB, SNAPSHOT]
 required_paths += [x[k] for x in artifacts.values() for k in ("builder", "commands")]
 for path in required_paths:
     if not path.is_file():
@@ -193,6 +195,18 @@ if HUB_CODE.is_file():
         if token not in text:
             errors.append("Schedule Hub lost generic command dispatch token: " + token)
 
+if QSDB.is_file():
+    text = QSDB.read_text(encoding="utf-8")
+    for token in ('Map("metadata", project.Metadata)', 'ReadStringMap(root.Element("metadata"), "p", project.Metadata)'):
+        if token not in text:
+            errors.append("QSDB persistence must save/reload project-level native Table metadata: " + token)
+
+if SNAPSHOT.is_file():
+    text = SNAPSHOT.read_text(encoding="utf-8")
+    for token in ("target.Metadata.Clear();", "foreach (var item in source.Metadata) target.Metadata[item.Key] = item.Value ?? string.Empty;"):
+        if token not in text:
+            errors.append("ProjectStateSnapshot must include project Metadata for rollback-safe native Table mutation: " + token)
+
 if INTERCHANGE.is_file():
     text = INTERCHANGE.read_text(encoding="utf-8")
     if "project.Metadata" in text:
@@ -212,4 +226,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: generic, Door/Opening, Room Finish and Material Usage native Tables have unique commands/artifact identities/metadata prefixes, project-level QS3DDOC ownership, namespaced diagnostics, fail-isolated runtime/Release wiring, Schedule Hub launchers and non-portable metadata exclusion from Semantic Snapshot interchange.")
+print("PASS: generic, Door/Opening, Room Finish and Material Usage native Tables have unique commands/artifact identities/metadata prefixes, project-level QS3DDOC ownership, rollback-safe QSDB persistence, namespaced diagnostics, fail-isolated runtime/Release wiring, Schedule Hub launchers and deliberate exclusion from portable Semantic Snapshot interchange.")
