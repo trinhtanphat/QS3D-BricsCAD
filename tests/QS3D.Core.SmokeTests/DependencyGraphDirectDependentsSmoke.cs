@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         {
             DirectLookupIsDeterministicAndNonTransitive();
             LookupNormalizesSourceId();
+            TransitiveLookupNormalizesAndIsDeterministic();
+            TransitiveCycleDoesNotReturnSource();
             MissingSourceIsEmpty();
         }
 
@@ -41,12 +43,45 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Direct dependency lookup must normalize source IDs case-insensitively.");
         }
 
+        private static void TransitiveLookupNormalizesAndIsDeterministic()
+        {
+            var root = Element("Root");
+            var z = Element("Z-CHILD", " root ");
+            var a = Element("A-CHILD", "ROOT");
+            var zLeaf = Element("Z-LEAF", "Z-CHILD");
+            var aLeaf = Element("A-LEAF", "A-CHILD");
+            var graph = new DependencyGraph();
+            graph.Rebuild(new[] { zLeaf, z, root, aLeaf, a });
+
+            var transitive = graph.GetDependentsTransitive(" ROOT ").ToArray();
+            var expected = new[] { "A-CHILD", "Z-CHILD", "A-LEAF", "Z-LEAF" };
+            if (!transitive.SequenceEqual(expected, StringComparer.OrdinalIgnoreCase))
+                throw new Exception("Transitive dependency lookup must normalize source IDs and return deterministic breadth-first order.");
+        }
+
+        private static void TransitiveCycleDoesNotReturnSource()
+        {
+            var root = Element("ROOT", "B");
+            var a = Element("A", "ROOT");
+            var b = Element("B", "A");
+            var graph = new DependencyGraph();
+            graph.Rebuild(new[] { b, root, a });
+
+            var transitive = graph.GetDependentsTransitive(" root ").ToArray();
+            if (transitive.Any(id => string.Equals(id, "ROOT", StringComparison.OrdinalIgnoreCase)))
+                throw new Exception("Transitive dependency lookup must not return its source through a cycle.");
+            if (!transitive.SequenceEqual(new[] { "A", "B" }, StringComparer.OrdinalIgnoreCase))
+                throw new Exception("Transitive dependency cycle traversal must remain bounded and deterministic.");
+        }
+
         private static void MissingSourceIsEmpty()
         {
             var graph = new DependencyGraph();
             graph.Rebuild(new[] { Element("ROOT") });
             if (graph.GetDirectDependents("missing").Count != 0 || graph.GetDirectDependents(" ").Count != 0)
                 throw new Exception("Missing/blank direct dependency lookups must be empty.");
+            if (graph.GetDependentsTransitive("missing").Count != 0 || graph.GetDependentsTransitive(" ").Count != 0)
+                throw new Exception("Missing/blank transitive dependency lookups must be empty.");
         }
 
         private static ProjectElement Element(string id, params string[] dependsOn)
