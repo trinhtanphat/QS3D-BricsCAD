@@ -20,6 +20,7 @@ namespace QS3D.Core.Diagnostics
             var claims = new Dictionary<string, List<Claim>>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 AddClaims(claims, element, "SourceHandles", element.SourceHandles);
                 foreach (var group in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element).GroupBy(x => x.Value, StringComparer.OrdinalIgnoreCase))
                     AddClaims(claims, element, group.Key, group.Select(x => x.Key));
