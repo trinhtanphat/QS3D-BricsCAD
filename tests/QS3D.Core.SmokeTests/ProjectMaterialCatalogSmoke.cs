@@ -125,7 +125,7 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("f-atomic", "Tường", ElementCategory.ArchitecturalWall);
             family.Properties["Material"] = "Vật liệu cũ";
             project.Families.Add(family);
-            project.Elements.Add(null);
+            project.Elements.Add(null!);
 
             Throws<InvalidOperationException>(() => ProjectMaterialCatalog.UpsertCustom(project, "mat-atomic", "Vật liệu mới", "m²", ""));
             if (ProjectMaterialCatalog.GetCustom(project).Single().Name != "Vật liệu cũ")
