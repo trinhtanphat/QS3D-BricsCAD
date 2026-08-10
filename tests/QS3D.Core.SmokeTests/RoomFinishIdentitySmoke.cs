@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ReusesPropertyLinkedLegacyFinish();
             ReusesDependencyLinkedLegacyFinish();
             RejectsCanonicalAndLegacyDuplicate();
+            RejectsDuplicateSemanticFinishIdentity();
             DuplicateFinishesFailClosedAcrossSchedules();
             RejectsCanonicalLinkedToAnotherRoom();
             RejectsCanonicalIdCategoryCollision();
@@ -61,6 +62,19 @@ namespace QS3D.Core.SmokeTests
             var project = BaseProject(out var room, out _);
             AddDuplicateSkirting(project, room);
             Throws<InvalidOperationException>(() => RoomFinishIdentityService.FindExisting(project, room, ElementCategory.Skirting), "Multiple Skirting finishes reference Room");
+        }
+
+        private static void RejectsDuplicateSemanticFinishIdentity()
+        {
+            var project = BaseProject(out var room, out _);
+            var first = Legacy("LEGACY-DUP", ElementCategory.WallFinish, room);
+            first.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
+            var second = Legacy("legacy-dup", ElementCategory.WallFinish, room);
+            second.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+
+            Throws<InvalidOperationException>(() => RoomFinishIdentityService.FindExisting(project, room, ElementCategory.WallFinish), "duplicate semantic element id");
         }
 
         private static void DuplicateFinishesFailClosedAcrossSchedules()
