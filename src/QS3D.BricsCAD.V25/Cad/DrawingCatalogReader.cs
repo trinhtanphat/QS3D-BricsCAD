@@ -9,7 +9,11 @@ namespace QS3D.BricsCAD.V25.Cad
     {
         public string Name { get; set; } = string.Empty;
         public bool IsVisible { get; set; }
+        public bool IsLocked { get; set; }
         public short ColorIndex { get; set; }
+        public byte Red { get; set; }
+        public byte Green { get; set; }
+        public byte Blue { get; set; }
     }
 
     internal sealed class DrawingReferenceSnapshot
@@ -32,7 +36,17 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var layer = tr.GetObject(id, OpenMode.ForRead) as LayerTableRecord;
                     if (layer == null) continue;
-                    result.Add(new LayerSnapshot { Name = layer.Name, IsVisible = !layer.IsOff && !layer.IsFrozen, ColorIndex = layer.Color.ColorIndex });
+                    var color = layer.Color;
+                    result.Add(new LayerSnapshot
+                    {
+                        Name = layer.Name,
+                        IsVisible = !layer.IsOff && !layer.IsFrozen,
+                        IsLocked = layer.IsLocked,
+                        ColorIndex = color.ColorIndex,
+                        Red = color.Red,
+                        Green = color.Green,
+                        Blue = color.Blue
+                    });
                 }
                 tr.Commit();
             }
