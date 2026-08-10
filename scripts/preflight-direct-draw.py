@@ -27,7 +27,14 @@ required = {
         "CreatePolyline(document",
         "CreateColumnFootprint",
         "PromptPositiveMeters",
+        "PromptFiniteMeters",
         "FamilyNumber",
+        "FamilyFiniteNumber",
+        'element.Properties["ThicknessM"]',
+        'element.Properties["WidthM"]',
+        'element.Properties["DepthM"]',
+        'element.Properties["HeightM"]',
+        'element.Properties["BottomOffsetM"]',
         "AllowNone = points.Count >= minimumPoints",
         "PlanarityToleranceM = 0.005d",
         "CadGeometryGuard.ToMeters(document, deltaDrawingUnits",
@@ -35,6 +42,7 @@ required = {
         "document.Database.CurrentSpaceId.Equals(modelSpaceId)",
         "CadHandleService.GetLiveHandles(document, normalized)",
         "Direct Draw rollback còn CAD handle chưa xóa",
+        'element.Properties.TryGetValue("GeneratedSolidHandle"',
         "QS3DVIEW3D",
     ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs": [
@@ -45,9 +53,13 @@ required = {
     ],
     "src/QS3D.BricsCAD.V25/Build3DCommands.cs": [
         'CommandMethod("QS3DBUILD3D"',
+        "SemanticReferenceHandles.MatchesSelection(x, handles)",
         "unsupported.Count > 0",
         "categories.Count > 1",
         "một category mỗi lần",
+        "CadHandleService.Select(document, sourceHandles)",
+        "liveSourceCount != sourceHandles.Count",
+        "EntitySnapshotReader.ReadImpliedSelection(document)",
         "ValidateWallSourceBatch",
         'string.Equals(x, "Line"',
         'string.Equals(x, "Polyline"',
@@ -55,6 +67,13 @@ required = {
         "không build chung LINE và open POLYLINE",
         "RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
         "BuildCategory(document, project, category)",
+        'x.Properties.TryGetValue("GeneratedSolidHandle"',
+    ],
+    "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs": [
+        "SelectInspectionSemanticSourcesForBuild()",
+        "SemanticReferenceHandles.MatchesSelection(x, handles)",
+        "Cad.CadHandleService.Select(doc, matches[0].SourceHandles)",
+        'Send("QS3DBUILD3D")',
     ],
     "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs": [
         "GeneratedHandleOwnershipPolicy.TryFindOwner",
@@ -166,6 +185,10 @@ if source.is_file():
         errors.append("Every P0 Direct Draw command must fail closed outside Model Space")
     if "Math.Abs(points[index].Z - z) > 1e-6d" in text:
         errors.append("Direct Draw planarity must be unit-aware rather than using raw drawing-unit tolerance")
+    if text.count('element.Properties["BottomOffsetM"]') < 4:
+        errors.append("All P0 Direct Draw commands must persist the prompted base elevation/offset")
+    if text.count("PromptPositiveMeters(document.Editor") < 7:
+        errors.append("P0 Direct Draw must prompt key positive dimensions instead of silently using all Family defaults")
     erase_body = text.split("private static void EraseHandles", 1)[-1].split("private static Document? Active", 1)[0]
     if "catch { }" in erase_body or "catch{}" in erase_body.replace(" ", ""):
         errors.append("Direct Draw CAD rollback must not swallow per-entity erase failures")
@@ -176,11 +199,17 @@ build3d = ROOT / "src/QS3D.BricsCAD.V25/Build3DCommands.cs"
 if build3d.is_file():
     text = build3d.read_text(encoding="utf-8")
     guard_category = text.find("if (categories.Count > 1)")
-    guard_wall_type = text.find("if (sourceTypes.Count > 1)")
+    resolve_sources = text.find("var liveSourceCount = CadHandleService.Select(document, sourceHandles);")
+    source_snapshots = text.find("var sourceSnapshots = EntitySnapshotReader.ReadImpliedSelection(document);")
+    validate_call = text.find("if (!ValidateWallSourceBatch(selectedElements, sourceSnapshots, category, out var wallSourceError))")
     regenerate = text.find("var regenerated = new RegenerationEngine")
     build = text.find("var built = BuildCategory(document, project, category);")
-    if min(guard_category, guard_wall_type, regenerate, build) < 0 or not (guard_category < guard_wall_type < regenerate < build):
-        errors.append("QS3DBUILD3D must reject mixed batches and regenerate semantic state before the first native builder commit")
+    if min(guard_category, resolve_sources, source_snapshots, validate_call, regenerate, build) < 0 or not (
+        guard_category < resolve_sources < source_snapshots < validate_call < regenerate < build
+    ):
+        errors.append("QS3DBUILD3D must reject mixed categories, resolve all live source CAD, validate the source batch and regenerate semantic state before the native builder commit")
+    if "if (sourceTypes.Count > 1)" not in text:
+        errors.append("QS3DBUILD3D wall validation must reject mixed LINE/open POLYLINE source batches")
     if "foreach (var category in categories)" in text:
         errors.append("QS3DBUILD3D must not commit independent category builders sequentially in one logical operation")
 
@@ -189,4 +218,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw validates semantic state before CAD mutation, is Model-Space/unit aware, discovers tagged orphan output for rollback, verifies cleanup, reuses guarded builders and exposes P0 authoring UI.")
+print("PASS: Direct Draw prompts BLT-style P0 dimensions, validates semantic state before CAD mutation, is Model-Space/unit aware, verifies rollback cleanup, and QS3DBUILD3D resolves semantic/generated selections back to complete live sources before rebuilding.")
