@@ -59,6 +59,16 @@ namespace QS3D.BricsCAD.V25
                 combined.AddRange(new DependencyHealthService().Inspect(project));
                 combined.AddRange(new LevelReferenceHealthService().Inspect(project));
                 combined.AddRange(new GeneratedGeometryStaleHealthService().Inspect(project));
+                combined.AddRange(new GeneratedGridAnnotationHealthService().Inspect(project));
+                combined.AddRange(GeneratedGridAnnotationRuntimeHealthService.Inspect(document, project));
+                combined.AddRange(new GeneratedSemanticTagHealthService().Inspect(project));
+                combined.AddRange(GeneratedSemanticTagRuntimeHealthService.Inspect(document, project));
+                combined.AddRange(GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project));
+                combined.AddRange(BbsNativeTableBuilder.Inspect(document, project));
+                combined.AddRange(BqNativeTableBuilder.Inspect(document, project));
+                combined.AddRange(DoorOpeningNativeTableBuilder.Inspect(document, project));
+                combined.AddRange(MaterialUsageNativeTableBuilder.Inspect(document, project));
+                combined.AddRange(RoomFinishNativeTableBuilder.Inspect(document, project));
                 combined.AddRange(new GeneratedRebarHealthService().InspectAll(project, liveLongitudinal, liveShape));
                 combined.AddRange(new GeneratedTieRebarHealthService().Inspect(project, liveTies));
                 combined.AddRange(new GeneratedBeamStirrupHealthService().Inspect(project, liveStirrups));
@@ -87,6 +97,16 @@ namespace QS3D.BricsCAD.V25
 
                 var window = new ModelHealthWindow(document, issues, issue =>
                 {
+                    if (string.IsNullOrWhiteSpace(issue.ElementId))
+                    {
+                        var artifactHandles = LocateProjectArtifactHandles(project, issue.Code).ToArray();
+                        if (artifactHandles.Length == 0) return;
+                        var artifactCount = CadHandleService.Select(document, artifactHandles);
+                        PaletteCoordinator.SetStatus("Health All Locate " + issue.Code + " • " + artifactCount + " CAD object");
+                        if (artifactCount > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                        return;
+                    }
+
                     var element = project.FindElement(issue.ElementId);
                     if (element == null) return;
                     var handles = LocateHandles(element, issue.Code).ToArray();
@@ -119,9 +139,35 @@ namespace QS3D.BricsCAD.V25
                 .ToArray();
         }
 
+        private static IEnumerable<string> LocateProjectArtifactHandles(ProjectState project, string code)
+        {
+            var normalized = (code ?? string.Empty).ToUpperInvariant();
+            if (normalized.StartsWith("SEMANTIC_ELEMENT_TABLE_", StringComparison.Ordinal))
+                return MetadataHandle(project, SemanticElementTableBuilder.HandleKey);
+            if (normalized.StartsWith("BBS_", StringComparison.Ordinal))
+                return MetadataHandle(project, BbsNativeTableBuilder.Definition.HandleKey);
+            if (normalized.StartsWith("BQ_", StringComparison.Ordinal))
+                return MetadataHandle(project, BqNativeTableBuilder.Definition.HandleKey);
+            if (normalized.StartsWith("DOOR_OPENING_", StringComparison.Ordinal))
+                return MetadataHandle(project, DoorOpeningNativeTableBuilder.Definition.HandleKey);
+            if (normalized.StartsWith("MATERIAL_USAGE_", StringComparison.Ordinal))
+                return MetadataHandle(project, MaterialUsageNativeTableBuilder.Definition.HandleKey);
+            if (normalized.StartsWith("ROOM_FINISH_", StringComparison.Ordinal))
+                return MetadataHandle(project, RoomFinishNativeTableBuilder.Definition.HandleKey);
+            return Array.Empty<string>();
+        }
+
+        private static IEnumerable<string> MetadataHandle(ProjectState project, string key)
+        {
+            if (!project.Metadata.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
+            return new[] { raw.Trim() };
+        }
+
         private static IEnumerable<string> LocateHandles(ProjectElement element, string code)
         {
             var normalized = (code ?? string.Empty).ToUpperInvariant();
+            if (normalized.Contains("SEMANTIC_TAG")) return SplitPropertyHandles(element, GeneratedSemanticTagHealthService.HandlesKey);
+            if (normalized.Contains("GRID_ANNOTATION")) return SplitPropertyHandles(element, "GeneratedGridAnnotationHandles");
             if (normalized.Contains("PHYSICAL_OPENING_CUT")) return SplitPropertyHandles(element, "PhysicalOpeningCutSolidHandle");
             if (normalized.Contains("CURTAIN_FRAME")) return SplitPropertyHandles(element, "GeneratedCurtainFrameHandles");
             if (normalized.Contains("REBAR_FAB")) return RebarOwnerSlotHandles(element);
