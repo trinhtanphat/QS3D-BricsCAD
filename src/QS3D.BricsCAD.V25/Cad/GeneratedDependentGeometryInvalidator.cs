@@ -27,6 +27,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 Remove(element, "PhysicalOpeningCutSolidHandle");
                 Remove(element, "PhysicalOpeningCutFingerprint");
                 Remove(element, "PhysicalOpeningCutCount");
+                Remove(element, "PhysicalOpeningCutMode");
 
                 Remove(element, "GeneratedRebarHandles");
                 Remove(element, "GeneratedRebarCount");
@@ -82,6 +83,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 Remove(element, "GeneratedCurtainFrameDepthM");
                 Remove(element, "GeneratedCurtainFrameSourceLengthM");
                 Remove(element, "GeneratedCurtainFrameHeightM");
+                Remove(element, "GeneratedCurtainFrameConfigFingerprint");
                 Remove(element, "GeneratedCurtainFrameMode");
                 element.ClearGeneratedGeometryStale();
             }
