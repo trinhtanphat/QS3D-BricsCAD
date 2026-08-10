@@ -95,10 +95,7 @@ namespace QS3D.BricsCAD.V25.Services
             var seenElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var snapshot in snapshots)
             {
-                var ownership = GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle, out var generatedOwner, out var generatedSlot);
-                if (ownership == GeneratedHandleOwnershipLookupStatus.Ambiguous)
-                    throw new InvalidOperationException("Selected handle " + snapshot.Handle + " has ambiguous generated ownership. Resolve Model Health before source reconcile.");
-                if (ownership == GeneratedHandleOwnershipLookupStatus.Owned)
+                if (GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle, out var generatedOwner, out var generatedSlot))
                     throw new InvalidOperationException("Selected handle " + snapshot.Handle + " is QS3D-generated output owned by " + generatedOwner!.Id + "/" + generatedSlot + ". Select the authoritative source CAD instead.");
 
                 var matches = project.Elements

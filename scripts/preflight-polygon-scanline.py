@@ -22,6 +22,8 @@ def require(text: str, token: str, label: str) -> None:
 planner = read("src/QS3D.Core/Geometry/PolygonScanlineClipper.cs")
 smoke = read("tests/QS3D.Core.SmokeTests/PolygonScanlineClipperSmoke.cs")
 registration = read("tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs")
+mesh = read("src/QS3D.Core/Rebar/PolygonalSlabMeshPlanner.cs")
+mesh_smoke = read("tests/QS3D.Core.SmokeTests/PolygonalSlabMeshSmoke.cs")
 
 for token in [
     "MaxVertices = 4096",
@@ -46,6 +48,32 @@ for token in [
 ]:
     require(smoke, token, "polygon scanline smoke")
 
+for token in [
+    "PolygonalSlabMeshPlanner",
+    "PolygonScanlineClipper.NormalizeAndValidate",
+    "SubtractBoundaryClearance",
+    "AppendCapsuleIntersection",
+    "RebarMath.Add(cover, xRadius",
+    "RebarMath.Add(cover, yRadius",
+    "MaxBars = 8192",
+    "MaxForbiddenIntervalsPerScanline = 16384",
+    "Polygonal slab footprint leaves no cover-compliant X rebar segments",
+    "Polygonal slab footprint leaves no cover-compliant Y rebar segments",
+]:
+    require(mesh, token, "polygon mesh planner")
+
+for token in [
+    "RectangleMatchesLegacyLengthsAndCount",
+    "ConcaveFootprintSplitsBarsDeterministically",
+    "SlopedBoundaryRespectsEuclideanCover",
+    "SelfIntersectionFailsClosed",
+    "ImpossibleCoverFailsClosed",
+    "AggregateBarLimitFailsClosed",
+    "AssertBoundaryDistance",
+    "[ModuleInitializer]",
+]:
+    require(mesh_smoke, token, "polygon mesh smoke")
+
 require(registration, "PolygonScanlineClipperSmoke.Run();", "smoke registration")
 
-print("[PASS] bounded simple-polygon scanline clipping is covered for convex/concave/self-intersection/boundary cases")
+print("[PASS] bounded simple-polygon scanline clipping plus cover-safe polygonal slab/foundation mesh planning is statically guarded for rectangle compatibility, concavity, sloped edges, invalid topology, impossible cover and aggregate limits")

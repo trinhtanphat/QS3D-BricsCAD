@@ -42,6 +42,7 @@ namespace QS3D.Core.SmokeTests
             PolygonScanlineClipperSmoke.Run();
             SemanticTagRendererSmoke.Run();
             ProjectInterchangeJsonSmoke.Run();
+            RegenerationSubsetSmoke.Run();
         }
     }
 }

@@ -9,14 +9,17 @@ errors = []
 service = ROOT / "src/QS3D.BricsCAD.V25/Services/SourceReconcileService.cs"
 command = ROOT / "src/QS3D.BricsCAD.V25/SourceReconcileCommands.cs"
 ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/ProjectRibbonAugmenter.cs"
+engine = ROOT / "src/QS3D.Core/Services/RegenerationEngine.cs"
+smoke = ROOT / "tests/QS3D.Core.SmokeTests/RegenerationSubsetSmoke.cs"
+registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 doc = ROOT / "docs/SOURCE-EDIT-WORKFLOW.md"
 
 checks = {
     service: [
         "EntitySnapshotReader.ReadCurrentSelection(document)",
-        "GeneratedHandleOwnershipPolicy.TryFindOwner",
-        "GeneratedHandleOwnershipLookupStatus.Ambiguous",
-        "GeneratedHandleOwnershipLookupStatus.Owned",
+        "GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle, out var generatedOwner, out var generatedSlot)",
+        "is QS3D-generated output owned by",
+        "Select the authoritative source CAD instead.",
         "Source reconcile P0 requires exactly one authoritative source handle per semantic element",
         "ExpandInvalidationTargets",
         "candidate.DependsOn.Any(result.ContainsKey)",
@@ -27,6 +30,7 @@ checks = {
         "dependent.MarkDirty(ElementDirtyFlags.All)",
         "RegenerateAffectedToStable",
         "MaxStableRegenerationPasses = 8",
+        "engine.RegenerateDirtySubset(project, affectedIds)",
         "invalidation.CommitMetadata()",
         "project.Touch()",
         "transaction.Commit();",
@@ -56,6 +60,21 @@ checks = {
         '"Đồng bộ source CAD"',
         '"QS3DSYNCSOURCE"',
     ],
+    engine: [
+        "RegenerateDirtySubset(ProjectState project, IEnumerable<string> elementIds)",
+        "Unknown regeneration target: ",
+        "var targets = project.Elements.Where(x => ids.Contains(x.Id)).ToList();",
+        "return Regenerate(project, targets, targets.Count);",
+    ],
+    smoke: [
+        "RegeneratesOnlyRequestedElements",
+        "RejectsUnknownTarget",
+        "engine.RegenerateDirtySubset(project, new[] { selected.Id })",
+        "True(unrelated.Dirty != ElementDirtyFlags.None)",
+        'True(!unrelated.Quantities.ContainsKey("Count"))',
+        "Throws<KeyNotFoundException>",
+    ],
+    registration: ["RegenerationSubsetSmoke.Run();"],
     doc: [
         "`QS3DSYNCSOURCE`",
         "native BricsCAD source edits",
@@ -86,6 +105,10 @@ if service.is_file():
     restore = text.find("rollback.Restore(project)", flag)
     if min(prepare, refresh, regen, metadata, touch, commit, flag, restore) < 0 or not (prepare < refresh < regen < metadata < touch < commit < flag < restore):
         errors.append("Source reconcile must invalidate CAD -> refresh authoritative semantic state -> converge regeneration -> commit generated metadata/revision -> CAD commit, with project restore only on pre-commit failure")
+    if "GeneratedHandleOwnershipLookupStatus" in text:
+        errors.append("Source reconcile must use the canonical boolean GeneratedHandleOwnershipPolicy.TryFindOwner contract; GeneratedHandleOwnershipLookupStatus is not part of the current Core API")
+    if "engine.RegenerateDirty(project)" in text:
+        errors.append("Source reconcile must regenerate only the affected semantic closure, not unrelated dirty project elements")
     if "new Build3DCommands" in text or "QS3DBUILD3D" in text or "SendStringToExecute" in text:
         errors.append("Source reconcile service must not auto-rebuild native/generated geometry")
 
@@ -104,4 +127,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE reconciles only tracked authoritative source CAD, rejects generated/ambiguous/untracked selection, expands linked-host/DependsOn invalidation closure, removes generated dependents ownership-safely, refreshes source-derived semantic state, converges the affected closure before commit, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
+print("PASS: QS3DSYNCSOURCE reconciles only tracked authoritative source CAD, rejects generated/ambiguous/untracked selection through the canonical boolean generated-owner lookup, expands linked-host/DependsOn invalidation closure, removes generated dependents ownership-safely, refreshes source-derived semantic state, regenerates only the affected semantic closure to stability, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
