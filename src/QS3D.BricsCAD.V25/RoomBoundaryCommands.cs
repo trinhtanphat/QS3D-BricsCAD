@@ -26,15 +26,15 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
+                var tolerance = MetadataNumber(project, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d);
                 var arcSagitta = MetadataNumber(project, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d);
-                var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta);
+                var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance);
                 if (segments.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chọn LINE hoặc POLYLINE tạo biên phòng.");
+                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chọn LINE, POLYLINE hoặc ARC plan-view tạo biên phòng.");
                     return;
                 }
 
-                var tolerance = MetadataNumber(project, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d);
                 var minimumArea = MetadataNumber(project, "RoomBoundaryMinimumAreaM2", 0.5d, minimumExclusive: -1d);
                 var boundaries = new RoomBoundaryEngine().Discover(segments, tolerance, minimumArea);
                 if (boundaries.Count == 0)
