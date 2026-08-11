@@ -10,6 +10,8 @@ namespace QS3D.Core.Reporting
     public sealed class QuantityCalculationSettings
     {
         public const int CurrentSchemaVersion = 2;
+        public const int MaxObservedCategoryCodeCount = 256;
+        public const int MaxDirectedIntersectionRuleCount = MaxObservedCategoryCodeCount * MaxObservedCategoryCodeCount;
         private const string NullCategoryRuleMessage = "CategoryRules cannot contain null entries.";
         private const string NullIntersectionRuleMessage = "IntersectionRules cannot contain null entries.";
 
@@ -106,6 +108,11 @@ namespace QS3D.Core.Reporting
 
             CategoryRules = CategoryRules ?? new List<QuantityCategoryRuleSetting>();
             IntersectionRules = IntersectionRules ?? new List<QuantityIntersectionRuleSetting>();
+            if (CategoryRules.Count > MaxObservedCategoryCodeCount)
+                throw new InvalidOperationException("CategoryRules cannot contain more than " + MaxObservedCategoryCodeCount + " entries.");
+            if (IntersectionRules.Count > MaxDirectedIntersectionRuleCount)
+                throw new InvalidOperationException("IntersectionRules cannot contain more than " + MaxDirectedIntersectionRuleCount + " entries.");
+
             DimColor = string.IsNullOrWhiteSpace(DimColor) ? "#FFFFFF" : DimColor.Trim().ToUpperInvariant();
 
             RequireFiniteNonNegative(FormworkTolerance, nameof(FormworkTolerance));
@@ -122,22 +129,26 @@ namespace QS3D.Core.Reporting
             if (!IsHexColor(DimColor)) throw new InvalidOperationException("DimColor must use #RRGGBB format.");
 
             var categoryCodes = new HashSet<int>();
+            var observedCategoryCodes = new HashSet<int>();
             foreach (var rule in CategoryRules)
             {
                 if (rule == null) throw new InvalidOperationException(NullCategoryRuleMessage);
                 if (rule.Category < 0) throw new InvalidOperationException("Category code cannot be negative.");
                 if (!categoryCodes.Add(rule.Category)) throw new InvalidOperationException("Duplicate category rule for code " + rule.Category + ".");
+                AddObservedCategoryCode(observedCategoryCodes, rule.Category);
                 RequireFiniteNonNegative(rule.FaceAngleThresholdDeg, nameof(rule.FaceAngleThresholdDeg));
                 if (rule.FaceAngleThresholdDeg > 90d) throw new InvalidOperationException("FaceAngleThresholdDeg must be between 0 and 90 degrees.");
             }
 
-            var pairs = new HashSet<string>(StringComparer.Ordinal);
+            var pairs = new HashSet<long>();
             foreach (var rule in IntersectionRules)
             {
                 if (rule == null) throw new InvalidOperationException(NullIntersectionRuleMessage);
                 if (rule.Source < 0 || rule.Target < 0) throw new InvalidOperationException("Intersection category codes cannot be negative.");
-                var key = rule.Source + ":" + rule.Target;
-                if (!pairs.Add(key)) throw new InvalidOperationException("Duplicate intersection rule for " + key + ".");
+                AddObservedCategoryCode(observedCategoryCodes, rule.Source);
+                AddObservedCategoryCode(observedCategoryCodes, rule.Target);
+                var key = PairKey(rule.Source, rule.Target);
+                if (!pairs.Add(key)) throw new InvalidOperationException("Duplicate intersection rule for " + rule.Source + ":" + rule.Target + ".");
             }
         }
 
@@ -161,6 +172,18 @@ namespace QS3D.Core.Reporting
         {
             if (rule == null) throw new InvalidOperationException(NullIntersectionRuleMessage);
             return rule.Clone();
+        }
+
+        private static void AddObservedCategoryCode(HashSet<int> observedCategoryCodes, int categoryCode)
+        {
+            if (!observedCategoryCodes.Add(categoryCode)) return;
+            if (observedCategoryCodes.Count > MaxObservedCategoryCodeCount)
+                throw new InvalidOperationException("Quantity settings cannot reference more than " + MaxObservedCategoryCodeCount + " distinct category codes.");
+        }
+
+        private static long PairKey(int sourceCode, int targetCode)
+        {
+            return ((long)(uint)sourceCode << 32) | (uint)targetCode;
         }
 
         private static void RequireFiniteNonNegative(double value, string name)
