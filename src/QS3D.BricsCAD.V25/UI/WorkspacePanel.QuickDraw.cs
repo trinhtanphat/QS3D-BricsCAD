@@ -40,15 +40,28 @@ namespace QS3D.BricsCAD.V25.UI
 
             var quick = CreateMenuItem("Vẽ Nhanh (Ctrl+D)", OnQuickDrawClick);
             quick.Tag = "QS3DDRAWACTIVE";
+            var advanced = CreateMenuItem("Vẽ tùy chỉnh (Ctrl+Shift+D)", OnAdvancedDrawClick);
+            advanced.Tag = "QS3DDRAWACTIVEADV";
             menu.Items.Insert(0, quick);
-            menu.Items.Insert(1, new Separator());
+            menu.Items.Insert(1, advanced);
+            menu.Items.Insert(2, new Separator());
         }
 
         private void OnQuickDrawPreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (Keyboard.Modifiers != ModifierKeys.Control || e.Key != Key.D) return;
-            ExecuteWorkspaceQuickDraw();
-            e.Handled = true;
+            if (e.Key != Key.D) return;
+            var modifiers = Keyboard.Modifiers;
+            if (modifiers == ModifierKeys.Control)
+            {
+                ExecuteWorkspaceDraw(advanced: false);
+                e.Handled = true;
+                return;
+            }
+            if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            {
+                ExecuteWorkspaceDraw(advanced: true);
+                e.Handled = true;
+            }
         }
 
         private void OnFamilyQuickDrawDoubleClick(object sender, MouseButtonEventArgs e)
@@ -57,31 +70,33 @@ namespace QS3D.BricsCAD.V25.UI
             var item = FindContainer<ListBoxItem>(FamilyList, e.OriginalSource as DependencyObject);
             if (item == null) return;
             item.IsSelected = true;
-            ExecuteWorkspaceQuickDraw();
+            ExecuteWorkspaceDraw(advanced: false);
             e.Handled = true;
         }
 
-        private void OnQuickDrawClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceQuickDraw();
+        private void OnQuickDrawClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceDraw(advanced: false);
+        private void OnAdvancedDrawClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceDraw(advanced: true);
 
-        private void ExecuteWorkspaceQuickDraw()
+        private void ExecuteWorkspaceDraw(bool advanced)
         {
             try
             {
                 if (!(FamilyList.SelectedItem is ProjectFamily family))
                 {
-                    SetStatus("Chọn một Family / Type trước khi Vẽ Nhanh.");
+                    SetStatus("Chọn một Family / Type trước khi vẽ.");
                     return;
                 }
 
                 // Reuse the same canonical active-Family write used by other Workspace authoring
-                // actions. QS3DDRAWACTIVE itself remains read-only/non-creating and owns no geometry.
+                // actions. Both active-family dispatchers remain read-only/non-creating and own no geometry.
                 _viewModel.SetActiveFamily(family);
-                SetStatus("Vẽ Nhanh → " + family.Name + " • " + family.Category);
-                Send("QS3DDRAWACTIVE");
+                var command = advanced ? "QS3DDRAWACTIVEADV" : "QS3DDRAWACTIVE";
+                SetStatus((advanced ? "Vẽ tùy chỉnh → " : "Vẽ Nhanh → ") + family.Name + " • " + family.Category);
+                Send(command);
             }
             catch (Exception ex)
             {
-                SetStatus("Vẽ Nhanh lỗi: " + ex.Message);
+                SetStatus((advanced ? "Vẽ tùy chỉnh lỗi: " : "Vẽ Nhanh lỗi: ") + ex.Message);
             }
         }
     }

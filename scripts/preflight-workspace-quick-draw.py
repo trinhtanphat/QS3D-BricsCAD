@@ -10,7 +10,7 @@ errors = []
 
 for path in (SOURCE, BASE, DOC):
     if not path.is_file():
-        errors.append("missing Workspace quick-draw dependency: " + str(path.relative_to(ROOT)))
+        errors.append("missing Workspace active-family draw dependency: " + str(path.relative_to(ROOT)))
 
 if SOURCE.is_file():
     text = SOURCE.read_text(encoding="utf-8")
@@ -23,18 +23,25 @@ if SOURCE.is_file():
         "FamilyList.MouseDoubleClick += OnFamilyQuickDrawDoubleClick;",
         'CreateMenuItem("Vẽ Nhanh (Ctrl+D)", OnQuickDrawClick)',
         'quick.Tag = "QS3DDRAWACTIVE";',
-        "Keyboard.Modifiers != ModifierKeys.Control || e.Key != Key.D",
+        'CreateMenuItem("Vẽ tùy chỉnh (Ctrl+Shift+D)", OnAdvancedDrawClick)',
+        'advanced.Tag = "QS3DDRAWACTIVEADV";',
+        "if (e.Key != Key.D) return;",
+        "modifiers == ModifierKeys.Control",
+        "modifiers == (ModifierKeys.Control | ModifierKeys.Shift)",
+        "ExecuteWorkspaceDraw(advanced: false)",
+        "ExecuteWorkspaceDraw(advanced: true)",
         "FindContainer<ListBoxItem>(FamilyList, e.OriginalSource as DependencyObject)",
         "item.IsSelected = true;",
         "if (!(FamilyList.SelectedItem is ProjectFamily family))",
         "_viewModel.SetActiveFamily(family);",
-        'Send("QS3DDRAWACTIVE");',
+        'var command = advanced ? "QS3DDRAWACTIVEADV" : "QS3DDRAWACTIVE";',
+        "Send(command);",
     ):
         if token not in text:
-            errors.append("Workspace quick-draw interaction missing: " + token)
+            errors.append("Workspace active-family draw interaction missing: " + token)
 
-    if text.count('Send("QS3DDRAWACTIVE");') != 1:
-        errors.append("Workspace gesture layer must funnel through exactly one QS3DDRAWACTIVE send site")
+    if text.count("Send(command);") != 1:
+        errors.append("Workspace gesture layer must funnel Quick/Advanced through exactly one send site")
 
     for forbidden in (
         "new DirectDrawCommands",
@@ -57,25 +64,27 @@ if BASE.is_file():
         "private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e)",
     ):
         if token not in text:
-            errors.append("Workspace quick-draw partial relies on missing canonical helper: " + token)
+            errors.append("Workspace active-family partial relies on missing canonical helper: " + token)
 
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
     for token in (
         "double-click a Family / Type",
         "Ctrl+D",
+        "Ctrl+Shift+D",
         "Vẽ Nhanh (Ctrl+D)",
+        "Vẽ tùy chỉnh (Ctrl+Shift+D)",
         "SetActiveFamily",
         "exactly the selected live Family",
         "LOCAL-008",
     ):
         if token not in text:
-            errors.append("Workspace quick-draw documentation missing: " + token)
+            errors.append("Workspace active-family draw documentation missing: " + token)
 
 if errors:
-    print("Workspace quick draw preflight FAILED:")
+    print("Workspace active-family draw preflight FAILED:")
     for error in errors:
         print("- " + error)
     sys.exit(1)
 
-print("Workspace quick draw preflight PASS")
+print("Workspace active-family draw preflight PASS")
