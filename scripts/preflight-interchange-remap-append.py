@@ -33,7 +33,7 @@ if not errors:
         "MapOptional(plan.Remap, InterchangeRemapIdentityKind.Zone",
         "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, dependency)",
         "string.Equals(property.Key, HostWallIdKey, StringComparison.OrdinalIgnoreCase)",
-        "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, property.Value.Trim())",
+        "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, sourceHost)",
         "LooksLikeUnregisteredSemanticReference(property.Key, property.Value)",
         "IsImportedOwnershipMetadata(property.Key)",
         'k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
@@ -77,12 +77,20 @@ if not errors:
         "source.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString()))",
         "target.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString()))",
         "NameKey(x.NameScope, x.Name)",
-        "NextName(sourceItem.Name, sourceItem.NameScope, occupiedNames)",
+        "private const int ZoneMaxIdLength = 64;",
+        "private const int ZoneMaxNameLength = 120;",
+        "private const int FloorMaxIdLength = 64;",
+        "private const int FloorMaxNameLength = 120;",
+        "private const int FamilyMaxIdLength = 80;",
+        "private const int FamilyMaxNameLength = 160;",
+        "private const int ElementMaxIdLength = 128;",
+        "NextId(sourceId, occupiedIds, maxIdLength)",
+        "NextName(sourceName, sourceItem.NameScope, occupiedNames, maxNameLength)",
         "public string NameScope { get; }",
     ]
     for needle in required_planner:
         if needle not in p:
-            errors.append("remap planner missing family/ownership/name-scope preview contract: " + needle)
+            errors.append("remap planner missing family/ownership/name-scope/runtime-bound preview contract: " + needle)
 
     # Planner preview and executor must recognize the exact same conservative ID/ref suffix set.
     reference_suffixes = ["Id", "Ids", "Ref", "Refs", "RefId", "RefIds"]
@@ -162,4 +170,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New keeps blocked plans inspectable, fails closed before mutation, aligns Family/Element opaque-reference policy, scopes Family names by category, strips incoming native ownership, and preserves existing target identities.")
+print("Import As New keeps blocked plans inspectable, fails closed before mutation, aligns Family/Element opaque-reference policy, enforces runtime-bounded remap identities, strips incoming native ownership, and preserves existing target identities.")
