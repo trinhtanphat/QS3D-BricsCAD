@@ -7,8 +7,18 @@ from pathlib import Path
 
 SHA40 = re.compile(r"^[0-9a-fA-F]{40}$")
 SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
-SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._/+:-]{1,160}$")
+SEMVER_IDENTIFIER = re.compile(r"^[0-9A-Za-z-]+$")
 ALLOWED_STATUS = {"PASS", "FAIL", "SKIPPED", "NOT_RUN", "FAIL_OR_INCOMPLETE"}
+SAFE_PUBLIC_BRANCHES = frozenset({"main", "master", "HEAD"})
+SAFE_QUALIFICATION_SCOPES = frozenset(
+    {
+        "incomplete",
+        "source-build",
+        "source-build+runtime-smoke",
+        "source-build+runtime-smoke+package",
+        "source-build+runtime-smoke+package+authenticode",
+    }
+)
 SAFE_STEP_NAMES = frozenset(
     {
         "Exact Git SHA / clean tree",
@@ -28,16 +38,58 @@ SAFE_STEP_NAMES = frozenset(
 )
 
 
-def safe_token(value, fallback="(not recorded)"):
-    text = str(value or "").strip()
-    if not text or not SAFE_TOKEN.fullmatch(text):
-        return fallback
-    return text
-
-
 def normalized_status(value, fallback="UNKNOWN"):
     text = str(value or "").strip().upper()
     return text if text in ALLOWED_STATUS else fallback
+
+
+def sanitized_qualification_scope(value):
+    text = str(value or "").strip()
+    return text if text in SAFE_QUALIFICATION_SCOPES else "legacy-or-unknown"
+
+
+def sanitized_branch(value):
+    text = str(value or "").strip()
+    if not text:
+        return "(not recorded)"
+    return text if text in SAFE_PUBLIC_BRANCHES else "(redacted non-main branch)"
+
+
+def strict_release_tag(value):
+    text = str(value or "").strip()
+    if not text:
+        return "(none)"
+    if not text.startswith("v"):
+        return "(redacted invalid tag)"
+
+    version = text[1:]
+    if version.count("+") > 1:
+        return "(redacted invalid tag)"
+    version_core, plus, build = version.partition("+")
+    if version_core.count("-") > 1:
+        return "(redacted invalid tag)"
+    core, dash, prerelease = version_core.partition("-")
+
+    core_parts = core.split(".")
+    if len(core_parts) != 3:
+        return "(redacted invalid tag)"
+    for part in core_parts:
+        if not part.isdigit() or (len(part) > 1 and part.startswith("0")):
+            return "(redacted invalid tag)"
+
+    if dash:
+        prerelease_parts = prerelease.split(".")
+        if any(not part or not SEMVER_IDENTIFIER.fullmatch(part) for part in prerelease_parts):
+            return "(redacted invalid tag)"
+        if any(part.isdigit() and len(part) > 1 and part.startswith("0") for part in prerelease_parts):
+            return "(redacted invalid tag)"
+
+    if plus:
+        build_parts = build.split(".")
+        if any(not part or not SEMVER_IDENTIFIER.fullmatch(part) for part in build_parts):
+            return "(redacted invalid tag)"
+
+    return text
 
 
 def sanitized_step_name(value, ordinal):
@@ -64,7 +116,7 @@ def build_summary(report):
         "NOT_RUN" if bool(report.get("runtimeSkipped")) else "UNKNOWN",
     )
     interactive_status = normalized_status(report.get("fullInteractiveMatrixStatus"), "NOT_RUN")
-    qualification_scope = safe_token(report.get("qualificationScope"), "legacy-or-unknown")
+    qualification_scope = sanitized_qualification_scope(report.get("qualificationScope"))
 
     exact_sha = str(report.get("exactSha") or "").strip()
     if not SHA40.fullmatch(exact_sha):
@@ -74,8 +126,8 @@ def build_summary(report):
     if not SHA256.fullmatch(plugin_hash):
         plugin_hash = "NOT AVAILABLE"
 
-    branch = safe_token(report.get("branch"), "(not recorded)")
-    release_tag = safe_token(report.get("releaseTag"), "(none)")
+    branch = sanitized_branch(report.get("branch"))
+    release_tag = strict_release_tag(report.get("releaseTag"))
     runtime_skipped = bool(report.get("runtimeSkipped"))
     package_requested = bool(report.get("packageRequested"))
     customer_release_qualified = yes_no_unknown(report, "customerReleaseQualified")
