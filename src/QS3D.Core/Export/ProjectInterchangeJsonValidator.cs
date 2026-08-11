@@ -506,6 +506,7 @@ namespace QS3D.Core.Export
 
         private static bool TryCategory(string? value, out ElementCategory category)
         {
+            category = default;
             var raw = value ?? string.Empty;
             return raw.Length > 0 && string.Equals(raw, raw.Trim(), StringComparison.Ordinal) &&
                    Enum.TryParse(raw, false, out category) && Enum.IsDefined(typeof(ElementCategory), category);

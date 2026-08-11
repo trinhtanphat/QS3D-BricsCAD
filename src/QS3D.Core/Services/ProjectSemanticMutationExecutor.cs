@@ -62,7 +62,7 @@ namespace QS3D.Core.Services
             ProjectState project,
             string operationName,
             Func<T> mutation,
-            ProjectSemanticMutationJournal journal = null)
+            ProjectSemanticMutationJournal? journal = null)
         {
             return Execute(project, operationName, mutation, null, journal);
         }
@@ -71,8 +71,8 @@ namespace QS3D.Core.Services
             ProjectState project,
             string operationName,
             Func<T> mutation,
-            Action preCommitValidation,
-            ProjectSemanticMutationJournal journal = null)
+            Action? preCommitValidation,
+            ProjectSemanticMutationJournal? journal = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (mutation == null) throw new ArgumentNullException(nameof(mutation));
