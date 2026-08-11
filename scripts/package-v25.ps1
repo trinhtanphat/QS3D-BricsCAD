@@ -42,12 +42,12 @@ $pluginProject = Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj
 $coreProject = Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj'
 $productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D plugin product version'
 $coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject) -Label 'QS3D Core product version'
-if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::OrdinalIgnoreCase)) {
+if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) {
     throw "QS3D plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion"
 }
 if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
     $expectedTag = 'v' + $productVersion
-    if (-not [string]::Equals($env:RELEASE_TAG.Trim(), $expectedTag, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not [string]::Equals($env:RELEASE_TAG.Trim(), $expectedTag, [StringComparison]::Ordinal)) {
         throw "RELEASE_TAG must exactly match the source product version. Expected $expectedTag, got $env:RELEASE_TAG."
     }
 }
