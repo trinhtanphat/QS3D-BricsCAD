@@ -212,13 +212,17 @@ namespace QS3D.Core.Navigation
             var dirtyRaw = (string)root.Attribute("dirtyOnly");
             if (!bool.TryParse(dirtyRaw, out var dirtyOnly)) throw new InvalidDataException("Project browser workspace dirtyOnly is invalid.");
 
-            var expectedChildren = new[] { "Categories", "FloorIds", "ZoneIds", "ExpandedPaths", "SelectedElementIds" };
+            var expectedChildren = new HashSet<XName>(new[]
+            {
+                XName.Get("Categories"), XName.Get("FloorIds"), XName.Get("ZoneIds"),
+                XName.Get("ExpandedPaths"), XName.Get("SelectedElementIds")
+            });
             foreach (var child in root.Elements())
-                if (!expectedChildren.Contains(child.Name.LocalName, StringComparer.Ordinal))
+                if (!expectedChildren.Contains(child.Name))
                     throw new InvalidDataException("Project browser workspace contains an unsupported element: " + child.Name + ".");
             foreach (var name in expectedChildren)
                 if (root.Elements(name).Count() != 1)
-                    throw new InvalidDataException("Project browser workspace requires exactly one " + name + " element.");
+                    throw new InvalidDataException("Project browser workspace requires exactly one " + name.LocalName + " element.");
 
             var categories = ReadCategories(root.Element("Categories"));
             var floorIds = ReadValues(root.Element("FloorIds"), "Id");
