@@ -20,17 +20,31 @@ for filename, command in EXPORTS.items():
         errors.append(f"missing {filename}")
         continue
     text = path.read_text(encoding="utf-8")
-    if f'CommandMethod("{command}"' not in text:
+    marker = f'[CommandMethod("{command}"'
+    start = text.find(marker)
+    if start < 0:
         errors.append(f"{filename}: missing {command}")
-    if "ExistingProjectMutationContext.TryGet(document, out var project)" not in text:
+        continue
+    next_command = text.find("[CommandMethod(", start + len(marker))
+    body = text[start:next_command if next_command >= 0 else len(text)]
+
+    bind_token = "ExistingProjectMutationContext.TryGet(document, out var project)"
+    read_only_token = "ProjectContextCoordinator.TryGetReadOnly(document, out var project)"
+    regen_token = "RegenerateDirty(project)"
+    cancel_token = "if (dialog.ShowDialog() != true) return;"
+
+    if bind_token not in body:
         errors.append(f"{filename}: regeneration export must bind canonical existing project")
-    if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" in text:
+    if read_only_token in body:
         errors.append(f"{filename}: export must not regenerate a detached read-only project")
-    if "RegenerateDirty(project)" not in text:
+    if "ProjectContextCoordinator.GetOrCreate(document)" in body:
+        errors.append(f"{filename}: export must not create replacement project state")
+    if regen_token not in body:
         errors.append(f"{filename}: expected semantic regeneration before export")
-    cancel = text.find("if (dialog.ShowDialog() != true) return;")
-    bind = text.find("ExistingProjectMutationContext.TryGet(document, out var project)")
-    regen = text.find("RegenerateDirty(project)")
+
+    cancel = body.find(cancel_token)
+    bind = body.find(bind_token)
+    regen = body.find(regen_token)
     if min(cancel, bind, regen) < 0 or not cancel < bind < regen:
         errors.append(f"{filename}: lifecycle order must be dialog cancel -> canonical bind -> regenerate")
 
@@ -40,4 +54,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: regeneration-based CSV/XLSX exports bind the canonical existing project after dialog confirmation.")
+print("PASS: regeneration-based CSV/XLSX export methods bind the canonical existing project after dialog confirmation without constraining separate read-only Show paths.")
