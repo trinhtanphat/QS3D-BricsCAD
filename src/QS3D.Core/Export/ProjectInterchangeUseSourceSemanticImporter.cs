@@ -486,8 +486,31 @@ namespace QS3D.Core.Export
                     .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 if (handles.Length == 0) continue;
+
+                foreach (var handle in handles)
+                {
+                    try
+                    {
+                        if (!GeneratedHandleOwnershipPolicy.TryFindOwner(target, handle, out var owner, out _) ||
+                            owner == null ||
+                            !ReferenceEquals(owner, element))
+                            throw new InvalidOperationException(
+                                "UseSource native cleanup handle " + handle + " is not exclusively owned by affected target element " + element.Id + ".");
+                    }
+                    catch (InvalidOperationException error)
+                    {
+                        throw new InvalidOperationException(
+                            "UseSource native cleanup ownership is ambiguous or unsafe for handle " + handle + "/" + element.Id + ": " + error.Message,
+                            error);
+                    }
+                }
+
                 cleanup.Add(new ProjectInterchangeNativeCleanupRequirement(element.Id, handles));
             }
+
+            if (cleanup.Count > 0 && string.IsNullOrWhiteSpace(target.DrawingFingerprint))
+                throw new InvalidOperationException(
+                    "UseSource native cleanup requires a non-empty target drawing fingerprint before cleanup authorization can be created.");
 
             var plan = new ProjectInterchangeUseSourceSemanticPlan(
                 target.ProjectId,
