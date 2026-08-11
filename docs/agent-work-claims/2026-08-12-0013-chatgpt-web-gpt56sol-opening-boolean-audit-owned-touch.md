@@ -1,6 +1,6 @@
 # Work claim — Physical opening boolean audit-owned Touch
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T00:13:00+07:00`
 - Baseline main SHA: `c61c5a4e74743426882403b28bd072f1eb987698`
@@ -8,43 +8,27 @@
 
 ## Reason
 
-Both straight and curved physical-opening boolean services apply host metadata through `CommitSemanticUpdate(...)` and record a dedicated `AuditTrail` mutation while the CAD transaction is still rollback-capable. `AuditTrail.Record(...)` owns `ProjectState.Touch()`, but both batch lifecycles then call `if (pending.Count > 0) project.Touch();` before `transaction.Commit()`. A successful N-host operation therefore advances `ChangeVersion` N+1 times rather than exactly once per audited host mutation, creating unnecessary freshness churn.
+Both straight and curved physical-opening boolean services applied host metadata through `CommitSemanticUpdate(...)` and recorded a dedicated `AuditTrail` mutation while the CAD transaction was still rollback-capable, then performed an additional batch-level `project.Touch()`. Because `AuditTrail.Record(...)` owns revision advancement, successful batches advanced `ChangeVersion` once beyond their audited host mutations.
 
 ## Reserved scope
 
-Remove only the redundant batch-level explicit Touch from:
+Remove only the redundant explicit batch-level Touch from `OpeningBooleanService` and `CurvedOpeningBooleanService`, preserving cutter geometry, host/opening placement, fingerprints/target state, native ownership, rollback, document lock/transaction and post-commit regen. Add one shared auto-discovered static preflight.
 
-- `OpeningBooleanService`
-- `CurvedOpeningBooleanService`
+## Completion evidence
 
-Preserve all cutter geometry, host/opening placement, fingerprint/target-state behavior, generated ownership validation, rollback, document lock/native transaction, best-effort viewport regen and existing audit records. Add one auto-discovered static preflight guarding the audit-owned revision invariant for both services.
-
-## Expected surfaces
-
-- `src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs`
-- `src/QS3D.BricsCAD.V25/Cad/CurvedOpeningBooleanService.cs`
-- `scripts/preflight-opening-boolean-audit-owned-touch.py`
-- this claim file
+- PR #567 merged to `main` as `531f73b17f6a515692619b1158965668f6d97716`.
+- PR scope was exactly three files: both reserved services plus `scripts/preflight-opening-boolean-audit-owned-touch.py`.
+- The PR reported `+62/-2`; the two source changes are exactly the two removed batch-level Touch lines and the additions are the new static preflight.
+- Compare against 27 concurrent commits after the implementation branch baseline showed no overlap with either reserved service.
+- Straight service retains `PhysicalOpeningCutTargetState.Write(...)` and audit action `geometry.opening.boolean`; curved service retains target-state write and `geometry.opening.boolean.curved`.
+- Rollback snapshot, document lock/native transaction, semantic update before CAD commit and post-commit best-effort `TryRegen` remain intact.
+- Post-merge exact blob verification: straight `3fa8e0bb4332c370eefa800f26d9b1d388f8039c`; curved `5a448c2215821df96e5607423befa6cfdf3e4c60`; preflight `bb13a4bf573457b3fc45c3549d2e8d67fe482a14`.
+- No force-push, GitHub Actions dispatch, release workflow, or licensed BricsCAD V25 runtime claim.
 
 ## Excluded scope
 
-- No changes to `OpeningCutPlanner`, curved footprint geometry, BooleanOperation behavior, host category support, source resolution, opening placement, generated/native ownership, physical-opening fingerprints/target sets, UI/commands, or `AuditTrail` semantics.
-- No GitHub Actions dispatch or release workflow.
-- No claim of licensed BricsCAD V25 runtime qualification.
-
-## Validation plan
-
-- Re-fetch claim and both target blob SHAs after registration; never force-push.
-- Preserve `ProjectStateSnapshot.Capture(project)`, native transaction, per-host semantic commit before CAD commit, rollback restore and post-commit `TryRegen` behavior.
-- Preserve audit actions `geometry.opening.boolean` and `geometry.opening.boolean.curved`.
-- Remove only the explicit batch-level `project.Touch()` following the audited update loop.
-- Add a shared static preflight requiring these ordering/ownership-of-revision invariants and rejecting reintroduction of explicit Touch in the `CutLinkedOpenings` lifecycle.
-- Record source/static verification only; exact V25 behavior remains LOCAL_ONLY.
-
-## Coordination
-
-The older cross-layer atomicity commit intentionally moved physical-opening metadata/audit/touch under the native transaction. This claim retains that atomic ordering while eliminating only the now-redundant explicit Touch because AuditTrail owns revision advancement. No current claim or recent commit was found reserving this exact revision-semantics lane.
+No `OpeningCutPlanner`, curved footprint geometry, BooleanOperation behavior, host-category support, source resolution, placement, generated/native ownership, fingerprint/target-set policy, UI/command or `AuditTrail` semantics changed.
 
 ## Completion condition
 
-Both physical-opening boolean services advance project revision only through their existing per-host audit records, retain their rollback/native/geometry contracts, include a shared static regression gate, are merged to `main`, and this claim is marked `COMPLETED`.
+Completed: straight and curved physical-opening boolean services now advance project revision only through their existing per-host audit records and the shared static regression gate is on `main`.
