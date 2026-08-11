@@ -15,6 +15,13 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var selectedIds = CadSelectionGuard.ReadImpliedSelection(document);
+                if (selectedIds.Length == 0)
+                {
+                    Report(document, "Rebar 3D: chọn Column semantic có closed rectangle POLYLINE + RebarNotation.");
+                    return;
+                }
+
                 var project = ExistingProjectMutationContext.Require(document, "Rebar 3D");
                 var count = ColumnRebarSolidBuilder.BuildSelected(document, project);
                 var message = count == 0
