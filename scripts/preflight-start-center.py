@@ -31,6 +31,16 @@ def forbid(text, token, label):
         raise AssertionError(label + " must not contain: " + token)
 
 
+def section(text, start, end, label):
+    start_index = text.find(start)
+    if start_index < 0:
+        raise AssertionError(label + " missing start token: " + start)
+    end_index = text.find(end, start_index + len(start))
+    if end_index < 0:
+        raise AssertionError(label + " missing end token: " + end)
+    return text[start_index:end_index]
+
+
 def registered_adapter_commands():
     registrations = {}
     pattern = re.compile(r'CommandMethod\s*\(\s*"([^"]+)"')
@@ -57,6 +67,15 @@ def main():
     require(commands, "window.RefreshFromActiveDocument();", "active-DWG refresh callback")
     require(commands, "_window.Closed += OnStartCenterClosed;", "named Start Center close lifecycle")
     require(commands, "_documentActivatedSubscribed", "idempotent activation subscription guard")
+    activation_handler = section(
+        commands,
+        "private static void OnDocumentActivated",
+        "private static void OnStartCenterClosed",
+        "BricsCAD document activation handler")
+    require(activation_handler, "try", "activation refresh exception boundary")
+    require(activation_handler, "catch (System.Exception ex)", "activation refresh exception containment")
+    require(activation_handler, 'e.Document?.Editor.WriteMessage("\\nQS3DSTART refresh warning: " + ex.Message);', "activation refresh diagnostic")
+    require(activation_handler, "catch (System.Exception)", "activation diagnostic exception containment")
     forbid(commands, "_window.Closed += (_, __) => _window = null;", "anonymous Start Center close lifecycle")
     forbid(commands, "Process.Start", "Start Center command surface")
 
@@ -144,7 +163,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
