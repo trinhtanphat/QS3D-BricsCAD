@@ -18,31 +18,35 @@ if FAMILY.is_file():
     for token in (
         "var owned = ResolveOwnedElements(project, elements, target);",
         "var pending = new List<PendingFamilyAssignment>();",
-        "project.FindFamily(element.FamilyId)",
+        "var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();",
+        "project.FindFamily(previousFamilyId)",
         "foreach (var item in pending)",
         "ResolveFamilyMembers(project, family.Id)",
     ):
         if token not in text:
             errors.append("ProjectFamilyService.cs missing whole-batch preflight token: " + token)
-    lookup = text.find("project.FindFamily(element.FamilyId)")
+    normalize = text.find("var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();")
+    lookup = text.find("project.FindFamily(previousFamilyId)", normalize if normalize >= 0 else 0)
     mutation = text.find("element.FamilyId = target.Id;")
-    if lookup < 0 or mutation < 0 or lookup > mutation:
-        errors.append("ProjectFamilyService.Assign must resolve previous Family identities before the first FamilyId mutation.")
+    if min(normalize, lookup, mutation) < 0 or not normalize < lookup < mutation:
+        errors.append("ProjectFamilyService.Assign must normalize and resolve previous Family identities before the first FamilyId mutation.")
 
 if BULK.is_file():
     text = BULK.read_text(encoding="utf-8")
     for token in (
         "var pending = new List<PendingFamilyAssignment>();",
-        "project.FindFamily(element.FamilyId)",
+        "var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();",
+        "project.FindFamily(previousFamilyId)",
         "pending.Add(new PendingFamilyAssignment",
         "foreach (var item in pending)",
     ):
         if token not in text:
             errors.append("BulkEditService.cs missing Family assignment preflight token: " + token)
-    lookup = text.find("project.FindFamily(element.FamilyId)")
+    normalize = text.find("var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();")
+    lookup = text.find("project.FindFamily(previousFamilyId)", normalize if normalize >= 0 else 0)
     mutation = text.find("element.FamilyId = family.Id;")
-    if lookup < 0 or mutation < 0 or lookup > mutation:
-        errors.append("BulkEditService.AssignFamily must resolve previous Family identities before the first FamilyId mutation.")
+    if min(normalize, lookup, mutation) < 0 or not normalize < lookup < mutation:
+        errors.append("BulkEditService.AssignFamily must normalize and resolve previous Family identities before the first FamilyId mutation.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -64,4 +68,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ProjectFamilyService and BulkEditService resolve all failure-prone previous-family identities before mutating any assignment target.")
+print("PASS: ProjectFamilyService and BulkEditService normalize and resolve all failure-prone previous-family identities before mutating any assignment target.")
