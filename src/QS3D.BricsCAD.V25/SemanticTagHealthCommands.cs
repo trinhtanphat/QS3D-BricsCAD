@@ -18,7 +18,12 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    Report(document, "Semantic Tag Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.");
+                    return;
+                }
+
                 var persisted = new GeneratedSemanticTagHealthService().Inspect(project);
                 var runtime = GeneratedSemanticTagRuntimeHealthService.Inspect(document, project);
                 var issues = persisted.Concat(runtime)
@@ -28,9 +33,7 @@ namespace QS3D.BricsCAD.V25
 
                 if (issues.Count == 0)
                 {
-                    var ok = "Semantic Tag Health: PASS.";
-                    PaletteCoordinator.SetStatus(ok);
-                    document.Editor.WriteMessage("\nQS3D " + ok);
+                    Report(document, "Semantic Tag Health: PASS.");
                     return;
                 }
 
@@ -42,16 +45,18 @@ namespace QS3D.BricsCAD.V25
                 Locate(document, project, issues);
                 var errors = issues.Count(x => x.Severity == HealthSeverity.Error);
                 var warnings = issues.Count - errors;
-                var status = "Semantic Tag Health: " + errors + " error(s), " + warnings + " warning(s).";
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
+                Report(document, "Semantic Tag Health: " + errors + " error(s), " + warnings + " warning(s).");
             }
             catch (Exception ex)
             {
-                var message = "QS3DTAGHEALTH lỗi: " + ex.Message;
-                try { PaletteCoordinator.SetStatus(message); } catch { }
-                try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
+                Report(document, "QS3DTAGHEALTH lỗi: " + ex.Message);
             }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
 
         private static void Locate(Document document, ProjectState project, IEnumerable<ModelHealthIssue> issues)
