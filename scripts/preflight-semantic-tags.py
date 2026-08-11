@@ -140,11 +140,35 @@ for token in [
     "GeneratedGeometryService.RequireMatchingOwnership",
     "if (!(entity is MText))",
     "ProjectStateSnapshot.Capture(project)",
+    "ParseExpectedHandles",
+    "CadHandleService.NormalizeHexHandle",
+    "ValidateCompleteLiveTagSet",
+    "ids.Count != handles.Count",
+    "OpenMode.ForRead",
+    "Refusing destructive remove before any semantic tag is erased.",
+    "Refusing partial destructive remove.",
     '"documentation.semantic-tag.remove"',
     "transaction.Commit();",
     "rollback.Restore(project)",
 ]:
     require(remove_service, token, "semantic tag removal service")
+
+remove_validate = remove_service.find("var ids = ValidateCompleteLiveTagSet(document.Database, project, element, ownership, handles);")
+remove_write = remove_service.find("OpenMode.ForWrite", remove_validate)
+remove_clear = remove_service.find("ClearGeneratedTagMetadata(element);", remove_write)
+remove_commit = remove_service.find("transaction.Commit();", remove_clear)
+if min(remove_validate, remove_write, remove_clear, remove_commit) < 0 or not remove_validate < remove_write < remove_clear < remove_commit:
+    print("[FAIL] semantic tag removal service: complete live-handle validation must precede the first write/erase and metadata clear must remain after all destructive work")
+    sys.exit(1)
+
+for forbidden in [
+    "allowMissing: true",
+    "if (id.IsNull || !id.IsValid) continue;",
+    "if (entity == null || entity.IsErased) continue;",
+]:
+    if forbidden in remove_service:
+        print("[FAIL] semantic tag removal service must fail closed instead of skipping missing live handles: " + forbidden)
+        sys.exit(1)
 
 for token in [
     '[CommandMethod("QS3DTAGREMOVE", CommandFlags.Modal)]',
@@ -209,4 +233,4 @@ for token in [
 ]:
     require(doc, token, "semantic tag lifecycle docs")
 
-print("[PASS] semantic tag rendering remains bounded/model-linked and native create/refresh/remove/live-health paths preserve guarded ownership, rollback, read-only runtime diagnostics and release wiring; MLeader/sheet/exact-V25 runtime remain explicit gates")
+print("[PASS] semantic tag rendering remains bounded/model-linked and native create/refresh/remove/live-health paths preserve complete live-handle prevalidation, guarded ownership, rollback, read-only runtime diagnostics and release wiring; MLeader/sheet/exact-V25 runtime remain explicit gates")
