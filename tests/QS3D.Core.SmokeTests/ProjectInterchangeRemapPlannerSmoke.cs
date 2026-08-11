@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             ElementOpaqueReferenceBlocksPreviewEvenForExternalValue();
             BlockedAppendPlanRemainsInspectableAndImportFailsClosed();
             OverLimitCatalogIdentitiesAreBoundedBeforeImport();
+            IncomingDuplicateNamesAreRemappedWithinBatch();
             PortableLevelReferencesAreTypedAndRemapped();
             RegisteredReferenceMissingFromSourceBlocksPreview();
         }
@@ -121,6 +122,38 @@ namespace QS3D.Core.SmokeTests
             Equal(zone.TargetId, imported!.ZoneId);
             Equal(floor.TargetId, imported.FloorId);
             Equal(family.TargetId, imported.FamilyId);
+        }
+
+        private static void IncomingDuplicateNamesAreRemappedWithinBatch()
+        {
+            var target = NewProject("target", ElementCategory.Column, "TARGET-FAM", "Target Family", "TARGET-ELEM");
+            var source = new ProjectState("source", "Source");
+            source.Zones.Add(new ZoneDefinition("ZA", "Shared Zone"));
+            source.Zones.Add(new ZoneDefinition("ZB", "Shared Zone"));
+            source.Floors.Add(new FloorDefinition("FA", "Shared Floor", 0d));
+            source.Floors.Add(new FloorDefinition("FB", "Shared Floor", 3d));
+            source.Families.Add(new ProjectFamily("FAMA", "Shared Family", ElementCategory.Beam));
+            source.Families.Add(new ProjectFamily("FAMB", "Shared Family", ElementCategory.Beam));
+            var json = ProjectInterchangeJsonExporter.Build(source);
+            var plan = ProjectInterchangeRemapAppendImporter.Plan(target, json);
+            True(plan.CanImport);
+            var zones = plan.Remap.Items.Where(x => x.Kind == InterchangeRemapIdentityKind.Zone).OrderBy(x => x.SourceId).ToList();
+            var floors = plan.Remap.Items.Where(x => x.Kind == InterchangeRemapIdentityKind.Floor).OrderBy(x => x.SourceId).ToList();
+            var families = plan.Remap.Items.Where(x => x.Kind == InterchangeRemapIdentityKind.Family).OrderBy(x => x.SourceId).ToList();
+            False(zones[0].NameChanged);
+            True(zones[1].NameChanged);
+            False(floors[0].NameChanged);
+            True(floors[1].NameChanged);
+            False(families[0].NameChanged);
+            True(families[1].NameChanged);
+            True(!string.Equals(zones[0].TargetName, zones[1].TargetName, StringComparison.OrdinalIgnoreCase));
+            True(!string.Equals(floors[0].TargetName, floors[1].TargetName, StringComparison.OrdinalIgnoreCase));
+            True(!string.Equals(families[0].TargetName, families[1].TargetName, StringComparison.OrdinalIgnoreCase));
+            var result = ProjectInterchangeRemapAppendImporter.Import(target, json);
+            Equal(2, result.ZonesAdded);
+            Equal(2, result.FloorsAdded);
+            Equal(2, result.FamiliesAdded);
+            Equal(0, result.ElementsAdded);
         }
 
         private static void PortableLevelReferencesAreTypedAndRemapped()
