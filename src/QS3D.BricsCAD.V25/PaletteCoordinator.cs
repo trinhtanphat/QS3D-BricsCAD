@@ -89,8 +89,10 @@ namespace QS3D.BricsCAD.V25
 
         public static void ResetForUnavailableProject(string status)
         {
-            ResetPreservingVisibility();
-            SetStatus(status);
+            EnsureCreated();
+            _workspacePanel?.ClearProject(status);
+            try { _rightPanel?.Refresh(); }
+            catch { }
         }
 
         private static void ResetPreservingVisibility()
