@@ -12,11 +12,13 @@ namespace QS3D.BricsCAD.V25
             RibbonBootstrapper.TryInitialize();
             ReferenceWallRibbonAugmenter.TryInitialize();
             ProjectRibbonAugmenter.TryInitialize();
+            QuickWorkflowRibbonAugmenter.TryInitialize();
         }
         public void Terminate()
         {
             DocumentLifecycleCoordinator.Stop();
             PaletteCoordinator.Dispose();
+            QuickWorkflowRibbonAugmenter.Reset();
             ReferenceWallRibbonAugmenter.Reset();
             ProjectRibbonAugmenter.Reset();
             RibbonBootstrapper.Reset();

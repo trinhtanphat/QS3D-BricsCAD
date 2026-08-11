@@ -510,13 +510,14 @@ namespace QS3D.BricsCAD.V25.Cad
         private static void MarkOwned(Database database, Transaction transaction, Table table, string projectId, string scheduleId, string fingerprint)
         {
             EnsureRegApp(database, transaction);
+            var scheduleToken = Token(scheduleId);
             using (var marker = new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, OwnershipVersion),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, projectId.Trim()),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, DocumentId),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, DocumentKind),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, scheduleId.Trim()),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, scheduleToken),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, fingerprint)))
                 table.XData = marker;
         }
@@ -527,13 +528,19 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 if (marker == null) return false;
                 var values = marker.AsArray();
-                return values.Length >= 7 &&
+                if (values.Length < 7) return false;
+                var normalizedScheduleId = NormalizeScheduleId(scheduleId);
+                var persistedScheduleIdentity = Convert.ToString(values[5].Value, CultureInfo.InvariantCulture) ?? string.Empty;
+                var scheduleMatches =
+                    string.Equals(persistedScheduleIdentity, Token(normalizedScheduleId), StringComparison.Ordinal) ||
+                    string.Equals(persistedScheduleIdentity, normalizedScheduleId, StringComparison.OrdinalIgnoreCase);
+                return
                     string.Equals(Convert.ToString(values[0].Value, CultureInfo.InvariantCulture), RegAppName, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(Convert.ToString(values[1].Value, CultureInfo.InvariantCulture), OwnershipVersion, StringComparison.Ordinal) &&
                     string.Equals(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId, StringComparison.Ordinal) &&
                     string.Equals(Convert.ToString(values[3].Value, CultureInfo.InvariantCulture), DocumentId, StringComparison.Ordinal) &&
                     string.Equals(Convert.ToString(values[4].Value, CultureInfo.InvariantCulture), DocumentKind, StringComparison.Ordinal) &&
-                    string.Equals(Convert.ToString(values[5].Value, CultureInfo.InvariantCulture), scheduleId, StringComparison.OrdinalIgnoreCase) &&
+                    scheduleMatches &&
                     string.Equals(Convert.ToString(values[6].Value, CultureInfo.InvariantCulture), fingerprint, StringComparison.OrdinalIgnoreCase);
             }
         }

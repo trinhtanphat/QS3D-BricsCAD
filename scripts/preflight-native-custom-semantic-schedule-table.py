@@ -42,6 +42,11 @@ for token in (
     'Token = token;',
     'public string Token { get; }',
     '!string.Equals(keys.Token, Token(storedScheduleId), StringComparison.Ordinal)',
+    'var scheduleToken = Token(scheduleId);',
+    'new TypedValue((int)DxfCode.ExtendedDataAsciiString, scheduleToken)',
+    'var persistedScheduleIdentity = Convert.ToString(values[5].Value, CultureInfo.InvariantCulture) ?? string.Empty;',
+    'string.Equals(persistedScheduleIdentity, Token(normalizedScheduleId), StringComparison.Ordinal)',
+    'string.Equals(persistedScheduleIdentity, normalizedScheduleId, StringComparison.OrdinalIgnoreCase)',
 ):
     if token not in builder:
         errors.append("custom schedule builder missing contract token: " + token)
@@ -50,6 +55,8 @@ if "semanticTable.Rows.Count == 0" in builder:
     errors.append("valid zero-match custom schedules must remain renderable as header-only native Tables")
 if "table.Erase();" not in builder or builder.find("HasMatchingOwnership(table, project.ProjectId, scheduleId, fingerprint)") > builder.find("table.Erase();"):
     errors.append("native replacement/removal must verify exact project/schedule/fingerprint ownership before erase")
+if 'new TypedValue((int)DxfCode.ExtendedDataAsciiString, scheduleId.Trim())' in builder:
+    errors.append("custom schedule XData must not write the Unicode-capable raw ScheduleId into an ASCII-only XData field")
 
 validate_start = builder.find("private static void ValidatePersistedState")
 validate_end = builder.find("private static void ErasePrevious", validate_start + 1)
@@ -152,4 +159,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: native custom semantic schedules preserve header-only rendering, prompt-before-bind freshness, bind ScheduleId to the actual owner bucket token, fail closed on malformed/partial owner metadata, retain canonical-token selection safety, keep per-schedule ownership-safe Table lifecycle, Hub wiring, and Health/Release diagnostics without becoming a BQ/BBS engine.")
+print("PASS: native custom semantic schedules preserve header-only rendering, prompt-before-bind freshness, bind ScheduleId to the actual owner bucket token, keep Unicode schedule identities out of ASCII-only XData while accepting legacy raw-ID ownership, fail closed on malformed/partial owner metadata, retain canonical-token selection safety, keep per-schedule ownership-safe Table lifecycle, Hub wiring, and Health/Release diagnostics without becoming a BQ/BBS engine.")

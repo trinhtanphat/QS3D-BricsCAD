@@ -152,8 +152,9 @@ namespace QS3D.Core.Domain
 
         public void Touch()
         {
+            var nextChangeVersion = checked(ChangeVersion + 1L);
             UpdatedUtc = DateTime.UtcNow;
-            ChangeVersion = checked(ChangeVersion + 1L);
+            ChangeVersion = nextChangeVersion;
         }
 
         internal void RestorePersistenceState(DateTime updatedUtc, long changeVersion)

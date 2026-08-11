@@ -57,10 +57,16 @@ else:
             errors.append("2D conversion must re-check Model Space/UCS after prompts")
 
 for token in (
+    "public string GeometryFingerprint { get; set; } = string.Empty;",
+    "GeometryFingerprint = BuildLineGeometryFingerprint(line)",
+    "GeometryFingerprint = BuildOpenPolylineGeometryFingerprint(polyline)",
     "private static void RequireSameSources",
     "left.Id.Equals(right.Id)",
     "left.Kind != right.Kind",
     "string.Equals(left.Handle, right.Handle, StringComparison.OrdinalIgnoreCase)",
+    "string.IsNullOrWhiteSpace(left.GeometryFingerprint)",
+    "string.IsNullOrWhiteSpace(right.GeometryFingerprint)",
+    "string.Equals(left.GeometryFingerprint, right.GeometryFingerprint, StringComparison.Ordinal)",
     "QS3D project đã thay đổi trong lúc xác nhận 2D -> 3D",
     "QS3D project đã xuất hiện trong lúc xác nhận 2D -> 3D",
     "Drawing unit policy đã thay đổi trong lúc xác nhận 2D -> 3D",
@@ -105,4 +111,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DCONVERT2D/QS3DPLAN2WALLS revalidate active drawing, Model Space/UCS, units, exact selected sources and canonical project identity before snapshot/mutation while preserving ownership-scoped batch compensation.")
+print("PASS: QS3DCONVERT2D/QS3DPLAN2WALLS revalidate active drawing, Model Space/UCS, units, exact selected source identity plus canonical geometry, and canonical project identity before snapshot/mutation while preserving ownership-scoped batch compensation.")

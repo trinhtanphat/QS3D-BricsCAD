@@ -30,6 +30,27 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
+            if (modifiers == ModifierKeys.None && e.Key == Key.Enter &&
+                PropertyList != null && PropertyList.IsKeyboardFocusWithin)
+            {
+                var source = e.OriginalSource as DependencyObject;
+                var combo = FindPropertyEditorAncestor<ComboBox>(source);
+                if (combo != null && combo.IsEditable)
+                {
+                    combo.GetBindingExpression(ComboBox.TextProperty)?.UpdateSource();
+                    e.Handled = true;
+                    return;
+                }
+
+                var textBox = FindPropertyEditorAncestor<TextBox>(source);
+                if (textBox != null)
+                {
+                    textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+                    e.Handled = true;
+                    return;
+                }
+            }
+
             if (modifiers == ModifierKeys.None && e.Key == Key.Escape &&
                 PropertySearch != null && PropertySearch.IsKeyboardFocusWithin &&
                 !string.IsNullOrEmpty(PropertySearch.Text))
@@ -37,6 +58,17 @@ namespace QS3D.BricsCAD.V25.UI
                 PropertySearch.Clear();
                 e.Handled = true;
             }
+        }
+
+        private static T? FindPropertyEditorAncestor<T>(DependencyObject? source) where T : DependencyObject
+        {
+            var current = source;
+            while (current != null)
+            {
+                if (current is T typed) return typed;
+                current = ParentOf(current);
+            }
+            return null;
         }
 
         private void OnPropertySearchChanged(object sender, TextChangedEventArgs e)

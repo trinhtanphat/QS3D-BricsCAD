@@ -51,9 +51,11 @@ namespace QS3D.Core.Services
         public void Reload()
         {
             if (_lock == null) throw new InvalidOperationException("Acquire the project write lock before reloading.");
-            Project = _store.Load(Path);
-            Audit = AuditTrail.ForProject(Project);
-            Audit.Record("PROJECT_RELOAD", string.Empty, Path);
+            var project = _store.Load(Path);
+            var audit = AuditTrail.ForProject(project);
+            audit.Record("PROJECT_RELOAD", string.Empty, Path);
+            Project = project;
+            Audit = audit;
         }
 
         public void Dispose()

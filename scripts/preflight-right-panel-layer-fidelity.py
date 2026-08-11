@@ -37,7 +37,8 @@ checks = {
     "code": [
         "private bool _refreshingLayers", "_refreshingLayers = true", "_refreshingLayers = false",
         "if (_refreshingLayers) return", "Color.FromRgb(item.Red, item.Green, item.Blue)", "brush.Freeze()",
-        "private void ReloadLayers()", "_layerSnapshots = DrawingCatalogReader.ReadLayers(doc);",
+        "private void ReloadLayers()", "foreach (var item in DrawingCatalogReader.ReadLayers(doc))",
+        "CollectionViewSource.GetDefaultView(_viewModel.Layers)",
         "private void ApplyLayerFilter()", "SetSelectedLayerLocks", "LayerVisibilityService.SetLocked", "ReloadLayers();",
     ],
 }
@@ -79,9 +80,12 @@ if files["code"].is_file():
                 errors.append("RightPanel ReloadLayers must re-read live CAD then rebuild the filtered view: " + token)
         if "DrawingCatalogReader.ReadLayers" in filter_body:
             errors.append("RightPanel ApplyLayerFilter must remain presentation-only over cached live snapshots")
-        for token in ("_refreshingLayers = true", "finally", "_refreshingLayers = false"):
+        for token in ("view.Filter =", "view.Refresh();", "_viewModel.SetLayerCounts"):
             if token not in filter_body:
-                errors.append("RightPanel cached view rebuild missing checkbox reentrancy guard: " + token)
+                errors.append("RightPanel cached collection-view filter contract missing: " + token)
+        for forbidden in ("_refreshingLayers", "_viewModel.Layers.Clear", "new SolidColorBrush", "LayerVisibilityService"):
+            if forbidden in filter_body:
+                errors.append("RightPanel presentation-only filter must not rebuild rows or mutate CAD: " + forbidden)
         for label, body, service in (
             ("checkbox", checkbox_body, "LayerVisibilityService.SetVisible"),
             ("bulk visibility", bulk_visibility_body, "LayerVisibilityService.SetVisible"),

@@ -24,7 +24,7 @@ required = {
         "rollback.Restore(project)",
         "FinalizeUi(document, createdElement!",
         "EnsureActive(document",
-        "RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
+        ".RegenerateDirtySubset(project, new[] { createdElement.Id })",
         "WallSolidBuilder.BuildSelectedLineWalls",
         "PolylineWallSolidBuilder.BuildSelected",
         "StructuralSolidBuilder.BuildSelected",

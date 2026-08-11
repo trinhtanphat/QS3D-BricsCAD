@@ -48,7 +48,7 @@ namespace QS3D.Core.Reporting
                     : Multiply(widthM, heightM, element.Id + "/OpeningAreaM2");
                 var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
                 var familyName = family?.Name ?? element.FamilyId;
-                var category = element.Category.ToString();
+                var category = ScheduleCategory(element);
                 var hostId = element.Properties.TryGetValue("HostWallId", out var hostRaw) ? (hostRaw ?? string.Empty).Trim() : string.Empty;
                 var key = string.Join("\u001f",
                     element.FloorId,
@@ -83,6 +83,17 @@ namespace QS3D.Core.Reporting
 
             foreach (var row in rows.Values) row.HostCount = row.HostIds.Count;
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static string ScheduleCategory(ProjectElement element)
+        {
+            if (element.Category != ElementCategory.WallOpening) return element.Category.ToString();
+            if (!element.Properties.TryGetValue("OpeningUsage", out var raw) || string.IsNullOrWhiteSpace(raw))
+                return ElementCategory.WallOpening.ToString();
+            var usage = raw.Trim();
+            return string.Equals(usage, "Window", StringComparison.OrdinalIgnoreCase)
+                ? "Window"
+                : ElementCategory.WallOpening.ToString();
         }
 
         private static double Number(ProjectElement element, ProjectFamily? family, string key, double fallback)

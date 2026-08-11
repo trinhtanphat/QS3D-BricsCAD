@@ -152,6 +152,49 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        internal static string LinkSingleOpening(Document document, ProjectState project, string openingId)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (string.IsNullOrWhiteSpace(openingId)) throw new ArgumentException("Opening id is required.", nameof(openingId));
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException("Auto Host single-opening mutation requires the DWG that started authoring to remain active.");
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) || !ReferenceEquals(currentProject, project))
+                throw new InvalidOperationException("Auto Host single-opening mutation requires the exact canonical project authorized by the authoring command.");
+
+            var opening = project.FindElement(openingId) ??
+                throw new InvalidOperationException("Opening element not found: " + openingId);
+            if (opening.Category != ElementCategory.Door && opening.Category != ElementCategory.WallOpening)
+                throw new InvalidOperationException("Element is not an opening/door: " + opening.Id);
+
+            var maxGapM = MetadataNumber(project, "AutoHostMaxGapM", 0.25d, allowZero: true);
+            var ambiguityM = MetadataNumber(project, "AutoHostAmbiguityM", 0.02d, allowZero: true);
+            var elevationToleranceM = MetadataNumber(project, "AutoHostElevationToleranceM", 0.25d, allowZero: true);
+            var sagittaM = MetadataNumber(project, "WallArcSagittaM", 0.002d, allowZero: false);
+            OpeningHostMatchResult match;
+
+            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                var location = ReadOpeningLocation(document, transaction, opening);
+                var candidates = ReadHostSegments(document, transaction, project, opening, location.ReferenceElevationM, elevationToleranceM, sagittaM);
+                match = new OpeningHostMatcher().Match(location.Plan, candidates, maxGapM, ambiguityM);
+                transaction.Commit();
+            }
+
+            if (match.Status == OpeningHostMatchStatus.Ambiguous)
+                throw new InvalidOperationException(
+                    "Opening " + opening.Id + " has ambiguous Auto Host candidates " + match.HostElementId + " / " +
+                    match.SecondaryHostElementId + ". Refusing to guess a host.");
+            if (match.Status != OpeningHostMatchStatus.Matched || string.IsNullOrWhiteSpace(match.HostElementId))
+                throw new InvalidOperationException(
+                    "Opening " + opening.Id + " has no unique compatible host within " +
+                    maxGapM.ToString("0.###", CultureInfo.InvariantCulture) + " m.");
+
+            new HostLinkService().LinkOpening(project, opening.Id, match.HostElementId);
+            if (UpdateAutoHostMetadata(opening, match.GapM)) project.Touch();
+            return match.HostElementId;
+        }
+
         private static HashSet<string> ReadSelectedHandles(Document document)
         {
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);

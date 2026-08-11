@@ -7,18 +7,6 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class RightPanel
     {
-        private bool TryHandleRightPanelInteractionShortcut(KeyEventArgs e, ModifierKeys modifiers)
-        {
-            if (modifiers == ModifierKeys.None && e.Key == Key.F5)
-            {
-                OnRefreshClick(this, new RoutedEventArgs());
-                e.Handled = true;
-                return true;
-            }
-
-            return false;
-        }
-
         private void OnDrawingListPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             var item = FindRightPanelContainer<ListViewItem>(DrawingList, e.OriginalSource as DependencyObject);

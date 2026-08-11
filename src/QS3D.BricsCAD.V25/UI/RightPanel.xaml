@@ -130,8 +130,9 @@
                         </StackPanel>
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                             <Border Style="{StaticResource RightBadge}" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Layers.Count, StringFormat={}{0} lớp}"
-                                           Style="{StaticResource Caption}"/>
+                                <TextBlock Text="{Binding LayerCountText}"
+                                           Style="{StaticResource Caption}"
+                                           ToolTip="Số lớp đang hiển thị / tổng số lớp"/>
                             </Border>
                             <Button Content="Làm mới" Click="OnRefreshClick"
                                     Style="{StaticResource DenseButton}"/>

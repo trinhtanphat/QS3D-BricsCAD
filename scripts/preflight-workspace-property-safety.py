@@ -54,12 +54,16 @@ if not element.is_file():
 else:
     text = element.read_text(encoding="utf-8")
     for token in (
+        "var affectsGeneratedGeometry = ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key);",
+        "var affectsGeneratedOutput = ElementGeometryPolicy.AffectsGeneratedOutput(Category, key);",
         "var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;",
-        "if (ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key)) flags |= ElementDirtyFlags.Geometry;",
-        "MarkDirty(flags);",
+        "if (affectsGeneratedGeometry) flags |= ElementDirtyFlags.Geometry;",
+        "MarkDirtyCore(flags, affectsGeneratedOutput);",
     ):
         if token not in text:
-            errors.append("ProjectElement property-specific dirty policy missing: " + token)
+            errors.append("ProjectElement property-specific dirty/stale policy missing: " + token)
+    if "MarkDirtyCore(flags, true);" in text:
+        errors.append("ProjectElement must not mark generated geometry stale for non-geometric property changes")
 
 if not panel.is_file():
     errors.append("missing WorkspacePanel.xaml.cs")
@@ -103,7 +107,7 @@ else:
         "OnChanged(nameof(IsEditable));",
         "var next = !_isReadOnly && value;",
         "if (_canReset == next) return;",
-        "if (string.Equals(_value, requested, StringComparison.Ordinal)) return;",
+        "if ((IsReadOnly || Apply == null) && string.Equals(_value, requested, StringComparison.Ordinal)) return;",
         "var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;",
         "bool.TryParse(text, out var parsed)",
         'text.Equals("yes", StringComparison.OrdinalIgnoreCase)',
@@ -111,11 +115,13 @@ else:
         'text.Equals("bật", StringComparison.CurrentCultureIgnoreCase)',
     ):
         if token not in text:
-            errors.append("Property row reactive/no-op/boolean safety missing: " + token)
-    no_op = text.find("if (string.Equals(_value, requested, StringComparison.Ordinal)) return;")
+            errors.append("Property row reactive/revalidation/boolean safety missing: " + token)
+    if "if (string.Equals(_value, requested, StringComparison.Ordinal)) return;" in text:
+        errors.append("Editable PropertyRow values must not skip Apply solely because the displayed text is unchanged; live semantic state may have changed modelessly")
+    guarded_no_op = text.find("if ((IsReadOnly || Apply == null) && string.Equals(_value, requested, StringComparison.Ordinal)) return;")
     apply = text.find("var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;")
-    if no_op < 0 or apply < 0 or no_op > apply:
-        errors.append("PropertyRowViewModel must reject exact display-value no-ops before invoking Apply")
+    if guarded_no_op < 0 or apply < 0 or guarded_no_op > apply:
+        errors.append("Only read-only/unbound display no-ops may short-circuit before Apply")
 
 print("QS3D Workspace property safety preflight")
 if errors:
@@ -123,4 +129,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Workspace property rows keep property-specific dirty/geometry invalidation, read-only rows can never retain or regain reset state, exact editor no-ops avoid mutation callbacks, Instance reset resolves live Family state, selection scope fails closed, and numeric/boolean editors stay validated.")
+print("PASS: Workspace property rows honor Core property-specific dirty/stale invalidation, read-only rows cannot retain reset state, editable same-text commits revalidate live modeless state, Instance reset resolves live Family state, selection scope fails closed, and numeric/boolean editors stay validated.")

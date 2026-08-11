@@ -21,8 +21,11 @@ if SESSION.is_file():
         'Audit.Record("PROJECT_SAVE", string.Empty, Path);',
         "_store.Save(Project, Path);",
         "snapshot.Restore(Project);",
-        "Project = _store.Load(Path);",
-        'Audit.Record("PROJECT_RELOAD", string.Empty, Path);',
+        "var project = _store.Load(Path);",
+        "var audit = AuditTrail.ForProject(project);",
+        'audit.Record("PROJECT_RELOAD", string.Empty, Path);',
+        "Project = project;",
+        "Audit = audit;",
     ):
         if token not in text:
             errors.append("ProjectSession.cs missing bound/persisted audit token: " + token)
