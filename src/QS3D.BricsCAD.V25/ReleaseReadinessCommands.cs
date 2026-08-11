@@ -49,6 +49,9 @@ namespace QS3D.BricsCAD.V25
                 issues.AddRange(new GeneratedFoundationMeshHealthService().Inspect(project, liveGenerated));
                 issues.AddRange(new GeneratedCurtainFrameHealthService().Inspect(project, liveGenerated));
                 issues.AddRange(CurtainWallFrameLiveStateService.Inspect(document, project));
+                issues.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, liveGenerated));
+                issues.AddRange(CurtainWallPanelLiveStateService.Inspect(document, project));
+                issues.AddRange(GeneratedCurtainPanelRuntimeHealthService.Inspect(document, project));
                 issues.AddRange(PhysicalOpeningCutLiveStateService.Inspect(document, project));
                 issues.AddRange(new GeneratedGeometryStaleHealthService().Inspect(project));
                 issues.AddRange(new GeneratedRebarModeHealthService().Inspect(project));

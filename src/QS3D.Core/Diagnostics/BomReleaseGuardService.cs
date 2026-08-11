@@ -14,6 +14,7 @@ namespace QS3D.Core.Diagnostics
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
             issues.AddRange(new RoomFinishHealthService().Inspect(project));
+            issues.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, liveGeneratedHandles));
 
             var included = new List<ProjectElement>();
             foreach (var element in project.Elements)

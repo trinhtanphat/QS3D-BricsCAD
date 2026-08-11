@@ -37,7 +37,7 @@ else:
         "không có phase Curtain 3D nào được commit",
         'phase = "live fingerprint stamp";',
         "CurtainWallFrameLiveStateService.TryStampSelected(document, project, out stampWarning)",
-        "FinalizeUi(document, hostSolids, frameSolids, stamped, regenerated, stampWarning)",
+        "FinalizeUi(document, hostSolids, frameSolids, panelSolids, checked(stamped + panelsStamped), regenerated, stampWarning)",
         "UI sync warning: ",
     )
     for token in required:

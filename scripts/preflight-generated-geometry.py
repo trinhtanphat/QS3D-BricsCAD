@@ -61,7 +61,7 @@ if invalidator.is_file():
     for needle in (
         "CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix",
         "ClearGeneratedGeometryStale",
-        "EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership);",
+        "EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership, curtainPanelOwnership);",
         "ParseExpectedHandles", "CadHandleService.NormalizeHexHandle",
         "ResolveCompleteSet", "ids.Count != expected.Count",
         "Refusing destructive invalidation before any generated geometry is erased.",
@@ -69,7 +69,7 @@ if invalidator.is_file():
     ):
         if needle not in text: errors.append("dependent generated-geometry invalidation missing: " + needle)
 
-    strict_index = text.find("EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership);")
+    strict_index = text.find("EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership, curtainPanelOwnership);")
     mutation_index = text.find("GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);")
     if strict_index < 0 or mutation_index < 0 or strict_index >= mutation_index:
         errors.append("dependent generated-geometry invalidation must validate every expected live handle set before the first destructive replacement")

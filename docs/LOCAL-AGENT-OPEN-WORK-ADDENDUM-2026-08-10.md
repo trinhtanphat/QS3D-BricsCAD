@@ -16,30 +16,29 @@ This file extends `docs/LOCAL-V25-QUALIFICATION.md` and `docs/LOCAL-AGENT-REMAIN
 
 ### Current boundary
 
-`src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs` intentionally runs semantic regeneration, LINE host replacement, path host replacement, LINE frame replacement and path-frame replacement as separate stages. Each canonical host/frame builder is internally cross-layer atomic, but a later stage can fail after an earlier stage has already committed. The command correctly reports `PARTIAL COMMIT`; do not remove that warning until a stronger contract is implemented and proven.
+Current `src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs` captures a `ProjectStateSnapshot`, performs semantic regeneration, then runs the canonical LINE/path host and frame replacement builders inside one outer BricsCAD transaction. A failure before the outer commit is expected to abort every nested native phase and restore the semantic snapshot. Live-fingerprint stamping and UI synchronization remain post-commit and warning-only.
+
+`scripts/preflight-curtain-orchestration-boundary.py` guards that source structure. It does not prove real V25 nested-transaction behavior. LOCAL-002 therefore remains `PENDING_LOCAL`, and obsolete `PARTIAL COMMIT` wording must not be restored unless actual runtime evidence disproves the current transaction contract and source is changed accordingly.
 
 ### Acceptable implementation directions
 
-Choose one architecture and document it before coding:
+The current source chose **shared native transaction orchestration**. Keep the outer transaction and semantic snapshot as one contract while extending the command. Do not add a panel transaction after the outer commit, fake rollback by restoring only semantic metadata, or erase foreign/ambiguous generated objects.
 
-1. **Shared native transaction orchestration**: refactor the participating host/frame builders so the high-level command can prepare all work and commit one BricsCAD transaction while semantic state remains rollback-capable; or
-2. **Recoverable compensation journal**: snapshot the complete previous host/frame semantic ownership plus enough native replacement state to deterministically restore the previous valid family when a later stage fails.
-
-Do not fake whole-command rollback by restoring only `.qsdb` metadata after native solids have committed. Do not erase foreign/ambiguous generated objects during compensation.
+If licensed V25 failure injection shows nested transactions do not roll back as expected, stop qualification and choose an explicit recoverable compensation journal before describing the combined command as atomic.
 
 ### Required source acceptance
 
 - pre-plan and validate all semantic/rule/ownership/count limits before the first destructive native mutation;
-- deterministic ownership for both LINE and open/bulged path host/frame families;
+- deterministic ownership for LINE/open-bulged path host, frame and any panel family added to the command;
 - injected failure after each stage proves either no mutation or deterministic restoration to the previous complete valid state;
 - rollback/compensation failure is surfaced as a distinct health/readiness error, never as success;
-- `QS3DHEALTHALL` and `QS3DRELEASECHECK` detect an interrupted journal/recovery state;
-- save/reopen does not lose a pending recovery marker if a journal design is used;
-- add a dedicated `preflight-curtain-orchestration-atomicity.py` only after the contract is real.
+- `QS3DHEALTHALL` and `QS3DRELEASECHECK` detect stale/missing/inconsistent generated output;
+- save/reopen preserves the committed ownership contract;
+- keep `scripts/preflight-curtain-orchestration-boundary.py` aligned with every new native phase.
 
 ### Required V25 proof
 
-On the same exact SHA, test LINE, straight open POLYLINE and bulged POLYLINE GlassWall cases. Force failure in path-host, LINE-frame and path-frame stages. PASS means the drawing and semantic project end in the previous valid complete state or in a clearly persisted recoverable state defined by the design; no silent half-host/half-frame result is allowed.
+On the same exact SHA, test LINE, straight open POLYLINE and bulged POLYLINE GlassWall cases. Force failure during semantic regeneration and every LINE/path host, frame and panel phase present in that SHA. PASS means a pre-commit failure leaves the previous native and semantic state complete and unchanged; a post-commit fingerprint/UI failure leaves the committed geometry intact and reports a warning. No silent half-host/half-frame/panel result is allowed. The exact panel matrix is in `docs/CURTAIN-NATIVE-PANELS.md`.
 
 ## P1 — native Direct Draw preview / repeated authoring
 

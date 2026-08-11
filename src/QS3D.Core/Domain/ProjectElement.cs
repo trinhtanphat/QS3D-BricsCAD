@@ -28,6 +28,7 @@ namespace QS3D.Core.Domain
         public const string GeneratedWallMeshStateKey = "QS3D.GeneratedWallMesh.State";
         public const string GeneratedFoundationMeshStateKey = "QS3D.GeneratedFoundationMesh.State";
         public const string GeneratedCurtainFrameStateKey = "QS3D.GeneratedCurtainFrame.State";
+        public const string GeneratedCurtainPanelStateKey = "QS3D.GeneratedCurtainPanel.State";
         public const string GeneratedSolidStaleSnapshotKey = "QS3D.GeneratedSolid.StaleSnapshot";
         public const string GeneratedRebarStaleSnapshotKey = "QS3D.GeneratedRebar.StaleSnapshot";
         public const string GeneratedShapeRebarStaleSnapshotKey = "QS3D.GeneratedShapeRebar.StaleSnapshot";
@@ -37,6 +38,7 @@ namespace QS3D.Core.Domain
         public const string GeneratedWallMeshStaleSnapshotKey = "QS3D.GeneratedWallMesh.StaleSnapshot";
         public const string GeneratedFoundationMeshStaleSnapshotKey = "QS3D.GeneratedFoundationMesh.StaleSnapshot";
         public const string GeneratedCurtainFrameStaleSnapshotKey = "QS3D.GeneratedCurtainFrame.StaleSnapshot";
+        public const string GeneratedCurtainPanelStaleSnapshotKey = "QS3D.GeneratedCurtainPanel.StaleSnapshot";
 
         private const string StaleValue = "stale";
         private const string GeneratedSolidHandleKey = "GeneratedSolidHandle";
@@ -48,6 +50,9 @@ namespace QS3D.Core.Domain
         private const string GeneratedWallMeshHandlesKey = "GeneratedWallMeshHandles";
         private const string GeneratedFoundationMeshHandlesKey = "GeneratedFoundationMeshHandles";
         private const string GeneratedCurtainFrameHandlesKey = "GeneratedCurtainFrameHandles";
+        private const string GeneratedCurtainPanelHandlesKey = "GeneratedCurtainPanelHandles";
+        private const string GeneratedCurtainPanelBuildStateKey = "GeneratedCurtainPanelBuildState";
+        private const string GeneratedCurtainPanelBuildCompleteValue = "Complete";
 
         private ElementCategory _category;
 
@@ -141,6 +146,7 @@ namespace QS3D.Core.Domain
             marked |= MarkGeneratedOutputStale(GeneratedWallMeshHandlesKey, GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
             marked |= MarkGeneratedOutputStale(GeneratedFoundationMeshHandlesKey, GeneratedFoundationMeshStateKey, GeneratedFoundationMeshStaleSnapshotKey);
             marked |= MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
+            marked |= MarkGeneratedCurtainPanelOutputStale();
             if (!marked) return;
             SetAggregateStaleReason(reason);
         }
@@ -148,6 +154,12 @@ namespace QS3D.Core.Domain
         public void MarkGeneratedCurtainFrameStale(string reason)
         {
             if (!MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey)) return;
+            SetAggregateStaleReason(reason);
+        }
+
+        public void MarkGeneratedCurtainPanelStale(string reason)
+        {
+            if (!MarkGeneratedCurtainPanelOutputStale()) return;
             SetAggregateStaleReason(reason);
         }
 
@@ -162,7 +174,8 @@ namespace QS3D.Core.Domain
                 IsGeneratedSlabMeshStale() ||
                 IsGeneratedWallMeshStale() ||
                 IsGeneratedFoundationMeshStale() ||
-                IsGeneratedCurtainFrameStale();
+                IsGeneratedCurtainFrameStale() ||
+                IsGeneratedCurtainPanelStale();
             if (!stale)
             {
                 Remove(GeneratedGeometryStateKey);
@@ -180,6 +193,7 @@ namespace QS3D.Core.Domain
         public bool IsGeneratedWallMeshStale() => IsGeneratedOutputStale(GeneratedWallMeshHandlesKey, GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
         public bool IsGeneratedFoundationMeshStale() => IsGeneratedOutputStale(GeneratedFoundationMeshHandlesKey, GeneratedFoundationMeshStateKey, GeneratedFoundationMeshStaleSnapshotKey);
         public bool IsGeneratedCurtainFrameStale() => IsGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
+        public bool IsGeneratedCurtainPanelStale() => IsGeneratedCurtainPanelOutputStale();
 
         public void ClearGeneratedSolidStale() => ClearGeneratedOutputStale(GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
         public void ClearGeneratedRebarStale() => ClearGeneratedOutputStale(GeneratedRebarStateKey, GeneratedRebarStaleSnapshotKey);
@@ -190,6 +204,7 @@ namespace QS3D.Core.Domain
         public void ClearGeneratedWallMeshStale() => ClearGeneratedOutputStale(GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
         public void ClearGeneratedFoundationMeshStale() => ClearGeneratedOutputStale(GeneratedFoundationMeshStateKey, GeneratedFoundationMeshStaleSnapshotKey);
         public void ClearGeneratedCurtainFrameStale() => ClearGeneratedOutputStale(GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
+        public void ClearGeneratedCurtainPanelStale() => ClearGeneratedOutputStale(GeneratedCurtainPanelStateKey, GeneratedCurtainPanelStaleSnapshotKey);
 
         public void ClearGeneratedGeometryStale()
         {
@@ -211,6 +226,8 @@ namespace QS3D.Core.Domain
             Remove(GeneratedFoundationMeshStaleSnapshotKey);
             Remove(GeneratedCurtainFrameStateKey);
             Remove(GeneratedCurtainFrameStaleSnapshotKey);
+            Remove(GeneratedCurtainPanelStateKey);
+            Remove(GeneratedCurtainPanelStaleSnapshotKey);
             Remove(GeneratedGeometryStateKey);
             Remove(GeneratedGeometryStaleReasonKey);
         }
@@ -236,6 +253,39 @@ namespace QS3D.Core.Domain
             Properties[stateKey] = StaleValue;
             Properties[snapshotKey] = signature;
             return true;
+        }
+
+        private bool MarkGeneratedCurtainPanelOutputStale()
+        {
+            var signature = CurtainPanelOutputSignature();
+            if (signature.Length == 0) return false;
+            Properties[GeneratedCurtainPanelStateKey] = StaleValue;
+            Properties[GeneratedCurtainPanelStaleSnapshotKey] = signature;
+            return true;
+        }
+
+        private bool IsGeneratedCurtainPanelOutputStale()
+        {
+            if (!Properties.TryGetValue(GeneratedCurtainPanelStateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.OrdinalIgnoreCase)) return false;
+            var current = CurtainPanelOutputSignature();
+            if (!Properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) || string.IsNullOrWhiteSpace(snapshot) ||
+                current.Length == 0 || !string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase))
+            {
+                Remove(GeneratedCurtainPanelStateKey);
+                Remove(GeneratedCurtainPanelStaleSnapshotKey);
+                return false;
+            }
+            return true;
+        }
+
+        private string CurtainPanelOutputSignature()
+        {
+            var handles = OutputSignature(GeneratedCurtainPanelHandlesKey);
+            if (handles.Length > 0) return handles;
+            return Properties.TryGetValue(GeneratedCurtainPanelBuildStateKey, out var state) &&
+                   string.Equals((state ?? string.Empty).Trim(), GeneratedCurtainPanelBuildCompleteValue, StringComparison.OrdinalIgnoreCase)
+                ? "@COMPLETE_EMPTY"
+                : string.Empty;
         }
 
         private bool IsGeneratedOutputStale(string outputKey, string stateKey, string snapshotKey)

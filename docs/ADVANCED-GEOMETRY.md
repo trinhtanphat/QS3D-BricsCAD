@@ -47,14 +47,15 @@ Both paths are fail-closed. The curved service specifically prepares **all** cut
 
 Source replacement clears `PhysicalOpeningCutSolidHandle`, fingerprint, count and mode metadata, preventing an old straight/curved cut mode from surviving after the underlying host is replaced.
 
-## Curtain Wall panel/grid and native frame overlay
+## Curtain Wall panel/grid, native frames and native panels
 
-GlassWall keeps two intentionally separate native layers:
+GlassWall keeps three intentionally separate native layers:
 
 1. a single backing host `GeneratedSolidHandle`, used by the existing Door/Opening boolean lifecycle;
-2. dedicated mullion/transom/perimeter-frame overlay solids stored under `GeneratedCurtainFrameHandles`.
+2. dedicated mullion/transom/perimeter-frame overlay solids stored under `GeneratedCurtainFrameHandles`;
+3. panel-by-panel clear-glass solids stored under `GeneratedCurtainPanelHandles`.
 
-`CurtainWallLayoutPlanner` and `CurtainWallDetailPlanner` deterministically calculate panel/grid rectangles. `QS3DCURTAINFRAMES3D` maps vertical/horizontal frame rectangles to native `Solid3d` boxes for supported horizontal GlassWall LINE sources. `QS3DCURTAIN3D` is the one-shot workflow that updates the backing host and then the frame overlay.
+`CurtainWallLayoutPlanner` and `CurtainWallDetailPlanner` deterministically calculate panel/grid rectangles. `QS3DCURTAINFRAMES3D` maps frames only. `QS3DCURTAIN3D` updates the backing host, frame overlays and panel solids for supported horizontal LINE and guarded open/bulged WCS-XY paths inside one outer native transaction.
 
 Native frame controls currently include:
 
@@ -66,18 +67,15 @@ Native frame controls currently include:
 - `CurtainFrameDepthM`
 - `CurtainFrameMaterial`
 
-The adapter imposes a lower native cap than the Core detail planner: at most 4,096 frame solids per element and 8,192 per selected batch. This avoids turning a very dense curtain grid into an accidental tens-of-thousands-of-solids operation.
+The adapter imposes lower native caps than the Core planners: at most 4,096 frame solids and 4,096 panel pieces per element, with independent 8,192-piece selected-batch caps. Panel base cells, opening-clipped pieces and path-mapped native fragments are bounded before destructive replacement.
 
-Frame ownership is independent from the backing host and rebar ownership. Source replacement erases frame solids only after verifying ownership. Rebar destructive guards also treat curtain-frame handles as protected foreign geometry.
+Frame and panel ownership are independent from the backing host and rebar ownership. Source replacement erases a complete old generated set only after project-wide owner, canonical handle, live `Solid3d` and dedicated XData validation. Rebar/recognition/destructive guards treat both Curtain slots as generated foreign geometry.
 
 `GeneratedCurtainFrameConfigFingerprint` is a deterministic SHA-256 snapshot of length, height, bottom offset, panel-size limits, perimeter/mullion/transom widths and frame depth. `GeneratedCurtainFrameHealthService` recomputes that fingerprint from current Family/Instance data, so panel-grid/frame-depth changes remain detectable even after semantic quantity regeneration has cleared ordinary dirty flags.
 
-Current limitations are explicit:
+`CurtainWallOpeningPanelPlanner` clips clear panel cells against linked Door/Opening rectangles before native placement. LINE panel pieces are placed directly; open/bulged paths reuse `CurtainPathFramePlanner` station mapping and split pieces at tessellated path segments. Panel configuration/live fingerprints, independent stale state, generated ownership, Model Health and Release Readiness keep this output auditable.
 
-- frame overlay supports GlassWall LINE, not curved/open-POLYLINE frame generation;
-- backing glass remains one host solid rather than panel-by-panel glass solids;
-- Door/Opening subtraction currently cuts the backing host, not the frame overlay;
-- opening-aware mullion/transom interruption remains future work.
+Current limitations are explicit: closed/tilted/arbitrary freeform paths remain unsupported, bulged output is bounded piecewise-linear rather than an exact swept panel, physical Door/Opening subtraction still targets the backing host, and exact V25 nested-transaction/tolerance/Undo/save-reopen behavior remains LOCAL-002 `PENDING_LOCAL`.
 
 ## Shape-driven rebar 3D
 

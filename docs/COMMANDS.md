@@ -54,7 +54,7 @@ P0 is intentionally guarded: Model Space only, unit-aware 5 mm planarity checks,
 
 ### Guarded P1 native subset
 
-- `QS3DDRAWGLASSWALL` — draw a GlassWall from two or more plan-view points, prompt/inherit thickness/height/bottom offset, capture semantic state and reuse `QS3DBUILD3D` for the backing native GlassWall host. Dedicated Curtain frames remain a `QS3DCURTAIN3D` / Curtain Hub workflow.
+- `QS3DDRAWGLASSWALL` — draw a GlassWall from two or more plan-view points, prompt/inherit thickness/height/bottom offset, capture semantic state and reuse `QS3DBUILD3D` for the backing native GlassWall host. Dedicated Curtain frames/panels remain a `QS3DCURTAIN3D` / Curtain Hub workflow.
 - `QS3DDRAWWALLPIER` — pick exactly two plan-view points and create a LINE source, prompt/inherit thickness/height/bottom offset, then reuse the specialized WallPier dispatch. The LINE path preserves current Rectangular/Chamfered `WallPierProfileSolidBuilder` semantics; multi-segment Direct Draw is deliberately rejected until a deterministic profile-around-corners contract exists.
 - `QS3DDRAWSTRUCTWALL` — draw a two-point StructuralWall LINE, prompt/inherit thickness/height/bottom offset and reuse canonical `QS3DBUILD3D` / structural builder behavior.
 - `QS3DDRAWFOUNDATION` — draw a closed Foundation POLYLINE from at least three plan-view points, prompt/inherit thickness/bottom offset and reuse canonical `QS3DBUILD3D` / structural builder behavior.
@@ -120,9 +120,9 @@ Opening link/re-host/unlink and relevant opening property changes stale dependen
 - `QS3DCURTAINXLSX` — deterministic Curtain schedule export.
 - `QS3DCURTAINFRAMES3D` — generate/update supported perimeter/mullion/transom frame overlays. Current source includes deterministic LINE plus guarded open/bulged WCS-XY path support; exact V25 behavior remains runtime-gated.
 - `QS3DCURTAINFRAMEHEALTH` — frame handle/live-solid/count/grid/config/live-geometry/ownership health.
-- `QS3DCURTAIN3D` — one-shot backing GlassWall host + supported frame-overlay workflow.
+- `QS3DCURTAIN3D` — one-shot backing GlassWall host + supported frame-overlay + panel-by-panel clear-glass workflow for guarded LINE/open-bulged path sources.
 
-Curtain frames can be interrupted deterministically around linked Door/Opening rectangles according to the supported source-path planner. The backing GlassWall remains the single host solid used by opening booleans; frame pieces own separate `GeneratedCurtainFrameHandles`.
+Curtain frames and panel cells are interrupted/clipped deterministically around linked Door/Opening rectangles according to the supported source-path planners. The backing GlassWall remains the single host solid used by opening booleans; frame pieces own `GeneratedCurtainFrameHandles` and native panel pieces own the independent `GeneratedCurtainPanelHandles` slot. Panel replacement is bounded to 4,096 native pieces per element and 8,192 per batch before destructive replacement. Source/static wiring is not exact-SHA BricsCAD V25 runtime proof; see `docs/CURTAIN-NATIVE-PANELS.md` and LOCAL-002.
 
 Curtain destructive and health ownership indexes use the shared generated-owner policy, so newly added generated families are protected without updating a manual slot list. Do not call current open/bulged-path frame work runtime-verified until the licensed V25 gate is executed.
 

@@ -272,7 +272,10 @@ namespace QS3D.Core.Services
                 {
                     host.MarkDirty(ElementDirtyFlags.Quantity);
                     if (host.Category == ElementCategory.GlassWall)
+                    {
                         host.MarkGeneratedCurtainFrameStale("Linked opening " + element.Id + " changed.");
+                        host.MarkGeneratedCurtainPanelStale("Linked opening " + element.Id + " changed.");
+                    }
                 }
             }
         }

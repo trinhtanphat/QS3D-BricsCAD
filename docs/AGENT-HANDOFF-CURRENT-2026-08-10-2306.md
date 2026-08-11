@@ -100,7 +100,7 @@ Local qualification must prove `QS3DRULEPREVIEW` and `QS3DREGENPREVIEW` do not m
 Do not mark these complete from source inspection:
 
 - physical L/T/X/Multi wall-solid reconciliation under safe one-owner semantics;
-- Curtain panel-by-panel native glass and remaining exact V25 curved/path proof;
+- Curtain panel-by-panel native glass is now source/static-implemented for guarded LINE/open-bulged paths with opening clipping, independent ownership/stale/health and the six-phase outer transaction; exact V25 geometry/nested-rollback/Undo/save-reopen proof remains LOCAL-002 `PENDING_LOCAL`;
 - native generalized polygon/hole loop ownership and disconnected-region policy;
 - richer freeform WallPier/native geometry where the current specialized subset is insufficient;
 - standard-specific fabrication rebar rules without an approved governing standard/revision;

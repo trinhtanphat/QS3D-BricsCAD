@@ -67,6 +67,12 @@ namespace QS3D.Core.Diagnostics
                         HealthSeverity.Warning,
                         Message(element, "Generated curtain-wall frame detail không còn khớp Family/Instance/source hiện tại; rebuild khung Vách Kính 3D."),
                         element.Id));
+                if (element.IsGeneratedCurtainPanelStale())
+                    issues.Add(new ModelHealthIssue(
+                        "CURTAIN_PANEL_GENERATED_STALE",
+                        HealthSeverity.Warning,
+                        Message(element, "Generated curtain-wall panels no longer match the current semantic/opening state; rebuild curtain panels before release."),
+                        element.Id));
             }
             return issues.AsReadOnly();
         }
