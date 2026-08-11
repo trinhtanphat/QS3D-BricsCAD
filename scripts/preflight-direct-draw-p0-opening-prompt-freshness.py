@@ -8,7 +8,7 @@ OPENING = ROOT / "src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs"
 errors = []
 
 
-def section(text: str, start_token: str, end_token: str | None = None) -> str:
+def section(text, start_token, end_token=None):
     start = text.find(start_token)
     if start < 0:
         return ""
@@ -18,7 +18,7 @@ def section(text: str, start_token: str, end_token: str | None = None) -> str:
     return text[start:end if end >= 0 else len(text)]
 
 
-def require_order(body: str, name: str, tokens: tuple[str, ...]) -> None:
+def require_order(body, name, tokens):
     positions = []
     for token in tokens:
         pos = body.find(token)
