@@ -110,6 +110,21 @@ Remote or hybrid agents should handle work that does not require the real local 
 
 Remote agents may still implement or strengthen source contracts, static guards, deterministic tests and local probes around those areas. If such source work changes what must be validated locally, add or update the matching `docs/LOCAL-AGENT-INBOX.md` item **in the same source/docs batch** with the minimum exact scenario/evidence required, then continue remote source work. Do not park a new local gate only in prose elsewhere. Remote agents must never manufacture `LOCAL_PASS` from source/static evidence.
 
+## Mandatory unavailable-work handoff
+
+If an agent cannot complete, execute, reproduce, or prove a task because its environment lacks the required local machine, licensed BricsCAD V25 runtime, private DWG/fixture, Windows UI, signing credential, hardware, installed dependency, or other non-repository resource, the agent **must not leave that work only in chat and must not repeatedly retry it from another equivalent remote/non-local agent**.
+
+Instead, before ending the same work batch, the agent must:
+
+1. classify the blocked part as `LOCAL_ONLY` when local execution can resolve it;
+2. add or update the matching item in `docs/LOCAL-AGENT-INBOX.md` with the exact scenario, prerequisite, expected result and minimum evidence required;
+3. reference an existing detailed runbook rather than creating a duplicate live queue; create or extend supporting Markdown only when the inbox item genuinely needs more execution detail;
+4. leave all source-safe implementation, deterministic tests, probes and scripts ready for the local agent whenever possible;
+5. continue with other remote-safe work instead of stopping the whole `continue all` pass;
+6. treat the parked inbox item as owned by a compatible local agent until source changes materially alter the scenario or real local evidence is posted.
+
+Once a task is recorded in `docs/LOCAL-AGENT-INBOX.md`, subsequent remote/non-local agents must **read and skip that execution gate rather than rediscovering, re-auditing, re-running, or re-reporting the same inability**. They may only change the item when new source materially changes the required local scenario, or when they can add a concrete source-side prerequisite/probe that reduces the local work. Lack of local capability is a handoff condition, not a reason for repeated remote attempts.
+
 ## Handoff rule
 
 When a remote agent reaches a new task that requires local-only access, leave the repository in a runnable/testable state and register the exact scenario in `docs/LOCAL-AGENT-INBOX.md`, which is the canonical live priority/status index. `docs/LOCAL-V25-QUALIFICATION.md` is the canonical exact-V25 execution runbook; preview/diagnostic runtime work is detailed in `docs/LOCAL-PREVIEW-DIAGNOSTIC-QUALIFICATION-2026-08-10.md`; remaining historical implementation/engineering/signing details live in `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` and `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`. Extend detailed handoffs only when useful, but always update the inbox when a new/changed local scenario affects current work. Do not repeatedly re-audit an already parked LOCAL_ONLY gate from a remote environment.

@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 errors = []
 workspace = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs"
+panel = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
 row = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/PropertyRowViewModel.cs"
 
 if not workspace.is_file():
@@ -23,6 +24,9 @@ else:
         "không được âm; đã giữ giá trị cũ",
         'case "BottomOffsetM": return "Offset đáy (so với source)";',
         'case "TopOffsetM": return "Offset đỉnh (so với source)";',
+        "public void SetSelectedElement(ProjectElement? element)",
+        "_selectedElement = null;",
+        "ShowFamilyProperties();",
     )
     for token in required:
         if token not in text:
@@ -33,6 +37,22 @@ else:
     ):
         if stale in text:
             errors.append("Workspace still exposes source-relative offset as absolute elevation: " + stale)
+
+if not panel.is_file():
+    errors.append("missing WorkspacePanel.xaml.cs")
+else:
+    text = panel.read_text(encoding="utf-8")
+    for token in (
+        "public void SetInspection(IReadOnlyList<EntitySnapshot> snapshots)",
+        "try\n            {\n                SyncFamilyFromSelection();\n            }\n            catch (Exception ex)",
+        'ClearProject("Selection sync semantic lỗi: " + ex.Message);',
+        "if (_inspection.Count == 0)",
+        "_viewModel.SetSelectedElement(null);",
+        "if (matches.Count != 1 || string.IsNullOrWhiteSpace(matches[0].FamilyId))",
+        "Cấu kiện semantic đang chọn không còn Family hợp lệ; inspector đã về scope Family.",
+    ):
+        if token not in text:
+            errors.append("Workspace selection safety missing: " + token)
 
 if not row.is_file():
     errors.append("missing PropertyRowViewModel.cs")
@@ -53,4 +73,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: source-derived CAD measurements remain read-only, impossible geometry dimensions fail early, source-relative offsets are labeled accurately, and Vietnamese boolean values render consistently.")
+print("PASS: Workspace property rows stay bounded to live semantic selection, source-derived CAD measurements remain read-only, impossible geometry dimensions fail early, source-relative offsets are labeled accurately, and Vietnamese boolean values render consistently.")

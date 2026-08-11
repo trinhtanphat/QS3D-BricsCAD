@@ -36,8 +36,9 @@ def require(name, tokens):
 require("commands", (
     '[CommandMethod("QS3DED2", CommandFlags.UsePickSet)]',
     '"Selection Floor Zone All"',
+    "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)",
     "ResolveEd2Selection(project, selectionSnapshots ?? Array.Empty<EntitySnapshot>())",
-    "ProjectStateSnapshot.CreateDetachedCopy(project)",
+    "var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);",
     "ProjectQuantityReportBuilder.Detail(previewProject, elementIds)",
     "ProjectQuantityReportBuilder.Group(previewProject, elementIds)",
     "EnsureEd2HandlesAreLive(doc, details)",
@@ -58,6 +59,8 @@ require("cad_handles", (
 ))
 if "ShowEd2Workflow() => ShowQuantitySummary()" in texts.get("commands", ""):
     errors.append("QS3DED2 is still an alias of QS3DBQ instead of a scoped ED2 export.")
+if "ProjectContextCoordinator.GetOrCreate(doc)" in texts.get("commands", "")[texts.get("commands", "").find('[CommandMethod("QS3DED2"'):texts.get("commands", "").find('[CommandMethod("QS3DBBS"')]:
+    errors.append("QS3DED2 read-only export must not create/cache replacement project state.")
 
 require("builder", (
     "public static IReadOnlyList<QuantityReportRow> Detail(ProjectState project, IEnumerable<string> elementIds)",
@@ -167,4 +170,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: ED2 preserves semantic round-trip provenance, exports user-facing material/family/floor-zone/density/mass/note columns with blank nullable cells, groups only homogeneous material/density rows, and fails closed on invalid quantities or Excel/CAD drift.")
+print("PASS: ED2 scopes before aggregation on a detached read-only snapshot, preserves one-element CHI_TIET and Zone-aware TONG_HOP provenance, exports material/family/density/mass/note fields with readable formatting, and fails closed on schema, quantity, fingerprint or live-Handle drift.")

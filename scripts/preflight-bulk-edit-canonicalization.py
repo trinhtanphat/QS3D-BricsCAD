@@ -14,8 +14,8 @@ for path in (SERVICE, SMOKE, REG):
 
 if SERVICE.is_file():
     text = SERVICE.read_text(encoding="utf-8")
-    if text.count("var key = propertyName.Trim();") < 2:
-        errors.append("BulkEditService must canonicalize propertyName in both set and multiply paths")
+    if text.count("SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName)") < 2:
+        errors.append("BulkEditService must canonicalize and validate propertyName through the shared policy in both set and multiply paths")
     for token in (
         "element.Properties.TryGetValue(key, out var before)",
         "element.Properties[key] = next;",

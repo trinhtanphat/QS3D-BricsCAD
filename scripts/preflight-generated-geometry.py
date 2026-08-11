@@ -11,6 +11,7 @@ required = [
     "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GridAnnotationBuilder.cs",
     "src/QS3D.BricsCAD.V25/GeneratedGeometryHealthCommands.cs",
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs",
     "src/QS3D.BricsCAD.V25/WallJunctionSnapCommands.cs",
@@ -77,6 +78,31 @@ if invalidator.is_file():
         if fail_open in text:
             errors.append("dependent generated-geometry invalidation still silently skips missing CAD handles: " + fail_open)
 
+grid = ROOT / "src/QS3D.BricsCAD.V25/Cad/GridAnnotationBuilder.cs"
+if grid.is_file():
+    text = grid.read_text(encoding="utf-8")
+    for needle in (
+        "ValidatePrevious", "CadHandleService.NormalizeHexHandle", "OpenMode.ForRead",
+        "result.Count != expected.Count",
+        "Refusing destructive replacement before any Grid annotation is erased.",
+        "Refusing partial destructive replacement:",
+    ):
+        if needle not in text: errors.append("Grid annotation exact-set replacement guard missing: " + needle)
+
+    validate_index = text.find("var previous = ValidatePrevious(document.Database, transaction, project, element);")
+    erase_index = text.find("ErasePrevious(transaction, project, element, previous);")
+    metadata_index = text.find("element.Properties[HandlesKey] = string.Join(\";\", generatedHandles);")
+    if validate_index < 0 or erase_index < 0 or metadata_index < 0 or not (validate_index < erase_index < metadata_index):
+        errors.append("Grid annotation replacement must validate the complete previous handle set before erase and metadata replacement")
+
+    for fail_open in (
+        "allowMissing: true",
+        "if (id.IsNull || !id.IsValid) continue;",
+        "if (entity == null || entity.IsErased) continue;",
+    ):
+        if fail_open in text:
+            errors.append("Grid annotation replacement still silently skips missing CAD handles: " + fail_open)
+
 ownership = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
 if ownership.is_file():
     text = ownership.read_text(encoding="utf-8")
@@ -123,4 +149,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: stale snapshots, exact live-handle prevalidation before destructive invalidation, auto-resolution, five generated output kinds, cross-set ownership, UI mutation path, health command and regression coverage are present.")
+print("PASS: stale snapshots, exact live-handle prevalidation before destructive invalidation/replacement, auto-resolution, five generated output kinds, cross-set ownership, UI mutation path, health command and regression coverage are present.")

@@ -4,12 +4,16 @@ import sys
 
 root = Path(__file__).resolve().parents[1]
 path = root / "src/QS3D.Core/Selection/SemanticSelectionBulkEditService.cs"
+policy_path = root / "src/QS3D.Core/Services/SemanticPropertyEditPolicy.cs"
 errors = []
 
-if not path.is_file():
-    errors.append("missing SemanticSelectionBulkEditService.cs")
+if not path.is_file() or not policy_path.is_file():
+    errors.append("missing SemanticSelectionBulkEditService.cs or shared SemanticPropertyEditPolicy.cs")
 else:
     text = path.read_text(encoding="utf-8")
+    policy = policy_path.read_text(encoding="utf-8")
+    if text.count("SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName)") < 2:
+        errors.append("multi-selection set/multiply paths must both use the shared semantic property policy")
     required = (
         "MeasuredSolidQuantityPolicy.VolumeProperty",
         "MeasuredSolidQuantityPolicy.SurfaceAreaProperty",
@@ -24,13 +28,13 @@ else:
         "Semantic identity/reference field cannot be edited as a generic property",
     )
     for token in required:
-        if token not in text:
+        if token not in policy:
             errors.append("bulk-edit fail-closed property boundary missing: " + token)
 
     for unsafe in (
         'SourceDerivedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)\n        {\n            "LengthM",\n            "AreaM2",\n            "VolumeM3",\n            "PerimeterM",\n            "Layer"\n        };',
     ):
-        if unsafe in text:
+        if unsafe in policy:
             errors.append("bulk-edit source-derived key policy is still missing measured CAD metrics")
 
 if errors:

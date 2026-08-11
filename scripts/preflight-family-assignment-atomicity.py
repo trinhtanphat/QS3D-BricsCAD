@@ -25,10 +25,11 @@ if FAMILY.is_file():
     ):
         if token not in text:
             errors.append("ProjectFamilyService.cs missing whole-batch preflight token: " + token)
-    lookup = text.find("project.FindFamily(previousFamilyId)")
+    normalize = text.find("var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();")
+    lookup = text.find("project.FindFamily(previousFamilyId)", normalize if normalize >= 0 else 0)
     mutation = text.find("element.FamilyId = target.Id;")
-    if lookup < 0 or mutation < 0 or lookup > mutation:
-        errors.append("ProjectFamilyService.Assign must resolve previous Family identities before the first FamilyId mutation.")
+    if min(normalize, lookup, mutation) < 0 or not normalize < lookup < mutation:
+        errors.append("ProjectFamilyService.Assign must normalize and resolve previous Family identities before the first FamilyId mutation.")
 
 if BULK.is_file():
     text = BULK.read_text(encoding="utf-8")
@@ -41,10 +42,11 @@ if BULK.is_file():
     ):
         if token not in text:
             errors.append("BulkEditService.cs missing Family assignment preflight token: " + token)
-    lookup = text.find("project.FindFamily(previousFamilyId)")
+    normalize = text.find("var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();")
+    lookup = text.find("project.FindFamily(previousFamilyId)", normalize if normalize >= 0 else 0)
     mutation = text.find("element.FamilyId = family.Id;")
-    if lookup < 0 or mutation < 0 or lookup > mutation:
-        errors.append("BulkEditService.AssignFamily must resolve previous Family identities before the first FamilyId mutation.")
+    if min(normalize, lookup, mutation) < 0 or not normalize < lookup < mutation:
+        errors.append("BulkEditService.AssignFamily must normalize and resolve previous Family identities before the first FamilyId mutation.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -66,4 +68,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ProjectFamilyService and BulkEditService resolve all failure-prone previous-family identities before mutating any assignment target.")
+print("PASS: ProjectFamilyService and BulkEditService normalize and resolve all failure-prone previous-family identities before mutating any assignment target.")

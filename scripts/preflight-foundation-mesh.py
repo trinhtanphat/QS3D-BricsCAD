@@ -31,6 +31,8 @@ checks = {
         "duplicateSelectedSource", "checked(batchBars + count)", "CadGeometryGuard.Multiply", "CadGeometryGuard.Subtract",
         "ReadPolygonFootprint", "ValidateCommonFootprint", "polygonal Foundation mesh chưa hỗ trợ bulge/curved boundary",
         "polyline.Normal.Z < 1d - 1e-9d", "ClearGeneratedFoundationMeshStale",
+        "ErasePrevious(document, transaction, project, element, ownership)",
+        "GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey",
         'AuditTrail.ForProject(project).Record('
     ],
     "src/QS3D.BricsCAD.V25/FoundationMeshCommands.cs": [
@@ -59,7 +61,10 @@ checks = {
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedTieRebarOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedCurtainFrameOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "GeneratedCurtainFrameHandles"],
-    "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs": ["CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix"],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs": [
+        "CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix",
+        "GeneratedRebarNativeOwnershipService.RequireMatchingOwnership"
+    ],
     "src/QS3D.Core/Domain/ProjectElement.cs": [
         "GeneratedFoundationMeshStateKey", "GeneratedFoundationMeshStaleSnapshotKey", "IsGeneratedFoundationMeshStale", "ClearGeneratedFoundationMeshStale"
     ],
@@ -107,6 +112,7 @@ if foundation_builder.is_file():
         semantic_token = "foreach (var update in pending) CommitSemanticUpdate(project, update);"
         touch_token = "if (pending.Count > 0) project.Touch();"
         commit_token = "transaction.Commit();\n                    cadCommitted = true;"
+        erase_token = "ErasePrevious(document, transaction, project, element, ownership)"
         semantic = body.find(semantic_token)
         touch = body.find(touch_token, semantic if semantic >= 0 else 0)
         commit = body.find(commit_token)
@@ -121,12 +127,14 @@ if foundation_builder.is_file():
             errors.append("Foundation mesh requires exactly one semantic replacement phase and one CAD commit/flag boundary")
         if "Editor.Regen(" in body:
             errors.append("Foundation native mesh builder must remain UI-free; viewport regen belongs to FoundationMeshCommands post-commit FinalizeUi")
-        if body.find("ReserveBatchBars(ref batchBars, layout.Count)") > body.find("ErasePrevious(document, transaction, project, element, ownership)"):
-            errors.append("Rectangle Foundation mesh must reserve the batch limit before destructive replacement")
+        rectangle_reserve = body.find("ReserveBatchBars(ref batchBars, layout.Count)")
+        rectangle_erase = body.find(erase_token, rectangle_reserve if rectangle_reserve >= 0 else 0)
+        if rectangle_reserve < 0 or rectangle_erase < 0 or rectangle_reserve > rectangle_erase:
+            errors.append("Rectangle Foundation mesh must reserve the batch limit before project-aware destructive replacement")
         polygon_reserve = body.find("ReserveBatchBars(ref batchBars, polygonLayout.Count)")
-        polygon_erase = body.find("ErasePrevious(document, transaction, project, element, ownership)", polygon_reserve if polygon_reserve >= 0 else 0)
+        polygon_erase = body.find(erase_token, polygon_reserve if polygon_reserve >= 0 else 0)
         if polygon_reserve < 0 or polygon_erase < 0 or polygon_reserve > polygon_erase:
-            errors.append("Polygon Foundation mesh must reserve the batch limit before destructive replacement")
+            errors.append("Polygon Foundation mesh must reserve the batch limit before project-aware destructive replacement")
 
     helper_start = text.find("private static void CommitSemanticUpdate")
     helper_end = text.find("private sealed class RectangleFrame", helper_start + 1) if helper_start >= 0 else -1
@@ -178,4 +186,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Foundation mesh preserves the legacy rotated-rectangle local-axis path and adds guarded straight simple polygon clipping through the shared polygonal planner; batch reservation precedes destructive replacement, generated ownership/count/spacing/faces/footprint-mode/audit/revision advance while CAD is rollback-capable, pre-commit failures restore the deep project snapshot, footprint health accepts only RectangleLocalXY/PolygonGlobalXY, and curved/bulged/holes/local-axis-generalization plus exact V25 runtime proof remain explicit gates.")
+print("PASS: Foundation mesh preserves rectangle/polygon behavior, reserves batch limits before project-aware native-ownership replacement, commits semantic ownership while CAD is rollback-capable, and retains health/audit/runtime qualification gates.")

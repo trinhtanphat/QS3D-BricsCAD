@@ -14,6 +14,25 @@ Remote agents must not repeatedly re-audit, re-run, re-open or re-report these g
 
 The purpose of this rule is to stop remote reviews from spending time rediscovering the same environment boundary and to keep runtime truth tied to the machine that can actually prove it.
 
+## Mandatory remote inability handoff
+
+Owner rule: **if a remote/hybrid agent cannot complete a task because the missing proof or execution requires a local machine, licensed BricsCAD V25, native Windows UI/runtime, private/customer DWG, installed proprietary dependency, local secret/certificate, or other machine-only capability, the agent must record that work in Markdown for a compatible local agent before ending the batch.**
+
+The canonical destination is always `docs/LOCAL-AGENT-INBOX.md`.
+
+Required behavior:
+
+1. Search/read `docs/LOCAL-AGENT-INBOX.md` first. If an existing `LOCAL-###` already covers the same scenario, **update that item instead of creating a duplicate**.
+2. If no item covers it, add the next `LOCAL-###` item with at least: `Priority`, `Status`, `Area`, `Why local`, `Scenario`, `Evidence required`, `Evidence`, `Related docs/files`, `Updated`, and the **exact source SHA** whose behavior must be qualified.
+3. Record what the remote agent already completed from source/static evidence so the local agent does not repeat remote-safe work. Keep the remaining local action narrow and executable.
+4. Mark the local item `OPEN` or `BLOCKED`; never mark `PASS` from remote evidence. `PASS` requires sanitized local evidence tied to the exact tested SHA.
+5. Future remote agents must treat the parked `LOCAL-###` as **do-not-repeat remote backlog**. They may update it only when current source materially changes the required local scenario or when the owner explicitly asks for source-contract work around it.
+6. In the remote completion report, reference the existing/new `LOCAL-###` rather than re-explaining and re-auditing the full local gate every turn.
+
+This rule applies to **environment/capability blockers that a local agent can actually resolve**. Do not misclassify owner policy, engineering approval, legal/commercial decisions, or unsupported external-format scope as LOCAL_ONLY merely to hand them to a local agent; keep those under the repository's existing `POLICY_REQUIRED`, `ENGINEERING_REQUIRED`, `NEEDS_DECISION`, or `FORMAT_SCOPE_REQUIRED` boundaries.
+
+A remote agent must not finish with only a chat note such as “needs local testing” when the local requirement is new or materially changed. The Markdown inbox update is part of the same implementation/handoff batch.
+
 ## Current remote completion snapshot
 
 Before creating another broad remote backlog, read `docs/REMOTE-IMPLEMENTATION-COMPLETION-2026-08-11.md`. It is the newest repository-level classification of the current source-safe implementation wave and explains which remaining gaps are `LOCAL_ONLY`, `POLICY_REQUIRED`, `ENGINEERING_REQUIRED` or `FORMAT_SCOPE_REQUIRED`.

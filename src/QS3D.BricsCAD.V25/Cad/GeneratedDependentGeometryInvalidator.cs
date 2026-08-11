@@ -85,7 +85,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (rebarOwnership != null)
                     foreach (var key in CoreOwnershipPolicy.RebarHandleKeys)
                         EraseRebarSet(document, transaction, project, element, key, rebarOwnership);
-                if (curtainOwnership != null) EraseCurtainFrames(document, transaction, element, curtainOwnership);
+                if (curtainOwnership != null) EraseCurtainFrames(document, transaction, project, element, curtainOwnership);
                 EraseGridAnnotations(document, transaction, project, element);
             }
             return new GeneratedGeometryInvalidation(targets);
@@ -119,7 +119,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var expected = ParseExpectedHandles(curtainRaw, element, CurtainFrameHandlesKey);
                     foreach (var handle in expected) curtainOwnership.EnsureOwned(handle, element);
-                    EnsureSolidSetLive(document, element, CurtainFrameHandlesKey, expected);
+                    EnsureCurtainFrameSetLive(document, project, element, expected);
                 }
 
                 EnsureGridAnnotationsLive(document, project, element);
@@ -180,9 +180,13 @@ namespace QS3D.BricsCAD.V25.Cad
             }
         }
 
-        private static void EnsureSolidSetLive(Document document, ProjectElement element, string propertyKey, IReadOnlyList<string> expected)
+        private static void EnsureCurtainFrameSetLive(
+            Document document,
+            ProjectState project,
+            ProjectElement element,
+            IReadOnlyList<string> expected)
         {
-            var ids = ResolveCompleteSet(document, element, propertyKey, expected);
+            var ids = ResolveCompleteSet(document, element, CurtainFrameHandlesKey, expected);
             using (var validation = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 foreach (var id in ids)
@@ -190,10 +194,16 @@ namespace QS3D.BricsCAD.V25.Cad
                     var entity = validation.GetObject(id, OpenMode.ForRead, false) as Entity;
                     if (entity == null || entity.IsErased)
                         throw new InvalidOperationException(
-                            "Generated " + propertyKey + " for " + element.Id + " resolved to a non-live Entity. Refusing destructive invalidation before any generated geometry is erased.");
-                    if (!(entity is Solid3d))
+                            "Generated " + CurtainFrameHandlesKey + " for " + element.Id + " resolved to a non-live Entity. Refusing destructive invalidation before any generated geometry is erased.");
+                    var solid = entity as Solid3d;
+                    if (solid == null)
                         throw new InvalidOperationException(
-                            "Generated " + propertyKey + " handle " + id.Handle + " for " + element.Id + " is live but is not a Solid3d. Refusing destructive invalidation before any generated geometry is erased.");
+                            "Generated " + CurtainFrameHandlesKey + " handle " + id.Handle + " for " + element.Id + " is live but is not a Solid3d. Refusing destructive invalidation before any generated geometry is erased.");
+                    GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(
+                        solid,
+                        project,
+                        element,
+                        "validate generated curtain frame " + id.Handle);
                 }
                 validation.Commit();
             }
@@ -312,13 +322,32 @@ namespace QS3D.BricsCAD.V25.Cad
         private static void EraseCurtainFrames(
             Document document,
             Transaction transaction,
+            ProjectState project,
             ProjectElement element,
             GeneratedCurtainFrameOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(CurtainFrameHandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             var expected = ParseExpectedHandles(raw, element, CurtainFrameHandlesKey);
             foreach (var handle in expected) ownership.EnsureOwned(handle, element);
-            EraseSolidSet(document, transaction, element, CurtainFrameHandlesKey, expected);
+
+            var ids = ResolveCompleteSet(document, element, CurtainFrameHandlesKey, expected);
+            foreach (var id in ids)
+            {
+                var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
+                if (entity == null || entity.IsErased)
+                    throw new InvalidOperationException(
+                        "Generated " + CurtainFrameHandlesKey + " handle " + id.Handle + " is no longer live. Refusing partial destructive invalidation.");
+                var solid = entity as Solid3d;
+                if (solid == null)
+                    throw new InvalidOperationException(
+                        "Generated " + CurtainFrameHandlesKey + " handle " + id.Handle + " is live but is not a Solid3d. Refusing destructive invalidation.");
+                GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(
+                    solid,
+                    project,
+                    element,
+                    "erase stale generated curtain frame " + id.Handle);
+                solid.Erase();
+            }
         }
 
         private static void EraseGridAnnotations(Document document, Transaction transaction, ProjectState project, ProjectElement element)
@@ -354,28 +383,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw new InvalidOperationException(
                     "Generated Grid annotation handle " + handle + " is owned by " + owner.Id + "/" + propertyKey +
                     ", not " + element.Id + "/" + GridAnnotationBuilder.HandlesKey + ". Refusing destructive invalidation.");
-        }
-
-        private static void EraseSolidSet(
-            Document document,
-            Transaction transaction,
-            ProjectElement element,
-            string propertyKey,
-            IReadOnlyList<string> expected)
-        {
-            var ids = ResolveCompleteSet(document, element, propertyKey, expected);
-            foreach (var id in ids)
-            {
-                var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
-                if (entity == null || entity.IsErased)
-                    throw new InvalidOperationException(
-                        "Generated " + propertyKey + " handle " + id.Handle + " is no longer live. Refusing partial destructive invalidation.");
-                var solid = entity as Solid3d;
-                if (solid == null)
-                    throw new InvalidOperationException(
-                        "Generated " + propertyKey + " handle " + id.Handle + " is live but is not a Solid3d. Refusing destructive invalidation.");
-                solid.Erase();
-            }
         }
     }
 }

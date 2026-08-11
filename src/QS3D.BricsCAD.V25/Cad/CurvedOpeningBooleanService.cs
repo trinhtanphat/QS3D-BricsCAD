@@ -147,9 +147,12 @@ namespace QS3D.BricsCAD.V25.Cad
                             preparedCuts.Select(x => x.FingerprintPart).ToList());
                         var openingIds = PhysicalOpeningCutTargetState.Normalize(preparedCuts.Select(x => x.OpeningId));
                         var currentSolidHandle = solidId.Handle.ToString();
-                        if (host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var previousSolid) &&
-                            string.Equals(previousSolid, currentSolidHandle, StringComparison.OrdinalIgnoreCase) &&
-                            host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var previousFingerprint))
+                        var hasCutSolid = host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var previousSolid) && !string.IsNullOrWhiteSpace(previousSolid);
+                        var hasCutFingerprint = host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var previousFingerprint) && !string.IsNullOrWhiteSpace(previousFingerprint);
+                        if (hasCutSolid != hasCutFingerprint)
+                            throw new InvalidOperationException("Host " + host.Id + " có physical opening metadata không đầy đủ. Hãy Build 3D lại host trước khi khoét curved openings.");
+
+                        if (hasCutSolid && string.Equals(previousSolid!.Trim(), currentSolidHandle, StringComparison.OrdinalIgnoreCase))
                         {
                             if (!string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal))
                                 throw new InvalidOperationException("Host " + host.Id + " đã được khoét trên generated solid hiện tại nhưng geometry/fingerprint đã thay đổi. Build 3D lại host trước khi khoét curved openings.");

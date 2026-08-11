@@ -26,12 +26,14 @@ else:
                 errors.append("template export missing lifecycle token: " + token)
         if "ProjectContextCoordinator.GetOrCreate(doc)" in export:
             errors.append("template export must not create/cache project state")
-        if "ProjectContextCoordinator.GetOrCreate(doc)" not in imp:
-            errors.append("template import bootstrap semantics changed unexpectedly; import may intentionally initialize a project")
+        if 'ExistingProjectMutationContext.Require(doc, "Template Import")' not in imp:
+            errors.append("template import must bind a canonical existing project before mutation")
+        if "ProjectContextCoordinator.GetOrCreate(doc)" in imp:
+            errors.append("template import must not cold-create/cache a replacement project")
 
 if errors:
     for error in errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: template export is cancel-first/read-only while template import preserves intentional project-bootstrap semantics.")
+print("PASS: template export is cancel-first/read-only while template import requires a canonical existing project and cannot cold-create replacement state.")

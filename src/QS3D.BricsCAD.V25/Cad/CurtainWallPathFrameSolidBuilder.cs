@@ -118,7 +118,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (frameCount > MaxFramesPerElement) throw new InvalidOperationException(element.Id + " cần " + frameCount + " curtain path frame fragment solids, vượt giới hạn native " + MaxFramesPerElement + ". Tăng panel size, giảm arc tessellation/opening hoặc chia vách.");
                         if (batchFrames > MaxFramesPerBatch - frameCount) throw new InvalidOperationException("Curtain path frame batch vượt giới hạn " + MaxFramesPerBatch + " solid.");
 
-                        ErasePrevious(document, transaction, element, ownership);
+                        ErasePrevious(document, transaction, project, element, ownership);
                         var baseZ = CadGeometryGuard.Add(polyline.Elevation, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/curtain path base Z");
                         var update = new PendingUpdate
                         {
@@ -143,6 +143,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                 solid.Layer = polyline.Layer;
                                 modelSpace.AppendEntity(solid);
                                 transaction.AddNewlyCreatedDBObject(solid, true);
+                                GeneratedCurtainFrameNativeOwnershipService.MarkGenerated(document, transaction, solid, project, element);
                                 update.Handles.Add(solid.Handle.ToString());
                                 solid = null;
                             }
@@ -282,7 +283,7 @@ namespace QS3D.BricsCAD.V25.Cad
             finally { solid?.Dispose(); }
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedCurtainFrameOwnershipGuard.OwnershipIndex ownership)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element, GeneratedCurtainFrameOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -294,6 +295,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
                 if (entity == null || entity.IsErased) continue;
                 if (!(entity is Solid3d solid)) throw new InvalidOperationException("Generated curtain frame handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
+                GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(solid, project, element, "erase generated curtain PATH frame " + handle);
                 solid.Erase();
             }
         }

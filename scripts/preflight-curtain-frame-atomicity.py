@@ -45,7 +45,7 @@ for label, contract in contracts.items():
     for token in (
         "ProjectStateSnapshot.Capture(project)",
         "var cadCommitted = false;",
-        "ErasePrevious(document, transaction, element, ownership)",
+        "ErasePrevious(document, transaction, project, element, ownership)",
         semantic_token,
         touch_token,
         commit_token,

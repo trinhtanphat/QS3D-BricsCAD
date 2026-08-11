@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +18,17 @@ BUILDERS = {
     "FoundationMeshSolidBuilder.cs": "GeneratedFoundationMeshHandles",
 }
 errors = []
+
+
+def private_static_method(text, signature):
+    start = text.find(signature)
+    if start < 0:
+        return ""
+    tail_start = start + len(signature)
+    match = re.search(r"\n\s*private static ", text[tail_start:])
+    end = tail_start + match.start() if match else len(text)
+    return text[start:end]
+
 
 if not SERVICE.is_file():
     errors.append("missing GeneratedRebarNativeOwnershipService.cs")
@@ -64,22 +76,17 @@ else:
         if token not in text:
             errors.append("generated invalidator missing rebar native-ownership token: " + token)
 
-    prevalidate_start = text.find("private static void EnsureRebarSetLive(")
-    generic_validate_start = text.find("private static void EnsureSolidSetLive(", prevalidate_start)
-    if prevalidate_start < 0 or generic_validate_start <= prevalidate_start:
+    prevalidate = private_static_method(text, "private static void EnsureRebarSetLive(")
+    if not prevalidate:
         errors.append("generated invalidator must keep a dedicated rebar prevalidation path")
-    else:
-        prevalidate = text[prevalidate_start:generic_validate_start]
-        if "RequireMatchingOwnership(" not in prevalidate:
-            errors.append("generated invalidator must verify native ownership during rebar prevalidation")
+    elif "GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(" not in prevalidate:
+        errors.append("generated invalidator must verify native ownership during rebar prevalidation")
 
-    erase_start = text.find("private static void EraseRebarSet(")
-    curtain_start = text.find("private static void EraseCurtainFrames(", erase_start)
-    if erase_start < 0 or curtain_start <= erase_start:
+    erase = private_static_method(text, "private static void EraseRebarSet(")
+    if not erase:
         errors.append("generated invalidator must keep a dedicated rebar erase path")
     else:
-        erase = text[erase_start:curtain_start]
-        require = erase.find("RequireMatchingOwnership(")
+        require = erase.find("GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(")
         destructive = erase.find("solid.Erase();")
         if require < 0 or destructive < 0 or require > destructive:
             errors.append("generated invalidator must verify matching native ownership before rebar Solid3d erase")
@@ -92,4 +99,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: generated rebar builders and dependent invalidation use project/element/owner-slot native ownership markers and fail closed before destructive erase.")
+print("PASS: generated rebar builders and dependent invalidation use project/element/owner-slot native ownership markers and fail closed before destructive erase; helper validation is independent of source method ordering.")

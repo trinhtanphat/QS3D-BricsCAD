@@ -19,7 +19,7 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class WorkspacePanel : UserControl
     {
-        private readonly WorkspaceViewModel _viewModel = new WorkspaceViewModel();
+        private WorkspaceViewModel _viewModel = new WorkspaceViewModel();
         private IReadOnlyList<EntitySnapshot> _inspection = Array.Empty<EntitySnapshot>();
         private bool _loadingContext;
         private ElementCategory? _categoryFilter;
@@ -27,11 +27,36 @@ namespace QS3D.BricsCAD.V25.UI
         public WorkspacePanel()
         {
             InitializeComponent();
-            DataContext = _viewModel;
-            var propertyView = CollectionViewSource.GetDefaultView(_viewModel.Properties);
-            if (propertyView != null && propertyView.CanGroup) propertyView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(PropertyRowViewModel.Group)));
+            BindViewModel();
             ConfigureWorkspaceInteractions();
             Loaded += (_, __) => RefreshProject();
+        }
+
+        private void BindViewModel()
+        {
+            DataContext = _viewModel;
+            var propertyView = CollectionViewSource.GetDefaultView(_viewModel.Properties);
+            if (propertyView != null && propertyView.CanGroup)
+                propertyView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(PropertyRowViewModel.Group)));
+        }
+
+        public void ClearProject(string status)
+        {
+            _loadingContext = true;
+            try
+            {
+                _inspection = Array.Empty<EntitySnapshot>();
+                InspectionList.ItemsSource = _inspection;
+                SelectionCount.Text = "0 chọn";
+                _categoryFilter = null;
+                _viewModel = new WorkspaceViewModel();
+                BindViewModel();
+                ZoneCombo.SelectedIndex = -1;
+                FloorCombo.SelectedIndex = -1;
+                FamilyList.SelectedItem = null;
+                _viewModel.Status = status ?? string.Empty;
+            }
+            finally { _loadingContext = false; }
         }
 
         private void ConfigureWorkspaceInteractions()
@@ -166,28 +191,72 @@ namespace QS3D.BricsCAD.V25.UI
             }
             catch (Exception ex)
             {
-                SetStatus("Đọc Workspace lỗi: " + ex.Message);
+                ClearProject("Đọc Workspace lỗi: " + ex.Message);
             }
             finally { _loadingContext = false; }
         }
 
         public void SetStatus(string status) => _viewModel.Status = status ?? string.Empty;
-        public void SetInspection(IReadOnlyList<EntitySnapshot> snapshots) { _inspection = snapshots ?? Array.Empty<EntitySnapshot>(); InspectionList.ItemsSource = _inspection; SelectionCount.Text = _inspection.Count + " chọn"; SyncFamilyFromSelection(); }
+
+        public void SetInspection(IReadOnlyList<EntitySnapshot> snapshots)
+        {
+            _inspection = snapshots ?? Array.Empty<EntitySnapshot>();
+            InspectionList.ItemsSource = _inspection;
+            SelectionCount.Text = _inspection.Count + " chọn";
+            try
+            {
+                SyncFamilyFromSelection();
+            }
+            catch (Exception ex)
+            {
+                ClearProject("Selection sync semantic lỗi: " + ex.Message);
+            }
+        }
 
         private void SyncFamilyFromSelection()
         {
-            if (_inspection.Count == 0) return; var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null) return;
-            var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase); var project = ProjectContextCoordinator.GetOrCreate(doc);
+            if (_inspection.Count == 0)
+            {
+                _viewModel.SetSelectedElement(null);
+                return;
+            }
+
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+            {
+                _viewModel.SetSelectedElement(null);
+                return;
+            }
+
+            var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
+            var project = ProjectContextCoordinator.GetOrCreate(doc);
             var matches = project.Elements.Where(x => SemanticReferenceHandles.MatchesSelection(x, handles)).Take(2).ToList();
             if (matches.Count != 1 || string.IsNullOrWhiteSpace(matches[0].FamilyId))
             {
-                if (matches.Count > 1) SetStatus("Selection khớp nhiều cấu kiện semantic; inspector giữ scope Family để tránh sửa nhầm Instance.");
+                _viewModel.SetSelectedElement(null);
+                if (matches.Count > 1)
+                    SetStatus("Selection khớp nhiều cấu kiện semantic; inspector giữ scope Family để tránh sửa nhầm Instance.");
                 return;
             }
+
             var element = matches[0];
-            var family = project.FindFamily(element.FamilyId); if (family == null) return;
+            var family = project.FindFamily(element.FamilyId);
+            if (family == null)
+            {
+                _viewModel.SetSelectedElement(null);
+                SetStatus("Cấu kiện semantic đang chọn không còn Family hợp lệ; inspector đã về scope Family.");
+                return;
+            }
+
             _loadingContext = true;
-            try { _categoryFilter = family.Category; ApplyFamilyFilter(); FamilyList.SelectedItem = family; FamilyList.ScrollIntoView(family); _viewModel.SetSelectedElement(element); }
+            try
+            {
+                _categoryFilter = family.Category;
+                ApplyFamilyFilter();
+                FamilyList.SelectedItem = family;
+                FamilyList.ScrollIntoView(family);
+                _viewModel.SetSelectedElement(element);
+            }
             finally { _loadingContext = false; }
         }
 
