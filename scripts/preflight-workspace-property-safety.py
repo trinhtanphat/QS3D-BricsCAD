@@ -54,12 +54,15 @@ if not element.is_file():
 else:
     text = element.read_text(encoding="utf-8")
     for token in (
+        "var affectsGeneratedGeometry = ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key);",
         "var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;",
-        "if (ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key)) flags |= ElementDirtyFlags.Geometry;",
-        "MarkDirty(flags);",
+        "if (affectsGeneratedGeometry) flags |= ElementDirtyFlags.Geometry;",
+        "MarkDirtyCore(flags, affectsGeneratedGeometry);",
     ):
         if token not in text:
-            errors.append("ProjectElement property-specific dirty policy missing: " + token)
+            errors.append("ProjectElement property-specific dirty/stale policy missing: " + token)
+    if "MarkDirtyCore(flags, true);" in text:
+        errors.append("ProjectElement must not mark generated geometry stale for non-geometric property changes")
 
 if not panel.is_file():
     errors.append("missing WorkspacePanel.xaml.cs")
@@ -125,4 +128,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Workspace property rows keep property-specific dirty/geometry invalidation, read-only rows cannot retain reset state, editable same-text commits still revalidate live modeless semantic state, Instance reset resolves live Family state, selection scope fails closed, and numeric/boolean editors stay validated.")
+print("PASS: Workspace property rows honor Core property-specific dirty/stale invalidation, read-only rows cannot retain reset state, editable same-text commits revalidate live modeless state, Instance reset resolves live Family state, selection scope fails closed, and numeric/boolean editors stay validated.")
