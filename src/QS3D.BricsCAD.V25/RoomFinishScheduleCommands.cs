@@ -39,9 +39,7 @@ namespace QS3D.BricsCAD.V25
                 var rows = RoomFinishScheduleBuilder.Build(snapshot);
                 if (rows.Count == 0)
                 {
-                    const string empty = "HT_Phòng XLSX: project chưa có finish semantic để xuất.";
-                    PaletteCoordinator.SetStatus(empty);
-                    document.Editor.WriteMessage("\nQS3D " + empty);
+                    Report(document, "HT_Phòng XLSX: project chưa có finish semantic để xuất.");
                     return;
                 }
 
@@ -60,9 +58,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
-                var status = "QS3DFINISHXLSX lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\n" + status);
+                Report(document, "QS3DFINISHXLSX lỗi: " + ex.Message);
             }
         }
 
@@ -84,6 +80,12 @@ namespace QS3D.BricsCAD.V25
                     // Export has already committed; UI reporting is best effort only.
                 }
             }
+        }
+
+        private static void Report(Document document, string status)
+        {
+            try { PaletteCoordinator.SetStatus(status); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + status); } catch { }
         }
     }
 }
