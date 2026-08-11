@@ -12,20 +12,21 @@ namespace QS3D.Core.Services
         public static bool Apply(ProjectElement element)
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
-            var handled = false;
-            if (TryRead(element, SurfaceAreaProperty, out var surfaceArea))
-            {
+
+            // Validate every applicable measured input before mutating quantities so
+            // malformed later fields cannot leave a partially applied measurement.
+            var hasSurfaceArea = TryRead(element, SurfaceAreaProperty, out var surfaceArea);
+            var hasVolume = SupportsMaterialVolume(element.Category) && TryRead(element, VolumeProperty, out var volume);
+
+            if (hasSurfaceArea)
                 element.SetQuantity("MeasuredSurfaceAreaM2", surfaceArea);
-                handled = true;
-            }
-            if (SupportsMaterialVolume(element.Category) && TryRead(element, VolumeProperty, out var volume))
+            if (hasVolume)
             {
                 element.SetQuantity("MeasuredSolidVolumeM3", volume);
                 element.SetQuantity("GrossVolumeM3", volume);
                 element.SetQuantity("NetVolumeM3", volume);
-                handled = true;
             }
-            return handled;
+            return hasSurfaceArea || hasVolume;
         }
 
         private static bool TryRead(ProjectElement element, string key, out double value)
