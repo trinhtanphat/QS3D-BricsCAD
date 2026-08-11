@@ -214,7 +214,14 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out _))
+                {
+                    if (refreshUi)
+                        PaletteCoordinator.ResetForUnavailableProject(
+                            "No QS3D project is available for this drawing. Use an authoring command to create one.");
+                    return;
+                }
+
                 if (refreshUi) PaletteCoordinator.RefreshAll();
             }
             catch (Exception ex)
