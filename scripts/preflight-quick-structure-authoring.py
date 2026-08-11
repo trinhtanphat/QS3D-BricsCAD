@@ -26,6 +26,23 @@ if SOURCE.is_file():
         if commands.count(name) != 1:
             errors.append(name + " must be declared exactly once, found " + str(commands.count(name)))
 
+    if 'element.Properties[' in text:
+        errors.append("Direct Draw P0 configure callbacks must use ProjectElement.SetProperty, not direct element.Properties writes")
+    if "element.MarkDirty(ElementDirtyFlags.Properties)" in text:
+        errors.append("Direct Draw P0 must rely on SetProperty dirty/invalidation semantics, not manual Properties-only dirty flags")
+
+    canonical_setter_counts = {
+        'element.SetProperty("WidthM"': 4,
+        'element.SetProperty("DepthM"': 2,
+        'element.SetProperty("ThicknessM"': 4,
+        'element.SetProperty("HeightM"': 6,
+        'element.SetProperty("BottomOffsetM"': 8,
+    }
+    for token, expected in canonical_setter_counts.items():
+        actual = text.count(token)
+        if actual != expected:
+            errors.append("Direct Draw P0 canonical setter count mismatch for " + token + ": expected " + str(expected) + ", found " + str(actual))
+
     markers = [
         ('[CommandMethod("QS3DDRAWBEAM", CommandFlags.Modal)]', '[CommandMethod("QS3DDRAWBEAMADV", CommandFlags.Modal)]', "beam quick"),
         ('[CommandMethod("QS3DDRAWBEAMADV", CommandFlags.Modal)]', '[CommandMethod("QS3DDRAWSLAB", CommandFlags.Modal)]', "beam advanced"),
@@ -79,6 +96,8 @@ if SOURCE.is_file():
                 errors.append(label + " must not require numeric prompts: " + forbidden)
         if "ExecuteDirect(" not in body:
             errors.append(label + " must reuse ExecuteDirect")
+        if "element.SetProperty(" not in body:
+            errors.append(label + " must configure semantic overrides through ProjectElement.SetProperty")
 
     advanced_requirements = {
         "beam advanced": (
@@ -108,6 +127,8 @@ if SOURCE.is_file():
                 errors.append(label + " missing: " + token)
         if "ExecuteDirect(" not in body:
             errors.append(label + " must reuse ExecuteDirect")
+        if "element.SetProperty(" not in body:
+            errors.append(label + " must configure semantic overrides through ProjectElement.SetProperty")
 
 if RIBBON.is_file():
     text = RIBBON.read_text(encoding="utf-8")
