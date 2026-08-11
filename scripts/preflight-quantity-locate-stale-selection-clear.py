@@ -89,23 +89,31 @@ for needle in (
     if needle not in resolve:
         errors.append("multi-object/stale-handle Resolve contract changed: " + needle)
 
+summary_select = "Cad.CadHandleService.Select(_document, liveHandles)"
 for needle in (
-    "Cad.CadHandleService.Select(_document, liveHandles)",
+    summary_select,
     "if (selectedCount <= 0)",
+    "if (_locate != null)",
     '_document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
 ):
     if needle not in summary_locate:
         errors.append("QuantitySummary locate missing contract: " + needle)
 
 if summary_locate:
-    select_pos = summary_locate.find("Cad.CadHandleService.Select(_document, liveHandles)")
-    zero_pos = summary_locate.find("if (selectedCount <= 0)")
+    if summary_locate.count(summary_select) < 2:
+        errors.append("QuantitySummary must replace selection both for live handles and for the zero-candidate fallback path")
+    first_select_pos = summary_locate.find(summary_select)
+    zero_live_guard_pos = summary_locate.find("if (selectedCount <= 0)")
     zoom_pos = summary_locate.find('_document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);')
-    if not (0 <= select_pos < zero_pos < zoom_pos):
-        errors.append("QuantitySummary must replace selection before zero guard and zoom only after positive selection")
+    zero_candidate_select_pos = summary_locate.find(summary_select, first_select_pos + len(summary_select))
+    fallback_pos = summary_locate.find("if (_locate != null)")
+    if not (0 <= first_select_pos < zero_live_guard_pos < zoom_pos < zero_candidate_select_pos < fallback_pos):
+        errors.append("QuantitySummary must clear zero-candidate selection after the live-handle branch and before fallback callback")
 
+insight_select = "Cad.CadHandleService.Select(document, handles)"
 for needle in (
-    "Cad.CadHandleService.Select(document, handles)",
+    "if (handles.Count == 0)",
+    insight_select,
     "if (count > 0)",
     'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
 ):
@@ -113,11 +121,24 @@ for needle in (
         errors.append("QuantityInsight locate missing contract: " + needle)
 
 if insight_locate:
-    select_pos = insight_locate.find("Cad.CadHandleService.Select(document, handles)")
-    guard_pos = insight_locate.find("if (count > 0)")
-    zoom_pos = insight_locate.find('document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);')
-    if not (0 <= select_pos < guard_pos <= zoom_pos):
-        errors.append("QuantityInsight must replace selection before positive-count zoom guard")
+    if insight_locate.count(insight_select) < 2:
+        errors.append("QuantityInsight must replace selection in both zero-candidate and normal locate paths")
+    zero_candidate_guard_pos = insight_locate.find("if (handles.Count == 0)")
+    zero_candidate_select_pos = insight_locate.find(insight_select, zero_candidate_guard_pos)
+    zero_candidate_status_pos = insight_locate.find(
+        '_viewModel.Status = "Dòng này chưa có semantic handle hiện hành để định vị trong CAD.";',
+        zero_candidate_guard_pos,
+    )
+    normal_select_pos = insight_locate.find(insight_select, zero_candidate_select_pos + len(insight_select))
+    positive_guard_pos = insight_locate.find("if (count > 0)", normal_select_pos)
+    zoom_pos = insight_locate.find(
+        'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
+        normal_select_pos,
+    )
+    if not (
+        0 <= zero_candidate_guard_pos < zero_candidate_select_pos < zero_candidate_status_pos < normal_select_pos < positive_guard_pos <= zoom_pos
+    ):
+        errors.append("QuantityInsight must clear zero-candidate selection before status/return and zoom only after normal positive selection")
 
 for locate_name, source in (("QuantitySummary", summary_locate), ("QuantityInsight", insight_locate)):
     for forbidden in (
@@ -135,7 +156,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: explicit CAD Select now replaces implied selection even when no handle survives, "
-    "SelectIfAny preserves its no-op-on-empty contract, and both quantity locate paths keep "
-    "multi-object/stale-handle resilience with zoom gated on a positive live selection."
+    "PASS: explicit CAD Select replaces implied selection for zero-live and zero-candidate quantity targets, "
+    "SelectIfAny preserves its no-op-on-empty contract, and both quantity locate paths keep multi-object/stale-handle "
+    "resilience with zoom gated on a positive live selection."
 )
