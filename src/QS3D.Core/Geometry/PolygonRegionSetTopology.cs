@@ -214,7 +214,17 @@ namespace QS3D.Core.Geometry
 
                 var crosses = (a.Y > point.Y) != (b.Y > point.Y);
                 if (!crosses) continue;
-                var x = a.X + (point.Y - a.Y) * (b.X - a.X) / (b.Y - a.Y);
+
+                var deltaY = point.Y - a.Y;
+                var edgeX = b.X - a.X;
+                var edgeY = b.Y - a.Y;
+                if (!Finite(deltaY) || !Finite(edgeX) || !Finite(edgeY) || edgeY == 0d)
+                    throw new OverflowException("Polygon multi-region point-in-polygon interpolation exceeds the supported numeric range.");
+                var ratio = deltaY / edgeY;
+                if (!Finite(ratio)) throw new OverflowException("Polygon multi-region point-in-polygon interpolation ratio is not finite.");
+                var deltaX = edgeX * ratio;
+                if (!Finite(deltaX)) throw new OverflowException("Polygon multi-region point-in-polygon X delta is not finite.");
+                var x = a.X + deltaX;
                 if (!Finite(x))
                     throw new OverflowException("Polygon multi-region point-in-polygon intersection is not finite.");
                 if (x > point.X + Epsilon) inside = !inside;
