@@ -22,7 +22,9 @@ The UI exposes four fixed BricsCAD document actions only: `NEW`, `OPEN`, `QSAVE`
 
 ### Command launcher
 
-`StartCenterCommandCatalog` is a hard-coded QS3D-only allowlist. Search ranks command name, Vietnamese title, group, description and keywords. Query text is split into non-empty tokens and uses **AND semantics**: every token must match at least one indexed field, while the accumulated score still prefers command/title prefix matches. This makes short mixed queries such as `wall qty`, `model health`, `rebar mesh` and `tham khao` useful without enabling arbitrary command text.
+`StartCenterCommandCatalog` is a hard-coded QS3D-only allowlist. Search ranks command name, Vietnamese title, group, description and keywords. Query text is split into non-empty tokens and uses **AND semantics**: every token must match at least one indexed field, while the accumulated score still prefers command/title prefix matches.
+
+Search text is also folded for Vietnamese-friendly lookup before scoring: Unicode combining accents are removed and `đ/Đ` are normalized to `d/D`. The stored/displayed command metadata is not changed. Therefore both accented and unaccented user queries such as `tham khảo` / `tham khao`, `đối tượng` / `doi tuong`, plus mixed queries such as `wall qty`, `model health` and `rebar mesh`, can reach the same allowlisted workflow without enabling arbitrary command text.
 
 Groups cover:
 
@@ -40,7 +42,8 @@ The catalogue includes the established Family/Type, Direct Draw Quick/Advanced, 
 
 - `QS3DWALLQTY` — modeless wall quantity/takeoff workspace with current read-only reporting/3D locate/XLSX behavior;
 - `QS3DREFSEARCH` — document-bound construction-reference search launcher;
-- `QS3DQSETTINGSHEALTHEXPORT` — Quantity Settings matrix-health JSON export.
+- `QS3DQSETTINGSHEALTHEXPORT` — Quantity Settings matrix-health JSON export;
+- `QS3DRULECREATE` — the current guarded Quantity Rule A -> B creation command; Start Center only launches it and does not duplicate its settings mutation/prompt logic.
 
 Every launcher click resolves the **current** active document at execution time and calls only a catalogue item accepted by `StartCenterCommandCatalog.TryGet`. Arbitrary command strings are rejected.
 
@@ -90,7 +93,8 @@ Project summary is read-only. Existing business commands keep ownership of their
 - Quick Workflow / Command Launcher / Favorites / Recent Projects / Review & Diagnostics surfaces;
 - hard-coded QS3D allowlisting and a representative command set;
 - tokenized AND-semantics launcher search;
-- source registration for `QS3DWALLQTY`, `QS3DREFSEARCH` and `QS3DQSETTINGSHEALTHEXPORT` before those commands may appear in the launcher;
+- Unicode decomposition, combining-mark removal and `đ/Đ` folding for accent-insensitive Vietnamese lookup;
+- source registration for `QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DQSETTINGSHEALTHEXPORT` and `QS3DRULECREATE` before those commands may appear in the launcher;
 - click-time `MdiActiveDocument` resolution;
 - non-creating `TryGetReadOnly` dashboard behavior;
 - active Family / pending-save summary;
@@ -116,8 +120,9 @@ Remote/source review is not BricsCAD runtime proof. Exact-candidate local qualif
 6. Favorites/recent commands survive BricsCAD restart;
 7. recent-DWG dedupe, pin/unpin, successful open, missing-file status and Remove/Clear no-delete behavior;
 8. `Ctrl+F`, `Enter`, double-click and `Esc` interaction;
-9. launcher queries `wall qty`, `model health`, `rebar mesh` and `tham khao` return only items matching every token, and launching the resulting `QS3DWALLQTY`, health/rebar and `QS3DREFSEARCH` entries follows the click-time active DWG;
+9. launcher queries `wall qty`, `model health`, `rebar mesh`, `tham khảo`, `tham khao`, `đối tượng` and `doi tuong` return only items matching every token after the documented fold, and launching the resulting `QS3DWALLQTY`, health/rebar and `QS3DREFSEARCH` entries follows the click-time active DWG;
 10. a disposable `start-center-v1.txt` containing one malformed Base64 line between valid favorite/recent/project records skips only the malformed line and preserves the later valid records after Start Center reload/restart;
-11. `QS3DQSETTINGSHEALTHEXPORT` launched from Start Center opens its normal guarded export flow rather than any Start Center-specific implementation.
+11. `QS3DQSETTINGSHEALTHEXPORT` launched from Start Center opens its normal guarded export flow rather than any Start Center-specific implementation;
+12. `QS3DRULECREATE` launched from Start Center enters the canonical command's existing prompt/validation/confirmation path and does not gain any Start Center-specific settings mutation path.
 
 Keep private paths/screenshots and proprietary runtime material out of Git; only sanitized exact-SHA evidence belongs in the local qualification record. These runtime checks remain `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until executed on licensed BricsCAD V25.

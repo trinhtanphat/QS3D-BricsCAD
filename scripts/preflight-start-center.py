@@ -11,6 +11,7 @@ STATE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "StartCenterUserStateS
 WALL_QUANTITY = ROOT / "src" / "QS3D.BricsCAD.V25" / "WallQuantityCommands.cs"
 REFERENCE_SEARCH = ROOT / "src" / "QS3D.BricsCAD.V25" / "ReferenceSearchCommands.cs"
 QUANTITY_SETTINGS_HEALTH = ROOT / "src" / "QS3D.BricsCAD.V25" / "QuantitySettingsDiagnosticExportCommands.cs"
+QUANTITY_RULE_CREATE = ROOT / "src" / "QS3D.BricsCAD.V25" / "QuantityRuleCreateCommands.cs"
 
 
 def read(path):
@@ -31,8 +32,8 @@ def forbid(text, token, label):
 
 def main():
     commands, window, xaml, catalog, state = map(read, (COMMANDS, WINDOW, XAML, CATALOG, STATE))
-    wall_quantity, reference_search, quantity_settings_health = map(
-        read, (WALL_QUANTITY, REFERENCE_SEARCH, QUANTITY_SETTINGS_HEALTH))
+    wall_quantity, reference_search, quantity_settings_health, quantity_rule_create = map(
+        read, (WALL_QUANTITY, REFERENCE_SEARCH, QUANTITY_SETTINGS_HEALTH, QUANTITY_RULE_CREATE))
 
     require(commands, '[CommandMethod("QS3DSTART", CommandFlags.Modal)]', "QS3DSTART registration")
     require(commands, "Application.ShowModelessWindow", "modeless BricsCAD host")
@@ -69,21 +70,27 @@ def main():
     require(catalog, "StringSplitOptions.RemoveEmptyEntries", "multi-token launcher search")
     require(catalog, "ScoreTerm", "multi-token launcher scoring")
     require(catalog, "if (termScore == 0) return 0;", "AND-semantics launcher search")
+    require(catalog, "FoldForSearch", "accent-insensitive launcher search")
+    require(catalog, "NormalizationForm.FormD", "Unicode decomposition search fold")
+    require(catalog, "UnicodeCategory.NonSpacingMark", "diacritic removal search fold")
+    require(catalog, "if (c == 'đ') builder.Append('d');", "Vietnamese d-stroke search fold")
+    require(catalog, "else if (c == 'Đ') builder.Append('D');", "Vietnamese D-stroke search fold")
 
     declared = re.findall(r'New\("(QS3D[A-Z0-9]*)"', catalog)
-    if len(declared) < 48:
+    if len(declared) < 49:
         raise AssertionError("Start Center command catalog is unexpectedly small: " + str(len(declared)))
     if len(declared) != len(set(declared)):
         raise AssertionError("Start Center command catalog contains duplicate command literals.")
-    for command in ("QS3D", "QS3DFAMILIES", "QS3DDRAWWALL", "QS3DDRAWBEAM", "QS3DDRAWCOLUMN", "QS3DDRAWSLAB", "QS3DDRAWDOOR", "QS3DDRAWWINDOW", "QS3DCREATESIMILAR", "QS3DWALLQTY", "QS3DBQ", "QS3DED2", "QS3DREBARHEALTHALL", "QS3DRULEPREVIEW", "QS3DREGENPREVIEW", "QS3DHEALTHALL", "QS3DDIAGSUMMARY", "QS3DQSETTINGSHEALTHEXPORT", "QS3DREFSEARCH", "QS3DRELEASECHECK", "QS3DSAVE", "QS3DRELOAD"):
+    for command in ("QS3D", "QS3DFAMILIES", "QS3DDRAWWALL", "QS3DDRAWBEAM", "QS3DDRAWCOLUMN", "QS3DDRAWSLAB", "QS3DDRAWDOOR", "QS3DDRAWWINDOW", "QS3DCREATESIMILAR", "QS3DWALLQTY", "QS3DBQ", "QS3DED2", "QS3DREBARHEALTHALL", "QS3DRULEPREVIEW", "QS3DREGENPREVIEW", "QS3DHEALTHALL", "QS3DDIAGSUMMARY", "QS3DQSETTINGSHEALTHEXPORT", "QS3DRULECREATE", "QS3DREFSEARCH", "QS3DRELEASECHECK", "QS3DSAVE", "QS3DRELOAD"):
         if command not in declared:
             raise AssertionError("Missing representative Start Center command: " + command)
 
     require(wall_quantity, '[CommandMethod("QS3DWALLQTY", CommandFlags.Modal)]', "Wall Quantity source registration")
     require(reference_search, '[CommandMethod("QS3DREFSEARCH", CommandFlags.Modal)]', "reference-search source registration")
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
+    require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, accent-insensitive, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
