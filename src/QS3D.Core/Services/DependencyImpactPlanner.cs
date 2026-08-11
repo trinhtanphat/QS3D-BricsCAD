@@ -50,7 +50,7 @@ namespace QS3D.Core.Services
         public DependencyImpactPlan Plan(ProjectState project, IEnumerable<string> sourceElementIds)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var requestedRoots = CanonicalRoots(sourceElementIds);
+            var requestedRoots = CanonicalRoots(sourceElementIds, project.Elements.Count);
             var sourceChangeVersion = project.ChangeVersion;
 
             var graph = new DependencyGraph();
@@ -104,7 +104,7 @@ namespace QS3D.Core.Services
             return new DependencyImpactPlan(project.ProjectId, sourceChangeVersion, roots, ordered);
         }
 
-        private static IReadOnlyList<string> CanonicalRoots(IEnumerable<string> sourceElementIds)
+        private static IReadOnlyList<string> CanonicalRoots(IEnumerable<string> sourceElementIds, int maxRootCount)
         {
             if (sourceElementIds == null) throw new ArgumentNullException(nameof(sourceElementIds));
             var result = new List<string>();
@@ -112,6 +112,8 @@ namespace QS3D.Core.Services
             var index = 0;
             foreach (var value in sourceElementIds)
             {
+                if (index >= maxRootCount)
+                    throw new ArgumentException("Dependency impact source count cannot exceed project semantic element count of " + maxRootCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(sourceElementIds));
                 var raw = value ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(raw))
                     throw new ArgumentException("Dependency impact source id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(sourceElementIds));
