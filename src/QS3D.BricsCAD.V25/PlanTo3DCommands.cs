@@ -96,6 +96,9 @@ namespace QS3D.BricsCAD.V25
                 sources = refreshedSources;
 
                 var project = projectPreview.ResolveForMutation(document, operation);
+                var commitSources = PreflightSources(document, selectedIds);
+                RequireSameSources(sources, commitSources);
+                sources = commitSources;
                 RequireFreshSources(project, sources);
                 var rollback = ProjectStateSnapshot.Capture(project);
                 var createdElements = new List<ProjectElement>();
