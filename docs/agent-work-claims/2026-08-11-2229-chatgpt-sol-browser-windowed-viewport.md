@@ -1,8 +1,9 @@
 # Agent Work Claim
 
-- Status: ACTIVE
+- Status: COMPLETED
 - Agent: chatgpt-gpt56sol-browser-windowing-20260811-2229
 - Timestamp: 2026-08-11T22:29:00+07:00
+- Completed: 2026-08-11T22:31:00+07:00
 - Baseline `main` SHA: `c33038f685a5d27e107e3ba5659e6b8fe67781d3`
 - Priority: P1 Project Browser scalability / feature hardening
 - Exact scope: Make `ProjectBrowserVirtualizationPlanner.BuildViewport` materialize only the requested visible-row window while still traversing/counting expanded rows to preserve `TotalVisibleRows`, ordering, expansion, offset validation, and paging semantics. Remove the full visible-row list allocation.
@@ -14,13 +15,17 @@
   - Project Browser workspace/query/selection/coordinator behavior
   - BricsCAD/native/WPF/runtime behavior
   - GitHub Actions
-- Validation plan:
-  - preserve existing Project Browser virtualization smoke semantics
-  - add focused coverage for `offset == TotalVisibleRows` returning an empty final page with the correct total
-  - source re-read proving only at most `pageSize` row DTOs are materialized by the viewport traversal
-  - no local `dotnet`/BricsCAD runtime is available in this environment
+- Validation performed:
+  - re-read the current `main` implementation: `BuildViewport` now preallocates at most `pageSize` rows, traverses expanded nodes with a monotonic visible-row counter, materializes a `ProjectBrowserVisibleRow` only when its index is within the requested window, and returns the separately counted `TotalVisibleRows`
+  - existing ordering/expansion/page-size semantics remain unchanged in the focused smoke surface
+  - added focused regression proving `offset == TotalVisibleRows` remains a valid empty final page with stable total, previous-page state, and no next page
+  - audited both commit payloads; implementation changed only the claimed planner and regression changed only the claimed smoke file
+  - no local `dotnet` runtime is available in this environment; no GitHub Actions or BricsCAD runtime validation was run
 - Coordination:
   - checked current claim registry immediately before registration; no active virtualization/windowing claim was present
-  - prior node-cap hardening claim is COMPLETED
-  - no GitHub Actions will be dispatched
-- Completion condition: viewport row DTO materialization is bounded by requested page size while externally observable ordering/count/paging behavior remains unchanged; focused regression is present; claim is marked COMPLETED.
+  - prior node-cap hardening claim was COMPLETED before this lane started
+  - no GitHub Actions were dispatched
+- Implementation commits:
+  - `ac44f22ee74797b324988755c3873e63e3aad088` — `perf(browser): materialize only viewport row window`
+  - `f6af488dfea115c7d064eff6bdce406db9c83d93` — `test(browser): cover empty final viewport page`
+- Result: Project Browser viewport row-object allocation is now bounded by the requested `pageSize` (maximum 1000) rather than the full expanded visible-row count, while total-row counting and paging behavior are preserved.
