@@ -1,45 +1,55 @@
 # Work claim — Floor elevation tolerance freshness
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-20260812-floor-elevation-tolerance-freshness`
 - Registered: `2026-08-12T00:33:34+07:00`
-- Last Updated: `2026-08-12T00:33:34+07:00`
+- Last Updated: `2026-08-12T00:38:10+07:00`
 - Baseline main SHA: `935bab2c0e2224429909a2838a83006cf215d29a`
 - Priority: deterministic Core freshness leak found during owner-requested continue-all audit
 - Task Key: `CORE-FLOOR-ELEVATION-TOLERANCE-FRESHNESS`
+- Implementation PR: `#580`
+- Implementation commit on `main`: `4d41ec7221e5c375a4f2ce1542f331626770a788`
 
 ## Confirmed defect
 
-`ProjectFloorService.Update(...)` intentionally treats tiny elevation deltas within `NearlyEqual(...)` as an elevation no-op. However, when a Floor name changes in the same call, the method still executes `floor.ElevationM = elevationM` even when `elevationChanged == false`. Referencing elements are then dirtied only for `Relations | Quantity`, not `Geometry`.
+`ProjectFloorService.Update(...)` intentionally treats tiny elevation deltas within `NearlyEqual(...)` as an elevation no-op. Before this fix, when a Floor name changed in the same call, the method still executed `floor.ElevationM = elevationM` even when `elevationChanged == false`. Referencing elements were then dirtied only for `Relations | Quantity`, not `Geometry`.
 
-That creates an inconsistent branch: a numerical elevation change small enough to be classified as "no geometry change" is nevertheless persisted whenever a name change accompanies it. The Floor semantic value can therefore change without the geometry dirty path that a real elevation change requires.
+That allowed a numerical Floor elevation mutation to be persisted while the same branch simultaneously classified it as a non-geometry change.
 
-## Reserved scope
+## Implemented scope
 
-Make the existing tolerance a true no-op threshold: only assign `FloorDefinition.ElevationM` when `elevationChanged` is true. A name-only update with a sub-tolerance requested elevation must preserve the exact stored elevation value. Preserve all current dirty-flag behavior for real elevation changes and name changes.
+The existing tolerance is now a true no-op threshold: `FloorDefinition.ElevationM` is assigned only when `elevationChanged` is true. A rename combined with a sub-tolerance requested elevation preserves the exact stored elevation while keeping the existing name-change relation/quantity dirty behavior. Material elevation changes still update the value and add `Geometry` dirtiness.
 
-## Expected surfaces
+Focused isolated Core smoke coverage verifies:
+
+- rename + sub-tolerance elevation preserves exact stored elevation and does not introduce Geometry dirty;
+- materially different elevation updates exactly and marks referenced geometry dirty;
+- pure sub-tolerance elevation request with unchanged name remains a complete `ChangeVersion`/element-freshness no-op.
+
+## Surfaces changed
 
 - `src/QS3D.Core/Domain/ProjectFloorService.cs`
-- one focused module-registered Core smoke for the tolerance/name-change edge case
+- `tests/QS3D.Core.SmokeTests/ProjectFloorElevationToleranceSmoke.cs`
+- `tests/QS3D.Core.SmokeTests/ProjectFloorElevationToleranceSmokeRegistration.cs`
 - this claim file
 
-## Coordination / exclusions
+## Coordination / exclusions preserved
 
-- The completed Floor/Zone mutation-integrity lane (`a19e4033...`, closeout `b83b3494...`) covered canonical activation/assignment no-ops and null target batches, not elevation tolerance semantics.
-- Do not modify Zone service, persistence schema, BricsCAD adapter/UI, geometry planners or existing Floor/Zone smoke/preflight from the completed lane.
-- Do not remove or retune the existing `NearlyEqual(...)` tolerance; this lane only makes mutation behavior consistent with that already-chosen threshold.
-- No GitHub Actions/build/release dispatch and no LOCAL_ONLY runtime claim.
+- The completed Floor/Zone mutation-integrity source/preflight/smoke lane was not modified.
+- `ProjectZoneService`, persistence schema, BricsCAD adapter/UI and geometry planners were not changed.
+- The existing `NearlyEqual(...)` tolerance was not removed or retuned.
+- No GitHub Actions/build/release workflow was dispatched and no LOCAL_ONLY runtime PASS is claimed.
 
-## Validation plan
+## Validation evidence
 
-- Rename + sub-tolerance elevation request changes the name but preserves the exact stored elevation.
-- The same operation does not introduce Geometry dirty solely from the ignored elevation delta.
-- A materially different elevation still updates the exact elevation and marks referenced geometry dirty through existing behavior.
-- A pure sub-tolerance elevation request with unchanged name remains a complete no-op, preserving project `ChangeVersion`.
-- Re-fetch current service after claim publication, review exact PR diff, and read back merged source/commit. Do not claim local smoke execution unless actually run.
+- Claim was published on `main` before implementation at `720ae817cfd0036e316f9797a0c8e4bd9029394d`.
+- Post-claim re-fetch confirmed `ProjectFloorService.cs` blob `e4f1534319b0b69c4034055ef1eea626db1e0a5c` still contained the inconsistent unconditional elevation assignment.
+- PR `#580` diff was reviewed before merge: one source-line behavior change plus two new isolated smoke/registration files (`3 files`, `+106/-1`).
+- Server-side squash merge produced `4d41ec7221e5c375a4f2ce1542f331626770a788`.
+- Merge commit read-back confirms only the conditional elevation assignment and the focused three-case smoke/registration were added.
+- Local build/smoke execution is **not** claimed because this connector-only environment does not provide the repository checkout/build runner.
 
-## Completion condition
+## Completion
 
-Current `main` no longer applies an elevation value that it simultaneously classified as non-changing for geometry freshness, and focused deterministic regression source is committed with exact evidence.
+`COMPLETED`: current `main` no longer persists a Floor elevation delta that `ProjectFloorService` classified as non-changing for geometry freshness, while real elevation changes retain their existing update/dirty semantics.
