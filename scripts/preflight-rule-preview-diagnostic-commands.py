@@ -107,8 +107,8 @@ if SOURCE.is_file():
     require_order(
         "Rule Preview Export",
         rule_export,
-        "if (dialog.ShowDialog() != true) return;",
         'TryGetReadOnlyProject(document, "Rule Preview Export", out var project)',
+        "if (dialog.ShowDialog() != true) return;",
         "new QuantityRulePreviewService().PreviewProject(project)",
         "new PreviewReviewSnapshotStore().Save(snapshot, dialog.FileName)",
         "ReportReviewExport(document, snapshot, dialog.FileName)",
@@ -118,8 +118,8 @@ if SOURCE.is_file():
     require_order(
         "Regen Preview Export",
         regen_export,
-        "if (dialog.ShowDialog() != true) return;",
         'TryGetReadOnlyProject(document, "Regen Preview Export", out var project)',
+        "if (dialog.ShowDialog() != true) return;",
         "new RegenerationPreviewService().Preview(project)",
         "new PreviewReviewSnapshotStore().Save(snapshot, dialog.FileName)",
         "ReportReviewExport(document, snapshot, dialog.FileName)",
@@ -129,9 +129,11 @@ if SOURCE.is_file():
     require_order(
         "Regen Selection Preview Export",
         regen_sel_export,
-        "if (dialog.ShowDialog() != true) return;",
         'TryGetReadOnlyProject(document, "Regen Selection Review Export", out var project)',
         "ResolveSelectedSemanticIds(document, project)",
+        "if (elementIds.Count == 0)",
+        "if (dialog.ShowDialog() != true) return;",
+        "new RegenerationPreviewService().PreviewSubset(project, elementIds)",
         "new PreviewReviewSnapshotStore().Save(snapshot, dialog.FileName)",
         "ReportReviewExport(document, snapshot, dialog.FileName)",
     )
@@ -140,8 +142,8 @@ if SOURCE.is_file():
     require_order(
         "Diagnostic Summary",
         diagnostic,
-        "if (dialog.ShowDialog() != true) return;",
         'TryGetReadOnlyProject(document, "Diagnostic Summary", out var project)',
+        "if (dialog.ShowDialog() != true) return;",
         "new ComprehensiveModelHealthService().Inspect(project)",
         "ProjectDiagnosticSummaryExporter.Export(dialog.FileName, project, issues)",
         "FinalizeExportUi(document,",
@@ -150,13 +152,11 @@ if SOURCE.is_file():
     if dialog_at >= 0:
         before_dialog = diagnostic[:dialog_at]
         for forbidden in (
-            "TryGetReadOnlyProject(",
-            "ProjectContextCoordinator.",
             "ComprehensiveModelHealthService",
-            "project.",
+            "ProjectDiagnosticSummaryExporter.Export",
         ):
             if forbidden in before_dialog:
-                errors.append("Diagnostic Summary Cancel path must not access/scan project before save confirmation: " + forbidden)
+                errors.append("Diagnostic Summary must validate project first but defer expensive scan/write until after Save confirmation: " + forbidden)
 
 if RULES.is_file() and "ProjectStateSnapshot.CreateDetachedCopy(project)" not in RULES.read_text(encoding="utf-8"):
     errors.append("Quantity rule preview lost detached-state execution.")
@@ -182,4 +182,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: preview/diagnostic commands use read-only project lookup, review exports confirm destination before project access, previews execute through one engine on detached Core state, and Diagnostic Summary atomically publishes aggregate output.")
+print("PASS: preview/diagnostic commands validate existing project/selection state before Save dialogs, defer expensive preview/health work until confirmation, execute previews on detached Core state, and publish review/diagnostic output safely.")
