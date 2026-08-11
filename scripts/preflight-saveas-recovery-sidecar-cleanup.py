@@ -48,14 +48,15 @@ def main():
         return fail("obsolete recovery cleanup helper boundaries were not found")
 
     cleanup_body = text[cleanup_start:cleanup_end]
+    try_guard = cleanup_body.find("try\n            {")
     same_path_guard = cleanup_body.find("if (SameDrawingName(obsoletePath, currentPath)) return;")
     primary_delete = cleanup_body.find("File.Delete(obsoletePath);")
     backup_delete = cleanup_body.find("File.Delete(obsoletePath + \".bak\");")
     state_remove = cleanup_body.rfind("UnsavedProjectPaths.Remove(document);")
-    if min(same_path_guard, primary_delete, backup_delete, state_remove) < 0:
+    if min(try_guard, same_path_guard, primary_delete, backup_delete, state_remove) < 0:
         return fail("cleanup helper is missing a required SAVEAS promotion guard")
-    if not same_path_guard < primary_delete < state_remove or not same_path_guard < backup_delete < state_remove:
-        return fail("same-path saves must preserve recovery tracking and cleanup must finish before tracking is discarded")
+    if not try_guard < same_path_guard < primary_delete < state_remove or not try_guard < same_path_guard < backup_delete < state_remove:
+        return fail("path comparison and cleanup must remain inside the post-commit best-effort region")
     if "catch (Exception)" not in cleanup_body:
         return fail("post-commit recovery cleanup is not best-effort")
 
