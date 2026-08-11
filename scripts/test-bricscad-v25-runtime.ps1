@@ -150,6 +150,7 @@ public static class QS3DWin32Capture {
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
 }
 "@
 
@@ -170,7 +171,28 @@ public static class QS3DWin32Capture {
         $bitmap = New-Object System.Drawing.Bitmap $width, $height
         $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
         try {
-            $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+            try {
+                $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+            }
+            catch {
+                # CopyFromScreen can fail with ERROR_INVALID_HANDLE when the
+                # interactive desktop does not expose a screen DC to this host.
+                # PrintWindow still captures the exact BricsCAD HWND and keeps
+                # screenshot evidence mandatory instead of silently skipping it.
+                $hdc = $graphics.GetHdc()
+                try {
+                    $captured = [QS3DWin32Capture]::PrintWindow($process.MainWindowHandle, $hdc, 2)
+                    if (-not $captured) {
+                        $captured = [QS3DWin32Capture]::PrintWindow($process.MainWindowHandle, $hdc, 0)
+                    }
+                    if (-not $captured) {
+                        throw "CopyFromScreen failed and PrintWindow could not capture the BricsCAD window."
+                    }
+                }
+                finally {
+                    $graphics.ReleaseHdc($hdc)
+                }
+            }
             $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
         }
         finally {
