@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             AvoidsExistingViewsDeterministically();
+            ExistingViewOutsideScheduleMarginRemainsValid();
             ReservedBottomAreaIsRespected();
             MissingScheduleFailsClosed();
             DuplicateRequestedScheduleFailsClosed();
@@ -44,6 +45,30 @@ namespace QS3D.Core.SmokeTests
             Equal("SCH-2", plan.Placements[1].ScheduleId);
             Equal(138d, plan.Placements[1].Xmm);
             Equal(68d, plan.Placements[1].Ymm);
+        }
+
+        private static void ExistingViewOutsideScheduleMarginRemainsValid()
+        {
+            var views = BuildViews("V1");
+            var sheet = SemanticSheetPlanner.Build(
+                new SemanticSheetDefinition(
+                    "S1", "A-01", "Schedule Sheet", 210d, 150d,
+                    new[] { new SemanticSheetPlacementDefinition("V1", 2d, 2d, 30d, 30d) }),
+                views);
+            var plan = SemanticSchedulePlacementPlanner.Build(
+                sheet,
+                BuildSchedules("SCH-1"),
+                new[] { new SemanticSchedulePlacementItem("SCH-1", 50d, 30d) },
+                new SemanticSchedulePlacementOptions(
+                    marginLeftMm: 20d,
+                    marginTopMm: 20d,
+                    marginRightMm: 20d,
+                    marginBottomMm: 20d));
+
+            Equal(1, plan.Placements.Count);
+            var placement = plan.Placements[0];
+            if (placement.Xmm < 20d || placement.Ymm < 20d)
+                throw new Exception("Schedule placement escaped the configured schedule margin.");
         }
 
         private static void ReservedBottomAreaIsRespected()
