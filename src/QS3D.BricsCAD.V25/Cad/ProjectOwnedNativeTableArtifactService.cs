@@ -165,7 +165,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         "documentation.table.replace",
                         string.Empty,
                         definition.DocumentId + " • " + table.Handle + " • rows=" + snapshot.Rows.Count.ToString(CultureInfo.InvariantCulture));
-                    project.Touch();
 
                     transaction.Commit();
                     cadCommitted = true;
@@ -208,7 +207,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     ErasePrevious(document, transaction, project, definition);
                     foreach (var key in definition.StateKeys) project.Metadata.Remove(key);
                     AuditTrail.ForProject(project).Record("documentation.table.remove", string.Empty, definition.DocumentId);
-                    project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
