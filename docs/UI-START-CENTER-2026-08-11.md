@@ -22,7 +22,9 @@ The UI exposes four fixed BricsCAD document actions only: `NEW`, `OPEN`, `QSAVE`
 
 ### Command launcher
 
-`StartCenterCommandCatalog` is a hard-coded QS3D-only allowlist. Search ranks command name, Vietnamese title, group, description and keywords. Groups cover:
+`StartCenterCommandCatalog` is a hard-coded QS3D-only allowlist. Search ranks command name, Vietnamese title, group, description and keywords. Query text is split into non-empty tokens and uses **AND semantics**: every token must match at least one indexed field, while the accumulated score still prefers command/title prefix matches. This makes short mixed queries such as `wall qty`, `model health`, `rebar mesh` and `tham khao` useful without enabling arbitrary command text.
+
+Groups cover:
 
 - Khởi đầu;
 - Tạo mới / Quick Direct Draw;
@@ -34,17 +36,23 @@ The UI exposes four fixed BricsCAD document actions only: `NEW`, `OPEN`, `QSAVE`
 - Review & Health;
 - Dự án.
 
-The initial catalogue includes 70+ current QS3D entry points, including Family/Type, Direct Draw Quick/Advanced, Create Similar, Room/Build/Curtain, Recognition/B4D, BQ/ED2/BBS, rebar, previews, Model Health, diagnostics and project persistence.
+The catalogue includes the established Family/Type, Direct Draw Quick/Advanced, Create Similar, Room/Build/Curtain, Recognition/B4D, BQ/ED2/BBS, rebar, previews, Model Health, diagnostics and project-persistence entry points. It also tracks current source additions that matter to the Start Center workflow hub:
+
+- `QS3DWALLQTY` — modeless wall quantity/takeoff workspace with current read-only reporting/3D locate/XLSX behavior;
+- `QS3DREFSEARCH` — document-bound construction-reference search launcher;
+- `QS3DQSETTINGSHEALTHEXPORT` — Quantity Settings matrix-health JSON export.
 
 Every launcher click resolves the **current** active document at execution time and calls only a catalogue item accepted by `StartCenterCommandCatalog.TryGet`. Arbitrary command strings are rejected.
 
 ### Quick Workflow
 
-The first screen promotes the shortest normal authoring route: Family / Type, Wall, Beam, Column, Slab, Door, Window, Create Similar, BQ and Model Health. The Start Center does not duplicate any of those workflows; it only launches their canonical commands.
+The first screen promotes the shortest normal authoring route: Family / Type, Wall, Beam, Column, Slab, Door, Window, Create Similar, BQ and Model Health. The Start Center does not duplicate any of those workflows; it only launches their canonical commands. Quantity and support workflows remain discoverable through the same launcher instead of introducing a second implementation path.
 
 ### Favorites and recent commands
 
 Favorites and the recent-command list are per-user state. Only commands still present in the hard-coded allowlist survive load/normalization, so a modified settings file cannot turn the launcher into arbitrary command execution.
+
+The settings loader treats each Base64 record independently. A malformed favorite/recent/recent-DWG record is skipped without aborting the rest of an otherwise valid bounded settings file. This keeps user-state corruption local to the bad line rather than silently dropping all later valid history.
 
 ### Recent Projects / DWG
 
@@ -81,11 +89,13 @@ Project summary is read-only. Existing business commands keep ownership of their
 - shared Premium Dark theme usage;
 - Quick Workflow / Command Launcher / Favorites / Recent Projects / Review & Diagnostics surfaces;
 - hard-coded QS3D allowlisting and a representative command set;
+- tokenized AND-semantics launcher search;
+- source registration for `QS3DWALLQTY`, `QS3DREFSEARCH` and `QS3DQSETTINGSHEALTHEXPORT` before those commands may appear in the launcher;
 - click-time `MdiActiveDocument` resolution;
 - non-creating `TryGetReadOnly` dashboard behavior;
 - active Family / pending-save summary;
 - normalized `.dwg` recent-project persistence;
-- bounded state and replacement save;
+- bounded state, malformed-record isolation and replacement save;
 - absence of `Process.Start` and `ProjectContextCoordinator.GetOrCreate` from the Start Center source lane.
 
 `scripts/preflight-start-center-ribbon.py` separately locks discoverability: the implemented `QS3DSTART` command must appear exactly once in Ribbon source, inside `KHỞI ĐẦU` → `Dự án`, while Ribbon execution continues to resolve `MdiActiveDocument` at click time.
@@ -105,6 +115,9 @@ Remote/source review is not BricsCAD runtime proof. Exact-candidate local qualif
 5. two-DWG switching while Start Center stays open, with dashboard/command/Ribbon dispatch always following the active DWG and no project creation merely from viewing;
 6. Favorites/recent commands survive BricsCAD restart;
 7. recent-DWG dedupe, pin/unpin, successful open, missing-file status and Remove/Clear no-delete behavior;
-8. `Ctrl+F`, `Enter`, double-click and `Esc` interaction.
+8. `Ctrl+F`, `Enter`, double-click and `Esc` interaction;
+9. launcher queries `wall qty`, `model health`, `rebar mesh` and `tham khao` return only items matching every token, and launching the resulting `QS3DWALLQTY`, health/rebar and `QS3DREFSEARCH` entries follows the click-time active DWG;
+10. a disposable `start-center-v1.txt` containing one malformed Base64 line between valid favorite/recent/project records skips only the malformed line and preserves the later valid records after Start Center reload/restart;
+11. `QS3DQSETTINGSHEALTHEXPORT` launched from Start Center opens its normal guarded export flow rather than any Start Center-specific implementation.
 
-Keep private paths/screenshots and proprietary runtime material out of Git; only sanitized exact-SHA evidence belongs in the local qualification record.
+Keep private paths/screenshots and proprietary runtime material out of Git; only sanitized exact-SHA evidence belongs in the local qualification record. These runtime checks remain `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until executed on licensed BricsCAD V25.
