@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.Core/Documentation/SemanticScheduleCatalog.cs"
+TABLE = ROOT / "src/QS3D.Core/Documentation/SemanticDocumentationTableBuilder.cs"
 TEST = ROOT / "tests/QS3D.Core.SmokeTests/SemanticScheduleCatalogSmoke.cs"
 DOC = ROOT / "docs/SEMANTIC-SCHEDULES.md"
 errors = []
@@ -17,6 +18,7 @@ def read(path):
 
 
 source = read(SOURCE)
+table = read(TABLE)
 test = read(TEST)
 doc = read(DOC)
 
@@ -32,19 +34,33 @@ for token in (
     "MaxSchedules = 128",
     "MaxIds = 5000",
     "MaxColumns = 32",
-    "Semantic schedule selects no elements",
     "FindFloor",
     "FindZone",
     "IncludeElementIds",
     "ExcludeElementIds",
+    "new List<ElementCategory>",
+    ".AsReadOnly()",
+    "Project contains a null semantic element.",
+    "allowEmpty: true",
 ):
     if token not in source:
         errors.append("semantic schedule source missing contract token: " + token)
 
 for token in (
+    "bool allowEmpty",
+    "ids.Count == 0 && !allowEmpty",
+    "SemanticTagRenderer.Render",
+):
+    if token not in table:
+        errors.append("documentation table builder missing schedule hardening token: " + token)
+
+for token in (
     "SaveLoadRoundTripIsDeterministic",
     "UpsertAndRemoveSupportMultipleDefinitions",
     "BuildFiltersAndUsesCanonicalTemplateRenderer",
+    "EmptySelectionBuildsHeaderOnlyTable",
+    "DefinitionCollectionsAreDefensivelyImmutable",
+    "NullProjectElementsFailClosed",
     "StaleReferencesFailClosedAtRenderTime",
     "DuplicateDefinitionsAndOverlappingListsFailClosed",
     "{Q:LengthM}",
@@ -59,11 +75,17 @@ for token in (
     "does not calculate BBS",
     "SemanticDocumentationTableBuilder",
     "Floor/Zone",
+    "header-only",
+    "defensively immutable",
+    "null semantic Element",
     "portable interchange",
     "native BricsCAD Table",
 ):
     if token not in doc:
         errors.append("semantic schedule documentation missing boundary token: " + token)
+
+if "Semantic schedule selects no elements" in source:
+    errors.append("valid zero-match custom schedules must render header-only rather than fail")
 
 if errors:
     for error in errors:
@@ -71,4 +93,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: custom semantic schedule definitions are bounded/persisted, render through the canonical documentation table builder, and do not become a second quantity calculator.")
+print("PASS: custom semantic schedules are bounded/persisted, immutable, fail closed on corrupt null model state, support header-only zero-match output, and remain on the canonical documentation renderer.")

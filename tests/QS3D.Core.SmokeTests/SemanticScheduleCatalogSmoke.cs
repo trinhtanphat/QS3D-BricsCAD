@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Documentation;
@@ -13,6 +14,9 @@ namespace QS3D.Core.SmokeTests
             SaveLoadRoundTripIsDeterministic();
             UpsertAndRemoveSupportMultipleDefinitions();
             BuildFiltersAndUsesCanonicalTemplateRenderer();
+            EmptySelectionBuildsHeaderOnlyTable();
+            DefinitionCollectionsAreDefensivelyImmutable();
+            NullProjectElementsFailClosed();
             StaleReferencesFailClosedAtRenderTime();
             DuplicateDefinitionsAndOverlappingListsFailClosed();
         }
@@ -72,6 +76,51 @@ namespace QS3D.Core.SmokeTests
 
             var source = project.FindElement("E1") ?? throw new Exception("Element missing.");
             Equal(4.5, source.Quantities["LengthM"]);
+        }
+
+        private static void EmptySelectionBuildsHeaderOnlyTable()
+        {
+            var project = Project();
+            var definition = Definition(
+                "S-EMPTY",
+                "Empty schedule",
+                "EMPTY",
+                "F2",
+                "Z2",
+                Array.Empty<string>(),
+                Array.Empty<string>());
+
+            var table = SemanticScheduleCatalog.Build(project, definition);
+            Equal("EMPTY", table.Title);
+            Equal("Id|Mark|Length", string.Join("|", table.Headers));
+            Equal(0, table.Rows.Count);
+        }
+
+        private static void DefinitionCollectionsAreDefensivelyImmutable()
+        {
+            var definition = Definition(
+                "S-IMMUTABLE",
+                "Immutable",
+                "IMMUTABLE",
+                "F1",
+                "Z1",
+                new[] { "E1" },
+                Array.Empty<string>());
+
+            Throws<NotSupportedException>(() => ((IList<ElementCategory>)definition.Categories)[0] = ElementCategory.Column);
+            Throws<NotSupportedException>(() => ((IList<string>)definition.IncludeElementIds)[0] = "E2");
+            Throws<NotSupportedException>(() => ((IList<SemanticDocumentationColumn>)definition.Columns)[0] = new SemanticDocumentationColumn("Other", "{Id}"));
+            Equal(ElementCategory.Beam, definition.Categories[0]);
+            Equal("E1", definition.IncludeElementIds[0]);
+            Equal("Id", definition.Columns[0].Header);
+        }
+
+        private static void NullProjectElementsFailClosed()
+        {
+            var project = Project();
+            project.Elements.Add(null!);
+            var definition = Definition("S-NULL", "Null guard", "NULL GUARD", "", "", Array.Empty<string>(), Array.Empty<string>());
+            Throws<InvalidOperationException>(() => SemanticScheduleCatalog.Build(project, definition));
         }
 
         private static void StaleReferencesFailClosedAtRenderTime()
