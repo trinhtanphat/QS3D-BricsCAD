@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "DocumentBoundWindowLifetime.cs"
