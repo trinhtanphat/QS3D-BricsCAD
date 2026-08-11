@@ -219,13 +219,35 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("gán Family cho selection");
+                if (!(FamilyList.SelectedItem is ProjectFamily selectedFamily))
+                    throw new InvalidOperationException("Chọn Family trước khi thực hiện thao tác.");
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject))
+                    throw new InvalidOperationException("Gán Family cho selection cần một QS3D project hiện hữu; thao tác này không tạo project mới.");
+                var previewFamily = previewProject.FindFamily(selectedFamily.Id)
+                    ?? throw new InvalidOperationException("Family đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại.");
+                var expectedProjectId = previewProject.ProjectId;
+                var previewIds = SemanticSelectionResolver.ResolveImplied(_document, previewProject)
+                    .Select(x => x.Id)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (previewIds.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+
                 var project = ExistingProjectMutationContext.Require(_document, "Gán Family cho selection");
-                var family = RequireSelectedFamily(project);
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi sau khi đọc selection. Không có Family assignment nào được áp dụng; hãy Refresh và thử lại.");
+                var family = project.FindFamily(previewFamily.Id)
+                    ?? throw new InvalidOperationException("Family đã thay đổi hoặc bị xóa khỏi project hiện tại. Hãy Refresh và chọn lại.");
                 var elements = SemanticSelectionResolver.ResolveImplied(_document, project)
                     .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                     .Select(x => x.First())
                     .ToList();
-                if (elements.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+                var currentIds = elements.Select(x => x.Id)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (!previewIds.SequenceEqual(currentIds, StringComparer.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Selection hoặc semantic ownership đã thay đổi trước khi gán Family. Không có mutation nào được áp dụng; hãy chọn lại và thử lại.");
+
                 var previous = elements.ToDictionary(x => x.Id, x => x.FamilyId, StringComparer.OrdinalIgnoreCase);
                 var changed = ExecuteAtomic(project, () =>
                 {
