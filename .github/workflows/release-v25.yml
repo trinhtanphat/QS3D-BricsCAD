@@ -16,7 +16,7 @@ on:
           - "NO"
           - "RELEASE"
       run_runtime:
-        description: "Run real BricsCAD V25 NETLOAD/runtime validation before packaging"
+        description: "Run real BricsCAD V25 NETLOAD/runtime validation on the release plugin payload"
         required: true
         default: true
         type: boolean
@@ -130,8 +130,8 @@ jobs:
       - name: Build BricsCAD V25 plugin
         run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
 
-      - name: Real V25 NETLOAD/runtime validation
-        if: ${{ inputs.run_runtime }}
+      - name: Real V25 runtime validation for unsigned preview payload
+        if: ${{ inputs.run_runtime && !inputs.sign_package }}
         shell: powershell
         run: |
           $plugin = (Resolve-Path "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll").Path
@@ -139,7 +139,7 @@ jobs:
             -BricsCadDir $env:BRICSCAD_V25_DIR `
             -PluginDll $plugin `
             -Profile $env:BRICSCAD_V25_PROFILE `
-            -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v25-runtime"
+            -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v25-runtime-unsigned"
 
       - name: Build V25 release package
         shell: powershell
@@ -202,6 +202,17 @@ jobs:
             -ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT `
             -Confirm:$false
 
+      - name: Real V25 runtime validation for signed release payload
+        if: ${{ inputs.run_runtime && inputs.sign_package }}
+        shell: powershell
+        run: |
+          $plugin = (Resolve-Path "dist\QS3D-BricsCAD-V25\QS3D.BricsCAD.V25.dll").Path
+          & .\scripts\test-bricscad-v25-runtime.ps1 `
+            -BricsCadDir $env:BRICSCAD_V25_DIR `
+            -PluginDll $plugin `
+            -Profile $env:BRICSCAD_V25_PROFILE `
+            -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v25-runtime-signed"
+
       - name: Create signed auto-update manifest
         if: ${{ inputs.sign_package }}
         shell: powershell
@@ -229,7 +240,8 @@ jobs:
             dist/QS3D-BricsCAD-V25.zip
             dist/QS3D-BricsCAD-V25.zip.sha256
             dist/QS3D-BricsCAD-V25.update.json
-            artifacts/bricscad-v25-runtime/
+            artifacts/bricscad-v25-runtime-unsigned/
+            artifacts/bricscad-v25-runtime-signed/
 
       - name: Publish GitHub Release
         shell: powershell
@@ -244,13 +256,16 @@ jobs:
           }
           $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
           $signPackage = $env:RELEASE_SIGN_PACKAGE -eq 'true'
-          $runtimeState = if ($env:RELEASE_RUN_RUNTIME -eq 'true') { 'passed required V25 runtime gate' } else { 'runtime skipped for explicit prerelease preview' }
+          $runtimeState = if ($env:RELEASE_RUN_RUNTIME -eq 'true') {
+            if ($signPackage) { 'passed required V25 runtime gate on the exact signed release plugin payload' }
+            else { 'passed V25 runtime gate on the unsigned prerelease plugin payload' }
+          } else { 'runtime skipped for explicit prerelease preview' }
           $signingState = if ($signPackage) { 'Authenticode-signed and timestamped with one-click update manifest' } else { 'unsigned explicit prerelease preview; manual install only' }
           $body = @{
             tag_name = $env:RELEASE_TAG
             target_commitish = $env:GITHUB_SHA
             name = "QS3D for BricsCAD V25 $env:RELEASE_TAG"
-            body = "Owner-approved manual build/release. Source checks, Core build/smoke tests and V25 adapter build completed. Runtime: $runtimeState. Package: $signingState. The release tag is bound to the package assembly version before publication."
+            body = "Owner-approved manual build/release. Source checks, Core build/smoke tests and V25 adapter build completed. Runtime: $runtimeState. Package: $signingState. The release tag is bound to the package product/assembly version before publication."
             draft = $true
             prerelease = $isPrerelease
             generate_release_notes = $true
