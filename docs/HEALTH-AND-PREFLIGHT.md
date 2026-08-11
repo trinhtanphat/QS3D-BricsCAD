@@ -46,6 +46,8 @@ Other feature preflights protect product-boundary, Direct Draw and additional so
 
 GitHub Actions workflows remain `workflow_dispatch` only unless [`../CI_POLICY.md`](../CI_POLICY.md) is explicitly changed. A commit, push, documentation update, review, handoff or `continue all` request does **not** authorize running a manual workflow.
 
+`scripts/preflight-ci-manual-only.py` treats the job-level event condition as a semantic safety boundary rather than a substring check. Every executable job must use `github.event_name == 'workflow_dispatch'` as the leading conjunction; YAML comments, negated equality and `||` bypass branches cannot satisfy the guard. Both `release-v25.yml` and `release-v25-cloud.yml` additionally require the canonical `inputs.confirm_release == 'RELEASE'` conjunction on their `release` job. The parser carries deterministic positive/negative regression cases so comment-only or bypassing expressions fail closed.
+
 A manually approved validation should run the generic/source guards before relevant Core/V25 build, smoke or runtime stages.
 
 ## What static gates do not prove
