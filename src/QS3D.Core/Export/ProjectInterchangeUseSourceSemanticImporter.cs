@@ -416,6 +416,9 @@ namespace QS3D.Core.Export
             ProjectInterchangeImportResolutionPlan resolution)
         {
             var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var replacedZones = new HashSet<string>(
+                resolution.Items.Where(x => x.Kind == InterchangeIdentityKind.Zone && x.Action == InterchangeImportResolutionAction.UseSourceSemanticData).Select(x => x.Id),
+                StringComparer.OrdinalIgnoreCase);
             var replacedFloors = new HashSet<string>(
                 resolution.Items.Where(x => x.Kind == InterchangeIdentityKind.Floor && x.Action == InterchangeImportResolutionAction.UseSourceSemanticData).Select(x => x.Id),
                 StringComparer.OrdinalIgnoreCase);
@@ -429,7 +432,8 @@ namespace QS3D.Core.Export
             foreach (var element in target.Elements)
             {
                 if (element == null) continue;
-                if (ReferencesReplacedFloor(element, replacedFloors) ||
+                if ((!string.IsNullOrWhiteSpace(element.ZoneId) && replacedZones.Contains(element.ZoneId.Trim())) ||
+                    ReferencesReplacedFloor(element, replacedFloors) ||
                     (!string.IsNullOrWhiteSpace(element.FamilyId) && replacedFamilies.Contains(element.FamilyId)))
                     affected.Add(element.Id);
             }
