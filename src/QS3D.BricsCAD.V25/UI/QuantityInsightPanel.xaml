@@ -1,0 +1,168 @@
+<UserControl x:Class="QS3D.BricsCAD.V25.UI.QuantityInsightPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:QS3D.BricsCAD.V25.UI.ViewModels"
+             MinWidth="260" MinHeight="360">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="InsightCard" TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource Bg1Brush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="5"/>
+                <Setter Property="Padding" Value="8"/>
+            </Style>
+            <Style x:Key="MetricLabel" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+                <Setter Property="Margin" Value="0,2"/>
+            </Style>
+            <Style x:Key="MetricValue" TargetType="TextBlock">
+                <Setter Property="HorizontalAlignment" Value="Right"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Margin" Value="8,2,0,2"/>
+            </Style>
+
+            <HierarchicalDataTemplate DataType="{x:Type vm:QuantityInsightFloorViewModel}"
+                                      ItemsSource="{Binding Items}">
+                <DockPanel Margin="0,2">
+                    <TextBlock Text="▣" Foreground="{StaticResource AccentBrush}" Margin="0,0,5,0"/>
+                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold"/>
+                </DockPanel>
+            </HierarchicalDataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:QuantityInsightItemViewModel}">
+                <Border x:Name="RowChrome" Background="Transparent" BorderBrush="Transparent"
+                        BorderThickness="1" CornerRadius="3" Padding="5,4" Margin="0,1,1,1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding MetaText}" Style="{StaticResource Caption}"
+                                       TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{Binding Summary}" Foreground="{StaticResource LuxuryBrush}"
+                                   FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding IsSelectionMatch}" Value="True">
+                        <Setter TargetName="RowChrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                        <Setter TargetName="RowChrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource Bg0Brush}" Margin="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" MinHeight="190"/>
+            <RowDefinition Height="4"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="31"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource Bg1Brush}" BorderThickness="0,0,0,1" Padding="8">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Top">
+                    <DockPanel>
+                        <StackPanel>
+                            <TextBlock Text="DIỄN GIẢI KHỐI LƯỢNG" Style="{StaticResource PanelTitle}" Margin="0"/>
+                            <TextBlock Text="Cây cấu kiện • Floor / Family" Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <Border DockPanel.Dock="Right" Background="{StaticResource AccentSoftBrush}"
+                                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+                                CornerRadius="8" Padding="7,1" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding QuantityCountText}" Style="{StaticResource Caption}"/>
+                        </Border>
+                    </DockPanel>
+
+                    <Border Background="{StaticResource Bg2Brush}" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1" CornerRadius="4" Padding="4" Margin="0,7,0,6">
+                        <WrapPanel>
+                            <Button Content="Làm mới" Click="OnRefreshClick" Style="{StaticResource DenseButton}"
+                                    ToolTip="Đọc lại tổng hợp khối lượng từ project QS3D hiện hành"/>
+                            <Button Content="Tính lại" Click="OnRegenerateClick" Style="{StaticResource DenseButton}"
+                                    ToolTip="Chạy QS3DREGEN trên project hiện hành"/>
+                            <Button Content="Mở BQ" Click="OnOpenBqClick" Style="{StaticResource AccentButton}"
+                                    ToolTip="Mở bảng khối lượng QS3DBQ đầy đủ"/>
+                            <Button Content="Định vị" Click="OnLocateClick" Style="{StaticResource DenseButton}"
+                                    ToolTip="Chọn và zoom các đối tượng CAD của dòng khối lượng đang chọn"/>
+                        </WrapPanel>
+                    </Border>
+                </StackPanel>
+
+                <Grid>
+                    <TextBlock x:Name="EmptyHint" Text="Chưa có dòng khối lượng để hiển thị."
+                               Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Margin="18" Visibility="Collapsed"/>
+                    <TreeView x:Name="QuantityTree" ItemsSource="{Binding Floors}"
+                              MouseDoubleClick="OnQuantityTreeDoubleClick"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                </Grid>
+            </DockPanel>
+        </Border>
+
+        <GridSplitter Grid.Row="1" Height="4" Background="{StaticResource BorderBrush}"
+                      HorizontalAlignment="Stretch"/>
+
+        <Border Grid.Row="2" Style="{StaticResource InsightCard}" Margin="8,7,8,7">
+            <StackPanel>
+                <DockPanel Margin="0,0,0,5">
+                    <TextBlock Text="TỔNG QUAN CẢ DỰ ÁN" Style="{StaticResource PanelTitle}" Margin="0"/>
+                    <TextBlock DockPanel.Dock="Right" Text="READ-ONLY" Foreground="{StaticResource SuccessBrush}"
+                               FontSize="9" FontWeight="SemiBold"/>
+                </DockPanel>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Bê tông gộp:" Style="{StaticResource MetricLabel}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GrossConcreteText}" Style="{StaticResource MetricValue}"/>
+
+                    <TextBlock Grid.Row="1" Text="Đã trừ giao cắt:" Style="{StaticResource MetricLabel}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DeductionText}" Style="{StaticResource MetricValue}"
+                               Foreground="{StaticResource WarningBrush}"/>
+
+                    <TextBlock Grid.Row="2" Text="Bê tông còn:" Style="{StaticResource MetricLabel}" FontWeight="SemiBold"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding NetConcreteText}" Style="{StaticResource MetricValue}"
+                               Foreground="{StaticResource SuccessBrush}"/>
+
+                    <TextBlock Grid.Row="3" Text="Cốp pha:" Style="{StaticResource MetricLabel}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding FormworkText}" Style="{StaticResource MetricValue}"/>
+
+                    <TextBlock Grid.Row="4" Text="Tổng chiều dài:" Style="{StaticResource MetricLabel}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding LengthText}" Style="{StaticResource MetricValue}"/>
+                </Grid>
+
+                <Border BorderThickness="0,1,0,0" BorderBrush="{StaticResource BorderBrush}" Margin="0,6,0,0" Padding="0,6,0,0">
+                    <TextBlock Text="Chọn cấu kiện trong CAD để highlight dòng liên quan; nhấp đúp dòng để định vị ngược trong bản vẽ."
+                               Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="3" Background="{StaticResource Bg1Brush}" BorderThickness="0,1,0,0" Padding="8,5">
+            <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis"/>
+        </Border>
+    </Grid>
+</UserControl>

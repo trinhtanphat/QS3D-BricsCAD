@@ -8,12 +8,13 @@
 
 ## Reserved scope
 
-Audit and harden the repository-level static preflight aggregation contract, then refresh the top-level README and consolidate high-level documentation references so current source/runtime truth is easier to discover. Fix only verified repository-health/tooling defects that are independent of active feature lanes.
+Audit and harden repository-level static source/preflight orchestration, then refresh the top-level README and consolidate high-level documentation references so current source/runtime truth is easier to discover. Fix only verified repository-health/tooling defects that are independent of active feature lanes.
 
 ## Expected surfaces
 
+- `scripts/preflight.py`
 - `scripts/preflight-all.py`
-- repository-health/static-preflight regression coverage directly targeting the aggregate runner, if needed
+- repository-health/static-preflight regression coverage directly targeting these repository-level guards, if needed
 - `README.md`
 - high-level documentation/index/status Markdown only when necessary to remove stale duplication or broken navigation
 - this claim file
@@ -28,14 +29,14 @@ Audit and harden the repository-level static preflight aggregation contract, the
 
 ## Validation plan
 
-- prove any aggregate-runner defect from source behavior before changing it
+- prove any repository-level guard defect from source behavior before changing it
 - execute Python syntax/behavior checks locally when the source can be reconstructed without proprietary dependencies
 - re-read latest `main` before the implementation commit and avoid overwriting concurrent documentation changes
 - inspect GitHub commit/status evidence after push
 
 ## Coordination
 
-This lane deliberately owns only repository-level preflight orchestration plus top-level documentation consolidation. Feature implementations and their feature-specific tests/docs remain with their existing claims.
+This lane deliberately owns only repository-level source/preflight orchestration plus top-level documentation consolidation. Feature implementations and their feature-specific tests/docs remain with their existing claims.
 
 ## Completion condition
 
