@@ -18,7 +18,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Slab Mesh 3D");
                 var result = SlabMeshSolidBuilder.BuildSelected(document, project);
                 var message = result.Bars == 0
                     ? "Slab Mesh 3D: chọn Slab semantic có closed straight-segment plan-view POLYLINE + RebarSlabXNotation/RebarSlabYNotation. Rectangle giữ local-axis legacy; polygon dùng drawing X/Y."
@@ -38,7 +38,12 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    Report(document, "Slab Mesh Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.");
+                    return;
+                }
+
                 var handles = new List<string>();
                 foreach (var element in project.Elements)
                 {

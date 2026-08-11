@@ -61,7 +61,8 @@ namespace QS3D.BricsCAD.V25.UI
                     ["CurtainFrameMaterial"] = Required(FrameMaterialBox.Text, "Vật liệu khung")
                 };
 
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                if (!ExistingProjectMutationContext.TryGet(_document, out var project))
+                    throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Vách Kính Hub không tạo project thay thế; hãy nạp project rồi Refresh.");
                 var family = project.FindFamily(selectedFamily.Id)
                     ?? throw new InvalidOperationException("Family Vách Kính đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại Family.");
                 if (family.Category != ElementCategory.GlassWall)
@@ -99,7 +100,8 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("tính lại Vách Kính");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                if (!ExistingProjectMutationContext.TryGet(_document, out var project))
+                    throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Vách Kính Hub không tạo project thay thế; hãy nạp project rồi Refresh.");
                 var rollback = ProjectStateSnapshot.Capture(project);
                 var count = 0;
                 try
@@ -148,7 +150,14 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("làm mới Vách Kính Hub");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                Title = "QS3D • Vách Kính • " + DrawingLabel(_document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                {
+                    ClearProjectView();
+                    SetStatus("QS3D project hiện hành không còn khả dụng. Vách Kính Hub không tạo project mới; hãy bóc/nạp project rồi Refresh.");
+                    return;
+                }
+
                 var selectedId = (FamilyCombo.SelectedItem as ProjectFamily)?.Id;
                 var families = project.Families.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Name).ToList();
                 _loading = true;
@@ -159,8 +168,7 @@ namespace QS3D.BricsCAD.V25.UI
                     LoadSelectedFamily();
                 }
                 finally { _loading = false; }
-                RefreshSummary();
-                Title = "QS3D • Vách Kính • " + DrawingLabel(_document);
+                RefreshSummary(project);
                 SetStatus(families.Count == 0 ? "Chưa có Family Vách Kính. Chọn đối tượng CAD rồi bấm “Bóc Vách Kính”." : "Đã nạp " + families.Count + " Family Vách Kính.");
             }
             catch (Exception ex) { SetStatus("Đọc Vách Kính lỗi: " + ex.Message); }
@@ -187,9 +195,18 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshSummary()
         {
-            var project = ProjectContextCoordinator.GetOrCreate(_document);
-            var family = FamilyCombo.SelectedItem as ProjectFamily;
-            var elements = project.Elements.Where(x => x.Category == ElementCategory.GlassWall && (family == null || string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase))).ToList();
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+            {
+                ClearSummary();
+                return;
+            }
+            RefreshSummary(project);
+        }
+
+        private void RefreshSummary(ProjectState project)
+        {
+            var familyId = (FamilyCombo.SelectedItem as ProjectFamily)?.Id;
+            var elements = project.Elements.Where(x => x.Category == ElementCategory.GlassWall && (familyId == null || string.Equals(x.FamilyId, familyId, StringComparison.OrdinalIgnoreCase))).ToList();
             var panelCount = 0;
             var glassAreaM2 = 0d;
             var frameLengthM = 0d;
@@ -203,6 +220,27 @@ namespace QS3D.BricsCAD.V25.UI
             PanelCountText.Text = panelCount.ToString(CultureInfo.InvariantCulture);
             GlassAreaText.Text = glassAreaM2.ToString("0.###", CultureInfo.InvariantCulture) + " m²";
             FrameLengthText.Text = frameLengthM.ToString("0.###", CultureInfo.InvariantCulture) + " m";
+        }
+
+        private void ClearProjectView()
+        {
+            _loading = true;
+            try
+            {
+                FamilyCombo.ItemsSource = Array.Empty<ProjectFamily>();
+                FamilyCombo.SelectedItem = null;
+                LoadSelectedFamily();
+            }
+            finally { _loading = false; }
+            ClearSummary();
+        }
+
+        private void ClearSummary()
+        {
+            WallCountText.Text = "0";
+            PanelCountText.Text = "0";
+            GlassAreaText.Text = "0 m²";
+            FrameLengthText.Text = "0 m";
         }
 
         private static void ApplyFamilyValue(ProjectState project, ProjectFamily family, string key, string next, ref int inherited, ref int overrides)

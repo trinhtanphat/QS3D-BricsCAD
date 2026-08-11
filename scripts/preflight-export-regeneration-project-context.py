@@ -22,17 +22,23 @@ for filename, command in EXPORTS.items():
     text = path.read_text(encoding="utf-8")
     if f'CommandMethod("{command}"' not in text:
         errors.append(f"{filename}: missing {command}")
-    if "ExistingProjectMutationContext.TryGet(document, out var project)" not in text:
-        errors.append(f"{filename}: regeneration export must bind canonical existing project")
-    if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" in text:
-        errors.append(f"{filename}: export must not regenerate a detached read-only project")
-    if "RegenerateDirty(project)" not in text:
-        errors.append(f"{filename}: expected semantic regeneration before export")
+    if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in text:
+        errors.append(f"{filename}: export must require an existing project without binding/creating live state")
+    if "ProjectStateSnapshot.CreateDetachedCopy(project)" not in text:
+        errors.append(f"{filename}: export must create a detached project snapshot")
+    if "RegenerateDirty(snapshot)" not in text:
+        errors.append(f"{filename}: export must regenerate only detached state")
+    if "ExistingProjectMutationContext" in text:
+        errors.append(f"{filename}: pure export must not promote read-only state to mutation context")
+    if "RegenerateDirty(project)" in text:
+        errors.append(f"{filename}: pure export must not mutate the live/read-only project")
+
     cancel = text.find("if (dialog.ShowDialog() != true) return;")
-    bind = text.find("ExistingProjectMutationContext.TryGet(document, out var project)")
-    regen = text.find("RegenerateDirty(project)")
-    if min(cancel, bind, regen) < 0 or not cancel < bind < regen:
-        errors.append(f"{filename}: lifecycle order must be dialog cancel -> canonical bind -> regenerate")
+    lookup = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
+    snapshot = text.find("ProjectStateSnapshot.CreateDetachedCopy(project)")
+    regen = text.find("RegenerateDirty(snapshot)")
+    if min(cancel, lookup, snapshot, regen) < 0 or not cancel < lookup < snapshot < regen:
+        errors.append(f"{filename}: lifecycle order must be dialog cancel -> read-only lookup -> detached copy -> regenerate")
 
 if errors:
     for error in errors:
@@ -40,4 +46,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: regeneration-based CSV/XLSX exports bind the canonical existing project after dialog confirmation.")
+print("PASS: regeneration-based CSV/XLSX exports regenerate detached snapshots and never mutate/bind live project state.")

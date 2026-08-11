@@ -12,7 +12,8 @@ if not review.is_file():
 else:
     text = review.read_text(encoding="utf-8")
     required = (
-        'AuditTrail.ForProject(ProjectContextCoordinator.GetOrCreate(doc)).Record("recognition.skip"',
+        "if (ExistingProjectMutationContext.TryGet(doc, out var auditProject))",
+        'AuditTrail.ForProject(auditProject).Record("recognition.skip"',
         "QS3D Recognition skip",
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
     )
@@ -21,6 +22,8 @@ else:
             errors.append("Review workflow safety contract missing: " + token)
     if "catch { skipped++; }" in text:
         errors.append("auto recognition must not silently swallow failed semantic captures")
+    if 'AuditTrail.ForProject(ProjectContextCoordinator.GetOrCreate(doc)).Record("recognition.skip"' in text:
+        errors.append("recognition.skip audit must not create/cache replacement project state")
 
 if not build3d.is_file():
     errors.append("missing Build3DCommands.cs")
@@ -49,4 +52,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Build3D fails closed on partial/mixed semantic selections and auto-recognition failures are audited against the re-resolved current project.")
+print("PASS: Build3D fails closed on partial/mixed semantic selections and auto-recognition failures are audited only against canonically re-resolved existing project state.")

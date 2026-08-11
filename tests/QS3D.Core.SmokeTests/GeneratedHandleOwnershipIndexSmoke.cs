@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             ResolvesCaseInsensitiveTrimmedHandle();
             SameLogicalAliasOnSameOwnerIsAllowed();
             DifferentOwnersFailClosed();
+            DuplicateIdsFailClosedAtBuild();
             DifferentLogicalSlotsOnSameOwnerFailClosed();
             BuiltIndexIsMembershipSnapshot();
         }
@@ -56,6 +57,19 @@ namespace QS3D.Core.SmokeTests
 
             var index = GeneratedHandleOwnershipIndex.Build(project);
             ExpectInvalid(() => index.TryFindOwner("AA01", out _, out _), "different semantic owners");
+        }
+
+        private static void DuplicateIdsFailClosedAtBuild()
+        {
+            var project = NewProject();
+            var first = NewElement("E-1");
+            var second = NewElement("e-1");
+            first.Properties["GeneratedSolidHandle"] = "AA01";
+            second.Properties["GeneratedSolidHandle"] = "AA01";
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+
+            ExpectInvalid(() => GeneratedHandleOwnershipIndex.Build(project), "duplicate semantic element IDs");
         }
 
         private static void DifferentLogicalSlotsOnSameOwnerFailClosed()

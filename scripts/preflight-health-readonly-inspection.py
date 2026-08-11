@@ -17,6 +17,17 @@ COMMANDS = {
     "SemanticTagHealthCommands.cs": None,
 }
 
+MIXED_HEALTH_COMMANDS = {
+    "BeamStirrupCommands.cs": (
+        "public void BeamStirrupHealth()",
+        "private static void FinalizeUi",
+    ),
+    "SlabMeshCommands.cs": (
+        "public void SlabMeshHealth()",
+        "private static void FinalizeUi",
+    ),
+}
+
 errors = []
 
 for name, current_locate_token in COMMANDS.items():
@@ -44,6 +55,31 @@ for name, current_locate_token in COMMANDS.items():
         ):
             if stale in text:
                 errors.append(name + " Locate callback must not use the ProjectState captured when the window opened: " + stale)
+
+for name, (start_marker, end_marker) in MIXED_HEALTH_COMMANDS.items():
+    path = SRC / name
+    if not path.is_file():
+        errors.append("missing mixed authoring/Health command source: " + str(path.relative_to(ROOT)))
+        continue
+
+    text = path.read_text(encoding="utf-8")
+    start = text.find(start_marker)
+    end = text.find(end_marker, start + len(start_marker)) if start >= 0 else -1
+    if start < 0 or end < 0:
+        errors.append(name + " Health method boundaries changed; update the regression gate before accepting lifecycle changes.")
+        continue
+
+    health = text[start:end]
+    if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in health:
+        errors.append(name + " Health method must resolve project state with TryGetReadOnly.")
+    if "ProjectContextCoordinator.GetOrCreate" in health:
+        errors.append(name + " Health method must not create/cache project state; GetOrCreate belongs only to explicit authoring methods.")
+    if "lệnh kiểm tra không tạo project mới" not in health:
+        errors.append(name + " Health method must explain that blocked inspection does not create a project.")
+
+    authoring = text[:start]
+    if "ProjectContextCoordinator.GetOrCreate(document)" not in authoring:
+        errors.append(name + " explicit authoring path no longer exposes its intentional GetOrCreate contract; review command lifecycle instead of weakening this gate.")
 
 health_all = SRC / "HealthAllCommands.cs"
 if not health_all.is_file():
@@ -75,4 +111,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: focused and comprehensive Health inspections are read-only, and modeless Locate callbacks re-resolve current project state by stable identity.")
+print("PASS: focused, mixed authoring/Health, and comprehensive Health inspections are read-only; explicit authoring may create project state, and modeless Locate callbacks re-resolve current project state by stable identity.")

@@ -37,7 +37,9 @@ checks = {
         "new ModelHealthWindow", "SourceHandleResolver.Resolve", "CadHandleService.Select", "ShowModelessWindow",
     ],
     required[4]: [
-        "combined.AddRange(new RoomFinishHealthService().Inspect(project));", "SourceHandleResolver.Resolve(project, new[] { element.Id })",
+        "combined.AddRange(new RoomFinishHealthService().Inspect(project));",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
+        "SourceHandleResolver.Resolve(currentProject, new[] { element.Id })",
     ],
     required[5]: ['Tag="QS3DROOMFINISHHEALTH"', "Kiểm tra HT_Phòng Semantic Health"],
     required[6]: [
@@ -54,6 +56,10 @@ for relative, needles in checks.items():
     for needle in needles:
         if needle not in text: errors.append(relative + " missing room-finish health/trace guard token: " + needle)
 
+health_all = ROOT / required[4]
+if health_all.is_file() and "SourceHandleResolver.Resolve(project, new[] { element.Id })" in health_all.read_text(encoding="utf-8"):
+    errors.append("Health All Room Finish modeless Locate must not use the project snapshot captured when the window opened")
+
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
     commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', path.read_text(encoding="utf-8"))
@@ -65,4 +71,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: HT_Phòng provenance conflicts, orphan/wrong-parent/cross-scope/stale/unlinked states are diagnosable, quantity exclusion is fail-closed, and property-only Room provenance traces back to Room boundary CAD handles.")
+print("PASS: HT_Phòng provenance conflicts, orphan/wrong-parent/cross-scope/stale/unlinked states are diagnosable, quantity exclusion is fail-closed, and modeless trace/Locate resolves current project state before Room boundary CAD handles.")

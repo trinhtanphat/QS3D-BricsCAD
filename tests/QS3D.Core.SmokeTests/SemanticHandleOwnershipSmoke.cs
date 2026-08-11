@@ -22,6 +22,7 @@ namespace QS3D.Core.SmokeTests
             ReferenceHandleIsNotGeneratedOwner();
             OwnerCollectionDedupesAndIncludesOpeningCut();
             AmbiguousGeneratedOwnerIsRejected();
+            DuplicateGeneratedOwnerSemanticIdIsRejected();
             StableIdSourceOwnerIsReused();
             DuplicateSourceOwnerIsRejected();
             CanonicalSourceRebindIsRejected();
@@ -117,6 +118,19 @@ namespace QS3D.Core.SmokeTests
             right.Properties["GeneratedFoundationMeshHandles"] = "dup";
             project.Elements.Add(left);
             project.Elements.Add(right);
+            Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "DUP", out _, out _));
+        }
+
+        private static void DuplicateGeneratedOwnerSemanticIdIsRejected()
+        {
+            var project = new ProjectState("duplicate-generated-owner", "Duplicate Generated Owner");
+            var left = new ProjectElement("DUP-ID", ElementCategory.Slab, string.Empty, string.Empty, string.Empty);
+            var right = new ProjectElement("dup-id", ElementCategory.Slab, string.Empty, string.Empty, string.Empty);
+            left.Properties["GeneratedSlabMeshHandles"] = "DUP";
+            right.Properties["GeneratedSlabMeshHandles"] = "dup";
+            project.Elements.Add(left);
+            project.Elements.Add(right);
+
             Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "DUP", out _, out _));
         }
 

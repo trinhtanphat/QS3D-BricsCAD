@@ -36,7 +36,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 if (selected.Count == 0) return;
 
-                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                if (!ExistingProjectMutationContext.TryGet(document, out var project))
                 {
                     Report(document, "Tie QTY: BLOCKED • chưa có QS3D project state/sidecar; lệnh không tạo project mới từ selection.");
                     return;

@@ -69,7 +69,7 @@ require("policy", (
 ))
 require("regen", ("MeasuredSolidQuantityPolicy.Apply(element)",))
 require("review", (
-    "var currentProject = ProjectContextCoordinator.GetOrCreate(doc);",
+    "if (!ExistingProjectMutationContext.TryGet(doc, out var currentProject))",
     "SemanticCaptureService.CaptureSnapshot(doc, refreshed.Snapshot, candidate.Category)",
     "var captured = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(currentProject, result.Handle)",
     'AuditTrail.ForProject(currentProject).Record("recognition.apply", captured.Id',
@@ -93,4 +93,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: B4D re-resolves current project/source ownership after guarded capture while preserving native Solid3d mass provenance and entity-type recognition gates.")
+print("PASS: B4D re-resolves and canonically binds current project/source ownership before guarded mutation while preserving native Solid3d mass provenance and entity-type recognition gates.")

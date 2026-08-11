@@ -15,7 +15,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Column Tie 3D");
                 var count = ColumnTieSolidBuilder.BuildSelected(document, project);
                 var message = count == 0
                     ? "Tie 3D: chọn Column semantic có closed rectangle POLYLINE; khai báo RebarTieDiameterMm/RebarTieSpacingMm nếu cần override."

@@ -77,8 +77,8 @@ namespace QS3D.Core.Diagnostics
         public static IReadOnlyList<string> CollectOwnerHandles(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            EnsureValidElementSet(project);
             return project.Elements
-                .Where(x => x != null)
                 .SelectMany(x => EnumerateOwnerHandles(x))
                 .Select(x => x.Key)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -94,16 +94,16 @@ namespace QS3D.Core.Diagnostics
             owner = null;
             propertyKey = string.Empty;
             if (normalized.Length == 0) return false;
+            EnsureValidElementSet(project);
 
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
                 foreach (var entry in EnumerateOwnerHandles(element))
                 {
                     if (!string.Equals(entry.Key, normalized, StringComparison.OrdinalIgnoreCase)) continue;
                     if (owner != null)
                     {
-                        var sameElement = string.Equals(owner.Id, element.Id, StringComparison.OrdinalIgnoreCase);
+                        var sameElement = ReferenceEquals(owner, element);
                         var sameLogicalSlot = AreSameLogicalOwnerSlots(propertyKey, entry.Value);
                         if (!sameElement || !sameLogicalSlot)
                             throw new InvalidOperationException("Generated CAD handle " + normalized + " is ambiguously claimed by " + owner.Id + "/" + propertyKey + " and " + element.Id + "/" + entry.Value + ".");
@@ -114,6 +114,21 @@ namespace QS3D.Core.Diagnostics
                 }
             }
             return owner != null;
+        }
+
+        private static void EnsureValidElementSet(ProjectState project)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry; generated CAD ownership cannot be resolved safely.");
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("Project contains a blank semantic element id; generated CAD ownership cannot be resolved safely.");
+                if (!seen.Add(elementId))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + elementId);
+            }
         }
 
         private static bool IsHostSolidAlias(string key) =>
