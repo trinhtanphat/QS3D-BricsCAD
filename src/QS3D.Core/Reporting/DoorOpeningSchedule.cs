@@ -8,6 +8,8 @@ namespace QS3D.Core.Reporting
 {
     public sealed class DoorOpeningScheduleRow
     {
+        public string ProjectId { get; set; } = string.Empty;
+        public string DrawingFingerprint { get; set; } = string.Empty;
         public string Floor { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;
         public string FamilyName { get; set; } = string.Empty;
@@ -21,6 +23,7 @@ namespace QS3D.Core.Reporting
         public int HostCount { get; set; }
         public IList<string> ElementIds { get; } = new List<string>();
         public IList<string> HostIds { get; } = new List<string>();
+        public IList<string> SourceHandles { get; } = new List<string>();
     }
 
     public static class DoorOpeningScheduleBuilder
@@ -64,6 +67,8 @@ namespace QS3D.Core.Reporting
                 {
                     row = new DoorOpeningScheduleRow
                     {
+                        ProjectId = project.ProjectId,
+                        DrawingFingerprint = project.DrawingFingerprint,
                         Floor = floor,
                         Category = category,
                         FamilyName = familyName,
@@ -79,6 +84,7 @@ namespace QS3D.Core.Reporting
                 row.Count = checked(row.Count + 1);
                 row.OpeningAreaM2 = Add(row.OpeningAreaM2, areaM2, element.Id + "/opening schedule area");
                 row.ElementIds.Add(element.Id);
+                ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
                 if (hostId.Length > 0 && !row.HostIds.Contains(hostId, StringComparer.OrdinalIgnoreCase)) row.HostIds.Add(hostId);
             }
 
