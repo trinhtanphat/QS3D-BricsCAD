@@ -94,7 +94,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (layout.ElevationsM.Count > MaxTiesPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxTiesPerElement + " tie 3D/element.");
                         if (totalTies > MaxTiesPerBatch - layout.ElevationsM.Count) throw new InvalidOperationException("Tie 3D batch vượt giới hạn " + MaxTiesPerBatch + " solid.");
 
-                        ErasePrevious(document, transaction, element, ownership);
+                        ErasePrevious(document, transaction, project, element, ownership);
                         var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, ActualSpacingM = layout.ActualSpacingM, CoverM = coverM };
                         var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, diameterMm / 2000d, element.Id + "/tie radius"), element.Id + "/tie radius drawing units");
                         var bottomOffset = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
@@ -109,6 +109,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                 tie.Layer = polyline.Layer;
                                 modelSpace.AppendEntity(tie);
                                 transaction.AddNewlyCreatedDBObject(tie, true);
+                                GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, tie, project, element, HandlesKey);
                                 update.Handles.Add(tie.Handle.ToString());
                                 tie = null!;
                             }
@@ -278,7 +279,7 @@ namespace QS3D.BricsCAD.V25.Cad
             finally { solid?.Dispose(); }
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedTieRebarOwnershipGuard.OwnershipIndex ownership)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element, GeneratedTieRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -291,6 +292,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (entity == null || entity.IsErased) continue;
                 var solid = entity as Solid3d;
                 if (solid == null) throw new InvalidOperationException("Generated tie handle " + handle + " is live but not Solid3d. Refusing destructive erase.");
+                GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(solid, project, element, HandlesKey, "erase generated column tie " + handle);
                 solid.Erase();
             }
         }
