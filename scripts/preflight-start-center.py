@@ -47,6 +47,8 @@ def main():
     for command in ("QS3DWALLQTY", "QS3DREFSEARCH", "QS3DRULECREATE", "QS3DQSETTINGSHEALTHEXPORT"):
         require(xaml, 'Tag="' + command + '"', "featured Start Center workflow")
     require(xaml, "hỗ trợ tiếng Việt có/không dấu", "Vietnamese search discoverability")
+    for token in ("RecentProjectSearchBox", "RecentProjectFilter", "RecentProjectCountText", "OnRecentProjectSearchChanged", "OnRecentProjectFilterChanged"):
+        require(xaml, token, "recent-DWG search/filter UI")
 
     require(window, "StartCenterCommandCatalog.TryGet", "allowlisted command dispatch")
     require(window, "Application.DocumentManager.MdiActiveDocument", "click-time active document resolution")
@@ -58,6 +60,15 @@ def main():
     require(window, "File.Exists(normalized)", "recent DWG existence guard")
     require(window, "StartCenterUserStateStore.TryNormalizeDwgPath(recent.Path, out var normalized)", "recent DWG path normalization")
     require(window, "NativeDocumentAction", "fixed native file-action allowlist")
+    require(window, 'private const string PinnedRecentProjects = "Đã ghim";', "recent-DWG pinned filter")
+    require(window, 'private const string AvailableRecentProjects = "Sẵn sàng";', "recent-DWG available filter")
+    require(window, 'private const string MissingRecentProjects = "Thiếu file";', "recent-DWG missing filter")
+    require(window, "x.DisplayName.IndexOf(query", "recent-DWG name search")
+    require(window, "x.Path.IndexOf(query", "recent-DWG path search")
+    require(window, "projects = projects.Where(x => x.IsPinned);", "recent-DWG pin filtering")
+    require(window, "projects = projects.Where(x => x.Exists);", "recent-DWG availability filtering")
+    require(window, "projects = projects.Where(x => !x.Exists);", "recent-DWG missing filtering")
+    require(window, 'RecentProjectCountText.Text = filtered.Count + " / " + state.RecentProjects.Count;', "recent-DWG filtered count")
     forbid(window, "ProjectContextCoordinator.GetOrCreate", "Start Center read-only dashboard")
     forbid(window, "System.Diagnostics.Process", "Start Center window")
     forbid(window, "Ribbon", "Start Center reserved scope")
@@ -93,7 +104,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, accent-insensitive, featured, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, accent-insensitive, featured, recent-filtered, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
