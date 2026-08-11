@@ -41,8 +41,6 @@ for label, path in files.items():
     except ET.ParseError as exc:
         errors.append(str(path.relative_to(ROOT)) + " is not well-formed XAML/XML: " + str(exc))
 
-# Every modeless window in the V25 UI folder is expected to consume the shared theme and
-# avoid legacy host-dependent dark colors after the premium P3 pass.
 for path in sorted(UI.glob("*Window.xaml")):
     text = path.read_text(encoding="utf-8")
     if 'ResourceDictionary Source="Theme.xaml"' not in text:
@@ -161,8 +159,10 @@ checks = {
         'Click="OnApplyConfidentClick"', 'Text="LOW CONFIDENCE = REVIEW"',
     ),
     "revision": (
-        'Text="QUANTITY DIFF"', 'x:Name="Header"', 'x:Name="Grid"', 'x:Name="Totals"',
-        'MouseDoubleClick="OnGridDoubleClick"', 'Text="DOUBLE-CLICK ROW TO LOCATE"',
+        'Text="SO SÁNH BẢN SỬA ĐỔI"', 'Text="SEMANTIC + QUANTITY"',
+        'x:Name="Header"', 'x:Name="Grid"', 'x:Name="SemanticGrid"', 'x:Name="Totals"',
+        'MouseDoubleClick="OnGridDoubleClick"', 'MouseDoubleClick="OnSemanticGridDoubleClick"',
+        'Text="DOUBLE-CLICK ROW TO LOCATE"',
     ),
     "health": (
         'Text="HEALTH REVIEW"', 'x:Name="SummaryText"', 'x:Name="IssueGrid"',
