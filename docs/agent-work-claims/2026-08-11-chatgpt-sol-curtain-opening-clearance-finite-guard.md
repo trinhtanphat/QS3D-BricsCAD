@@ -1,8 +1,9 @@
 # Agent Work Claim
 
-- Status: ACTIVE
+- Status: COMPLETED
 - Agent: chatgpt-gpt56sol-curtain-clearance-20260811-2135
 - Timestamp: 2026-08-11T21:35:00+07:00
+- Completed: 2026-08-11T22:18:00+07:00
 - Baseline `main` SHA: `1bd4d39a7c275450cfc459bfade5d74d3081661a`
 - Priority: P1 deterministic correctness / fail-closed geometry
 - Exact scope: Harden `CurtainWallOpeningFramePlanner` against non-finite geometry produced when finite `clearanceM` overflows expanded-opening arithmetic; add regression coverage. Touch the panel planner only if directly required for propagation/regression.
@@ -16,11 +17,18 @@
   - persistence/session atomicity
   - GitHub Actions
 - Validation:
-  - deterministic source-level regression coverage and static inspection
-  - no local `dotnet` or BricsCAD runtime is available in this environment
+  - source fix re-read from `main`: expanded opening coordinates/dimensions are validated before invalid geometry can enter subtraction
+  - regression smoke re-read from `main`: covers finite-overflow clearance, NaN, signed infinity, and ordinary finite geometry
+  - smoke registration re-read from `main`
+  - commit payload audit confirmed the implementation commit touched only the claimed planner and the registration commit added only the intended smoke registration line
+  - no local `dotnet` or BricsCAD runtime is available in this environment; no GitHub Actions were run; LOCAL_ONLY BricsCAD validation was not claimed
 - Coordination:
   - checked the current claim registry immediately before registration; no Curtain scope was reserved
-  - known ACTIVE core mutation atomicity work is outside this lane
+  - known ACTIVE core mutation atomicity work remained outside this lane
   - changed regression surface from shared `Program.cs` to a dedicated smoke module plus registration to reduce concurrent-agent collision risk
-  - re-check latest `main` and target blobs immediately before the implementation commit
-- Completion condition: Overflowed expanded-opening geometry fails closed with regression coverage; implementation is committed/pushed on the latest compatible `main`; this claim is then marked COMPLETED.
+  - latest `main` and target blobs were re-read before implementation writes
+- Implementation commits:
+  - `0ee86539af5222352be7d3da782f0c4821bca2d2` — `fix(curtain): reject overflowed opening clearance geometry`
+  - `c4e6d468e6115a19fd0d0ebb53035837a9d1d9d4` — `test(curtain): cover opening clearance overflow guard`
+  - `080ea1bb0ccd2a2a4dc8c3ac338c1fc1f8d2d4aa` — `test(curtain): register opening frame overflow smoke`
+- Result: finite `clearanceM` values that overflow expanded-opening arithmetic now fail closed before non-finite geometry reaches frame subtraction; ordinary finite clearance behavior remains covered by the registered smoke regression.
