@@ -43,7 +43,7 @@ for token in (
     "AuthorizedImportRetainsProvenanceWithoutCadOwnership",
     "MissingSourceFingerprintFailsBeforeMutation",
     "ProjectInterchangeNativeCleanupAuthorization.None",
-    "ProjectInterchangeNativeCleanupAuthorization.ForElementIds",
+    "ProjectInterchangeNativeCleanupAuthorization.ForPlan",
     "ProjectInterchangeSourceHandleProvenance.ReadSourceHandles",
     "ProjectInterchangeProvenanceTargetMap.ReadTargetElementId",
     "ModuleInitializer",
@@ -69,4 +69,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: UseSource provenance composition preserves native-cleanup authorization and keeps imported source handles outside target CAD ownership.")
+print("PASS: UseSource provenance composition preserves handle-bound native-cleanup authorization and keeps imported source handles outside target CAD ownership.")
