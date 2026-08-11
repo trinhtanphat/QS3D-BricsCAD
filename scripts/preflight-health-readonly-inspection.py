@@ -72,14 +72,16 @@ for name, (start_marker, end_marker) in MIXED_HEALTH_COMMANDS.items():
     health = text[start:end]
     if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in health:
         errors.append(name + " Health method must resolve project state with TryGetReadOnly.")
-    if "ProjectContextCoordinator.GetOrCreate" in health:
-        errors.append(name + " Health method must not create/cache project state; GetOrCreate belongs only to explicit authoring methods.")
+    if "ProjectContextCoordinator.GetOrCreate" in health or "ExistingProjectMutationContext" in health:
+        errors.append(name + " Health method must remain read-only and must not bind/create mutation state.")
     if "lệnh kiểm tra không tạo project mới" not in health:
         errors.append(name + " Health method must explain that blocked inspection does not create a project.")
 
     authoring = text[:start]
-    if "ProjectContextCoordinator.GetOrCreate(document)" not in authoring:
-        errors.append(name + " explicit authoring path no longer exposes its intentional GetOrCreate contract; review command lifecycle instead of weakening this gate.")
+    if "ExistingProjectMutationContext.Require(document" not in authoring:
+        errors.append(name + " explicit authoring path must bind canonical existing project state before native mutation.")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in authoring:
+        errors.append(name + " explicit authoring path must not directly create/cache replacement project state.")
 
 health_all = SRC / "HealthAllCommands.cs"
 if not health_all.is_file():
@@ -111,4 +113,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: focused, mixed authoring/Health, and comprehensive Health inspections are read-only; explicit authoring may create project state, and modeless Locate callbacks re-resolve current project state by stable identity.")
+print("PASS: focused, mixed authoring/Health, and comprehensive Health inspections are read-only; explicit authoring binds canonical existing project state, and modeless Locate callbacks re-resolve current project state by stable identity.")
