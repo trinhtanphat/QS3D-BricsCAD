@@ -1,46 +1,54 @@
 # Work claim — Quantity Settings diagnostic export atomicity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-diagnostic-export-atomicity-20260812-0005`
 - Registered: `2026-08-12T00:05:00+07:00`
+- Completed: `2026-08-12T00:09:00+07:00`
 - Baseline main SHA observed: `51622e193c45827bf4b5b56ac738697907c8d7f6`
 - Priority: P1 — prevent a failed sanitized health export from truncating a previously valid user-selected diagnostic JSON.
 
 ## Confirmed defect
 
-`QuantityCalculationMatrixDiagnosticSnapshotExporter.Save()` currently opens the destination itself with `FileMode.Create` and serializes directly into it. If serialization or the filesystem fails after truncation, an existing diagnostic report is destroyed/left partial even though the new export did not complete.
+`QuantityCalculationMatrixDiagnosticSnapshotExporter.Save()` previously opened the destination itself with `FileMode.Create` and serialized directly into it. If serialization or the filesystem failed after truncation, an existing diagnostic report could be destroyed/left partial even though the new export did not complete.
 
-## Reserved scope
+## Delivered scope
 
 - `src/QS3D.Core/Reporting/QuantityCalculationMatrixDiagnosticSnapshot.cs`
 - `tests/QS3D.Core.SmokeTests/QuantityCalculationMatrixDiagnosticSnapshotSmoke.cs`
 - `scripts/preflight-quantity-settings-diagnostics-export.py`
-- this claim file for close-out
+- this claim file
 
-## Contract
+## Implemented contract
 
-- Serialize to a unique temp file in the destination directory first.
-- Flush the temp file before publishing it.
-- If destination exists, replace it atomically without creating a secondary backup for this disposable diagnostic artifact; otherwise move the completed temp file into place.
-- Always best-effort delete the temp file in `finally` when publication fails.
-- Keep the public `Write(Stream, snapshot)` method unchanged for in-memory/support callers.
-- Preserve the sanitized snapshot schema and all command-level path redaction/read-only behavior.
+- `Save()` now creates a unique same-directory temp file with `FileMode.CreateNew`.
+- It serializes through the existing public `Write(Stream, snapshot)` API and calls `Flush(true)` before publication.
+- Existing destinations are replaced with `File.Replace(temp, fullPath, null, true)` only after successful temp serialization; new destinations use `File.Move(temp, fullPath)`.
+- A `finally` block performs best-effort temp deletion and deliberately does not mask the original publish failure.
+- The public `Write(Stream, snapshot)` surface and portable sanitized snapshot schema remain unchanged.
 
-## Excluded scope
+## Regression coverage
 
-- No Quantity Settings machine-store, WPF, Core rule/deduction/matrix semantics, project persistence, CAD geometry, Ribbon/Start Center, updater/release or GitHub Actions changes.
+- Snapshot smoke now saves a real temporary JSON, verifies the first portable payload, saves a second snapshot to the same destination to exercise replacement, verifies the second payload won, and confirms only the final destination remains in the directory.
+- Existing diagnostic-export preflight now rejects direct `File.Open(fullPath, FileMode.Create...)` destination writes and pins temp-create -> Write -> durable flush -> replace/move -> finally cleanup ordering.
+- Existing command Load -> snapshot -> save-dialog -> exporter ordering and privacy/read-only guards remain in the same preflight.
 
-## Validation plan
+## Product integration
 
-- Extend snapshot smoke to exercise `Save()` to a temporary destination and verify the resulting JSON retains expected portable fields while caller state remains unchanged.
-- Extend existing diagnostic-export preflight to forbid direct `File.Open(fullPath, FileMode.Create...)` destination writes and require temp-create -> Write -> publish -> finally-cleanup ordering.
-- Re-fetch current `main` before implementation/merge and preserve concurrent winners without force push.
-- Source/static review only from this remote session; no GitHub Actions/native V25 runtime PASS claim.
+- Claim registration: `f2baddd0a4680acf0e4d53eb7ef4087686f0df5c`.
+- PR: `#557` — `fix(quantity): publish health snapshots atomically`.
+- Squash merge on `main`: `8f1300b8178fd99b666ad2de15e6210176068a67`.
+
+## Validation actually performed
+
+- Re-fetched the exporter, smoke and existing export preflight before implementation and preserved their existing sanitized/read-only contract.
+- PR #557 was squash-merged without force push while `main` was concurrently advancing.
+- Source/static review only in this remote session; the smoke/preflight were not executed from a repository checkout, so no execution PASS is claimed.
+- No GitHub Actions or release workflow was dispatched. No licensed BricsCAD V25 runtime PASS is claimed.
 
 ## Coordination
 
-The health export, diagnostics path redaction and matrix snapshot claims are completed. Current active recognition/project-save/ownership and other lanes do not own this Core snapshot exporter.
+No Quantity Settings machine-store, WPF, rule/deduction/matrix semantics, project persistence, CAD geometry, Ribbon/Start Center, updater or release surfaces were modified.
 
-## Completion condition
+## Completion
 
-A failed health snapshot export can no longer truncate an existing destination before successful serialization/publish; regression source is merged to `main` and this claim is marked `COMPLETED` with exact merge evidence.
+Reservation released. A health snapshot is now published only after successful temp serialization/flush, so a failed export cannot truncate an existing destination first.
