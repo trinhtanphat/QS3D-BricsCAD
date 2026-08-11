@@ -70,6 +70,13 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (host == null) throw new ArgumentNullException(nameof(host));
+
+            var canonicalHost = project.FindElement(host.Id);
+            if (canonicalHost == null)
+                throw new InvalidOperationException("Physical opening cut host does not belong to the project: " + host.Id + ".");
+            if (!ReferenceEquals(canonicalHost, host))
+                throw new InvalidOperationException("Physical opening cut host is detached from the current project instance: " + host.Id + ".");
+
             var ids = Normalize(openingIds);
             if (ids.Count == 0)
                 throw new InvalidOperationException("Host " + host.Id + " physical opening target-state cannot be empty.");
@@ -82,8 +89,8 @@ namespace QS3D.Core.Services
                 if (!IsOpening(opening))
                     throw new InvalidOperationException("Physical opening target is no longer a Door/WallOpening: " + id + ". Rebuild the host 3D geometry.");
                 if (!opening.Properties.TryGetValue("HostWallId", out var linkedHostId) ||
-                    !string.Equals(linkedHostId?.Trim(), host.Id, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Physical opening target " + id + " is no longer linked to host " + host.Id + ". Rebuild the host 3D geometry.");
+                    !string.Equals(linkedHostId?.Trim(), canonicalHost.Id, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Physical opening target " + id + " is no longer linked to host " + canonicalHost.Id + ". Rebuild the host 3D geometry.");
                 result.Add(opening);
             }
             return result.AsReadOnly();
