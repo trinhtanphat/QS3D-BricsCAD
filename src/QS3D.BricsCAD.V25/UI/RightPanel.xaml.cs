@@ -31,7 +31,23 @@ namespace QS3D.BricsCAD.V25.UI
         public void Refresh()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
+            if (doc == null)
+            {
+                _refreshingDrawings = true;
+                try
+                {
+                    _viewModel.Drawings.Clear();
+                    DrawingList?.UnselectAll();
+                }
+                finally
+                {
+                    _refreshingDrawings = false;
+                }
+                _layerSnapshots = Array.Empty<LayerSnapshot>();
+                ApplyLayerFilter();
+                _viewModel.Status = "Không có bản vẽ BricsCAD đang active.";
+                return;
+            }
             try
             {
                 RefreshDrawingsOnly();
@@ -163,7 +179,15 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnClearDrawingSelectionClick(object sender, RoutedEventArgs e)
         {
-            DrawingList.UnselectAll();
+            _refreshingDrawings = true;
+            try
+            {
+                DrawingList.UnselectAll();
+            }
+            finally
+            {
+                _refreshingDrawings = false;
+            }
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
             {
