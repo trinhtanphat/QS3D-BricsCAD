@@ -5,18 +5,20 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "src" / "QS3D.Core" / "Export" / "ProjectInterchangeSemanticReferencePolicy.cs"
 VALIDATOR = ROOT / "src" / "QS3D.Core" / "Export" / "ProjectInterchangeSemanticReferenceValidator.cs"
+JSON_VALIDATOR = ROOT / "src" / "QS3D.Core" / "Export" / "ProjectInterchangeJsonValidator.cs"
 EXPORTER = ROOT / "src" / "QS3D.Core" / "Export" / "ProjectInterchangeJsonExporter.cs"
 READER = ROOT / "src" / "QS3D.Core" / "Export" / "ProjectInterchangeValidatedSnapshotReader.cs"
 SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "ProjectInterchangeSemanticReferenceValidationSmoke.cs"
 
 errors = []
-for path in (POLICY, VALIDATOR, EXPORTER, READER, SMOKE):
+for path in (POLICY, VALIDATOR, JSON_VALIDATOR, EXPORTER, READER, SMOKE):
     if not path.is_file():
         errors.append("missing semantic-reference contract file: " + str(path.relative_to(ROOT)))
 
 if not errors:
     policy = POLICY.read_text(encoding="utf-8")
     validator = VALIDATOR.read_text(encoding="utf-8")
+    json_validator = JSON_VALIDATOR.read_text(encoding="utf-8")
     exporter = EXPORTER.read_text(encoding="utf-8")
     reader = READER.read_text(encoding="utf-8")
     smoke = SMOKE.read_text(encoding="utf-8")
@@ -34,6 +36,16 @@ if not errors:
         if token not in validator:
             errors.append("central semantic reference validator missing contract: " + token)
 
+    for token in (
+        "ValidateSemanticPropertyReferences",
+        "ProjectInterchangeSemanticReferencePolicy.KnownPropertyReferences",
+        "SEMANTIC_PROPERTY_REF_MISSING",
+        "LEVEL_ORDER",
+        "TryLevelOffset",
+    ):
+        if token not in json_validator:
+            errors.append("validate-only semantic reference diagnostics missing contract: " + token)
+
     if "ProjectInterchangeSemanticReferenceValidator.Validate(project);" not in exporter:
         errors.append("semantic exporter must validate registered property references before emitting a snapshot")
     if "ProjectInterchangeSemanticReferenceValidator.Validate(result);" not in reader:
@@ -41,9 +53,11 @@ if not errors:
 
     for token in (
         "ExportRejectsMissingRegisteredReference",
-        "TypedReaderRejectsMissingRegisteredReference",
-        "TypedReaderRejectsInvalidLevelChain",
+        "ValidatorAndTypedReaderRejectMissingRegisteredReference",
+        "ValidatorAndTypedReaderRejectInvalidLevelChain",
         "MixedFieldMergeRollsBackInvalidLevelComposition",
+        "SEMANTIC_PROPERTY_REF_MISSING",
+        "LEVEL_ORDER",
         "ProjectInterchangeFieldMergeImporter.Import",
     ):
         if token not in smoke:
@@ -56,4 +70,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: canonical HostWall/BottomLevel/TopLevel property references are centrally validated on export and typed import, including mixed field-merge rollback.")
+print("PASS: canonical HostWall/BottomLevel/TopLevel property references are aligned across validate-only diagnostics, export, typed import and mixed field-merge rollback.")
