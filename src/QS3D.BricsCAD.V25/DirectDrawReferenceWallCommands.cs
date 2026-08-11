@@ -39,26 +39,34 @@ namespace QS3D.BricsCAD.V25
                 if (reference == null) return;
 
                 EnsureActive(document, "QS3DDRAWWALLREF / parameters");
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
                 var lengthM = PromptPositiveMeters(document.Editor, "Chiều dài Tường (m)", reference.LengthM);
                 if (!lengthM.HasValue) return;
                 var thicknessM = PromptPositiveMeters(
                     document.Editor,
                     "Bề dày Tường (m)",
-                    FamilyNumber(project, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d));
+                    hasDefaultsProject
+                        ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d)
+                        : 0.2d);
                 if (!thicknessM.HasValue) return;
                 var heightM = PromptPositiveMeters(
                     document.Editor,
                     "Chiều cao Tường (m)",
-                    FamilyNumber(project, ElementCategory.ArchitecturalWall, "HeightM", 3.6d));
+                    hasDefaultsProject
+                        ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "HeightM", 3.6d)
+                        : 3.6d);
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(
                     document.Editor,
                     "Offset đáy Tường so với Z tham chiếu (m)",
-                    FamilyFiniteNumber(project, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d));
+                    hasDefaultsProject
+                        ? FamilyFiniteNumber(defaultsProject, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d)
+                        : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 var endpoints = reference.CreateCenteredEndpoints(document, lengthM.Value);
+                EnsureActive(document, "QS3DDRAWWALLREF / execute boundary");
+                var project = ProjectContextCoordinator.GetOrCreate(document);
                 Execute(
                     document,
                     project,

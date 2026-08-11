@@ -47,17 +47,25 @@ namespace QS3D.BricsCAD.V25
                     label + "/plan width");
                 var widthM = CadGeometryGuard.Positive(CadGeometryGuard.ToMeters(document, widthDrawing, label + "/width"), label + "/WidthM");
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var heightDefault = FamilyPositiveNumber(project, category, "HeightM", 2.2d);
+                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var heightDefault = hasDefaultsProject
+                    ? FamilyPositiveNumber(defaultsProject, category, "HeightM", 2.2d)
+                    : 2.2d;
                 var heightM = PromptPositiveMeters(document.Editor, "Chiều cao " + label + " (m)", heightDefault);
                 if (!heightM.HasValue) return;
 
-                var bottomOffsetDefault = FamilyNonNegativeNumber(project, category, "BottomOffsetM", defaultSillM);
-                var sillDefault = FamilyNonNegativeNumber(project, category, "SillHeightM", bottomOffsetDefault);
+                var bottomOffsetDefault = hasDefaultsProject
+                    ? FamilyNonNegativeNumber(defaultsProject, category, "BottomOffsetM", defaultSillM)
+                    : defaultSillM;
+                var sillDefault = hasDefaultsProject
+                    ? FamilyNonNegativeNumber(defaultsProject, category, "SillHeightM", bottomOffsetDefault)
+                    : bottomOffsetDefault;
                 var sillM = PromptNonNegativeMeters(document.Editor, "Cao độ bậu " + label + " so với đáy host (m)", sillDefault);
                 if (!sillM.HasValue) return;
 
-                var clearanceDefault = FamilyNonNegativeNumber(project, category, "BooleanClearanceM", 0.01d);
+                var clearanceDefault = hasDefaultsProject
+                    ? FamilyNonNegativeNumber(defaultsProject, category, "BooleanClearanceM", 0.01d)
+                    : 0.01d;
                 var clearanceM = PromptNonNegativeMeters(document.Editor, "Khe hở boolean (m)", clearanceDefault);
                 if (!clearanceM.HasValue) return;
 

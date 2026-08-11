@@ -36,12 +36,21 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquirePath(document, "Vách Kính", 2, false);
                 if (points == null) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Vách Kính (m)", FamilyNumber(project, ElementCategory.GlassWall, "ThicknessM", 0.012d));
+                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var thicknessM = PromptPositiveMeters(
+                    document.Editor,
+                    "Bề dày Vách Kính (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "ThicknessM", 0.012d) : 0.012d);
                 if (!thicknessM.HasValue) return;
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Vách Kính (m)", FamilyNumber(project, ElementCategory.GlassWall, "HeightM", 3.6d));
+                var heightM = PromptPositiveMeters(
+                    document.Editor,
+                    "Chiều cao Vách Kính (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Vách Kính so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.GlassWall, "BottomOffsetM", 0d));
+                var bottomOffsetM = PromptFiniteMeters(
+                    document.Editor,
+                    "Offset đáy Vách Kính so với Z source (m)",
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 Execute(
@@ -69,12 +78,21 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquireFixedPath(document, "Trụ Tường", 2);
                 if (points == null) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Trụ Tường (m)", FamilyNumber(project, ElementCategory.WallPier, "ThicknessM", 0.2d));
+                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var thicknessM = PromptPositiveMeters(
+                    document.Editor,
+                    "Bề dày Trụ Tường (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "ThicknessM", 0.2d) : 0.2d);
                 if (!thicknessM.HasValue) return;
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Trụ Tường (m)", FamilyNumber(project, ElementCategory.WallPier, "HeightM", 3.6d));
+                var heightM = PromptPositiveMeters(
+                    document.Editor,
+                    "Chiều cao Trụ Tường (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Trụ Tường so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.WallPier, "BottomOffsetM", 0d));
+                var bottomOffsetM = PromptFiniteMeters(
+                    document.Editor,
+                    "Offset đáy Trụ Tường so với Z source (m)",
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 Execute(
@@ -101,12 +119,21 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquireFixedPath(document, "Vách BTCT", 2);
                 if (points == null) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Vách BTCT (m)", FamilyNumber(project, ElementCategory.StructuralWall, "ThicknessM", 0.2d));
+                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var thicknessM = PromptPositiveMeters(
+                    document.Editor,
+                    "Bề dày Vách BTCT (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "ThicknessM", 0.2d) : 0.2d);
                 if (!thicknessM.HasValue) return;
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Vách BTCT (m)", FamilyNumber(project, ElementCategory.StructuralWall, "HeightM", 3.6d));
+                var heightM = PromptPositiveMeters(
+                    document.Editor,
+                    "Chiều cao Vách BTCT (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Vách BTCT so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.StructuralWall, "BottomOffsetM", 0d));
+                var bottomOffsetM = PromptFiniteMeters(
+                    document.Editor,
+                    "Offset đáy Vách BTCT so với Z source (m)",
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 Execute(
@@ -133,10 +160,16 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquirePath(document, "Móng", 3, true);
                 if (points == null) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Móng (m)", FamilyNumber(project, ElementCategory.Foundation, "ThicknessM", 0.5d));
+                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var thicknessM = PromptPositiveMeters(
+                    document.Editor,
+                    "Bề dày Móng (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Foundation, "ThicknessM", 0.5d) : 0.5d);
                 if (!thicknessM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Móng so với Z source (m)", FamilyFiniteNumber(project, ElementCategory.Foundation, "BottomOffsetM", 0d));
+                var bottomOffsetM = PromptFiniteMeters(
+                    document.Editor,
+                    "Offset đáy Móng so với Z source (m)",
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 Execute(
