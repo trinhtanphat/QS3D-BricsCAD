@@ -15,20 +15,28 @@ namespace QS3D.BricsCAD.V25
     {
         private static readonly Guid WorkspaceGuid = new Guid("B6D934DE-67ED-4F90-A7CF-A4DC0C4CDDF1");
         private static readonly Guid RightGuid = new Guid("AC615D29-590A-457C-8579-6BF4ACEC5C29");
+        private static readonly Guid QuantityInsightGuid = new Guid("7EA0345F-1F62-4BD4-9ED0-3B25EB76A91B");
         private static PaletteSet? _workspace;
         private static PaletteSet? _right;
+        private static PaletteSet? _quantityInsight;
         private static WorkspacePanel? _workspacePanel;
         private static RightPanel? _rightPanel;
+        private static QuantityInsightPanel? _quantityInsightPanel;
 
         public static bool IsWorkspaceVisible => _workspace != null && _workspace.Visible;
         public static bool IsRightPanelVisible => _right != null && _right.Visible;
+        public static bool IsQuantityInsightVisible => _quantityInsight != null && _quantityInsight.Visible;
 
         public static void EnsureCreated()
         {
-            if (_workspace != null && _right != null) return;
+            if (_workspace != null && _right != null && _quantityInsight != null) return;
+            if (_workspace != null || _right != null || _quantityInsight != null) Dispose();
+
             var layout = UserUiLayoutStore.Get();
             _workspacePanel = new WorkspacePanel();
             _rightPanel = new RightPanel();
+            _quantityInsightPanel = new QuantityInsightPanel();
+
             _workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid)
             {
                 DockEnabled = DockSides.Left | DockSides.Right,
@@ -50,6 +58,17 @@ namespace QS3D.BricsCAD.V25
             };
             _right.DeviceIndependentSize = new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight);
             _right.AddVisual("Quản lý", _rightPanel, true);
+
+            _quantityInsight = new PaletteSet("QS3D — Diễn giải khối lượng", QuantityInsightGuid)
+            {
+                DockEnabled = DockSides.Left | DockSides.Right,
+                Dock = DockSides.Right,
+                Visible = false,
+                KeepFocus = false,
+                MinimumSize = new DrawingSize(280, 360)
+            };
+            _quantityInsight.DeviceIndependentSize = new WpfSize(Math.Max(310, layout.RightPaletteWidth), layout.RightPaletteHeight);
+            _quantityInsight.AddVisual("Khối lượng", _quantityInsightPanel, true);
         }
 
         public static void Show()
@@ -57,6 +76,7 @@ namespace QS3D.BricsCAD.V25
             EnsureCreated();
             if (_workspace != null) _workspace.Visible = true;
             if (_right != null) _right.Visible = true;
+            if (_quantityInsight != null) _quantityInsight.Visible = true;
             RefreshAll();
             SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
         }
@@ -66,6 +86,7 @@ namespace QS3D.BricsCAD.V25
             PersistPaletteLayout();
             if (_workspace != null) _workspace.Visible = false;
             if (_right != null) _right.Visible = false;
+            if (_quantityInsight != null) _quantityInsight.Visible = false;
         }
 
         public static void ShowSafeMode()
@@ -73,7 +94,8 @@ namespace QS3D.BricsCAD.V25
             EnsureCreated();
             if (_workspace != null) _workspace.Visible = true;
             if (_right != null) _right.Visible = false;
-            _workspacePanel?.SetStatus("Safe Mode: panel bản vẽ/layer đang tắt.");
+            if (_quantityInsight != null) _quantityInsight.Visible = false;
+            _workspacePanel?.SetStatus("Safe Mode: panel bản vẽ/layer và diễn giải khối lượng đang tắt.");
             SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
         }
 
@@ -85,10 +107,18 @@ namespace QS3D.BricsCAD.V25
             if (document != null && ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject))
                 project = currentProject;
             _workspacePanel?.SetInspectionReadOnly(snapshots, project);
+            _quantityInsightPanel?.SetInspectionReadOnly(snapshots, project);
         }
 
         public static void SetStatus(string status) { EnsureCreated(); _workspacePanel?.SetStatus(status); }
-        public static void RefreshProject() { EnsureCreated(); _workspacePanel?.RefreshProject(); }
+
+        public static void RefreshProject()
+        {
+            EnsureCreated();
+            _workspacePanel?.RefreshProject();
+            _quantityInsightPanel?.RefreshQuantityInsights();
+        }
+
         public static void RefreshCad() { EnsureCreated(); _rightPanel?.Refresh(); }
         public static void RefreshAll() { RefreshProject(); RefreshCad(); }
 
@@ -101,19 +131,22 @@ namespace QS3D.BricsCAD.V25
         {
             EnsureCreated();
             _workspacePanel?.ClearProject(status);
+            _quantityInsightPanel?.ClearQuantityInsights(status);
             try { _rightPanel?.Refresh(); }
             catch { }
         }
 
         private static void ResetPreservingVisibility()
         {
-            if (_workspace == null && _right == null) return;
+            if (_workspace == null && _right == null && _quantityInsight == null) return;
             var workspaceVisible = IsWorkspaceVisible;
             var rightVisible = IsRightPanelVisible;
+            var quantityVisible = IsQuantityInsightVisible;
             Dispose();
             EnsureCreated();
             if (_workspace != null) _workspace.Visible = workspaceVisible;
             if (_right != null) _right.Visible = rightVisible;
+            if (_quantityInsight != null) _quantityInsight.Visible = quantityVisible;
         }
 
         public static void Dispose()
@@ -121,8 +154,10 @@ namespace QS3D.BricsCAD.V25
             PersistPaletteLayout();
             if (_workspace != null) { _workspace.Dispose(); _workspace = null; }
             if (_right != null) { _right.Dispose(); _right = null; }
+            if (_quantityInsight != null) { _quantityInsight.Dispose(); _quantityInsight = null; }
             _workspacePanel = null;
             _rightPanel = null;
+            _quantityInsightPanel = null;
         }
 
         private static void PersistPaletteLayout()
