@@ -51,7 +51,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void Locate()
         {
-            if (_locate == null || !(IssueGrid.SelectedItem is ModelHealthIssue issue) || string.IsNullOrWhiteSpace(issue.ElementId)) return;
+            if (_locate == null || !(IssueGrid.SelectedItem is ModelHealthIssue issue)) return;
             try
             {
                 EnsureActiveAndCurrent();
