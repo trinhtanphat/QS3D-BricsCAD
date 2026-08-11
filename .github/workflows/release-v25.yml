@@ -52,15 +52,15 @@ jobs:
       RELEASE_RUN_RUNTIME: ${{ inputs.run_runtime }}
       RELEASE_SIGN_PACKAGE: ${{ inputs.sign_package }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
 
@@ -210,7 +210,7 @@ jobs:
           "$hash  QS3D-BricsCAD-V25.zip" | Set-Content "dist\QS3D-BricsCAD-V25.zip.sha256" -Encoding ASCII
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: QS3D-BricsCAD-V25-${{ inputs.release_tag }}
           if-no-files-found: error

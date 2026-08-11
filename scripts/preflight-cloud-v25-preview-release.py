@@ -15,12 +15,16 @@ else:
     required = (
         "workflow_dispatch:",
         "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
+        "actions/checkout@v7",
+        "actions/setup-python@v7",
+        "actions/setup-dotnet@v6",
+        "actions/cache/restore@v6",
+        "actions/cache/save@v6",
+        "actions/upload-artifact@v7",
         "BRICSCAD_V25_MIRROR_MSI_URL:",
         "BRICSCAD_V25_PUBLIC_MSI_URL:",
         "BRICSCAD_V25_PINNED_MSI_SHA256: " + PINNED_SHA256,
         "BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}",
-        "actions/cache/restore@v4",
-        "actions/cache/save@v4",
         "bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}",
         "Name = 'pinned-user-mirror'",
         "Name = 'pinned-public'",
@@ -47,7 +51,7 @@ else:
     )
     for token in required:
         if token not in text:
-            errors.append("cloud V25 workflow missing cache/pinning/signature/version/manual-release token: " + token)
+            errors.append("cloud V25 workflow missing Node24/cache/pinning/signature/version/manual-release token: " + token)
 
     restore_index = text.find("- name: Restore BricsCAD V25 installer cache")
     acquire_index = text.find("- name: Acquire BricsCAD V25 compile references")
@@ -108,4 +112,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cloud V25 preview remains manual-only; the exact V25.2.10 MSI digest is pinned, cache hits are re-verified, the approved mirror is bounded by digest + Bricsys Authenticode + MSI identity checks, and download/extraction waits are finite.")
+print("PASS: cloud V25 preview remains manual-only on current Node 24 action majors; the exact V25.2.10 MSI digest is pinned, cache hits are re-verified, the approved mirror is bounded by digest + Bricsys Authenticode + MSI identity checks, and download/extraction waits are finite.")

@@ -16,10 +16,13 @@ if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
     for token in (
         '[CommandMethod("QS3DGRIDNUMBER", CommandFlags.Modal)]',
-        "AcquireOrderedGridIds(document, project)",
+        "AcquireOrderedGridSelection(document, previewProject)",
         "new PromptEntityOptions(prompt)",
-        "AllowNone = orderedIds.Count > 0",
-        "editor.GetEntity(options)",
+        "AllowNone = handles.Count > 0",
+        "editor.GetEntity(promptOptions)",
+        'ExistingProjectMutationContext.Require(document, "Grid Renumber")',
+        "ResolveOrderedGridIds(project, selectionPlan.Handles)",
+        "SameGridIdentityPlan(selectionPlan.ElementIds, orderedIds)",
         "GridNamingService.Renumber(project, orderedIds, options)",
         "ProjectStateSnapshot.Capture(project)",
         "rollback.Restore(project)",
@@ -32,6 +35,16 @@ if COMMAND.is_file():
             errors.append("GridNamingCommands.cs missing explicit-order/rollback contract: " + token)
     if "GetSelection(" in text or "SelectImplied(" in text:
         errors.append("QS3DGRIDNUMBER must not rely on selection-set ordering; explicit GetEntity order is required")
+    preview = text.find("AcquireOrderedGridSelection(document, previewProject)")
+    naming = text.find("options = AcquireOptions(document.Editor)")
+    bind = text.find('ExistingProjectMutationContext.Require(document, "Grid Renumber")')
+    resolve = text.find("ResolveOrderedGridIds(project, selectionPlan.Handles)")
+    freshness = text.find("SameGridIdentityPlan(selectionPlan.ElementIds, orderedIds)")
+    snapshot = text.find("ProjectStateSnapshot.Capture(project)")
+    mutate = text.find("GridNamingService.Renumber(project, orderedIds, options)")
+    ordered_steps = (preview, naming, bind, resolve, freshness, snapshot, mutate)
+    if min(ordered_steps) < 0 or list(ordered_steps) != sorted(ordered_steps):
+        errors.append("Grid naming must finish selection/options before canonical bind, then re-resolve ownership before snapshot/mutation")
     if text.index("GridNamingService.Renumber(project, orderedIds, options)") > text.index("AuditTrail.ForProject(project).Record("):
         errors.append("Grid semantic renumber must occur before its audit record")
     if text.index("FinalizeUi(document, assignments, options)") < text.index("GridNamingService.Renumber(project, orderedIds, options)"):
@@ -67,4 +80,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DGRIDNUMBER uses explicit per-entity click order, delegates fail-closed naming to Core, rolls project state back on command failure and keeps UI finalization non-fatal.")
+print("PASS: QS3DGRIDNUMBER completes explicit click order and naming prompts before canonical bind, re-resolves ownership, delegates fail-closed naming to Core, rolls back failures and keeps UI finalization non-fatal.")

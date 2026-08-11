@@ -25,10 +25,17 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var tolerance = MetadataNumber(project, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d);
-                var arcSagitta = MetadataNumber(project, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d);
-                var splineChord = MetadataNumber(project, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d);
+                ProjectState? previewProject = null;
+                string? expectedProjectId = null;
+                if (ProjectContextCoordinator.TryGetReadOnly(document, out var existingPreview))
+                {
+                    previewProject = existingPreview;
+                    expectedProjectId = existingPreview.ProjectId;
+                }
+
+                var tolerance = previewProject == null ? 0.005d : MetadataNumber(previewProject, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d);
+                var arcSagitta = previewProject == null ? 0.002d : MetadataNumber(previewProject, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d);
+                var splineChord = previewProject == null ? 0.02d : MetadataNumber(previewProject, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d);
                 var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance, splineChord);
                 if (segments.Count == 0)
                 {
@@ -36,12 +43,31 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var minimumArea = MetadataNonNegative(project, "RoomBoundaryMinimumAreaM2", 0.5d);
+                var minimumArea = previewProject == null ? 0.5d : MetadataNonNegative(previewProject, "RoomBoundaryMinimumAreaM2", 0.5d);
                 var boundaries = new RoomBoundaryEngine().Discover(segments, tolerance, minimumArea);
                 if (boundaries.Count == 0)
                 {
                     document.Editor.WriteMessage("\nQS3DROOMAUTO: chưa phát hiện face kín hợp lệ trong selection.");
                     return;
+                }
+
+                ProjectState project;
+                if (expectedProjectId != null)
+                {
+                    project = ExistingProjectMutationContext.Require(document, "Room Auto");
+                    if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("QS3D project đã thay đổi trong lúc đọc Room boundary. Hãy chạy lại lệnh.");
+                    if (MetadataNumber(project, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d) != tolerance ||
+                        MetadataNumber(project, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d) != arcSagitta ||
+                        MetadataNumber(project, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d) != splineChord ||
+                        MetadataNonNegative(project, "RoomBoundaryMinimumAreaM2", 0.5d) != minimumArea)
+                        throw new InvalidOperationException("Room boundary settings đã thay đổi trong lúc đọc selection. Hãy chạy lại lệnh.");
+                }
+                else
+                {
+                    // Creation-capable only after usable CAD input produced at least one closed face.
+                    // Cancel/empty/no-face paths above must never bootstrap a blank project.
+                    project = ProjectContextCoordinator.GetOrCreate(document);
                 }
 
                 var signatureCounts = boundaries

@@ -20,11 +20,11 @@ jobs:
       BRICSCAD_V25_DIR: ${{ vars.BRICSCAD_V25_DIR }}
       BRICSCAD_V25_PROFILE: ${{ vars.BRICSCAD_V25_PROFILE }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Manual-only CI policy gate
@@ -80,7 +80,7 @@ jobs:
             -PluginDll $plugin `
             -Profile $env:BRICSCAD_V25_PROFILE `
             -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v25-runtime"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: QS3D-BricsCAD-V25
           path: |
@@ -89,7 +89,7 @@ jobs:
             dist/QS3D-BricsCAD-V25.zip
       - name: Upload V25 runtime evidence
         if: ${{ always() && inputs.run_runtime }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: QS3D-BricsCAD-V25-runtime
           if-no-files-found: warn

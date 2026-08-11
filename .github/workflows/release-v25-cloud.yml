@@ -35,15 +35,15 @@ jobs:
       BRICSCAD_V25_MSI_URL: ${{ secrets.BRICSCAD_V25_MSI_URL }}
       BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
 
@@ -114,7 +114,7 @@ jobs:
 
       - name: Restore BricsCAD V25 installer cache
         id: bricscad-msi-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
           key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
@@ -252,7 +252,7 @@ jobs:
 
       - name: Save BricsCAD V25 installer cache
         if: ${{ steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
           key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
@@ -303,7 +303,7 @@ jobs:
           "$hash  QS3D-BricsCAD-V25.zip" | Set-Content 'dist\QS3D-BricsCAD-V25.zip.sha256' -Encoding ASCII
 
       - name: Upload cloud preview artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: QS3D-BricsCAD-V25-${{ inputs.release_tag }}-cloud-preview
           if-no-files-found: error
