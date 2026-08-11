@@ -1,0 +1,21 @@
+# Agent work claim — Direct Draw Opening bootstrap rollback
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `ACTIVE`
+- Scope: source-safe project-context rollback for projectless Door/WallOpening Direct Draw failure.
+- Files reserved:
+  - `src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs`
+  - `scripts/preflight-directdraw-opening-bootstrap-rollback.py`
+  - this claim file for close-out
+- Problem: `Execute` resolves/bootstraps the preview project before source/capture/Auto Host. Its failure path erases the LINE and restores `ProjectState`, but does not release a project context bootstrapped by this authoring attempt.
+- Intended contract:
+  - capture project ownership before `ResolveForMutation`;
+  - preserve existing-project context on failure;
+  - after source cleanup + semantic restore, forget only projectless authoring bootstrap;
+  - cleanup runs before secondary rollback error aggregation;
+  - success keeps intentional bootstrap;
+  - Auto Host, stable-id re-resolution, scoped regeneration and UI behavior remain unchanged.
+- Non-overlap: excludes P0/P1/Window/ReferenceWall, Ribbon, Quantity, WPF, generated-XData tokenization and LOCAL_ONLY V25 execution.
+- Validation: exact diff/current-source review plus auto-discovered static preflight; no GitHub Actions under `continue all`.
+- Completion condition: failed projectless Door/WallOpening Direct Draw cannot leave a cached project and claim closes with exact SHAs.
