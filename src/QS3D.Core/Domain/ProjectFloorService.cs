@@ -60,7 +60,7 @@ namespace QS3D.Core.Domain
 
             project.Touch();
             floor.Name = normalizedName;
-            floor.ElevationM = elevationM;
+            if (elevationChanged) floor.ElevationM = elevationM;
             foreach (var element in referencedElements)
             {
                 var flags = ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;
