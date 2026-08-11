@@ -113,7 +113,9 @@ namespace QS3D.BricsCAD.V25.Updates
             if (parsedProductVersion.CompareTo(release.Version) != 0)
                 return UpdateManifestProbeResult.Rejected("Update manifest productVersion không khớp release SemVer đã chọn.");
 
-            if (!Version.TryParse(manifest.Version, out var assemblyVersion) || assemblyVersion == null ||
+            var assemblyVersionText = manifest.Version?.Trim();
+            if (string.IsNullOrEmpty(assemblyVersionText) ||
+                !Version.TryParse(assemblyVersionText, out var assemblyVersion) || assemblyVersion == null ||
                 assemblyVersion.Major != release.Version.Major ||
                 assemblyVersion.Minor != release.Version.Minor ||
                 assemblyVersion.Build != release.Version.Patch)
@@ -129,7 +131,9 @@ namespace QS3D.BricsCAD.V25.Updates
             if (string.IsNullOrEmpty(sha256) || !Sha256Pattern.IsMatch(sha256))
                 return UpdateManifestProbeResult.Rejected("Update manifest SHA-256 không hợp lệ.");
 
-            if (!Uri.TryCreate(manifest.PackageUri, UriKind.Absolute, out var packageUri) || packageUri == null ||
+            var packageUriText = manifest.PackageUri?.Trim();
+            if (string.IsNullOrEmpty(packageUriText) ||
+                !Uri.TryCreate(packageUriText, UriKind.Absolute, out var packageUri) || packageUri == null ||
                 !IsExpectedReleaseAssetUri(packageUri, release.Tag, "QS3D-BricsCAD-V25.zip"))
             {
                 return UpdateManifestProbeResult.Rejected("Update package URL không thuộc đúng repository/tag/asset GitHub đã chọn.");
