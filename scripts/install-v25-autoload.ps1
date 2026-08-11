@@ -214,9 +214,79 @@ function Restore-DemandLoadSnapshot {
     }
 }
 
-if (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {
-    throw 'Close all BricsCAD processes before installing or upgrading QS3D.'
+function Get-RunningBricsCADProcessDetails {
+    $details = @()
+    foreach ($process in @(Get-Process -Name bricscad -ErrorAction SilentlyContinue)) {
+        $processPath = '<unavailable>'
+        try {
+            if (-not [string]::IsNullOrWhiteSpace([string]$process.Path)) {
+                $processPath = [string]$process.Path
+            }
+        }
+        catch {
+            $processPath = '<unavailable>'
+        }
+        $details += "Name=$($process.ProcessName) PID=$($process.Id) Path=$processPath"
+    }
+    return $details
 }
+
+function Assert-DemandLoadRegistration {
+    param(
+        $Target,
+        [string]$ExpectedLoader,
+        [int]$ExpectedLoadCtrls,
+        [string[]]$ExpectedCommands
+    )
+
+    if (-not (Test-Path -LiteralPath $Target.AppKey)) {
+        throw "DemandLoad registration was not created for $($Target.Version)/$($Target.Language): $($Target.AppKey)"
+    }
+
+    $appKey = Get-Item -LiteralPath $Target.AppKey
+    try {
+        $actualLoader = [string]$appKey.GetValue('Loader', '')
+        $actualLoadCtrls = [int]$appKey.GetValue('LoadCtrls', -1)
+        $actualDescription = [string]$appKey.GetValue('Description', '')
+    }
+    finally { $appKey.Close() }
+
+    if (-not [string]::Equals($actualLoader, $ExpectedLoader, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "DemandLoad Loader mismatch for $($Target.Version)/$($Target.Language). Expected '$ExpectedLoader', got '$actualLoader'."
+    }
+    if ($actualLoadCtrls -ne $ExpectedLoadCtrls) {
+        throw "DemandLoad LoadCtrls mismatch for $($Target.Version)/$($Target.Language). Expected $ExpectedLoadCtrls, got $actualLoadCtrls."
+    }
+    if ($actualDescription -ne 'QS3D for BricsCAD V25') {
+        throw "DemandLoad Description mismatch for $($Target.Version)/$($Target.Language)."
+    }
+
+    $commandsKeyPath = Join-Path $Target.AppKey 'Commands'
+    if (-not (Test-Path -LiteralPath $commandsKeyPath)) {
+        throw "DemandLoad Commands key is missing for $($Target.Version)/$($Target.Language)."
+    }
+    $commandsKey = Get-Item -LiteralPath $commandsKeyPath
+    try {
+        $registeredNames = @($commandsKey.GetValueNames())
+        foreach ($command in $ExpectedCommands) {
+            if (-not ($registeredNames -contains $command)) {
+                throw "DemandLoad command registration is missing '$command' for $($Target.Version)/$($Target.Language)."
+            }
+            $mappedCommand = [string]$commandsKey.GetValue($command, '')
+            if ($mappedCommand -ne $command) {
+                throw "DemandLoad command mapping mismatch for '$command' on $($Target.Version)/$($Target.Language)."
+            }
+        }
+    }
+    finally { $commandsKey.Close() }
+}
+
+$runningBricsCAD = @(Get-RunningBricsCADProcessDetails)
+if ($runningBricsCAD.Count -gt 0) {
+    throw ('Close all BricsCAD processes before installing or upgrading QS3D. Detected: ' + ($runningBricsCAD -join ' | '))
+}
+
+Write-Warning 'QS3D managed plugin requires BricsCAD V25 Pro or higher. BricsCAD Shape/Lite cannot load the BRX/.NET plugin.'
 
 $scriptDirectory = $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($scriptDirectory) -and -not [string]::IsNullOrWhiteSpace([string]$MyInvocation.MyCommand.Path)) {
@@ -292,6 +362,7 @@ try {
             foreach ($command in $commands) {
                 New-ItemProperty -Path $commandsKey -Name $command -Value $command -PropertyType String -Force | Out-Null
             }
+            Assert-DemandLoadRegistration -Target $target -ExpectedLoader $loader -ExpectedLoadCtrls $loadCtrls -ExpectedCommands $commands
         }
     }
 
@@ -299,6 +370,7 @@ try {
     Write-Host "QS3D installed: $installFull"
     Write-Host "DemandLoad mode: $LoadMode"
     Write-Host "Registered targets: $($targets.Count)"
+    Write-Host 'Host requirement: BricsCAD V25 Pro or higher. Shape/Lite cannot load the QS3D BRX/.NET plugin.'
     Write-Host 'Security settings were not weakened. Production -RequireSigned verifies both DLLs and all packaged PowerShell executable payloads.'
 }
 catch {
