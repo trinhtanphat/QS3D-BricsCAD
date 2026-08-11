@@ -3,25 +3,21 @@
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12 (UTC+7)
 - Status: `COMPLETED`
+- Outcome: `REVERTED` — the proposed behavior was based on an incorrect interpretation of the existing canonical no-op contract.
 - Baseline main SHA: `cad2ea8b733dbfc9037b2846e7e91fbb4dda732d`
-- Merged PR: `#590`
-- Main implementation SHA: `3fa9a709307fbd9e9f1614f6b072efd2affe449f`
-- Scope: make Core Floor/Zone activation persist the exact canonical project-owned ID even when the current active value differs only by whitespace or casing, instead of treating a non-canonical alias as an unchanged no-op.
-- Files reserved:
-  - `src/QS3D.Core/Domain/ProjectFloorService.cs`
-  - `src/QS3D.Core/Domain/ProjectZoneService.cs`
-  - `tests/QS3D.Core.SmokeTests/ProjectFloorServiceSmoke.cs`
-  - `tests/QS3D.Core.SmokeTests/ProjectZoneServiceSmoke.cs`
-  - this claim file
-- Excluded scope:
-  - no Family/ActiveFamily changes; that lane has separate completed hardening history;
-  - no BricsCAD adapter/UI/runtime changes;
-  - no persistence schema changes;
-  - no GitHub Actions dispatch or release work.
-- Contract completed:
-  - `SetActive` resolves the requested Floor/Zone through the existing canonical project lookup first;
-  - a truly exact active ID remains a zero-change no-op;
-  - whitespace/case aliases that resolve to the same project-owned ID are repaired to the exact canonical ID and advance `ChangeVersion` once;
-  - invalid/missing IDs still fail before mutation;
-  - deterministic Core smoke coverage pins canonical repair, exact-value no-op and rejected missing-target atomicity for both Floor and Zone.
-- Validation: reviewed the final PR diff and confirmed the merged source/test scope. GitHub Actions were not manually dispatched and no BricsCAD V25 runtime PASS is claimed from this web session.
+- Original merged PR: `#590`
+- Original implementation SHA: `3fa9a709307fbd9e9f1614f6b072efd2affe449f`
+- Corrective PR: `#592`
+- Corrective main SHA: `0ce741622c31fe794aa3784ac45c304309d8c2a4`
+- Original scope: make Core Floor/Zone activation persist the exact canonical project-owned ID even when the current active value differs only by whitespace or casing.
+- Audit correction:
+  - existing PR #545 intentionally defines trimmed, case-insensitive Floor/Zone active identity as a semantic no-op;
+  - semantic aliases such as padded/case-varied IDs are intentionally preserved rather than rewritten;
+  - `preflight-project-floor-zone-mutation-integrity.py` explicitly guards that behavior;
+  - therefore PR #590 was reverted and its rewrite-specific smoke assertions were removed.
+- Current contract after correction:
+  - `SetActive` resolves the requested Floor/Zone first and compares the stored active id after trimming using `OrdinalIgnoreCase`;
+  - semantic same-target activation does not `Touch()` or rewrite raw stored identity;
+  - missing targets still fail before mutation;
+  - prior #545 assignment/null-target hardening remains unchanged.
+- Validation: corrective PR #592 diff was reviewed before squash merge. GitHub Actions were not manually dispatched and no BricsCAD V25 runtime PASS is claimed from this web session.
