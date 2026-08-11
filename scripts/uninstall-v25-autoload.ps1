@@ -53,21 +53,45 @@ function Assert-InstallDirectorySafeToRemove {
         throw 'Refusing to remove a custom install directory outside the QS3D LocalAppData scope. Use -Force only after verifying the path.'
     }
 
-    if (-not $ForceDelete) {
-        $metadataPath = Join-Path $installFull 'PACKAGE-METADATA.json'
-        $pluginPath = Join-Path $installFull 'QS3D.BricsCAD.V25.dll'
-        if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf) -or -not (Test-Path -LiteralPath $pluginPath -PathType Leaf)) {
-            throw 'Refusing recursive removal because the target does not contain the QS3D package identity files. Use -Force only after verifying the path.'
+    $metadataPath = Join-Path $installFull 'PACKAGE-METADATA.json'
+    $pluginPath = Join-Path $installFull 'QS3D.BricsCAD.V25.dll'
+    $corePath = Join-Path $installFull 'QS3D.Core.dll'
+    if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $pluginPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $corePath -PathType Leaf)) {
+        throw 'Refusing recursive removal because the target does not contain the canonical QS3D package identity files.'
+    }
+
+    try {
+        $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+        if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V25 x64') {
+            throw 'package identity does not match QS3D / BricsCAD V25 x64'
         }
-        try {
-            $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-            if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V25 x64') {
-                throw 'package identity does not match QS3D / BricsCAD V25 x64'
+        if (-not $metadata.PSObject.Properties['version'] -or -not $metadata.PSObject.Properties['productVersion']) {
+            throw 'package version identity is incomplete'
+        }
+
+        $metadataAssemblyVersion = [Version]::Parse([string]$metadata.version)
+        $metadataProductVersion = ([string]$metadata.productVersion).Trim()
+        if ([string]::IsNullOrWhiteSpace($metadataProductVersion)) {
+            throw 'package productVersion is empty'
+        }
+
+        foreach ($identityPath in @($pluginPath, $corePath)) {
+            $identityName = [IO.Path]::GetFileName($identityPath)
+            $assemblyVersion = [Reflection.AssemblyName]::GetAssemblyName($identityPath).Version
+            if (-not $assemblyVersion -or $assemblyVersion -ne $metadataAssemblyVersion) {
+                throw "$identityName assembly version does not match PACKAGE-METADATA version"
+            }
+            $productVersion = ([string][Diagnostics.FileVersionInfo]::GetVersionInfo($identityPath).ProductVersion).Trim()
+            if ([string]::IsNullOrWhiteSpace($productVersion) -or
+                -not [string]::Equals($productVersion, $metadataProductVersion, [StringComparison]::Ordinal)) {
+                throw "$identityName product version does not match PACKAGE-METADATA productVersion"
             }
         }
-        catch {
-            throw "Refusing recursive removal because PACKAGE-METADATA.json is not a valid QS3D V25 identity marker: $($_.Exception.Message)"
-        }
+    }
+    catch {
+        throw "Refusing recursive removal because PACKAGE-METADATA/DLL identity is not a valid QS3D V25 installation: $($_.Exception.Message)"
     }
 
     return $installFull
