@@ -5,18 +5,24 @@ namespace QS3D.Core.Domain
 {
     public sealed class ElementInstance
     {
+        private string _floor;
+
         public ElementInstance(string id, FamilyDefinition family, string floor)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Element id is required.", nameof(id));
             Id = id.Trim();
             Family = family ?? throw new ArgumentNullException(nameof(family));
-            Floor = string.IsNullOrWhiteSpace(floor) ? "Nền 0.00" : floor.Trim();
+            _floor = NormalizeFloor(floor);
             SourceHandles = new List<string>();
         }
 
         public string Id { get; }
         public FamilyDefinition Family { get; }
-        public string Floor { get; set; }
+        public string Floor
+        {
+            get => _floor;
+            set => _floor = NormalizeFloor(value);
+        }
         public IList<string> SourceHandles { get; }
         public double LengthM { get; set; }
         public double AreaM2 { get; set; }
@@ -32,5 +38,8 @@ namespace QS3D.Core.Domain
         public double TopAreaM2 { get; set; }
         public double OtherAreaM2 { get; set; }
         public double NetConcreteM3 => GrossConcreteM3 - DeductionM3;
+
+        private static string NormalizeFloor(string value) =>
+            string.IsNullOrWhiteSpace(value) ? "Nền 0.00" : value.Trim();
     }
 }

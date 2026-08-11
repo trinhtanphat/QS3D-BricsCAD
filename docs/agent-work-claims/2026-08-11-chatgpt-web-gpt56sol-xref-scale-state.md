@@ -1,49 +1,34 @@
 # Work claim — Xref scale-state display
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-xref-scale-state`
 - Registered: `2026-08-11T22:05:00+07:00`
+- Completed: `2026-08-11T22:15:00+07:00`
 - Baseline main SHA: `a32473279878b1a5096ddd3159567edfd66cd515`
 - Rebased audit SHA: `34b871b659c4e7ee87a5d0bc9076367d4ac1b6af`
 - Priority: P1 screenshot/reference parity
 
-## Goal
+## Implemented
 
-Complete the supplied `QUẢN LÝ BẢN VẼ` table with a real `Tỉ lệ` state derived from current-space Xref instances. Preserve the already-functional Xref/layer actions, including the newly completed native lock/unlock lane.
+- `b46e1abce077eb20e393a487e9cfba48980747df` — `DrawingCatalogReader.ReadReferences(...)` now captures the first live current-space Xref instance's native `ScaleFactors`, compares later current-space instances with a deterministic relative tolerance, exposes `Hỗn hợp` when scale states differ, and formats one consistent scale as `1:1`, `1:N`, `N:1`, or explicit `X/Y/Z` values for non-uniform/non-ratio-safe scale.
+- Xrefs with no current-space instances remain `—`; existing instance count and layer-lock state are calculated in the same read-only transaction as before.
+- `858bc0bdea32880a32a65293b62efd92926186de` — `DrawingItemViewModel` now implements `INotifyPropertyChanged` for a dedicated `ScaleText` property while preserving existing row properties including internal `Kind` and `InstanceText`.
+- `50eb5d22b9d341f52fe9e13b939484a9628020a3` — added isolated `RightPanel.XrefScale.cs`. A class-level Loaded hook subscribes once to the existing drawing collection, coalesces collection rebuilds through the WPF Dispatcher, re-reads current catalog scale state, maps by Xref name, sets the main DWG row to `1:1`, and updates only `ScaleText`. It does not call `RefreshDrawingsOnly()` and therefore does not introduce a collection refresh loop.
+- `2d9bb01774f84344296945ee69b9b9b2df81d1be` — drawing table now shows screenshot-style `Tên / Khóa / SL / Tỉ lệ`; the redundant displayed `Loại` column was removed while internal `Kind` remains available. All existing Add/Reload/Move/Lock/Unlock/Zoom/Detach actions and the layer manager remain intact.
+- `078225db5fa524dde20fad82d8e16d6ad35cc60b` plus correction `0b332aaaaacbc33ef20c3fcdab7d8fbf01fc6a92` — added/fixed `scripts/preflight-xref-scale-state.py`, covering current-space scale capture, tolerance/mixed-state handling, ratio/non-uniform formatting, notifying VM propagation, idempotent collection/Dispatcher enrichment, `Tỉ lệ` XAML wiring, preservation of `SL`, native Xref lock controls and all pre-existing Xref operations.
 
-## Reserved scope
+## Source validation
 
-- `src/QS3D.BricsCAD.V25/Cad/DrawingCatalogReader.cs`
-- `src/QS3D.BricsCAD.V25/UI/ViewModels/RightPanelViewModel.cs`
-- `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml`
-- `src/QS3D.BricsCAD.V25/UI/RightPanel.XrefScale.cs` (new isolated partial)
-- `scripts/preflight-xref-scale-state.py`
-- this claim file
-- `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs` is **audit-only / no edit planned**. The isolated partial subscribes to the existing drawing collection and enriches scale state after the core refresh path, avoiding replacement of the large concurrent interaction surface.
+- Re-fetched the current `DrawingCatalogReader.cs`, `RightPanelViewModel.cs`, `RightPanel.XrefScale.cs` and the relevant `RightPanel.xaml` section from `main`; all scale-state contracts remain present after concurrent commits.
+- Re-fetched the focused preflight and corrected two string-match tokens so the static contract reflects the actual C#/XAML source rather than escaped Python literals.
+- `compare_commits` from `b46e1abce077eb20e393a487e9cfba48980747df` to current `main` reports `behind_by: 0` with that implementation as merge base; 53 concurrent commits were preserved and no force push/reset was used.
+- GitHub exposes no combined status checks for `0b332aaaaacbc33ef20c3fcdab7d8fbf01fc6a92`; no GitHub Actions were dispatched.
+- The remote connector environment did not execute the BricsCAD adapter build or licensed runtime. Validation for this lane is source/preflight inspection only; no native runtime PASS is claimed.
 
-## Implementation shape
+## LOCAL_ONLY disposition
 
-- `DrawingCatalogReader.ReadReferences(...)` remains the source of truth for current-space Xref state and additionally records first-instance X/Y/Z scale, deterministic same-scale comparison across later current-space instances, mixed-state detection, and a display string.
-- `DrawingItemViewModel` gains a notifying `ScaleText` property only; existing immutable drawing row properties remain unchanged.
-- `RightPanel.XrefScale.cs` registers a class-level Loaded hook through a static field initializer, subscribes once to `_viewModel.Drawings.CollectionChanged`, coalesces refreshes through the WPF Dispatcher, re-reads current `DrawingCatalogReader.ReadReferences(...)`, maps by Xref name, sets the model row to `1:1`, and updates Xref `ScaleText` without changing collection membership.
-- The partial is read-only and intentionally does not call `RefreshDrawingsOnly()` itself, preventing refresh loops while allowing every existing core drawing rebuild to be enriched automatically.
+- Physical BricsCAD V25 verification of mirrored/non-uniform Xref display, table rendering and current-space scale changes remains part of the existing RightPanel/palette runtime qualification boundary. No duplicate local inbox item was added.
 
-## Functional contract
+## Completion evidence
 
-- For every Xref, inspect only live `BlockReference` instances in the current space, using the same scope already used for instance count/lock state.
-- Record the first instance's exact X/Y/Z scale, compare later instances with a small deterministic relative tolerance, and expose `Hỗn hợp` if scales differ across current-space instances.
-- For one consistent uniform positive scale, display a human-friendly ratio: `1:1` for unity, `1:N` for scale factors below 1, and `N:1` for factors above 1. Non-uniform, mirrored/non-positive, or otherwise non-ratio-safe X/Y/Z scale displays explicit `X/Y/Z` values rather than pretending it is one ratio.
-- Xrefs with zero current-space instances show `—`. The main DWG row shows `1:1`.
-- Keep instance count (`SL`) visible and replace the redundant displayed `Loại` column with `Tỉ lệ`; internal `Kind` state remains available for behavior/tooltips.
-- This is read-only catalog state. No Xref transformation, source-file write, semantic/QSDB mutation or command dispatch is introduced.
-- Preserve all existing Xref toolbar/context actions and layer-manager behavior.
-
-## Validation plan
-
-- Re-fetch current `main` and all reserved source files immediately before writes; preserve concurrent winners.
-- Add an auto-discovered static preflight covering current-space scale capture, tolerance/mixed-state handling, uniform/non-uniform ratio formatting, notifying VM propagation, collection-change/Dispatcher enrichment, `Tỉ lệ` XAML column, preserved `SL`, native lock controls and all existing Xref actions.
-- Re-fetch final source/ancestry/status. Do not dispatch GitHub Actions.
-
-## Completion condition
-
-The drawing manager reports actual current-space Xref scale state in the screenshot-style `Tỉ lệ` column without mutating CAD or losing any existing drawing/layer actions, and this claim is marked `COMPLETED` with exact SHAs.
+The screenshot-inspired drawing manager now reports actual native current-space Xref scale state in a `Tỉ lệ` column, including mixed and non-uniform cases, without transforming CAD objects or touching QS3D semantic/QSDB state.

@@ -6,17 +6,22 @@ namespace QS3D.Core.Domain
     public sealed class FamilyDefinition
     {
         private ElementCategory _category;
+        private string _name;
+        private string _material;
 
         public FamilyDefinition(string name, ElementCategory category, string material = "Khác")
         {
-            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Family name is required.", nameof(name));
-            Name = name.Trim();
+            _name = RequireName(name);
             Category = category;
-            Material = string.IsNullOrWhiteSpace(material) ? "Khác" : material.Trim();
+            _material = NormalizeMaterial(material);
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
-        public string Name { get; set; }
+        public string Name
+        {
+            get => _name;
+            set => _name = RequireName(value);
+        }
         public ElementCategory Category
         {
             get => _category;
@@ -27,9 +32,19 @@ namespace QS3D.Core.Domain
                 _category = value;
             }
         }
-        public string Material { get; set; }
+        public string Material
+        {
+            get => _material;
+            set => _material = NormalizeMaterial(value);
+        }
         public string ColorMode { get; set; } = "Theo loại (mặc định)";
         public string Transparency { get; set; } = "ByLayer";
         public IDictionary<string, string> Metadata { get; }
+
+        private static string RequireName(string value) =>
+            string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Family name is required.", nameof(value)) : value.Trim();
+
+        private static string NormalizeMaterial(string value) =>
+            string.IsNullOrWhiteSpace(value) ? "Khác" : value.Trim();
     }
 }

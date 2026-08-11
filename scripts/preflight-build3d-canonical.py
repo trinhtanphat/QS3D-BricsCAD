@@ -43,11 +43,14 @@ else:
         "SemanticReferenceHandles.MatchesSelection(x, handles)",
         "NativeBuildCapability.Supports(x.Category)",
         "NativeBuildCapability.IsWallCategory(category)",
+        "var sourceIds = CadHandleService.Resolve(document, sourceHandles)",
+        "EntitySnapshotReader.ReadHandles(document, sourceHandles)",
         "ValidateWallSourceBatch(selectedElements, sourceSnapshots, category",
         ".RegenerateDirtySubset(project, regenerationScope)",
         "BuildCategory(document, project, category, sourceType)",
         "if (sourceTypes.Count == 0)",
         "FinalizeUi(document, elementIds, sourceHandles, built, regenerated, category, project)",
+        "CadHandleService.Select(document, generatedHandles)",
         '" UI sync warning: " + ex.Message',
         "Report(document, \"QS3DBUILD3D lỗi: \" + ex.Message)",
         'string.Equals(sourceType, "Line", StringComparison.OrdinalIgnoreCase)',
@@ -59,6 +62,11 @@ else:
     for token in required:
         if token not in text:
             errors.append("canonical Build3D missing contract: " + token)
+
+    if "document.Editor.SetImpliedSelection(sourceIds.ToArray())" in text:
+        errors.append("Build3D preflight must not replace PICKFIRST/implied selection merely to inspect semantic source CAD")
+    if "EntitySnapshotReader.ReadImpliedSelection(document)" in text:
+        errors.append("Build3D source preflight must read resolved source handles directly instead of depending on implied-selection mutation")
 
     if re.search(r"private\s+static\s+bool\s+IsNativeBuildCategory\s*\(", text):
         errors.append("Build3DCommands must not duplicate NativeBuildCapability.Supports")
@@ -90,4 +98,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DBUILD3D has one canonical owner, consumes centralized native category capability, validates one wall source type, dispatches WallPier deterministically and keeps post-commit UI failures non-fatal.")
+print("PASS: QS3DBUILD3D has one canonical owner, preserves PICKFIRST during source preflight, consumes centralized native category capability, validates one wall source type, dispatches WallPier deterministically and keeps post-commit UI failures non-fatal.")
