@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
                 var project = ProjectContextCoordinator.GetOrCreate(document);
+                var previewChangeVersion = project.ChangeVersion;
                 var plan = InterchangeUseSourceElementImportService.Plan(project, json);
                 if (plan.ElementsToReplace <= 0)
                 {
@@ -66,8 +67,11 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxButton.YesNo,
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
-                // The service repeats strict validation/planning after confirmation. A target state change
-                // while the dialog was open therefore fails closed instead of applying stale intent.
+                InterchangeConfirmationGuard.RequireFresh(
+                    document,
+                    project,
+                    previewChangeVersion,
+                    "Interchange UseSource Element");
                 var result = InterchangeUseSourceElementImportService.Import(document, json);
                 try { PaletteCoordinator.RefreshProject(); } catch { }
 
