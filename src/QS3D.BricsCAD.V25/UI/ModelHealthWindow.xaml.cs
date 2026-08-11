@@ -14,15 +14,26 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private readonly Action<ModelHealthIssue>? _locate;
         private readonly Document _document;
-        private readonly ProjectState _projectAtOpen;
+        private readonly string _projectIdAtOpen;
+        private readonly DateTime _updatedUtcAtOpen;
+        private readonly long _changeVersionAtOpen;
+        private readonly string _drawingFingerprintAtOpen;
         private bool _staleSnapshot;
 
-        public ModelHealthWindow(Document document, IReadOnlyList<ModelHealthIssue> issues, Action<ModelHealthIssue>? locate = null)
+        public ModelHealthWindow(
+            Document document,
+            ProjectState projectAtOpen,
+            IReadOnlyList<ModelHealthIssue> issues,
+            Action<ModelHealthIssue>? locate = null)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
+            if (projectAtOpen == null) throw new ArgumentNullException(nameof(projectAtOpen));
             if (issues == null) throw new ArgumentNullException(nameof(issues));
             _locate = locate;
-            _projectAtOpen = ProjectContextCoordinator.GetOrCreate(_document);
+            _projectIdAtOpen = projectAtOpen.ProjectId;
+            _updatedUtcAtOpen = projectAtOpen.UpdatedUtc;
+            _changeVersionAtOpen = projectAtOpen.ChangeVersion;
+            _drawingFingerprintAtOpen = projectAtOpen.DrawingFingerprint ?? string.Empty;
             InitializeComponent();
             DocumentBoundWindowLifetime.Attach(this, _document);
             Activated += (_, __) => RefreshSnapshotFreshness();
@@ -53,7 +64,7 @@ namespace QS3D.BricsCAD.V25.UI
                 throw new InvalidOperationException("Cửa sổ Model Health này thuộc một DWG khác. Hãy kích hoạt lại đúng bản vẽ trước khi định vị.");
             RefreshSnapshotFreshness();
             if (_staleSnapshot)
-                throw new InvalidOperationException("Snapshot Model Health đã cũ vì project của DWG này đã được reload/thay thế. Đóng cửa sổ và chạy lại QS3DHEALTH hoặc QS3DHEALTHALL.");
+                throw new InvalidOperationException("Snapshot Model Health đã cũ vì semantic project của DWG này đã thay đổi/reload. Đóng cửa sổ và chạy lại QS3DHEALTH hoặc QS3DHEALTHALL.");
         }
 
         private void RefreshSnapshotFreshness()
@@ -61,14 +72,27 @@ namespace QS3D.BricsCAD.V25.UI
             if (_staleSnapshot) return;
             try
             {
-                var current = ProjectContextCoordinator.GetOrCreate(_document);
-                if (ReferenceEquals(current, _projectAtOpen)) return;
-                MarkSnapshotStale("Project của DWG đã được reload/thay thế.");
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var current))
+                {
+                    MarkSnapshotStale("QS3D project hiện hành không còn khả dụng.");
+                    return;
+                }
+
+                if (MatchesSnapshot(current)) return;
+                MarkSnapshotStale("Semantic project đã thay đổi hoặc được reload kể từ lúc Health được tạo.");
             }
             catch (Exception ex)
             {
                 MarkSnapshotStale("Không thể xác nhận project hiện hành: " + ex.Message);
             }
+        }
+
+        private bool MatchesSnapshot(ProjectState current)
+        {
+            return string.Equals(current.ProjectId, _projectIdAtOpen, StringComparison.Ordinal) &&
+                   current.UpdatedUtc == _updatedUtcAtOpen &&
+                   current.ChangeVersion == _changeVersionAtOpen &&
+                   string.Equals(current.DrawingFingerprint ?? string.Empty, _drawingFingerprintAtOpen, StringComparison.OrdinalIgnoreCase);
         }
 
         private void MarkSnapshotStale(string reason)
