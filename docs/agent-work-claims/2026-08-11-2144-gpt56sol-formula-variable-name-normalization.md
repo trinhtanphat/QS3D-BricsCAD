@@ -1,0 +1,21 @@
+# Agent Work Claim
+
+- Agent: `GPT-5.6 Sol`
+- Status: `ACTIVE`
+- Started at: `2026-08-11T21:44:12+07:00`
+- Scope: Harden CAD-independent formula variable-name normalization so caller dictionary keys with incidental leading/trailing whitespace bind consistently, while blank names and duplicates after trim + case-fold fail closed instead of producing ambiguous lookup behavior.
+- Primary files:
+  - `src/QS3D.Core/Formulas/ExpressionEvaluator.cs`
+  - `tests/QS3D.Core.SmokeTests/FormulaVariableNameNormalizationSmoke.cs`
+  - `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs`
+  - `docs/agent-work-claims/2026-08-11-2144-gpt56sol-formula-variable-name-normalization.md`
+- Tests intended:
+  - Trimmed caller variable names bind to formula identifiers.
+  - Whitespace-only variable names fail closed.
+  - Names colliding after trim + case-insensitive normalization fail closed.
+  - Existing case-insensitive and finite-value behavior remains unchanged.
+- Dependencies:
+  - Builds on the completed `formula-variable-casefold` and `formula-finite-safety` lanes already present on `main`; no active overlap found in the current claim directory.
+- Notes:
+  - Pure Core/netstandard-compatible change; no BricsCAD host/native runtime, updater, UI, Ribbon, Direct Draw, quantity, rebar, or interchange surfaces are in scope.
+  - GitHub Actions will not be dispatched; repository policy and this execution environment do not provide a local BricsCAD runtime.

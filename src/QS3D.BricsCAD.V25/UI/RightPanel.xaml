@@ -64,6 +64,12 @@
                                     ToolTip="Nạp lại Xref đang chọn"/>
                             <Button Content="Di chuyển" Click="OnMoveDrawingClick"
                                     ToolTip="Di chuyển instance của Xref đang chọn"/>
+                            <Button Content="Khóa" Click="OnLockXrefClick"
+                                    Style="{StaticResource DenseButton}"
+                                    ToolTip="Khóa các layer native đang chứa instance của Xref được chọn trong space hiện tại"/>
+                            <Button Content="Mở khóa" Click="OnUnlockXrefClick"
+                                    Style="{StaticResource DenseButton}"
+                                    ToolTip="Mở khóa các layer native đang chứa instance của Xref được chọn trong space hiện tại"/>
                             <Button Content="Khoanh vùng" Click="OnZoomWindowClick"
                                     Style="{StaticResource DenseButton}"
                                     ToolTip="Khoanh vùng để zoom trong viewport"/>
@@ -87,6 +93,11 @@
                             <MenuItem Header="Nạp lại Xref" Click="OnReloadXrefClick"
                                       Foreground="{StaticResource TextBrush}" Background="Transparent"/>
                             <MenuItem Header="Di chuyển Xref" Click="OnMoveDrawingClick"
+                                      Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                            <Separator/>
+                            <MenuItem Header="Khóa layer Xref" Click="OnLockXrefClick"
+                                      Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                            <MenuItem Header="Mở khóa layer Xref" Click="OnUnlockXrefClick"
                                       Foreground="{StaticResource TextBrush}" Background="Transparent"/>
                             <Separator/>
                             <MenuItem Header="Khoanh vùng" Click="OnZoomWindowClick"
