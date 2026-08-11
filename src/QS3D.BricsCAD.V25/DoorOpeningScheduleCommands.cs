@@ -32,7 +32,8 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                    throw new InvalidOperationException("Door XLSX cần một QS3D project hiện hữu; lệnh export không tạo project mới.");
                 new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 var rows = DoorOpeningScheduleBuilder.Build(project);
                 if (rows.Count == 0)
