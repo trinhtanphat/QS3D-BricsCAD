@@ -17,7 +17,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             if (project == null || _inspection.Count == 0)
             {
-                _viewModel.SetInspectedElementReadOnly(null);
+                _viewModel.SetSelectedElement(null);
                 return;
             }
 
@@ -28,7 +28,7 @@ namespace QS3D.BricsCAD.V25.UI
                 StringComparer.OrdinalIgnoreCase);
             if (handles.Count == 0)
             {
-                _viewModel.SetInspectedElementReadOnly(null);
+                _viewModel.SetSelectedElement(null);
                 return;
             }
 
@@ -39,7 +39,7 @@ namespace QS3D.BricsCAD.V25.UI
             var singleElement = selectedElements.Count == 1 ? selectedElements[0] : null;
             if (singleElement == null)
             {
-                _viewModel.SetInspectedElementReadOnly(null);
+                _viewModel.SetSelectedElement(null);
                 return;
             }
 
@@ -48,7 +48,7 @@ namespace QS3D.BricsCAD.V25.UI
                 : project.FindFamily(singleElement.FamilyId);
             if (family == null)
             {
-                _viewModel.SetInspectedElementReadOnly(null);
+                _viewModel.SetSelectedElement(null);
                 return;
             }
 
@@ -66,7 +66,7 @@ namespace QS3D.BricsCAD.V25.UI
                     FamilyList.SelectedItem = visibleFamily;
                     FamilyList.ScrollIntoView(visibleFamily);
                 }
-                _viewModel.SetInspectedElementReadOnly(singleElement);
+                _viewModel.SetSelectedElement(singleElement);
             }
             finally { _loadingContext = false; }
         }

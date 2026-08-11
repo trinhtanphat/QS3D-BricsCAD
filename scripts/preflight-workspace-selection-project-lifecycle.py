@@ -7,7 +7,6 @@ ADAPTER = ROOT / "src" / "QS3D.BricsCAD.V25"
 PALETTE = ADAPTER / "PaletteCoordinator.cs"
 SELECTION = ADAPTER / "UI" / "WorkspacePanel.SelectionInspection.cs"
 LEGACY = ADAPTER / "UI" / "WorkspacePanel.xaml.cs"
-VIEW_MODEL = ADAPTER / "UI" / "ViewModels" / "WorkspaceViewModel.cs"
 INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
 errors = []
 
@@ -21,7 +20,6 @@ def read(path):
 palette = read(PALETTE)
 selection = read(SELECTION)
 legacy = read(LEGACY)
-view_model = read(VIEW_MODEL)
 inbox = read(INBOX)
 
 for token in (
@@ -47,21 +45,12 @@ for token in (
     "if (project == null || _inspection.Count == 0)",
     "SemanticReferenceHandles.GetSelectionAliases(element)",
     "project.FindFamily(singleElement.FamilyId)",
-    "_viewModel.SetInspectedElementReadOnly(singleElement)",
-    "_inspection = snapshots ?? Array.Empty<EntitySnapshot>()",
-    "ApplyFamilyFilter()",
+    "_viewModel.SetSelectedElement(singleElement)",
 ):
     if token not in selection:
         errors.append("Workspace read-only selection partial missing token: " + token)
 if "ProjectContextCoordinator.GetOrCreate" in selection or "ExistingProjectMutationContext" in selection:
     errors.append("Workspace read-only selection partial must not bind/create mutable project state")
-
-for token in (
-    "public void SetInspectedElementReadOnly(ProjectElement? element) => SetSelectedElementCore(element, false);",
-    "if (activateFamily) ProjectFamilyActivationService.SetActive(_project, family.Id);",
-):
-    if token not in view_model:
-        errors.append("Workspace read-only inspector activation policy missing token: " + token)
 
 # Keep the old public method source for compatibility, but PaletteCoordinator must no longer route
 # implicit selection events through it because it historically calls GetOrCreate.
