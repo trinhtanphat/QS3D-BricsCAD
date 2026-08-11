@@ -67,6 +67,8 @@ if SOURCE.is_file():
 
     if text.count("ActiveFamilyQuickDrawCommands.SupportsFamily(") != 2:
         errors.append("Create Similar must reject unsupported Family categories both before and after canonical re-resolution")
+    if "case ElementCategory." in text:
+        errors.append("Create Similar must not carry a second category dispatch/support switch")
 
     for forbidden in (
         "ProjectContextCoordinator.GetOrCreate",
@@ -102,6 +104,21 @@ if ACTIVE.is_file():
         if token not in text:
             errors.append("Active Family shared support contract missing: " + token)
 
+    support_start = text.find("internal static bool SupportsFamily(ProjectFamily family)")
+    support_end = text.find("private static void DrawActiveFamilyCore", support_start)
+    dispatch_start = text.find("private static void Dispatch(")
+    dispatch_end = text.find("private static bool IsWindowFamily", dispatch_start)
+    if min(support_start, support_end, dispatch_start, dispatch_end) < 0:
+        errors.append("could not isolate Active Family support/dispatch sections")
+    else:
+        case_pattern = re.compile(r"case\s+ElementCategory\.([A-Za-z0-9_]+)\s*:")
+        supported = set(case_pattern.findall(text[support_start:support_end]))
+        dispatched = set(case_pattern.findall(text[dispatch_start:dispatch_end]))
+        if supported != dispatched:
+            errors.append(
+                "Active Family support predicate drifted from dispatcher categories: supported=" +
+                ",".join(sorted(supported)) + " dispatched=" + ",".join(sorted(dispatched)))
+
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
     for token in (
@@ -124,4 +141,4 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Create Similar preflight PASS: sample selection is cancel-safe/non-creating, semantic/generated ownership is revalidated before canonical Family activation, unsupported categories are rejected before mutation, and authoring delegates to Active Family Quick/Advanced.")
+print("Create Similar preflight PASS: sample selection is cancel-safe/non-creating, semantic/generated ownership is revalidated before canonical Family activation, unsupported categories are rejected before mutation, route support stays identical to the Active Family dispatcher, and authoring delegates to Active Family Quick/Advanced.")
