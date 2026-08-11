@@ -2,20 +2,24 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11 (UTC+7)
-- Status: `ACTIVE`
+- Completed: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
 - Scope: source-safe hardening of no-project bootstrap behavior for semantic capture.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs`
   - `scripts/preflight-semantic-capture-bootstrap.py`
   - this claim file for close-out
-- Problem: `Capture(...)` / `CaptureSnapshot(...)` currently call `ProjectContextCoordinator.GetOrCreate(document)` before selection eligibility and drawing-unit policy are known. `GetOrCreate` registers newly-created project state in the document cache, so an invalid or unresolved capture can leave a blank project bound even though capture fails.
-- Intended contract:
-  - empty/cancel/invalid/unresolved semantic capture paths must not bootstrap a new QS3D project;
-  - a capture batch validates all candidate snapshots and drawing-unit policy before `GetOrCreate`;
-  - the mutation core keeps eligibility/unit rechecks after canonical binding as defense-in-depth/freshness protection;
+- Problem fixed: `Capture(...)` / `CaptureSnapshot(...)` called `ProjectContextCoordinator.GetOrCreate(document)` before selection eligibility and drawing-unit policy were known. Because `GetOrCreate` registers newly-created project state in the document cache, an invalid or unresolved capture could leave a blank project bound even though the capture itself failed.
+- Implemented contract:
+  - empty selection still returns without project bootstrap;
+  - batch capture validates every candidate snapshot and the drawing-unit policy before `GetOrCreate`;
+  - single-snapshot capture performs the same preflight before `GetOrCreate`;
+  - the mutation core retains eligibility and drawing-unit rechecks after canonical binding as defense-in-depth/freshness protection;
   - valid semantic capture remains an intentional authoring/bootstrap path;
   - existing project, generated-owner rejection, rollback, Family/default and quantity semantics remain unchanged;
-  - no Ribbon/BQ/UI/native geometry/LOCAL_ONLY V25 qualification changes.
-- Overlap check: recent active work is concentrated in updater, Model Health UI, quantity/report provenance and other independent lanes; this reservation is limited to semantic capture lifecycle source plus its dedicated preflight.
-- Validation: exact source/diff review plus an auto-discovered static preflight locking validation-before-bootstrap and core rechecks. Do not dispatch GitHub Actions under `continue all`.
-- Completion condition: invalid/unresolved capture cannot reach `GetOrCreate`, regression guard is present, and this claim is marked `COMPLETED` with exact implementation/test SHAs.
+  - no Ribbon/BQ/UI/native geometry behavior was changed.
+- Source commit: `2f556751187292baa2096c7ea1190954d1fc51e5` (`fix(capture): validate before project bootstrap`).
+- Regression guard commit: `46175c80dcc42c1fd99d252c3d70731c1fddbd75` (`test(capture): guard validation before bootstrap`).
+- Validation: reviewed the exact source diff and current `main` source after the two commits. `scripts/preflight-semantic-capture-bootstrap.py` locks validation-before-bootstrap ordering and the post-bind core rechecks; `scripts/preflight-all.py` auto-discovers it through the existing `preflight-*.py` glob. No GitHub Actions were dispatched under `continue all`.
+- LOCAL_ONLY: no new or materially changed local-only runtime scenario was introduced; this batch only changes source-side lifecycle ordering before existing semantic capture mutation/runtime behavior.
+- Handoff: reservation released; future agents may edit these files after re-checking current `main` and active claims.
