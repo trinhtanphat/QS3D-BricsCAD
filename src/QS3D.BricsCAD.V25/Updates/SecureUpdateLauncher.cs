@@ -290,7 +290,7 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("$updateMutex = $null");
             script.AppendLine("$ownsUpdateMutex = $false");
             script.AppendLine("try {");
-            script.AppendLine("  $updateMutex = New-Object System.Threading.Mutex($false, $mutexName)");
+            script.AppendLine("  $updateMutex = [System.Threading.Mutex]::new($false, $mutexName)");
             script.AppendLine("  try { $ownsUpdateMutex = $updateMutex.WaitOne() }");
             script.AppendLine("  catch [System.Threading.AbandonedMutexException] { $ownsUpdateMutex = $true }");
             script.AppendLine("  if (-not $ownsUpdateMutex) { throw 'Could not acquire the QS3D cross-process update reservation.' }");
