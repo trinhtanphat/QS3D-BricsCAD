@@ -27,6 +27,33 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Legacy quantity grouping must remain unchanged for distinct element identities.");
             if (valid.SourceHandles.Count != 2 || valid.SourceHandles[0] != "AA" || valid.SourceHandles[1] != "Bb")
                 throw new Exception("Legacy quantity source handles must be trimmed and case-insensitively deduplicated in first-seen order.");
+
+            ExpectArgumentException(
+                () => QuantityReportBuilder.Group(new ElementInstance[] { first, null!, second }),
+                "elements",
+                "index: 1");
+
+            var totals = QuantityReportTotals.FromRows(new[] { valid });
+            if (totals.Count != 2 || Math.Abs(totals.LengthM - 5d) > 1e-12 || Math.Abs(totals.GrossConcreteM3 - 3d) > 1e-12)
+                throw new Exception("Legacy quantity totals must remain unchanged for valid rows.");
+
+            ExpectArgumentException(
+                () => QuantityReportTotals.FromRows(new QuantityReportRow[] { valid, null! }),
+                "rows",
+                "index: 1");
+        }
+
+        private static void ExpectArgumentException(Action action, string paramName, string messagePart)
+        {
+            try { action(); }
+            catch (ArgumentException ex)
+            {
+                if (!string.Equals(ex.ParamName, paramName, StringComparison.Ordinal) ||
+                    ex.Message.IndexOf(messagePart, StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Expected ArgumentException for '" + paramName + "' containing '" + messagePart + "', got: " + ex.Message);
+                return;
+            }
+            throw new Exception("Expected ArgumentException.");
         }
 
         private static void ExpectThrows<T>(Action action) where T : Exception
