@@ -125,6 +125,7 @@ else:
     text = multi_code.read_text(encoding="utf-8")
     for token in (
         "using QS3D.Core.Model;",
+        "using QS3D.Core.Services;",
         "SemanticSelectionInspector.Inspect(project, ids)",
         "summary.PresentCount",
         "inspection.Count",
@@ -134,7 +135,7 @@ else:
         "SameSemanticSelection(presentedIds, currentIds)",
         "ExecuteAtomic(",
         "new SemanticSelectionBulkEditService().SetProperty",
-        "MultiSelectionSourceDerivedKeys",
+        "!SemanticPropertyEditPolicy.IsEditablePropertyKey(key)",
         "FamilyList.IsEnabled = false",
         "_viewModel.PropertyScopes.Clear()",
         "var commonFamilyId = !inspection.Family.IsMixed",
@@ -143,6 +144,20 @@ else:
     ):
         if token not in text:
             errors.append("Workspace multi-selection inspector missing guard/presentation token: " + token)
+
+    if text.count("SemanticPropertyEditPolicy.IsEditablePropertyKey(key)") != 1:
+        errors.append("Workspace multi-selection read-only classification must delegate exactly once to the canonical Core edit policy")
+
+    for duplicate_policy_token in (
+        "MultiSelectionSourceDerivedKeys",
+        'normalized.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase)',
+        'normalized.Equals("FamilyId", StringComparison.OrdinalIgnoreCase)',
+        'normalized.IndexOf("Handle", StringComparison.OrdinalIgnoreCase)',
+        'normalized.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)',
+        'normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)',
+    ):
+        if duplicate_policy_token in text:
+            errors.append("Workspace multi-selection adapter must not duplicate Core edit-policy rules: " + duplicate_policy_token)
 
     value_assignment = text.find("row.Value = summary.IsMixed")
     apply_assignment = text.find("row.Apply = value => ApplyMultiSelectionProperty")
@@ -246,4 +261,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace keeps guarded common/mixed selection rows and Core-aligned single-selection read-only policy; single and bulk mutation paths reject source/identity/ownership keys while bulk writes retain rollback-protected semantic mutation boundaries.")
+print("PASS: Workspace common/mixed selection rows and single-selection presentation share the canonical Core semantic edit policy; the UI no longer carries a parallel multi-selection denylist, while bulk writes retain stale-selection and rollback-protected mutation guards.")

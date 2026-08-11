@@ -18,31 +18,49 @@ Before starting substantive work, read in this order:
 2. `docs/PRODUCT-BOUNDARY.md` — **canonical product/hosting boundary**;
 3. `CI_POLICY.md`;
 4. fetch the latest `main`;
-5. `docs/REMOTE-AGENT-SCOPE.md` — **canonical remote/local execution boundary; remote agents must filter LOCAL_ONLY work out of their backlog instead of rechecking it**;
-6. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2306.md` — **newest short canonical current-state delta for Rule/Regen Preview, Health baseline/diff, privacy-safe diagnostics and current source/product logic**;
-7. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2037.md` — previous fast-moving source delta retained for concurrent persistence/interchange/documentation context;
-8. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — broader current-source baseline/handoff retained for detail;
-9. `docs/IMPLEMENTATION-STATUS.md`;
-10. `docs/PLAN.md`, `docs/SOURCE-PRODUCT-PLAN-2026-08-10.md` and `docs/COMMANDS.md`;
-11. `docs/COMMANDS-PREVIEW-DIAGNOSTICS.md` — Rule Preview, Regen Preview, privacy-safe Diagnostic Summary and guarded Core Apply boundaries;
-12. `docs/DIRECT-DRAW-WORKFLOW.md` — **owner-required BLT-style direct authoring direction**;
-13. `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` — current P0 source/rollback/runtime boundary;
-14. `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md` — guarded GlassWall/WallPier/StructuralWall/Foundation plus current Direct Draw extension summary;
-15. `docs/DIRECT-DRAW-OPENINGS.md` — **current Door/WallOpening source + Auto Host + explicit physical-cut boundary and V25 runtime checklist**;
-16. `docs/LOCAL-AGENT-INBOX.md` — **single live priority queue for every LOCAL_ONLY gate; remote agents must register new/changed local scenarios here in the same batch, and local agents start here**;
-17. `docs/LOCAL-V25-QUALIFICATION.md` — **LOCAL_ONLY execution runbook for agents with interactive Windows + licensed BricsCAD V25; remote agents do not re-run/re-audit it**;
-18. `docs/LOCAL-PREVIEW-DIAGNOSTIC-QUALIFICATION-2026-08-10.md` — **LOCAL_ONLY exact-SHA qualification for read-only previews, privacy-safe diagnostic export and future guarded Apply confirmation/Undo/session behavior**;
-19. `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` — **LOCAL_ONLY remaining Curtain-panel, physical wall-junction, standard-specific rebar and production-signing detail**;
-20. `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` — **LOCAL_ONLY/runtime/policy detail including whole-command Curtain recovery, native DrawJig/repeated authoring, commercial-license policy/wiring, legal distribution and performance/UX gates**;
-21. `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md` — **consolidated LOCAL_ONLY execution detail for Interchange JSON, documentation, polygon mesh, Level Z-chain, Source Reconcile, Curtain, L/T/X, Direct Draw, signing/licensing and performance**;
-22. `docs/DOCUMENTATION-LAYER.md` — semantic-tag and native documentation-table source/runtime boundaries;
-23. `docs/INTERCHANGE-JSON.md` — read-only semantic interchange format and runtime qualification boundary;
-24. `docs/INTERCHANGE-IMPORT-RESOLUTION-POLICY.md` — **explicit collision/provenance/generated-output policy planning and execution boundaries**;
-25. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
+5. `docs/AGENT-WORK-REGISTRATION.md` and every `ACTIVE` / `BLOCKED` file under `docs/agent-work-claims/` — **canonical pre-work reservation contract; the claim commit must already be visible on `origin/main` before implementation or qualification starts**;
+6. `docs/REMOTE-AGENT-SCOPE.md` — **canonical remote/local execution boundary; remote agents must filter LOCAL_ONLY work out of their backlog instead of rechecking it**;
+7. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2306.md` — **newest short canonical current-state delta for Rule/Regen Preview, Health baseline/diff, privacy-safe diagnostics and current source/product logic**;
+8. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2037.md` — previous fast-moving source delta retained for concurrent persistence/interchange/documentation context;
+9. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — broader current-source baseline/handoff retained for detail;
+10. `docs/IMPLEMENTATION-STATUS.md`;
+11. `docs/PLAN.md`, `docs/SOURCE-PRODUCT-PLAN-2026-08-10.md` and `docs/COMMANDS.md`;
+12. `docs/COMMANDS-PREVIEW-DIAGNOSTICS.md` — Rule Preview, Regen Preview, privacy-safe Diagnostic Summary and guarded Core Apply boundaries;
+13. `docs/DIRECT-DRAW-WORKFLOW.md` — **owner-required BLT-style direct authoring direction**;
+14. `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` — current P0 source/rollback/runtime boundary;
+15. `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md` — guarded GlassWall/WallPier/StructuralWall/Foundation plus current Direct Draw extension summary;
+16. `docs/DIRECT-DRAW-OPENINGS.md` — **current Door/WallOpening source + Auto Host + explicit physical-cut boundary and V25 runtime checklist**;
+17. `docs/LOCAL-AGENT-INBOX.md` — **single live priority queue for every LOCAL_ONLY gate; remote agents must register new/changed local scenarios here in the same batch, and local agents start here**;
+18. `docs/LOCAL-V25-QUALIFICATION.md` — **LOCAL_ONLY execution runbook for agents with interactive Windows + licensed BricsCAD V25; remote agents do not re-run/re-audit it**;
+19. `docs/LOCAL-PREVIEW-DIAGNOSTIC-QUALIFICATION-2026-08-10.md` — **LOCAL_ONLY exact-SHA qualification for read-only previews, privacy-safe diagnostic export and future guarded Apply confirmation/Undo/session behavior**;
+20. `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` — **LOCAL_ONLY remaining Curtain-panel, physical wall-junction, standard-specific rebar and production-signing detail**;
+21. `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` — **LOCAL_ONLY/runtime/policy detail including whole-command Curtain recovery, native DrawJig/repeated authoring, commercial-license policy/wiring, legal distribution and performance/UX gates**;
+22. `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md` — **consolidated LOCAL_ONLY execution detail for Interchange JSON, documentation, polygon mesh, Level Z-chain, Source Reconcile, Curtain, L/T/X, Direct Draw, signing/licensing and performance**;
+23. `docs/DOCUMENTATION-LAYER.md` — semantic-tag and native documentation-table source/runtime boundaries;
+24. `docs/INTERCHANGE-JSON.md` — read-only semantic interchange format and runtime qualification boundary;
+25. `docs/INTERCHANGE-IMPORT-RESOLUTION-POLICY.md` — **explicit collision/provenance/generated-output policy planning and execution boundaries**;
+26. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
 
 The local-agent inbox is the live priority index. Longer `LOCAL-*` documents are runbooks/history/detail and must not become competing live queues. If they conflict on current priority/status, `docs/LOCAL-AGENT-INBOX.md` wins; current source still wins for implementation truth.
 
 The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the current handoff or current source, current `main` wins. For product-form/hosting ambiguity, `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes that requirement.
+
+## Mandatory work registration
+
+Every agent must reserve substantive repository work before implementation. This includes source, tests, scripts, documentation batches, local V25 qualification, packaging and release preparation.
+
+1. Fetch and integrate the latest `origin/main`.
+2. Read `docs/AGENT-WORK-REGISTRATION.md` and inspect every `ACTIVE` or `BLOCKED` claim under `docs/agent-work-claims/`.
+3. Choose a scope that does not overlap an existing reservation.
+4. Add one uniquely named Markdown claim containing the exact scope, expected files/surfaces, exclusions, baseline SHA, validation plan and agent identity.
+5. Commit and push that claim to `origin/main` **without any implementation changes**.
+6. Verify the claim commit is reachable from current `origin/main`; only then begin the reserved work.
+
+An unpushed local claim, chat message, private branch or draft patch does not reserve work. If the intended scope expands, update and push the claim before touching the added scope. `ACTIVE` and `BLOCKED` claims remain reserved; agents may not assume a quiet or old claim is abandoned. A scope becomes available only after the claim is explicitly `COMPLETED` or `RELEASED`, or the repository owner coordinates a takeover.
+
+Read-only orientation needed to choose a lane is allowed before registration, but do not edit files, run a substantive qualification lane or create material runtime artifacts until the reservation is published. The registration commit is an intentional exception to request-scoped batching because its purpose is to become visible before the implementation batch begins.
+
+`docs/LOCAL-AGENT-INBOX.md` remains the product/runtime gate queue; it does not identify which agent currently owns a task. Work claims record temporary agent ownership and must reference the relevant `LOCAL-###` item when applicable.
 
 ## Mandatory sync discipline
 
