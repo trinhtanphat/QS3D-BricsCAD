@@ -99,6 +99,14 @@ for unsafe in (
     if unsafe in test or unsafe in coordinator_test:
         errors.append("UseSource success-path smoke still authorizes cleanup by Element ID only: " + unsafe)
 
+source_calls = []
+for path in (ROOT / "src").rglob("*.cs"):
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    if "ProjectInterchangeNativeCleanupAuthorization.ForElementIds(" in text:
+        source_calls.append(str(path.relative_to(ROOT)))
+if source_calls:
+    errors.append("production source must not grant cleanup authority by Element ID only: " + ", ".join(sorted(source_calls)))
+
 for token in (
     "cleanup authorization",
     "does not perform native cleanup",
