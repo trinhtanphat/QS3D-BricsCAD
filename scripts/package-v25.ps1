@@ -144,7 +144,7 @@ foreach ($name in $forbidden) {
 }
 
 $distFull = [IO.Path]::GetFullPath($dist).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-$hashLines = Get-ChildItem $dist -Recurse -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | Sort-Object FullName | ForEach-Object {
+$hashLines = Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object {
     $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
     $relativePath = $_.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/')
     "$hash  $relativePath"
