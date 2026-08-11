@@ -1,39 +1,33 @@
 # Work claim — document lifecycle stop teardown resilience
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-document-lifecycle-stop-teardown`
 - Registered: `2026-08-11T22:41:00+07:00`
+- Completed: `2026-08-11T22:44:00+07:00`
 - Baseline main SHA: `26f1015647da6a6ae8003564c94a147a58683ae0`
 - Priority: P1 deterministic teardown ownership hardening found during owner-requested `continue all` audit.
 
-## Confirmed defect
+## Result
 
-`DocumentLifecycleCoordinator.Stop()` removes four BricsCAD `DocumentManager` handlers sequentially without per-handler isolation, then detaches document persistence, stops selection sync and finally clears `_started`. If any earlier event removal throws, teardown exits immediately: later manager handlers remain subscribed, persistence/selection ownership is not fully released, and `_started` stays true.
+Normal lifecycle teardown can no longer be short-circuited by one failing manager unsubscription.
 
-The startup rollback already treats native event removal as best-effort; normal Stop should provide at least the same cleanup resilience.
+- `ad493057ffa08953220388a59b05e60f79d1c276` — `fix(lifecycle): complete teardown after unsubscribe failures`
+  - each of the four `DocumentManager` removals is isolated best-effort, matching the existing startup rollback policy;
+  - persistence-handler cleanup is attempted independently;
+  - `SelectionSyncCoordinator.Stop()` is attempted independently;
+  - `_started` is cleared after all cleanup attempts so termination does not remain logically active merely because one native removal failed;
+  - Start, document-created/activated/destroyed behavior, exact-Document ownership cleanup and save/close persistence paths are unchanged.
+- `521e07a5f670daa2e3fd59b936c3ad29a52a59dc` — `test(lifecycle): guard resilient stop teardown`
+  - focused auto-discovered gate requires independent manager unsubscriptions, persistence/selection teardown attempts and final ownership clear while pinning the existing startup/destruction contracts.
 
-## Reserved scope
+## Integration verification
 
-- `src/QS3D.BricsCAD.V25/DocumentLifecycleCoordinator.cs`
-- `scripts/preflight-document-lifecycle-stop-teardown.py` (new)
-- this claim file for close-out
+The implementation diff was inspected and touches only `DocumentLifecycleCoordinator.Stop()`. Immediately after the focused gate commit, compare from `521e07a5...` to `main` reported `status: identical`, `behind_by: 0`; later concurrent changes are unrelated Core/model claims. No force-push, reset or rebase was used.
 
-## Intended contract
+## Validation boundary
 
-- Stop attempts all four manager unsubscriptions independently.
-- Persistence cleanup and selection-sync cleanup still run even if one manager event removal fails.
-- `_started` is deterministically cleared after teardown attempts so repeated termination does not duplicate cleanup work.
-- Existing startup rollback, exact-Document destruction, save/close persistence and active-document rebind semantics remain unchanged.
+The focused source gate is committed but was not executed in a full checkout in this connector-only lane. No GitHub Actions, BricsCAD V25 native unsubscription failure injection, build/NETLOAD, installer, signing or release was run. Native teardown qualification remains local-only; no `LOCAL_PASS` is claimed.
 
-## Excluded scope
+## Coordination
 
-- No SelectionSyncCoordinator internals, ProjectContext semantics, palette/modeless/Ribbon/updater/Core changes, installer/signing/release or LOCAL inbox edits.
-- No GitHub Actions dispatch and no BricsCAD V25 runtime PASS claim.
-
-## Validation plan
-
-Re-fetch source immediately before writing, make Stop best-effort across each cleanup stage without touching Start/Document event behavior, add a focused auto-discovered static gate, inspect exact diff and verify ancestry on moving `main` without force-push.
-
-## Completion condition
-
-Normal document lifecycle teardown cannot be short-circuited by one failing manager unsubscription, focused regression source is merged, and native failure-injection remains local-only.
+No SelectionSyncCoordinator internals, ProjectContext semantics, palette/modeless/Ribbon/updater/Core or LOCAL inbox files were modified in this lane.
