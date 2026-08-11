@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             SavePersistsAuditAndReloadRebindsTrail();
+            FailedReloadKeepsExistingSessionBinding();
         }
 
         private static void SavePersistsAuditAndReloadRebindsTrail()
@@ -60,10 +61,53 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void FailedReloadKeepsExistingSessionBinding()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-session-reload-atomicity-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "project.qsdb");
+            try
+            {
+                File.WriteAllText(path,
+                    "<qs3d schema=\"3\" projectId=\"reloaded\" name=\"Reloaded\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"9223372036854775807\" drawingPath=\"\" drawingFingerprint=\"\" activeZoneId=\"\" activeFloorId=\"\">" +
+                    "<metadata/><zones/><floors/><families/><rules/><elements/><audit/></qs3d>");
+
+                var original = new ProjectState("original", "Original");
+                using (var session = new ProjectSession(original, path))
+                {
+                    session.AcquireWriteLock();
+                    var originalProject = session.Project;
+                    var originalAudit = session.Audit;
+
+                    Throws<OverflowException>(() => session.Reload());
+
+                    if (!ReferenceEquals(originalProject, session.Project))
+                        throw new Exception("Failed ProjectSession.Reload replaced the current project binding.");
+                    if (!ReferenceEquals(originalAudit, session.Audit))
+                        throw new Exception("Failed ProjectSession.Reload replaced the current audit binding.");
+                    if (!string.Equals(session.Project.ProjectId, "original", StringComparison.Ordinal))
+                        throw new Exception("Failed ProjectSession.Reload exposed the staged project.");
+                    if (session.Audit.Events.Count != 0)
+                        throw new Exception("Failed ProjectSession.Reload changed the original audit trail.");
+                }
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
         private static void RequireAction(ProjectState project, string action)
         {
             if (!project.AuditEvents.Any(x => string.Equals(x.Action, action, StringComparison.Ordinal)))
                 throw new Exception("Expected project audit action: " + action);
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            try { action(); }
+            catch (T) { return; }
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
         }
     }
 }
