@@ -33,7 +33,7 @@ if CATALOG.is_file():
         "snapshot.MixedScale = true;",
         "private static bool SameScale(double left, double right)",
         "ScaleTolerance * magnitude",
-        'snapshot.MixedScale\n                            ? "Hỗn hợp"',
+        '? "Hỗn hợp"',
         "private static string FormatScale(double x, double y, double z)",
         'if (SameScale(x, 1d)) return "1:1";',
         '? "1:" + FormatScaleNumber(1d / x)',
@@ -80,8 +80,8 @@ if VM.is_file():
         'var normalized = string.IsNullOrWhiteSpace(value) ? "—" : value;',
         "new PropertyChangedEventArgs(nameof(ScaleText))",
         "public event PropertyChangedEventHandler? PropertyChanged;",
-        "public string Kind { get; set; } = \"DWG\";",
-        "public string InstanceText { get; set; } = \"—\";",
+        'public string Kind { get; set; } = "DWG";',
+        'public string InstanceText { get; set; } = "—";',
     )
     for needle in required:
         if needle not in text:
