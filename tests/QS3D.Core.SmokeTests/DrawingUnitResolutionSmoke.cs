@@ -42,6 +42,14 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.TryResolve(null, metadata, out _));
             Throws<ArgumentOutOfRangeException>(() => DrawingUnitResolutionPolicy.SetProjectOverride(metadata, (LengthUnit)999));
 
+            Throws<ArgumentOutOfRangeException>(() => new ProjectUnitPolicy((LengthUnit)999));
+            Throws<ArgumentOutOfRangeException>(() => new ProjectUnitPolicy(LengthUnit.Meter, 10));
+            var unitPolicy = new ProjectUnitPolicy(LengthUnit.Centimeter, 2);
+            if (unitPolicy.DrawingUnit != LengthUnit.Centimeter || unitPolicy.DisplayDecimals != 2 ||
+                Math.Abs(unitPolicy.ToMeters(123d) - 1.23d) > 1e-12d ||
+                Math.Abs(unitPolicy.RoundForDisplay(1.236d) - 1.24d) > 1e-12d)
+                throw new Exception("Defined ProjectUnitPolicy values must preserve conversion and display behavior.");
+
             var path = Path.Combine(Path.GetTempPath(), "qs3d-unit-binding-" + Guid.NewGuid().ToString("N") + ".qsdb");
             try
             {
