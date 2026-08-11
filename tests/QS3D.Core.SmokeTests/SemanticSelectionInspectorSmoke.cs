@@ -90,6 +90,7 @@ namespace QS3D.Core.SmokeTests
             project.Elements[0].Properties["GeneratedSolidHandle"] = "AB12";
             project.Elements[0].Properties[ProjectElement.GeneratedGeometryStateKey] = "stale";
             project.Elements[0].Properties["PhysicalOpeningCutHandle"] = "CD34";
+            project.Elements[0].Properties["QS3D.PhysicalOpeningCutOpeningIds"] = "T1|T2";
             project.Families[0].Properties["GeneratedFamilyHandle"] = "EF56";
             var result = SemanticSelectionInspector.Inspect(project, new[] { project.Elements[0].Id });
             if (result.Properties.Any(x => x.Name.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0))
@@ -97,7 +98,9 @@ namespace QS3D.Core.SmokeTests
             if (result.Properties.Any(x => x.Name.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)))
                 throw new Exception("Property inspector must not expose internal generated-state keys as editable semantic properties.");
             if (result.Properties.Any(x => x.Name.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)))
-                throw new Exception("Property inspector must not expose physical opening cut ownership state.");
+                throw new Exception("Property inspector must not expose legacy physical opening cut ownership state.");
+            if (result.Properties.Any(x => x.Name.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)))
+                throw new Exception("Property inspector must not expose namespaced physical opening cut ownership state.");
         }
 
         private static void MissingSelectionFailsClosed()
