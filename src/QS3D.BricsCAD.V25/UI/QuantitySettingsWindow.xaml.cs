@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using Microsoft.Win32;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.Core.Domain;
@@ -14,12 +16,14 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private readonly QuantitySettingsStore _store;
         private QuantityCalculationSettings _loadedSettings = QuantityCalculationSettings.CreateDefault();
+        private bool _updatingIntersectionBrowser;
 
         public QuantitySettingsWindow(QuantitySettingsStore store)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             CategoryRows = new ObservableCollection<QuantityCategoryRuleRow>();
             IntersectionRows = new ObservableCollection<QuantityIntersectionRuleRow>();
+            IntersectionCategoryChoices = new ObservableCollection<QuantityCategoryChoice>();
 
             InitializeComponent();
             DataContext = this;
@@ -43,6 +47,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         public ObservableCollection<QuantityCategoryRuleRow> CategoryRows { get; }
         public ObservableCollection<QuantityIntersectionRuleRow> IntersectionRows { get; }
+        public ObservableCollection<QuantityCategoryChoice> IntersectionCategoryChoices { get; }
 
         private void LoadIntoView(QuantityCalculationSettings settings)
         {
@@ -58,6 +63,8 @@ namespace QS3D.BricsCAD.V25.UI
             IntersectionRows.Clear();
             foreach (var rule in copy.IntersectionRules)
                 IntersectionRows.Add(new QuantityIntersectionRuleRow(rule));
+
+            RebuildIntersectionBrowser();
 
             FormworkToleranceBox.Text = Format(copy.FormworkTolerance);
             BlindingConcreteOffsetBox.Text = Format(copy.BlindingConcreteOffset);
@@ -93,6 +100,144 @@ namespace QS3D.BricsCAD.V25.UI
             };
             result.NormalizeAndValidate();
             return result;
+        }
+
+        private void RebuildIntersectionBrowser()
+        {
+            var previousSource = (PrimaryCategoryList.SelectedItem as QuantityCategoryChoice)?.CategoryCode;
+            var previousTarget = (ReferenceCategoryList.SelectedItem as QuantityCategoryChoice)?.CategoryCode;
+            var codes = CategoryRows.Select(x => x.CategoryCode)
+                .Concat(IntersectionRows.Select(x => x.SourceCode))
+                .Concat(IntersectionRows.Select(x => x.TargetCode))
+                .Distinct()
+                .OrderBy(x => QuantityCategoryDisplayName.Resolve(x), StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(x => x)
+                .ToList();
+
+            _updatingIntersectionBrowser = true;
+            try
+            {
+                IntersectionCategoryChoices.Clear();
+                foreach (var code in codes)
+                    IntersectionCategoryChoices.Add(new QuantityCategoryChoice(code));
+
+                if (IntersectionCategoryChoices.Count == 0)
+                {
+                    PrimaryCategoryList.SelectedItem = null;
+                    ReferenceCategoryList.SelectedItem = null;
+                    ClearIntersectionRuleDetail();
+                    return;
+                }
+
+                var source = FindIntersectionChoice(previousSource) ?? IntersectionCategoryChoices[0];
+                var target = FindIntersectionChoice(previousTarget) ?? FindFirstTargetForSource(source.CategoryCode) ?? IntersectionCategoryChoices[0];
+                PrimaryCategoryList.SelectedItem = source;
+                ReferenceCategoryList.SelectedItem = target;
+            }
+            finally
+            {
+                _updatingIntersectionBrowser = false;
+            }
+
+            RefreshSelectedIntersectionRule();
+        }
+
+        private QuantityCategoryChoice? FindIntersectionChoice(int? categoryCode)
+        {
+            if (!categoryCode.HasValue) return null;
+            return IntersectionCategoryChoices.FirstOrDefault(x => x.CategoryCode == categoryCode.Value);
+        }
+
+        private QuantityCategoryChoice? FindFirstTargetForSource(int sourceCode)
+        {
+            var targetCode = IntersectionRows
+                .Where(x => x.SourceCode == sourceCode)
+                .Select(x => (int?)x.TargetCode)
+                .FirstOrDefault();
+            return FindIntersectionChoice(targetCode);
+        }
+
+        private void IntersectionCategorySelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_updatingIntersectionBrowser) return;
+            RefreshSelectedIntersectionRule();
+        }
+
+        private void RefreshSelectedIntersectionRule()
+        {
+            var source = PrimaryCategoryList.SelectedItem as QuantityCategoryChoice;
+            var target = ReferenceCategoryList.SelectedItem as QuantityCategoryChoice;
+            if (source == null || target == null)
+            {
+                ClearIntersectionRuleDetail();
+                return;
+            }
+
+            SelectedRuleHeading.Text = source.DisplayName + "  →  " + target.DisplayName;
+            var selected = IntersectionRows.SingleOrDefault(x => x.SourceCode == source.CategoryCode && x.TargetCode == target.CategoryCode);
+            SelectedRuleEditor.DataContext = selected;
+            SelectedRuleEditor.IsEnabled = selected != null;
+            SelectedRuleStateText.Text = selected == null
+                ? "Template hiện tại không có dòng luật cho cặp này. QS3D không tự tạo luật mới để tránh làm thay đổi payload ngoài ý muốn."
+                : "Đang chỉnh đúng một luật có hướng trong ma trận hiện tại.";
+
+            var reverse = IntersectionRows.SingleOrDefault(x => x.SourceCode == target.CategoryCode && x.TargetCode == source.CategoryCode);
+            if (reverse == null)
+            {
+                ReverseRuleSummaryText.Text = "Không có luật chiều ngược trong template hiện tại.";
+                ViewReverseRuleButton.IsEnabled = false;
+                return;
+            }
+
+            ReverseRuleSummaryText.Text = target.DisplayName + " → " + source.DisplayName + ": " + SummarizeIntersectionRule(reverse);
+            ViewReverseRuleButton.IsEnabled = source.CategoryCode != target.CategoryCode;
+        }
+
+        private void ClearIntersectionRuleDetail()
+        {
+            SelectedRuleHeading.Text = "Chọn hai loại cấu kiện";
+            SelectedRuleStateText.Text = "Chọn Cấu kiện chính và Cấu kiện tham chiếu để xem một luật có hướng.";
+            SelectedRuleEditor.DataContext = null;
+            SelectedRuleEditor.IsEnabled = false;
+            ReverseRuleSummaryText.Text = "Chưa có cặp luật để đối chiếu.";
+            ViewReverseRuleButton.IsEnabled = false;
+        }
+
+        private void ViewReverseRule_Click(object sender, RoutedEventArgs e)
+        {
+            var source = PrimaryCategoryList.SelectedItem as QuantityCategoryChoice;
+            var target = ReferenceCategoryList.SelectedItem as QuantityCategoryChoice;
+            if (source == null || target == null || source.CategoryCode == target.CategoryCode) return;
+
+            var reverse = IntersectionRows.SingleOrDefault(x => x.SourceCode == target.CategoryCode && x.TargetCode == source.CategoryCode);
+            if (reverse == null) return;
+
+            var nextSource = FindIntersectionChoice(target.CategoryCode);
+            var nextTarget = FindIntersectionChoice(source.CategoryCode);
+            if (nextSource == null || nextTarget == null) return;
+
+            _updatingIntersectionBrowser = true;
+            try
+            {
+                PrimaryCategoryList.SelectedItem = nextSource;
+                ReferenceCategoryList.SelectedItem = nextTarget;
+            }
+            finally
+            {
+                _updatingIntersectionBrowser = false;
+            }
+            RefreshSelectedIntersectionRule();
+        }
+
+        private static string SummarizeIntersectionRule(QuantityIntersectionRuleRow rule)
+        {
+            var enabled = new List<string>();
+            if (rule.SubtractConcrete) enabled.Add("trừ BT");
+            if (rule.SubtractSideFormworkByConcrete) enabled.Add("CP Thành ← BT");
+            if (rule.SubtractBottomFormworkByConcrete) enabled.Add("CP Đáy ← BT");
+            if (rule.SubtractSideFormworkBySideFormwork) enabled.Add("CP Thành ← CP");
+            if (rule.SubtractBottomFormworkByBottomFormwork) enabled.Add("CP Đáy ← CP");
+            return enabled.Count == 0 ? "không bật phép trừ nào" : string.Join(" • ", enabled);
         }
 
         private void ImportTemplate_Click(object sender, RoutedEventArgs e)
@@ -251,6 +396,17 @@ namespace QS3D.BricsCAD.V25.UI
                 FaceAngleThresholdDeg = FaceAngleThresholdDeg
             };
         }
+    }
+
+    public sealed class QuantityCategoryChoice
+    {
+        public QuantityCategoryChoice(int categoryCode)
+        {
+            CategoryCode = categoryCode;
+        }
+
+        public int CategoryCode { get; }
+        public string DisplayName => QuantityCategoryDisplayName.Resolve(CategoryCode);
     }
 
     public sealed class QuantityIntersectionRuleRow
