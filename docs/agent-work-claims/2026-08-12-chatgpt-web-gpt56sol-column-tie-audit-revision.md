@@ -2,16 +2,20 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: remove the redundant transaction-tail `ProjectState.Touch()` from non-empty `QS3DREBARTIEQTY` updates because each target already records an audit event that owns the revision advance.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/ColumnTieQuantityCommands.cs`
   - `scripts/preflight-column-tie-audit-revision.py`
   - this claim file
-- Contract:
-  - keep selection-before-project binding and existing-project-only behavior;
-  - keep all five TieRebar quantity assignments and `ColumnTieProjectQuantityService.Calculate` unchanged;
-  - keep one `quantity.rebar.column.tie` audit event per updated Column;
-  - remove only the redundant standalone batch-tail `project.Touch()`;
-  - keep `ProjectStateSnapshot` rollback and post-commit UI behavior unchanged;
-  - no GitHub Actions dispatch and no BricsCAD V25 runtime PASS from this web session.
+- Implemented contract:
+  - selection-before-project binding and existing-project-only behavior are unchanged;
+  - all five TieRebar quantity assignments and `ColumnTieProjectQuantityService.Calculate` are unchanged;
+  - one `quantity.rebar.column.tie` audit event remains per updated Column and owns the revision advance;
+  - removed only the redundant standalone batch-tail `project.Touch()`;
+  - `ProjectStateSnapshot` rollback and post-commit UI behavior are unchanged.
+- Source commit: `441a4ba8ed0e9efcd8af0a49aaba94e1aeeeee46` — `fix(rebar): make tie quantity revision audit-owned`.
+- Regression guard: `24e13fcb374dd579983bd8d3e3c622bcb98aeebf` — `scripts/preflight-column-tie-audit-revision.py`.
+- Validation actually performed: connector-side exact diff review confirmed the source commit removes exactly one standalone `project.Touch()`; regression-guard source was reviewed but not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.
