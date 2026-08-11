@@ -20,6 +20,7 @@ Updated for the integrated source baseline on 2026-08-10. These names are **Bric
 - `QS3DRELEASECHECK` — unified source/project release-readiness review. Includes safe generated ownership, all current generated rebar families including Foundation mesh, mode semantics, live CAD and BOM release guards. A clean result is still **not** a substitute for the licensed V25/private-DWG runtime gate.
 - `QS3DOWNERSHIPHEALTH` — provenance-safe generated handle ownership review.
 - `QS3DRUNTIMEPROBE` — V25 runtime identity/readiness probe.
+- `QS3DBRCPROBE` — **automation-only clean-room diagnostic**, not a user-facing command. It runs only when the qualification harness supplies its result-marker environment variable and must be used only on a disposable reference copy of an authorized drawing, never on the original. The probe uses public BricsCAD APIs and emits sanitized aggregate capability/count data only; it does not emit drawing paths, CAD handles, layer/text/property values, call BLT APIs, or open/read BLT program binaries. Its purpose is to determine whether proxy/BRC entities expose supported public measurements; it is not a BLT compatibility or reverse-engineering path.
 
 Project mutation APIs follow a shared integrity rule: object-based Floor/Zone/Family/Bulk Edit operations reject foreign `ProjectElement` objects even when their ID matches an element already stored in the project.
 
@@ -135,7 +136,7 @@ Native source conventions include LINE for supported linear structure and closed
 - `QS3DRECOGNIZEAUTO` — auto-apply only sufficiently confident recognition.
 - `QS3DB4D` — bounded Current Space scan. It rejects layer/text matches whose CAD entity type is incompatible, excludes every generated owner-slot handle through the shared ownership policy, and keeps planar area separate from `Solid3d` total surface area. For recognized material solids, native mass-properties volume is authoritative over default prism estimates.
 - `QS3DBQ` — quantity summary/filter/group/Locate/XLSX.
-- `QS3DED2` — choose `Selection`, active `Floor`, active `Zone` or `All`; regenerate that semantic scope, then export `CHI_TIET` (one element per row) and Zone-aware `TONG_HOP` in one workbook.
+- `QS3DED2` — choose `Selection`, active `Floor`, active `Zone` or `All`; regenerate that semantic scope, then export `CHI_TIET` (one element per row) and Zone-aware `TONG_HOP` in one newly created workbook. Both sheets preserve Element ID/Handle/fingerprint provenance and expose element name, category, effective material, Family ID, Floor/Zone, engineering quantities, optional `DensityKgM3`/derived or explicit mass, and notes. Missing density stays blank rather than being guessed.
 - `QS3DEXCELLOCATE` — locate a `CHI_TIET`/QS3D workbook row only when Element ID, CAD Handle and DWG fingerprint provenance agree with the active project and every Handle still resolves. Legacy BLT `$decimal` Handle rows are the only no-fingerprint path and require explicit `YES`; failures preserve the current CAD selection.
 
 ## Material schedules

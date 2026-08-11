@@ -99,8 +99,8 @@ namespace QS3D.Core.Export
                     WriteEntry(archive, "xl/workbook.xml", isEd2 ? Ed2WorkbookXml : WorkbookXml);
                     WriteEntry(archive, "xl/_rels/workbook.xml.rels", isEd2 ? Ed2WorkbookRelationshipsXml : WorkbookRelationshipsXml);
                     WriteEntry(archive, "xl/styles.xml", StylesXml);
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
-                    if (summaryRows != null) WriteEntry(archive, "xl/worksheets/sheet2.xml", BuildSheet(summaryRows));
+                    WriteEntry(archive, "xl/worksheets/sheet1.xml", isEd2 ? BuildEd2Sheet(rows) : BuildSheet(rows));
+                    if (summaryRows != null) WriteEntry(archive, "xl/worksheets/sheet2.xml", BuildEd2Sheet(summaryRows));
                 }
                 ValidatePackage(tempPath, summaryRows != null);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
@@ -165,6 +165,67 @@ namespace QS3D.Core.Export
             return sb.ToString();
         }
 
+        private static string BuildEd2Sheet(IReadOnlyList<QuantityReportRow> rows)
+        {
+            var headers = new[]
+            {
+                "STT", "Tên cấu kiện", "Loại", "Vật liệu", "Family ID", "Tầng/Zone", "SL",
+                "BT gộp (m³)", "Trừ giao (m³)", "BT còn (m³)", "Cốp pha (m²)", "Dài (m)",
+                "Chu vi ngoài (m)", "Chu vi trong (m)", "DT cửa (m²)", "Thành bên (m²)",
+                "DT đáy (m²)", "DT đỉnh (m²)", "DT khác (m²)", "Khối lượng riêng (kg/m³)",
+                "Khối lượng (kg)", "Ghi chú", "QS3D Element ID", "CAD Handle (hex)", "QS3D Drawing Fingerprint"
+            };
+
+            var lastRow = Math.Max(1, rows.Count + 1);
+            var range = "A1:Y" + lastRow.ToString(CultureInfo.InvariantCulture);
+            var sb = new StringBuilder();
+            sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+            sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
+            sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
+            sb.Append("<sheetData><row r=\"1\">");
+            for (var c = 0; c < headers.Length; c++) AppendInlineStringCell(sb, CellRef(c, 1), headers[c], 1);
+            sb.Append("</row>");
+
+            for (var i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                if (row == null) throw new InvalidDataException("ED2 worksheet contains a null quantity row.");
+                var r = i + 2;
+                var displayName = string.IsNullOrWhiteSpace(row.ElementName) ? row.FamilyName : row.ElementName;
+                sb.Append("<row r=\"").Append(r).Append("\">");
+                AppendNumberCell(sb, CellRef(0, r), i + 1);
+                AppendInlineStringCell(sb, CellRef(1, r), displayName, 0);
+                AppendInlineStringCell(sb, CellRef(2, r), row.Category, 0);
+                AppendInlineStringCell(sb, CellRef(3, r), row.Material, 0);
+                AppendInlineStringCell(sb, CellRef(4, r), row.FamilyId, 0);
+                AppendInlineStringCell(sb, CellRef(5, r), row.FloorZoneText, 0);
+                AppendNumberCell(sb, CellRef(6, r), row.Count);
+                AppendNumberCell(sb, CellRef(7, r), row.GrossConcreteM3);
+                AppendNumberCell(sb, CellRef(8, r), row.DeductionM3);
+                AppendNumberCell(sb, CellRef(9, r), row.NetConcreteM3);
+                AppendNumberCell(sb, CellRef(10, r), row.FormworkM2);
+                AppendNumberCell(sb, CellRef(11, r), row.LengthM);
+                AppendNumberCell(sb, CellRef(12, r), row.OuterPerimeterM);
+                AppendNumberCell(sb, CellRef(13, r), row.InnerPerimeterM);
+                AppendNumberCell(sb, CellRef(14, r), row.DoorAreaM2);
+                AppendNumberCell(sb, CellRef(15, r), row.SideAreaM2);
+                AppendNumberCell(sb, CellRef(16, r), row.BottomAreaM2);
+                AppendNumberCell(sb, CellRef(17, r), row.TopAreaM2);
+                AppendNumberCell(sb, CellRef(18, r), row.OtherAreaM2);
+                AppendNullableNumberCell(sb, CellRef(19, r), row.DensityKgM3);
+                AppendNullableNumberCell(sb, CellRef(20, r), row.MassKg);
+                AppendInlineStringCell(sb, CellRef(21, r), row.Note, 0);
+                AppendInlineStringCell(sb, CellRef(22, r), row.ElementIdText, 0);
+                AppendInlineStringCell(sb, CellRef(23, r), row.SourceHandleText, 0);
+                AppendInlineStringCell(sb, CellRef(24, r), row.DrawingFingerprint, 0);
+                sb.Append("</row>");
+            }
+
+            sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
+            return sb.ToString();
+        }
+
         private static void ValidatePackage(string path, bool isEd2)
         {
             if (isEd2)
@@ -184,6 +245,12 @@ namespace QS3D.Core.Export
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "XLSX numeric values must be finite.");
             sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>")
                 .Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
+        }
+
+        private static void AppendNullableNumberCell(StringBuilder sb, string cellRef, double? value)
+        {
+            if (!value.HasValue) return;
+            AppendNumberCell(sb, cellRef, value.Value);
         }
 
         private static string CellRef(int columnZeroBased, int row)
