@@ -34,6 +34,7 @@ namespace QS3D.Core.Units
     {
         public ProjectUnitPolicy(LengthUnit drawingUnit = LengthUnit.Millimeter, int displayDecimals = 3)
         {
+            if (!Enum.IsDefined(typeof(LengthUnit), drawingUnit)) throw new ArgumentOutOfRangeException(nameof(drawingUnit));
             if (displayDecimals < 0 || displayDecimals > 9) throw new ArgumentOutOfRangeException(nameof(displayDecimals));
             DrawingUnit = drawingUnit;
             DisplayDecimals = displayDecimals;
