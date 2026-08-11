@@ -55,10 +55,32 @@ if mesh.is_file():
         if token not in text:
             errors.append("RebarMeshSetupWindow missing stale-project fail-closed token: " + token)
 
+health = UI / "ModelHealthWindow.xaml.cs"
+if health.is_file():
+    text = health.read_text(encoding="utf-8")
+    for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var current)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "_projectIdAtOpen = projectAtOpen.ProjectId",
+        "_updatedUtcAtOpen = projectAtOpen.UpdatedUtc",
+        "_changeVersionAtOpen = projectAtOpen.ChangeVersion",
+        "_drawingFingerprintAtOpen = projectAtOpen.DrawingFingerprint ?? string.Empty",
+        "current.UpdatedUtc == _updatedUtcAtOpen",
+        "current.ChangeVersion == _changeVersionAtOpen",
+        "MatchesSnapshot(current)",
+        "Model Health cần một QS3D project hiện hữu; cửa sổ kiểm tra không tạo project mới",
+    ):
+        if token not in text:
+            errors.append("ModelHealthWindow missing read-only semantic-snapshot freshness token: " + token)
+    if "ProjectContextCoordinator.GetOrCreate" in text:
+        errors.append("ModelHealthWindow must not create/cache a project merely to display or freshness-check a read-only Health snapshot.")
+    if "ReferenceEquals(current, _projectAtOpen)" in text:
+        errors.append("ModelHealthWindow must compare semantic snapshot stamps, not ProjectState object identity; read-only sidecar loads may produce equivalent detached instances.")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: every source-DWG-bound modeless window closes with its source drawing; Curtain re-resolves the selected Family and Rebar Mesh rejects a replaced project instance before mutation.")
+print("PASS: every source-DWG-bound modeless window closes with its source drawing; Curtain re-resolves selected Family, Rebar Mesh rejects replaced project state, and Model Health uses read-only semantic stamps to block stale Locate without creating project state.")
