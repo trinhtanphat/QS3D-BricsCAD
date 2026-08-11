@@ -165,11 +165,19 @@ namespace QS3D.Core.Geometry
             var qx = point.X - start.X;
             var qy = point.Y - start.Y;
             if (!Finite(qx) || !Finite(qy)) throw new OverflowException("Opening-to-host delta exceeds the supported numeric range.");
-            var along = qx * ux + qy * uy;
-            if (!Finite(along)) throw new OverflowException("Opening host projection overflowed.");
-            if (along <= 0d) return start;
-            if (along >= length) return end;
+            var scale = Math.Max(Math.Abs(qx), Math.Abs(qy));
+            if (!Finite(scale)) throw new OverflowException("Opening host projection scale overflowed.");
+            if (scale == 0d) return start;
 
+            var scaledAlong = qx / scale * ux + qy / scale * uy;
+            if (!Finite(scaledAlong)) throw new OverflowException("Opening host scaled projection overflowed.");
+            if (scaledAlong <= 0d) return start;
+
+            var scaledLength = length / scale;
+            if (scaledAlong >= scaledLength) return end;
+
+            var along = scaledAlong * scale;
+            if (!Finite(along)) throw new OverflowException("Opening host projection overflowed.");
             var x = start.X + ux * along;
             var y = start.Y + uy * along;
             if (!Finite(x) || !Finite(y)) throw new OverflowException("Opening host closest-point calculation overflowed.");
