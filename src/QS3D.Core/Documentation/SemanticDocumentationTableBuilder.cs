@@ -52,9 +52,7 @@ namespace QS3D.Core.Documentation
     public static class SemanticDocumentationTableBuilder
     {
         private const int MaxRows = 5000;
-        private const int MaxColumns = 32;
         private const int MaxTitleLength = 160;
-        private const int MaxHeaderLength = 96;
         private const int MaxElementIdLength = 128;
 
         public static SemanticDocumentationTable Build(
@@ -62,6 +60,16 @@ namespace QS3D.Core.Documentation
             string title,
             IEnumerable<string> orderedElementIds,
             IEnumerable<SemanticDocumentationColumn> columns)
+        {
+            return Build(project, title, orderedElementIds, columns, allowEmpty: false);
+        }
+
+        public static SemanticDocumentationTable Build(
+            ProjectState project,
+            string title,
+            IEnumerable<string> orderedElementIds,
+            IEnumerable<SemanticDocumentationColumn> columns,
+            bool allowEmpty)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (orderedElementIds == null) throw new ArgumentNullException(nameof(orderedElementIds));
@@ -72,24 +80,12 @@ namespace QS3D.Core.Documentation
             var ids = rawIds
                 .Select((value, index) => Required(value, "orderedElementIds[" + index + "]", MaxElementIdLength))
                 .ToList();
-            if (ids.Count == 0) throw new InvalidOperationException("Documentation table requires at least one semantic element.");
+            if (ids.Count == 0 && !allowEmpty)
+                throw new InvalidOperationException("Documentation table requires at least one semantic element.");
             if (ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count)
                 throw new InvalidOperationException("Documentation table input contains duplicate semantic element ids.");
 
-            var columnList = MaterializeBounded(columns, MaxColumns, "columns");
-            if (columnList.Count == 0) throw new InvalidOperationException("Documentation table requires at least one column.");
-
-            var normalizedColumns = new List<SemanticDocumentationColumn>(columnList.Count);
-            var headers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (var i = 0; i < columnList.Count; i++)
-            {
-                var column = columnList[i] ?? throw new ArgumentException("Documentation table column cannot be null at index " + i + ".", nameof(columns));
-                var header = Required(column.Header, "columns[" + i + "].Header", MaxHeaderLength);
-                var template = Required(column.Template, "columns[" + i + "].Template", 512);
-                if (!headers.Add(header)) throw new InvalidOperationException("Documentation table contains duplicate column header: " + header + ".");
-                normalizedColumns.Add(new SemanticDocumentationColumn(header, template));
-            }
-
+            var normalizedColumns = SemanticDocumentationColumnPolicy.Normalize(columns, nameof(columns));
             var context = new SemanticTagRenderContext(project);
             var elements = new List<ProjectElement>(ids.Count);
             foreach (var id in ids) elements.Add(context.ResolveElement(id));
