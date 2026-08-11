@@ -1,38 +1,32 @@
 # Work claim — document-bound modeless lifetime attachment atomicity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-modeless-lifetime-attach-atomicity`
 - Registered: `2026-08-11T22:37:00+07:00`
+- Completed: `2026-08-11T22:40:00+07:00`
 - Baseline main SHA: `b07b02da76168b6f32231a3a4ccef1f8bdda66a2`
 - Priority: P1 deterministic event-ownership hardening found during owner-requested `continue all` audit.
 
-## Confirmed defect
+## Result
 
-`DocumentBoundWindowLifetime.Registration.Attach(...)` subscribes `DocumentToBeDestroyed`, `Activated`, `PreviewMouseDown`, `PreviewKeyDown` and `Closed` sequentially, but marks `_attached = true` only after the final subscription. If any later event subscription throws, earlier handlers remain subscribed while `_attached` stays false. A retry can then subscribe those earlier handlers again, and ordinary `Detach()` cannot clean the failed attempt because it exits when `_attached` is false.
+The partial-subscription retry defect in `DocumentBoundWindowLifetime.Registration.Attach(...)` is closed on `main`.
 
-The same failed attempt can also retain a project-affinity snapshot captured before subscription failure, so a retry may inherit stale affinity instead of binding to the then-current project.
+- `8d474795d98d49d61cf792a565917d9e891de76f` — `fix(ui): roll back partial modeless lifetime attach`
+  - all existing event subscriptions remain in the same order and successful attach still sets `_attached = true` only after the full set is installed;
+  - failure temporarily marks the partial attempt attached and routes rollback through the existing best-effort `Detach()` implementation, which removes every possibly-added manager/window handler without letting one remove failure block the rest;
+  - rollback then clears `_projectAffinityBound` and `_projectId`, so a later retry binds against the then-current canonical project instead of inheriting a failed-attempt snapshot;
+  - the original attachment exception is rethrown.
+- `68a2ebf73aec03094f560b0f712be0eb768ebeb1` — `test(ui): guard modeless lifetime attach atomicity`
+  - focused auto-discovered source gate requires the ordered attach/rollback contract, project-affinity reset, existing best-effort detach handlers, same-window idempotence, cross-document rebind rejection and source-DWG/project fail-closed behavior.
 
-## Reserved scope
+## Integration verification
 
-- `src/QS3D.BricsCAD.V25/UI/DocumentBoundWindowLifetime.cs`
-- `scripts/preflight-document-bound-window-attach-atomicity.py` (new)
-- this claim file for close-out
+The implementation commit diff was re-read and touches only `DocumentBoundWindowLifetime.cs`. Compare from `68a2ebf7...` to later `main` reported `behind_by: 0` with the regression commit as merge base; subsequent commits touched unrelated Family/Grid/Updater claim surfaces. No reset, rebase or force-push was used.
 
-## Intended contract
+## Validation boundary
 
-- Attach either completes all event subscriptions and owns the registration, or removes every possibly-added handler before rethrowing.
-- Failed attach resets project-affinity state so retry binds to current canonical project state.
-- Existing same-window idempotence, cross-document rebind rejection, source-DWG close behavior and project-change fail-closed behavior remain unchanged.
+The focused source gate is committed but was not executed in a full repository checkout in this connector-only lane. No GitHub Actions, BricsCAD V25 event-add failure injection, build/NETLOAD, installer, signing or release was run. Native event-subscription failure/retry remains local-only; no `LOCAL_PASS` is claimed.
 
-## Excluded scope
+## Coordination
 
-- No modeless window call-site edits, dynamic hub behavior, presentation/XAML, ProjectContext semantics, Ribbon/updater/Core, installer/signing/release or LOCAL inbox changes.
-- No GitHub Actions dispatch and no BricsCAD V25 runtime PASS claim.
-
-## Validation plan
-
-Re-fetch current source before writing. Reuse the existing best-effort `Detach()` path for rollback without changing normal close semantics, add a focused auto-discovered source preflight for failure cleanup/retry, inspect exact diff, and verify ancestry on moving `main` without force-push.
-
-## Completion condition
-
-Document-bound modeless attachment becomes retry-safe/fail-atomic at source level with focused regression guard merged on `main`; native event-add failure injection remains local-only.
+No modeless call sites, dynamic hubs, XAML/presentation, ProjectContext semantics, Ribbon, updater, Core or LOCAL inbox files were modified.
