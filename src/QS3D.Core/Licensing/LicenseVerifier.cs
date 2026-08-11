@@ -70,6 +70,8 @@ namespace QS3D.Core.Licensing
         private static void ValidateToken(string value, string name, int maximumLength)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("License " + name + " is required.");
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("License " + name + " must not contain leading or trailing whitespace.");
             if (value.Length > maximumLength) throw new InvalidDataException("License " + name + " is too long.");
             foreach (var ch in value)
                 if (char.IsControl(ch) || ch == '\n' || ch == '\r') throw new InvalidDataException("License " + name + " contains control characters.");
