@@ -1,0 +1,21 @@
+# Agent work claim — semantic capture bootstrap lifecycle
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `ACTIVE`
+- Scope: source-safe hardening of no-project bootstrap behavior for semantic capture.
+- Files reserved:
+  - `src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs`
+  - `scripts/preflight-semantic-capture-bootstrap.py`
+  - this claim file for close-out
+- Problem: `Capture(...)` / `CaptureSnapshot(...)` currently call `ProjectContextCoordinator.GetOrCreate(document)` before selection eligibility and drawing-unit policy are known. `GetOrCreate` registers newly-created project state in the document cache, so an invalid or unresolved capture can leave a blank project bound even though capture fails.
+- Intended contract:
+  - empty/cancel/invalid/unresolved semantic capture paths must not bootstrap a new QS3D project;
+  - a capture batch validates all candidate snapshots and drawing-unit policy before `GetOrCreate`;
+  - the mutation core keeps eligibility/unit rechecks after canonical binding as defense-in-depth/freshness protection;
+  - valid semantic capture remains an intentional authoring/bootstrap path;
+  - existing project, generated-owner rejection, rollback, Family/default and quantity semantics remain unchanged;
+  - no Ribbon/BQ/UI/native geometry/LOCAL_ONLY V25 qualification changes.
+- Overlap check: recent active work is concentrated in updater, Model Health UI, quantity/report provenance and other independent lanes; this reservation is limited to semantic capture lifecycle source plus its dedicated preflight.
+- Validation: exact source/diff review plus an auto-discovered static preflight locking validation-before-bootstrap and core rechecks. Do not dispatch GitHub Actions under `continue all`.
+- Completion condition: invalid/unresolved capture cannot reach `GetOrCreate`, regression guard is present, and this claim is marked `COMPLETED` with exact implementation/test SHAs.
