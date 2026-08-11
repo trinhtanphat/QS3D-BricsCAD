@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
@@ -10,6 +11,12 @@ namespace QS3D.BricsCAD.V25.Updates
 {
     internal static class SecureUpdateLauncher
     {
+        private static readonly Guid WinTrustActionGenericVerifyV2 = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
+        private const uint WtdUiNone = 2;
+        private const uint WtdRevokeNone = 0;
+        private const uint WtdChoiceFile = 1;
+        private const uint WtdStateActionVerify = 1;
+        private const uint WtdStateActionClose = 2;
         private static int _scheduled;
 
         internal static bool IsScheduled => Volatile.Read(ref _scheduled) != 0;
@@ -27,6 +34,8 @@ namespace QS3D.BricsCAD.V25.Updates
                     return false;
                 }
 
+                if (!TryVerifyAuthenticode(pluginPath, out reason)) return false;
+
                 var certificate = X509Certificate.CreateFromSignedFile(pluginPath);
                 using (var signer = new X509Certificate2(certificate))
                 {
@@ -42,7 +51,7 @@ namespace QS3D.BricsCAD.V25.Updates
             }
             catch
             {
-                reason = "Bản QS3D hiện tại chưa được ký Authenticode; cần cài thủ công một bản signed trước khi bật one-click update.";
+                reason = "Bản QS3D hiện tại chưa có Authenticode hợp lệ; cần cài thủ công một bản signed hợp lệ trước khi bật one-click update.";
                 return false;
             }
         }
@@ -144,6 +153,61 @@ namespace QS3D.BricsCAD.V25.Updates
             }
         }
 
+        private static bool TryVerifyAuthenticode(string filePath, out string reason)
+        {
+            reason = string.Empty;
+            var fileInfoPointer = IntPtr.Zero;
+            try
+            {
+                var fileInfo = new WinTrustFileInfo
+                {
+                    cbStruct = (uint)Marshal.SizeOf(typeof(WinTrustFileInfo)),
+                    pcwszFilePath = filePath,
+                    hFile = IntPtr.Zero,
+                    pgKnownSubject = IntPtr.Zero
+                };
+                fileInfoPointer = Marshal.AllocCoTaskMem(Marshal.SizeOf(typeof(WinTrustFileInfo)));
+                Marshal.StructureToPtr(fileInfo, fileInfoPointer, false);
+
+                var trustData = new WinTrustData
+                {
+                    cbStruct = (uint)Marshal.SizeOf(typeof(WinTrustData)),
+                    pPolicyCallbackData = IntPtr.Zero,
+                    pSIPClientData = IntPtr.Zero,
+                    dwUIChoice = WtdUiNone,
+                    fdwRevocationChecks = WtdRevokeNone,
+                    dwUnionChoice = WtdChoiceFile,
+                    pFile = fileInfoPointer,
+                    dwStateAction = WtdStateActionVerify,
+                    hWVTStateData = IntPtr.Zero,
+                    pwszURLReference = IntPtr.Zero,
+                    dwProvFlags = 0,
+                    dwUIContext = 0
+                };
+
+                var status = WinVerifyTrust(IntPtr.Zero, WinTrustActionGenericVerifyV2, ref trustData);
+                trustData.dwStateAction = WtdStateActionClose;
+                WinVerifyTrust(IntPtr.Zero, WinTrustActionGenericVerifyV2, ref trustData);
+
+                if (status == 0) return true;
+                reason = "Authenticode của DLL QS3D hiện tại không hợp lệ (WinVerifyTrust 0x" + unchecked((uint)status).ToString("X8") + ").";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                reason = "Không xác minh được Authenticode của DLL QS3D hiện tại: " + ex.Message;
+                return false;
+            }
+            finally
+            {
+                if (fileInfoPointer != IntPtr.Zero)
+                {
+                    Marshal.DestroyStructure(fileInfoPointer, typeof(WinTrustFileInfo));
+                    Marshal.FreeCoTaskMem(fileInfoPointer);
+                }
+            }
+        }
+
         private static string BuildWorkerScript(string updaterPath, string manifestUri, string signerThumbprint, string installDirectory, string bricscadPath, string logDirectory)
         {
             var script = new StringBuilder();
@@ -186,6 +250,38 @@ namespace QS3D.BricsCAD.V25.Updates
         private static string PsLiteral(string value)
         {
             return "'" + (value ?? string.Empty).Replace("'", "''") + "'";
+        }
+
+        [DllImport("wintrust.dll", ExactSpelling = true, SetLastError = true)]
+        private static extern int WinVerifyTrust(
+            IntPtr hwnd,
+            [MarshalAs(UnmanagedType.LPStruct)] Guid actionId,
+            ref WinTrustData trustData);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct WinTrustFileInfo
+        {
+            internal uint cbStruct;
+            [MarshalAs(UnmanagedType.LPWStr)] internal string pcwszFilePath;
+            internal IntPtr hFile;
+            internal IntPtr pgKnownSubject;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct WinTrustData
+        {
+            internal uint cbStruct;
+            internal IntPtr pPolicyCallbackData;
+            internal IntPtr pSIPClientData;
+            internal uint dwUIChoice;
+            internal uint fdwRevocationChecks;
+            internal uint dwUnionChoice;
+            internal IntPtr pFile;
+            internal uint dwStateAction;
+            internal IntPtr hWVTStateData;
+            internal IntPtr pwszURLReference;
+            internal uint dwProvFlags;
+            internal uint dwUIContext;
         }
     }
 }
