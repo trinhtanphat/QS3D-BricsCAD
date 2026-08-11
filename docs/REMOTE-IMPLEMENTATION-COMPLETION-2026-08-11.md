@@ -19,7 +19,7 @@ The major deterministic/Core gaps that had clear contracts have been implemented
 - `ENGINEERING_REQUIRED`: a governing engineering standard/revision and engineering approval are required;
 - `FORMAT_SCOPE_REQUIRED`: external interoperability schema/vendor/product scope must be explicitly selected.
 
-Remote agents must not turn these boundaries into fake completion by inventing native behavior, merge precedence, engineering design values, licensing policy or signing credentials.
+Remote agents must not turn these boundaries into fake completion by inventing native behavior, unreviewed merge precedence, engineering design values, licensing policy or signing credentials.
 
 ## 2. Source-safe implementation delivered in this wave
 
@@ -33,15 +33,16 @@ The following coherent batches were merged:
 - `174366e153a39264d401f11b49ff307acac04550` — UseSource + provenance while preserving the exact native-cleanup authorization boundary.
 - `faf30228187d034dd06ac9cea0576de58997a9a9` — KeepTarget + provenance, with no false target lineage for source identities rejected by KeepTarget collision policy.
 - `a7443d25936a85f6a9b18dd4e16b880f084e0844` — unified Core import coordinator for explicit AppendOnly / KeepTarget / ImportAsNew / UseSourceSemanticData modes plus reviewed provenance selection; no implicit policy fallback.
+- `0ff97a919e7a2bdf6e7bd7f17d8232cab7cc0cce` — deterministic same-ID field-level precedence execution with target/source/decision freshness, exact generated-handle cleanup requirements and `ProjectStateSnapshot` rollback; generic BricsCAD orchestration remains intentionally separate.
 
-The coordinator is now the preferred source-level policy entry point. It delegates to canonical importers rather than implementing another merge engine.
+The coordinator is now the preferred source-level policy entry point for the four generic import modes. The field-level planner/executor is a separate reviewed Core boundary and is intentionally not exposed as a fifth generic coordinator mode.
 
 Important boundaries preserved:
 
 - imported source handles never become target `ProjectElement.SourceHandles` merely because provenance is retained;
 - imported source drawing fingerprints never become target Element ownership;
 - provenance metadata remains separate from portable semantic Element ownership;
-- UseSource native-cleanup authorization remains mandatory where affected target owners contain generated/native output;
+- UseSource and field-level execution retain exact reviewed generated-handle cleanup requirements where affected target owners contain generated/native output;
 - Core does not erase or rebuild BricsCAD entities;
 - no requested import policy silently falls back to another policy.
 
@@ -166,12 +167,12 @@ Status:
 Status:
 
 - current guarded semantic snapshot execution policies, provenance compositions and unified Core coordinator: `REMOTE_DONE` for the explicit policies implemented on `main`;
-- native replacement cleanup/rebuild transaction/compensation, Undo/session/save-reopen/multi-DWG and customer/private-DWG qualification: `LOCAL_ONLY`;
-- broader field-level merge/precedence: `POLICY_REQUIRED`;
+- deterministic same-ID field-level precedence planner plus reviewed rollback-safe Core executor: `REMOTE_DONE` for the current explicit group-level policy contract; this is not a fifth generic coordinator mode;
+- native replacement/field-merge cleanup and rebuild orchestration, transaction/compensation, Undo/session/save-reopen/multi-DWG and customer/private-DWG qualification: `LOCAL_ONLY / COORDINATED`;
 - target-DWG source-handle adoption/rebinding: `POLICY_REQUIRED + LOCAL_ONLY`;
 - IFC/Revit/BCF/vendor/cloud formats: `FORMAT_SCOPE_REQUIRED` before implementation.
 
-Do not invent one global field-merge precedence. The correct behavior may differ for Family catalog properties, Element overrides, quantities, references and provenance. A reviewed product policy is required first.
+Do not invent a new or broader field-merge precedence contract beyond the reviewed source model. Current field merge is explicit group-level KeepTarget/UseSource/Unspecified precedence for same-ID semantic collisions; source-only identities remain routed to AppendOnly or ImportAsNew. Per-key mixed policy, native ownership adoption and new precedence categories require their own reviewed product contract before implementation.
 
 ## 4. Workstream closure by execution wave
 
@@ -179,7 +180,7 @@ Do not invent one global field-merge precedence. The correct behavior may differ
 
 Current assessment: `REMOTE_DONE` or sufficiently implemented for the explicitly defined contracts. New remote work should be evidence-driven regression hardening, not feature-count expansion.
 
-Includes Interchange Core/coordinator/provenance, semantic documentation/custom schedules, dependency/performance harnesses, deterministic diagnostics and source-safe fault testing.
+Includes Interchange Core/coordinator/provenance/field-merge planner+executor, semantic documentation/custom schedules, dependency/performance harnesses, deterministic diagnostics and source-safe fault testing.
 
 ### Wave B — coordinated shared platform
 
@@ -213,7 +214,7 @@ When a local agent with licensed BricsCAD V25 x64 is available:
 8. run Grid/Level/native vertical-placement scenarios;
 9. run Slab/Foundation polygon/hole/multi-region + rebar native materialization scenarios;
 10. run BQ/BBS/Excel/documentation/Layout/Viewport scenarios;
-11. run interchange confirmation, UseSource native cleanup/rebuild, Undo, save/reopen and multi-DWG scenarios;
+11. run interchange confirmation, UseSource and reviewed field-merge native cleanup/rebuild/recovery, Undo, save/reopen and multi-DWG scenarios;
 12. run UI screenshot/DPI/Unicode/keyboard/focus/Ribbon/context-menu matrix;
 13. run representative large/private-DWG performance measurements;
 14. only after the candidate remains stable, run clean install/upgrade/rollback/uninstall and production signing checks when approved credentials exist;

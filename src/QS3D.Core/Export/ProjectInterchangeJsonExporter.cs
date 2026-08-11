@@ -19,6 +19,7 @@ namespace QS3D.Core.Export
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             ValidateProjectIdentity(project);
+            ProjectInterchangeSemanticReferenceValidator.Validate(project);
 
             var json = new StringBuilder(32768);
             json.Append("{\n");
@@ -126,7 +127,7 @@ namespace QS3D.Core.Export
             AppendStringArray(json, element.DependsOn, "dependencies");
             json.Append(",\n");
             json.Append("      \"properties\": ");
-            AppendStringMap(json, element.Properties.Where(x => IsInterchangeProperty(x.Key)), 3);
+            AppendStringMap(json, element.Properties.Where(x => ProjectInterchangeElementPropertyPolicy.IsPortable(x.Key)), 3);
             json.Append(",\n");
             json.Append("      \"quantities\": ");
             AppendNumberMap(json, element.Quantities);
@@ -141,6 +142,7 @@ namespace QS3D.Core.Export
             if (normalized.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return false;
             if (normalized.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return false;
             if (normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return false;
+            if (normalized.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return false;
             return true;
         }
 

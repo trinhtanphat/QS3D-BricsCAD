@@ -54,7 +54,6 @@ namespace QS3D.Core.Geometry
             if (segments.Count < 3) return Array.Empty<RoomBoundary>();
 
             var cuts = new List<Cut>[segments.Count];
-            var bounds = new SegmentBounds[segments.Count];
             for (var i = 0; i < segments.Count; i++)
             {
                 cuts[i] = new List<Cut>
@@ -62,15 +61,10 @@ namespace QS3D.Core.Geometry
                     new Cut(0d, segments[i].Start),
                     new Cut(1d, segments[i].End)
                 };
-                bounds[i] = new SegmentBounds(segments[i], tolerance);
             }
 
-            for (var i = 0; i < segments.Count; i++)
-                for (var j = i + 1; j < segments.Count; j++)
-                {
-                    if (!bounds[i].Overlaps(bounds[j])) continue;
-                    CollectPairCuts(segments[i], segments[j], cuts[i], cuts[j], tolerance);
-                }
+            foreach (var pair in EnumeratePotentialPairs(segments, tolerance))
+                CollectPairCuts(segments[pair.Item1], segments[pair.Item2], cuts[pair.Item1], cuts[pair.Item2], tolerance);
 
             var rawEdges = new List<RawEdge>();
             for (var i = 0; i < segments.Count; i++)
@@ -150,6 +144,40 @@ namespace QS3D.Core.Geometry
                     boundarySources.Where(x => !string.IsNullOrWhiteSpace(x)).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly(),
                     signedArea,
                     perimeter));
+            }
+        }
+
+        private static IEnumerable<Tuple<int, int>> EnumeratePotentialPairs(IReadOnlyList<BoundarySegment> segments, double tolerance)
+        {
+            var ordered = new List<SegmentBounds>(segments.Count);
+            for (var index = 0; index < segments.Count; index++) ordered.Add(new SegmentBounds(index, segments[index], tolerance));
+            ordered.Sort((left, right) =>
+            {
+                var compare = left.MinX.CompareTo(right.MinX);
+                if (compare != 0) return compare;
+                compare = left.MaxX.CompareTo(right.MaxX);
+                if (compare != 0) return compare;
+                compare = left.MinY.CompareTo(right.MinY);
+                if (compare != 0) return compare;
+                compare = left.MaxY.CompareTo(right.MaxY);
+                return compare != 0 ? compare : left.Index.CompareTo(right.Index);
+            });
+
+            var active = new List<SegmentBounds>();
+            foreach (var current in ordered)
+            {
+                for (var index = active.Count - 1; index >= 0; index--)
+                    if (active[index].MaxX < current.MinX) active.RemoveAt(index);
+
+                foreach (var other in active)
+                {
+                    if (!other.Overlaps(current)) continue;
+                    var first = Math.Min(other.Index, current.Index);
+                    var second = Math.Max(other.Index, current.Index);
+                    yield return Tuple.Create(first, second);
+                }
+
+                active.Add(current);
             }
         }
 
@@ -372,15 +400,52 @@ namespace QS3D.Core.Geometry
 
         private static string CanonicalRotation(IReadOnlyList<string> tokens)
         {
-            string? best = null;
-            for (var start = 0; start < tokens.Count; start++)
+            if (tokens.Count == 0) return string.Empty;
+
+            var first = 0;
+            var second = 1;
+            var offset = 0;
+            while (first < tokens.Count && second < tokens.Count && offset < tokens.Count)
             {
-                var ordered = new string[tokens.Count];
-                for (var i = 0; i < tokens.Count; i++) ordered[i] = tokens[(start + i) % tokens.Count];
-                var candidate = string.Join("|", ordered);
-                if (best == null || string.CompareOrdinal(candidate, best) < 0) best = candidate;
+                var compare = CompareRotationToken(tokens[(first + offset) % tokens.Count], tokens[(second + offset) % tokens.Count]);
+                if (compare == 0)
+                {
+                    offset++;
+                    continue;
+                }
+
+                if (compare > 0)
+                {
+                    first += offset + 1;
+                    if (first <= second) first = second + 1;
+                }
+                else
+                {
+                    second += offset + 1;
+                    if (second <= first) second = first + 1;
+                }
+                offset = 0;
             }
-            return best ?? string.Empty;
+
+            var start = Math.Min(first, second);
+            var ordered = new string[tokens.Count];
+            for (var index = 0; index < tokens.Count; index++) ordered[index] = tokens[(start + index) % tokens.Count];
+            return string.Join("|", ordered);
+        }
+
+        private static int CompareRotationToken(string left, string right)
+        {
+            var leftLength = left.Length + 1;
+            var rightLength = right.Length + 1;
+            var commonLength = Math.Min(leftLength, rightLength);
+            for (var index = 0; index < commonLength; index++)
+            {
+                var leftChar = index < left.Length ? left[index] : '|';
+                var rightChar = index < right.Length ? right[index] : '|';
+                var compare = leftChar.CompareTo(rightChar);
+                if (compare != 0) return compare;
+            }
+            return leftLength.CompareTo(rightLength);
         }
 
         private static string QuantizedToken(Point2 point, double tolerance)
@@ -405,14 +470,16 @@ namespace QS3D.Core.Geometry
 
         private sealed class SegmentBounds
         {
-            public SegmentBounds(BoundarySegment segment, double tolerance)
+            public SegmentBounds(int index, BoundarySegment segment, double tolerance)
             {
+                Index = index;
                 MinX = ExpandDown(Math.Min(segment.Start.X, segment.End.X), tolerance);
                 MaxX = ExpandUp(Math.Max(segment.Start.X, segment.End.X), tolerance);
                 MinY = ExpandDown(Math.Min(segment.Start.Y, segment.End.Y), tolerance);
                 MaxY = ExpandUp(Math.Max(segment.Start.Y, segment.End.Y), tolerance);
             }
 
+            public int Index { get; }
             public double MinX { get; }
             public double MaxX { get; }
             public double MinY { get; }

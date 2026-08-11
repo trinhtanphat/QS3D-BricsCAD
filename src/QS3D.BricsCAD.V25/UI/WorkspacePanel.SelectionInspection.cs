@@ -16,7 +16,7 @@ namespace QS3D.BricsCAD.V25.UI
             InspectionList.ItemsSource = _inspection;
             SelectionCount.Text = _inspection.Count + " chọn";
 
-            if (project == null || _inspection.Count == 0)
+            if (project == null || _inspection.Count != 1)
             {
                 _viewModel.SetSelectedElement(null);
                 return;

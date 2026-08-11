@@ -37,7 +37,14 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidDataException("Snapshot is not valid QS3D semantic interchange JSON.");
                 if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                     throw new InvalidOperationException("Interchange UseSource stopped because the active DWG changed after file selection.");
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    const string blocked = "Interchange UseSource: target drawing chưa có QS3D project để replace. Dùng QS3DINTERCHANGEIMPORT để import vào target mới/trống.";
+                    try { PaletteCoordinator.SetStatus(blocked); } catch { }
+                    document.Editor.WriteMessage("\nQS3D " + blocked);
+                    return;
+                }
+
                 var previewChangeVersion = project.ChangeVersion;
                 var plan = InterchangeUseSourceElementImportService.Plan(project, json);
                 if (plan.ElementsToReplace <= 0)

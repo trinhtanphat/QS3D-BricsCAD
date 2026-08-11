@@ -17,24 +17,17 @@ else:
     else:
         body = text[start:end]
         confirm = body.find("if (dialog.ShowDialog(this) != true) return;")
-        project = body.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)")
-        snapshot = body.find("ProjectStateSnapshot.CreateDetachedCopy(project)")
-        regenerate = body.find("RegenerateDirty(snapshot)")
-        build = body.find("_rows = ProjectRebarScheduleBuilder.Build(snapshot);")
+        active = body.find("EnsureActive(", confirm + 1)
+        build = body.find("_rows = BuildCurrentRows();")
         bind = body.find("BindRows();", build + 1)
         export = body.find("XlsxRebarScheduleExporter.Export(dialog.FileName, _rows)")
-        if min(confirm, project, snapshot, regenerate, build, bind, export) < 0:
-            errors.append("BBS review export missing save/read-only-project/detached-regenerate/build/rebind/export contract token")
-        elif not confirm < project < snapshot < regenerate < build < bind < export:
-            errors.append("BBS review XLSX must confirm Save before existing-project lookup, detached regeneration, fresh build, UI rebind, and export")
+        if min(confirm, active, build, bind, export) < 0:
+            errors.append("BBS review export missing save/active-DWG/fresh-build/rebind/export contract token")
+        elif not confirm < active < build < bind < export:
+            errors.append("BBS review XLSX must confirm Save before active-DWG recheck, fresh detached build, UI rebind, and export")
 
         before_confirm = body[:confirm if confirm >= 0 else 0]
-        for forbidden in (
-            "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
-            "ProjectStateSnapshot.CreateDetachedCopy(project)",
-            "RegenerateDirty(snapshot)",
-            "ProjectRebarScheduleBuilder.Build(snapshot)",
-        ):
+        for forbidden in ("BuildCurrentRows()",):
             if forbidden in before_confirm:
                 errors.append("BBS review Cancel path must not execute before Save confirmation: " + forbidden)
         for forbidden in (
@@ -45,6 +38,26 @@ else:
         ):
             if forbidden in body:
                 errors.append("BBS review export must not create/bind/regenerate live project state: " + forbidden)
+
+    helper_start = text.find("private IReadOnlyList<RebarScheduleRow> BuildCurrentRows()")
+    helper_end = text.find("private static bool SameRow", helper_start + 1)
+    helper = text[helper_start:helper_end] if helper_start >= 0 and helper_end > helper_start else ""
+    helper_positions = [
+        helper.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)"),
+        helper.find("ProjectStateSnapshot.CreateDetachedCopy(project)"),
+        helper.find("RegenerateDirty(snapshot)"),
+        helper.find("ProjectRebarScheduleBuilder.Build(snapshot)"),
+    ]
+    if min(helper_positions) < 0 or helper_positions != sorted(helper_positions):
+        errors.append("BBS review fresh-row helper must use read-only project -> detached copy -> regeneration -> authoritative build")
+    for forbidden in (
+        "ProjectContextCoordinator.GetOrCreate",
+        "ExistingProjectMutationContext",
+        "RegenerateDirty(project)",
+        "ProjectRebarScheduleBuilder.Build(project)",
+    ):
+        if forbidden in helper:
+            errors.append("BBS review fresh-row helper must remain read-only/detached: " + forbidden)
 
     for token in (
         "private IReadOnlyList<RebarScheduleRow> _rows;",

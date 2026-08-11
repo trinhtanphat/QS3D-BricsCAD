@@ -47,7 +47,7 @@ if ".SetInspection(snapshots)" in set_region:
 
 for token in (
     "internal void SetInspectionReadOnly(",
-    "if (project == null || _inspection.Count == 0)",
+    "if (project == null || _inspection.Count != 1)",
     "SemanticReferenceHandles.GetSelectionAliases(element)",
     "project.FindFamily(singleElement.FamilyId)",
     "_viewModel.SetSelectedElement(singleElement)",

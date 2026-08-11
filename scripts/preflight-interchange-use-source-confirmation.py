@@ -80,9 +80,11 @@ for filename, (operation, import_call) in standalone.items():
         errors.append(filename + " must pass the exact freshness-authorized project to UseSource mutation")
     validation = text.find("ProjectInterchangeJsonValidator.Validate(json)")
     active = text.find("ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)")
-    bootstrap = text.find("ProjectContextCoordinator.GetOrCreate(document)")
-    if min(validation, active, bootstrap) < 0 or not validation < active < bootstrap:
-        errors.append(filename + " must validate input and recheck the active DWG before project bootstrap")
+    readonly = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
+    if min(validation, active, readonly) < 0 or not validation < active < readonly:
+        errors.append(filename + " must validate input and recheck the active DWG before read-only target lookup")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append(filename + " must not create/cache a target project during UseSource preview")
 
 unified = ADAPTER / "ProjectInterchangeImportCommands.cs"
 if not unified.is_file():

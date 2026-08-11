@@ -219,9 +219,11 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void SyncFamilyFromSelection()
         {
-            if (_inspection.Count == 0)
+            if (_inspection.Count != 1)
             {
                 _viewModel.SetSelectedElement(null);
+                if (_inspection.Count > 1)
+                    SetStatus("Selection gồm nhiều đối tượng CAD; inspector giữ scope Family để tránh sửa nhầm Instance.");
                 return;
             }
 

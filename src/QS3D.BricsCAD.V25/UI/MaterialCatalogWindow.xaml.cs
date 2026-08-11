@@ -159,13 +159,42 @@ namespace QS3D.BricsCAD.V25.UI
                 EnsureActive("áp dụng material cho selection");
                 if (!(MaterialList.SelectedItem is ProjectMaterial selectedMaterial)) throw new InvalidOperationException("Chọn một material trước khi áp dụng.");
                 var target = (TargetCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Material";
-                if (!ExistingProjectMutationContext.TryGet(_document, out var project))
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject))
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Material Catalog không tạo project thay thế; hãy nạp project rồi Refresh trước khi áp dụng.");
-                var material = ProjectMaterialCatalog.GetAll(project)
+                var previewMaterial = ProjectMaterialCatalog.GetAll(previewProject)
                     .FirstOrDefault(x => string.Equals(x.Id, selectedMaterial.Id, StringComparison.OrdinalIgnoreCase))
                     ?? throw new InvalidOperationException("Material đã thay đổi hoặc bị xóa khỏi project hiện tại. Hãy Refresh và chọn lại material.");
-                var elements = SemanticSelectionResolver.ResolveImplied(_document, project).ToList();
-                if (elements.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+                var expectedProjectId = previewProject.ProjectId;
+                var previewElements = SemanticSelectionResolver.ResolveImplied(_document, previewProject)
+                    .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => x.First())
+                    .ToList();
+                if (previewElements.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+                var previewIds = previewElements.Select(x => x.Id)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (string.Equals(target, "CurtainFrameMaterial", StringComparison.OrdinalIgnoreCase))
+                {
+                    var invalid = previewElements.Where(x => x.Category != ElementCategory.GlassWall).Select(x => x.Id).ToList();
+                    if (invalid.Count > 0) throw new InvalidOperationException("CurtainFrameMaterial chỉ áp dụng cho Vách Kính. Selection không hợp lệ: " + string.Join(", ", invalid.Take(5)) + (invalid.Count > 5 ? "…" : string.Empty));
+                }
+
+                if (!ExistingProjectMutationContext.TryGet(_document, out var project))
+                    throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Material Catalog không tạo project thay thế; hãy nạp project rồi Refresh trước khi áp dụng.");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi sau khi đọc selection. Không có material assignment nào được áp dụng; hãy Refresh và thử lại.");
+                var material = ProjectMaterialCatalog.GetAll(project)
+                    .FirstOrDefault(x => string.Equals(x.Id, previewMaterial.Id, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException("Material đã thay đổi hoặc bị xóa khỏi project hiện tại. Hãy Refresh và chọn lại material.");
+                var elements = SemanticSelectionResolver.ResolveImplied(_document, project)
+                    .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => x.First())
+                    .ToList();
+                var currentIds = elements.Select(x => x.Id)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (!previewIds.SequenceEqual(currentIds, StringComparer.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Selection hoặc semantic ownership đã thay đổi trước khi áp dụng material. Không có mutation nào được áp dụng; hãy chọn lại và thử lại.");
                 if (string.Equals(target, "CurtainFrameMaterial", StringComparison.OrdinalIgnoreCase))
                 {
                     var invalid = elements.Where(x => x.Category != ElementCategory.GlassWall).Select(x => x.Id).ToList();

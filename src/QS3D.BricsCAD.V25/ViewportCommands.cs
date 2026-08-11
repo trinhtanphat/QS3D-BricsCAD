@@ -14,12 +14,12 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class ViewportCommands
     {
-        [CommandMethod("QS3DVIEW3D", CommandFlags.Modal)] public void View3D() { var doc = Active(); if (doc == null) return; doc.Editor.SwitchToModelSpace(); doc.SendStringToExecute("_.VPOINT 1,-1,1 _.ZOOM _E ", true, false, false); PaletteCoordinator.SetStatus("Viewport 3D isometric • pan/zoom/orbit trực tiếp trên BricsCAD."); }
-        [CommandMethod("QS3DVIEWTOP", CommandFlags.Modal)] public void ViewTop() { var doc = Active(); if (doc == null) return; doc.Editor.SwitchToModelSpace(); doc.SendStringToExecute("_.PLAN _W _.ZOOM _E ", true, false, false); PaletteCoordinator.SetStatus("Viewport Top/Plan."); }
-        [CommandMethod("QS3DORBIT", CommandFlags.Modal)] public void Orbit() { var doc = Active(); if (doc == null) return; doc.Editor.SwitchToModelSpace(); doc.SendStringToExecute("_.3DORBIT ", true, false, false); PaletteCoordinator.SetStatus("3D Orbit: kéo trực tiếp trong viewport BricsCAD."); }
-        [CommandMethod("QS3DFOCUSMODEL", CommandFlags.Modal)] public void FocusModel() { var doc = Active(); if (doc == null) return; doc.Editor.SwitchToModelSpace(); doc.Editor.UpdateScreen(); PaletteCoordinator.SetStatus("Đã focus Model Space."); }
+        [CommandMethod("QS3DVIEW3D", CommandFlags.Modal)] public void View3D() { var doc = Active(); if (doc == null) return; EnsureTiledModelSpace(doc); doc.SendStringToExecute("_.VPOINT 1,-1,1 _.ZOOM _E ", true, false, false); PaletteCoordinator.SetStatus("Viewport 3D isometric • pan/zoom/orbit trực tiếp trên BricsCAD."); }
+        [CommandMethod("QS3DVIEWTOP", CommandFlags.Modal)] public void ViewTop() { var doc = Active(); if (doc == null) return; EnsureTiledModelSpace(doc); doc.SendStringToExecute("_.PLAN _W _.ZOOM _E ", true, false, false); PaletteCoordinator.SetStatus("Viewport Top/Plan."); }
+        [CommandMethod("QS3DORBIT", CommandFlags.Modal)] public void Orbit() { var doc = Active(); if (doc == null) return; EnsureTiledModelSpace(doc); doc.SendStringToExecute("_.3DORBIT ", true, false, false); PaletteCoordinator.SetStatus("3D Orbit: kéo trực tiếp trong viewport BricsCAD."); }
+        [CommandMethod("QS3DFOCUSMODEL", CommandFlags.Modal)] public void FocusModel() { var doc = Active(); if (doc == null) return; EnsureTiledModelSpace(doc); doc.Editor.UpdateScreen(); PaletteCoordinator.SetStatus("Đã focus Model Space."); }
         [CommandMethod("QS3DZOOMSELECTED", CommandFlags.Modal)] public void ZoomSelected() { var doc = Active(); if (doc == null) return; if (!TryZoomSelection(doc)) { doc.Editor.WriteMessage("\nQS3D: chưa có đối tượng được chọn để zoom."); PaletteCoordinator.SetStatus("Zoom chọn: chưa có đối tượng."); } }
-        [CommandMethod("QS3DZOOMALL", CommandFlags.Modal)] public void ZoomAll() { var doc = Active(); if (doc == null) return; doc.Editor.SwitchToModelSpace(); doc.SendStringToExecute("_.ZOOM _E ", true, false, false); PaletteCoordinator.SetStatus("Zoom Extents."); }
+        [CommandMethod("QS3DZOOMALL", CommandFlags.Modal)] public void ZoomAll() { var doc = Active(); if (doc == null) return; EnsureTiledModelSpace(doc); doc.SendStringToExecute("_.ZOOM _E ", true, false, false); PaletteCoordinator.SetStatus("Zoom Extents."); }
 
         [CommandMethod("QS3DUNTRACK", CommandFlags.Modal)] public void UntrackSelected() => UntrackSelectedElements(null, "cấu kiện");
 
@@ -64,6 +64,14 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 doc.Editor.WriteMessage("\nQS3D: " + message);
             }
+        }
+
+        private static void EnsureTiledModelSpace(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (document.Database.TileMode) return;
+            document.Database.TileMode = true;
+            document.Editor.UpdateScreen();
         }
 
         private static bool TryZoomSelection(Document document)

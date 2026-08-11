@@ -174,9 +174,73 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureCurrentProject("định vị BQ");
-                _locate(row);
+                var currentRow = ResolveCurrentRow(row);
+                _locate(currentRow);
             }
             catch (Exception ex) { MessageBox.Show(this, "Không thể định vị: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        }
+
+        private QuantityReportRow ResolveCurrentRow(QuantityReportRow displayedRow)
+        {
+            if (_recalculate == null)
+                throw new InvalidOperationException("BQ Locate không có nguồn tính lại read-only để xác nhận row hiện hành. Đóng bảng và mở lại QS3DBQ.");
+            var displayedIds = CanonicalIds(displayedRow.ElementIds);
+            if (displayedIds.Length == 0)
+                throw new InvalidOperationException("Dòng BQ này không có semantic ElementId ổn định để định vị an toàn.");
+
+            var currentRows = _recalculate() ?? Array.Empty<QuantityReportRow>();
+            var matches = currentRows.Where(x => x != null && SameElementIdentity(displayedIds, x)).ToList();
+            if (matches.Count != 1)
+                throw new InvalidOperationException("Dòng BQ đã cũ hoặc không còn định danh duy nhất trong project hiện hành. Đóng bảng và chạy lại QS3DBQ.");
+            if (!SameRow(displayedRow, matches[0]))
+                throw new InvalidOperationException("Dòng BQ đã thay đổi kể từ lúc bảng được mở. Đóng bảng và chạy lại QS3DBQ trước khi định vị.");
+            return matches[0];
+        }
+
+        private static bool SameElementIdentity(string[] expectedIds, QuantityReportRow candidate)
+        {
+            var currentIds = CanonicalIds(candidate.ElementIds);
+            return expectedIds.SequenceEqual(currentIds, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static string[] CanonicalIds(IEnumerable<string> values)
+        {
+            return (values ?? Array.Empty<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        private static bool SameRow(QuantityReportRow left, QuantityReportRow right)
+        {
+            return string.Equals(left.Floor, right.Floor, StringComparison.Ordinal) &&
+                   string.Equals(left.Zone, right.Zone, StringComparison.Ordinal) &&
+                   string.Equals(left.Category, right.Category, StringComparison.Ordinal) &&
+                   string.Equals(left.FamilyId, right.FamilyId, StringComparison.Ordinal) &&
+                   string.Equals(left.FamilyName, right.FamilyName, StringComparison.Ordinal) &&
+                   string.Equals(left.ElementName, right.ElementName, StringComparison.Ordinal) &&
+                   string.Equals(left.Material, right.Material, StringComparison.Ordinal) &&
+                   string.Equals(left.Note, right.Note, StringComparison.Ordinal) &&
+                   string.Equals(left.DrawingFingerprint, right.DrawingFingerprint, StringComparison.Ordinal) &&
+                   left.Count == right.Count &&
+                   left.GrossConcreteM3.Equals(right.GrossConcreteM3) &&
+                   left.DeductionM3.Equals(right.DeductionM3) &&
+                   left.NetConcreteM3.Equals(right.NetConcreteM3) &&
+                   left.FormworkM2.Equals(right.FormworkM2) &&
+                   left.LengthM.Equals(right.LengthM) &&
+                   left.OuterPerimeterM.Equals(right.OuterPerimeterM) &&
+                   left.InnerPerimeterM.Equals(right.InnerPerimeterM) &&
+                   left.DoorAreaM2.Equals(right.DoorAreaM2) &&
+                   left.SideAreaM2.Equals(right.SideAreaM2) &&
+                   left.BottomAreaM2.Equals(right.BottomAreaM2) &&
+                   left.TopAreaM2.Equals(right.TopAreaM2) &&
+                   left.OtherAreaM2.Equals(right.OtherAreaM2) &&
+                   Nullable.Equals(left.DensityKgM3, right.DensityKgM3) &&
+                   Nullable.Equals(left.MassKg, right.MassKg) &&
+                   CanonicalIds(left.ElementIds).SequenceEqual(CanonicalIds(right.ElementIds), StringComparer.OrdinalIgnoreCase) &&
+                   CanonicalIds(left.SourceHandles).SequenceEqual(CanonicalIds(right.SourceHandles), StringComparer.OrdinalIgnoreCase);
         }
 
         private void OnExportClick(object sender, RoutedEventArgs e)

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
@@ -65,8 +66,15 @@ namespace QS3D.Core.SmokeTests
         {
             var target = BuildProject("target");
             var source = BuildProject("source");
-            source.Elements.Single().Properties[ProjectFloorService.TopLevelIdKey] = "L1";
-            var json = ProjectInterchangeJsonExporter.Build(source);
+            var sourceElement = source.Elements.Single();
+            sourceElement.Properties[ProjectFloorService.BottomLevelIdKey] = "L0";
+            sourceElement.Properties[ProjectFloorService.TopLevelIdKey] = "L1";
+            var validJson = ProjectInterchangeJsonExporter.Build(source);
+            var json = validJson.Replace(
+                "\"BottomLevelId\":\"L0\",",
+                string.Empty,
+                StringComparison.Ordinal);
+            True(!string.Equals(validJson, json, StringComparison.Ordinal));
             var beforeZones = target.Zones.Count;
             var beforeFloors = target.Floors.Count;
             var beforeFamilies = target.Families.Count;
@@ -96,8 +104,10 @@ namespace QS3D.Core.SmokeTests
 
         private static void MustFail(Action action)
         {
-            try { action(); } catch (InvalidOperationException) { return; }
-            throw new Exception("Expected InvalidOperationException.");
+            try { action(); }
+            catch (InvalidOperationException) { return; }
+            catch (InvalidDataException) { return; }
+            throw new Exception("Expected InvalidOperationException or InvalidDataException.");
         }
         private static void Equal<T>(T expected, T actual)
         {

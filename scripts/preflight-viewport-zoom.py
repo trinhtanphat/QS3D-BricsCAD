@@ -22,9 +22,12 @@ else:
         "MinimumViewSpan(view)",
         "Finite(extentMin)",
         "Finite(extentMax)",
+        "private static void EnsureTiledModelSpace(Document document)",
+        "if (document.Database.TileMode) return;",
+        "document.Database.TileMode = true;",
     ):
         if needle not in text:
-            errors.append("ViewportCommands.cs missing DCS zoom token: " + needle)
+            errors.append("ViewportCommands.cs missing DCS/model-space safety token: " + needle)
 
     command_count = len(re.findall(r'\[CommandMethod\("QS3DZOOMSELECTED"', text, re.IGNORECASE))
     if command_count != 1:
@@ -43,10 +46,31 @@ else:
         if "view.ViewDirection =" in body or "view.Target =" in body or "view.ViewTwist =" in body:
             errors.append("Zoom Selected must frame the current view without changing camera direction/target/twist.")
 
+    viewport_commands_end = text.find('[CommandMethod("QS3DUNTRACK"')
+    viewport_commands = text[:viewport_commands_end] if viewport_commands_end >= 0 else text
+    if "SwitchToModelSpace()" in viewport_commands:
+        errors.append("Viewport commands must not call Editor.SwitchToModelSpace() blindly; it throws eInvalidInput when the Model tab is already active.")
+    expected_model_focus_commands = (
+        'CommandMethod("QS3DVIEW3D"',
+        'CommandMethod("QS3DVIEWTOP"',
+        'CommandMethod("QS3DORBIT"',
+        'CommandMethod("QS3DFOCUSMODEL"',
+        'CommandMethod("QS3DZOOMALL"',
+    )
+    for command in expected_model_focus_commands:
+        start = viewport_commands.find(command)
+        if start < 0:
+            errors.append("Viewport command missing: " + command)
+            continue
+        line_end = viewport_commands.find("\n", start)
+        command_line = viewport_commands[start:line_end if line_end >= 0 else len(viewport_commands)]
+        if "EnsureTiledModelSpace(doc)" not in command_line:
+            errors.append(command + " must use idempotent EnsureTiledModelSpace before changing the model view.")
+
 print("QS3D viewport zoom preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: QS3DZOOMSELECTED transforms WCS entity extents into the current view DCS before framing, preserves the camera orientation, and rejects non-finite bounds.")
+print("PASS: viewport commands use idempotent TILEMODE-aware model focus, never blindly SwitchToModelSpace, and QS3DZOOMSELECTED transforms WCS entity extents into current-view DCS without changing camera orientation.")

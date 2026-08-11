@@ -67,7 +67,7 @@ if bbs.is_file():
 revision = windows["Revision"]
 if revision.is_file():
     text = revision.read_text(encoding="utf-8")
-    ensure = text.find("EnsureActive();")
+    ensure = text.find("EnsureActiveAndCurrent();")
     callback = text.find("_locate?.Invoke(row);")
     if min(ensure, callback) < 0 or ensure > callback:
         errors.append("Revision Locate must verify its source DWG before invoking the CAD callback")

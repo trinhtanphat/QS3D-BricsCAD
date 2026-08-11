@@ -159,6 +159,7 @@ namespace QS3D.Core.Export
             var elementIndex = ValidateElements(elements, familyIndex, floorIds, zoneIds, issues);
             ValidateDependencies(elements, elementIndex, issues);
             ValidateDependencyCycles(elementIndex, issues);
+            ValidateSemanticPropertyReferences(elements, zones, floors, families, elementIndex, issues);
 
             return new ProjectInterchangeValidationResult(
                 snapshot.Format ?? string.Empty,
@@ -455,6 +456,137 @@ namespace QS3D.Core.Export
                 "$.elements");
         }
 
+        private static void ValidateSemanticPropertyReferences(
+            IReadOnlyList<ElementContract> elements,
+            IReadOnlyList<ZoneContract> zones,
+            IReadOnlyList<FloorContract> floors,
+            IReadOnlyList<FamilyContract> families,
+            IReadOnlyDictionary<string, ElementContract> elementIndex,
+            IssueCollector issues)
+        {
+            if (issues.Full) return;
+            var zoneIds = new HashSet<string>(zones.Where(x => x != null).Select(x => (x.Id ?? string.Empty).Trim()).Where(x => x.Length > 0), StringComparer.OrdinalIgnoreCase);
+            var familyIds = new HashSet<string>(families.Where(x => x != null).Select(x => (x.Id ?? string.Empty).Trim()).Where(x => x.Length > 0), StringComparer.OrdinalIgnoreCase);
+            var floorById = floors
+                .Where(x => x != null && !string.IsNullOrWhiteSpace(x.Id))
+                .GroupBy(x => (x.Id ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(x => x.Key, x => x.First().ElevationM, StringComparer.OrdinalIgnoreCase);
+
+            for (var i = 0; i < elements.Count && !issues.Full; i++)
+            {
+                var element = elements[i];
+                if (element == null || element.Properties == null) continue;
+                var elementId = (element.Id ?? string.Empty).Trim();
+                var propertyPath = "$.elements[" + i.ToString(CultureInfo.InvariantCulture) + "].properties";
+
+                foreach (var reference in ProjectInterchangeSemanticReferencePolicy.KnownPropertyReferences)
+                {
+                    if (!TryProperty(element.Properties, reference.PropertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                    var id = raw.Trim();
+                    bool exists;
+                    switch (reference.Kind)
+                    {
+                        case InterchangeRemapIdentityKind.Zone: exists = zoneIds.Contains(id); break;
+                        case InterchangeRemapIdentityKind.Floor: exists = floorById.ContainsKey(id); break;
+                        case InterchangeRemapIdentityKind.Family: exists = familyIds.Contains(id); break;
+                        case InterchangeRemapIdentityKind.Element: exists = elementIndex.ContainsKey(id); break;
+                        default:
+                            issues.Error("SEMANTIC_PROPERTY_REF_KIND", "Unsupported registered semantic property reference kind: " + reference.Kind + ".", propertyPath + "." + reference.PropertyKey);
+                            continue;
+                    }
+                    if (!exists)
+                        issues.Error(
+                            "SEMANTIC_PROPERTY_REF_MISSING",
+                            "Element " + elementId + " property " + reference.PropertyKey + " references missing " + reference.Kind + " identity " + id + ".",
+                            propertyPath + "." + reference.PropertyKey);
+                }
+
+                ValidateLevelReferenceConsistency(element, floorById, propertyPath, issues);
+            }
+        }
+
+        private static void ValidateLevelReferenceConsistency(
+            ElementContract element,
+            IReadOnlyDictionary<string, double> floorById,
+            string propertyPath,
+            IssueCollector issues)
+        {
+            if (element.Properties == null || issues.Full) return;
+            var elementId = (element.Id ?? string.Empty).Trim();
+            var bottomId = Property(element.Properties, ProjectFloorService.BottomLevelIdKey);
+            var topId = Property(element.Properties, ProjectFloorService.TopLevelIdKey);
+            var hasBottomOffset = HasConfiguredProperty(element.Properties, ProjectFloorService.BottomLevelOffsetKey);
+            var hasTopOffset = HasConfiguredProperty(element.Properties, ProjectFloorService.TopLevelOffsetKey);
+
+            if (bottomId.Length == 0)
+            {
+                if (topId.Length > 0)
+                    issues.Error("LEVEL_RELATION", "Element " + elementId + " has TopLevelId without BottomLevelId.", propertyPath + "." + ProjectFloorService.TopLevelIdKey);
+                if (hasBottomOffset || hasTopOffset)
+                    issues.Error("LEVEL_RELATION", "Element " + elementId + " has a level offset without its level reference.", propertyPath);
+                return;
+            }
+
+            if (!floorById.TryGetValue(bottomId, out var bottomBase)) return;
+            if (!TryLevelOffset(element.Properties, ProjectFloorService.BottomLevelOffsetKey, out var bottomOffset))
+            {
+                issues.Error("LEVEL_OFFSET", "Element " + elementId + " bottom level offset must be a finite invariant-culture number.", propertyPath + "." + ProjectFloorService.BottomLevelOffsetKey);
+                return;
+            }
+            var bottom = bottomBase + bottomOffset;
+            if (!Finite(bottom))
+            {
+                issues.Error("LEVEL_OFFSET", "Element " + elementId + " bottom level elevation must be finite.", propertyPath + "." + ProjectFloorService.BottomLevelOffsetKey);
+                return;
+            }
+
+            if (topId.Length == 0)
+            {
+                if (hasTopOffset)
+                    issues.Error("LEVEL_RELATION", "Element " + elementId + " has TopLevelOffsetM without TopLevelId.", propertyPath + "." + ProjectFloorService.TopLevelOffsetKey);
+                return;
+            }
+            if (!floorById.TryGetValue(topId, out var topBase)) return;
+            if (!TryLevelOffset(element.Properties, ProjectFloorService.TopLevelOffsetKey, out var topOffset))
+            {
+                issues.Error("LEVEL_OFFSET", "Element " + elementId + " top level offset must be a finite invariant-culture number.", propertyPath + "." + ProjectFloorService.TopLevelOffsetKey);
+                return;
+            }
+            var top = topBase + topOffset;
+            if (!Finite(top))
+            {
+                issues.Error("LEVEL_OFFSET", "Element " + elementId + " top level elevation must be finite.", propertyPath + "." + ProjectFloorService.TopLevelOffsetKey);
+                return;
+            }
+            if (top <= bottom)
+                issues.Error("LEVEL_ORDER", "Element " + elementId + " top level elevation must be above bottom level elevation.", propertyPath);
+        }
+
+        private static bool TryLevelOffset(IDictionary<string, string> properties, string key, out double value)
+        {
+            value = 0d;
+            if (!TryProperty(properties, key, out var raw) || string.IsNullOrWhiteSpace(raw)) return true;
+            return double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) && Finite(value);
+        }
+
+        private static bool HasConfiguredProperty(IDictionary<string, string> properties, string key) =>
+            TryProperty(properties, key, out var raw) && !string.IsNullOrWhiteSpace(raw);
+
+        private static string Property(IDictionary<string, string> properties, string key) =>
+            TryProperty(properties, key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
+
+        private static bool TryProperty(IDictionary<string, string> properties, string key, out string value)
+        {
+            foreach (var pair in properties)
+            {
+                if (!string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase)) continue;
+                value = pair.Value ?? string.Empty;
+                return true;
+            }
+            value = string.Empty;
+            return false;
+        }
+
         private static void ValidateProperties(IDictionary<string, string>? properties, string path, IssueCollector issues)
         {
             if (properties == null) return;
@@ -482,6 +614,7 @@ namespace QS3D.Core.Export
             if (key.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return true;
             if (key.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return true;
             if (key.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             return false;
         }
 
