@@ -123,7 +123,7 @@
                                                 DisplayMemberBinding="{Binding LockState}"/>
                                 <GridViewColumn Header="SL" Width="28"
                                                 DisplayMemberBinding="{Binding InstanceText}"/>
-                                <GridViewColumn Header="Tỉ lệ" Width="66"
+                                <GridViewColumn Header="Tỉ lệ Xref" Width="66"
                                                 DisplayMemberBinding="{Binding ScaleText}"/>
                             </GridView>
                         </ListView.View>
