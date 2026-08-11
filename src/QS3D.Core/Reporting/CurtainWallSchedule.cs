@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -47,7 +48,7 @@ namespace QS3D.Core.Reporting
                 var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
                 var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
                 var family = families.TryGetValue(familyId, out var familyDefinition) ? familyDefinition.Name : familyId;
-                var key = floorId + "\u001f" + familyId;
+                var key = GroupKey(floorId, familyId);
                 if (!rows.TryGetValue(key, out var row))
                 {
                     row = new CurtainWallScheduleRow
@@ -85,6 +86,14 @@ namespace QS3D.Core.Reporting
                 if (row.MinimumClearPanelHeightM == double.MaxValue) row.MinimumClearPanelHeightM = 0d;
             }
             return order.Select(x => rows[x]).ToList();
+        }
+
+        private static string GroupKey(string floorId, string familyId)
+        {
+            var floor = floorId ?? string.Empty;
+            var family = familyId ?? string.Empty;
+            return floor.Length.ToString(CultureInfo.InvariantCulture) + ":" + floor +
+                   family.Length.ToString(CultureInfo.InvariantCulture) + ":" + family;
         }
 
         private static double Q(ProjectElement element, string key)
