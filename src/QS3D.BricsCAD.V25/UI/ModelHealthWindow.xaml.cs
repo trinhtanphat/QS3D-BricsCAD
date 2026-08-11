@@ -20,7 +20,12 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly string _drawingFingerprintAtOpen;
         private bool _staleSnapshot;
 
-        public ModelHealthWindow(
+        public ModelHealthWindow(Document document, IReadOnlyList<ModelHealthIssue> issues, Action<ModelHealthIssue>? locate = null)
+            : this(document, ResolveProjectAtOpen(document), issues, locate)
+        {
+        }
+
+        internal ModelHealthWindow(
             Document document,
             ProjectState projectAtOpen,
             IReadOnlyList<ModelHealthIssue> issues,
@@ -93,6 +98,13 @@ namespace QS3D.BricsCAD.V25.UI
                    current.UpdatedUtc == _updatedUtcAtOpen &&
                    current.ChangeVersion == _changeVersionAtOpen &&
                    string.Equals(current.DrawingFingerprint ?? string.Empty, _drawingFingerprintAtOpen, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static ProjectState ResolveProjectAtOpen(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (ProjectContextCoordinator.TryGetReadOnly(document, out var project)) return project;
+            throw new InvalidOperationException("Model Health cần một QS3D project hiện hữu; cửa sổ kiểm tra không tạo project mới.");
         }
 
         private void MarkSnapshotStale(string reason)
