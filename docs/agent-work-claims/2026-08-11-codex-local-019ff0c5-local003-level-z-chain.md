@@ -99,6 +99,12 @@ Baseline audited before this expansion: `origin/main@67e822d0`. The next full Co
 
 Reserve only that smoke file to require `WallRegenerator.Regenerate(...)` to throw for the present NaN value and to prove no derived wall quantities were partially written. Preserve the remaining finite clamping assertions in the same smoke. Do not edit `SemanticNumber`, regenerators, quantity math or the dedicated semantic-number regression; their released production contract remains authoritative. Re-run the complete Core smoke after this narrow reconciliation.
 
+## 2026-08-12 generated-stale smoke compile reconciliation expansion
+
+Baseline audited before this expansion: `origin/main@aff0efa0`. The completed generated-stale freshness lane published `tests/QS3D.Core.SmokeTests/ProjectElementGeneratedStaleClearFreshnessSmoke.cs` with three calls to a nonexistent `Require(...)` helper, while the file already defines the equivalent `True(bool, string)` assertion helper. This prevents the full Core smoke project from compiling.
+
+Reserve only that released smoke file to replace those three unresolved helper calls with `True(...)`, preserving each condition and message byte-for-byte. Do not edit `ProjectElement`, generated-stale semantics, timestamps, dirty flags or any production source. Re-run the complete Core smoke after this compile-only reconciliation.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
