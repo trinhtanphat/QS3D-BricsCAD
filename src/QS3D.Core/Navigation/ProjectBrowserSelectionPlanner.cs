@@ -215,7 +215,7 @@ namespace QS3D.Core.Navigation
             return entry;
         }
 
-        private static string CanonicalRequired(string value, string label)
+        private static string CanonicalRequired(string? value, string label)
         {
             var raw = value ?? string.Empty;
             if (string.IsNullOrWhiteSpace(raw)) throw new InvalidOperationException(label + " is required.");
