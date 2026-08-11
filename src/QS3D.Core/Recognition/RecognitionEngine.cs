@@ -13,6 +13,7 @@ namespace QS3D.Core.Recognition
         public RecognitionRule(string id, ElementCategory category, IEnumerable<string>? layerTerms = null, IEnumerable<string>? textTerms = null, IEnumerable<string>? entityTypes = null)
         {
             Id = string.IsNullOrWhiteSpace(id) ? throw new ArgumentException("Rule id is required.", nameof(id)) : id.Trim();
+            if (!Enum.IsDefined(typeof(ElementCategory), category)) throw new ArgumentOutOfRangeException(nameof(category), "Recognition rule category must be defined.");
             Category = category;
             LayerTerms = NormalizeTerms(layerTerms);
             TextTerms = NormalizeTerms(textTerms);
@@ -28,8 +29,18 @@ namespace QS3D.Core.Recognition
 
     public sealed class RecognitionCandidate
     {
+        private ElementCategory _category;
+
         public string RuleId { get; set; } = string.Empty;
-        public ElementCategory Category { get; set; }
+        public ElementCategory Category
+        {
+            get => _category;
+            set
+            {
+                if (!Enum.IsDefined(typeof(ElementCategory), value)) throw new ArgumentOutOfRangeException(nameof(value), "Recognition candidate category must be defined.");
+                _category = value;
+            }
+        }
         public double Confidence { get; set; }
         public IList<string> Evidence { get; } = new List<string>();
         public string EvidenceText => string.Join("; ", Evidence);
@@ -71,6 +82,8 @@ namespace QS3D.Core.Recognition
             foreach (var candidate in candidates)
             {
                 if (candidate == null) throw new ArgumentException("Recognition candidate list cannot contain null.", nameof(candidates));
+                if (!Enum.IsDefined(typeof(ElementCategory), candidate.Category))
+                    throw new ArgumentOutOfRangeException(nameof(candidates), "Recognition candidate category must be defined.");
                 if (double.IsNaN(candidate.Confidence) || double.IsInfinity(candidate.Confidence) || candidate.Confidence < 0d || candidate.Confidence > 1d)
                     throw new ArgumentOutOfRangeException(nameof(candidates), "Recognition confidence must be finite and between 0 and 1.");
             }
