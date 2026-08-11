@@ -31,7 +31,7 @@ namespace QS3D.Core.Geometry
 
             var dx = end.X - start.X;
             var dy = end.Y - start.Y;
-            var midpoint = new Point2((start.X + end.X) * 0.5d, (start.Y + end.Y) * 0.5d);
+            var midpoint = new Point2(start.X + dx * 0.5d, start.Y + dy * 0.5d);
             var nx = -dy / chord;
             var ny = dx / chord;
             var centerOffset = chord * 0.25d * (1d / bulge - bulge);
