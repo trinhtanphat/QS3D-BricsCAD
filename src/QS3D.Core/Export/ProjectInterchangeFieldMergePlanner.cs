@@ -135,6 +135,7 @@ namespace QS3D.Core.Export
             var targetFloors = Index(targetSnapshot.Floors, x => x.Id);
             var targetFamilies = Index(targetSnapshot.Families, x => x.Id);
             var targetElements = Index(targetSnapshot.Elements, x => x.Id);
+            var sourceFamilies = Index(source.Families, x => x.Id);
 
             foreach (var sourceZone in source.Zones.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
@@ -313,6 +314,15 @@ namespace QS3D.Core.Export
                     true);
             }
 
+            AddSelectedSourceNameBatchCollisions(blockers, decisions, InterchangeIdentityKind.Zone, _ => string.Empty, "Zone");
+            AddSelectedSourceNameBatchCollisions(blockers, decisions, InterchangeIdentityKind.Floor, _ => string.Empty, "Floor");
+            AddSelectedSourceNameBatchCollisions(
+                blockers,
+                decisions,
+                InterchangeIdentityKind.Family,
+                id => sourceFamilies.TryGetValue(id, out var family) ? family.Category.ToString() : string.Empty,
+                "Family");
+
             return new ProjectInterchangeFieldMergePlan(
                 source.Project.Id,
                 target.ProjectId,
@@ -355,6 +365,42 @@ namespace QS3D.Core.Export
                 result[id] = item;
             }
             return result;
+        }
+
+        private static void AddSelectedSourceNameBatchCollisions(
+            ICollection<string> blockers,
+            IEnumerable<InterchangeFieldMergeDecision> decisions,
+            InterchangeIdentityKind kind,
+            Func<string, string> scopeSelector,
+            string label)
+        {
+            var selected = decisions
+                .Where(x =>
+                    x.Kind == kind &&
+                    string.Equals(x.Field, "name", StringComparison.OrdinalIgnoreCase) &&
+                    x.Choice == InterchangeFieldPrecedenceChoice.UseSource &&
+                    x.SourceHasValue &&
+                    !string.IsNullOrWhiteSpace(x.SourceValue))
+                .ToArray();
+
+            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var decision in selected)
+            {
+                var scope = (scopeSelector(decision.Id) ?? string.Empty).Trim();
+                var name = decision.SourceValue.Trim();
+                var key = scope + "\u001f" + name;
+                if (!owners.TryGetValue(key, out var firstId))
+                {
+                    owners[key] = decision.Id;
+                    continue;
+                }
+                if (string.Equals(firstId, decision.Id, StringComparison.OrdinalIgnoreCase)) continue;
+
+                blockers.Add(
+                    label + " field merge cannot select source display name '" + name + "' for both semantic IDs " +
+                    firstId + " and " + decision.Id +
+                    (scope.Length == 0 ? "." : " in category " + scope + "."));
+            }
         }
 
         private static void AddStringDecision(
