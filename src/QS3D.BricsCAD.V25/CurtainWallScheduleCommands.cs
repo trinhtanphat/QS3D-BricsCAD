@@ -19,6 +19,18 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
+                var dialog = new SaveFileDialog
+                {
+                    Title = "Xuất bảng Vách Kính",
+                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
+                    DefaultExt = ".xlsx",
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                    FileName = drawingName + "-Vach-Kinh.xlsx"
+                };
+                if (dialog.ShowDialog() != true) return;
+
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 var rows = CurtainWallScheduleBuilder.Build(project);
@@ -40,17 +52,6 @@ namespace QS3D.BricsCAD.V25
                     frame = QuantityReportMath.Add(frame, row.FrameLengthM, "Curtain export frame length");
                 }
 
-                var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
-                var dialog = new SaveFileDialog
-                {
-                    Title = "Xuất bảng Vách Kính",
-                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-                    DefaultExt = ".xlsx",
-                    AddExtension = true,
-                    OverwritePrompt = true,
-                    FileName = drawingName + "-Vach-Kinh.xlsx"
-                };
-                if (dialog.ShowDialog() != true) return;
                 CurtainWallXlsxExporter.Export(dialog.FileName, rows);
 
                 var status = "Curtain XLSX: " + rows.Count + " nhóm • " + panels + " panel • " + glass.ToString("0.###") + " m² kính net • " + frame.ToString("0.###") + " m khung.";
