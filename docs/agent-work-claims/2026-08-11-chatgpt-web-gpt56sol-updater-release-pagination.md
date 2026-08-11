@@ -2,41 +2,50 @@
 
 - Claim ID: `UPDATER-RELEASE-PAGINATION-20260811`
 - Owner: `ChatGPT Web / GPT-5.6 Sol`
-- Status: `ACTIVE`
+- Status: `RELEASED`
 - Registered: `2026-08-11T21:30:10+07:00`
+- Released: `2026-08-11T21:33:00+07:00`
 - Baseline main SHA: `7224baa13b03e5599419bdd6f025ca3dbb2040f3`
 - Parent updater lane: `GITHUB-RELEASE-AUTO-UPDATE-20260811`
 
 ## Verified defect
 
-`GitHubReleaseClient` currently requests only `releases?per_page=20`, then the coordinator filters stable/prerelease and sorts those 20 entries by SemVer. GitHub orders release-list pages by release chronology, not by the updater's channel/SemVer policy. A stable update can therefore be hidden beyond the first 20 entries by newer-in-time prereleases, causing a stable client to incorrectly report that it is up to date.
+`GitHubReleaseClient` requested only `releases?per_page=20`, then the coordinator filtered stable/prerelease and sorted those 20 entries by SemVer. GitHub orders release-list pages by release chronology, not by the updater's channel/SemVer policy. A stable update could therefore be hidden beyond the first 20 entries by newer-in-time prereleases, causing a stable client to incorrectly report that it was up to date.
 
 ## Reserved scope
 
 - `src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs`
-- `scripts/preflight-update-release-pagination.py` (new)
+- `scripts/preflight-update-release-pagination.py`
 - this claim file
 
-## Explicit non-overlap
+No edits were made to `scripts/preflight-auto-update.py`, update PowerShell, SecureUpdateLauncher, UpdateCoordinator/UI, release workflow or unrelated product lanes.
 
-- Do not edit `scripts/preflight-auto-update.py`; it is currently owned by the active updater manifest-v2 compatibility claim.
-- Preserve its exact pinned `ReleasesEndpoint = ...releases?per_page=20` marker so the existing security gate remains valid.
-- Do not edit update manifest/package PowerShell scripts, SecureUpdateLauncher, UpdateCoordinator/UI, release workflow or unrelated product lanes.
+## Completed changes
 
-## Planned fix
+- `21ef752903023e25cd447704c21b868f385486f8` — `fix(updater): scan bounded GitHub release pages`
+  - preserves the exact pinned HTTPS first-page endpoint `...releases?per_page=20` used by the existing updater security gate;
+  - scans additional pages sequentially with explicit `page=N` and `MaxReleasePages = 10`;
+  - applies the existing GitHub headers, 15-second request timeouts, declared response-size guard, streaming 2 MiB byte bound and DTO parsing independently to every page;
+  - uses GitHub's `Link` header `rel="next"` as the authoritative continuation signal, avoiding a false overflow when the final page happens to contain exactly 20 items;
+  - stops immediately when no next page exists;
+  - if GitHub still advertises another page after the tenth bounded page, fails closed with an incomplete-history error instead of deriving a false latest-version result from a truncated history;
+  - preserves strict tag SemVer parsing, GitHub/prerelease consistency, GitHub page/asset host allowlist and signed-manifest asset recognition;
+  - preserves the completed nullable contracts in the release DTOs and optional manifest/page data.
 
-1. Keep the pinned HTTPS repository endpoint and 20-entry page size.
-2. Fetch release pages sequentially with explicit `page=N` and a hard maximum page count.
-3. Keep the existing per-response byte bound, HTTPS/API headers and JSON validation on every page.
-4. Stop as soon as GitHub returns a short page.
-5. If the final allowed page is still full, fail closed with a bounded-scan error instead of silently declaring the user up to date from an incomplete history window.
-6. Convert/aggregate valid releases only after each page is bounded and parsed; preserve prerelease metadata consistency and GitHub URL allowlists.
-7. Add a separate auto-discovered static preflight that requires bounded sequential pagination and the fail-closed scan ceiling.
+- `eec308dce45ef16064ef9cdefcc9b12b0b0594f7` — `test(updater): guard bounded release pagination`
+  - adds an auto-discovered pagination source gate;
+  - requires the hard page bound, sequential `page=N` scan, Link/`rel="next"` continuation, fail-closed scan ceiling and per-page byte bounds;
+  - rejects unbounded `while (true)` pagination and `Task.WhenAll` page bursts.
 
-## Validation / release conditions
+## Validation / coordination
 
-- Re-read current `main` before writes and preserve the completed nullable contracts in `GitHubReleaseClient.cs`.
-- Re-fetch source after commit and verify ancestry with `behind_by: 0`.
-- Do not dispatch GitHub Actions.
-- Native/network runtime proof remains local/integration qualification; no remote runtime PASS claim.
-- Release this claim only after source + pagination regression gate are on `main`.
+- Re-read `scripts/preflight-updater-nullability.py`; all existing nullable-flow markers for `GitHubReleaseClient.cs` remain present in the pagination implementation.
+- Re-read the neighboring manifest-v2 compatibility claim; it closed `SUPERSEDED / NO IMPLEMENTATION REQUIRED` and did not alter this client lane.
+- Compare from `eec308dce45ef16064ef9cdefcc9b12b0b0594f7` to then-current `main` reported `behind_by: 0`; later commits preserved the pagination changes.
+- No force-push, reset or rebase was used.
+- No GitHub Actions workflow was dispatched.
+- This connector session did not execute a fresh exact-V25 compile after the pagination commit; the immediately preceding local nullable lane had compiled the updater client before this change, so no post-pagination native/build PASS is claimed here.
+
+## Result
+
+Release discovery no longer silently trusts only the first 20 chronological GitHub releases. It scans a reviewed bounded history window and fails closed if the history is still incomplete, preventing false `UpToDate` decisions caused by prerelease-heavy release histories.
