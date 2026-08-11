@@ -5,21 +5,22 @@
 - Timestamp: 2026-08-11T23:32:00+07:00
 - Baseline `main` SHA: `874ccc3f7cbf37bf988d599e6848c4afd42ba423`
 - Priority: P1 diagnostic/readiness fail-closed integrity
-- Exact scope: Reject undefined `HealthSeverity` values at the `ModelHealthIssue` construction boundary so corrupt/out-of-range severities cannot be silently excluded from `HealthSummary` counters and accidentally report healthy/release-ready state. Preserve Info/Warning/Error semantics and null-summary-entry behavior.
+- Exact scope: Make `HealthSummary` reject undefined `HealthSeverity` values before computing counters/readiness so corrupt/out-of-range severities cannot be silently excluded and accidentally report healthy/release-ready state. Preserve Info/Warning/Error semantics and null-summary-entry behavior.
 - Expected surfaces:
-  - `src/QS3D.Core/Diagnostics/ModelHealthService.cs`
+  - `src/QS3D.Core/Diagnostics/HealthSummary.cs`
   - `tests/QS3D.Core.SmokeTests/HealthSummaryReadinessSmoke.cs`
 - Excluded scope:
   - changes to existing health issue codes or severity assignments
-  - broader model-health inspection semantics
+  - `ModelHealthIssue` constructor changes or broader model-health inspection semantics
   - BricsCAD/native/runtime/UI behavior
   - GitHub Actions
 - Validation plan:
-  - focused smoke proving `(HealthSeverity)999` fails at issue construction
+  - focused smoke proving a deliberately corrupted `(HealthSeverity)999` issue fails when entering `HealthSummary`
   - preserve warning/error/info readiness semantics and existing null-entry summary behavior
   - re-read current `main` target blobs before every write
   - no local `dotnet` or BricsCAD runtime is available in this environment
 - Coordination:
   - checked current claim registry and recent commit history immediately before registration; no HealthSeverity/HealthSummary integrity claim was present
+  - narrowed implementation from the large `ModelHealthService.cs` construction boundary to the small summary/readiness boundary before any substantive code edit, avoiding unsafe replacement of connector-truncated source
   - no GitHub Actions will be dispatched
-- Completion condition: undefined severity values fail closed before entering health summaries; focused regression is present; this claim is marked COMPLETED.
+- Completion condition: undefined severity values fail closed before readiness is calculated; focused regression is present; this claim is marked COMPLETED.
