@@ -33,6 +33,19 @@ for name in FILES:
     if "DocumentBoundWindowLifetime.Attach(this, _document);" not in text:
         errors.append(name + " must close automatically when its source DWG is destroyed.")
 
+audit = UI / "AuditLogWindow.xaml.cs"
+if audit.is_file():
+    text = audit.read_text(encoding="utf-8")
+    for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
+        "Chưa có QS3D project hiện hữu; Audit Log không tạo project mới",
+        "_rows = Array.Empty<AuditEvent>()",
+    ):
+        if token not in text:
+            errors.append("AuditLogWindow missing read-only viewer token: " + token)
+    if "ProjectContextCoordinator.GetOrCreate" in text:
+        errors.append("AuditLogWindow must not create/cache project state merely to display audit history.")
+
 curtain = UI / "CurtainWallWindow.xaml.cs"
 if curtain.is_file():
     text = curtain.read_text(encoding="utf-8")
@@ -83,4 +96,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: every source-DWG-bound modeless window closes with its source drawing; Curtain re-resolves selected Family, Rebar Mesh rejects replaced project state, and Model Health uses read-only semantic stamps to block stale Locate without creating project state.")
+print("PASS: document-bound modeless windows close with their DWG; Audit Log and Model Health remain read-only, Model Health uses semantic snapshot stamps, Curtain re-resolves selected Family, and Rebar Mesh rejects replaced project state.")
