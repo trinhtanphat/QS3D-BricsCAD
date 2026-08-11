@@ -163,10 +163,7 @@ namespace QS3D.Core.Geometry
             EnsureFiniteDerived("Grid LINE offset", qpx, qpy);
             var rLength = Length(rx, ry);
             var sLength = Length(sx, sy);
-            var scale = rLength * sLength;
-            EnsureFiniteDerived("Grid LINE direction scale", scale);
-            var crossTolerance = tolerance * Math.Max(1.0, scale);
-            EnsureFiniteDerived("Grid LINE cross tolerance", crossTolerance);
+            var crossTolerance = LineCrossTolerance(tolerance, rLength, sLength);
 
             if (Math.Abs(rxs) <= crossTolerance)
             {
@@ -403,8 +400,37 @@ namespace QS3D.Core.Geometry
         private static double Cross(double ax, double ay, double bx, double by)
         {
             EnsureFiniteDerived("Grid intersection cross-product input", ax, ay, bx, by);
-            var value = ax * by - ay * bx;
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (scaleA == 0.0 || scaleB == 0.0) return 0.0;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!IsFinite(normalized)) throw new OverflowException("Grid intersection cross product exceeds the supported numeric range.");
+            var smallerScale = Math.Min(scaleA, scaleB);
+            var largerScale = Math.Max(scaleA, scaleB);
+            var scaled = normalized * smallerScale;
+            if (!IsFinite(scaled)) throw new OverflowException("Grid intersection cross product exceeds the supported numeric range.");
+            var value = scaled * largerScale;
             if (!IsFinite(value)) throw new OverflowException("Grid intersection cross product exceeds the supported numeric range.");
+            return value;
+        }
+
+        private static double LineCrossTolerance(double tolerance, double rLength, double sLength)
+        {
+            EnsureFiniteDerived("Grid LINE cross tolerance input", tolerance, rLength, sLength);
+            if (!(rLength > 0.0) || !(sLength > 0.0))
+                throw new InvalidOperationException("Grid LINE cross tolerance requires positive finite line lengths.");
+
+            var smallerLength = Math.Min(rLength, sLength);
+            var largerLength = Math.Max(rLength, sLength);
+            if (smallerLength <= 1.0 / largerLength) return tolerance;
+
+            var factors = new[] { tolerance, smallerLength, largerLength };
+            Array.Sort(factors);
+            var partial = factors[0] * factors[1];
+            if (!IsFinite(partial)) throw new OverflowException("Grid LINE cross tolerance exceeds the supported numeric range.");
+            var value = partial * factors[2];
+            if (!IsFinite(value)) throw new OverflowException("Grid LINE cross tolerance exceeds the supported numeric range.");
             return value;
         }
 
