@@ -51,6 +51,7 @@ for token in (
     if token not in test:
         errors.append("UseSource provenance smoke missing regression token: " + token)
 
+doc_boundary = doc.replace("**", "")
 for token in (
     "cleanup authorization",
     "does not perform native cleanup",
@@ -60,7 +61,7 @@ for token in (
     "portable semantic re-export",
     "LOCAL_ONLY",
 ):
-    if token not in doc:
+    if token not in doc_boundary:
         errors.append("UseSource provenance documentation missing boundary token: " + token)
 
 if errors:

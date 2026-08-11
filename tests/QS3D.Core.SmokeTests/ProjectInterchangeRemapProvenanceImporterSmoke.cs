@@ -107,7 +107,7 @@ namespace QS3D.Core.SmokeTests
             {
                 DrawingFingerprint = "TARGET-DWG"
             };
-            var existing = new ProjectElement("E1", ElementCategory.Beam)
+            var existing = new ProjectElement("E1", ElementCategory.Beam, string.Empty, string.Empty, string.Empty)
             {
                 DrawingFingerprint = target.DrawingFingerprint
             };
@@ -124,7 +124,7 @@ namespace QS3D.Core.SmokeTests
                 DrawingFingerprint = withFingerprint ? "SOURCE-DWG" : string.Empty,
                 UpdatedUtc = new DateTime(2026, 8, 11, 0, 48, 0, DateTimeKind.Utc)
             };
-            var collision = new ProjectElement("E1", ElementCategory.Beam)
+            var collision = new ProjectElement("E1", ElementCategory.Beam, string.Empty, string.Empty, string.Empty)
             {
                 DrawingFingerprint = source.DrawingFingerprint
             };
@@ -133,7 +133,7 @@ namespace QS3D.Core.SmokeTests
             collision.Properties["Mark"] = "SOURCE-1";
             source.Elements.Add(collision);
 
-            var added = new ProjectElement("E2", ElementCategory.Beam)
+            var added = new ProjectElement("E2", ElementCategory.Beam, string.Empty, string.Empty, string.Empty)
             {
                 DrawingFingerprint = source.DrawingFingerprint
             };

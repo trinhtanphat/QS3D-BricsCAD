@@ -131,7 +131,7 @@ namespace QS3D.Core.Export
                             ownershipDiscarded = checked(ownershipDiscarded + 1);
                             continue;
                         }
-                        EnsureFamilyPropertyRuntimeCompatible(snapshot.Id, property.Key, property.Value);
+                        EnsureFamilyPropertyRuntimeCompatible(snapshot.Id, property.Key, property.Value ?? string.Empty);
                         if (!string.IsNullOrWhiteSpace(property.Value) && ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key))
                             throw new InvalidOperationException(
                                 "Import As New found unregistered ID/ref-like Family property " + property.Key +
@@ -169,7 +169,7 @@ namespace QS3D.Core.Export
 
                         if (ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference))
                         {
-                            added.Properties[property.Key] = MapPropertyReference(plan.Remap, reference, property.Value, ref rewrites);
+                            added.Properties[property.Key] = MapPropertyReference(plan.Remap, reference, property.Value ?? string.Empty, ref rewrites);
                             continue;
                         }
 
@@ -264,7 +264,7 @@ namespace QS3D.Core.Export
             {
                 foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (IsImportedOwnershipMetadata(property.Key)) continue;
+                    if (IsImportedOwnershipMetadata(property.Key ?? string.Empty)) continue;
                     var keyLength = (property.Key ?? string.Empty).Trim().Length;
                     var valueLength = (property.Value ?? string.Empty).Length;
                     if (keyLength > FamilyMaxPropertyKeyLength)

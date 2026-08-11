@@ -114,7 +114,7 @@ Physical multi-owner wall-solid union/reconciliation is **not** implemented by g
 - Opening property changes and link/re-host/unlink changes stale dependent frame overlays without unnecessarily stale-marking the backing host.
 - Curtain destructive ownership and dedicated ownership health are policy-driven through the shared generated-handle ownership definition rather than a manual generated-slot list.
 
-Remaining Curtain product/runtime work includes panel-by-panel backing glass solids, broader unsupported/freeform path parity and exact V25 runtime qualification of current LINE/open/bulged frame paths. Whole-command host+frame rollback must remain conservative until proven under the final runtime contract.
+Remaining Curtain product/runtime work includes panel-by-panel backing glass solids, broader unsupported/freeform path parity and exact V25 runtime qualification of current LINE/open/bulged frame paths. Source now wraps all canonical host/frame builder transactions in one outer native transaction with semantic snapshot rollback; phase-failure injection and save/reopen proof remain LOCAL_ONLY.
 
 ### Structure / recognition / quantities
 

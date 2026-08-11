@@ -30,11 +30,11 @@ if bq.is_file():
     mutation = text.find("VisibleBqColumnsKey", persist)
     if persist < 0 or persist_guard < 0 or mutation < 0 or persist_guard > mutation:
         errors.append("BQ column preference mutation must require the source DWG before project metadata changes")
-    for needle in ('EnsureActive("tính lại BQ")', 'EnsureActive("định vị BQ")', 'EnsureActive("xuất BQ XLSX")'):
+    for needle in ('EnsureCurrentProject("tính lại BQ")', 'EnsureCurrentProject("định vị BQ")', 'EnsureCurrentProject("xuất BQ XLSX")'):
         if needle not in text:
             errors.append("BQ modeless callback missing active-DWG guard: " + needle)
     export = text.find("private void OnExportClick")
-    export_guard = text.find('EnsureActive("xuất BQ XLSX")', export)
+    export_guard = text.find('EnsureCurrentProject("xuất BQ XLSX")', export)
     recalc = text.find("_rows = _recalculate()", export)
     exporter = text.find("XlsxQuantityExporter.Export", export)
     if export < 0 or export_guard < 0 or recalc < 0 or exporter < 0 or not (export_guard < recalc < exporter):

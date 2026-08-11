@@ -107,9 +107,13 @@ for name, (path, health_marker, commands) in TABLES.items():
     if "không tạo project mới" not in health:
         errors.append(name + " native Table health must explain BLOCKED no-project behavior")
 
-    build_or_refresh_mutation = text.count("ProjectContextCoordinator.GetOrCreate(document)")
-    if build_or_refresh_mutation < 3:
-        errors.append(name + " native Table Build/Refresh/Remove must keep explicit project mutation path")
+    existing_project_mutations = text.count("RequireExistingProject(document")
+    if existing_project_mutations < 3:
+        errors.append(name + " native Table Build/Refresh/Remove must require an existing project before explicit mutation")
+    if "private static QS3D.Core.Domain.ProjectState RequireExistingProject" not in text:
+        errors.append(name + " native Table must centralize the existing-project guard")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append(name + " native Table lifecycle must not create a replacement project")
 
 if HUB.is_file():
     text = HUB.read_text(encoding="utf-8")
@@ -130,4 +134,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Release Check, Health All and all five native Table health commands inspect existing QS3D state without creating/touching project identity; Build/Refresh/Remove retain explicit mutation paths and Schedule Hub exposes each native Table lifecycle command exactly once.")
+print("PASS: Release Check, Health All and all five native Table lifecycles require existing QS3D state without creating replacement project identity; Build/Refresh/Remove retain explicit mutation paths and Schedule Hub exposes each command exactly once.")

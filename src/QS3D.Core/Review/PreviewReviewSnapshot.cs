@@ -478,7 +478,9 @@ namespace QS3D.Core.Review
         private static string Required(XElement element, string name)
         {
             var value = element.Attribute(name)?.Value;
-            return !string.IsNullOrWhiteSpace(value) ? value : throw new InvalidDataException("Missing preview review attribute: " + name + ".");
+            if (value == null || value.Trim().Length == 0)
+                throw new InvalidDataException("Missing preview review attribute: " + name + ".");
+            return value;
         }
 
         private static string CanonicalRequired(XElement element, string name)

@@ -71,7 +71,7 @@ if room_finish.is_file():
 bq_window = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs"
 if bq_window.is_file():
     text = bq_window.read_text(encoding="utf-8")
-    for needle in ("QuantityReportTotals.FromRows", 'EnsureActive("xuất BQ XLSX")', "_rows = _recalculate()"):
+    for needle in ("QuantityReportTotals.FromRows", 'EnsureCurrentProject("xuất BQ XLSX")', "_rows = _recalculate()"):
         if needle not in text: errors.append("BQ review/export consistency guard missing: " + needle)
 
 print("QS3D schedule arithmetic/provenance preflight")
