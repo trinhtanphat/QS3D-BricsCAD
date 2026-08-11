@@ -60,6 +60,7 @@ namespace QS3D.Core.SmokeTests
             ProjectBrowserPlannerSmoke.Run();
             ProjectBrowserQueryPlannerSmoke.Run();
             SemanticSelectionInspectorSmoke.Run();
+            SemanticSelectionBulkEditSmoke.Run();
             ProjectInterchangeJsonSmoke.Run();
             ProjectInterchangeImportPreviewSmoke.Run();
             ProjectInterchangeValidatedSnapshotReaderSmoke.Run();
