@@ -134,8 +134,10 @@ namespace QS3D.Core.Rules
             var result = new List<string>();
             foreach (var key in element.Properties.Keys.Where(x => x.StartsWith(ProvenancePrefix, StringComparison.OrdinalIgnoreCase)).ToArray())
             {
-                var output = key.Substring(ProvenancePrefix.Length).Trim();
-                if (output.Length == 0 || activeOutputs.Contains(output)) continue;
+                var output = key.Substring(ProvenancePrefix.Length);
+                if (string.IsNullOrWhiteSpace(output) || !string.Equals(output, output.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Element " + element.Id + " contains malformed quantity-rule provenance key: " + key + ".");
+                if (activeOutputs.Contains(output)) continue;
                 if (!result.Contains(output, StringComparer.OrdinalIgnoreCase)) result.Add(output);
             }
             return result;
