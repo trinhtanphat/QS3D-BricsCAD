@@ -32,7 +32,7 @@ required = {
         "new AutoHostLinkCommands().AutoLinkHosts()",
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
-        'RibbonButtonSpec("Khoét Cửa/Lỗ chọn", "QS3DCUTSELECTEDOPENINGS")',
+        'Button("Khoét Cửa/Lỗ chọn", "QS3DCUTSELECTEDOPENINGS")',
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
         'Content="Khoét Cửa/Lỗ đang chọn" Tag="QS3DCUTSELECTEDOPENINGS"',

@@ -151,9 +151,9 @@ if SOURCE.is_file():
 if RIBBON.is_file():
     text = RIBBON.read_text(encoding="utf-8")
     for token in (
-        'new RibbonButtonSpec("Vẽ Dầm", "QS3DDRAWBEAM")',
-        'new RibbonButtonSpec("Vẽ Cột", "QS3DDRAWCOLUMN")',
-        'new RibbonButtonSpec("Vẽ Sàn", "QS3DDRAWSLAB")',
+        'Button("Vẽ Dầm", "QS3DDRAWBEAM")',
+        'Button("Vẽ Cột", "QS3DDRAWCOLUMN")',
+        'Button("Vẽ Sàn", "QS3DDRAWSLAB")',
     ):
         if token not in text:
             errors.append("primary quick structure Ribbon wiring missing: " + token)
