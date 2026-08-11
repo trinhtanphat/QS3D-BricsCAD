@@ -32,7 +32,7 @@ Do not delete completed/released claims; they are lightweight coordination histo
 2. Search current claims, including blocked reservations:
 
    ```powershell
-   rg -n -C 3 '^- Status: `(ACTIVE|BLOCKED)`$' docs/agent-work-claims
+   rg -n -C 3 '^- Status: `(ACTIVE|BLOCKED)`\r?$' docs/agent-work-claims
    ```
 
 3. Read the full files for any claim that touches the same feature, files, commands, tests, runtime scenario or documentation surface.
