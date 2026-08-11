@@ -3,6 +3,8 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+AUDIT = ROOT / "src/QS3D.Core/Audit/AuditTrail.cs"
+SNAPSHOT_STATE = ROOT / "src/QS3D.Core/Persistence/ProjectStateSnapshot.cs"
 TARGETS = [
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/SemanticElementTableBuilder.cs",
@@ -55,8 +57,7 @@ for path, start_token, end_token, audit_token, label, requires_model_space in TA
     method = text[start:end]
     snapshot = method.find("ProjectStateSnapshot.Capture(project)")
     audit = method.find(audit_token)
-    touch = method.find("project.Touch();", audit + 1)
-    commit = method.find("transaction.Commit();", touch + 1)
+    commit = method.find("transaction.Commit();", audit + 1)
     committed = method.find("committed = true;", commit + 1)
     if committed < 0:
         committed = method.find("cadCommitted = true;", commit + 1)
@@ -64,15 +65,13 @@ for path, start_token, end_token, audit_token, label, requires_model_space in TA
     if restore < 0:
         restore = method.find("rollback.Restore(project)", committed + 1)
 
-    if min(snapshot, audit, touch, commit, committed, restore) < 0:
-        errors.append(path.name + ": missing snapshot/audit/touch/commit/rollback token in " + label)
-    elif not snapshot < audit < touch < commit < committed < restore:
-        errors.append(path.name + ": expected snapshot -> audit -> Touch -> CAD commit -> committed flag -> rollback catch in " + label)
+    if min(snapshot, audit, commit, committed, restore) < 0:
+        errors.append(path.name + ": missing snapshot/audit/commit/rollback token in " + label)
+    elif not snapshot < audit < commit < committed < restore:
+        errors.append(path.name + ": expected snapshot -> audit/revision -> CAD commit -> committed flag -> rollback catch in " + label)
 
-    if method.count("project.Touch();") != 1:
-        errors.append(path.name + ": " + label + " must Touch project exactly once")
-    if method.find("project.Touch();", commit + 1) >= 0:
-        errors.append(path.name + ": " + label + " must not Touch project after CAD commit")
+    if "project.Touch();" in method:
+        errors.append(path.name + ": " + label + " must not duplicate the audit-owned project Touch")
     if "if (!committed)" not in method and "if (!cadCommitted)" not in method:
         errors.append(path.name + ": " + label + " rollback must remain guarded by CAD commit state")
     if "if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))" not in method:
@@ -82,6 +81,32 @@ for path, start_token, end_token, audit_token, label, requires_model_space in TA
     if "catch (Exception operationError)" not in method or "AggregateException(operationError, restoreError)" not in method:
         errors.append(path.name + ": " + label + " must preserve both operation and rollback failures")
 
+if not AUDIT.is_file():
+    errors.append("missing src/QS3D.Core/Audit/AuditTrail.cs")
+else:
+    audit_text = AUDIT.read_text(encoding="utf-8")
+    record_start = audit_text.find("public void Record(")
+    clear_start = audit_text.find("public void Clear()", record_start + 1) if record_start >= 0 else -1
+    if record_start < 0 or clear_start <= record_start:
+        errors.append("could not isolate AuditTrail.Record")
+    else:
+        record = audit_text[record_start:clear_start]
+        if "_project?.Touch();" not in record:
+            errors.append("AuditTrail.Record must remain the native Table project revision owner")
+        if "_events.Add(item);" not in record:
+            errors.append("AuditTrail.Record must continue appending the audit event")
+
+if not SNAPSHOT_STATE.is_file():
+    errors.append("missing src/QS3D.Core/Persistence/ProjectStateSnapshot.cs")
+else:
+    snapshot_text = SNAPSHOT_STATE.read_text(encoding="utf-8")
+    for token in (
+        "target.AuditEvents.Clear();",
+        "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);",
+    ):
+        if token not in snapshot_text:
+            errors.append("ProjectStateSnapshot must restore audit/revision state: " + token)
+
 print("QS3D native table transaction-boundary preflight")
 if errors:
     for error in errors:
@@ -89,4 +114,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: native table build/remove stays document-bound, build stays ModelSpace-only, metadata/audit/revision commit before CAD, and rollback preserves compound failures.")
+print("PASS: native table build/remove stays document-bound and rollback-safe while AuditTrail.Record owns the single project revision touch before CAD commit.")
