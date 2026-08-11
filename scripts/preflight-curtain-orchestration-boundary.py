@@ -23,9 +23,9 @@ else:
         "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project)",
         "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project)",
         "CurtainWallFrameLiveStateService.TryStampSelected(document, project, out stampWarning)",
-        "ReportPhaseFailure(document, phase, lineHostSolids, pathHostSolids, lineFrames, pathFrames, ex)",
+        "ReportPhaseFailure(document, phase, regenerated, lineHostSolids, pathHostSolids, lineFrames, pathFrames, ex)",
         "private static void ReportPhaseFailure",
-        '"Curtain 3D PARTIAL COMMIT: host LINE="',
+        '"Curtain 3D PARTIAL COMMIT: semantic regenerate="',
         '". Các phase trước đã commit bằng transaction riêng và không bị giả vờ rollback. Chạy QS3DCURTAINFRAMEHEALTH/QS3DHEALTHALL, sửa lỗi rồi rebuild host hoặc chạy QS3DCURTAINFRAMES3D theo kết quả health."',
         '"QS3DCURTAIN3D lỗi tại " + phase',
         "FinalizeUi(document, hostSolids, frameSolids, stamped, regenerated, stampWarning)",
@@ -58,8 +58,10 @@ else:
     finalize_start = text.find("private static void FinalizeUi", report_start + 1) if report_start >= 0 else -1
     report = text[report_start:finalize_start] if report_start >= 0 and finalize_start > report_start else ""
     for token in (
-        "committedHosts == 0 && committedFrames == 0",
+        "regenerated == 0 && committedHosts == 0 && committedFrames == 0",
         "Curtain 3D PARTIAL COMMIT",
+        "semantic regenerate=",
+        "int regenerated",
         "lineHostSolids",
         "pathHostSolids",
         "lineFrames?.Frames",

@@ -65,13 +65,14 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                ReportPhaseFailure(document, phase, lineHostSolids, pathHostSolids, lineFrames, pathFrames, ex);
+                ReportPhaseFailure(document, phase, regenerated, lineHostSolids, pathHostSolids, lineFrames, pathFrames, ex);
             }
         }
 
         private static void ReportPhaseFailure(
             Document document,
             string phase,
+            int regenerated,
             int lineHostSolids,
             int pathHostSolids,
             CurtainFrameBuildResult lineFrames,
@@ -80,13 +81,14 @@ namespace QS3D.BricsCAD.V25
         {
             var committedHosts = checked(lineHostSolids + pathHostSolids);
             var committedFrames = checked((lineFrames?.Frames ?? 0) + (pathFrames?.Frames ?? 0));
-            if (committedHosts == 0 && committedFrames == 0)
+            if (regenerated == 0 && committedHosts == 0 && committedFrames == 0)
             {
                 Report(document, "QS3DCURTAIN3D lỗi tại " + phase + ": " + error.Message);
                 return;
             }
 
-            var status = "Curtain 3D PARTIAL COMMIT: host LINE=" + lineHostSolids +
+            var status = "Curtain 3D PARTIAL COMMIT: semantic regenerate=" + regenerated +
+                " • host LINE=" + lineHostSolids +
                 " • host path=" + pathHostSolids +
                 " • frame LINE=" + (lineFrames?.Frames ?? 0) +
                 " • frame path=" + (pathFrames?.Frames ?? 0) +
