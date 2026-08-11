@@ -26,7 +26,7 @@ for name, (error_prefix, empty_status) in FILES.items():
         "private static void Report(Document document, string status)",
         "try { PaletteCoordinator.SetStatus(status); } catch { }",
         "try { document.Editor.WriteMessage(\"\\nQS3D \" + status); } catch { }",
-        'Report(document, "' + error_prefix + '" + ex.Message);',
+        'Report(document, "' + error_prefix + ' " + ex.Message);',
         'Report(document, "' + empty_status + '");',
     ):
         if token not in text:

@@ -95,7 +95,7 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs": [
         "private readonly Document _document", "FloorLevelWindow(Document document)",
-        "ProjectContextCoordinator.GetOrCreate(_document)", "EnsureBoundDrawingIsActive",
+        "ExistingProjectMutationContext.Require(_document,", "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", "EnsureBoundDrawingIsActive",
         "ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document)",
         "ProjectFloorService.Create", "ProjectFloorService.Update", "ProjectFloorService.Delete",
         "ProjectFloorService.SetActive", "ProjectFloorService.Assign", "ProjectFloorService.ReferenceCount",
@@ -149,6 +149,12 @@ if material_window.is_file():
     text = material_window.read_text(encoding="utf-8")
     if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
         errors.append("Material Catalog modeless callbacks must not create/cache replacement project state")
+
+floor_window = ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs"
+if floor_window.is_file():
+    text = floor_window.read_text(encoding="utf-8")
+    if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
+        errors.append("Floor/Level modeless callbacks must not create/cache replacement project state")
 
 for relative in (
     "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs",

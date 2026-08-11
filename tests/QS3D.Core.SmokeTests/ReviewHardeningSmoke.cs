@@ -68,7 +68,21 @@ namespace QS3D.Core.SmokeTests
             var bltPath = Path.Combine(directory, "blt.xlsx");
             try
             {
-                var row = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "$12510 cost note", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
+                var row = new QuantityReportRow
+                {
+                    Floor = "F",
+                    Zone = "Z",
+                    Category = "WallFinish",
+                    FamilyId = "finish-family",
+                    FamilyName = "$12510 cost note",
+                    ElementName = "Finish instance",
+                    Material = "Concrete",
+                    Note = "ED2 note",
+                    DensityKgM3 = 2400d,
+                    MassKg = 4500d,
+                    DrawingFingerprint = "DWG-FINGERPRINT-1",
+                    Count = 1
+                };
                 row.ElementIds.Add("WF-1"); row.SourceHandles.Add("AB12"); row.SourceHandles.Add("30DE");
                 XlsxQuantityExporter.Export(qs3dPath, new[] { row });
                 var exported = XlsxHandleReader.ReadHandleLookup(qs3dPath, 2);
@@ -99,6 +113,18 @@ namespace QS3D.Core.SmokeTests
                     {
                         var workbook = reader.ReadToEnd();
                         True(workbook.Contains("CHI_TIET")); True(workbook.Contains("TONG_HOP"));
+                    }
+                    using (var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8))
+                    {
+                        var detailSheet = reader.ReadToEnd();
+                        True(detailSheet.Contains("STT")); True(detailSheet.Contains("Tên cấu kiện"));
+                        True(detailSheet.Contains("Vật liệu")); True(detailSheet.Contains("Family ID"));
+                        True(detailSheet.Contains("Tầng/Zone")); True(detailSheet.Contains("Khối lượng riêng (kg/m³)"));
+                        True(detailSheet.Contains("Khối lượng (kg)")); True(detailSheet.Contains("Ghi chú"));
+                        True(detailSheet.Contains(">2400<")); True(detailSheet.Contains(">4500<"));
+                        True(!detailSheet.Contains("r=\"T3\"")); True(!detailSheet.Contains("r=\"U3\""));
+                        True(detailSheet.Contains("QS3D Element ID")); True(detailSheet.Contains("CAD Handle (hex)"));
+                        True(detailSheet.Contains("QS3D Drawing Fingerprint"));
                     }
                 }
                 var ed2Detail = XlsxHandleReader.ReadHandleLookup(ed2Path, 3);

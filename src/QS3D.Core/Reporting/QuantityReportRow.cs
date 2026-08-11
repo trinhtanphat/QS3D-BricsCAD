@@ -9,7 +9,11 @@ namespace QS3D.Core.Reporting
         public string Floor { get; set; } = string.Empty;
         public string Zone { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;
+        public string FamilyId { get; set; } = string.Empty;
         public string FamilyName { get; set; } = string.Empty;
+        public string ElementName { get; set; } = string.Empty;
+        public string Material { get; set; } = string.Empty;
+        public string Note { get; set; } = string.Empty;
         public string DrawingFingerprint { get; set; } = string.Empty;
         public int Count { get; set; }
         public double GrossConcreteM3 { get; set; }
@@ -24,8 +28,13 @@ namespace QS3D.Core.Reporting
         public double BottomAreaM2 { get; set; }
         public double TopAreaM2 { get; set; }
         public double OtherAreaM2 { get; set; }
+        public double? DensityKgM3 { get; set; }
+        public double? MassKg { get; set; }
         public IList<string> ElementIds { get; }
         public IList<string> SourceHandles { get; }
+        public string FloorZoneText => string.IsNullOrWhiteSpace(Floor)
+            ? Zone
+            : string.IsNullOrWhiteSpace(Zone) ? Floor : Floor + " / " + Zone;
         public string ElementIdText => string.Join(";", ElementIds.Where(x => !string.IsNullOrWhiteSpace(x)));
         public string SourceHandleText => string.Join(";", SourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)));
     }
