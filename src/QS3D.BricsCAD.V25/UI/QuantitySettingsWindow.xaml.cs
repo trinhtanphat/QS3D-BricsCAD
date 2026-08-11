@@ -76,9 +76,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             var result = new QuantityCalculationSettings
             {
-                SchemaVersion = _loadedSettings.SchemaVersion <= 0
-                    ? QuantityCalculationSettings.CurrentSchemaVersion
-                    : _loadedSettings.SchemaVersion,
+                SchemaVersion = QuantityCalculationSettings.CurrentSchemaVersion,
                 FormworkTolerance = ParseNonNegative(FormworkToleranceBox.Text, "Dung sai cốp pha"),
                 BlindingConcreteOffset = ParseNonNegative(BlindingConcreteOffsetBox.Text, "Offset bê tông lót"),
                 MinSubtractAreaMm2 = ParseNonNegative(MinSubtractAreaBox.Text, "Diện tích trừ tối thiểu"),
