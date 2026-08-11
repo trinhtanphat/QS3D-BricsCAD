@@ -21,6 +21,7 @@ namespace QS3D.BricsCAD.V25.Services
             if (document == null) throw new ArgumentNullException(nameof(document));
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
             if (snapshots.Count == 0) return 0;
+            EnsureCapturePreflight(document, snapshots, category);
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
             try
@@ -40,6 +41,7 @@ namespace QS3D.BricsCAD.V25.Services
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            EnsureCapturePreflight(document, new[] { snapshot }, category);
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
             try
@@ -51,6 +53,23 @@ namespace QS3D.BricsCAD.V25.Services
                 RestoreOrThrow(project, rollback, operationError, "Semantic capture");
                 throw;
             }
+        }
+
+        private static void EnsureCapturePreflight(
+            Document document,
+            IReadOnlyList<EntitySnapshot> snapshots,
+            ElementCategory category)
+        {
+            if (snapshots == null) throw new ArgumentNullException(nameof(snapshots));
+            foreach (var snapshot in snapshots)
+            {
+                if (snapshot == null)
+                    throw new ArgumentException("Semantic capture selection cannot contain a null snapshot.", nameof(snapshots));
+                EntitySnapshotCaptureEligibility.EnsureReady(snapshot, category);
+            }
+
+            if (!CadUnitService.TryGetPolicy(document, out _, out _))
+                throw new InvalidOperationException("Drawing units are unresolved. Run QS3DUNITS before semantic capture.");
         }
 
         private static bool CaptureSnapshotCore(Document document, ProjectState project, EntitySnapshot snapshot, ElementCategory category)

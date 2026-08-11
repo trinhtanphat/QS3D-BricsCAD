@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace QS3D.BricsCAD.V25.Updates
@@ -79,6 +78,7 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 if (release == null || release.Draft) continue;
                 if (!SemanticReleaseVersion.TryParse(release.TagName, out var version)) continue;
+                if (release.Prerelease != version.IsPrerelease) continue;
                 if (!TryGitHubUri(release.HtmlUrl, out var pageUri)) continue;
 
                 Uri manifestUri = null;
