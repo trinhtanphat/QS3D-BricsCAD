@@ -111,6 +111,10 @@ namespace QS3D.BricsCAD.V25.Services
                         // cannot swap generated owner-slot metadata between the early precheck and native
                         // invalidation. This check must remain immediately before destructive preparation.
                         GeneratedNativeCleanupCoverageGuard.EnsureSupported(lockedInvalidationTargets);
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange field merge / pre-native cleanup");
 
                         // Prepare native erasure before Core mutation while the target's reviewed generated
                         // handle metadata still exists. Prepare is rollback-capable and does not clear semantic
@@ -122,6 +126,14 @@ namespace QS3D.BricsCAD.V25.Services
                             lockedProject,
                             lockedInvalidationTargets);
 
+                        // A document lock cannot prevent an external process from replacing the sidecar.
+                        // Recheck after native preparation while CAD erasure is still uncommitted so a changed
+                        // backing store aborts the transaction before any semantic source data is applied.
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange field merge / pre-core apply");
+
                         var coreResult = ProjectInterchangeFieldMergeImporter.Import(
                             lockedProject,
                             json,
@@ -132,6 +144,13 @@ namespace QS3D.BricsCAD.V25.Services
                         // authorization succeeds. CommitMetadata is intentionally retained as the native
                         // invalidator's final parity sweep; after the Core clear it is idempotent.
                         invalidation.CommitMetadata();
+
+                        // Core mutation and metadata cleanup are still rollback-capable until CAD commit.
+                        // Refuse to commit against a sidecar revision that changed during either phase.
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange field merge / pre-CAD commit");
 
                         transaction.Commit();
                         cadCommitted = true;
