@@ -67,17 +67,85 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (element == null) continue;
                     if (!element.Properties.TryGetValue(HandleKey, out var rawHandle) || string.IsNullOrWhiteSpace(rawHandle)) continue;
                     var handle = rawHandle.Trim();
-                    if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) continue;
+                    if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GENERATED_SOLID_HANDLE_INVALID",
+                            HealthSeverity.Error,
+                            "GeneratedSolidHandle không phải handle hex hợp lệ. Health chỉ báo lỗi và không sửa metadata/project.",
+                            element.Id));
+                        continue;
+                    }
 
                     ObjectId id;
-                    try { id = document.Database.GetObjectId(false, new Handle(value), 0); }
-                    catch { continue; }
-                    if (id.IsNull || !id.IsValid) continue;
+                    try
+                    {
+                        id = document.Database.GetObjectId(false, new Handle(value), 0);
+                    }
+                    catch (System.Exception ex) when (IsRecoverableDiagnosticFailure(ex))
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GENERATED_SOLID_HANDLE_UNRESOLVED",
+                            HealthSeverity.Error,
+                            "GeneratedSolidHandle không resolve được tới đối tượng CAD hiện tại: " + ex.Message,
+                            element.Id));
+                        continue;
+                    }
 
-                    Entity? entity;
-                    try { entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity; }
-                    catch { continue; }
-                    if (entity == null || entity.IsErased || !(entity is Solid3d)) continue;
+                    if (id.IsNull || !id.IsValid)
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GENERATED_SOLID_HANDLE_UNRESOLVED",
+                            HealthSeverity.Error,
+                            "GeneratedSolidHandle không resolve được tới ObjectId hợp lệ trong database hiện tại.",
+                            element.Id));
+                        continue;
+                    }
+
+                    DBObject? dbObject;
+                    try
+                    {
+                        dbObject = transaction.GetObject(id, OpenMode.ForRead, true);
+                    }
+                    catch (System.Exception ex) when (IsRecoverableDiagnosticFailure(ex))
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GENERATED_SOLID_ENTITY_UNREADABLE",
+                            HealthSeverity.Error,
+                            "Đối tượng CAD được GeneratedSolidHandle tham chiếu không thể đọc trong health inspection: " + ex.Message,
+                            element.Id));
+                        continue;
+                    }
+
+                    if (dbObject == null)
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GENERATED_SOLID_ENTITY_UNREADABLE",
+                            HealthSeverity.Error,
+                            "GeneratedSolidHandle resolve được ObjectId nhưng không đọc được đối tượng CAD tương ứng.",
+                            element.Id));
+                        continue;
+                    }
+
+                    if (dbObject.IsErased)
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GENERATED_SOLID_ENTITY_ERASED",
+                            HealthSeverity.Error,
+                            "GeneratedSolidHandle đang trỏ tới đối tượng CAD đã bị erase. Health chỉ báo lỗi và không tự sửa/xóa metadata.",
+                            element.Id));
+                        continue;
+                    }
+
+                    if (!(dbObject is Solid3d entity))
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GENERATED_SOLID_ENTITY_TYPE_MISMATCH",
+                            HealthSeverity.Error,
+                            "GeneratedSolidHandle đang trỏ tới đối tượng CAD không phải Solid3d.",
+                            element.Id));
+                        continue;
+                    }
 
                     if (!GeneratedGeometryService.HasMatchingOwnership(entity, project, element))
                     {
