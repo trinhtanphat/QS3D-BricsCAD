@@ -83,7 +83,6 @@ namespace QS3D.BricsCAD.V25
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             var project = ExistingProjectMutationContext.Require(document, "Save Project");
-            SyncDrawingIdentity(project, document);
             var path = GetProjectPath(document);
             if ((File.Exists(path) || File.Exists(path + ".bak")) && project.Metadata.TryGetValue(RecoveryRequiredKey, out var blocked) && string.Equals(blocked, "true", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("QS3D project load failed and the existing .qsdb will not be overwritten. Recover or move the damaged project file first.");
@@ -105,6 +104,7 @@ namespace QS3D.BricsCAD.V25
                         throw new InvalidOperationException("QS3D save cannot verify its sidecar baseline. Reload and retry.");
 
                     var pathTransition = !baseline.IsForPath(path);
+                    SyncDrawingIdentity(project, document);
                     if (pathTransition)
                         Store.SaveNew(project, path);
                     else if (recoveredFromBackup)
