@@ -68,6 +68,8 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWGLASSWALLADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquirePath(document, "Vách Kính", 2, false);
                 if (points == null) return;
 
@@ -90,6 +92,7 @@ namespace QS3D.BricsCAD.V25
                     hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWGLASSWALLADV");
                 Execute(
                     document,
                     ElementCategory.GlassWall,
@@ -148,6 +151,8 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWWALLPIERADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 // Advanced WallPier keeps the same specialized two-point LINE geometry contract.
                 var points = AcquireFixedPath(document, "Trụ Tường", 2);
                 if (points == null) return;
@@ -171,6 +176,7 @@ namespace QS3D.BricsCAD.V25
                     hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWWALLPIERADV");
                 Execute(
                     document,
                     ElementCategory.WallPier,
@@ -228,6 +234,8 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWSTRUCTWALLADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquireFixedPath(document, "Vách BTCT", 2);
                 if (points == null) return;
 
@@ -250,6 +258,7 @@ namespace QS3D.BricsCAD.V25
                     hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWSTRUCTWALLADV");
                 Execute(
                     document,
                     ElementCategory.StructuralWall,
@@ -304,6 +313,8 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWFOUNDATIONADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquirePath(document, "Móng", 3, true);
                 if (points == null) return;
 
@@ -321,6 +332,7 @@ namespace QS3D.BricsCAD.V25
                     hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWFOUNDATIONADV");
                 Execute(
                     document,
                     ElementCategory.Foundation,
@@ -602,6 +614,20 @@ namespace QS3D.BricsCAD.V25
                 if (active != null && active.Category == category) return active;
             }
             return project.Families.FirstOrDefault(x => x.Category == category);
+        }
+
+        private static void RequirePromptContextUnchanged(
+            Document document,
+            QS3D.Core.Units.LengthUnit promptUnit,
+            Matrix3d promptUcs,
+            string operation)
+        {
+            EnsureActive(document, operation + " / prompt freshness");
+            RequireModelSpace(document);
+            if (!document.Editor.CurrentUserCoordinateSystem.Equals(promptUcs))
+                throw new InvalidOperationException(operation + " dừng vì Current UCS đã thay đổi trong lúc chờ nhập tham số. Hãy chạy lại lệnh.");
+            if (CadUnitService.GetLengthUnit(document) != promptUnit)
+                throw new InvalidOperationException(operation + " dừng vì drawing unit policy đã thay đổi trong lúc chờ nhập tham số. Hãy chạy lại lệnh.");
         }
 
         private static void RequireModelSpace(Document document)
