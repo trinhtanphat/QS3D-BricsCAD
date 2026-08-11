@@ -8,7 +8,7 @@ Direct Draw quick/advanced commands may read Family defaults before they mutate 
 
 Before `ProjectStateSnapshot`, source CAD creation, semantic capture or native generation:
 
-- a preview that started with a project must bind the canonical existing project and require the same `ProjectId`;
+- a preview that started with a project must bind the canonical existing project and require the same `ProjectId` (**same-ProjectId** continuity);
 - a preview that started projectless must still be projectless; if a project appears while the user is confirming parameters, the command refuses and asks for a rerun;
 - a missing/replaced project is never silently replaced by `GetOrCreate` after project-derived defaults were shown;
 - projectless authoring remains creation-capable only when no project appeared before the mutation boundary.
