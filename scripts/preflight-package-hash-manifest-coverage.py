@@ -31,6 +31,10 @@ def exact_coverage(manifest_names, actual_names):
 # Contract-level negative/positive cases independent of PowerShell runtime availability.
 require(exact_coverage(["a.dll", "Samples/x.dxf"], ["a.dll", "Samples/x.dxf", "SHA256SUMS.txt"]),
         "coverage model baseline must pass")
+require(exact_coverage(
+            ["a.dll", "Samples/SHA256SUMS.txt"],
+            ["a.dll", "Samples/SHA256SUMS.txt", "SHA256SUMS.txt"]),
+        "coverage model must treat only the root SHA256SUMS.txt as the manifest")
 require(not exact_coverage(["a.dll"], ["a.dll", "COMMANDS.txt", "SHA256SUMS.txt"]),
         "coverage model must reject an unmanifested package file")
 require(not exact_coverage(["a.dll", "COMMANDS.txt"], ["a.dll", "SHA256SUMS.txt"]),
@@ -51,6 +55,10 @@ for label, source in (("package-v25.ps1", package_source), ("finalize-v25-signed
 
 require("install-v25-autoload.ps1" in package_source,
         "package-v25.ps1 must package the installer that enforces internal manifest coverage")
+require("Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object" in package_source,
+        "package-v25.ps1 must hash every regular payload present before creating the root manifest")
+require("Where-Object { $_.Name -ne 'SHA256SUMS.txt' }" not in package_source,
+        "package-v25.ps1 must not exclude nested payloads merely because their basename is SHA256SUMS.txt")
 
 installer_tokens = (
     "[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)",
