@@ -25,8 +25,7 @@ namespace QS3D.BricsCAD.V25
                 var store = new TemplateProfileStore();
                 var profile = store.ExportProject(project, "template-" + Guid.NewGuid().ToString("N"), drawingName + " Template");
                 store.Save(profile, dialog.FileName);
-                PaletteCoordinator.SetStatus("Đã xuất template: " + dialog.FileName);
-                doc.Editor.WriteMessage("\nQS3D template exported: " + dialog.FileName);
+                FinalizeExportUi(doc, "Đã xuất template: " + dialog.FileName, "QS3D template exported: " + dialog.FileName);
             });
         }
 
@@ -76,6 +75,20 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 doc.Editor.WriteMessage("\nQS3D " + message);
             });
+        }
+
+        private static void FinalizeExportUi(Document document, string status, string message)
+        {
+            try
+            {
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\n" + message);
+            }
+            catch (System.Exception ex)
+            {
+                try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export template: " + ex.Message); }
+                catch { }
+            }
         }
 
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
