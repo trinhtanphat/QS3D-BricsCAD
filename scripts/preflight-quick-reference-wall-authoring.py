@@ -35,11 +35,15 @@ if SOURCE.is_file():
         "reference.CreateCenteredEndpoints(document, lengthM)",
         "SemanticCaptureService.Capture(document, ElementCategory.ArchitecturalWall)",
         "ProjectStateSnapshot.Capture(project)",
+        ".RegenerateDirtySubset(project, new[] { createdElementId })",
         "WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall)",
         "GeneratedGeometryService.RequireMatchingOwnership",
     ):
         if token not in text:
             errors.append("quick reference-wall contract missing: " + token)
+
+    if ".RegenerateDirty(project)" in text:
+        errors.append("reference-wall authoring must not regenerate unrelated dirty project elements")
 
     gate = text.find("if (promptParameters)")
     else_pos = text.find("else", gate)
@@ -71,6 +75,7 @@ if DOC.is_file():
         "LOCAL-008",
         "read-only",
         "WallSolidBuilder",
+        "operation-scoped",
     ):
         if token not in text:
             errors.append("quick reference-wall documentation missing: " + token)
