@@ -36,6 +36,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureViewportAidControls()
         {
+            _ = ViewAidClassHandlerRegistered;
             if (_viewportAidsApplied) return;
             if (!(Content is Grid root)) return;
 
