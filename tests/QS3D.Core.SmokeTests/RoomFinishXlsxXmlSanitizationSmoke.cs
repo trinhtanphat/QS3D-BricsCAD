@@ -29,7 +29,7 @@ namespace QS3D.Core.SmokeTests
                 using (var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")?.Open() ?? throw new Exception("Room Finish XLSX worksheet entry is missing.")))
                 {
                     var xml = reader.ReadToEnd();
-                    if (!xml.Contains("A\uFFFDB\uFFFDC&lt;&amp;", StringComparison.Ordinal))
+                    if (xml.IndexOf("A\uFFFDB\uFFFDC&lt;&amp;", StringComparison.Ordinal) < 0)
                         throw new Exception("Room Finish XLSX must replace XML-invalid text while preserving ordinary characters and escaping markup.");
                     if (xml.IndexOf('\u0001') >= 0 || xml.IndexOf('\uD800') >= 0)
                         throw new Exception("Room Finish XLSX worksheet must not retain XML-invalid control or unpaired surrogate characters.");
