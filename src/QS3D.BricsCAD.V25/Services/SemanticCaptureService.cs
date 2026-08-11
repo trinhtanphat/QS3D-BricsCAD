@@ -22,6 +22,7 @@ namespace QS3D.BricsCAD.V25.Services
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
             if (snapshots.Count == 0) return 0;
             EnsureCapturePreflight(document, snapshots, category);
+            var projectExistedBeforeCapture = ProjectContextCoordinator.TryGetReadOnly(document, out _);
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
             try
@@ -32,7 +33,7 @@ namespace QS3D.BricsCAD.V25.Services
             }
             catch (Exception operationError)
             {
-                RestoreOrThrow(project, rollback, operationError, "Semantic capture batch");
+                RestoreCaptureOrThrow(document, project, rollback, projectExistedBeforeCapture, operationError, "Semantic capture batch");
                 throw;
             }
         }
@@ -42,6 +43,7 @@ namespace QS3D.BricsCAD.V25.Services
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             EnsureCapturePreflight(document, new[] { snapshot }, category);
+            var projectExistedBeforeCapture = ProjectContextCoordinator.TryGetReadOnly(document, out _);
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
             try
@@ -50,7 +52,7 @@ namespace QS3D.BricsCAD.V25.Services
             }
             catch (Exception operationError)
             {
-                RestoreOrThrow(project, rollback, operationError, "Semantic capture");
+                RestoreCaptureOrThrow(document, project, rollback, projectExistedBeforeCapture, operationError, "Semantic capture");
                 throw;
             }
         }
@@ -127,6 +129,29 @@ namespace QS3D.BricsCAD.V25.Services
             MeasuredSolidQuantityPolicy.Apply(element);
             project.Touch();
             return true;
+        }
+
+        private static void RestoreCaptureOrThrow(
+            Document document,
+            ProjectState project,
+            ProjectStateSnapshot rollback,
+            bool projectExistedBeforeCapture,
+            Exception operationError,
+            string operation)
+        {
+            Exception? restoreError = null;
+            try
+            {
+                rollback.Restore(project);
+            }
+            catch (Exception error)
+            {
+                restoreError = error;
+            }
+
+            if (!projectExistedBeforeCapture) ProjectContextCoordinator.Forget(document);
+            if (restoreError != null)
+                throw new InvalidOperationException(operation + " failed and project rollback also failed.", new AggregateException(operationError, restoreError));
         }
 
         private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError, string operation)

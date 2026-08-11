@@ -3,7 +3,8 @@
 - Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-insight-affinity-hardening`
 - Registered: `2026-08-11T20:56:00+07:00`
-- Completed: `2026-08-11T20:59:00+07:00`
+- Reopened: `2026-08-11T21:06:00+07:00`
+- Completed: `2026-08-11T21:08:00+07:00`
 - Baseline main SHA: `12159590d88afd2127f49404d254184883e4f0b5`
 - Priority: P1
 
@@ -12,27 +13,28 @@
 - Audit and harden the newly added docked `QuantityInsightPanel` so modeless rows cannot locate/select CAD objects after the active DWG/project or live quantity row has changed.
 - Preserve the existing read-only quantity tree, selection highlight, native Handle selection + `QS3DZOOMSELECTED`, and the completed `QS3DBQ` detail/reveal lane.
 - Add deterministic source/preflight coverage for the document-affinity and stale-row fail-closed contract.
+- Reconcile the affinity preflight with the concurrent detached preview-regeneration implementation without weakening either contract.
 
 ## Implemented
 
-- `a13ff0bbc79d3c6bd6a4e6d8f1bdd33f45564a3e` — binds each quantity insight refresh to its exact BricsCAD `Document`, ProjectId and drawing fingerprint; stores the displayed grouped `QuantityReportRow` snapshot per tree item; rejects cross-DWG/project locate; rebuilds current grouped rows read-only and requires one exact semantic identity plus unchanged quantity/provenance before resolving Handles.
-- Selection highlighting now also refuses a project/document mismatch instead of resolving the stale tree against another project.
-- `39259a39e4bba3c2fe2e11ae72d3bebc4912aa19` — adds `scripts/preflight-quantity-insight-affinity.py` guarding DWG -> project -> live-row -> Handle -> native CAD selection ordering and forbidding creating/mutating project binds or direct stale item-ID Handle resolution.
+- `a13ff0bbc79d3c6bd6a4e6d8f1bdd33f45564a3e` — binds each quantity insight refresh to its exact BricsCAD `Document`, ProjectId and drawing fingerprint; stores the displayed grouped `QuantityReportRow` snapshot per tree item; rejects cross-DWG/project locate; requires one exact semantic identity plus unchanged quantity/provenance before resolving Handles.
+- `39259a39e4bba3c2fe2e11ae72d3bebc4912aa19` — introduced the document/row-affinity source gate.
+- Concurrent `1c5513b403cef7fd1463960f4714018f2ac2e666` upgraded the read model to detached preview-regeneration. Current source keeps the affinity guards while rebuilding both displayed and validation rows from `ProjectStateSnapshot.CreateDetachedCopy(...)` -> `RegenerateDirty(...)` -> `ProjectQuantityReportBuilder.Group(previewProject)`.
+- `bdbc501bb377d64da47d41554c4c0cfbf680f6b4` — reconciled and strengthened `scripts/preflight-quantity-insight-affinity.py` so detached preview regeneration is now a mandatory part of the stale-row protection contract rather than a conflicting token.
 
-## Source validation
+## Validation
 
-- Re-fetched `QuantityInsightPanel.xaml.cs` after the implementation commit and confirmed the current `main` blob retains the affinity guards, full live-row equality check, and current-row Handle resolution.
-- The new path remains read-only: it uses `ProjectContextCoordinator.TryGetReadOnly(...)` and `ProjectQuantityReportBuilder.Group(project)`; it does not use `GetOrCreate` or `ExistingProjectMutationContext.Require`.
-- Existing `QS3DZOOMSELECTED` behavior is preserved after successful current-row revalidation.
-- GitHub exposes no combined status checks for the preflight commit, and this lane did not dispatch GitHub Actions.
+- Re-fetched current `QuantityInsightPanel.xaml.cs` and confirmed the source retains exact-document/project binding, full row/provenance equality, detached preview-regeneration, current-row Handle resolution and `QS3DZOOMSELECTED` only after validation.
+- Re-fetched the affinity preflight after `bdbc501...`; it requires DWG -> project -> current preview row -> Handle -> native CAD selection ordering, detached snapshot -> regenerate -> group ordering, and forbids project creation/mutation binds, stale item-ID Handle resolution and direct live-project grouping.
+- The repository aggregate preflight auto-discovers `scripts/preflight-*.py`, so the reconciled affinity gate participates automatically in aggregate runs.
+- No force push or Actions dispatch was used.
 
 ## LOCAL_ONLY disposition
 
-- Native BricsCAD V25 modeless mouse selection, implied-selection highlight and viewport zoom still require the existing local interactive qualification. No remote runtime PASS is claimed.
-- No duplicate local inbox item was added because the repository already retains the modeless/private-DWG BQ interaction matrix under the existing local qualification queue.
+- Native BricsCAD V25 modeless mouse selection, implied-selection highlight and viewport zoom remain covered by the existing local interactive qualification; no remote runtime PASS is claimed.
 
 ## Completion evidence
 
-- Quantity Insight locate now fails closed when the user switches DWG, the canonical project identity changes, the displayed grouped row disappears/becomes ambiguous, or any compared quantity/provenance field changes.
-- Only a revalidated live current row reaches `SourceHandleResolver.Resolve(...)`, `CadHandleService.Select(...)`, and `QS3DZOOMSELECTED`.
-- Implementation/test tip for this lane: `39259a39e4bba3c2fe2e11ae72d3bebc4912aa19`; concurrent main commits were preserved and no force push was used.
+- Quantity Insight fails closed after DWG/project changes or stale/ambiguous/changed quantity rows while preserving detached read-only regeneration.
+- Only a current revalidated preview row reaches semantic Handle resolution, native CAD selection and zoom.
+- Current reconciliation/test tip: `bdbc501bb377d64da47d41554c4c0cfbf680f6b4`; concurrent main winners were preserved.

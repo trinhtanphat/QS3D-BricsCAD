@@ -28,8 +28,26 @@ namespace QS3D.BricsCAD.V25.Services
 
         public QuantityCalculationSettings Load()
         {
-            if (!File.Exists(_settingsPath)) return QuantityCalculationSettings.CreateDefault();
-            return ReadAndValidate(_settingsPath);
+            var backupPath = GetBackupPath(_settingsPath);
+            if (!File.Exists(_settingsPath))
+            {
+                return File.Exists(backupPath)
+                    ? ReadAndValidate(backupPath)
+                    : QuantityCalculationSettings.CreateDefault();
+            }
+
+            try
+            {
+                return ReadAndValidate(_settingsPath);
+            }
+            catch (InvalidDataException) when (File.Exists(backupPath))
+            {
+                return ReadAndValidate(backupPath);
+            }
+            catch (FileNotFoundException) when (File.Exists(backupPath))
+            {
+                return ReadAndValidate(backupPath);
+            }
         }
 
         public QuantityCalculationSettings Import(string path)
@@ -53,8 +71,8 @@ namespace QS3D.BricsCAD.V25.Services
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             var copy = settings.Clone();
-            if (copy.SchemaVersion <= 0) copy.SchemaVersion = QuantityCalculationSettings.CurrentSchemaVersion;
             copy.NormalizeAndValidate();
+            copy.SchemaVersion = QuantityCalculationSettings.CurrentSchemaVersion;
             return copy;
         }
 
@@ -78,6 +96,11 @@ namespace QS3D.BricsCAD.V25.Services
             }
         }
 
+        private static string GetBackupPath(string path)
+        {
+            return path + ".bak";
+        }
+
         private static void WriteAtomic(string path, QuantityCalculationSettings settings)
         {
             var directory = Path.GetDirectoryName(path);
@@ -96,7 +119,7 @@ namespace QS3D.BricsCAD.V25.Services
 
                 if (File.Exists(path))
                 {
-                    var backup = path + ".bak";
+                    var backup = GetBackupPath(path);
                     if (File.Exists(backup)) File.Delete(backup);
                     File.Replace(temp, path, backup, true);
                 }

@@ -162,7 +162,12 @@ namespace QS3D.BricsCAD.V25
                     foreach (var stale in staleRooms)
                         audit.Record("RoomBoundaryStale", stale.Id, "topology changed within the selected boundary source set");
 
-                    var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                    var regenerationTargets = new HashSet<string>(activeRoomIds, StringComparer.OrdinalIgnoreCase);
+                    foreach (var stale in staleRooms)
+                        regenerationTargets.Add(stale.Id);
+
+                    var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                        .RegenerateDirtySubset(project, regenerationTargets);
                     project.Touch();
                     PaletteCoordinator.RefreshProject();
                     var message = "Room Auto: " + boundaries.Count + " face • mới " + created + " • cập nhật " + updated + " • stale " + staleRooms.Count + " • sync finish " + refreshedFinishes + " • regenerate " + regenerated + ".";

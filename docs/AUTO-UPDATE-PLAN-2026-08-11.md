@@ -13,7 +13,7 @@ Give users of the QS3D BricsCAD V25 plugin a first-class update experience witho
 3. If a newer release exists, surface a small Update Center with release version, publication time, release notes summary, and update eligibility.
 4. Provide `QS3DUPDATE` so the user can open the Update Center at any time.
 5. Provide **Kiểm tra lại** and **Cập nhật ngay** buttons.
-6. Never replace an assembly while BricsCAD has it loaded. A one-click update schedules a detached worker, waits for BricsCAD to close normally, runs the repository's existing hardened updater, and restarts the same BricsCAD executable only after success.
+6. Never replace an assembly while BricsCAD has it loaded. A one-click update schedules a detached worker first, requests a normal main-window close so BricsCAD keeps its own save/cancel prompts, waits until every BricsCAD process has really exited, runs the repository's existing hardened updater, and restarts the same BricsCAD executable only after success.
 
 ## 2. Existing release/security contract to preserve
 
@@ -38,7 +38,7 @@ If the running informational version contains a prerelease suffix, allow both pr
 
 ### Invalid/unrecognized tags
 
-Ignore tags that are not strict `vMAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]` SemVer. Never fall back to lexical comparison.
+Ignore tags that are not strict `vMAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]` SemVer. Never fall back to lexical comparison. Also reject a GitHub release whose `prerelease` flag disagrees with the parsed SemVer tag so channel metadata cannot silently contradict the version label.
 
 ## 4. GitHub API contract
 
@@ -78,7 +78,7 @@ Unsigned preview releases intentionally omit the update manifest and are therefo
 
 ### Running plugin publisher anchor
 
-One-click update requires the running QS3D plugin DLL to have a readable Authenticode signer certificate. Its normalized 40-hex SHA-1 certificate thumbprint becomes the expected publisher passed to `update-v25.ps1`.
+One-click update requires the running QS3D plugin DLL to have a readable Authenticode signer certificate. Its normalized 40-hex certificate thumbprint becomes the expected publisher passed to `update-v25.ps1`.
 
 This prevents a compromised release manifest/package from switching the updater to an unrelated publisher.
 
@@ -88,7 +88,7 @@ Before invoking the installed `update-v25.ps1`, the detached worker checks its A
 
 ### Target package
 
-`update-v25.ps1` remains responsible for package SHA-256, archive safety, internal hashes, signed executable payloads, signer equality, metadata/assembly version binding, downgrade blocking, and atomic installation.
+`update-v25.ps1` remains responsible for package SHA-256, archive safety, internal hashes, signed executable payloads, signer equality, metadata/assembly version binding, downgrade blocking, and atomic installation. The plugin may use `-AllowSameVersion` only after it has independently proven the GitHub SemVer is newer; this supports prereleases that intentionally share the same numeric AssemblyVersion while retaining the updater's independent downgrade block.
 
 ### Unsigned current preview
 
@@ -104,7 +104,7 @@ Planned components:
 - `GitHubReleaseClient` — bounded public GitHub release query and DTO parsing.
 - `UpdateReleaseInfo` / `UpdateCheckResult` — immutable update state presented to UI.
 - `UpdateCoordinator` — session-wide single-flight auto/manual checks, current version discovery, channel selection, UI dispatch, and state events.
-- `SecureUpdateLauncher` — validates install/update paths and current publisher, creates a detached encoded PowerShell worker, waits for BricsCAD exit, revalidates updater signer, invokes `update-v25.ps1`, logs the result, and restarts BricsCAD only after success.
+- `SecureUpdateLauncher` — validates install/update paths and current publisher, creates a detached encoded PowerShell worker, requests graceful BricsCAD close, waits for every BricsCAD process to exit, revalidates updater signer, invokes `update-v25.ps1`, logs the result, and restarts BricsCAD only after success.
 - `UpdateCenterWindow` — code-only WPF window so the lane does not touch shared XAML/theme surfaces; shows current/latest version, state, release notes, manual release link, refresh button, and update button.
 - `UpdateCommands` — `QS3DUPDATE` command.
 - `UpdateBootstrapper` — starts automatic check from the plugin lifecycle and shuts down cleanly.
@@ -133,20 +133,21 @@ Network failure must never block plugin initialization or drawing work.
 5. Resolve the current `bricscad.exe` path from the host process.
 6. Read and pin the running plugin Authenticode signer thumbprint.
 7. Start a detached PowerShell worker with only fixed script logic and safely encoded literal inputs.
-8. Worker waits for all BricsCAD processes to exit; it never kills BricsCAD and never bypasses unsaved-document prompts.
-9. Worker validates the installed updater script Authenticode signature and exact signer thumbprint.
-10. Worker runs `update-v25.ps1` with the GitHub manifest URL, expected signer, current install directory, and approved `github.com` package host.
-11. Existing updater downloads/verifies/installs atomically.
-12. On success, worker restarts the exact BricsCAD executable used for the session.
-13. Worker writes a per-update log under the QS3D install/update-log area for diagnosis.
+8. Request `CloseMainWindow()` on the current BricsCAD host. This is a graceful window-close request, not process termination; BricsCAD remains responsible for unsaved-document save/cancel prompts.
+9. Worker waits for all BricsCAD processes to exit. If the user cancels BricsCAD shutdown, the worker keeps waiting and never kills the host.
+10. Worker validates the installed updater script Authenticode signature and exact signer thumbprint.
+11. Worker runs `update-v25.ps1` with the GitHub manifest URL, expected signer, current install directory, approved `github.com` package host, and `-AllowSameVersion` only for the already-proven newer GitHub SemVer handoff.
+12. Existing updater downloads/verifies/installs atomically.
+13. On success, worker restarts the exact BricsCAD executable used for the session.
+14. Worker writes a per-update transcript under `%LOCALAPPDATA%\QS3D\UpdateLogs`, outside the replaceable plugin directory.
 
 ## 10. Release workflow change
 
 Only the existing manual self-hosted signed release workflow is changed:
 
 - after signing/finalizing the package and before publishing the GitHub Release, generate `QS3D-BricsCAD-V25.update.json` when `sign_package=true`;
-- include the manifest in Actions build artifacts when present;
-- upload the manifest as a GitHub Release asset when present;
+- include the manifest in build artifacts when present;
+- upload the manifest as a GitHub Release asset only for signed releases;
 - require it before publishing a signed release;
 - keep unsigned prerelease behavior compatible by not generating/publishing an auto-update manifest.
 
@@ -167,13 +168,14 @@ This implementation intentionally does not edit:
 ## 12. Failure handling
 
 - GitHub unavailable/rate-limited: record state and allow retry; no host failure.
-- Malformed release JSON/tag: ignore invalid release; fail closed if response contract is unusable.
+- Malformed release JSON/tag or contradictory prerelease metadata: ignore invalid release; fail closed if response contract is unusable.
 - No update manifest: manual-only release.
 - Non-HTTPS or unexpected host: reject.
 - Current plugin unsigned: manual-only.
 - Missing/tampered updater script: reject one-click launch.
 - Multiple update clicks: single scheduled worker per session.
-- BricsCAD remains open: worker waits; it does not force termination.
+- Graceful close request rejected/unavailable: tell the user to close BricsCAD normally; worker remains safely queued.
+- User cancels unsaved-document close prompt: worker waits; it does not force termination.
 - Updater fails: do not restart automatically; preserve log and existing atomic installer rollback behavior.
 
 ## 13. Source regression gate
@@ -181,11 +183,13 @@ This implementation intentionally does not edit:
 Add `scripts/preflight-auto-update.py`, auto-discovered by `preflight-all.py`, to assert at minimum:
 
 - fixed HTTPS GitHub releases endpoint and repo identity;
-- strict SemVer implementation and stable/prerelease channel policy markers;
+- strict SemVer implementation, stable/prerelease channel policy, and GitHub/tag prerelease consistency;
 - exact update-manifest asset name;
 - one-click gate requires signed current plugin + manifest asset;
 - detached worker waits for BricsCAD exit rather than killing processes;
+- one-click path uses `CloseMainWindow()` and forbids `Stop-Process`, `taskkill`, and `.Kill(`;
 - worker checks updater Authenticode signer before execution;
+- same-AssemblyVersion prerelease handoff is explicit and only reachable after newer SemVer selection;
 - `PluginEntry.Initialize/Terminate` call updater bootstrap start/stop;
 - `QS3DUPDATE` command exists in isolated updater file;
 - signed manual workflow generates and uploads the update manifest;
@@ -193,23 +197,24 @@ Add `scripts/preflight-auto-update.py`, auto-discovered by `preflight-all.py`, t
 
 ## 14. Native validation handoff
 
-Connector/source verification can prove source contracts but cannot honestly prove native BricsCAD behavior. Before calling the feature production-qualified, the local Windows V25 lane should verify:
+Connector/source verification can prove source contracts but cannot honestly prove native BricsCAD behavior. Before calling the feature production-qualified, the existing `LOCAL-009 — clean-machine install/sign/update qualification` lane should verify on a signed candidate:
 
 - automatic check does not stall BricsCAD startup;
 - Update Center opens modelessly and remains responsive;
 - update notification appears once per session;
 - signed release is detected correctly;
 - clicking update never overwrites loaded DLLs;
-- normal BricsCAD close triggers update and restart;
-- unsaved drawings still receive BricsCAD's normal close/save handling;
+- graceful close preserves BricsCAD save/cancel prompts and a cancelled close leaves the worker waiting;
+- normal close triggers signature verification, update and restart;
 - tampered updater/package/signature is rejected;
-- failed update preserves previous installation and provides a useful log.
+- failed update preserves previous installation and provides a useful log;
+- DemandLoad/SECURELOAD behavior remains intact.
 
 ## 15. Definition of done for this source lane
 
 - Work claim committed first.
 - This planning document committed before implementation.
-- Updater source, command, UI, plugin lifecycle wiring, signed-release manifest publication, and static regression gate committed on current `main`.
+- Updater source, command, UI, plugin lifecycle wiring, signed-release manifest publication, graceful one-click close, and static regression gate committed on current `main`.
 - No forbidden/overlapping active-claim paths changed.
 - No GitHub Actions dispatched.
 - Claim closed with exact commit evidence and any remaining LOCAL_ONLY runtime proof stated explicitly.

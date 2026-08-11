@@ -108,7 +108,7 @@ namespace QS3D.BricsCAD.V25.Updates
                 fresh.CurrentVersion,
                 fresh.Release,
                 "Đã lên lịch cập nhật.",
-                "Hãy đóng BricsCAD bình thường. QS3D sẽ chờ mọi tiến trình BricsCAD thoát, cập nhật an toàn rồi mở lại BricsCAD sau khi thành công.");
+                "QS3D sẽ yêu cầu BricsCAD đóng theo cơ chế cửa sổ bình thường để giữ nguyên các nhắc lưu bản vẽ. Nếu bạn hủy đóng, updater chỉ tiếp tục chờ; khi mọi BricsCAD đã thoát, nó mới xác minh chữ ký, cập nhật và mở lại sau khi thành công.");
             Publish(scheduled, false);
             return scheduled;
         }

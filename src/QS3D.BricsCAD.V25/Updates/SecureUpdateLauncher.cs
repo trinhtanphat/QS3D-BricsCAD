@@ -79,8 +79,11 @@ namespace QS3D.BricsCAD.V25.Updates
                 if (!File.Exists(updaterPath))
                     throw new FileNotFoundException("Không tìm thấy update-v25.ps1 cạnh plugin QS3D.", updaterPath);
 
-                var process = Process.GetCurrentProcess();
-                var bricscadPath = process.MainModule?.FileName;
+                string bricscadPath;
+                using (var process = Process.GetCurrentProcess())
+                {
+                    bricscadPath = process.MainModule?.FileName;
+                }
                 if (string.IsNullOrWhiteSpace(bricscadPath) || !File.Exists(bricscadPath))
                     throw new InvalidOperationException("Không xác định được bricscad.exe đang chạy.");
 
@@ -111,12 +114,32 @@ namespace QS3D.BricsCAD.V25.Updates
 
                 var updater = Process.Start(startInfo);
                 if (updater == null) throw new InvalidOperationException("Không thể khởi động tiến trình updater tách rời.");
+                updater.Dispose();
                 return true;
             }
             catch (Exception ex)
             {
                 Interlocked.Exchange(ref _scheduled, 0);
                 error = ex.Message;
+                return false;
+            }
+        }
+
+        internal static bool TryRequestGracefulHostClose(out string error)
+        {
+            error = string.Empty;
+            try
+            {
+                using (var process = Process.GetCurrentProcess())
+                {
+                    if (process.CloseMainWindow()) return true;
+                }
+                error = "BricsCAD chưa chấp nhận yêu cầu đóng cửa sổ chính. Hãy lưu bản vẽ và đóng BricsCAD bình thường; updater sẽ tiếp tục chờ.";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                error = "Không gửi được yêu cầu đóng BricsCAD: " + ex.Message + " Hãy đóng BricsCAD bình thường; updater sẽ tiếp tục chờ.";
                 return false;
             }
         }

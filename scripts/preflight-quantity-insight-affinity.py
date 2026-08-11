@@ -20,7 +20,11 @@ def main():
         "var currentRow = ResolveCurrentRow(item, project);",
         "SourceHandleResolver.Resolve(project, currentRow.ElementIds)",
         "private QuantityReportRow ResolveCurrentRow(QuantityInsightItemViewModel item, ProjectState project)",
-        "var currentRows = ProjectQuantityReportBuilder.Group(project);",
+        "var currentRows = BuildPreviewRows(project, out _);",
+        "private static IReadOnlyList<QuantityReportRow> BuildPreviewRows(ProjectState project, out int regenerated)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(previewProject)",
+        "ProjectQuantityReportBuilder.Group(previewProject)",
         "SameElementIdentity(displayedIds, x)",
         "if (matches.Count != 1)",
         "if (!SameRow(displayedRow, matches[0]))",
@@ -42,32 +46,43 @@ def main():
     if min(locate_pos, document_pos, project_pos, resolve_pos, handles_pos, select_pos) < 0 or not (
         locate_pos < document_pos < project_pos < resolve_pos < handles_pos < select_pos
     ):
-        print("ERROR: locate must validate DWG -> project -> live row before resolving handles/selecting CAD objects.")
+        print("ERROR: locate must validate DWG -> project -> current preview row before resolving handles/selecting CAD objects.")
+        return 1
+
+    preview_method = text.find("private static IReadOnlyList<QuantityReportRow> BuildPreviewRows")
+    detached_pos = text.find("ProjectStateSnapshot.CreateDetachedCopy(project)", preview_method)
+    regen_pos = text.find("RegenerateDirty(previewProject)", detached_pos)
+    grouped_pos = text.find("ProjectQuantityReportBuilder.Group(previewProject)", regen_pos)
+    if min(preview_method, detached_pos, regen_pos, grouped_pos) < 0 or not (
+        preview_method < detached_pos < regen_pos < grouped_pos
+    ):
+        print("ERROR: Quantity Insight preview rows must regenerate detached project state before grouping quantities.")
         return 1
 
     resolve_method = text.find("private QuantityReportRow ResolveCurrentRow")
-    group_pos = text.find("ProjectQuantityReportBuilder.Group(project)", resolve_method)
-    match_pos = text.find("SameElementIdentity(displayedIds, x)", group_pos)
+    preview_pos = text.find("BuildPreviewRows(project, out _)", resolve_method)
+    match_pos = text.find("SameElementIdentity(displayedIds, x)", preview_pos)
     same_row_pos = text.find("if (!SameRow(displayedRow, matches[0]))", match_pos)
-    if min(resolve_method, group_pos, match_pos, same_row_pos) < 0 or not (
-        resolve_method < group_pos < match_pos < same_row_pos
+    if min(resolve_method, preview_pos, match_pos, same_row_pos) < 0 or not (
+        resolve_method < preview_pos < match_pos < same_row_pos
     ):
-        print("ERROR: live row revalidation ordering is incomplete.")
+        print("ERROR: current preview-row revalidation ordering is incomplete.")
         return 1
 
     forbidden = [
         "ProjectContextCoordinator.GetOrCreate",
         "ExistingProjectMutationContext.Require",
         "SourceHandleResolver.Resolve(project, item.ElementIds)",
+        "ProjectQuantityReportBuilder.Group(project)",
     ]
     found = [token for token in forbidden if token in text]
     if found:
-        print("ERROR: Quantity Insight locate must remain read-only and must not resolve stale item IDs directly:")
+        print("ERROR: Quantity Insight must remain detached/read-only and must not resolve stale item IDs/direct live rows:")
         for token in found:
             print(" - forbidden:", token)
         return 1
 
-    print("PASS: Quantity Insight fails closed across DWG/project changes and revalidates the live grouped row before native CAD selection/zoom.")
+    print("PASS: Quantity Insight preview-regenerates detached state, fails closed across DWG/project changes, and revalidates the current preview row before native CAD selection/zoom.")
     return 0
 
 
