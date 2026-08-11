@@ -19,10 +19,19 @@ def require(text, token, label):
         errors.append(f"{label} missing required token: {token}")
 
 
+def forbid(text, token, label):
+    if token in text:
+        errors.append(f"{label} contains forbidden token: {token}")
+
+
 v25 = read("src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj")
 v26 = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
 entry = read("src/QS3D.BricsCAD.V26/PluginEntry.cs")
-update_stub = read("src/QS3D.BricsCAD.V26/Updates/UpdateCommands.cs")
+update_commands = read("src/QS3D.BricsCAD.V26/Updates/UpdateCommands.cs")
+v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
+v26_release_client = read("src/QS3D.BricsCAD.V26/Updates/GitHubReleaseClient.cs")
+v26_manifest_probe = read("src/QS3D.BricsCAD.V26/Updates/UpdateManifestProbe.cs")
+v26_launcher = read("src/QS3D.BricsCAD.V26/Updates/SecureUpdateLauncher.cs")
 workflow = read(".github/workflows/bricscad-v26.yml")
 runtime = read("scripts/test-bricscad-v26-runtime.ps1")
 qualification = read("docs/LOCAL-V26-QUALIFICATION.md")
@@ -39,6 +48,10 @@ for token in (
     "..\\QS3D.BricsCAD.V25\\**\\*.cs",
     "..\\QS3D.BricsCAD.V25\\PluginEntry.cs",
     "..\\QS3D.BricsCAD.V25\\Updates\\**\\*.cs",
+    "Updates\\SemanticReleaseVersion.cs",
+    "Updates\\UpdateBootstrapper.cs",
+    "Updates\\UpdateCenterWindow.cs",
+    "Updates\\UpdateCoordinator.cs",
     "<Reference Include=\"BrxMgd\">",
     "<Reference Include=\"TD_Mgd\">",
     "<Private>false</Private>",
@@ -46,21 +59,59 @@ for token in (
 ):
     require(v26, token, "V26 project")
 
-if "BRICSCAD_V25_DIR" in v26:
-    errors.append("V26 project must never resolve managed references through BRICSCAD_V25_DIR")
-if "net48" in v26:
-    errors.append("V26 project must not fall back to net48")
-if "QS3D-BricsCAD-V25.update.json" in v26:
-    errors.append("V26 project must not embed the V25 updater channel")
+for token in ("BRICSCAD_V25_DIR", "net48", "QS3D-BricsCAD-V25.update.json"):
+    forbid(v26, token, "V26 project")
 
-require(entry, "public sealed class PluginEntry : IExtensionApplication", "V26 PluginEntry")
-if "UpdateBootstrapper" in entry or ".Updates" in entry:
-    errors.append("V26 PluginEntry must not start the V25 updater until a V26 signed channel is qualified")
+for token in (
+    "public sealed class PluginEntry : IExtensionApplication",
+    "using QS3D.BricsCAD.V25.Updates;",
+    "UpdateBootstrapper.Start();",
+    "UpdateBootstrapper.Stop();",
+):
+    require(entry, token, "V26 PluginEntry")
 
-for token in ("QS3DUPDATE", "one-click update is intentionally disabled", "Do not install a V25 update package"):
-    require(update_stub, token, "V26 update safety stub")
-if "UpdateCenterWindowHost" in update_stub or "UpdateCoordinator" in update_stub:
-    errors.append("V26 update safety stub must not invoke the V25 update implementation")
+for token in ("QS3DUPDATE", "UpdateCenterWindowHost.Show()", "QS3DUPDATE V26 error"):
+    require(update_commands, token, "V26 update command")
+for token in ("one-click update is intentionally disabled", "Do not install a V25 update package"):
+    forbid(update_commands, token, "V26 update command")
+
+# Both host majors share one GitHub release stream; channel membership must be
+# determined by the exact host-major signed manifest before latest selection.
+for text, label, manifest_asset in (
+    (v25_release_client, "V25 release client", "QS3D-BricsCAD-V25.update.json"),
+    (v26_release_client, "V26 release client", "QS3D-BricsCAD-V26.update.json"),
+):
+    require(text, manifest_asset, label)
+    require(text, "if (manifestUri == null) continue;", label)
+    require(text, "UpdateManifestAssetName", label)
+require(v26_release_client, "QS3D-BricsCAD-V26-Updater", "V26 release client")
+for token in ("QS3D-BricsCAD-V25.update.json", "QS3D-BricsCAD-V25.zip", "QS3D-BricsCAD-V25-Updater"):
+    forbid(v26_release_client, token, "V26 release client")
+
+for token in (
+    'private const string Target = "BricsCAD V26 x64";',
+    'request.UserAgent = "QS3D-BricsCAD-V26-Updater";',
+    '"QS3D-BricsCAD-V26.zip"',
+    "GitHubReleaseClient.UpdateManifestAssetName",
+    "schemaVersion 2",
+):
+    require(v26_manifest_probe, token, "V26 manifest probe")
+for token in ("BricsCAD V25 x64", "QS3D-BricsCAD-V25.zip", "QS3D-BricsCAD-V25.update.json"):
+    forbid(v26_manifest_probe, token, "V26 manifest probe")
+
+for token in (
+    'UpdateMutexPrefix = "Global\\\\QS3D-BricsCAD-V26-Update-"',
+    'Path.Combine(installDirectory, "update-v26.ps1")',
+    "TryVerifyAuthenticode",
+    "WinVerifyTrust",
+    "TryAcquireCrossProcessReservation",
+    "WorkerReadyTimeoutMilliseconds",
+    "-AllowedPackageHost @('github.com')",
+    "-ExpectedSignerThumbprint $expectedSigner",
+):
+    require(v26_launcher, token, "V26 secure update launcher")
+for token in ("QS3D-BricsCAD-V25-Update-", "update-v25.ps1"):
+    forbid(v26_launcher, token, "V26 secure update launcher")
 
 for token in (
     "workflow_dispatch:",
@@ -74,8 +125,7 @@ for token in (
 ):
     require(workflow, token, "V26 workflow")
 for forbidden in ("\n  push:", "\n  pull_request:", "\n  schedule:", "\n  workflow_run:"):
-    if forbidden in workflow:
-        errors.append("V26 workflow must remain manual-only; forbidden trigger: " + forbidden.strip())
+    forbid(workflow, forbidden, "V26 workflow")
 
 for token in (
     "FileMajorPart -ne 26",
@@ -103,4 +153,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V25 remains net48; V26 is isolated on net8.0-windows with V26-only refs, manual CI, runtime identity checks, and no V25 one-click updater cross-load.")
+print("PASS: V25 remains net48; V26 is isolated on net8.0-windows with V26-only refs/runtime/update assets, shared updater lifecycle is host-neutral, and V25/V26 release discovery is manifest-channel isolated.")
