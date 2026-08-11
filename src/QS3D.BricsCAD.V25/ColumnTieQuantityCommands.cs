@@ -69,7 +69,6 @@ namespace QS3D.BricsCAD.V25
                             ";totalLengthM=" + quantity.TotalLengthM.ToString("R", CultureInfo.InvariantCulture) +
                             ";weightKg=" + quantity.TotalWeightKg.ToString("R", CultureInfo.InvariantCulture));
                     }
-                    project.Touch();
                 }
                 catch
                 {
