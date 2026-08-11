@@ -264,6 +264,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var handles = SourceHandleResolver.Resolve(project, currentRow.ElementIds);
                 if (handles.Count == 0)
                 {
+                    Cad.CadHandleService.Select(document, handles);
                     _viewModel.Status = "Dòng này chưa có semantic handle hiện hành để định vị trong CAD.";
                     return;
                 }
