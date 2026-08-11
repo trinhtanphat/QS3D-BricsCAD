@@ -11,8 +11,7 @@ namespace QS3D.BricsCAD.V25.UI
     {
         internal void SetInspectionReadOnly(IReadOnlyList<EntitySnapshot> snapshots, ProjectState? project)
         {
-            _inspection.Clear();
-            if (snapshots != null) _inspection.AddRange(snapshots);
+            _inspection = snapshots ?? System.Array.Empty<EntitySnapshot>();
             InspectionList.ItemsSource = null;
             InspectionList.ItemsSource = _inspection;
             SelectionCount.Text = _inspection.Count + " selected";
@@ -51,12 +50,14 @@ namespace QS3D.BricsCAD.V25.UI
                 var family = project.FindFamily(singleElement.FamilyId);
                 if (family != null)
                 {
-                    FilterFamily(family.Category);
+                    _categoryFilter = family.Category;
+                    ApplyFamilyFilter();
                     return;
                 }
             }
 
-            FilterFamily(singleElement.Category);
+            _categoryFilter = singleElement.Category;
+            ApplyFamilyFilter();
         }
     }
 }
