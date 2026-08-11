@@ -131,6 +131,17 @@ namespace QS3D.Core.Export
     public static class ProjectInterchangeImportResolutionPlanner
     {
         private const int MaxPlanItems = 50000;
+        private const int MaxZones = 2000;
+        private const int MaxFloors = 2000;
+        private const int MaxFamilies = 10000;
+        private const int ZoneMaxIdLength = 64;
+        private const int ZoneMaxNameLength = 120;
+        private const int FloorMaxIdLength = 64;
+        private const int FloorMaxNameLength = 120;
+        private const int FamilyMaxIdLength = 80;
+        private const int FamilyMaxNameLength = 160;
+        private const int FamilyMaxPropertyKeyLength = 120;
+        private const int FamilyMaxPropertyValueLength = 1000;
 
         public static ProjectInterchangeImportResolutionPlan Plan(
             ProjectState targetProject,
@@ -168,14 +179,18 @@ namespace QS3D.Core.Export
             foreach (var zone in source.Zones)
             {
                 var exists = targetZones.ContainsKey(zone.Id);
-                if (sourceDuplicateZoneNames.Contains((zone.Name ?? string.Empty).Trim()) &&
-                    (!exists || policy.ZoneCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
+                var appliesSource = !exists || policy.ZoneCollision == InterchangeExistingIdentityAction.UseSourceSemanticData;
+                if (appliesSource && !CatalogIdentityFitsRuntime(zone.Id, zone.Name, exists, ZoneMaxIdLength, ZoneMaxNameLength, out var runtimeReason))
+                {
+                    AddRuntimeCompatibilityBlock(items, InterchangeIdentityKind.Zone, zone.Id, runtimeReason);
+                    continue;
+                }
+                if (sourceDuplicateZoneNames.Contains((zone.Name ?? string.Empty).Trim()) && appliesSource)
                 {
                     AddSourceBatchNameCollision(items, InterchangeIdentityKind.Zone, zone.Id, "Zone name", zone.Name);
                     continue;
                 }
-                if (NameOwnedByDifferentIdentity(targetZoneNames, zone.Name, zone.Id) &&
-                    (!exists || policy.ZoneCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
+                if (NameOwnedByDifferentIdentity(targetZoneNames, zone.Name, zone.Id) && appliesSource)
                 {
                     AddNameCollision(items, InterchangeIdentityKind.Zone, zone.Id, "Zone name", zone.Name);
                     continue;
@@ -186,14 +201,18 @@ namespace QS3D.Core.Export
             foreach (var floor in source.Floors)
             {
                 var exists = targetFloors.ContainsKey(floor.Id);
-                if (sourceDuplicateFloorNames.Contains((floor.Name ?? string.Empty).Trim()) &&
-                    (!exists || policy.FloorCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
+                var appliesSource = !exists || policy.FloorCollision == InterchangeExistingIdentityAction.UseSourceSemanticData;
+                if (appliesSource && !CatalogIdentityFitsRuntime(floor.Id, floor.Name, exists, FloorMaxIdLength, FloorMaxNameLength, out var runtimeReason))
+                {
+                    AddRuntimeCompatibilityBlock(items, InterchangeIdentityKind.Floor, floor.Id, runtimeReason);
+                    continue;
+                }
+                if (sourceDuplicateFloorNames.Contains((floor.Name ?? string.Empty).Trim()) && appliesSource)
                 {
                     AddSourceBatchNameCollision(items, InterchangeIdentityKind.Floor, floor.Id, "Floor name", floor.Name);
                     continue;
                 }
-                if (NameOwnedByDifferentIdentity(targetFloorNames, floor.Name, floor.Id) &&
-                    (!exists || policy.FloorCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
+                if (NameOwnedByDifferentIdentity(targetFloorNames, floor.Name, floor.Id) && appliesSource)
                 {
                     AddNameCollision(items, InterchangeIdentityKind.Floor, floor.Id, "Floor name", floor.Name);
                     continue;
@@ -205,8 +224,18 @@ namespace QS3D.Core.Export
             {
                 var nameKey = FamilyNameKey(family.Category, family.Name);
                 var exists = targetFamilies.TryGetValue(family.Id, out var existing);
-                if (sourceDuplicateFamilyNames.Contains(nameKey) &&
-                    (!exists || policy.FamilyCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
+                var appliesSource = !exists || policy.FamilyCollision == InterchangeExistingIdentityAction.UseSourceSemanticData;
+                if (appliesSource && !CatalogIdentityFitsRuntime(family.Id, family.Name, exists, FamilyMaxIdLength, FamilyMaxNameLength, out var runtimeReason))
+                {
+                    AddRuntimeCompatibilityBlock(items, InterchangeIdentityKind.Family, family.Id, runtimeReason);
+                    continue;
+                }
+                if (appliesSource && !FamilyPropertiesFitRuntime(family, out runtimeReason))
+                {
+                    AddRuntimeCompatibilityBlock(items, InterchangeIdentityKind.Family, family.Id, runtimeReason);
+                    continue;
+                }
+                if (sourceDuplicateFamilyNames.Contains(nameKey) && appliesSource)
                 {
                     AddSourceBatchNameCollision(items, InterchangeIdentityKind.Family, family.Id, family.Category + " Family name", family.Name);
                     continue;
@@ -277,6 +306,10 @@ namespace QS3D.Core.Export
                 AddCollision(items, InterchangeIdentityKind.Element, element.Id, policy.ElementCollision, true);
             }
 
+            AddCapacityBlock(globalBlocks, "Zone", targetProject.Zones.Count, Count(items, InterchangeIdentityKind.Zone, InterchangeImportResolutionAction.AddSourceSemanticData), MaxZones);
+            AddCapacityBlock(globalBlocks, "Floor", targetProject.Floors.Count, Count(items, InterchangeIdentityKind.Floor, InterchangeImportResolutionAction.AddSourceSemanticData), MaxFloors);
+            AddCapacityBlock(globalBlocks, "Family", targetProject.Families.Count, Count(items, InterchangeIdentityKind.Family, InterchangeImportResolutionAction.AddSourceSemanticData), MaxFamilies);
+
             var replacingExistingElement = items.Any(x =>
                 x.Kind == InterchangeIdentityKind.Element &&
                 x.Action == InterchangeImportResolutionAction.UseSourceSemanticData &&
@@ -322,6 +355,65 @@ namespace QS3D.Core.Export
             if (!allowUnspecified && Convert.ToInt32(value) == 0)
                 errors.Add(name + " must be explicitly selected; import planning has no implicit collision/provenance default.");
         }
+
+        private static bool CatalogIdentityFitsRuntime(
+            string sourceId,
+            string sourceName,
+            bool existingTargetIdentity,
+            int maxIdLength,
+            int maxNameLength,
+            out string reason)
+        {
+            var id = (sourceId ?? string.Empty).Trim();
+            var name = (sourceName ?? string.Empty).Trim();
+            if (!existingTargetIdentity && id.Length > maxIdLength)
+            {
+                reason = "Source ID length " + id.Length + " exceeds target runtime limit " + maxIdLength + "; this policy does not remap IDs.";
+                return false;
+            }
+            if (name.Length > maxNameLength)
+            {
+                reason = "Source display-name length " + name.Length + " exceeds target runtime limit " + maxNameLength + "; this policy does not truncate semantic data.";
+                return false;
+            }
+            reason = string.Empty;
+            return true;
+        }
+
+        private static bool FamilyPropertiesFitRuntime(ProjectFamily family, out string reason)
+        {
+            foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var key = (property.Key ?? string.Empty).Trim();
+                var value = property.Value ?? string.Empty;
+                if (key.Length > FamilyMaxPropertyKeyLength)
+                {
+                    reason = "Source Family property key length " + key.Length + " exceeds target runtime limit " + FamilyMaxPropertyKeyLength + "; this policy does not truncate semantic data.";
+                    return false;
+                }
+                if (value.Length > FamilyMaxPropertyValueLength)
+                {
+                    reason = "Source Family property value length " + value.Length + " exceeds target runtime limit " + FamilyMaxPropertyValueLength + "; this policy does not truncate semantic data.";
+                    return false;
+                }
+            }
+            reason = string.Empty;
+            return true;
+        }
+
+        private static void AddCapacityBlock(ICollection<string> globalBlocks, string kind, int targetCount, int addCount, int maxCount)
+        {
+            var combined = checked(targetCount + addCount);
+            if (combined <= maxCount) return;
+            globalBlocks.Add(
+                "Import policy would produce " + combined + " " + kind + " identities, exceeding target runtime limit " + maxCount + ".");
+        }
+
+        private static int Count(
+            IEnumerable<InterchangeImportResolutionItem> items,
+            InterchangeIdentityKind kind,
+            InterchangeImportResolutionAction action) =>
+            items.Count(x => x.Kind == kind && x.Action == action);
 
         private static void AddSimple(
             ICollection<InterchangeImportResolutionItem> items,
@@ -377,6 +469,20 @@ namespace QS3D.Core.Export
                 resolved,
                 reason,
                 resetGeneratedOutputWhenUsingSource && action == InterchangeExistingIdentityAction.UseSourceSemanticData));
+        }
+
+        private static void AddRuntimeCompatibilityBlock(
+            ICollection<InterchangeImportResolutionItem> items,
+            InterchangeIdentityKind kind,
+            string id,
+            string reason)
+        {
+            Add(items, new InterchangeImportResolutionItem(
+                kind,
+                id,
+                InterchangeImportResolutionAction.BlockedIncompatible,
+                "Source semantic data is not compatible with target runtime contracts: " + reason,
+                false));
         }
 
         private static void AddNameCollision(

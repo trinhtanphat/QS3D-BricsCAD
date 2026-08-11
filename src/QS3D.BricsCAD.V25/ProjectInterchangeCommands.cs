@@ -35,20 +35,25 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    ReportUi(document, "Interchange JSON: chưa có QS3D project hiện hữu; chưa tạo project mới và chưa tạo file.");
+                    return;
+                }
+
                 var snapshot = ProjectStateSnapshot.CreateDetachedCopy(project);
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(snapshot);
                 ProjectInterchangeJsonExporter.Export(dialog.FileName, snapshot);
 
                 var status = "Interchange JSON: " + snapshot.Elements.Count + " cấu kiện • " + snapshot.Families.Count + " Family • detached regenerate " + regenerated + " • " + dialog.FileName;
-                try { PaletteCoordinator.SetStatus(status); } catch { }
-                document.Editor.WriteMessage("\nQS3D " + status);
-                document.Editor.WriteMessage("\nQS3D snapshot là read-only semantic interchange v" + ProjectInterchangeJsonExporter.FormatVersion + ": ID/quantity/SI/provenance; regenerate chỉ chạy trên detached copy, không mutate project live; không phải QSDB backup và không chứa generated CAD ownership handles.");
+                FinalizeUi(
+                    document,
+                    status,
+                    "QS3D snapshot là read-only semantic interchange v" + ProjectInterchangeJsonExporter.FormatVersion + ": ID/quantity/SI/provenance; regenerate chỉ chạy trên detached copy, không mutate project live; không phải QSDB backup và không chứa generated CAD ownership handles.");
             }
             catch (Exception ex)
             {
-                try { PaletteCoordinator.SetStatus("QS3DINTERCHANGEJSON lỗi: " + ex.Message); } catch { }
-                document.Editor.WriteMessage("\nQS3DINTERCHANGEJSON error: " + ex.Message);
+                ReportUi(document, "QS3DINTERCHANGEJSON lỗi: " + ex.Message);
             }
         }
 
@@ -82,9 +87,7 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidDataException("Snapshot không còn vượt qua validation khi lập import preview.");
                 if (preview.CollisionCount > 0)
                 {
-                    var collisionStatus = "Interchange Append bị chặn: " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s). Append-only không merge/replace/skip.";
-                    try { PaletteCoordinator.SetStatus(collisionStatus); } catch { }
-                    document.Editor.WriteMessage("\nQS3D " + collisionStatus);
+                    ReportUi(document, "Interchange Append bị chặn: " + preview.CollisionCount.ToString(CultureInfo.InvariantCulture) + " semantic ID collision(s). Append-only không merge/replace/skip.");
                     return;
                 }
 
@@ -128,14 +131,14 @@ namespace QS3D.BricsCAD.V25
                     " • source handles discarded " + result.SourceHandlesDiscarded.ToString(CultureInfo.InvariantCulture) +
                     " • warning " + result.ValidationWarnings.ToString(CultureInfo.InvariantCulture) +
                     ". Chưa tự lưu .qsdb.";
-                try { PaletteCoordinator.SetStatus(status); } catch { }
-                document.Editor.WriteMessage("\nQS3D " + status);
-                document.Editor.WriteMessage("\nQS3D append-only import chỉ thêm semantic portable state; không phải native CAD merge và không xác nhận source geometry trong DWG hiện tại.");
+                FinalizeUi(
+                    document,
+                    status,
+                    "QS3D append-only import chỉ thêm semantic portable state; không phải native CAD merge và không xác nhận source geometry trong DWG hiện tại.");
             }
             catch (Exception ex)
             {
-                try { PaletteCoordinator.SetStatus("QS3DINTERCHANGEAPPEND lỗi: " + ex.Message); } catch { }
-                document.Editor.WriteMessage("\nQS3DINTERCHANGEAPPEND error: " + ex.Message + " Importer rollback semantic mutation nếu apply thất bại.");
+                ReportUi(document, "QS3DINTERCHANGEAPPEND lỗi: " + ex.Message + " Importer rollback semantic mutation nếu apply thất bại.");
             }
         }
 
@@ -143,6 +146,19 @@ namespace QS3D.BricsCAD.V25
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                 throw new InvalidOperationException(operation + " requires the DWG that started the operation to remain active.");
+        }
+
+        private static void FinalizeUi(Document document, string status, string detail)
+        {
+            try { PaletteCoordinator.SetStatus(status); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + status); } catch { }
+            try { document.Editor.WriteMessage("\n" + detail); } catch { }
+        }
+
+        private static void ReportUi(Document document, string status)
+        {
+            try { PaletteCoordinator.SetStatus(status); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + status); } catch { }
         }
 
         private static string ReadGuardedSnapshotText(string path)

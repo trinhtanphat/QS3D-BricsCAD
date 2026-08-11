@@ -47,7 +47,8 @@ namespace QS3D.Core.Documentation
             {
                 var previous = views[matches[0]];
                 views[matches[0]] = definition;
-                sheets = RewriteViewReferences(sheets, previous.Id, definition.Id, out rewritten);
+                if (!string.Equals(previous.Id, definition.Id, StringComparison.Ordinal))
+                    sheets = RewriteViewReferences(sheets, previous.Id, definition.Id, out rewritten);
             }
 
             return Save(project, "UpsertView", definition.Id, views, sheets, rewritten);
