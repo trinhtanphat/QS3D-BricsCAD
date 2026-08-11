@@ -18,7 +18,12 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    Report(document, "Rebar Health: BLOCKED • chưa có QS3D project state/sidecar; health check không tạo project mới.");
+                    return;
+                }
+
                 var handles = project.Elements
                     .SelectMany(ParseHandles)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -27,11 +32,11 @@ namespace QS3D.BricsCAD.V25
                 var issues = new GeneratedRebarHealthService().Inspect(project, live);
                 var summary = new HealthSummary(issues);
                 var message = "Rebar Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                Report(document, message);
                 Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue =>
                 {
-                    var element = project.FindElement(issue.ElementId);
+                    if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+                    var element = currentProject.FindElement(issue.ElementId);
                     if (element == null) return;
                     var count = CadHandleService.Select(document, ParseHandles(element));
                     PaletteCoordinator.SetStatus("Rebar Health Định vị " + element.Id + " • " + count + " generated bar solid(s)");
@@ -40,9 +45,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
-                var message = "QS3DREBARHEALTH lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                Report(document, "QS3DREBARHEALTH lỗi: " + ex.Message);
             }
         }
 
@@ -50,6 +53,12 @@ namespace QS3D.BricsCAD.V25
         {
             if (!element.Properties.TryGetValue("GeneratedRebarHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
             return raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0);
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
     }
 }
