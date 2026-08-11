@@ -48,30 +48,14 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnMaterialSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_loading || !(MaterialList.SelectedItem is ProjectMaterial material)) return;
-            if (!material.IsBuiltIn)
-            {
-                _editingId = material.Id;
-                NameBox.Text = material.Name;
-                UnitBox.Text = material.Unit;
-                DescriptionBox.Text = material.Description;
-            }
-            else
-            {
-                _editingId = string.Empty;
-                NameBox.Text = material.Name;
-                UnitBox.Text = material.Unit;
-                DescriptionBox.Text = material.Description;
-            }
-            SetStatus(material.IsBuiltIn ? "Built-in material: có thể áp dụng nhưng không sửa/xóa." : "Custom material: " + material.Name);
+            if (_loading) return;
+            if (MaterialList.SelectedItem is ProjectMaterial material)
+                LoadEditor(material, true);
         }
 
         private void OnNewClick(object sender, RoutedEventArgs e)
         {
-            _editingId = string.Empty;
-            NameBox.Text = string.Empty;
-            UnitBox.Text = string.Empty;
-            DescriptionBox.Text = string.Empty;
+            ClearEditor();
             MaterialList.SelectedItem = null;
             NameBox.Focus();
             SetStatus("Tạo custom material mới.");
@@ -252,19 +236,43 @@ namespace QS3D.BricsCAD.V25.UI
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Material Catalog không tạo replacement project; hãy đóng và chạy lại QS3DMATERIALS.");
                 var previous = string.IsNullOrWhiteSpace(selectedId) ? (MaterialList.SelectedItem as ProjectMaterial)?.Id : selectedId;
                 var materials = ProjectMaterialCatalog.GetAll(project).ToList();
+                var selectedMaterial = materials.FirstOrDefault(x => string.Equals(x.Id, previous, StringComparison.OrdinalIgnoreCase));
                 _loading = true;
                 try
                 {
                     MaterialList.ItemsSource = materials;
-                    MaterialList.SelectedItem = materials.FirstOrDefault(x => string.Equals(x.Id, previous, StringComparison.OrdinalIgnoreCase));
+                    MaterialList.SelectedItem = selectedMaterial;
                 }
                 finally { _loading = false; }
+
+                if (selectedMaterial != null) LoadEditor(selectedMaterial, false);
+                else ClearEditor();
+
                 var referenced = ProjectMaterialCatalog.ReferencedMaterialNames(project);
                 ReferencedText.Text = referenced.Count == 0 ? "—" : string.Join(" • ", referenced);
                 Title = "QS3D • Vật liệu • " + DrawingLabel(_document);
                 _boundProject = project;
             }
             catch (Exception ex) { SetStatus("Đọc Material Catalog lỗi: " + ex.Message); }
+        }
+
+        private void LoadEditor(ProjectMaterial material, bool announce)
+        {
+            if (material == null) throw new ArgumentNullException(nameof(material));
+            _editingId = material.IsBuiltIn ? string.Empty : material.Id;
+            NameBox.Text = material.Name;
+            UnitBox.Text = material.Unit;
+            DescriptionBox.Text = material.Description;
+            if (announce)
+                SetStatus(material.IsBuiltIn ? "Built-in material: có thể áp dụng nhưng không sửa/xóa." : "Custom material: " + material.Name);
+        }
+
+        private void ClearEditor()
+        {
+            _editingId = string.Empty;
+            NameBox.Text = string.Empty;
+            UnitBox.Text = string.Empty;
+            DescriptionBox.Text = string.Empty;
         }
 
         private void RefreshAfterCommit(Action refresh, string successMessage, string context)
