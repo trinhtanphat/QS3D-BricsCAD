@@ -109,10 +109,12 @@ namespace QS3D.Core.Domain
             foreach (var element in targets)
             {
                 var bottomOffset = LevelOffset(element, BottomLevelOffsetKey);
+                var bottomElevation = AddFinite(floor.ElevationM, bottomOffset, element.Id + "/bottom level elevation");
                 if (!element.Properties.TryGetValue(TopLevelIdKey, out var topId) || string.IsNullOrWhiteSpace(topId)) continue;
                 var top = FindRequired(project, topId);
                 var topOffset = LevelOffset(element, TopLevelOffsetKey);
-                if (top.ElevationM + topOffset <= floor.ElevationM + bottomOffset)
+                var topElevation = AddFinite(top.ElevationM, topOffset, element.Id + "/top level elevation");
+                if (topElevation <= bottomElevation)
                     throw new InvalidOperationException("Cannot assign bottom level '" + floor.Name + "' because top level is not above it for element " + element.Id + ".");
             }
 
@@ -148,8 +150,10 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("Assign Bottom Level before Top Level for element " + element.Id + ".");
                 var bottom = FindRequired(project, bottomId);
                 var bottomOffset = LevelOffset(element, BottomLevelOffsetKey);
+                var bottomElevation = AddFinite(bottom.ElevationM, bottomOffset, element.Id + "/bottom level elevation");
                 var topOffset = LevelOffset(element, TopLevelOffsetKey);
-                if (top.ElevationM + topOffset <= bottom.ElevationM + bottomOffset)
+                var topElevation = AddFinite(top.ElevationM, topOffset, element.Id + "/top level elevation");
+                if (topElevation <= bottomElevation)
                     throw new InvalidOperationException("Top level '" + top.Name + "' must be above bottom level for element " + element.Id + ".");
             }
 
@@ -303,6 +307,14 @@ namespace QS3D.Core.Domain
         private static double Finite(double value, string parameterName)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(parameterName, "Value must be finite.");
+            return value;
+        }
+
+        private static double AddFinite(double left, double right, string label)
+        {
+            var value = left + right;
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new InvalidOperationException(label + " must be finite.");
             return value;
         }
 
