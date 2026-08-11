@@ -57,8 +57,18 @@ namespace QS3D.Core.Revisions
         public IReadOnlyList<QuantityRevisionSummary> Summarize(IEnumerable<QuantityRevisionRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var summarizable = new List<QuantityRevisionRow>();
+            var index = 0;
+            foreach (var row in rows)
+            {
+                if (row == null)
+                    throw new ArgumentException("Quantity revision summary contains a null row at index " + index + ".", nameof(rows));
+                if (!string.IsNullOrWhiteSpace(row.QuantityName)) summarizable.Add(row);
+                index++;
+            }
+
             var result = new List<QuantityRevisionSummary>();
-            foreach (var group in rows.Where(x => x != null && !string.IsNullOrWhiteSpace(x.QuantityName)).GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            foreach (var group in summarizable.GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var before = 0d;
                 var after = 0d;
