@@ -63,7 +63,7 @@ if not XAML.is_file():
 else:
     text = XAML.read_text(encoding="utf-8")
     if 'PreviewKeyDown="OnRightPanelPreviewKeyDown"' not in text:
-        errors.append("RightPanel XAML must own the single PreviewKeyDown route for layer-search shortcuts")
+        errors.append("RightPanel XAML must own the single PreviewKeyDown route for keyboard shortcuts")
 
 if not SHORTCUTS.is_file():
     errors.append("missing RightPanel.SearchShortcuts.cs")
@@ -74,12 +74,19 @@ else:
         "modifiers == ModifierKeys.Control && e.Key == Key.F",
         "LayerSearchBox?.Focus();",
         "LayerSearchBox?.SelectAll();",
+        "modifiers == ModifierKeys.None && e.Key == Key.F5",
+        "Refresh();",
         "e.Key == Key.Escape",
         "LayerSearchBox.IsKeyboardFocusWithin",
         "LayerSearchBox.Clear();",
     ):
         if token not in text:
-            errors.append("RightPanel layer-search shortcut contract missing: " + token)
+            errors.append("RightPanel keyboard shortcut contract missing: " + token)
+    f5_guard = text.find("modifiers == ModifierKeys.None && e.Key == Key.F5")
+    f5_refresh = text.find("Refresh();", f5_guard)
+    escape_guard = text.find("e.Key == Key.Escape")
+    if f5_guard < 0 or f5_refresh < f5_guard or (escape_guard >= 0 and f5_refresh > escape_guard):
+        errors.append("RightPanel F5 must route directly to Refresh before the Escape search-clear branch")
     for forbidden in (
         "DrawingCatalogReader.ReadLayers",
         "LayerVisibilityService",
@@ -88,7 +95,7 @@ else:
         "OnInitialized(",
     ):
         if forbidden in text:
-            errors.append("RightPanel search shortcuts must remain presentation-only and must not double-register the XAML key handler: " + forbidden)
+            errors.append("RightPanel keyboard shortcuts must not duplicate CAD internals or double-register the XAML key handler: " + forbidden)
 
 print("QS3D RightPanel cached layer-search preflight")
 if errors:
@@ -97,4 +104,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: layer search is bounded multi-term filtering over cached CAD snapshots; keystrokes do not reopen the layer table, XAML owns one Ctrl+F/Escape route, and real layer mutations explicitly reload live CAD state.")
+print("PASS: layer search is bounded multi-term filtering over cached CAD snapshots; Ctrl+F/Escape stay presentation-only, F5 reuses the canonical panel Refresh path, XAML owns one key route, and real layer mutations explicitly reload live CAD state.")
