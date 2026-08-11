@@ -53,6 +53,7 @@ namespace QS3D.BricsCAD.V25
                 issues.AddRange(new GeneratedGeometryStaleHealthService().Inspect(project));
                 issues.AddRange(new GeneratedRebarModeHealthService().Inspect(project));
                 issues.AddRange(new RebarFabricationQualificationHealthService().Inspect(project));
+                issues.AddRange(SemanticScheduleNativeTableBuilder.Inspect(document, project));
                 issues.AddRange(BomReleaseGuardService.Inspect(project, liveGenerated));
                 issues = issues
                     .GroupBy(x => x.Code + "\n" + x.ElementId + "\n" + x.Message, StringComparer.Ordinal)
@@ -87,8 +88,17 @@ namespace QS3D.BricsCAD.V25
 
         private static void Locate(Document document, ModelHealthIssue issue)
         {
-            if (string.IsNullOrWhiteSpace(issue.ElementId)) return;
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+            if (string.IsNullOrWhiteSpace(issue.ElementId))
+            {
+                if (!(issue.Code ?? string.Empty).StartsWith("CUSTOM_SCHEDULE_TABLE_", StringComparison.OrdinalIgnoreCase)) return;
+                var artifactHandles = SemanticScheduleNativeTableBuilder.PersistedHandles(currentProject);
+                if (artifactHandles.Count == 0) return;
+                var artifactCount = CadHandleService.Select(document, artifactHandles);
+                PaletteCoordinator.SetStatus("Release Check Định vị " + issue.Code + " • " + artifactCount + " CAD object(s)");
+                if (artifactCount > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                return;
+            }
             var element = currentProject.FindElement(issue.ElementId);
             if (element == null) return;
             var handles = SemanticReferenceHandles.Get(element)
