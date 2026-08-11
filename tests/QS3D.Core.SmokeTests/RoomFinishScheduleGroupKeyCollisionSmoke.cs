@@ -11,54 +11,78 @@ namespace QS3D.Core.SmokeTests
         {
             const string separator = "\u001f";
             var project = new ProjectState("P-ROOM-FINISH-GROUP", "Room finish grouping");
-            project.Floors.Add(new FloorDefinition("f1", "Tầng 1", 0d));
+            project.Floors.Add(new FloorDefinition("A" + separator + "B", "Floor AB", 0d));
+            project.Floors.Add(new FloorDefinition("A", "Floor A", 3d));
+            project.Floors.Add(new FloorDefinition("D", "Floor D", 6d));
 
             var roomFamily = new ProjectFamily("room-family", "Phòng", ElementCategory.Room);
+            var finishFamily = new ProjectFamily("wf", "Sơn nước", ElementCategory.WallFinish);
+            finishFamily.Properties["Material"] = "Paint";
             project.Families.Add(roomFamily);
-            var room = new ProjectElement("room-1", ElementCategory.Room, roomFamily.Id, "f1", "z");
-            room.Properties["RoomName"] = "Phòng 101";
-            project.Elements.Add(room);
+            project.Families.Add(finishFamily);
 
-            var firstFamily = new ProjectFamily("family" + separator + "material", "Finish A", ElementCategory.WallFinish);
-            firstFamily.Properties["Material"] = "paint";
-            var secondFamily = new ProjectFamily("family", "Finish B", ElementCategory.WallFinish);
-            secondFamily.Properties["Material"] = "material" + separator + "paint";
-            project.Families.Add(firstFamily);
-            project.Families.Add(secondFamily);
+            var firstRoom = Room("C", roomFamily.Id, "A" + separator + "B", "Room C");
+            var secondRoom = Room("B" + separator + "C", roomFamily.Id, "A", "Room BC");
+            project.Elements.Add(firstRoom);
+            project.Elements.Add(secondRoom);
 
-            var first = Finish("finish-1", firstFamily.Id, 2d, "A1");
-            var identical = Finish("finish-2", firstFamily.Id, 3d, "A2");
-            var collidingUnderOldKey = Finish("finish-3", secondFamily.Id, 7d, "B1");
+            var first = LinkedFinish("finish-1", finishFamily.Id, "A" + separator + "B", firstRoom.Id, 2d, "A1");
+            var collidingUnderOldKey = LinkedFinish("finish-2", finishFamily.Id, "A", secondRoom.Id, 7d, "B1");
+            var identicalUnlinked = UnlinkedFinish("finish-3", finishFamily.Id, "D", 3d, "C1");
+            var identicalUnlinkedAgain = UnlinkedFinish("finish-4", finishFamily.Id, "D", 4d, "C2");
             project.Elements.Add(first);
-            project.Elements.Add(identical);
             project.Elements.Add(collidingUnderOldKey);
+            project.Elements.Add(identicalUnlinked);
+            project.Elements.Add(identicalUnlinkedAgain);
 
             var rows = RoomFinishScheduleBuilder.Build(project);
-            Equal(2, rows.Count, "distinct room-finish grouping tuples remain distinct");
+            Equal(3, rows.Count, "old delimiter collision remains split while identical tuples still group");
 
-            var firstGroup = rows.Single(x => x.FamilyName == "Finish A");
-            Equal(2, firstGroup.Count, "identical tuple still groups");
-            Equal(5d, firstGroup.AreaM2, "identical tuple area accumulates");
-            Equal(5d, firstGroup.PrimaryQuantity, "identical tuple primary quantity accumulates");
-            Equal("paint", firstGroup.Material, "first material preserved");
-            Equal(2, firstGroup.ElementIds.Count, "first group element provenance preserved");
-            Equal(2, firstGroup.SourceHandles.Count, "first group source provenance preserved");
-            Equal(1, firstGroup.RoomIds.Count, "first group room provenance remains singular");
+            var firstGroup = rows.Single(x => x.Room == "Room C");
+            Equal(1, firstGroup.Count, "first linked finish remains independent");
+            Equal(2d, firstGroup.PrimaryQuantity, "first linked quantity remains independent");
+            Equal("finish-1", firstGroup.ElementIds.Single(), "first element provenance remains independent");
+            Equal("A1", firstGroup.SourceHandles.Single(), "first source provenance remains independent");
+            Equal("C", firstGroup.RoomIds.Single(), "first room provenance remains independent");
 
-            var secondGroup = rows.Single(x => x.FamilyName == "Finish B");
+            var secondGroup = rows.Single(x => x.Room == "Room BC");
             Equal(1, secondGroup.Count, "old delimiter collision no longer merges");
-            Equal(7d, secondGroup.AreaM2, "second group area remains independent");
-            Equal(7d, secondGroup.PrimaryQuantity, "second group primary quantity remains independent");
-            Equal("material" + separator + "paint", secondGroup.Material, "separator-bearing material preserved");
-            Equal("finish-3", secondGroup.ElementIds.Single(), "second group element provenance remains independent");
-            Equal("B1", secondGroup.SourceHandles.Single(), "second group source provenance remains independent");
-            Equal("room-1", secondGroup.RoomIds.Single(), "second group room provenance remains independent");
+            Equal(7d, secondGroup.PrimaryQuantity, "second linked quantity remains independent");
+            Equal("finish-2", secondGroup.ElementIds.Single(), "second element provenance remains independent");
+            Equal("B1", secondGroup.SourceHandles.Single(), "second source provenance remains independent");
+            Equal("B" + separator + "C", secondGroup.RoomIds.Single(), "separator-bearing room id is preserved");
+
+            var identicalGroup = rows.Single(x => x.Room == "(chưa liên kết phòng)");
+            Equal(2, identicalGroup.Count, "identical unlinked tuple still groups");
+            Equal(7d, identicalGroup.PrimaryQuantity, "identical tuple quantities still accumulate");
+            Equal(2, identicalGroup.ElementIds.Count, "identical tuple element provenance accumulates");
+            Equal(2, identicalGroup.SourceHandles.Count, "identical tuple source provenance accumulates");
+            Equal(0, identicalGroup.RoomIds.Count, "unlinked tuple does not invent room provenance");
         }
 
-        private static ProjectElement Finish(string id, string familyId, double areaM2, string sourceHandle)
+        private static ProjectElement Room(string id, string familyId, string floorId, string label)
         {
-            var element = new ProjectElement(id, ElementCategory.WallFinish, familyId, "f1", "z");
-            element.Properties["ParentRoomId"] = "room-1";
+            var room = new ProjectElement(id, ElementCategory.Room, familyId, floorId, "z");
+            room.Properties["RoomName"] = label;
+            return room;
+        }
+
+        private static ProjectElement LinkedFinish(
+            string id,
+            string familyId,
+            string floorId,
+            string roomId,
+            double areaM2,
+            string sourceHandle)
+        {
+            var element = UnlinkedFinish(id, familyId, floorId, areaM2, sourceHandle);
+            element.Properties["ParentRoomId"] = roomId;
+            return element;
+        }
+
+        private static ProjectElement UnlinkedFinish(string id, string familyId, string floorId, double areaM2, string sourceHandle)
+        {
+            var element = new ProjectElement(id, ElementCategory.WallFinish, familyId, floorId, "z");
             element.Quantities["NetFinishAreaM2"] = areaM2;
             element.SourceHandles.Add(sourceHandle);
             return element;
