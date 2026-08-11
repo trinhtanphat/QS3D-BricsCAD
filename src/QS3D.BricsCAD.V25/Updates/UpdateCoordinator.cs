@@ -105,7 +105,7 @@ namespace QS3D.BricsCAD.V25.Updates
             if (!TryScheduleCurrentGeneration(generation, release, out var lifecycleCurrent, out var error))
             {
                 var failed = new UpdateCheckResult(UpdateState.Error, fresh.CurrentVersion, release, "Không thể lên lịch cập nhật.", error);
-                if (lifecycleCurrent) Publish(failed, false);
+                if (lifecycleCurrent) TryPublishCurrent(generation, failed, false);
                 return failed;
             }
 
@@ -115,7 +115,7 @@ namespace QS3D.BricsCAD.V25.Updates
                 release,
                 "Đã lên lịch cập nhật.",
                 "QS3D sẽ yêu cầu BricsCAD đóng theo cơ chế cửa sổ bình thường để giữ nguyên các nhắc lưu bản vẽ. Nếu bạn hủy đóng, updater chỉ tiếp tục chờ; khi mọi BricsCAD đã thoát, nó mới xác minh chữ ký, cập nhật và mở lại sau khi thành công.");
-            if (IsGenerationCurrent(generation)) Publish(scheduled, false);
+            TryPublishCurrent(generation, scheduled, false);
             return scheduled;
         }
 
@@ -158,7 +158,10 @@ namespace QS3D.BricsCAD.V25.Updates
         private async Task<UpdateCheckResult> CheckCoreAsync(bool automatic, int generation)
         {
             var current = GetCurrentVersion();
-            Publish(new UpdateCheckResult(UpdateState.Checking, current, null, "Đang kiểm tra GitHub Releases…", string.Empty), false);
+            TryPublishCurrent(
+                generation,
+                new UpdateCheckResult(UpdateState.Checking, current, null, "Đang kiểm tra GitHub Releases…", string.Empty),
+                false);
 
             try
             {
@@ -216,37 +219,42 @@ namespace QS3D.BricsCAD.V25.Updates
                     }
                 }
 
-                if (!IsGenerationCurrent(generation)) return result;
-                Publish(result, automatic && result.HasUpdate);
+                TryPublishCurrent(generation, result, automatic && result.HasUpdate);
                 return result;
             }
             catch (Exception ex)
             {
                 var result = new UpdateCheckResult(UpdateState.Error, current, null, "Không kiểm tra được cập nhật. QS3D vẫn tiếp tục hoạt động bình thường.", ex.Message);
-                if (IsGenerationCurrent(generation)) Publish(result, false);
+                TryPublishCurrent(generation, result, false);
                 return result;
             }
         }
 
-        private bool IsGenerationCurrent(int generation)
+        private bool TryPublishCurrent(int generation, UpdateCheckResult result, bool automaticNotification)
         {
-            lock (_sync) return _started && generation == _generation;
-        }
+            Dispatcher? dispatcher;
+            lock (_sync)
+            {
+                if (!_started || generation != _generation) return false;
+                _last = result;
+                dispatcher = _dispatcher;
+            }
 
-        private void Publish(UpdateCheckResult result, bool automaticNotification)
-        {
-            lock (_sync) _last = result;
-            var dispatcher = _dispatcher;
-            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return true;
 
             Action publish = () =>
             {
-                StateChanged?.Invoke(this, result);
-                if (automaticNotification) AutomaticUpdateFound?.Invoke(this, result);
+                lock (_sync)
+                {
+                    if (!_started || generation != _generation) return;
+                    StateChanged?.Invoke(this, result);
+                    if (automaticNotification) AutomaticUpdateFound?.Invoke(this, result);
+                }
             };
 
             if (dispatcher.CheckAccess()) publish();
             else dispatcher.BeginInvoke(publish, DispatcherPriority.Background);
+            return true;
         }
 
         private static SemanticReleaseVersion GetCurrentVersion()
