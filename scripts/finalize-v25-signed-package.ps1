@@ -60,7 +60,16 @@ function Read-ManagedProductVersion {
 }
 
 $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
+$packagePath = [IO.Path]::GetFullPath($package).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+$packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar
 $zip = [IO.Path]::GetFullPath($PackageZip)
+if (-not [string]::Equals([IO.Path]::GetExtension($zip), '.zip', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "PackageZip must use the .zip extension: $zip"
+}
+if ([string]::Equals($zip, $packagePath, [StringComparison]::OrdinalIgnoreCase) -or
+    $zip.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'PackageZip must be outside PackageDirectory so finalization cannot delete or overwrite package payload.'
+}
 $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
 $metadataPath = Join-Path $package 'PACKAGE-METADATA.json'
 if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Missing signed-package artifact: $metadataPath" }
