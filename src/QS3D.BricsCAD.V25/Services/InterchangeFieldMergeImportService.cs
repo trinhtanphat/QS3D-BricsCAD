@@ -93,6 +93,11 @@ namespace QS3D.BricsCAD.V25.Services
                 {
                     EnsureActive(document, "Interchange field merge / native mutation");
 
+                    // Repeat the coverage check under the document lock so a modeless/event callback
+                    // cannot swap generated owner-slot metadata between the early precheck and native
+                    // invalidation. This check must remain immediately before destructive preparation.
+                    GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);
+
                     // Prepare native erasure before Core mutation while the target's reviewed generated
                     // handle metadata still exists. Prepare is rollback-capable and does not clear semantic
                     // ownership metadata. Core Import re-plans next and rejects stale target/source/policy/
