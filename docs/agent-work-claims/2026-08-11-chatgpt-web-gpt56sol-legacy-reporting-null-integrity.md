@@ -1,6 +1,6 @@
 # Work claim — legacy reporting null-input integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-legacy-reporting-null-integrity`
 - Registered: `2026-08-11T21:07:00+07:00`
 - Baseline main SHA: `cc38e41349bcb113367670feafbd17238220586c`
@@ -8,7 +8,7 @@
 
 ## Confirmed defect
 
-`QuantityReportBuilder.Group(IEnumerable<ElementInstance>)` currently executes `if (element == null) continue;`, and `QuantityReportTotals.FromRows(IEnumerable<QuantityReportRow>)` executes `if (row == null) continue;`. A malformed caller sequence can therefore lose one or more report records without any error while still receiving a valid-looking grouped report or total.
+`QuantityReportBuilder.Group(IEnumerable<ElementInstance>)` executed `if (element == null) continue;`, and `QuantityReportTotals.FromRows(IEnumerable<QuantityReportRow>)` executed `if (row == null) continue;`. A malformed caller sequence could therefore lose one or more report records without any error while still receiving a valid-looking grouped report or total.
 
 ## Reserved scope
 
@@ -41,6 +41,20 @@
 
 The previous legacy reporting provenance/identity claims are completed and released these paths. Current Ribbon, XLSX exporter, Workspace, Start Center, updater, BQ/Quantity UI, Core mutation and Room Auto lanes do not reserve the three files above.
 
+## Completion
+
+- Claim-only PR: `#458`, merged to `main` before substantive source work as `3abc5637ad65b81ee489b1ae8cf3c0198a95dd5c`.
+- Implementation PR: `#460` — `fix(reporting): fail closed on null legacy report members`.
+- Reviewed implementation head: `84325aa44ab618f10f1ebf68706540e50d1ea0d4`.
+- Squash merge on `main`: `81205012d1255dd652830e45cb9b6e0281cd4173`.
+- `QuantityReportBuilder.Group` now rejects a null element with its zero-based input index and `elements` parameter binding instead of silently skipping it.
+- `QuantityReportTotals.FromRows` now rejects a null row with its zero-based input index and `rows` parameter binding instead of silently skipping it.
+- The already-registered `LegacyQuantityReportIdentitySmoke` now covers both null-member contracts and confirms valid totals remain unchanged.
+- Final implementation PR diff: 3 files / 35 additions / 2 deletions.
+- Concurrent-main comparison before integration showed no changes to the three reserved files.
+- GitHub Actions/build/release were not dispatched.
+- No native BricsCAD V25/WPF runtime PASS is claimed.
+
 ## Completion condition
 
-Both legacy reporting entry points fail closed on null members, the already-registered smoke guards the contract, changes are merged onto current `main` without overlap, and this claim is closed with exact SHAs and truthful validation scope.
+Satisfied by PR `#460` and merge `81205012d1255dd652830e45cb9b6e0281cd4173`: both legacy reporting entry points fail closed on null members, the existing smoke guards the behavior, and the implementation was merged without overwriting concurrent work.
