@@ -12,7 +12,7 @@ if not review.is_file():
 else:
     text = review.read_text(encoding="utf-8")
     required = (
-        'AuditTrail.ForProject(project).Record("recognition.skip"',
+        'AuditTrail.ForProject(ProjectContextCoordinator.GetOrCreate(doc)).Record("recognition.skip"',
         "QS3D Recognition skip",
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
     )
@@ -49,4 +49,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Build3D fails closed on partial/mixed semantic selections and auto-recognition skips are auditable.")
+print("PASS: Build3D fails closed on partial/mixed semantic selections and auto-recognition failures are audited against the re-resolved current project.")
