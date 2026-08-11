@@ -51,10 +51,15 @@ for token in (
     "UseSourceExecuteRequiresAndConsumesExplicitAuthorization",
     "ProvenanceToggleSelectsCombinedExecution",
     "InvalidModeFailsClosed",
+    "ProjectInterchangeUseSourceSemanticImporter.Plan(target, json)",
+    "ProjectInterchangeNativeCleanupAuthorization.ForPlan(semanticPlan)",
     "ModuleInitializer",
 ):
     if token not in test:
         errors.append("import coordinator smoke missing regression token: " + token)
+
+if "ProjectInterchangeNativeCleanupAuthorization.ForElementIds(plan.NativeCleanupElementIds)" in test:
+    errors.append("import coordinator smoke must not treat element-id-only cleanup authorization as executable UseSource authority")
 
 for token in (
     "one explicit mode",
@@ -74,4 +79,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: one Core coordinator selects an explicit import policy/provenance mode, never falls back silently, and preserves UseSource native-cleanup authorization.")
+print("PASS: one Core coordinator selects an explicit import policy/provenance mode, never falls back silently, and preserves handle-bound UseSource native-cleanup authorization.")
