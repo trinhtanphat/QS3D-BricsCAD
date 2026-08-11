@@ -216,13 +216,15 @@ namespace QS3D.Core.Domain
         private static List<ProjectMaterial> ReadCustom(ProjectState project)
         {
             if (!project.Metadata.TryGetValue(MetadataKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return new List<ProjectMaterial>();
-            var lines = raw.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var lines = raw.Split(new[] { '\n' }, StringSplitOptions.None);
             if (lines.Length > MaxCustomMaterials) throw new InvalidOperationException("Stored material catalog exceeds the supported custom-material limit.");
             var result = new List<ProjectMaterial>(lines.Length);
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var index = 0; index < lines.Length; index++)
             {
+                if (string.IsNullOrWhiteSpace(lines[index]))
+                    throw new InvalidOperationException("Material catalog contains an empty record at line " + (index + 1) + ".");
                 var fields = lines[index].Split('|');
                 if (fields.Length != 4) throw new InvalidOperationException("Invalid material catalog record at line " + (index + 1) + ".");
                 var material = new ProjectMaterial(Decode(fields[0]), Decode(fields[1]), Decode(fields[2]), Decode(fields[3]), false);
