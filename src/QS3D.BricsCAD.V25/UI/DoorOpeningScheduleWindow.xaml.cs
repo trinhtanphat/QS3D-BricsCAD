@@ -95,7 +95,7 @@ namespace QS3D.BricsCAD.V25.UI
         private IReadOnlyList<DoorOpeningScheduleRow> BuildCurrentRows(out int regenerated)
         {
             EnsureActive("đọc Door/Opening Schedule hiện hành");
-            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+            if (!ExistingProjectMutationContext.TryGet(_document, out var project))
                 throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng Door/Opening Schedule và mở lại sau khi nạp project.");
             regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
             return DoorOpeningScheduleBuilder.Build(project);
