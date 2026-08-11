@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             ExplicitOrderAndTemplatesArePreserved();
+            EmptyRowsStillValidateTemplates();
             BlankOptionalCellsAreAllowedWithoutWeakeningTagLabels();
             DuplicateElementIdsFailClosed();
             AmbiguousProjectElementFailsClosed();
@@ -47,6 +48,38 @@ namespace QS3D.Core.SmokeTests
             Equal("7.25", table.Rows[0].Cells[2]);
             Equal("E-1", table.Rows[1].ElementId);
             Equal("B1", table.Rows[1].Cells[0]);
+        }
+
+        private static void EmptyRowsStillValidateTemplates()
+        {
+            var project = new ProjectState("table", "Table");
+            var table = SemanticDocumentationTableBuilder.Build(
+                project,
+                "Empty",
+                Array.Empty<string>(),
+                new[] { new SemanticDocumentationColumn("Optional", "{P:MissingOptional}") },
+                allowEmpty: true);
+            Equal(1, table.Headers.Count);
+            Equal(0, table.Rows.Count);
+
+            Throws<FormatException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Empty",
+                Array.Empty<string>(),
+                new[] { new SemanticDocumentationColumn("Bad", "{Unsupported}") },
+                allowEmpty: true));
+            Throws<FormatException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Empty",
+                Array.Empty<string>(),
+                new[] { new SemanticDocumentationColumn("Bad", "{P:Missing") },
+                allowEmpty: true));
+            Throws<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Empty",
+                Array.Empty<string>(),
+                new[] { new SemanticDocumentationColumn("Native", "{P:GeneratedSolidHandle}") },
+                allowEmpty: true));
         }
 
         private static void BlankOptionalCellsAreAllowedWithoutWeakeningTagLabels()
