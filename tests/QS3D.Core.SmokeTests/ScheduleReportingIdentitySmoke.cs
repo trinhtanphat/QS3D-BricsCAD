@@ -26,6 +26,9 @@ namespace QS3D.Core.SmokeTests
         private static void UniqueIdsRemainAccepted()
         {
             var project = new ProjectState("schedule-identity-valid", "Schedule identity valid");
+            project.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("zone", "Zone"));
+            project.Families.Add(new ProjectFamily("family", "Family", ElementCategory.Slab));
             project.Elements.Add(new ProjectElement("E1", ElementCategory.Slab, "family", "floor", "zone"));
             project.Elements.Add(new ProjectElement("E2", ElementCategory.Slab, "family", "floor", "zone"));
 
