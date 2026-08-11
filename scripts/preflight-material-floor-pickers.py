@@ -78,13 +78,13 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs": [
         "private readonly Document _document", "MaterialCatalogWindow(Document document)",
-        "_document = document", "ProjectContextCoordinator.GetOrCreate(_document)", "ReferenceEquals(",
+        "_document = document", "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", "ReferenceEquals(",
         "SemanticSelectionResolver.ResolveImplied(_document, project)", "ProjectMaterialCatalog.UpsertCustom", "ProjectMaterialCatalog.DeleteCustom",
         'element.SetProperty(target, material.Name)', '"CurtainFrameMaterial"', "ElementCategory.GlassWall",
         'AuditTrail.ForProject(project).Record("material.assign"', 'AuditTrail.ForProject(project).Record("material.catalog.upsert"',
     ],
     "src/QS3D.BricsCAD.V25/MaterialCatalogCommands.cs": [
-        'CommandMethod("QS3DMATERIALS"', "new MaterialCatalogWindow(document)", "ShowModelessWindow",
+        'CommandMethod("QS3DMATERIALS"', "ProjectContextCoordinator.GetOrCreate(document)", "new MaterialCatalogWindow(document)", "ShowModelessWindow",
     ],
     "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml": [
         'x:Class="QS3D.BricsCAD.V25.UI.FloorLevelWindow"', 'x:Name="FloorList"', 'x:Name="ActiveFloorText"',
@@ -144,6 +144,12 @@ if resolver.is_file():
         if obsolete in text:
             errors.append("SemanticSelectionResolver still contains obsolete whole-project ownership logic: " + obsolete)
 
+material_window = ROOT / "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs"
+if material_window.is_file():
+    text = material_window.read_text(encoding="utf-8")
+    if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
+        errors.append("Material Catalog modeless callbacks must not create/cache replacement project state")
+
 for relative in (
     "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs",
     "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs",
@@ -166,4 +172,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: persisted material catalog, inherited/reference-safe rename+delete, selection-scoped ownership, document-bound material picker, and Core-backed floor CRUD/active/assignment semantics with project-instance membership guards are present.")
+print("PASS: persisted material catalog, inherited/reference-safe rename+delete, selection-scoped ownership, explicit launcher creation plus existing-project-only modeless material picker, and Core-backed floor CRUD/active/assignment semantics with project-instance membership guards are present.")
