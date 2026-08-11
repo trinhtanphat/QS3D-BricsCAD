@@ -46,9 +46,17 @@ for token in (
     ".AsReadOnly()",
     "Project contains a null semantic element.",
     "allowEmpty: true",
+    "ParseCategory",
+    "Enum.TryParse(raw, false",
+    "category.ToString()",
+    "EnsureRequiredAttributes",
+    "RequireExactlyOneChild",
 ):
     if token not in source:
         errors.append("semantic schedule source missing contract token: " + token)
+
+if "Enum.Parse(typeof(ElementCategory)" in source:
+    errors.append("persisted semantic schedule categories must not use permissive Enum.Parse")
 
 for token in (
     "bool allowEmpty",
@@ -71,6 +79,8 @@ for token in (
 
 for token in (
     "SaveLoadRoundTripIsDeterministic",
+    "PersistedCategoriesRequireCanonicalNames",
+    "PersistedSchemaRequiresCanonicalShape",
     "UpsertAndRemoveSupportMultipleDefinitions",
     "BuildFiltersAndUsesCanonicalTemplateRenderer",
     "EmptySelectionBuildsHeaderOnlyTable",
@@ -78,6 +88,7 @@ for token in (
     "NullProjectElementsFailClosed",
     "StaleReferencesFailClosedAtRenderTime",
     "DuplicateDefinitionsAndOverlappingListsFailClosed",
+    "InvalidDataException",
     "{Q:LengthM}",
     "ModuleInitializer",
 ):
@@ -104,6 +115,8 @@ for token in (
     "null semantic Element",
     "template syntax",
     "generated/native ownership",
+    "canonical ElementCategory names",
+    "exactly one canonical",
     "portable interchange",
     "native BricsCAD Table",
 ):
@@ -119,4 +132,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: custom semantic schedules are bounded/persisted, immutable, fail closed on corrupt model/template state, support header-only zero-match output, and remain on the canonical documentation renderer.")
+print("PASS: custom semantic schedules are bounded/persisted, immutable, strict-canonical on v1 XML shape/category names, fail closed on corrupt model/template state, support header-only zero-match output, and remain on the canonical documentation renderer.")
