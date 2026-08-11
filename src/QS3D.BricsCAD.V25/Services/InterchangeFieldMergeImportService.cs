@@ -76,6 +76,13 @@ namespace QS3D.BricsCAD.V25.Services
             EnsureActive(document, "Interchange field merge");
             var project = ExistingProjectMutationContext.Require(document, "Interchange field merge");
             var invalidationTargets = ResolveAffectedTargets(project, reviewedPlan.CorePlan.AffectedTargetElementIds);
+
+            // Core recognizes Generated*Handle(s) owner slots generically, but the native invalidator
+            // can erase only the slots for which BricsCAD liveness/ownership/erase handlers exist.
+            // Refuse an unsupported or split physical-opening owner alias before a CAD transaction
+            // can erase anything or Core can clear the corresponding ownership metadata.
+            GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);
+
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
 
