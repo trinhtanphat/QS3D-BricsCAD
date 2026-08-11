@@ -57,6 +57,8 @@ namespace QS3D.Core.Persistence
             var document = LoadDocument(path);
             ProjectSchemaMigrator.MigrateToCurrent(document);
             var root = document.Root ?? throw new InvalidDataException("QSDB has no root element.");
+            var updatedUtc = Date(root.Attribute("updatedUtc")?.Value);
+            var changeVersion = ChangeVersion(root.Attribute("changeVersion")?.Value);
 
             var project = new ProjectState(Required(root, "projectId"), Required(root, "name"))
             {
@@ -64,9 +66,9 @@ namespace QS3D.Core.Persistence
                 DrawingPath = Value(root, "drawingPath"),
                 DrawingFingerprint = Value(root, "drawingFingerprint"),
                 ActiveZoneId = Value(root, "activeZoneId"),
-                ActiveFloorId = Value(root, "activeFloorId"),
-                UpdatedUtc = Date(root.Attribute("updatedUtc")?.Value)
+                ActiveFloorId = Value(root, "activeFloorId")
             };
+            project.RestorePersistenceState(updatedUtc, changeVersion);
 
             var zones = root.Element("zones");
             if (zones != null)
@@ -175,6 +177,7 @@ namespace QS3D.Core.Persistence
                 new XAttribute("projectId", project.ProjectId),
                 new XAttribute("name", project.Name),
                 new XAttribute("updatedUtc", project.UpdatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)),
+                new XAttribute("changeVersion", project.ChangeVersion.ToString(CultureInfo.InvariantCulture)),
                 new XAttribute("drawingPath", project.DrawingPath ?? string.Empty),
                 new XAttribute("drawingFingerprint", project.DrawingFingerprint ?? string.Empty),
                 new XAttribute("activeZoneId", project.ActiveZoneId ?? string.Empty),
@@ -362,6 +365,14 @@ namespace QS3D.Core.Persistence
         }
 
         private static int Int(string? value, int fallback) => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) ? result : fallback;
+
+        private static long ChangeVersion(string? value)
+        {
+            if (value == null) return 0L;
+            if (value.Length == 0 || !long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var result))
+                throw new InvalidDataException("Invalid QSDB change version: " + value);
+            return result;
+        }
 
         private static DateTime Date(string? value)
         {
