@@ -5,9 +5,16 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 GENERIC = ROOT / "src/QS3D.BricsCAD.V25/Cad/ProjectOwnedNativeTableArtifactService.cs"
 SCHEDULE = ROOT / "src/QS3D.BricsCAD.V25/Cad/SemanticScheduleNativeTableBuilder.cs"
+ELEMENT = ROOT / "src/QS3D.BricsCAD.V25/Cad/SemanticElementTableBuilder.cs"
 errors = []
 
-for path in (GENERIC, SCHEDULE):
+owner_tokens = {
+    GENERIC: "project.Metadata[definition.OwnerProjectKey].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal",
+    SCHEDULE: "project.Metadata[keys.OwnerProjectId].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal",
+    ELEMENT: "project.Metadata[OwnerProjectKey].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal",
+}
+
+for path in (GENERIC, SCHEDULE, ELEMENT):
     if not path.is_file():
         errors.append("missing " + str(path.relative_to(ROOT)))
         continue
@@ -27,12 +34,7 @@ for path in (GENERIC, SCHEDULE):
         if token not in text:
             errors.append(label + " missing Unicode-safe project XData identity token: " + token)
 
-    owner_token = (
-        "project.Metadata[definition.OwnerProjectKey].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal"
-        if path == GENERIC
-        else "project.Metadata[keys.OwnerProjectId].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal"
-    )
-    if owner_token not in text:
+    if owner_tokens[path] not in text:
         errors.append(label + " must compare persisted owner metadata against the normalized ProjectId.")
 
     for forbidden in (

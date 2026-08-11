@@ -54,7 +54,13 @@ def main():
     transaction = service.find("StartTransaction()")
     snapshot = service.find("ProjectStateSnapshot.Capture(lockedProject)")
     locked_guard = service.find("GeneratedNativeCleanupCoverageGuard.EnsureSupported(lockedInvalidationTargets);")
+    pre_native_authority = service.find('"Interchange field merge / pre-native cleanup"')
     invalidation = service.find("GeneratedDependentGeometryInvalidator.Prepare(")
+    pre_core_authority = service.find('"Interchange field merge / pre-core apply"')
+    core_import = service.find("ProjectInterchangeFieldMergeImporter.Import(")
+    metadata = service.find("invalidation.CommitMetadata();")
+    pre_commit_authority = service.find('"Interchange field merge / pre-CAD commit"')
+    commit = service.find("transaction.Commit();")
 
     ordered = [
         early_guard,
@@ -65,16 +71,25 @@ def main():
         transaction,
         snapshot,
         locked_guard,
+        pre_native_authority,
         invalidation,
+        pre_core_authority,
+        core_import,
+        metadata,
+        pre_commit_authority,
+        commit,
     ]
     if min(ordered) < 0:
         failures.append(
-            "field merge service is missing early coverage, document lock, canonical rebind, locked target re-resolution, rollback snapshot, locked coverage, or invalidator preparation"
+            "field merge service is missing cleanup coverage, canonical locked rebind, sidecar authority phase checks, rollback snapshot, native invalidation, Core apply, metadata sweep, or CAD commit"
         )
     elif ordered != sorted(ordered):
         failures.append(
-            "field merge native ordering must be early coverage -> document lock -> canonical rebind/identity check -> target re-resolve -> transaction/snapshot -> locked coverage -> invalidator"
+            "field merge native ordering must be early coverage -> document lock/rebind -> transaction/snapshot -> locked coverage -> pre-native authority -> invalidator -> pre-Core authority -> Core apply -> metadata -> pre-commit authority -> CAD commit"
         )
+
+    if service.count("ProjectContextCoordinator.RequireBackingStoreUnchanged(") != 3:
+        failures.append("field merge must recheck sidecar/backing-store authority exactly at pre-native, pre-Core and pre-CAD-commit phases")
 
     require(service, "GeneratedDependentGeometryInvalidator.Prepare(\n                            document,\n                            transaction,\n                            lockedProject,\n                            lockedInvalidationTargets)", "locked invalidator inputs", failures)
     require(service, "ProjectInterchangeFieldMergeImporter.Import(\n                            lockedProject,", "locked Core mutation target", failures)
@@ -98,6 +113,7 @@ def main():
     print("PASS: FieldMerge rejects unsupported generated ownership slots before native mutation.")
     print("PASS: the exact canonical project and affected targets are rebound/re-resolved under the document lock.")
     print("PASS: cleanup coverage is rechecked under the document lock immediately before native invalidation.")
+    print("PASS: sidecar authority is rechecked before native cleanup, before Core apply, and before CAD commit.")
     print("PASS: physical-opening owner aliases must identify the same generated host Solid3d handle.")
     print("PASS: known native cleanup handlers remain present for solid/rebar/curtain/grid ownership slots.")
     return 0
