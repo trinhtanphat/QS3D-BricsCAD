@@ -105,13 +105,24 @@ namespace QS3D.Core.Geometry
                     throw new ArgumentException("Polygon contains a zero-length edge at vertex " + i + ".", nameof(polygon));
             }
 
+            var origin = vertices[0];
             var twiceArea = 0d;
-            for (var i = 0; i < vertices.Count; i++)
+            var compensation = 0d;
+            for (var i = 1; i < vertices.Count - 1; i++)
             {
-                var a = vertices[i];
-                var b = vertices[(i + 1) % vertices.Count];
-                twiceArea += a.X * b.Y - b.X * a.Y;
-                if (!Finite(twiceArea)) throw new OverflowException("Polygon signed area exceeds the supported numeric range.");
+                var ax = vertices[i].X - origin.X;
+                var ay = vertices[i].Y - origin.Y;
+                var bx = vertices[i + 1].X - origin.X;
+                var by = vertices[i + 1].Y - origin.Y;
+                if (!Finite(ax) || !Finite(ay) || !Finite(bx) || !Finite(by))
+                    throw new OverflowException("Polygon coordinate delta exceeds the supported numeric range.");
+                var cross = ax * by - ay * bx;
+                if (!Finite(cross)) throw new OverflowException("Polygon signed area exceeds the supported numeric range.");
+                var corrected = cross - compensation;
+                var next = twiceArea + corrected;
+                if (!Finite(next)) throw new OverflowException("Polygon signed area exceeds the supported numeric range.");
+                compensation = (next - twiceArea) - corrected;
+                twiceArea = next;
             }
             if (Math.Abs(twiceArea) <= Epsilon) throw new ArgumentException("Polygon area is zero or below tolerance.", nameof(polygon));
 
