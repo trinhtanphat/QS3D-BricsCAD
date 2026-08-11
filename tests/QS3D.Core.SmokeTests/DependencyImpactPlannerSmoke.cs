@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
@@ -14,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             ImpactPlanIsDeterministicAndReadOnly();
             MultipleRootsUseStableShortestCause();
             InvalidRootsFailClosed();
+            OverBoundRootEnumerationStopsAtProjectCardinality();
         }
 
         private static void ImpactPlanIsDeterministicAndReadOnly()
@@ -63,6 +65,25 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => planner.Plan(project, new[] { " ROOT " }));
             Throws<ArgumentException>(() => planner.Plan(project, new[] { "ROOT", "root" }));
             Throws<InvalidOperationException>(() => planner.Plan(project, new[] { "MISSING" }));
+        }
+
+        private static void OverBoundRootEnumerationStopsAtProjectCardinality()
+        {
+            var project = Fixture();
+            var yielded = 0;
+
+            IEnumerable<string> Roots()
+            {
+                for (var i = 0; i <= project.Elements.Count; i++)
+                {
+                    yielded++;
+                    yield return "ROOT-" + i;
+                }
+                throw new Exception("Dependency impact planner enumerated beyond the first impossible root.");
+            }
+
+            Throws<ArgumentException>(() => new DependencyImpactPlanner().Plan(project, Roots()));
+            Equal(project.Elements.Count + 1, yielded);
         }
 
         private static ProjectState Fixture()
