@@ -103,7 +103,43 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWBEAM", () =>
             {
                 RequireModelSpace(document);
-                var points = AcquireFixedPath(document, "Dầm", 2);
+                var points = AcquireFixedPath(document, "Dầm nhanh", 2);
+                if (points == null) return;
+
+                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var widthM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Beam, "WidthM", 0.3d) : 0.3d;
+                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Beam, "HeightM", 0.5d) : 0.5d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Beam, "BottomOffsetM", 0d) : 0d;
+
+                document.Editor.WriteMessage(
+                    "\nQS3D Dầm nhanh: dùng Family hiện tại (rộng " + widthM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, cao " + heightM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, offset " + bottomOffsetM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m). Dùng QS3DDRAWBEAMADV khi cần nhập tham số riêng.");
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.Beam,
+                    () => CreateLine(document, points[0], points[1]),
+                    element =>
+                    {
+                        element.Properties["WidthM"] = widthM.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["HeightM"] = heightM.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
+            });
+        }
+
+        [CommandMethod("QS3DDRAWBEAMADV", CommandFlags.Modal)]
+        public void DrawBeamAdvanced()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWBEAMADV", () =>
+            {
+                RequireModelSpace(document);
+                var points = AcquireFixedPath(document, "Dầm tùy chỉnh", 2);
                 if (points == null) return;
 
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
@@ -136,7 +172,40 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWSLAB", () =>
             {
                 RequireModelSpace(document);
-                var points = AcquirePath(document, "Sàn", minimumPoints: 3, close: true);
+                var points = AcquirePath(document, "Sàn nhanh", minimumPoints: 3, close: true);
+                if (points == null) return;
+
+                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Slab, "ThicknessM", 0.12d) : 0.12d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Slab, "BottomOffsetM", 0d) : 0d;
+
+                document.Editor.WriteMessage(
+                    "\nQS3D Sàn nhanh: dùng Family hiện tại (dày " + thicknessM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, offset " + bottomOffsetM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m). Dùng QS3DDRAWSLABADV khi cần nhập tham số riêng.");
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.Slab,
+                    () => CreatePolyline(document, points, true),
+                    element =>
+                    {
+                        element.Properties["ThicknessM"] = thicknessM.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
+            });
+        }
+
+        [CommandMethod("QS3DDRAWSLABADV", CommandFlags.Modal)]
+        public void DrawSlabAdvanced()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWSLABADV", () =>
+            {
+                RequireModelSpace(document);
+                var points = AcquirePath(document, "Sàn tùy chỉnh", minimumPoints: 3, close: true);
                 if (points == null) return;
 
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
@@ -166,7 +235,46 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWCOLUMN", () =>
             {
                 RequireModelSpace(document);
-                var centerResult = document.Editor.GetPoint(new PromptPointOptions("\nChọn tâm Cột: "));
+                var centerResult = document.Editor.GetPoint(new PromptPointOptions("\nChọn tâm Cột nhanh: "));
+                if (centerResult.Status != PromptStatus.OK) return;
+
+                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var widthM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Column, "WidthM", 0.4d) : 0.4d;
+                var depthM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Column, "DepthM", 0.4d) : 0.4d;
+                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Column, "HeightM", 3.6d) : 3.6d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Column, "BottomOffsetM", 0d) : 0d;
+
+                document.Editor.WriteMessage(
+                    "\nQS3D Cột nhanh: dùng Family hiện tại (" + widthM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " x " + depthM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, cao " + heightM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, offset " + bottomOffsetM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m). Dùng QS3DDRAWCOLUMNADV khi cần nhập tham số riêng.");
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.Column,
+                    () => CreateColumnFootprint(document, centerResult.Value, widthM, depthM),
+                    element =>
+                    {
+                        element.Properties["WidthM"] = widthM.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["DepthM"] = depthM.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["HeightM"] = heightM.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
+            });
+        }
+
+        [CommandMethod("QS3DDRAWCOLUMNADV", CommandFlags.Modal)]
+        public void DrawColumnAdvanced()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWCOLUMNADV", () =>
+            {
+                RequireModelSpace(document);
+                var centerResult = document.Editor.GetPoint(new PromptPointOptions("\nChọn tâm Cột tùy chỉnh: "));
                 if (centerResult.Status != PromptStatus.OK) return;
 
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
