@@ -192,12 +192,7 @@ namespace QS3D.BricsCAD.V25
         private static void CleanupObsoleteUnsavedProject(Document document, string currentPath)
         {
             if (!UnsavedProjectPaths.TryGetValue(document, out var obsoletePath) || string.IsNullOrWhiteSpace(obsoletePath)) return;
-            if (SameDrawingName(obsoletePath, currentPath))
-            {
-                UnsavedProjectPaths.Remove(document);
-                UnsavedProjectKeys.Remove(document);
-                return;
-            }
+            if (SameDrawingName(obsoletePath, currentPath)) return;
 
             try
             {
