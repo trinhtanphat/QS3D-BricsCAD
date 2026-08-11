@@ -131,7 +131,9 @@ namespace QS3D.Core.Domain
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Quantity name is required.", nameof(name));
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value));
-            Quantities[name.Trim()] = value;
+            var key = name.Trim();
+            if (Quantities.TryGetValue(key, out var existing) && existing.Equals(value)) return;
+            Quantities[key] = value;
             UpdatedUtc = DateTime.UtcNow;
         }
 
