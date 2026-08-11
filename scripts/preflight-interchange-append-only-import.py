@@ -47,22 +47,24 @@ if COMMANDS.is_file():
         'preview.CollisionCount > 0',
         'ProjectInterchangeAppendOnlyImporter.Plan(project, json)',
         'MessageBoxButton.YesNo',
-        'ProjectInterchangeAppendOnlyImporter.Import(project, json)',
+        'var currentProject = ProjectContextCoordinator.GetOrCreate(document);',
+        'currentProject.ChangeVersion != previewChangeVersion',
+        'ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)',
         'Chưa tự lưu .qsdb',
     ):
         if token not in text:
-            errors.append("interchange append command missing safety token: " + token)
+            errors.append("interchange append command missing safety/freshness token: " + token)
     if 'File.ReadAllText(dialog.FileName)' in text:
         errors.append("append command must not re-read the selected file through an unbounded second path")
     if '[CommandMethod("QS3DINTERCHANGEIMPORT"' in text:
-        errors.append("generic interchange import command must not be introduced by the append-only slice")
+        errors.append("dedicated append command source must remain separate from the generic policy selector")
 
 if PROJECT_TOOLS.is_file():
     text = PROJECT_TOOLS.read_text(encoding="utf-8")
-    if 'Tag="QS3DINTERCHANGEAPPEND"' not in text:
-        errors.append("Project Tools must expose the guarded append-only command explicitly")
-    if 'Tag="QS3DINTERCHANGEIMPORT"' in text:
-        errors.append("Project Tools must not present append-only as a generic interchange import")
+    if text.count('Tag="QS3DINTERCHANGEAPPEND"') != 1:
+        errors.append("Project Tools must expose the guarded dedicated append-only command exactly once")
+    if text.count('Tag="QS3DINTERCHANGEIMPORT"') != 1:
+        errors.append("Project Tools must expose the separate generic policy selector exactly once")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -95,4 +97,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: append-only interchange mutation uses bounded strict input, read-only confirmation planning, collision blocking, rollback, explicit UI discoverability and non-portable CAD ownership discard. Runtime V25 qualification is still required.")
+print("PASS: dedicated append-only import is bounded, collision-blocked, freshness-guarded, rollback-safe and remains distinct from the generic policy selector.")
