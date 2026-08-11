@@ -16,6 +16,14 @@ def require(text: str, needle: str, label: str) -> None:
         raise AssertionError(f"missing {label}: {needle}")
 
 
+def replacement_allowed(*, exists: bool, force: bool, is_directory: bool, qs3d_identity: bool) -> bool:
+    if not exists:
+        return True
+    if not force:
+        return False
+    return is_directory and qs3d_identity
+
+
 def main() -> int:
     installer = read(INSTALLER)
 
@@ -35,15 +43,49 @@ def main() -> int:
     require(installer, "[Diagnostics.FileVersionInfo]::GetVersionInfo($path).ProductVersion", "DLL ProductVersion read")
     require(installer, "does not match PACKAGE-METADATA productVersion", "DLL/metadata ProductVersion equality")
 
+    # A forced upgrade must prove the existing destructive target is QS3D-owned.
+    require(installer, "function Assert-ExistingInstallDirectorySafeToReplace", "existing install replacement boundary")
+    require(installer, "if (-not (Test-Path -LiteralPath $Directory -PathType Container))", "non-directory replacement refusal")
+    require(installer, "Assert-PackageIdentity -Directory $Directory", "existing target QS3D identity validation")
+    require(installer, "Refusing to replace existing InstallDirectory because it is not a valid QS3D V25 installation", "foreign directory refusal")
+    require(installer, "Assert-ExistingInstallDirectorySafeToReplace -Directory $installFull", "replacement guard invocation")
+
+    policy_cases = (
+        ({"exists": False, "force": False, "is_directory": False, "qs3d_identity": False}, True, "first install"),
+        ({"exists": True, "force": False, "is_directory": True, "qs3d_identity": True}, False, "existing install without force"),
+        ({"exists": True, "force": True, "is_directory": False, "qs3d_identity": True}, False, "forced file target"),
+        ({"exists": True, "force": True, "is_directory": True, "qs3d_identity": False}, False, "forced foreign directory"),
+        ({"exists": True, "force": True, "is_directory": True, "qs3d_identity": True}, True, "forced verified QS3D replacement"),
+    )
+    for kwargs, expected, label in policy_cases:
+        actual = replacement_allowed(**kwargs)
+        if actual is not expected:
+            raise AssertionError(f"replacement policy model mismatch for {label}: expected {expected}, got {actual}")
+
     integrity_call = installer.find("$commands = Assert-PackageIntegrity -Directory $package")
     identity_call = installer.find("Assert-PackageIdentity -Directory $package")
     targets_call = installer.find("$targets = @(Get-RegistryTargets")
     stage_create = installer.find("New-Item -ItemType Directory -Path $stage")
+    replacement_guard = installer.find("Assert-ExistingInstallDirectorySafeToReplace -Directory $installFull")
+    backup_assign = installer.find("$backup = $installFull + '.backup-'")
+    backup_move = installer.find("Move-Item -LiteralPath $installFull -Destination $backup")
     registry_write = installer.find("New-Item -Path $target.AppKey -Force")
-    if min(integrity_call, identity_call, targets_call, stage_create, registry_write) < 0 or not (
-        integrity_call < identity_call < targets_call < stage_create < registry_write
+    positions = (
+        integrity_call,
+        identity_call,
+        targets_call,
+        stage_create,
+        replacement_guard,
+        backup_assign,
+        backup_move,
+        registry_write,
+    )
+    if min(positions) < 0 or not (
+        integrity_call < identity_call < targets_call < stage_create < replacement_guard < backup_assign < backup_move < registry_write
     ):
-        raise AssertionError("hash/signature integrity -> package identity -> target discovery -> staging -> registry mutation ordering is required")
+        raise AssertionError(
+            "hash/signature integrity -> source package identity -> target discovery/staging -> existing target identity -> backup move -> registry mutation ordering is required"
+        )
 
     # Preserve the existing install security/transaction contracts.
     require(installer, "SHA256SUMS.txt", "hash manifest verification")
@@ -57,7 +99,9 @@ def main() -> int:
     require(installer, "$backup = $installFull + '.backup-'", "payload rollback backup")
     require(installer, "throw $originalError", "original install failure propagation")
 
-    print("PASS: V25 installer binds hashed/signed package metadata to both QS3D managed DLL assembly/product identities before staging or DemandLoad mutation, while preserving transactional install safeguards.")
+    print(
+        "PASS: V25 installer binds hashed/signed source package identity and verifies an existing forced replacement target is a canonical QS3D V25 installation before its backup/move boundary, while preserving transactional safeguards."
+    )
     return 0
 
 
