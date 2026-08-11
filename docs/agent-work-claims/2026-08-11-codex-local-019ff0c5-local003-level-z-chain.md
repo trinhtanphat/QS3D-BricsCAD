@@ -111,6 +111,12 @@ Baseline audited before this expansion: `origin/main@9c20cbfb`. The next full Co
 
 Reserve only that released smoke file to express the same order/case-insensitive equivalent-set comparison with two unique, nonblank, trim-canonical dependency IDs on each side. Preserve dependency-only diff, persistence round-trip, malformed XML and production Revision behavior. Do not edit `RevisionService`, snapshot storage or canonical dependency validation. Re-run the complete Core smoke after this test-data reconciliation.
 
+## 2026-08-12 Room Finish numeric smoke reconciliation expansion
+
+Baseline audited before this expansion: `origin/main@22f2297c`. The next full Core smoke reaches `tests/QS3D.Core.SmokeTests/RoomFinishGeneratorNumericSafetySmoke.cs`, which assigns NaN/Infinity to public `ElementInstance` measurement properties before invoking the generator. The completed finite-measurement domain contract now rejects those assignments at the setter boundary, so the old consumer setup is no longer constructible through the public API.
+
+Reserve only that released smoke file to assert non-finite wall/skirting measurements fail at the domain setter and to retain the disabled-output consumer check with finite negative metrics, which remain valid stored inputs but invalid only when their corresponding outputs are consumed. Preserve valid Room Finish generation/provenance and the enabled negative-area rejection. Do not edit `ElementInstance`, `RoomFinishGenerator` or numeric policy. Re-run the complete Core smoke after this test-boundary reconciliation.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
