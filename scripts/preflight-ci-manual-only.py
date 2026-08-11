@@ -5,7 +5,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
-RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml"}
+RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml", "release-v26.yml"}
 errors = []
 
 
@@ -241,5 +241,5 @@ if errors:
 
 print(
     "PASS: every GitHub Actions workflow is workflow_dispatch-only, every job is independently "
-    "hard-guarded to the manual event, and both release workflows require explicit RELEASE confirmation."
+    "hard-guarded to the manual event, and every release workflow requires explicit RELEASE confirmation."
 )
