@@ -269,9 +269,11 @@ namespace QS3D.BricsCAD.V25.Services
                 if (!TrySettingsPath(out var path)) return;
                 var directory = System.IO.Path.GetDirectoryName(path);
                 if (string.IsNullOrWhiteSpace(directory)) return;
+                var serialized = Serialize(state);
+                if (Encoding.UTF8.GetByteCount(serialized) > MaxFileBytes) return;
                 Directory.CreateDirectory(directory);
                 temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-                File.WriteAllText(temp, Serialize(state), new UTF8Encoding(false));
+                File.WriteAllText(temp, serialized, new UTF8Encoding(false));
                 if (!File.Exists(path))
                 {
                     File.Move(temp, path);

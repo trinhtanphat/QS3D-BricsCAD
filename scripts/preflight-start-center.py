@@ -148,6 +148,25 @@ def main():
     require(state_load, "while ((raw = reader.ReadLine()) != null)", "line-by-line state parsing")
     forbid(state_load, "new FileInfo(", "path-level state size precheck")
     forbid(state_load, "File.ReadAllLines", "whole-file state materialization")
+    state_save = section(
+        state,
+        "private static void TrySaveCore(StartCenterUserStateSnapshot state)",
+        "private static string Serialize",
+        "bounded local-state save")
+    save_tokens = (
+        "var serialized = Serialize(state);",
+        "if (Encoding.UTF8.GetByteCount(serialized) > MaxFileBytes) return;",
+        "Directory.CreateDirectory(directory);",
+        'temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";',
+        "File.WriteAllText(temp, serialized, new UTF8Encoding(false));",
+    )
+    save_positions = []
+    for token in save_tokens:
+        require(state_save, token, "bounded local-state save")
+        save_positions.append(state_save.find(token))
+    if save_positions != sorted(save_positions):
+        raise AssertionError("bounded local-state save must size-check serialized bytes before directory/temp creation and publish")
+    forbid(state_save, "File.WriteAllText(temp, Serialize(state)", "unbounded serialized state publish")
     forbid(state, "Process.Start", "Start Center state store")
 
     require(catalog, "StringSplitOptions.RemoveEmptyEntries", "multi-token launcher search")
@@ -181,7 +200,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, optional-state-fail-soft, stream-size-bounded, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, optional-state-fail-soft, stream-size-bounded, write-size-bounded, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
