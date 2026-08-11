@@ -20,17 +20,38 @@ namespace QS3D.BricsCAD.V25
             {
                 var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
                 if (snapshots.Count == 0) return;
-                var selectedHandles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-                var project = ExistingProjectMutationContext.Require(document, "Rebar Mesh Setup");
-                var matches = project.Elements
-                    .Where(x => (x.Category == ElementCategory.Slab || x.Category == ElementCategory.StructuralWall || x.Category == ElementCategory.Foundation) && x.SourceHandles.Any(selectedHandles.Contains))
-                    .Take(3)
-                    .ToList();
-                if (matches.Count != 1)
+                var selectedHandles = new HashSet<string>(
+                    snapshots.Select(x => x.Handle).Where(x => !string.IsNullOrWhiteSpace(x)),
+                    StringComparer.OrdinalIgnoreCase);
+                if (selectedHandles.Count == 0) return;
+
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                {
+                    document.Editor.WriteMessage("\nQS3D Rebar Mesh Setup: chưa có QS3D project hiện hữu để resolve semantic source.");
+                    return;
+                }
+
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
+                var previewMatches = ResolveMeshTargets(previewProject, selectedHandles);
+                if (previewMatches.Count != 1)
                 {
                     document.Editor.WriteMessage("\nQS3D Rebar Mesh Setup: chọn đúng một Slab, StructuralWall hoặc Foundation semantic source.");
                     return;
                 }
+
+                var expectedElementId = previewMatches[0].Id;
+                var expectedCategory = previewMatches[0].Category;
+                var project = ExistingProjectMutationContext.Require(document, "Rebar Mesh Setup");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Rebar Mesh Setup: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
+                var matches = ResolveMeshTargets(project, selectedHandles);
+                if (matches.Count != 1 ||
+                    !string.Equals(matches[0].Id, expectedElementId, StringComparison.OrdinalIgnoreCase) ||
+                    matches[0].Category != expectedCategory)
+                    throw new InvalidOperationException("Rebar Mesh Setup: semantic target đã thay đổi sau khi đọc selection; hãy chọn lại target.");
 
                 var element = matches[0];
                 var elementId = element.Id;
@@ -48,5 +69,16 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.WriteMessage("\n" + message);
             }
         }
+
+        private static List<ProjectElement> ResolveMeshTargets(ProjectState project, HashSet<string> selectedHandles) =>
+            project.Elements
+                .Where(x => IsMeshTarget(x) && x.SourceHandles.Any(selectedHandles.Contains))
+                .Take(3)
+                .ToList();
+
+        private static bool IsMeshTarget(ProjectElement element) =>
+            element.Category == ElementCategory.Slab ||
+            element.Category == ElementCategory.StructuralWall ||
+            element.Category == ElementCategory.Foundation;
     }
 }
