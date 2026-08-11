@@ -14,21 +14,21 @@ The cloud workflow deliberately does **not** claim real BricsCAD NETLOAD/runtime
 
 Do not add fake/reimplemented `BrxMgd.dll` or `TD_Mgd.dll` shims to make CI green. A fake assembly can compile against the wrong binary identity/API surface and does not prove that the plugin will load in BricsCAD.
 
-## One-time GitHub configuration
+## GitHub configuration
 
-Repository -> Settings -> Secrets and variables -> Actions.
+The workflow contains the pinned public object URL for the official BricsCAD V25.2.10 x64 en_US MSI. No laptop and no mandatory repository variable are required for the normal cloud preview path.
 
-The workflow contains the pinned public URL for the official BricsCAD V25.2.10 x64 en_US MSI. If that public object requires a signed query URL in GitHub's network environment, optionally create repository secret:
+If the public object requires a signed query URL in GitHub's network environment, optionally create repository secret:
 
 - `BRICSCAD_V25_MSI_URL`: signed HTTPS fallback for the **same pinned public MSI object**. The workflow rejects a fallback that does not start with the pinned official object URL.
 
-Create repository variable:
+Optional defense-in-depth repository variable:
 
-- `BRICSCAD_V25_MSI_SHA256`: **required** 64-hex SHA-256 of that exact pinned MSI. The cloud workflow fails closed if the digest is missing/malformed and always verifies the downloaded installer before extracting compile references.
+- `BRICSCAD_V25_MSI_SHA256`: optional 64-hex SHA-256 of the exact pinned MSI. When configured, a mismatch blocks extraction. When it is not configured, the workflow still calculates and logs the downloaded MSI SHA-256.
 
-The fallback URL never replaces integrity pinning. Whether the MSI comes from the public URL or the optional signed fallback, the exact same required SHA-256 must match. The workflow then also verifies the MSI Authenticode signature before administrative extraction. Digest verification and Authenticode are complementary gates; neither is treated as a substitute for the other.
+The SHA pin is an extra integrity layer rather than a manual prerequisite. Before any administrative extraction, the workflow always requires a mandatory Authenticode signature and verifies that the MSI ProductName is BricsCAD and the MSI ProductVersion must identify V25.2.10. The download route is also restricted to the pinned V25.2.10 object (or a signed-query form of that same object).
 
-When the pinned MSI changes, update the pinned object/version and required digest together after independently obtaining the SHA-256 for that exact installer. Do not leave the digest blank to bypass pinning.
+When the pinned MSI version changes, update the pinned object/version checks together. If a trusted SHA-256 is available, update `BRICSCAD_V25_MSI_SHA256` as an additional immutable pin.
 
 Do not put a BricsCAD license key in the workflow. The cloud preview workflow does not launch BricsCAD and does not need runtime activation.
 
@@ -49,15 +49,16 @@ The workflow performs:
 3. Core Release build;
 4. deterministic Core smoke tests;
 5. download the pinned official V25.2.10 MSI from the public URL or same-object signed fallback;
-6. verify the downloaded MSI against the required pinned SHA-256;
-7. verify the MSI Authenticode signature;
-8. MSI administrative extraction on GitHub-hosted Windows;
-9. resolve `BrxMgd.dll` + `TD_Mgd.dll` only as compile references;
-10. build `QS3D.BricsCAD.V25.dll` x64/net48;
-11. package QS3D while excluding BricsCAD runtime assemblies;
-12. create SHA-256;
-13. upload Actions artifact;
-14. publish a GitHub prerelease.
+6. calculate and log the downloaded MSI SHA-256, enforcing the optional configured pin when present;
+7. verify the mandatory Authenticode signature;
+8. verify MSI ProductName + V25.2.10 ProductVersion;
+9. MSI administrative extraction on GitHub-hosted Windows;
+10. resolve `BrxMgd.dll` + `TD_Mgd.dll` only as compile references;
+11. build `QS3D.BricsCAD.V25.dll` x64/net48;
+12. package QS3D while excluding BricsCAD runtime assemblies;
+13. create package SHA-256;
+14. upload Actions artifact;
+15. publish a GitHub prerelease.
 
 ## Runtime qualification
 
