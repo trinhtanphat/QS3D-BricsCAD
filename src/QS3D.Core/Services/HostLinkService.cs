@@ -31,26 +31,30 @@ namespace QS3D.Core.Services
                 EnsureCanLeavePhysicalCutHost(project, opening, previousHostElement, previousHost, "re-host");
             }
 
-            if (relationshipChanged)
-                ClearAutoHostMetadata(opening);
-
-            if (previousHost.Length > 0 && relationshipChanged)
+            ProjectSemanticMutationExecutor.Execute(project, "host.link", () =>
             {
-                RemoveDependencies(opening, previousHost);
-                MarkHostOpeningRelationChanged(previousHostElement, opening.Id, "unlinked/re-hosted");
-            }
+                if (relationshipChanged)
+                    ClearAutoHostMetadata(opening);
 
-            opening.Properties["HostWallId"] = wall.Id;
-            var dependencyAdded = matchingDependencies.Count == 0;
-            RemoveDependencies(opening, wall.Id);
-            opening.DependsOn.Add(wall.Id);
-            opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-            if (relationshipChanged || dependencyAdded)
-                MarkHostOpeningRelationChanged(wall, opening.Id, "linked/re-hosted");
-            else
-                wall.MarkDirty(ElementDirtyFlags.Quantity);
-            project.Touch();
-            AuditTrail.ForProject(project).Record("host.link", opening.Id, (previousHost.Length == 0 ? "" : previousHost + " → ") + wall.Id);
+                if (previousHost.Length > 0 && relationshipChanged)
+                {
+                    RemoveDependencies(opening, previousHost);
+                    MarkHostOpeningRelationChanged(previousHostElement, opening.Id, "unlinked/re-hosted");
+                }
+
+                opening.Properties["HostWallId"] = wall.Id;
+                var dependencyAdded = matchingDependencies.Count == 0;
+                RemoveDependencies(opening, wall.Id);
+                opening.DependsOn.Add(wall.Id);
+                opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+                if (relationshipChanged || dependencyAdded)
+                    MarkHostOpeningRelationChanged(wall, opening.Id, "linked/re-hosted");
+                else
+                    wall.MarkDirty(ElementDirtyFlags.Quantity);
+                project.Touch();
+                AuditTrail.ForProject(project).Record("host.link", opening.Id, (previousHost.Length == 0 ? "" : previousHost + " → ") + wall.Id);
+                return true;
+            });
         }
 
         public void UnlinkOpening(ProjectState project, string openingId)
@@ -61,9 +65,13 @@ namespace QS3D.Core.Services
             var hasHostProperty = opening.Properties.TryGetValue("HostWallId", out var value);
             if (!hasHostProperty)
             {
-                if (!ClearAutoHostMetadata(opening)) return;
-                project.Touch();
-                AuditTrail.ForProject(project).Record("host.auto-provenance.clear", opening.Id, "stale metadata without HostWallId");
+                ProjectSemanticMutationExecutor.Execute(project, "host.auto-provenance.clear", () =>
+                {
+                    if (!ClearAutoHostMetadata(opening)) return false;
+                    project.Touch();
+                    AuditTrail.ForProject(project).Record("host.auto-provenance.clear", opening.Id, "stale metadata without HostWallId");
+                    return true;
+                });
                 return;
             }
 
@@ -72,19 +80,23 @@ namespace QS3D.Core.Services
             if (hostId.Length > 0)
                 EnsureCanLeavePhysicalCutHost(project, opening, host, hostId, "unlink");
 
-            opening.Properties.Remove("HostWallId");
-            ClearAutoHostMetadata(opening);
-            var dependencyRemoved = RemoveDependencies(opening, hostId) > 0;
-            opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-            if (host != null)
+            ProjectSemanticMutationExecutor.Execute(project, "host.unlink", () =>
             {
-                if (dependencyRemoved || !opening.Properties.ContainsKey("HostWallId"))
-                    MarkHostOpeningRelationChanged(host, opening.Id, "unlinked");
-                else
-                    host.MarkDirty(ElementDirtyFlags.Quantity);
-            }
-            project.Touch();
-            AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
+                opening.Properties.Remove("HostWallId");
+                ClearAutoHostMetadata(opening);
+                var dependencyRemoved = RemoveDependencies(opening, hostId) > 0;
+                opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+                if (host != null)
+                {
+                    if (dependencyRemoved || !opening.Properties.ContainsKey("HostWallId"))
+                        MarkHostOpeningRelationChanged(host, opening.Id, "unlinked");
+                    else
+                        host.MarkDirty(ElementDirtyFlags.Quantity);
+                }
+                project.Touch();
+                AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
+                return true;
+            });
         }
 
         private static bool ClearAutoHostMetadata(ProjectElement opening)
