@@ -21,10 +21,10 @@ namespace QS3D.BricsCAD.V25
             {
                 RequireModelSpace(document);
                 RequireSupportedUcs(document);
+                var project = RequireExistingProject(document, "BBS Table");
                 var point = document.Editor.GetPoint("\nChọn điểm đặt QS3D BBS Table: ");
                 if (point.Status != PromptStatus.OK) return;
                 var world = point.Value.TransformBy(document.Editor.CurrentUserCoordinateSystem);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
                 var regenerated = RegenerateSemantic(project);
                 var handle = BbsNativeTableBuilder.Build(document, project, world);
                 FinalizeUi(document, "BBS Table: đã tạo/cập nhật native Table " + handle + " • regen " + regenerated + ".");
@@ -40,7 +40,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 RequireModelSpace(document);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = RequireExistingProject(document, "BBS Table refresh");
                 var position = BbsNativeTableBuilder.StoredPosition(project);
                 var regenerated = RegenerateSemantic(project);
                 var handle = BbsNativeTableBuilder.Build(document, project, position);
@@ -56,7 +56,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = RequireExistingProject(document, "BBS Table remove");
                 BbsNativeTableBuilder.Remove(document, project);
                 FinalizeUi(document, "BBS Table: đã xóa owned native Table/metadata (nếu có).");
             }
@@ -88,6 +88,13 @@ namespace QS3D.BricsCAD.V25
                 Report(document, "BBS Table health: " + issues.Count + " issue(s).\n- " + string.Join("\n- ", visible) + suffix);
             }
             catch (Exception ex) { Report(document, "QS3DBBSTABLEHEALTH lỗi: " + ex.Message); }
+        }
+
+        private static QS3D.Core.Domain.ProjectState RequireExistingProject(Document document, string operation)
+        {
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                throw new InvalidOperationException(operation + " cần một QS3D project hiện hữu; native schedule table không tạo project mới.");
+            return project;
         }
 
         private static int RegenerateSemantic(QS3D.Core.Domain.ProjectState project)

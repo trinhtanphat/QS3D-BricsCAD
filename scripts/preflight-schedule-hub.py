@@ -27,15 +27,18 @@ checks = {
         'Text="SAME VALIDATION AS EXPORT"',
     ],
     required[1]: [
-        "private readonly Document _document", "ScheduleHubWindow(Document document)", "ProjectContextCoordinator.GetOrCreate(_document)",
-        "RegenerationEngine", "DependencyGraph", "RegeneratorCatalog.CreateDefault()",
-        "ProjectQuantityReportBuilder.Group(project)", "RoomFinishScheduleBuilder.Build(project)",
-        "DoorOpeningScheduleBuilder.Build(project)", "CurtainWallScheduleBuilder.Build(project)",
-        "MaterialUsageScheduleBuilder.Build(project)", "QuantityReportMath.AddCount",
+        "private readonly Document _document", "ScheduleHubWindow(Document document)",
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(previewProject)",
+        "ProjectQuantityReportBuilder.Group(previewProject)", "RoomFinishScheduleBuilder.Build(previewProject)",
+        "DoorOpeningScheduleBuilder.Build(previewProject)", "CurtainWallScheduleBuilder.Build(previewProject)",
+        "MaterialUsageScheduleBuilder.Build(previewProject)", "QuantityReportMath.AddCount",
         "CountBqElements", "CountFinishElements", "CountDoorElements", "CountCurtainElements",
         "Distinct(StringComparer.OrdinalIgnoreCase)",
         "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
         "số đang hiển thị được giữ nguyên", "EnsureActive", "_document.SendStringToExecute", "DrawingLabel(_document)",
+        "bản sao semantic read-only",
     ],
     required[2]: ['CommandMethod("QS3DSCHEDULES"', "new ScheduleHubWindow(document)", "ShowModelessWindow"],
     required[3]: ['Tag="QS3DSCHEDULES"', "Schedule / Bóc khối lượng"],
@@ -49,8 +52,26 @@ for relative, needles in checks.items():
         if needle not in text: errors.append(relative + " missing Schedule Hub guard/token: " + needle)
 
 code = (ROOT / required[1]).read_text(encoding="utf-8") if (ROOT / required[1]).is_file() else ""
-for forbidden in ("ProjectMaterialCatalog.ReferencedMaterialNames(project)", "project.Elements.Count(x => IsRoomFinish", "project.Elements.Count(x => x.Category == ElementCategory.Door"):
-    if forbidden in code: errors.append("Schedule Hub must not use raw schedule badge counting: " + forbidden)
+for forbidden in (
+    "ProjectContextCoordinator.GetOrCreate(_document)",
+    "RegenerateDirty(project)",
+    "ProjectQuantityReportBuilder.Group(project)",
+    "RoomFinishScheduleBuilder.Build(project)",
+    "DoorOpeningScheduleBuilder.Build(project)",
+    "CurtainWallScheduleBuilder.Build(project)",
+    "MaterialUsageScheduleBuilder.Build(project)",
+    "ProjectMaterialCatalog.ReferencedMaterialNames(project)",
+    "project.Elements.Count(x => IsRoomFinish",
+    "project.Elements.Count(x => x.Category == ElementCategory.Door",
+):
+    if forbidden in code: errors.append("Schedule Hub snapshot must not create/mutate/read badges from the live semantic project: " + forbidden)
+
+loaded = code.find("Loaded += (_, __) => RefreshSnapshot();")
+activated = code.find("Activated += (_, __) => RefreshSnapshot();")
+detached = code.find("ProjectStateSnapshot.CreateDetachedCopy(project)")
+regen = code.find("RegenerateDirty(previewProject)")
+if min(loaded, activated, detached, regen) < 0:
+    errors.append("Schedule Hub must keep automatic Loaded/Activated refresh on a detached preview project")
 
 xaml = (ROOT / required[0]).read_text(encoding="utf-8") if (ROOT / required[0]).is_file() else ""
 if "QS3DBBSC SV" in xaml: errors.append("Schedule Hub must not retain the dead QS3DBBSC SV command typo")
@@ -68,4 +89,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: document-bound Schedule Hub uses validated builders for badges, exposes HT_Phòng repair health, and exposes all schedule/export workflows without recomputing a background DWG.")
+print("PASS: document-bound Schedule Hub previews validated schedules on a detached semantic copy, never creates/mutates the live project during automatic refresh, and exposes all schedule/export workflows.")

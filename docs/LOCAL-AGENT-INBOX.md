@@ -70,11 +70,11 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Priority: P1
 - Status: OPEN
 - Area: Rebar 3D / Slab / Foundation
-- Why local: Core polygon topology/planning can be source-tested remotely, but final bar-centerline cover, native materialization, ownership, limits, and save/reopen require V25.
-- Scenario: Qualify convex/concave/disconnected regions and holes, impossible-cover rejection, bounded bar/object counts, rectangle compatibility, aggregate ownership/stale/health semantics, and cross-layer rollback before CAD commit.
-- Evidence required: Exact SHA; representative geometry matrix; cover/spacing/count measurements; limit rejection; rollback result; save/reopen result.
+- Why local: Core outer+holes+disconnected multi-region topology/planning is REMOTE_DONE. Remaining proof requires native source-loop/RegionId association, native rebar materialization/ownership, straight/bulged extraction and OCS/WCS behavior, limits, Undo/save-reopen, multi-DWG, and exact V25 geometry.
+- Scenario: Qualify the current Core region plans through native Slab/Foundation extraction/materialization. Cover convex/concave/disconnected regions and holes, straight/bulged source loops, impossible-cover rejection, bounded bar/object counts, rectangle compatibility, per-region ownership/stale/health, cross-layer rollback, Undo/Redo, and multi-DWG. Do not concatenate islands or treat islands as holes.
+- Evidence required: Exact SHA; representative region/hole/bulge matrix; source-loop ↔ RegionId ↔ native-owner checks; cover/spacing/count measurements; limit rejection; rollback/Undo result; save-reopen/multi-DWG result.
 - Evidence: PENDING_LOCAL
-- Related docs: `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
+- Related docs: `docs/POLYGON-REGION-HOLES.md`; `docs/POLYGONAL-SLAB-MESH.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
 - Updated: 2026-08-11
 
 ## LOCAL-006 — native documentation objects
@@ -82,11 +82,11 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Priority: P1
 - Status: OPEN
 - Area: Documentation / Tags / Tables / Sheets
-- Why local: MText/MLeader, Table, Layout, Viewport, Paper/Model Space, styles, Unicode, scale, and native ownership must be proven against the installed V25 API.
-- Scenario: Implement/qualify one semantic tag path and one native schedule table path first, then sheet/layout/viewport ownership. Verify stable semantic owner IDs, deterministic refresh, user-object protection, Unicode, styles, scale/lock, Model/Paper Space, and save/reopen.
-- Evidence required: Exact SHA; native object ownership/refresh checks; user-object protection; Unicode/HiDPI result; save/reopen result.
+- Why local: Semantic MText tags and generic/authoritative project Table source paths already exist; licensed V25 is required to prove runtime ownership/rendering/refresh plus the remaining MLeader, custom-schedule interaction, Layout, Viewport and PaperSpace behavior.
+- Scenario: Qualify the existing `QS3DTAG` / `QS3DTAGREFRESH` / `QS3DTAGREMOVE` / `QS3DTAGHEALTH` lifecycle and the existing native generic/BQ/Door-Opening/Room-Finish/Material/BBS Table lifecycles first; do not reimplement them. Then implement/qualify only the remaining native MLeader/custom-schedule interaction and Sheet/Layout/Viewport/title-block/PaperSpace workflows. Verify stable semantic/project ownership, deterministic refresh, user-object protection, Unicode/HiDPI, styles, scale/lock, Undo, and save/reopen.
+- Evidence required: Exact SHA; semantic-tag and each implemented Table ownership/refresh/health checks; user-object protection; Unicode/HiDPI result; Layout/Viewport scale/lock result when implemented; Undo/save-reopen/multi-DWG result.
 - Evidence: PENDING_LOCAL
-- Related docs: `docs/DOCUMENTATION-LAYER.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
+- Related docs: `docs/SEMANTIC-TAGS.md`; `docs/COMMANDS-NATIVE-DOCUMENTATION-TABLES.md`; `docs/DOCUMENTATION-LAYER.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
 - Updated: 2026-08-11
 
 ## LOCAL-007 — physical L/T/X wall junction output
@@ -95,8 +95,8 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Status: OPEN
 - Area: Wall junctions
 - Why local: Core now defines deterministic multi-owner identity/dependency/rebuild plans, but safe native Solid3d materialization, booleans, replacement and ownership verification still require V25.
-- Scenario: Materialize only from current `WallJunctionOwnershipPlanner` output. Persist/verify dedicated `OwnerToken` (`WJX1:`) plus `InputFingerprint` (`WJF1:`), never reuse one wall's generated-solid owner. Cover L/T/X/Multi, 2/3/4+ owners, mixed thicknesses, incompatible vertical ranges, source/profile/elevation changes, removal/rebuild, foreign/corrupt ownership refusal, and Door/Opening host retention.
-- Evidence required: Exact SHA; `OwnerToken`/dependency/fingerprint persistence checks; L/T/X geometry matrix; invalidation/rebuild after fingerprint changes; no cross-DWG/project mutation; opening host-retention result; save/reopen and Undo/Redo result.
+- Scenario: Materialize only from current `WallJunctionOwnershipPlanner` output. Treat all plans sharing one `GroupToken` (`WJP1:`) as one replacement/rebuild unit; never assume an individual occurrence index remains long-lived when group topology/membership changes. Persist/verify dedicated `OwnerToken` (`WJX1:`) plus `InputFingerprint` (`WJF1:`), never reuse one wall's generated-solid owner. Cover L/T/X/Multi, 2/3/4+ owners, multiple occurrences, mixed thicknesses, incompatible vertical ranges, source/profile/elevation changes, owner add/remove, stale-extra output cleanup, foreign/corrupt ownership refusal, and Door/Opening host retention.
+- Evidence required: Exact SHA; whole-`GroupToken` membership/replacement check; `OwnerToken`/dependency/fingerprint persistence checks; L/T/X/Multi geometry matrix; invalidation/rebuild after fingerprint or group-membership changes; stale-extra cleanup; no cross-DWG/project mutation; opening host-retention result; save/reopen and Undo/Redo result.
 - Evidence: PENDING_LOCAL
 - Related docs: `docs/WALL-JUNCTION-OWNERSHIP.md`; `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
 - Updated: 2026-08-11

@@ -26,7 +26,7 @@ A valid definition whose current filters match zero Elements produces a **header
 
 Malformed semantic model state is different: if the project's Element collection contains a **null semantic Element**, custom schedule rendering fails closed rather than silently skipping it. Explicit stale Floor/Zone/include/exclude references also continue to fail closed.
 
-The schedule layer does **not calculate BQ**, does **not calculate BBS**, and does not regenerate semantic quantities. `{Q:...}` columns only display quantity values already present on the semantic Element. Authoritative BQ, BBS, Door/Opening, Room Finish and Material calculators/schedules remain separate domain sources.
+The schedule layer does not calculate BQ and does not calculate BBS; it also does not regenerate semantic quantities. `{Q:...}` columns only display quantity values already present on the semantic Element. Authoritative BQ, BBS, Door/Opening, Room Finish and Material calculators/schedules remain separate domain sources.
 
 This prevents a custom schedule from silently becoming a competing quantity engine.
 
