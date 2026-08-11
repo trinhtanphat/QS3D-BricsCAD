@@ -15,7 +15,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class ZoneManagerWindow : Window
     {
         private readonly Document _document;
-        private ProjectState _boundProject;
+        private ProjectState? _boundProject;
         private bool _loading;
         private string _editingId = string.Empty;
 

@@ -23,7 +23,7 @@ def block(text, start_token, end_token):
 
 def require_guard(text, manager, mutation_methods):
     for token in (
-        "private ProjectState _boundProject;",
+        "private ProjectState? _boundProject;",
         "_boundProject = null;",
         "_boundProject = project;",
         "ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject)",

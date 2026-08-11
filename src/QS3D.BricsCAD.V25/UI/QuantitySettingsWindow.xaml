@@ -7,6 +7,10 @@
         Background="#0B101A" Foreground="#E8EEF9"
         FontFamily="Segoe UI" FontSize="13">
     <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
         <SolidColorBrush x:Key="PanelBrush" Color="#111827" />
         <SolidColorBrush x:Key="PanelAltBrush" Color="#0E1522" />
         <SolidColorBrush x:Key="BorderBrush" Color="#263247" />
@@ -75,6 +79,7 @@
             <Setter Property="Margin" Value="14,6,0,6" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
+        </ResourceDictionary>
     </Window.Resources>
 
     <Grid Margin="18">

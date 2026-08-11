@@ -83,7 +83,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static bool ContainsIgnoreCase(string? value, string query)
         {
-            return !string.IsNullOrEmpty(value) && value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+            if (value == null || value.Length == 0) return false;
+            return value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private void UpdateTotalSummary()

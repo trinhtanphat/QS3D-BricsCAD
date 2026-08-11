@@ -110,7 +110,7 @@ checks = {
     "project_tools": (
         'Text="PROJECT CONTROL"', 'x:Key="ProjectCard"', 'x:Key="ProjectMetric"',
         'Tag="QS3DLEVELS"', 'Tag="QS3DZONES"', 'Tag="QS3DFAMILIES"', 'Tag="QS3DMATERIALS"',
-        'Tag="QS3DHEALTHALL"', 'Text="PROJECT-SAFE • DWG CONTEXT LOCK"',
+        'Tag="QS3DHEALTHALL"', 'Text="PROJECT-SAFE • READ-ONLY SNAPSHOT • DWG CONTEXT LOCK"',
     ),
     "schedule_hub": (
         'Text="QUANTITY HUB"', 'x:Key="ScheduleCard"', 'x:Key="ScheduleMetric"',
@@ -121,7 +121,7 @@ checks = {
         'Text="BQ REVIEW"', 'x:Name="FloorCombo"', 'x:Name="SearchBox"',
         'x:Name="CategoryList"', 'x:Name="QuantityGrid"', 'x:Name="TotalsText"',
         'Checked="OnColumnVisibilityChanged"', 'Unchecked="OnColumnVisibilityChanged"',
-        'Text="DOUBLE-CLICK ROW TO LOCATE • EXPORT XLSX"',
+        'Text="DETAIL: CLICK → 3D • SUMMARY: DOUBLE-CLICK → LOCATE • EXPORT XLSX"',
     ),
     "rebar_hub": (
         'Text="REBAR WORKFLOW"', 'x:Key="RebarCard"', 'Tag="QS3DREBAR3D"',
@@ -169,7 +169,7 @@ checks = {
     ),
     "health": (
         'Text="HEALTH REVIEW"', 'x:Name="SummaryText"', 'x:Name="IssueGrid"',
-        'Click="OnLocateClick"', 'MouseDoubleClick="OnGridDoubleClick"', 'Text="ISSUE → CAD LOCATE"',
+        'Click="OnLocateClick"', 'MouseDoubleClick="OnGridDoubleClick"', 'Text="READ-ONLY TRIAGE • ISSUE → CAD LOCATE"',
     ),
     "audit": (
         'Text="AUDIT TRAIL"', 'Text="Tìm nhật ký"', 'x:Name="SearchBox"',
