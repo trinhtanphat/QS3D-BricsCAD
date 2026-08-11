@@ -102,6 +102,7 @@ namespace QS3D.Core.Documentation
 
     public static class SemanticSheetPlanner
     {
+        private const int MaxCatalogSheets = 10000;
         private const int MaxPlacements = 128;
         private const int MaxIdLength = 128;
         private const int MaxNameLength = 160;
@@ -167,8 +168,7 @@ namespace QS3D.Core.Documentation
 
             var views = availableViews.ToArray();
             BuildUniqueViewIndex(views);
-            var materialized = definitions.ToList();
-            if (materialized.Count > 10000) throw new InvalidOperationException("Semantic sheet catalog supports at most 10000 sheets.");
+            var materialized = MaterializeCatalogBounded(definitions);
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var numbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -186,6 +186,21 @@ namespace QS3D.Core.Documentation
                 .OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+        }
+
+        private static List<SemanticSheetDefinition> MaterializeCatalogBounded(IEnumerable<SemanticSheetDefinition> definitions)
+        {
+            var result = new List<SemanticSheetDefinition>(Math.Min(MaxCatalogSheets, 256));
+            using (var enumerator = definitions.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxCatalogSheets)
+                        throw new InvalidOperationException("Semantic sheet catalog supports at most " + MaxCatalogSheets + " sheets.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result;
         }
 
         private static Dictionary<string, SemanticViewPlan> BuildUniqueViewIndex(IEnumerable<SemanticViewPlan> views)
