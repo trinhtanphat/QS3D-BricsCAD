@@ -12,9 +12,11 @@ namespace QS3D.Core.Reporting
             var order = new List<string>();
             var grouped = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
             var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var elementIndex = 0;
             foreach (var element in elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new ArgumentException("Quantity report elements cannot contain null entries. Invalid element index: " + elementIndex + ".", nameof(elements));
                 if (!seenElementIds.Add(element.Id))
                     throw new InvalidOperationException("Quantity report contains duplicate element id: " + element.Id + ".");
                 var key = element.Floor + "\u001f" + element.Family.Category + "\u001f" + element.Family.Name;
@@ -38,6 +40,7 @@ namespace QS3D.Core.Reporting
                 row.BottomAreaM2 = QuantityReportMath.Add(row.BottomAreaM2, element.BottomAreaM2, element.Id + "/BottomAreaM2");
                 row.TopAreaM2 = QuantityReportMath.Add(row.TopAreaM2, element.TopAreaM2, element.Id + "/TopAreaM2");
                 row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, element.OtherAreaM2, element.Id + "/OtherAreaM2");
+                elementIndex++;
             }
             var result = new List<QuantityReportRow>(order.Count);
             foreach (var key in order) result.Add(grouped[key]);
