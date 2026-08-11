@@ -49,6 +49,8 @@ else:
         "modifiers == ModifierKeys.None && e.Key == Key.Enter",
         "PropertyList != null && PropertyList.IsKeyboardFocusWithin",
         "var combo = FindPropertyEditorAncestor<ComboBox>(source);",
+        "if (combo != null && combo.IsEditable)",
+        "if (combo.IsDropDownOpen) return;",
         "combo.GetBindingExpression(ComboBox.TextProperty)?.UpdateSource();",
         "var textBox = FindPropertyEditorAncestor<TextBox>(source);",
         "textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();",
@@ -77,6 +79,13 @@ else:
     ):
         if token not in text:
             errors.append("Workspace property filter/editor keyboard UX missing: " + token)
+
+    combo_guard = text.find("if (combo != null && combo.IsEditable)")
+    dropdown_guard = text.find("if (combo.IsDropDownOpen) return;", combo_guard)
+    combo_commit = text.find("combo.GetBindingExpression(ComboBox.TextProperty)?.UpdateSource();", combo_guard)
+    if combo_guard < 0 or dropdown_guard < combo_guard or combo_commit < dropdown_guard:
+        errors.append("Enter must defer to an open editable ComboBox dropdown before using Enter as an explicit property commit")
+
     for forbidden in (
         "GetOrCreate(",
         "ExistingProjectMutationContext",
@@ -95,4 +104,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace exposes a denser BLT-style Family/property palette with bounded multi-term search, Ctrl+Shift+F/Escape search UX, Enter-to-commit through existing bindings, source/override/editor/choice aliases, counts and wider editors; routing itself remains mutation-free.")
+print("PASS: Workspace keeps bounded BLT-style property search and keyboard commits, while Enter defers to an open editable ComboBox dropdown so normal choice selection remains intact; routing itself stays mutation-free.")
