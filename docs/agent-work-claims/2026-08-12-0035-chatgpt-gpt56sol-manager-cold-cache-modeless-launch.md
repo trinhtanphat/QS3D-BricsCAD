@@ -40,4 +40,4 @@
 
 ## Result
 
-Source-side cold-cache launch binding and focused static regression are complete on the implementation branch. The claim is released when the PR is merged to `main`; licensed BricsCAD V25 cold-process verification remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under `LOCAL-001`.
+PR #587 (`fix(ui): warm-bind managers on cold-cache launch`) was squash-merged to `main` as `47c0d4e1e160b913d72cf76857362abd8c329be3`. Source-side cold-cache launch binding and focused static regression are complete and the claimed files are released. Licensed BricsCAD V25 cold-process verification remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under `LOCAL-001`.
