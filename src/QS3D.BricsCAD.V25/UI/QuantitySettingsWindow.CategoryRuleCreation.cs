@@ -26,6 +26,7 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             InitializeUnsavedChangesTracking();
+            InitializeIntersectionRuleRemoval();
             RebuildMissingCategoryRuleChoices();
         }
 
