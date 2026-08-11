@@ -165,7 +165,8 @@ namespace QS3D.BricsCAD.V25
                 createdElementId = createdElement.Id;
                 configureElement(createdElement);
 
-                regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                    .RegenerateDirtySubset(project, new[] { createdElementId });
                 createdElement = project.Elements.SingleOrDefault(x =>
                     string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase));
                 if (createdElement == null)
