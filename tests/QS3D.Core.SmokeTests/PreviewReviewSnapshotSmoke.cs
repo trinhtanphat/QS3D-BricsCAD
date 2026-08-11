@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             RegenerationReviewKeepsSubsetScope();
             TamperedReviewFailsClosed();
             HandleFieldInjectionFailsClosed();
+            NonPortableGeneratedFieldInjectionFailsClosed();
         }
 
         private static void QuantityReviewIsImmutableAndRoundTrips()
@@ -107,7 +108,27 @@ namespace QS3D.Core.SmokeTests
                 var xml = File.ReadAllText(path);
                 if (!xml.Contains("field=\"Quantity:Cost\"")) throw new Exception("Expected serialized field was not found.");
                 File.WriteAllText(path, xml.Replace("field=\"Quantity:Cost\"", "field=\"SourceHandles\""));
-                Throws<InvalidDataException>(() => store.Load(path));
+                ThrowsInvalidDataContaining(() => store.Load(path), "forbidden drawing-local/native field");
+            }
+            finally
+            {
+                SafeDelete(path);
+                SafeDelete(path + ".bak");
+            }
+        }
+
+        private static void NonPortableGeneratedFieldInjectionFailsClosed()
+        {
+            var snapshot = new PreviewReviewSnapshotService().Create("Cost review", new QuantityRulePreviewService().PreviewProject(RuleFixture()));
+            var path = TempPath();
+            try
+            {
+                var store = new PreviewReviewSnapshotStore();
+                store.Save(snapshot, path);
+                var xml = File.ReadAllText(path);
+                if (!xml.Contains("field=\"Quantity:Cost\"")) throw new Exception("Expected serialized field was not found.");
+                File.WriteAllText(path, xml.Replace("field=\"Quantity:Cost\"", "field=\"Property:QS3D.GeneratedSolid.StaleSnapshot\""));
+                ThrowsInvalidDataContaining(() => store.Load(path), "forbidden drawing-local/native field");
             }
             finally
             {
@@ -168,6 +189,17 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (T) { return; }
             throw new Exception("Expected " + typeof(T).Name + ".");
+        }
+
+        private static void ThrowsInvalidDataContaining(Action action, string fragment)
+        {
+            try { action(); }
+            catch (InvalidDataException ex)
+            {
+                if (ex.Message.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0) return;
+                throw new Exception("Expected InvalidDataException containing '" + fragment + "', got: " + ex.Message);
+            }
+            throw new Exception("Expected InvalidDataException.");
         }
     }
 }
