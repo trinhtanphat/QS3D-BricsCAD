@@ -31,6 +31,34 @@ function Normalize-Thumbprint {
     return $Thumbprint.Replace(' ', '').ToUpperInvariant()
 }
 
+function Convert-ToStrictSemVerText {
+    param([string]$Value, [string]$Label)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
+    $text = $Value.Trim()
+    $match = [regex]::Match(
+        $text,
+        '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $match.Success) { throw "$Label is not strict SemVer: $text" }
+
+    foreach ($index in 1..3) {
+        $parsed = 0
+        if (-not [int]::TryParse($match.Groups[$index].Value, [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
+            throw "$Label numeric component is outside the supported range: $text"
+        }
+    }
+
+    if ($match.Groups[4].Success) {
+        foreach ($identifier in $match.Groups[4].Value.Split('.')) {
+            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') {
+                throw "$Label has a numeric prerelease identifier with a leading zero: $text"
+            }
+        }
+    }
+    return $text
+}
+
 function Assert-AuthenticodeSigner {
     param([string]$Path, [string]$ExpectedSigner, [string]$Label)
     $signature = Get-AuthenticodeSignature -FilePath $Path
@@ -51,6 +79,17 @@ function Read-PluginAssemblyVersion {
     }
     catch {
         throw "QS3D plugin assembly version is unreadable: $($_.Exception.Message)"
+    }
+}
+
+function Read-PluginProductVersion {
+    param([string]$Path)
+    try {
+        $productVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($Path).ProductVersion
+        return Convert-ToStrictSemVerText -Value ([string]$productVersion) -Label 'Signed QS3D plugin product version'
+    }
+    catch {
+        throw "QS3D plugin product version is unreadable: $($_.Exception.Message)"
     }
 }
 
@@ -104,24 +143,32 @@ $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
 if ([string]$metadata.product -ne 'QS3D') { throw 'PACKAGE-METADATA product must be QS3D.' }
 if ([string]$metadata.target -ne 'BricsCAD V25 x64') { throw 'PACKAGE-METADATA target must be BricsCAD V25 x64.' }
 if (-not $metadata.PSObject.Properties['version']) { throw 'PACKAGE-METADATA is missing version.' }
+if (-not $metadata.PSObject.Properties['productVersion']) { throw 'PACKAGE-METADATA is missing productVersion.' }
 try { $version = [Version]::Parse([string]$metadata.version) }
 catch { throw "PACKAGE-METADATA version is invalid: $($metadata.version)" }
+$productVersion = Convert-ToStrictSemVerText -Value ([string]$metadata.productVersion) -Label 'PACKAGE-METADATA productVersion'
 
 $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
 foreach ($name in $SignedPayloadNames) {
     Assert-AuthenticodeSigner -Path (Join-Path $package $name) -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name)
 }
-$signedPluginVersion = Read-PluginAssemblyVersion -Path (Join-Path $package 'QS3D.BricsCAD.V25.dll')
+$pluginPath = Join-Path $package 'QS3D.BricsCAD.V25.dll'
+$signedPluginVersion = Read-PluginAssemblyVersion -Path $pluginPath
 if ($version -ne $signedPluginVersion) {
     throw "PACKAGE-METADATA version $version does not match signed QS3D plugin assembly version $signedPluginVersion."
+}
+$signedPluginProductVersion = Read-PluginProductVersion -Path $pluginPath
+if (-not [string]::Equals($productVersion, $signedPluginProductVersion, [StringComparison]::Ordinal)) {
+    throw "PACKAGE-METADATA productVersion $productVersion does not match signed QS3D plugin product version $signedPluginProductVersion."
 }
 Assert-ZipPayloadMatchesSignedStaging -ZipPath $zip -PackageRoot $package -ExpectedSigner $expectedSigner
 
 $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()
 $manifest = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     product = 'QS3D'
     target = 'BricsCAD V25 x64'
+    productVersion = $signedPluginProductVersion
     version = $signedPluginVersion.ToString()
     packageUri = $uri.AbsoluteUri
     sha256 = $zipHash
@@ -138,6 +185,7 @@ if ($PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
 }
 
 Write-Host "Update manifest: $outputFull"
-Write-Host "Version: $($signedPluginVersion.ToString())"
+Write-Host "Product version: $signedPluginProductVersion"
+Write-Host "Assembly version: $($signedPluginVersion.ToString())"
 Write-Host "Package SHA256: $zipHash"
 Write-Host "Signer: $expectedSigner"
