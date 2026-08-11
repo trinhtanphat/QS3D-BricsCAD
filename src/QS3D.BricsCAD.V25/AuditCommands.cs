@@ -17,11 +17,14 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 if (_window != null && _window.IsLoaded) _window.Close();
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var project);
                 _window = new AuditLogWindow(document);
                 _window.Closed += (_, __) => _window = null;
                 Application.ShowModelessWindow(IntPtr.Zero, _window, true);
-                try { PaletteCoordinator.SetStatus("Đã mở Nhật ký thay đổi • " + project.AuditEvents.Count + " sự kiện."); } catch { }
+                var status = hasProject
+                    ? "Đã mở Nhật ký thay đổi • " + project.AuditEvents.Count + " sự kiện."
+                    : "Đã mở Nhật ký thay đổi • chưa có QS3D project hiện hữu; không tạo project mới.";
+                try { PaletteCoordinator.SetStatus(status); } catch { }
             }
             catch (System.Exception ex)
             {

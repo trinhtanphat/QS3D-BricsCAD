@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "src/QS3D.BricsCAD.V25/UI"
+AUDIT_COMMAND = ROOT / "src/QS3D.BricsCAD.V25/AuditCommands.cs"
 FILES = [
     "AuditLogWindow.xaml.cs",
     "CurtainWallWindow.xaml.cs",
@@ -45,6 +46,20 @@ if audit.is_file():
             errors.append("AuditLogWindow missing read-only viewer token: " + token)
     if "ProjectContextCoordinator.GetOrCreate" in text:
         errors.append("AuditLogWindow must not create/cache project state merely to display audit history.")
+
+if not AUDIT_COMMAND.is_file():
+    errors.append("missing AuditCommands.cs read-only entrypoint")
+else:
+    text = AUDIT_COMMAND.read_text(encoding="utf-8")
+    for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "new AuditLogWindow(document)",
+        "chưa có QS3D project hiện hữu; không tạo project mới",
+    ):
+        if token not in text:
+            errors.append("AuditCommands missing read-only entrypoint token: " + token)
+    if "ProjectContextCoordinator.GetOrCreate" in text:
+        errors.append("QS3DAUDIT entrypoint must not create/cache project state before opening the read-only Audit Log.")
 
 curtain = UI / "CurtainWallWindow.xaml.cs"
 if curtain.is_file():
@@ -96,4 +111,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: document-bound modeless windows close with their DWG; Audit Log and Model Health remain read-only, Model Health uses semantic snapshot stamps, Curtain re-resolves selected Family, and Rebar Mesh rejects replaced project state.")
+print("PASS: document-bound modeless windows close with their DWG; Audit command/viewer and Model Health remain read-only, Model Health uses semantic snapshot stamps, Curtain re-resolves selected Family, and Rebar Mesh rejects replaced project state.")
