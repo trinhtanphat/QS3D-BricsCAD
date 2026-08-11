@@ -18,7 +18,7 @@ namespace QS3D.BricsCAD.V25
     /// <summary>
     /// Fast 2D-plan -> QS3D wall conversion for imported/legacy BricsCAD plans.
     /// The original LINE/open POLYLINE remains the semantic source; QS3D owns only
-    /// the generated Solid3d. A fresh batch uses one wall style prompt for all sources.
+    /// the generated Solid3d. A fresh batch uses one shared wall style for all sources.
     /// </summary>
     public sealed class PlanTo3DCommands
     {
