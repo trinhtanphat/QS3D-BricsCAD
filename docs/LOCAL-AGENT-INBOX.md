@@ -106,11 +106,11 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Priority: P1
 - Status: OPEN
 - Area: Direct Draw UX
-- Why local: DrawJig/transient/editor/UCS lifecycle, ESC cleanup, document switches, and native palette behavior require interactive V25.
-- Scenario: Qualify transient thickness/profile preview and repeated authoring; ESC/cancel leaves no residue, active planar UCS is respected, only safe last values are reused, document switch cancels safely, and final source+semantic+native commit remains atomic.
-- Evidence required: Exact SHA; cancel/ESC evidence; UCS matrix; repeated-mode result; document-switch result; no persistent preview residue.
+- Why local: DrawJig/transient/editor/UCS lifecycle, ESC cleanup, document switches, native palette behavior, and proof that editor cancellation does not cross the project-creation boundary require interactive V25.
+- Scenario: First qualify the source-defined cancel/project lifecycle on a new disposable DWG with no QS3D project or sidecar. For each of `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWSLAB`, `QS3DDRAWCOLUMN`, `QS3DDRAWGLASSWALL`, `QS3DDRAWWALLPIER`, `QS3DDRAWSTRUCTWALL`, `QS3DDRAWFOUNDATION`, `QS3DDRAWDOOR`, `QS3DDRAWOPENING`, and `QS3DDRAWWALLREF`, complete point/reference acquisition and cancel at every numeric parameter prompt in separate runs. Verify each cancel leaves no newly-created/cached QS3D project, no new sidecar/project persistence, no command-owned source CAD, no semantic Element, and no generated/native output. Then repeat representative commands with an existing valid project and compatible Family defaults and verify the prompt defaults still come from that project without mutation before commit. After that, qualify transient thickness/profile preview and repeated authoring; ESC/cancel leaves no residue, active planar UCS is respected, only safe last values are reused, document switch cancels safely, and final source+semantic+native commit remains atomic.
+- Evidence required: Exact SHA; per-command/per-prompt cancel matrix; proof of no project/cache/sidecar/source/semantic/native residue on clean DWG; existing-project Family-default continuity; UCS matrix; repeated-mode result; document-switch result; no persistent preview residue.
 - Evidence: PENDING_LOCAL
-- Related docs: `docs/DIRECT-DRAW-WORKFLOW.md`; `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
+- Related docs: `docs/DIRECT-DRAW-WORKFLOW.md`; `docs/DIRECT-DRAW-CANCEL-PROJECT-LIFECYCLE.md`; `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
 - Updated: 2026-08-11
 
 ## LOCAL-009 — clean-machine install/sign/update qualification
