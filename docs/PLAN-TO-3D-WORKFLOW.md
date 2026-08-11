@@ -1,6 +1,6 @@
 # 2D Plan -> 3D Quick Workflow
 
-Mục tiêu của workflow này là đưa luồng thao tác trong hình tham chiếu vào QS3D theo đúng product boundary **BricsCAD V25 native**: lấy mặt bằng 2D có sẵn, chọn một lần, nhập thông số tường một lần và tạo semantic + Solid3d ngay trong DWG hiện tại.
+Mục tiêu của workflow này là đưa luồng thao tác trong hình tham chiếu vào QS3D theo đúng product boundary **BricsCAD V25 native**: lấy mặt bằng 2D có sẵn, chọn một lần và tạo semantic + Solid3d ngay trong DWG hiện tại với số thao tác tối thiểu.
 
 ## Luồng 3 bước
 
@@ -13,19 +13,24 @@ Mục tiêu của workflow này là đưa luồng thao tác trong hình tham chi
 
 ### Bước 2 — Chuyển mặt bằng sang tường 3D
 
-Hai command tương đương:
+Hai command quick tương đương:
 
 - `QS3DCONVERT2D`
 - `QS3DPLAN2WALLS`
 
-Cách dùng:
+Cách dùng quick path:
 
 1. Preselect hoặc chọn nhiều `LINE` / open `POLYLINE` của tường trên mặt bằng.
-2. Nhập **bề dày tường** một lần cho toàn selection.
-3. Nhập **chiều cao tường** một lần cho toàn selection. Fallback cho project mới là `3.0 m` (3000 mm), đúng quick-workflow tham chiếu; nếu project đã có ArchitecturalWall family thì command dùng family value làm default.
-4. Nhập `BottomOffsetM` nếu cần.
-5. QS3D capture từng source thành `ArchitecturalWall`, áp cùng bộ thông số, regenerate semantic và gọi native wall builder ngay.
-6. Khi hoàn tất, QS3D chọn generated solids và chuyển sang `QS3DVIEW3D`.
+2. QS3D đọc `ThicknessM`, `HeightM`, `BottomOffsetM` từ active/preferred `ArchitecturalWall` Family hiện có mà **không mở ba numeric prompt**.
+3. Nếu drawing chưa có project/Family, fallback quick hiện là `ThicknessM=0.2 m`, `HeightM=3.0 m`, `BottomOffsetM=0 m`.
+4. QS3D capture từng source thành `ArchitecturalWall`, áp cùng bộ thông số, regenerate đúng wall vừa capture và gọi native wall builder ngay.
+5. Khi hoàn tất, QS3D chọn generated solids và chuyển sang `QS3DVIEW3D`.
+
+Khi cần override bộ thông số cho riêng batch hiện tại, dùng:
+
+- `QS3DCONVERT2DADV`
+
+Advanced path giữ ba prompt cũ cho Thickness / Height / BottomOffset, với Family values làm default. Cancel ở bất kỳ prompt nào vẫn kết thúc trước project mutation/bootstrap.
 
 Điểm quan trọng: **CAD 2D gốc không bị xóa hay thay thế**. Nó tiếp tục là semantic source; Solid3d do QS3D sinh có ownership marker riêng.
 
@@ -43,9 +48,9 @@ Trước mutation, toàn selection được kiểm tra:
 
 ### Preview-to-commit freshness
 
-Family defaults được đọc trước các prompt, vì vậy command phải giữ một **preview-to-commit** boundary rõ ràng thay vì tin rằng project/drawing/source vẫn giống lúc bắt đầu.
+Family defaults được đọc trước commit, vì vậy command giữ một **preview-to-commit** boundary rõ ràng thay vì tin rằng project/drawing/source vẫn giống lúc bắt đầu.
 
-Sau khi người dùng xác nhận Thickness/Height/BottomOffset và trước `ProjectStateSnapshot` hoặc semantic/native mutation, command hiện:
+Trước `ProjectStateSnapshot` hoặc semantic/native mutation, command hiện:
 
 - xác nhận đúng DWG ban đầu vẫn active;
 - kiểm tra lại Model Space và planar UCS;
@@ -56,13 +61,15 @@ Sau khi người dùng xác nhận Thickness/Height/BottomOffset và trước `P
 - sau khi project được resolve mới kiểm lại semantic/generated ownership của source;
 - chỉ sau toàn bộ freshness checks mới capture snapshot và bắt đầu batch mutation.
 
-Các số Thickness/Height/BottomOffset đã được người dùng xác nhận ở prompt nên command không stale toàn bộ thao tác chỉ vì `ProjectState.ChangeVersion` đổi bởi một thay đổi không liên quan; boundary bắt buộc ở đây là project identity + drawing/source eligibility.
+Quick path dùng Family/fallback values đã đọc trong preview. Advanced path dùng values người dùng xác nhận ở prompt. Command không stale toàn bộ thao tác chỉ vì `ProjectState.ChangeVersion` đổi bởi một thay đổi không liên quan; boundary bắt buộc ở đây là project identity + drawing/source eligibility.
+
+Mỗi wall mới chỉ được semantic-regenerate bằng `RegenerateDirtySubset(project, new[] { element.Id })`; conversion không được regenerate hoặc mark-clean các element cũ đang dirty ngoài selection. Điều này vừa giới hạn side effect vừa tránh chi phí whole-project regeneration trong batch lớn.
 
 Nếu batch mới bị lỗi giữa chừng, command tìm generated CAD bằng ownership metadata, xóa các Solid3d thuộc chính batch đó rồi restore `ProjectStateSnapshot`. Source 2D của người dùng không nằm trong rollback-delete set. Compensation này vẫn là whole-batch safety boundary hiện hữu; freshness hardening không tạo transaction engine thứ hai.
 
-Static lifecycle contract được khóa bởi `scripts/preflight-plan-to-3d-project-lifecycle.py`.
+Static lifecycle contract được khóa bởi `scripts/preflight-plan-to-3d-project-lifecycle.py`; scoped regeneration được khóa bởi `scripts/preflight-plan-to-3d-scoped-regeneration.py`; quick-vs-advanced interaction contract được khóa bởi `scripts/preflight-plan-to-3d-quick-authoring.py`.
 
-Exact BricsCAD V25 proof cho project xuất hiện/thay project, Model Space/UCS thay đổi, source bị sửa/xóa/chuyển loại và ownership-scoped compensation nằm trong **LOCAL-008** của `docs/LOCAL-AGENT-INBOX.md`; source review không được coi là `LOCAL_PASS`.
+Exact BricsCAD V25 proof cho project xuất hiện/thay project, Model Space/UCS thay đổi, source bị sửa/xóa/chuyển loại, quick no-prompt defaults, advanced prompt cancellation và ownership-scoped compensation nằm trong **LOCAL-008** của `docs/LOCAL-AGENT-INBOX.md`; source review không được coi là `LOCAL_PASS`.
 
 ## Bước 3 — Hoàn thiện mô hình
 
@@ -84,17 +91,17 @@ Window authoring cũng fail-closed: source LINE do command tạo sẽ bị xóa 
 
 Tab **TẠO MỚI** được augment thêm các entry point theo đúng workflow tham chiếu:
 
-- **2D → Tường 3D** → `QS3DCONVERT2D`;
+- **2D → Tường 3D** → `QS3DCONVERT2D` quick/no-prompt path;
 - **Vẽ Cửa Sổ** → `QS3DDRAWWINDOW`;
 - **Vật liệu** → `QS3DMATERIALS`.
 
 Các nút Direct Draw hiện hữu như Vẽ Tường, Vẽ Dầm, Vẽ Cột, Vẽ Sàn, Vẽ Cửa và Vẽ Lỗ Mở vẫn giữ nguyên. Augmenter chỉ bổ sung discoverability vào tab hiện hữu và dùng ID ổn định để không tạo nút/tab trùng khi plugin được khởi tạo lại.
 
-Như vậy luồng sử dụng trở thành:
+Như vậy luồng sử dụng mặc định trở thành:
 
 `2D plan -> select walls -> QS3DCONVERT2D -> immediate 3D -> QS3DDRAWDOOR / QS3DDRAWWINDOW -> QS3DMATERIALS -> optional targeted cut`
 
-thay vì phải lặp `select -> capture -> set property -> build 3D` cho từng đối tượng.
+thay vì phải lặp `select -> capture -> set property -> build 3D` cho từng đối tượng hoặc nhập lại cùng ba thông số cho mỗi batch.
 
 ## Product boundary
 
