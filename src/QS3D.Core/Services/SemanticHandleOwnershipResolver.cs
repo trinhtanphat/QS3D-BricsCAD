@@ -18,7 +18,14 @@ namespace QS3D.Core.Services
             ProjectElement? owner = null;
             foreach (var element in project.Elements)
             {
-                if (!element.SourceHandles.Any(x => string.Equals(x, normalized, StringComparison.OrdinalIgnoreCase))) continue;
+                var ownsSource = false;
+                for (var index = 0; index < element.SourceHandles.Count; index++)
+                {
+                    var storedHandle = RequireCanonicalStoredSourceHandle(element, element.SourceHandles[index], index);
+                    if (string.Equals(storedHandle, normalized, StringComparison.OrdinalIgnoreCase))
+                        ownsSource = true;
+                }
+                if (!ownsSource) continue;
                 if (owner != null && !ReferenceEquals(owner, element))
                     throw new InvalidOperationException(
                         "CAD source handle " + normalized + " is claimed by multiple semantic elements " + owner.Id + " and " + element.Id +
@@ -83,8 +90,11 @@ namespace QS3D.Core.Services
             var channels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                foreach (var handle in element.SourceHandles)
+                for (var index = 0; index < element.SourceHandles.Count; index++)
+                {
+                    var handle = RequireCanonicalStoredSourceHandle(element, element.SourceHandles[index], index);
                     Add(handle, element, "SourceHandles", selected, owners, channels);
+                }
                 foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
                     Add(entry.Key, element, entry.Value, selected, owners, channels);
             }
@@ -121,6 +131,18 @@ namespace QS3D.Core.Services
                 if (!seen.Add(element.Id))
                     throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
             }
+        }
+
+        private static string RequireCanonicalStoredSourceHandle(ProjectElement element, string? rawHandle, int index)
+        {
+            var raw = rawHandle ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(raw))
+                throw new InvalidOperationException(
+                    "Semantic element " + element.Id + " contains an empty SourceHandles entry at index " + index + ". Repair source ownership before continuing.");
+            if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Semantic element " + element.Id + " contains a non-canonical SourceHandles entry at index " + index + ". Repair source ownership before continuing.");
+            return raw;
         }
 
         private static void Add(
