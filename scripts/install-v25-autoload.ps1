@@ -251,6 +251,21 @@ function Assert-PackageIdentity {
     }
 }
 
+function Assert-ExistingInstallDirectorySafeToReplace {
+    param([string]$Directory)
+
+    if (-not (Test-Path -LiteralPath $Directory)) { return }
+    if (-not (Test-Path -LiteralPath $Directory -PathType Container)) {
+        throw "Refusing to replace existing InstallDirectory because it is not a directory: $Directory"
+    }
+    try {
+        Assert-PackageIdentity -Directory $Directory
+    }
+    catch {
+        throw "Refusing to replace existing InstallDirectory because it is not a valid QS3D V25 installation: $Directory. $($_.Exception.Message)"
+    }
+}
+
 function Get-RegistryValueSnapshot {
     param([string]$Path, [string]$Name)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -477,6 +492,7 @@ try {
 
             if (Test-Path -LiteralPath $installFull) {
                 if (-not $Force) { throw "Install directory already exists: $installFull" }
+                Assert-ExistingInstallDirectorySafeToReplace -Directory $installFull
                 $backup = $installFull + '.backup-' + [Guid]::NewGuid().ToString('N')
                 Move-Item -LiteralPath $installFull -Destination $backup
             }
