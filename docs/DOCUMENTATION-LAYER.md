@@ -47,7 +47,19 @@ Current contract:
 - output rows/cells/headers are **defensively copied** into read-only collections; mutating a caller-owned source list after construction cannot rewrite a previously built documentation snapshot, and casting the exposed `IReadOnlyList` back to `IList` does not make it writable;
 - the builder is read-only: it returns `SemanticDocumentationTable` / row/cell data and never creates CAD entities or changes semantic state.
 
-This is intended as a reusable input to a future native BricsCAD Table adapter or to other documentation exporters. It is **not** a second BQ/BBS/schedule calculation engine and must not be used to bypass the existing schedule models where a specialized schedule already exists.
+This is a reusable input to the source-implemented native Semantic Element Table adapter and to other documentation exporters. It is **not** a second BQ/BBS/schedule calculation engine and must not be used to bypass the existing schedule models where a specialized schedule already exists.
+
+### Semantic View / Sheet planning and persistence
+
+The CAD-independent View/Sheet planning layer is already source-implemented and must remain the authority for future native Layout/PaperSpace materialization:
+
+- `SemanticViewPlanner` validates deterministic semantic view definitions, stable IDs/names and optional Floor/Zone/category filters;
+- `SemanticSheetPlanner` validates stable sheet IDs/numbers, paper bounds, optional title-block name and non-overlapping view placements;
+- `SemanticSheetAutoLayoutPlanner` performs deterministic multi-sheet packing with bounded margins/gaps and reserved bottom/title-block space instead of making CAD runtime code invent another packing algorithm;
+- `SemanticDocumentationCatalogStore` persists the documentation catalog in project metadata with bounded XML parsing/serialization;
+- `SemanticDocumentationCatalogEditor` performs referentially safe View/Sheet replacement/removal so a view cannot silently disappear while sheet placements still reference it.
+
+These classes are planning/persistence infrastructure. They do **not** by themselves prove native BricsCAD Layout, PaperSpace Viewport, title-block insertion, viewport scale/lock or save/reopen behavior.
 
 Source checks:
 
@@ -58,45 +70,60 @@ python scripts/preflight-semantic-documentation-table.py
 
 The Core smoke suite includes `SemanticTagRendererSmoke` and `SemanticDocumentationTableSmoke`. The table smoke also verifies that the returned snapshot is not externally mutable through retained source lists or collection casts.
 
-## Native V25 work that remains
+## Native V25 status
 
-Do not mark #77 complete from the Core renderers/models alone. A local agent with the exact BricsCAD V25 assemblies/runtime must design and qualify native annotation/document behavior.
+Issue #77 remains open because native documentation support is intentionally incremental. Distinguish source-implemented native slices from host/runtime work that still requires exact BricsCAD V25 qualification.
 
-### Semantic tag placement
+### Semantic tags — source-implemented MText slice
 
-Required contract:
+The current V25 source implements an ownership-aware MText semantic-tag lifecycle:
 
-- select/resolve a semantic owner through canonical source/generated ownership;
-- render text only through `SemanticTagRenderer` or a compatible centrally tested renderer;
-- store a stable semantic owner ID and tag-template identity on the generated annotation;
-- give generated tag entities their own canonical generated ownership slot; do not overload `GeneratedSolidHandle`;
-- replacement/update must be ownership-safe and transactional;
-- source/property/quantity changes must make affected tags stale or update them deterministically;
-- deleting/untracking an owner must not leave a tag pretending to be valid;
-- foreign/ambiguous annotations must fail closed rather than being erased;
-- Paper Space vs Model Space behavior must be explicit; do not silently move annotations between spaces.
+- `QS3DTAG` resolves one authoritative semantic CAD source, renders through the central semantic tag renderer and creates/updates generated MText;
+- `QS3DTAGREFRESH` rebuilds the generated MText at its stored world position/rotation;
+- `QS3DTAGREMOVE` removes only ownership-resolved generated semantic tag content and fails closed on foreign generated objects;
+- `QS3DTAGHEALTH` is read-only and reports persisted/native ownership/content drift without bootstrapping project state.
 
-Use native MText/MLeader/Table APIs only after compiling against the installed V25 SDK/managed assemblies. Do not guess API signatures.
+The current P0 placement slice is deliberately narrower than full annotation parity: it requires a single authoritative source handle and a supported UCS plane. It must not be documented as MLeader/leader support.
 
-### DWG tables
+Still open for semantic annotations:
 
-A first native table slice should reuse an existing QS3D schedule model (for example BQ, Door/Opening, Room Finish, Material or BBS) or the bounded `SemanticDocumentationTable` model where a generic semantic table is explicitly desired. Do not create a second quantity calculation engine.
+- native MLeader/leader geometry and style behavior;
+- associative/batch tag placement and richer placement policies;
+- explicit Model Space/Paper Space annotation workflows beyond the currently qualified slice;
+- exact-SHA V25 compile/runtime, Unicode/HiDPI and save/reopen qualification.
 
-The native table should carry schedule/table kind, schema/version, project identity and generated ownership, with deterministic refresh/replacement. If a specialized QS3D schedule already exists, that schedule remains authoritative for its calculated rows/units; `SemanticDocumentationTableBuilder` is not a substitute for BQ/BBS logic.
+Do not guess MLeader or other V25 API signatures. Compile against the exact installed V25 managed assemblies before adding host-specific calls.
 
-Local acceptance must cover table styles, Unicode Vietnamese, row/column bounds, long values, units, page/layout behavior and update after semantic changes.
+### DWG tables — source-implemented native Table slice
 
-### Layout / Sheet / View
+Native Table creation is also present in source. `QS3DELEMENTTABLE`, `QS3DELEMENTTABLEREFRESH`, `QS3DELEMENTTABLEREMOVE` and `QS3DELEMENTTABLEHEALTH` provide a bounded generic semantic-element Table lifecycle backed by the central documentation table model and generated ownership.
 
-Treat BricsCAD Layout/Viewport lifecycle as runtime-gated. Before adding automatic sheet generation, establish:
+The current Semantic Element Table P0 explicitly requires ModelSpace; PaperSpace/Layout behavior belongs to the sheet lifecycle rather than being silently inferred. Specialized QS3D schedules remain authoritative for their calculated rows/units and must not be replaced by a second quantity engine.
+
+Still open for native table qualification/expansion:
+
+- richer V25 `TableStyle`, column/format and specialized schedule presentation behavior;
+- Unicode Vietnamese, row/column bounds, long values and units on the real host;
+- PaperSpace/layout/page behavior where a workflow actually requires it;
+- deterministic refresh/replacement and save/reopen qualification on exact V25 builds.
+
+### Layout / Sheet / View — Core planned, native materialization still open
+
+Core planning/persistence is implemented, but native BricsCAD Layout/PaperSpace/Viewport/title-block materialization is still open. Native code should consume the existing `SemanticViewPlanner`, `SemanticSheetPlanner`, `SemanticSheetAutoLayoutPlanner` and documentation catalog rather than rebuilding their identity/layout rules.
+
+Before calling this native workflow complete, establish and qualify:
 
 - stable QS3D sheet/view identity separate from display title;
-- ownership of generated layouts/viewports without deleting user-created ones;
-- scale, paper size and viewport lock rules;
-- update/recreate/rename/delete behavior;
-- model/paper-space context switching safety;
+- ownership of generated layouts/viewports/title blocks without deleting user-created content;
+- mapping of semantic sheet paper bounds and view placements into Layout/PaperSpace coordinates;
+- title-block selection/insertion rules without assuming a customer-private block definition exists;
+- view target/direction, viewport scale and viewport lock rules;
+- update/recreate/rename/delete behavior for both semantic catalog and native objects;
+- Model/Paper Space context switching safety;
 - save/reopen and multi-DWG behavior;
-- exact V25 API/runtime proof.
+- exact V25 API compile/runtime proof.
+
+Do not mark native Sheet/View complete from model-space view commands alone; general model-space focus/zoom/orbit commands are not a PaperSpace viewport lifecycle.
 
 ## Local close-out
 

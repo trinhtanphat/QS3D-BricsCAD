@@ -14,9 +14,11 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class QuantitySettingsWindow : Window
     {
+        private const string UnsupportedSchemaMarker = "QS3D.QuantitySettings.UnsupportedSchema";
         private readonly QuantitySettingsStore _store;
         private QuantityCalculationSettings _loadedSettings = QuantityCalculationSettings.CreateDefault();
         private bool _updatingIntersectionBrowser;
+        private bool _persistentSettingsWriteBlocked;
 
         public QuantitySettingsWindow(QuantitySettingsStore store)
         {
@@ -35,11 +37,21 @@ namespace QS3D.BricsCAD.V25.UI
             }
             catch (Exception ex)
             {
+                var unsupportedSchema = IsUnsupportedSettingsSchema(ex);
                 LoadIntoView(QuantityCalculationSettings.CreateDefault());
+                if (unsupportedSchema)
+                {
+                    _persistentSettingsWriteBlocked = true;
+                    SaveSettingsButton.IsEnabled = false;
+                    SettingsPathText.Text = _store.SettingsPath + "  •  CHỈ ĐỌC: schema mới hơn";
+                }
+
                 MessageBox.Show(
                     this,
-                    "Không đọc được cấu hình QS3D hiện tại. Cửa sổ đã nạp mặc định an toàn; file lỗi chưa bị ghi đè.\n\n" + ex.Message,
-                    "QS3D • Cài đặt tính toán",
+                    unsupportedSchema
+                        ? "File cấu hình QS3D hiện tại được tạo bởi schema mới hơn phiên bản plugin này. File gốc được giữ nguyên và cửa sổ chỉ nạp mặc định để tham khảo.\n\n‘Lưu Cài Đặt’ vào file cấu hình theo máy đã bị khóa trong cửa sổ này để tránh ghi đè dữ liệu mới hơn. Hãy cập nhật QS3D trước khi chỉnh cấu hình chính.\n\n" + ex.Message
+                        : "Không đọc được cấu hình QS3D hiện tại. Cửa sổ đã nạp mặc định an toàn; file lỗi chưa bị ghi đè.\n\n" + ex.Message,
+                    unsupportedSchema ? "QS3D • Cấu hình cần phiên bản mới hơn" : "QS3D • Cài đặt tính toán",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
@@ -262,7 +274,9 @@ namespace QS3D.BricsCAD.V25.UI
                 MessageBox.Show(
                     this,
                     "Đã nạp " + imported.CategoryRules.Count + " loại cấu kiện và " + imported.IntersectionRules.Count + " luật giao cắt." + note +
-                    "\n\nNhấn ‘Lưu Cài Đặt’ để áp dụng template này làm cấu hình theo máy.",
+                    (_persistentSettingsWriteBlocked
+                        ? "\n\nFile cấu hình chính đang dùng schema mới hơn nên Lưu Cài Đặt vẫn bị khóa. Bạn vẫn có thể Xuất template đã nạp ra một file khác."
+                        : "\n\nNhấn ‘Lưu Cài Đặt’ để áp dụng template này làm cấu hình theo máy."),
                     "QS3D • Nạp template",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -288,6 +302,16 @@ namespace QS3D.BricsCAD.V25.UI
                     FileName = "QS3D_quantity_settings.json"
                 };
                 if (dialog.ShowDialog(this) != true) return;
+                if (_persistentSettingsWriteBlocked && SamePath(dialog.FileName, _store.SettingsPath))
+                {
+                    MessageBox.Show(
+                        this,
+                        "Không thể xuất đè lên file cấu hình theo máy đang dùng schema mới hơn. Hãy chọn một file khác hoặc cập nhật QS3D trước.",
+                        "QS3D • File cấu hình đang được bảo vệ",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
                 _store.Export(dialog.FileName, current);
                 MessageBox.Show(this, "Đã xuất template:\n" + dialog.FileName, "QS3D • Xuất template", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -301,7 +325,9 @@ namespace QS3D.BricsCAD.V25.UI
         {
             var answer = MessageBox.Show(
                 this,
-                "Khôi phục cấu hình mặc định QS3D trong cửa sổ? Thao tác này chưa ghi xuống máy cho tới khi bạn nhấn ‘Lưu Cài Đặt’.",
+                _persistentSettingsWriteBlocked
+                    ? "Khôi phục cấu hình mặc định chỉ trong cửa sổ? File cấu hình schema mới hơn vẫn được bảo vệ và Lưu Cài Đặt tiếp tục bị khóa."
+                    : "Khôi phục cấu hình mặc định QS3D trong cửa sổ? Thao tác này chưa ghi xuống máy cho tới khi bạn nhấn ‘Lưu Cài Đặt’.",
                 "QS3D • Khôi phục mặc định",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
@@ -310,6 +336,17 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
+            if (_persistentSettingsWriteBlocked)
+            {
+                MessageBox.Show(
+                    this,
+                    "Không thể ghi đè file cấu hình theo máy vì file hiện tại dùng schema mới hơn phiên bản QS3D này. Hãy cập nhật plugin trước. File hiện hữu chưa bị thay đổi.",
+                    "QS3D • Lưu Cài Đặt bị khóa",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
             try
             {
                 var current = BuildSettingsFromView();
@@ -325,6 +362,27 @@ namespace QS3D.BricsCAD.V25.UI
             catch (Exception ex)
             {
                 ShowError("Không thể lưu cài đặt.", ex);
+            }
+        }
+
+        private static bool IsUnsupportedSettingsSchema(Exception exception)
+        {
+            return exception is System.IO.InvalidDataException
+                && Equals(exception.Data[UnsupportedSchemaMarker], true);
+        }
+
+        private static bool SamePath(string left, string right)
+        {
+            try
+            {
+                return string.Equals(
+                    System.IO.Path.GetFullPath(left),
+                    System.IO.Path.GetFullPath(right),
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
             }
         }
 

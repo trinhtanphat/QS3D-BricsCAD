@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             LegacyPlacementRemainsSourceRelative();
             BottomAndTopLevelsResolveAbsolutePlacement();
+            HostedOpeningsResolveInsideTheHostFrame();
             LevelReferencesValidateOnlyConsumedLegacyInputs();
             EffectiveHeightIsPreparedWhileProductionRegenerationStaysBlocked();
             TopAssignmentRequiresBottomAndValidRange();
@@ -58,6 +59,73 @@ namespace QS3D.Core.SmokeTests
             var legacyAgain = ElementVerticalPlacementService.Resolve(project, element, 10d, 3d, 0.2d);
             True(!legacyAgain.UsesBottomLevel);
             Near(10.2d, legacyAgain.BottomElevationM);
+        }
+
+        private static void HostedOpeningsResolveInsideTheHostFrame()
+        {
+            var project = NewProject();
+            var legacyHost = NewElement(project, "legacy-opening-host", ElementCategory.ArchitecturalWall);
+            var legacyOpening = NewElement(project, "legacy-hosted-opening", ElementCategory.WallOpening);
+            var legacy = ElementVerticalPlacementService.ResolveHostedOpening(
+                project,
+                legacyHost,
+                legacyOpening,
+                10d,
+                3d,
+                0.2d,
+                2d,
+                0.5d);
+            Near(10.2d, legacy.Host.BottomElevationM);
+            Near(10.7d, legacy.Opening.BottomElevationM);
+            Near(12.7d, legacy.Opening.TopElevationM);
+            Near(0.5d, legacy.RelativeSillM);
+
+            var boundedHost = NewElement(project, "bounded-opening-host", ElementCategory.ArchitecturalWall);
+            AssignBounded(project, boundedHost);
+            var hostRelativeOpening = NewElement(project, "level-host-legacy-opening", ElementCategory.Door);
+            var hostRelative = ElementVerticalPlacementService.ResolveHostedOpening(
+                project,
+                boundedHost,
+                hostRelativeOpening,
+                double.NaN,
+                double.NaN,
+                double.PositiveInfinity,
+                2d,
+                0.5d);
+            Near(3d, hostRelative.Host.BottomElevationM);
+            Near(7d, hostRelative.Host.TopElevationM);
+            Near(3.5d, hostRelative.Opening.BottomElevationM);
+            Near(0.5d, hostRelative.RelativeSillM);
+
+            var boundedOpening = NewElement(project, "bounded-hosted-opening", ElementCategory.WallOpening);
+            Equal(1, ProjectFloorService.AssignBottomLevel(project, "L1", new[] { boundedOpening }));
+            Equal(1, ProjectFloorService.AssignTopLevel(project, "L2", new[] { boundedOpening }));
+            boundedOpening.Properties[ProjectFloorService.BottomLevelOffsetKey] = "1";
+            boundedOpening.Properties[ProjectFloorService.TopLevelOffsetKey] = "-0.5";
+            var bounded = ElementVerticalPlacementService.ResolveHostedOpening(
+                project,
+                boundedHost,
+                boundedOpening,
+                double.NaN,
+                double.NaN,
+                double.NegativeInfinity,
+                double.NaN,
+                double.PositiveInfinity);
+            Near(4d, bounded.Opening.BottomElevationM);
+            Near(6.5d, bounded.Opening.TopElevationM);
+            Near(1d, bounded.RelativeSillM);
+
+            var belowHost = NewElement(project, "opening-below-host", ElementCategory.WallOpening);
+            Equal(1, ProjectFloorService.AssignBottomLevel(project, "L0", new[] { belowHost }));
+            Throws<InvalidOperationException>(() => ElementVerticalPlacementService.ResolveHostedOpening(
+                project, boundedHost, belowHost, double.NaN, double.NaN, double.NaN, 1d, 0d));
+
+            var aboveHost = NewElement(project, "opening-above-host", ElementCategory.WallOpening);
+            Equal(1, ProjectFloorService.AssignBottomLevel(project, "L1", new[] { aboveHost }));
+            Equal(1, ProjectFloorService.AssignTopLevel(project, "L2", new[] { aboveHost }));
+            aboveHost.Properties[ProjectFloorService.TopLevelOffsetKey] = "0.1";
+            Throws<InvalidOperationException>(() => ElementVerticalPlacementService.ResolveHostedOpening(
+                project, boundedHost, aboveHost, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN));
         }
 
         private static void TopAssignmentRequiresBottomAndValidRange()

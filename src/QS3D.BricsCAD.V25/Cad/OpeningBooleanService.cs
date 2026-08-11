@@ -42,6 +42,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private sealed class OpeningGeometry
         {
             public ProjectElement Opening { get; set; } = null!;
+            public CadHostedOpeningPlacement HostedPlacement { get; set; } = null!;
             public ObjectId SourceId { get; set; }
             public double WidthM { get; set; }
             public double HeightM { get; set; }
@@ -86,6 +87,8 @@ namespace QS3D.BricsCAD.V25.Cad
                     {
                         var host = project.FindElement(group.Key) ?? throw new InvalidOperationException("Opening host not found: " + group.Key);
                         if (!IsSupportedHost(host.Category)) continue;
+                        if (host.IsGeneratedSolidStale())
+                            throw new InvalidOperationException("Host " + host.Id + " has stale generated geometry. Rebuild 3D before cutting openings.");
                         if (!host.Properties.TryGetValue("GeneratedSolidHandle", out var generatedHandle) || string.IsNullOrWhiteSpace(generatedHandle)) continue;
 
                         var solidId = ResolveSingle(document, transaction, new[] { generatedHandle }, typeof(Solid3d), "generated host solid " + host.Id);
@@ -106,7 +109,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var requestedOpenings = requestedElements
                             .Select(x => ReadOpening(document, transaction, project, x))
                             .ToList();
-                        var requestedPrepared = PrepareHost(document, host, hostSource, hostThicknessM, hostHeightM, hostBottomOffsetM, requestedOpenings);
+                        var requestedPrepared = PrepareHost(document, project, host, hostSource, hostThicknessM, hostHeightM, hostBottomOffsetM, requestedOpenings);
                         var requestedFingerprint = Fingerprint(requestedPrepared);
 
                         var hasCutSolid = host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolidHandle) && !string.IsNullOrWhiteSpace(cutSolidHandle);
@@ -130,7 +133,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                 var previousOpenings = previousElements
                                     .Select(x => ReadOpening(document, transaction, project, x))
                                     .ToList();
-                                var previousPrepared = PrepareHost(document, host, hostSource, hostThicknessM, hostHeightM, hostBottomOffsetM, previousOpenings);
+                                var previousPrepared = PrepareHost(document, project, host, hostSource, hostThicknessM, hostHeightM, hostBottomOffsetM, previousOpenings);
                                 var previousFingerprint = Fingerprint(previousPrepared);
                                 if (!string.Equals(cutFingerprint, previousFingerprint, StringComparison.Ordinal))
                                     throw new InvalidOperationException("Host " + host.Id + " physical opening state đã stale so với geometry/thông số hiện tại. Hãy Build 3D lại host trước khi khoét tiếp.");
@@ -146,7 +149,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                     .Select(x => ReadOpening(document, transaction, project, x))
                                     .ToList();
                                 finalElements = finalById;
-                                finalPrepared = PrepareHost(document, host, hostSource, hostThicknessM, hostHeightM, hostBottomOffsetM, finalOpenings);
+                                finalPrepared = PrepareHost(document, project, host, hostSource, hostThicknessM, hostHeightM, hostBottomOffsetM, finalOpenings);
                                 finalFingerprint = Fingerprint(finalPrepared);
                                 cutsToApply = finalPrepared.Cuts
                                     .Where(x => !previousSet.Contains(x.Opening.Id))
@@ -259,6 +262,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static PreparedHost PrepareHost(
             Document document,
+            ProjectState project,
             ProjectElement host,
             Entity hostSource,
             double hostThicknessM,
@@ -267,9 +271,9 @@ namespace QS3D.BricsCAD.V25.Cad
             IReadOnlyList<OpeningGeometry> openings)
         {
             if (hostSource is Line hostLine)
-                return PrepareLineHost(document, host, hostLine, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
+                return PrepareLineHost(document, project, host, hostLine, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
             if (hostSource is Polyline hostPolyline && IsPolylineHost(host.Category))
-                return PreparePolylineHost(document, host, hostPolyline, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
+                return PreparePolylineHost(document, project, host, hostPolyline, hostThicknessM, hostHeightM, hostBottomOffsetM, openings);
             throw new InvalidOperationException("Host source type chưa hỗ trợ physical opening cut: " + host.Id + " / " + hostSource.GetType().Name);
         }
 
@@ -278,6 +282,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static PreparedHost PrepareLineHost(
             Document document,
+            ProjectState project,
             ProjectElement host,
             Line hostLine,
             double hostThicknessM,
@@ -285,6 +290,8 @@ namespace QS3D.BricsCAD.V25.Cad
             double hostBottomOffsetM,
             IReadOnlyList<OpeningGeometry> openings)
         {
+            var hostPlacement = CadVerticalPlacementResolver.Resolve(
+                document, project, host, hostLine.StartPoint.Z, hostHeightM, hostBottomOffsetM);
             var dx = CadGeometryGuard.Finite(hostLine.EndPoint.X - hostLine.StartPoint.X, host.Id + "/dx");
             var dy = CadGeometryGuard.Finite(hostLine.EndPoint.Y - hostLine.StartPoint.Y, host.Id + "/dy");
             var hostLengthDrawing = CadGeometryGuard.Hypot(dx, dy, host.Id + "/source length");
@@ -296,11 +303,21 @@ namespace QS3D.BricsCAD.V25.Cad
             var maximumOffsetDrawing = CadGeometryGuard.ToDrawingUnits(document, hostThicknessM / 2d + 0.25d, host.Id + "/host proximity tolerance");
             var prepared = new PreparedHost
             {
-                FingerprintPrefix = HostFingerprint(hostLine, hostThicknessM, hostHeightM, hostBottomOffsetM)
+                FingerprintPrefix = HostFingerprint(hostLine, hostThicknessM, hostHeightM, hostBottomOffsetM, hostPlacement)
             };
 
             foreach (var opening in openings)
             {
+                opening.HostedPlacement = CadVerticalPlacementResolver.ResolveHostedOpening(
+                    document,
+                    project,
+                    host,
+                    opening.Opening,
+                    hostLine.StartPoint.Z,
+                    hostHeightM,
+                    hostBottomOffsetM,
+                    opening.HeightM,
+                    opening.SillM);
                 var fromStartX = CadGeometryGuard.Finite(opening.CenterXDrawing - hostLine.StartPoint.X, opening.Opening.Id + "/from start X");
                 var fromStartY = CadGeometryGuard.Finite(opening.CenterYDrawing - hostLine.StartPoint.Y, opening.Opening.Id + "/from start Y");
                 var alongDrawing = CadGeometryGuard.Add(fromStartX * ux, fromStartY * uy, opening.Opening.Id + "/projection along host");
@@ -313,17 +330,22 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     HostLengthM = hostLengthM,
                     HostThicknessM = hostThicknessM,
-                    HostHeightM = hostHeightM,
+                    HostHeightM = opening.HostedPlacement.Host.HeightM,
                     OpeningWidthM = opening.WidthM,
-                    OpeningHeightM = opening.HeightM,
-                    SillHeightM = opening.SillM,
+                    OpeningHeightM = opening.HostedPlacement.Opening.HeightM,
+                    SillHeightM = opening.HostedPlacement.RelativeSillM,
                     CenterAlongHostM = centerAlongHostM,
                     ClearanceM = opening.ClearanceM
                 });
 
                 var alongCenterDrawing = CadGeometryGuard.ToDrawingUnits(document, plan.CenterAlongHostM, opening.Opening.Id + "/center along host");
-                var relativeCenterZM = CadGeometryGuard.Add(hostBottomOffsetM, plan.CenterElevationM, opening.Opening.Id + "/relative cutter center Z");
-                var centerZ = CadGeometryGuard.Add(hostLine.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, relativeCenterZM, opening.Opening.Id + "/cutter center Z"), opening.Opening.Id + "/world cutter center Z");
+                var centerZ = CutterCenterZ(
+                    document,
+                    opening.HostedPlacement,
+                    hostLine.StartPoint.Z,
+                    hostBottomOffsetM,
+                    plan.CenterElevationM,
+                    opening.Opening.Id);
                 var targetX = CadGeometryGuard.Add(hostLine.StartPoint.X, ux * alongCenterDrawing, opening.Opening.Id + "/target X");
                 var targetY = CadGeometryGuard.Add(hostLine.StartPoint.Y, uy * alongCenterDrawing, opening.Opening.Id + "/target Y");
                 prepared.Cuts.Add(new PreparedCut
@@ -340,6 +362,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static PreparedHost PreparePolylineHost(
             Document document,
+            ProjectState project,
             ProjectElement host,
             Polyline hostPolyline,
             double hostThicknessM,
@@ -364,30 +387,48 @@ namespace QS3D.BricsCAD.V25.Cad
                     CadGeometryGuard.ToMeters(document, point.Y, host.Id + "/polyline Y")));
             }
 
+            var hostPlacement = CadVerticalPlacementResolver.Resolve(
+                document, project, host, hostPolyline.Elevation, hostHeightM, hostBottomOffsetM);
+
             var maximumOffsetM = CadGeometryGuard.Add(hostThicknessM / 2d, 0.25d, host.Id + "/host proximity tolerance");
             var prepared = new PreparedHost
             {
-                FingerprintPrefix = HostFingerprint(hostPolyline, centerline, hostThicknessM, hostHeightM, hostBottomOffsetM)
+                FingerprintPrefix = HostFingerprint(hostPolyline, centerline, hostThicknessM, hostHeightM, hostBottomOffsetM, hostPlacement)
             };
             foreach (var opening in openings)
             {
+                opening.HostedPlacement = CadVerticalPlacementResolver.ResolveHostedOpening(
+                    document,
+                    project,
+                    host,
+                    opening.Opening,
+                    hostPolyline.Elevation,
+                    hostHeightM,
+                    hostBottomOffsetM,
+                    opening.HeightM,
+                    opening.SillM);
                 var polylinePlan = PolylineOpeningCutPlanner.Plan(new PolylineOpeningCutInput
                 {
                     Centerline = centerline,
                     OpeningCenter = new Point2(opening.CenterXM, opening.CenterYM),
                     HostThicknessM = hostThicknessM,
-                    HostHeightM = hostHeightM,
+                    HostHeightM = opening.HostedPlacement.Host.HeightM,
                     OpeningWidthM = opening.WidthM,
-                    OpeningHeightM = opening.HeightM,
-                    SillHeightM = opening.SillM,
+                    OpeningHeightM = opening.HostedPlacement.Opening.HeightM,
+                    SillHeightM = opening.HostedPlacement.RelativeSillM,
                     ClearanceM = opening.ClearanceM,
                     MaximumCenterlineOffsetM = maximumOffsetM
                 });
                 var plan = polylinePlan.Cut;
                 var targetX = CadGeometryGuard.ToDrawingUnits(document, polylinePlan.ProjectedCenter.X, opening.Opening.Id + "/polyline target X");
                 var targetY = CadGeometryGuard.ToDrawingUnits(document, polylinePlan.ProjectedCenter.Y, opening.Opening.Id + "/polyline target Y");
-                var relativeCenterZM = CadGeometryGuard.Add(hostBottomOffsetM, plan.CenterElevationM, opening.Opening.Id + "/relative cutter center Z");
-                var centerZ = CadGeometryGuard.Add(hostPolyline.Elevation, CadGeometryGuard.ToDrawingUnits(document, relativeCenterZM, opening.Opening.Id + "/cutter center Z"), opening.Opening.Id + "/world cutter center Z");
+                var centerZ = CutterCenterZ(
+                    document,
+                    opening.HostedPlacement,
+                    hostPolyline.Elevation,
+                    hostBottomOffsetM,
+                    plan.CenterElevationM,
+                    opening.Opening.Id);
                 var angle = CadGeometryGuard.Finite(Math.Atan2(polylinePlan.Tangent.Y, polylinePlan.Tangent.X), opening.Opening.Id + "/polyline tangent angle");
                 prepared.Cuts.Add(new PreparedCut
                 {
@@ -433,19 +474,58 @@ namespace QS3D.BricsCAD.V25.Cad
             };
         }
 
-        private static string OpeningFingerprint(OpeningGeometry opening, double stationM, string mode) =>
-            opening.Opening.Id + ":" + opening.SourceId.Handle.ToString() + ":" + mode + ":" +
-            NumberToken(opening.CenterXM) + ":" + NumberToken(opening.CenterYM) + ":" + NumberToken(stationM) + ":" +
-            NumberToken(opening.WidthM) + ":" + NumberToken(opening.HeightM) + ":" + NumberToken(opening.SillM) + ":" + NumberToken(opening.ClearanceM);
+        private static string OpeningFingerprint(OpeningGeometry opening, double stationM, string mode)
+        {
+            var legacy = opening.Opening.Id + ":" + opening.SourceId.Handle.ToString() + ":" + mode + ":" +
+                NumberToken(opening.CenterXM) + ":" + NumberToken(opening.CenterYM) + ":" + NumberToken(stationM) + ":" +
+                NumberToken(opening.WidthM) + ":" + NumberToken(opening.HeightM) + ":" + NumberToken(opening.SillM) + ":" + NumberToken(opening.ClearanceM);
+            return HasLevelPlacement(opening.HostedPlacement.Opening.Semantic)
+                ? legacy + ":LEVEL:" + PlacementToken(opening.HostedPlacement.Opening.Semantic)
+                : legacy;
+        }
 
-        private static string HostFingerprint(Line hostLine, double hostThicknessM, double hostHeightM, double hostBottomOffsetM) =>
-            "HOST-LINE:" + hostLine.Handle.ToString() + ":" + PointToken(hostLine.StartPoint) + ":" + PointToken(hostLine.EndPoint) + ":" +
-            NumberToken(hostThicknessM) + ":" + NumberToken(hostHeightM) + ":" + NumberToken(hostBottomOffsetM);
+        private static string HostFingerprint(Line hostLine, double hostThicknessM, double hostHeightM, double hostBottomOffsetM, CadVerticalPlacement placement)
+        {
+            var legacy = "HOST-LINE:" + hostLine.Handle.ToString() + ":" + PointToken(hostLine.StartPoint) + ":" + PointToken(hostLine.EndPoint) + ":" +
+                NumberToken(hostThicknessM) + ":" + NumberToken(hostHeightM) + ":" + NumberToken(hostBottomOffsetM);
+            return HasLevelPlacement(placement.Semantic) ? legacy + ":LEVEL:" + PlacementToken(placement.Semantic) : legacy;
+        }
 
-        private static string HostFingerprint(Polyline hostPolyline, IReadOnlyList<Point2> centerline, double hostThicknessM, double hostHeightM, double hostBottomOffsetM) =>
-            "HOST-POLY:" + hostPolyline.Handle.ToString() + ":" + NumberToken(hostPolyline.Elevation) + ":" +
-            string.Join(";", centerline.Select(x => NumberToken(x.X) + "," + NumberToken(x.Y))) + ":" +
-            NumberToken(hostThicknessM) + ":" + NumberToken(hostHeightM) + ":" + NumberToken(hostBottomOffsetM);
+        private static string HostFingerprint(Polyline hostPolyline, IReadOnlyList<Point2> centerline, double hostThicknessM, double hostHeightM, double hostBottomOffsetM, CadVerticalPlacement placement)
+        {
+            var legacy = "HOST-POLY:" + hostPolyline.Handle.ToString() + ":" + NumberToken(hostPolyline.Elevation) + ":" +
+                string.Join(";", centerline.Select(x => NumberToken(x.X) + "," + NumberToken(x.Y))) + ":" +
+                NumberToken(hostThicknessM) + ":" + NumberToken(hostHeightM) + ":" + NumberToken(hostBottomOffsetM);
+            return HasLevelPlacement(placement.Semantic) ? legacy + ":LEVEL:" + PlacementToken(placement.Semantic) : legacy;
+        }
+
+        private static double CutterCenterZ(
+            Document document,
+            CadHostedOpeningPlacement placement,
+            double legacySourceBaseDrawing,
+            double legacyBottomOffsetM,
+            double centerElevationM,
+            string label)
+        {
+            if (!HasLevelPlacement(placement.Host.Semantic) && !HasLevelPlacement(placement.Opening.Semantic))
+            {
+                var relativeCenterM = CadGeometryGuard.Add(legacyBottomOffsetM, centerElevationM, label + "/relative cutter center Z");
+                return CadGeometryGuard.Add(
+                    legacySourceBaseDrawing,
+                    CadGeometryGuard.ToDrawingUnits(document, relativeCenterM, label + "/cutter center Z"),
+                    label + "/world cutter center Z");
+            }
+            return CadGeometryGuard.Add(
+                placement.Host.BottomDrawingUnits,
+                CadGeometryGuard.ToDrawingUnits(document, centerElevationM, label + "/resolved cutter center Z"),
+                label + "/resolved world cutter center Z");
+        }
+
+        private static bool HasLevelPlacement(ElementVerticalPlacement placement) =>
+            placement.UsesBottomLevel || placement.UsesTopLevel;
+
+        private static string PlacementToken(ElementVerticalPlacement placement) =>
+            NumberToken(placement.BottomElevationM) + ":" + NumberToken(placement.TopElevationM) + ":" + NumberToken(placement.HeightM);
 
         private static string PointToken(Point3d point) => NumberToken(point.X) + "," + NumberToken(point.Y) + "," + NumberToken(point.Z);
 

@@ -12,14 +12,18 @@ namespace QS3D.Core.Reporting
             if (string.IsNullOrWhiteSpace(reportName)) throw new ArgumentException("Report name is required.", nameof(reportName));
 
             var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var elementIndex = 0;
             foreach (var element in project.Elements)
             {
+                if (element == null)
+                    throw new InvalidOperationException(reportName + " cannot be built because project element index " + elementIndex + " is null.");
                 if (string.IsNullOrWhiteSpace(element.Id))
                     throw new InvalidOperationException(reportName + " cannot be built with a blank project element id.");
 
                 var elementId = element.Id.Trim();
                 if (!seenElementIds.Add(elementId))
                     throw new InvalidOperationException(reportName + " cannot be built because project element id '" + elementId + "' is duplicated.");
+                elementIndex++;
             }
         }
     }

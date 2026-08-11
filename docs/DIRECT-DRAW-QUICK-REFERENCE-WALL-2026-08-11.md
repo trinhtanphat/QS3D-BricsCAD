@@ -4,7 +4,7 @@ Updated: 2026-08-11 (UTC+7)
 
 ## Goal
 
-Make the reference-driven wall workflow useful for rapid tracing without forcing four numeric confirmations for the normal case.
+Make the reference-driven wall workflow useful for rapid tracing without forcing four numeric confirmations for the normal case or forcing the user to select the same reference LINE twice.
 
 The selected reference LINE stays **read-only**. QS3D creates its own new wall source LINE from the reference direction/center, then uses the normal semantic/native wall pipeline.
 
@@ -14,7 +14,8 @@ Primary command: `QS3DDRAWWALLREF`
 
 ```text
 Tường theo tham chiếu
--> select reference LINE
+-> if exactly one LINE is already preselected, consume that PICKFIRST selection
+-> otherwise select one reference LINE interactively
 -> keep the reference LINE plan length
 -> use active/preferred ArchitecturalWall Family / Type
 -> create a new QS3D source LINE
@@ -23,6 +24,8 @@ Tường theo tham chiếu
 -> WallSolidBuilder
 -> owned native wall
 ```
+
+Both `QS3DDRAWWALLREF` and `QS3DDRAWWALLREFADV` opt into `CommandFlags.UsePickSet`. The resolver only consumes PICKFIRST when the implied selection contains **exactly one valid LINE**. Empty, multi-object, stale or non-LINE implied selection is not guessed from geometry and falls back to the existing explicit `GetEntity` prompt.
 
 The primary quick path uses:
 
@@ -44,15 +47,17 @@ The advanced flow preserves the previous explicit prompts for:
 - wall height;
 - source-reference bottom offset.
 
-The requested wall remains centered on the reference direction as before.
+The requested wall remains centered on the reference direction as before. PICKFIRST only removes the redundant reference re-selection; it does not skip Advanced parameter prompts.
 
 ## Safety
 
 Quick Reference Wall changes only the interaction surface. It preserves the established lifecycle:
 
 - Model Space guard;
+- PICKFIRST is read-only and accepted only for exactly one valid LINE; otherwise explicit selection remains the fallback;
 - reference LINE opened read-only and never repurposed as QS3D ownership;
 - finite/unit-aware reference planarity and length checks;
+- reference acquisition still occurs before project preview/mutation, so cancel leaves no authoring project/source/semantic/native residue;
 - read-only Family lookup before project creation;
 - `ProjectStateSnapshot` rollback;
 - real new DWG source LINE with stable Handle;
@@ -72,15 +77,17 @@ This is source/static-contract work. Exact V25 interactive proof remains under `
 
 Local qualification should cover:
 
-1. `QS3DDRAWWALLREF`: cancel reference selection leaves no project/source/semantic/native residue; successful selection proceeds without numeric prompts and keeps the reference length + compatible Family values;
-2. `QS3DDRAWWALLREFADV`: cancel independently at Length / Thickness / Height / BottomOffset prompts and verify no residue;
-3. reference LINE remains unchanged after success and forced failure;
-4. new source/generated ownership is distinct from the reference;
-5. begin with an unrelated semantic element already dirty, create one reference wall, and verify only the newly-created wall is regenerated before native build while the unrelated element remains dirty;
-6. save/reopen, BQ/XLSX/Locate, Health and rebuild continue through the normal semantic model;
-7. active-DWG switching and forced native failure remain fail-closed.
+1. preselect exactly one valid LINE, launch `QS3DDRAWWALLREF`, and verify no second reference-selection prompt appears;
+2. preselect zero, multiple, stale or non-LINE objects and verify the command safely falls back to the explicit LINE picker without mutating project/source/semantic/native state first;
+3. `QS3DDRAWWALLREF`: cancel reference selection leaves no project/source/semantic/native residue; successful selection proceeds without numeric prompts and keeps the reference length + compatible Family values;
+4. `QS3DDRAWWALLREFADV`: preselected LINE skips only reference re-selection, then cancel independently at Length / Thickness / Height / BottomOffset prompts and verify no residue;
+5. reference LINE remains unchanged after success and forced failure;
+6. new source/generated ownership is distinct from the reference;
+7. begin with an unrelated semantic element already dirty, create one reference wall, and verify only the newly-created wall is regenerated before native build while the unrelated element remains dirty;
+8. save/reopen, BQ/XLSX/Locate, Health and rebuild continue through the normal semantic model;
+9. active-DWG switching and forced native failure remain fail-closed.
 
-The source scope is locked by `scripts/preflight-quick-reference-wall-authoring.py`; this does not replace exact BricsCAD V25 interaction evidence.
+The source scope is locked by `scripts/preflight-quick-reference-wall-authoring.py` plus `scripts/preflight-reference-wall-pickfirst.py`; these do not replace exact BricsCAD V25 interaction evidence.
 
 Transient preview, repeated authoring and native editor behavior remain LOCAL_ONLY.
 

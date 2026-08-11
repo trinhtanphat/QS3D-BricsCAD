@@ -115,11 +115,27 @@ namespace QS3D.Core.Rebar
             ValidateFinite(farHorizontal, "far horizontal face offset");
             ValidateFinite(farVertical, "far vertical face offset");
 
+            var usableLow = -half + cover;
+            var usableHigh = half - cover;
             if (input.IncludeNear && input.IncludeFar)
             {
                 var nearInner = Math.Max(nearHorizontal + horizontalRadius, nearVertical + verticalRadius);
                 var farInner = Math.Min(farHorizontal - horizontalRadius, farVertical - verticalRadius);
                 if (!(farInner > nearInner)) throw new InvalidOperationException("Structural wall thickness is insufficient for the requested two-face mesh and cover.");
+            }
+            else if (input.IncludeNear)
+            {
+                var low = Math.Min(nearHorizontal - horizontalRadius, nearVertical - verticalRadius);
+                var high = Math.Max(nearHorizontal + horizontalRadius, nearVertical + verticalRadius);
+                if (low < usableLow - 1e-12d || high > usableHigh + 1e-12d)
+                    throw new InvalidOperationException("Near structural-wall mesh does not fit within the concrete cover envelope.");
+            }
+            else if (input.IncludeFar)
+            {
+                var low = Math.Min(farHorizontal - horizontalRadius, farVertical - verticalRadius);
+                var high = Math.Max(farHorizontal + horizontalRadius, farVertical + verticalRadius);
+                if (low < usableLow - 1e-12d || high > usableHigh + 1e-12d)
+                    throw new InvalidOperationException("Far structural-wall mesh does not fit within the concrete cover envelope.");
             }
 
             var bars = new List<WallMeshBarPlacement>((int)projectedBars);

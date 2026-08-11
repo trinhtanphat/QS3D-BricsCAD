@@ -62,6 +62,7 @@ namespace QS3D.Core.Licensing
             foreach (var feature in Features)
             {
                 ValidateToken(feature, "feature", 128);
+                if (feature.IndexOf(',') >= 0) throw new InvalidDataException("License feature contains the reserved ',' delimiter.");
                 if (!seen.Add(feature)) throw new InvalidDataException("Duplicate license feature: " + feature);
             }
         }

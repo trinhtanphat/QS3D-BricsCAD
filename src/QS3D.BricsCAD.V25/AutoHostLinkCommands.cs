@@ -74,7 +74,7 @@ namespace QS3D.BricsCAD.V25
                     {
                         try
                         {
-                            var location = ReadOpeningLocation(document, transaction, opening);
+                            var location = ReadOpeningLocation(document, transaction, project, opening);
                             var candidates = ReadHostSegments(document, transaction, project, opening, location.ReferenceElevationM, elevationToleranceM, sagittaM);
                             var result = matcher.Match(location.Plan, candidates, maxGapM, ambiguityM);
                             if (result.Status == OpeningHostMatchStatus.Ambiguous)
@@ -183,7 +183,7 @@ namespace QS3D.BricsCAD.V25
 
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
-                var location = ReadOpeningLocation(document, transaction, opening);
+                var location = ReadOpeningLocation(document, transaction, project, opening);
                 var candidates = ReadHostSegments(document, transaction, project, opening, location.ReferenceElevationM, elevationToleranceM, sagittaM);
                 match = new OpeningHostMatcher().Match(location.Plan, candidates, maxGapM, ambiguityM);
                 transaction.Commit();
@@ -209,7 +209,11 @@ namespace QS3D.BricsCAD.V25
             return new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
         }
 
-        private static OpeningLocation ReadOpeningLocation(Document document, Transaction transaction, ProjectElement opening)
+        private static OpeningLocation ReadOpeningLocation(
+            Document document,
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement opening)
         {
             var ids = ResolveLiveIds(document, transaction, opening.SourceHandles);
             if (ids.Count != 1) throw new InvalidOperationException("Opening cần đúng một live CAD source để tự xác định host.");
@@ -217,12 +221,29 @@ namespace QS3D.BricsCAD.V25
             if (entity == null || entity.IsErased) throw new InvalidOperationException("Opening source không còn tồn tại.");
             var extents = entity.GeometricExtents;
             var units = CadUnitService.GetPolicy(document);
+            var referenceElevationM = units.ToMeters(extents.MinPoint.Z);
+            if (CadVerticalPlacementResolver.HasConfiguredLevel(opening))
+            {
+                var family = project.FindFamily(opening.FamilyId);
+                var heightM = CadGeometryGuard.Positive(
+                    CadGeometryGuard.Number(opening, family, "HeightM", 2.2d), opening.Id + "/HeightM");
+                var sillM = CadGeometryGuard.Finite(
+                    CadGeometryGuard.Number(opening, family, "SillHeightM", CadGeometryGuard.Number(opening, family, "BottomOffsetM", 0d)),
+                    opening.Id + "/SillHeightM");
+                referenceElevationM = CadVerticalPlacementResolver.Resolve(
+                    document,
+                    project,
+                    opening,
+                    extents.MinPoint.Z,
+                    heightM,
+                    sillM).Semantic.BottomElevationM;
+            }
             return new OpeningLocation
             {
                 Plan = new Point2(
                     units.ToMeters(Midpoint(extents.MinPoint.X, extents.MaxPoint.X)),
                     units.ToMeters(Midpoint(extents.MinPoint.Y, extents.MaxPoint.Y))),
-                ReferenceElevationM = units.ToMeters(extents.MinPoint.Z)
+                ReferenceElevationM = referenceElevationM
             };
         }
 
@@ -234,6 +255,14 @@ namespace QS3D.BricsCAD.V25
             {
                 var family = project.FindFamily(wall.FamilyId);
                 var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(wall, family, "ThicknessM", 0.2d), wall.Id + "/ThicknessM");
+                var hasLevelPlacement = CadVerticalPlacementResolver.HasConfiguredLevel(wall);
+                var heightM = 0d;
+                var bottomOffsetM = 0d;
+                if (hasLevelPlacement)
+                {
+                    heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(wall, family, "HeightM", 3.6d), wall.Id + "/HeightM");
+                    bottomOffsetM = CadGeometryGuard.Finite(CadGeometryGuard.Number(wall, family, "BottomOffsetM", 0d), wall.Id + "/BottomOffsetM");
+                }
                 foreach (var id in ResolveLiveIds(document, transaction, wall.SourceHandles))
                 {
                     var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
@@ -243,7 +272,11 @@ namespace QS3D.BricsCAD.V25
                         var startZM = units.ToMeters(line.StartPoint.Z);
                         var endZM = units.ToMeters(line.EndPoint.Z);
                         if (Math.Abs(startZM - endZM) > elevationToleranceM) continue;
-                        if (Math.Abs(Midpoint(startZM, endZM) - openingElevationM) > elevationToleranceM) continue;
+                        var candidateElevationM = hasLevelPlacement
+                            ? CadVerticalPlacementResolver.Resolve(
+                                document, project, wall, line.StartPoint.Z, heightM, bottomOffsetM).Semantic.BottomElevationM
+                            : Midpoint(startZM, endZM);
+                        if (Math.Abs(candidateElevationM - openingElevationM) > elevationToleranceM) continue;
                         result.Add(new OpeningHostSegment(wall.Id,
                             new Point2(units.ToMeters(line.StartPoint.X), units.ToMeters(line.StartPoint.Y)),
                             new Point2(units.ToMeters(line.EndPoint.X), units.ToMeters(line.EndPoint.Y)), thicknessM));
@@ -253,7 +286,11 @@ namespace QS3D.BricsCAD.V25
                     var normal = polyline.Normal;
                     if (Math.Abs(normal.X) > 1e-9d || Math.Abs(normal.Y) > 1e-9d || normal.Z < 1d - 1e-9d) continue;
                     var elevationM = units.ToMeters(polyline.Elevation);
-                    if (Math.Abs(elevationM - openingElevationM) > elevationToleranceM) continue;
+                    var candidatePolylineElevationM = hasLevelPlacement
+                        ? CadVerticalPlacementResolver.Resolve(
+                            document, project, wall, polyline.Elevation, heightM, bottomOffsetM).Semantic.BottomElevationM
+                        : elevationM;
+                    if (Math.Abs(candidatePolylineElevationM - openingElevationM) > elevationToleranceM) continue;
                     for (var index = 0; index < polyline.NumberOfVertices - 1; index++)
                     {
                         var a = polyline.GetPoint2dAt(index);

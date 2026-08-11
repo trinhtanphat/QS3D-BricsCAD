@@ -4,9 +4,9 @@ import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-XAML = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
-PARTIAL = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs"
-DOC = ROOT / "docs/UI-WORKSPACE-COMPACT-SHELL-2026-08-11.md"
+XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml"
+PARTIAL = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.CompactShell.cs"
+DOC = ROOT / "docs" / "UI-WORKSPACE-COMPACT-SHELL-2026-08-11.md"
 errors = []
 
 for path in (XAML, PARTIAL, DOC):
@@ -70,10 +70,16 @@ if XAML.is_file():
         'Click="OnHealthClick"',
         'Click="OnSaveClick"',
         'PHẠM VI LÀM VIỆC',
+        'MÔ HÌNH',
+        'Content="Làm mới"',
         'FAMILY / TYPE',
         'THUỘC TÍNH',
         'ĐỐI TƯỢNG ĐANG CHỌN',
         'VIEWPORT BRICSCAD',
+        'BIM WORKSPACE',
+        'SEMANTIC MODEL',
+        'Content="Xoay 3D"',
+        'Content="Zoom chọn"',
     )
     for token in required_xaml:
         if token not in xaml:
@@ -110,6 +116,33 @@ if PARTIAL.is_file():
         '"FAMILY / TYPE"',
         '"THUỘC TÍNH"',
         '"ĐỐI TƯỢNG ĐANG CHỌN"',
+        # Responsive top-header contract: preserve full XAML labels/handlers but collapse
+        # decorative badges and shorten only display labels at compact breakpoints.
+        "TuneResponsiveHeader()",
+        "header.SizeChanged += OnCompactHeaderSizeChanged",
+        "ApplyCompactHeaderBreakpoint(header)",
+        "width < 570",
+        "width < 700",
+        'FindHeaderBadge(branding, "BIM WORKSPACE")',
+        'FindHeaderBadge(branding, "SEMANTIC MODEL")',
+        "Visibility.Collapsed",
+        'button.Content = narrow ? "Xoay" : "Xoay 3D"',
+        'button.Content = narrow ? "Zoom" : "Zoom chọn"',
+        "status.MinWidth = 0",
+        "status.TextAlignment = TextAlignment.Center",
+        # Owner screenshot regression: the narrow model-section DockPanel must reserve
+        # the right-side refresh action and constrain the MÔ HÌNH/caption text area.
+        "TuneModelSectionHeaderCollision()",
+        'string.Equals(text.Text, "MÔ HÌNH"',
+        'FindButton("Làm mới")',
+        "header.LastChildFill = false",
+        "DockPanel.SetDock(titleStack, Dock.Left)",
+        "DockPanel.SetDock(refreshButton, Dock.Right)",
+        "TextWrapping.NoWrap",
+        "TextTrimming.CharacterEllipsis",
+        "titleStack.MaxWidth = Math.Max(48, header.ActualWidth - refreshWidth - 7)",
+        "header.SizeChanged += (_, __) => UpdateAvailableTitleWidth()",
+        "refreshButton.SizeChanged += (_, __) => UpdateAvailableTitleWidth()",
     )
     for token in required_partial:
         if token not in partial:
@@ -125,9 +158,11 @@ if PARTIAL.is_file():
         "OnDeleteClick(",
         "OnQuantityClick(",
         "OnSaveClick(",
+        "Canvas.Set",
+        "Margin = new Thickness(-",
     ):
         if forbidden in partial:
-            errors.append("Workspace compact presentation must remain presentation-only: " + forbidden)
+            errors.append("Workspace compact presentation must remain presentation-only/collision-safe: " + forbidden)
 
 if DOC.is_file():
     doc = DOC.read_text(encoding="utf-8")
@@ -153,4 +188,8 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Workspace compact-shell preflight PASS: screenshot-inspired density is presentation-only, existing Workspace actions remain wired, and the BricsCAD viewport boundary is preserved.")
+print(
+    "Workspace compact-shell preflight PASS: top-header breakpoints and the narrow MÔ HÌNH/Làm mới "
+    "section reserve collision-free space, existing Workspace actions remain wired, presentation stays "
+    "source-only, and the BricsCAD viewport boundary is preserved."
+)

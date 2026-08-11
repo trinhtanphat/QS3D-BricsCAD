@@ -1,22 +1,29 @@
 # Agent Work Claim
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETE`
+- State: `COMPLETE`
 - Agent: `chatgpt-web-gpt56sol-20260811-quantity-description-3d-locate`
 - Started (UTC): `2026-08-11T13:28:30Z`
-- Last Updated (UTC): `2026-08-11T13:28:30Z`
-- Expected Completion: `same session after implementation and repository-verifiable checks`
+- Last Updated (UTC): `2026-08-11T14:42:00Z`
+- Expected Completion: `completed source-side; native BricsCAD V25 interaction remains covered by the existing LOCAL_ONLY qualification queue`
 - Task Key: `UI-QUANTITY-DESCRIPTION-3D-LOCATE`
 - Intended Work: Add a quantity/schedule explanation interaction so selecting or activating a reporting/detail row can resolve its stable semantic/CAD entity identity, select/highlight the corresponding BricsCAD object(s), and frame/zoom them in the 3D view. Keep the interaction modeless-safe, fail closed for missing/stale/deleted entities, preserve multi-entity rows where applicable, and add focused tests/documentation for the mapping and locate behavior.
-- Out of Scope: Core schedule/reporting identity stabilization currently owned by `CORE-SCHEDULE-REPORTING-IDENTITY-STABILIZATION`; schedule-engine internals; BOQ quantity formulas/grouping semantics; Excel COM synchronization/locate behavior; unrelated Direct Draw/Create Similar/Room Auto/persistence work; release/signing/deployment; claims of native BricsCAD V25 runtime verification when unavailable.
-- Planned Branch Workflow: Register this claim on `main`, verify it is visible on `origin/main`, then add a planning document on `main`. Implement only non-overlapping UI/modeless/BricsCAD locate surfaces on current `main`, preserving concurrent changes. If a Core reporting-identity change becomes necessary, update this claim and coordinate before touching that scope.
-- Dependencies: Existing quantity/schedule row identity data and BricsCAD selection/zoom helpers. Active Core reporting identity claim is a coordination boundary, not a dependency to modify.
-- Verification Plan: Focused source/smoke tests for row-to-entity mapping, empty/stale/multi-entity behavior and modeless dispatch; relevant project build/test where connector-accessible; repository `scripts/verify.ps1 -Configuration Release` when executable in the available environment; final diff/commit/status review against current `main`. Native BricsCAD UI behavior that cannot be executed remotely will be recorded as a local-agent item instead of being falsely claimed as verified.
+- Out of Scope: Core schedule/reporting identity stabilization; schedule-engine internals; BOQ quantity formulas/grouping semantics; Excel COM synchronization/locate behavior; unrelated Direct Draw/Create Similar/Room Auto/persistence work; release/signing/deployment; claims of native BricsCAD V25 runtime verification when unavailable.
+- Dependencies: Existing quantity/schedule row identity data and BricsCAD selection/zoom helpers.
+- Planning: `docs/QUANTITY-DESCRIPTION-3D-LOCATE-PLAN-2026-08-11.md` (`26d5d5255b6d93abe5e8436fa0540557743d3e20`).
 - Completion Evidence:
-  - Branch + commit SHA: pending
-  - Independent qualifier: pending
-  - Qualifier verdict: pending
-  - Requirement smoke-run verdict: pending
-  - Commands: pending
+  - Implementation merged to `main`: `775a1098ec8e58d689ad099cfd658d78680e5bdd` via PR #470 (`fix(quantity): harden description 3D locate`).
+  - Focused regression gate on `main`: `a628fad8674715d3d2066c25fb06d2c30cf99bae` (`scripts/preflight-quantity-description-3d-locate.py`).
+  - Source qualifier: re-fetched `src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs` from current `main`; blob `edb734b0a42ccb55147bbdc917a763250da5de46` contains semantic-first identity, `SourceHandles` fallback, direct `ReadHandles(...)` revalidation, partial surviving-handle selection/status, and zoom-after-positive-selection behavior.
+  - Regression qualifier: re-fetched `scripts/preflight-quantity-description-3d-locate.py`; blob `e9bf3707b9bdbb7f5899532e6d0f2053ad0d6250`; Python AST syntax check PASS in the available environment.
+  - Concurrency qualifier: comparison from gate commit `a628fad8674715d3d2066c25fb06d2c30cf99bae` to then-current `main` `a70ca7ad759ee13442ba98af3e3de473aaea0f23` showed nine later commits and none modified `QuantitySummaryWindow.xaml.cs` or the focused gate.
+  - Scope qualifier: implementation changed only `src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs`; no Core reporting identity, quantity formula/grouping, persistence, or Excel behavior was changed.
+  - GitHub checks: no combined status checks or workflow runs were registered for the gate commit; this is recorded rather than treated as a pass.
+  - Native V25 disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`. The existing `docs/LOCAL-AGENT-INBOX.md` already owns the broader exact-V25 BQ/modeless/full-interactive qualification matrix, so no duplicate LOCAL_ONLY queue item was created.
+- Qualifier verdict: `REMOTE_PASS` for repository/source contract; native V25 interaction is intentionally not claimed as remotely verified.
+- Requirement smoke-run verdict: `PASS` for source-level contracts and focused gate syntax; `PENDING_LOCAL` for licensed BricsCAD V25 interactive behavior.
 - Change Log:
   - `2026-08-11T13:28:30Z` — Registered `ACTIVE` claim before planning or implementation; explicitly excluded the concurrently owned Core reporting-identity lane.
+  - `2026-08-11T14:15:25Z` — Planning document committed before implementation.
+  - `2026-08-11T14:35:00Z` — Rebased the prepared implementation through PR #470 to avoid force-pushing over high-frequency concurrent `main` updates; merged successfully as `775a1098ec8e58d689ad099cfd658d78680e5bdd`.
+  - `2026-08-11T14:42:00Z` — Added focused regression gate, re-fetched merged source/gate, checked post-gate concurrency scope, and closed source-side claim as `COMPLETE` with native runtime qualification explicitly left to the existing LOCAL_ONLY queue.

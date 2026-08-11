@@ -4,17 +4,17 @@
 
 Bring QS3D's right-docked **Quản lý bản vẽ / Quản lý lớp** surface closer to the owner's BLT3D reference without replacing any native Xref/layer workflow. The reference is dense: drawing management occupies a short upper band, layer management gets the larger lower band, and frequent actions remain one click away.
 
-## Source defect fixed
+## Keyboard ownership correction
 
-`RightPanel.xaml` already declares `PreviewKeyDown="OnRightPanelPreviewKeyDown"` and advertises `Ctrl+F` on the layer search box. The existing code-behind did not provide that callback. The dedicated `RightPanel.Keyboard.cs` partial restores that XAML contract and delegates only to controls/handlers that already exist.
+The XAML route `PreviewKeyDown="OnRightPanelPreviewKeyDown"` was already backed by the pre-existing canonical partial `RightPanel.SearchShortcuts.cs`. A later compact-interactions change mistakenly added a second `RightPanel.Keyboard.cs` partial with the same method signature. Because all partials compile into the same `RightPanel` class, that duplicate member is invalid C# and has been removed.
 
-Keyboard behavior:
+`RightPanel.SearchShortcuts.cs` remains the single keyboard callback owner, matching the older `scripts/preflight-right-panel-layer-search.py` contract. The keyboard behavior is therefore:
 
 - **Ctrl+F** — focus `LayerSearchBox` and select the current query.
-- **F5** — execute the existing `OnRefreshClick` path.
-- **Esc** — clear the layer filter first; when no filter exists, call the existing clear-layer-selection and clear-drawing/Xref-selection paths.
+- **F5** — call the canonical `Refresh()` path.
+- **Esc** — when `LayerSearchBox` has keyboard focus and its filter is non-empty, clear that filter.
 
-No parallel Xref or layer service implementation is introduced.
+No parallel Xref or layer service implementation is introduced, and the compact lane does not create a second keyboard route.
 
 ## Screenshot mapping
 
@@ -26,25 +26,25 @@ The compact shell keeps the existing functional sections and makes them denser f
 - `DrawingList` and `LayerList` retain explicit minimum working areas so compacting chrome cannot collapse the actual data surfaces.
 - The row splitter uses preview resizing, matching the interaction policy used by the compact Workspace shell.
 - Section titles receive a stronger hierarchy while the existing premium dark theme remains authoritative.
-- Existing `Ctrl+F`, new visible `F5` hint and `Esc` filter hint are surfaced through tooltips rather than new decorative buttons.
+- Existing `Ctrl+F`, `F5` and `Esc` hints are surfaced through tooltips rather than new decorative buttons.
 
 ## Behavior boundary
 
 `RightPanel.CompactShell.cs` is intentionally presentation-only. It does not reference `XrefService`, `LayerVisibilityService`, project state, quantity/reporting code or `SendStringToExecute`. The existing `RightPanel.xaml.cs` remains the single implementation for real drawing/layer operations.
 
-`RightPanel.Keyboard.cs` is also a routing layer, not a second implementation: it calls `OnRefreshClick`, `OnClearLayerSelectionClick` and `OnClearDrawingSelectionClick` instead of copying their logic.
+`RightPanel.SearchShortcuts.cs` is also a routing/presentation layer rather than a second business implementation. It owns the one XAML keyboard callback and does not duplicate Xref/layer mutation internals.
 
 ## Concurrency boundary
 
-This lane does not edit `PaletteCoordinator.cs`, `QuantityInsightPanel*`, `WallQuantityWindow*`, `QuantitySummaryWindow*`, `WorkspacePanel*`, Ribbon, Start Center, Project Tools, Core reporting/persistence/semantic mutation, updater/release/signing or GitHub Actions. In particular, the active quantity-description 3D-locate and wall-quantity viewport-locate work remain independent.
+This lane does not edit `PaletteCoordinator.cs`, `QuantityInsightPanel*`, `WallQuantityWindow*`, `QuantitySummaryWindow*`, `WorkspacePanel*`, Ribbon, Start Center, Project Tools, Core reporting/persistence/semantic mutation, updater/release/signing or GitHub Actions. Quantity-description 3D-locate and wall-quantity viewport-locate work remain independent.
 
 ## Qualification
 
-The focused source gate `scripts/preflight-right-panel-compact-interactions.py` checks:
+The compact source gate `scripts/preflight-right-panel-compact-interactions.py` now composes with the canonical `scripts/preflight-right-panel-layer-search.py` ownership model. Together they check:
 
 1. the current RightPanel XAML remains well-formed and keeps all important real action bindings;
-2. the declared `OnRightPanelPreviewKeyDown` callback has one dedicated implementation;
-3. Ctrl+F/F5/Esc route to the intended existing controls/handlers;
+2. `OnRightPanelPreviewKeyDown` has exactly one implementation across all `RightPanel*.cs` partials and that implementation belongs to `RightPanel.SearchShortcuts.cs`;
+3. Ctrl+F/F5/Esc keep the canonical keyboard behavior without a second registration or duplicate member;
 4. the compact shell keeps density/minimum-size/section hierarchy behavior;
 5. the presentation partial does not gain mutation/CAD-command dependencies.
 

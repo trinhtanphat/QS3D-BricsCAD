@@ -2,12 +2,24 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11 (UTC+7)
-- Status: `ACTIVE`
+- Completed: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
 - Scope: reduce redundant interaction in `QS3DDRAWWALLREF` / `QS3DDRAWWALLREFADV` by safely consuming exactly one preselected reference LINE before falling back to the existing interactive `GetEntity` prompt; preserve read-only reference ownership, cancellation, project preview/freshness, semantic capture, scoped regeneration, native ownership and rollback contracts.
 - Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/DirectDrawReferenceWallCommands.cs`
   - `scripts/preflight-reference-wall-pickfirst.py`
   - `docs/DIRECT-DRAW-QUICK-REFERENCE-WALL-2026-08-11.md`
   - this claim file for close-out
-- Non-goals: no DrawJig/transient/repeated-mode implementation, no geometry heuristics, no changes to builders/Core persistence/Opening workflows, no physical boolean side effects, no GitHub Actions dispatch.
-- Runtime boundary: exact BricsCAD V25 PICKFIRST/implied-selection/editor behavior remains LOCAL_ONLY under existing `LOCAL-008`; source/static changes must not claim runtime PASS.
+- Implemented contract:
+  - both Reference Wall commands opt into `CommandFlags.UsePickSet`;
+  - exactly one valid implied LINE is opened read-only and used immediately;
+  - zero/multiple/stale/non-LINE implied selection is never inferred from geometry and falls back to the existing explicit `GetEntity` LINE picker;
+  - reference acquisition remains before project preview/mutation, so selection cancel does not cross the project/source/semantic/native authoring boundary;
+  - existing Family defaults, Advanced numeric prompts, scoped regeneration, WallSolidBuilder ownership and rollback behavior are unchanged.
+- Source commit: `49546f68890db977f04888816c6b42a55e41b806` (`feat(authoring): consume preselected reference wall line`).
+- Regression guard commit: `82f1c1cc87597af719d5393913df56286c77bf49` (`test(authoring): guard reference wall PICKFIRST`).
+- Documentation commit: `4b2b2b90b4190621adcc17eb0ad04312c0d4b00a` (`docs(authoring): document reference wall PICKFIRST`).
+- Validation: connector-side source review confirms `SelectImplied` precedes `GetEntity`, implied acceptance requires exactly one object and the same read-only LINE parser, reference acquisition still precedes `DirectDrawProjectPreviewContext.Capture`, and regeneration remains `RegenerateDirtySubset`. No GitHub Actions were dispatched.
+- Runtime boundary: exact BricsCAD V25 PICKFIRST/implied-selection/editor behavior remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under existing `LOCAL-008`, which already owns Direct Draw reference/editor/cancel/document-switch qualification. The focused doc now enumerates PICKFIRST success/fallback/cancel scenarios; this source-safe claim does not claim V25 runtime PASS.
+- Non-goals preserved: no DrawJig/transient/repeated-mode implementation, no geometry heuristics, no changes to builders/Core persistence/Opening workflows, no physical boolean side effects.
+- Handoff: reservation released after merge; future agents may edit these files after re-checking current `main` and active claims.

@@ -11,7 +11,7 @@ namespace QS3D.Core.Formulas
         public double Evaluate(string expression, IReadOnlyDictionary<string, double>? variables = null)
         {
             ValidateExpression(expression);
-            return new Parser(expression, variables ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)).Parse();
+            return new Parser(expression, NormalizeVariables(variables)).Parse();
         }
 
         public IReadOnlyCollection<string> GetReferencedVariables(string expression)
@@ -54,6 +54,25 @@ namespace QS3D.Core.Formulas
         {
             if (string.IsNullOrWhiteSpace(expression)) throw new ArgumentException("Expression is required.", nameof(expression));
             if (expression.Length > MaxExpressionLength) throw new InvalidOperationException("Expression is too long.");
+        }
+
+        private static IReadOnlyDictionary<string, double> NormalizeVariables(IReadOnlyDictionary<string, double>? variables)
+        {
+            var normalized = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            if (variables == null) return normalized;
+
+            foreach (var pair in variables)
+            {
+                if (string.IsNullOrWhiteSpace(pair.Key))
+                    throw new InvalidOperationException("Variable names cannot be blank or whitespace-only.");
+
+                var normalizedName = pair.Key.Trim();
+                if (normalized.ContainsKey(normalizedName))
+                    throw new InvalidOperationException($"Variable name '{pair.Key}' conflicts with another variable after trimming whitespace and ignoring casing.");
+                normalized.Add(normalizedName, pair.Value);
+            }
+
+            return normalized;
         }
 
         private static void SkipNumberToken(string text, ref int index)

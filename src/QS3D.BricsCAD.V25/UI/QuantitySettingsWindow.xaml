@@ -16,275 +16,48 @@
         <SolidColorBrush x:Key="BorderBrush" Color="#263247" />
         <SolidColorBrush x:Key="AccentBrush" Color="#2F80ED" />
         <SolidColorBrush x:Key="MutedBrush" Color="#8FA1BA" />
-
-        <Style TargetType="Button">
-            <Setter Property="Foreground" Value="#EAF1FB" />
-            <Setter Property="Background" Value="#172235" />
-            <Setter Property="BorderBrush" Value="#31415A" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="14,8" />
-            <Setter Property="Margin" Value="4,0,0,0" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Background" Value="#174C78" />
-            <Setter Property="BorderBrush" Value="#2D75A9" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-        </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#101827" />
-            <Setter Property="Foreground" Value="#F2F6FC" />
-            <Setter Property="BorderBrush" Value="#2C3A50" />
-            <Setter Property="Padding" Value="8,5" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-        <Style TargetType="DataGrid">
-            <Setter Property="Background" Value="#0D1320" />
-            <Setter Property="Foreground" Value="#EAF0F9" />
-            <Setter Property="BorderBrush" Value="#253047" />
-            <Setter Property="HorizontalGridLinesBrush" Value="#202A3C" />
-            <Setter Property="VerticalGridLinesBrush" Value="#202A3C" />
-            <Setter Property="RowBackground" Value="#0D1320" />
-            <Setter Property="AlternatingRowBackground" Value="#101725" />
-            <Setter Property="SelectionUnit" Value="FullRow" />
-            <Setter Property="SelectionMode" Value="Single" />
-        </Style>
-        <Style TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="#141C2B" />
-            <Setter Property="Foreground" Value="#A9C7F4" />
-            <Setter Property="BorderBrush" Value="#2A354A" />
-            <Setter Property="BorderThickness" Value="0,0,1,1" />
-            <Setter Property="Padding" Value="9,8" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-        </Style>
-        <Style TargetType="DataGridCell">
-            <Setter Property="Foreground" Value="#E5ECF7" />
-            <Setter Property="BorderBrush" Value="#202A3C" />
-            <Setter Property="Padding" Value="7,4" />
-        </Style>
-        <Style TargetType="TabItem">
-            <Setter Property="Foreground" Value="#D9E3F2" />
-            <Setter Property="Background" Value="#111827" />
-            <Setter Property="BorderBrush" Value="#263247" />
-            <Setter Property="Padding" Value="14,8" />
-        </Style>
-        <Style x:Key="FieldLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#C9D4E5" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="0,6,18,6" />
-        </Style>
-        <Style x:Key="FieldHint" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="14,6,0,6" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-        </Style>
+        <Style TargetType="Button"><Setter Property="Foreground" Value="#EAF1FB" /><Setter Property="Background" Value="#172235" /><Setter Property="BorderBrush" Value="#31415A" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Padding" Value="14,8" /><Setter Property="Margin" Value="4,0,0,0" /><Setter Property="Cursor" Value="Hand" /></Style>
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="#174C78" /><Setter Property="BorderBrush" Value="#2D75A9" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+        <Style TargetType="TextBox"><Setter Property="Background" Value="#101827" /><Setter Property="Foreground" Value="#F2F6FC" /><Setter Property="BorderBrush" Value="#2C3A50" /><Setter Property="Padding" Value="8,5" /><Setter Property="VerticalContentAlignment" Value="Center" /></Style>
+        <Style TargetType="DataGrid"><Setter Property="Background" Value="#0D1320" /><Setter Property="Foreground" Value="#EAF0F9" /><Setter Property="BorderBrush" Value="#253047" /><Setter Property="HorizontalGridLinesBrush" Value="#202A3C" /><Setter Property="VerticalGridLinesBrush" Value="#202A3C" /><Setter Property="RowBackground" Value="#0D1320" /><Setter Property="AlternatingRowBackground" Value="#101725" /><Setter Property="SelectionUnit" Value="FullRow" /><Setter Property="SelectionMode" Value="Single" /></Style>
+        <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#141C2B" /><Setter Property="Foreground" Value="#A9C7F4" /><Setter Property="BorderBrush" Value="#2A354A" /><Setter Property="BorderThickness" Value="0,0,1,1" /><Setter Property="Padding" Value="9,8" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+        <Style TargetType="DataGridCell"><Setter Property="Foreground" Value="#E5ECF7" /><Setter Property="BorderBrush" Value="#202A3C" /><Setter Property="Padding" Value="7,4" /></Style>
+        <Style TargetType="TabItem"><Setter Property="Foreground" Value="#D9E3F2" /><Setter Property="Background" Value="#111827" /><Setter Property="BorderBrush" Value="#263247" /><Setter Property="Padding" Value="14,8" /></Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock"><Setter Property="Foreground" Value="#C9D4E5" /><Setter Property="VerticalAlignment" Value="Center" /><Setter Property="Margin" Value="0,6,18,6" /></Style>
+        <Style x:Key="FieldHint" TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource MutedBrush}" /><Setter Property="VerticalAlignment" Value="Center" /><Setter Property="Margin" Value="14,6,0,6" /><Setter Property="TextWrapping" Value="Wrap" /></Style>
         </ResourceDictionary>
     </Window.Resources>
-
     <Grid Margin="18">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="12" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="12" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
-
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <Grid Grid.Row="0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel>
-                <TextBlock Text="⚙  CÀI ĐẶT THÔNG SỐ TÍNH TOÁN  (SETUP &amp; RULES)"
-                           FontSize="17" FontWeight="Bold" Foreground="#F3F7FD" />
-                <TextBlock Margin="0,5,0,0"
-                           Text="Thông số cốp pha + luật giao cắt + ngưỡng engine — cấu hình QS3D dùng cho định lượng."
-                           Foreground="{StaticResource MutedBrush}" />
-            </StackPanel>
-            <Border Grid.Column="1" Padding="10,5" CornerRadius="4" Background="#132238" BorderBrush="#2A4D74" BorderThickness="1">
-                <TextBlock Text="Schema v2" Foreground="#86BDF2" FontWeight="SemiBold" />
-            </Border>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel><TextBlock Text="⚙  CÀI ĐẶT THÔNG SỐ TÍNH TOÁN  (SETUP &amp; RULES)" FontSize="17" FontWeight="Bold" Foreground="#F3F7FD" /><TextBlock Margin="0,5,0,0" Text="Thông số cốp pha + luật giao cắt + ngưỡng engine — cấu hình QS3D dùng cho định lượng." Foreground="{StaticResource MutedBrush}" /></StackPanel>
+            <Border Grid.Column="1" Padding="10,5" CornerRadius="4" Background="#132238" BorderBrush="#2A4D74" BorderThickness="1"><TextBlock Text="Schema v2" Foreground="#86BDF2" FontWeight="SemiBold" /></Border>
         </Grid>
-
         <Border Grid.Row="2" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="5" Padding="1">
             <TabControl Background="{StaticResource PanelBrush}" BorderThickness="0">
-                <TabItem Header="◇  Thông số Cốp pha">
-                    <Grid Margin="10">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="8" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <TextBlock Text="Chọn bề mặt cốp pha cần lấy cho từng loại cấu kiện và ngưỡng phân loại mặt."
-                                   Foreground="{StaticResource MutedBrush}" />
-                        <DataGrid Grid.Row="2" ItemsSource="{Binding CategoryRows}"
-                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
-                                  HeadersVisibility="Column" RowHeaderWidth="0" AlternationCount="2"
-                                  EnableRowVirtualization="True" EnableColumnVirtualization="True">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Loại cấu kiện" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*" MinWidth="220" />
-                                <DataGridCheckBoxColumn Header="Lấy CP Thành" Binding="{Binding ExtractSide, Mode=TwoWay}" Width="125" />
-                                <DataGridCheckBoxColumn Header="Lấy CP Đáy" Binding="{Binding ExtractBottom, Mode=TwoWay}" Width="115" />
-                                <DataGridTextColumn Header="Góc ngưỡng mặt ngang (°)" Binding="{Binding FaceAngleThresholdDeg, Mode=TwoWay}" Width="190" />
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </Grid>
-                </TabItem>
-
+                <TabItem Header="◇  Thông số Cốp pha"><Grid Margin="10"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions><TextBlock Text="Chọn bề mặt cốp pha cần lấy cho từng loại cấu kiện và ngưỡng phân loại mặt." Foreground="{StaticResource MutedBrush}" /><DataGrid Grid.Row="2" ItemsSource="{Binding CategoryRows}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column" RowHeaderWidth="0" AlternationCount="2" EnableRowVirtualization="True" EnableColumnVirtualization="True"><DataGrid.Columns><DataGridTextColumn Header="Loại cấu kiện" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*" MinWidth="220" /><DataGridCheckBoxColumn Header="Lấy CP Thành" Binding="{Binding ExtractSide, Mode=TwoWay}" Width="125" /><DataGridCheckBoxColumn Header="Lấy CP Đáy" Binding="{Binding ExtractBottom, Mode=TwoWay}" Width="115" /><DataGridTextColumn Header="Góc ngưỡng mặt ngang (°)" Binding="{Binding FaceAngleThresholdDeg, Mode=TwoWay}" Width="190" /></DataGrid.Columns></DataGrid></Grid></TabItem>
                 <TabItem Header="✂  Luật Giao Cắt (Intersection Rules)">
-                    <Grid Margin="10">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="8" />
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="8" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <TextBlock Text="Quy tắc có hướng: chọn Cấu kiện chính → Cấu kiện tham chiếu. Hai chiều A → B và B → A luôn là hai luật độc lập."
-                                   Foreground="{StaticResource MutedBrush}" />
-
-                        <Grid Grid.Row="2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="190" />
-                                <ColumnDefinition Width="8" />
-                                <ColumnDefinition Width="190" />
-                                <ColumnDefinition Width="10" />
-                                <ColumnDefinition Width="*" MinWidth="310" />
-                            </Grid.ColumnDefinitions>
-
-                            <Border Grid.Column="0" Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="6">
-                                <DockPanel LastChildFill="True">
-                                    <StackPanel DockPanel.Dock="Top" Margin="3,2,3,7">
-                                        <TextBlock Text="Cấu kiện chính" FontWeight="SemiBold" Foreground="#A9C7F4" />
-                                        <TextBlock Text="(bị trừ / nhận tác động)" FontSize="10" Foreground="{StaticResource MutedBrush}" />
-                                    </StackPanel>
-                                    <ListBox x:Name="PrimaryCategoryList"
-                                             ItemsSource="{Binding IntersectionCategoryChoices}"
-                                             DisplayMemberPath="DisplayName"
-                                             SelectionChanged="IntersectionCategorySelectionChanged"
-                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                                </DockPanel>
-                            </Border>
-
-                            <Border Grid.Column="2" Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="6">
-                                <DockPanel LastChildFill="True">
-                                    <StackPanel DockPanel.Dock="Top" Margin="3,2,3,7">
-                                        <TextBlock Text="Cấu kiện tham chiếu" FontWeight="SemiBold" Foreground="#A9C7F4" />
-                                        <TextBlock Text="(đối tượng giao với cấu kiện chính)" FontSize="10" Foreground="{StaticResource MutedBrush}" />
-                                    </StackPanel>
-                                    <ListBox x:Name="ReferenceCategoryList"
-                                             ItemsSource="{Binding IntersectionCategoryChoices}"
-                                             DisplayMemberPath="DisplayName"
-                                             SelectionChanged="IntersectionCategorySelectionChanged"
-                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                                </DockPanel>
-                            </Border>
-
-                            <Border Grid.Column="4" Background="#0D1320" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="12">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="8" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="10" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="10" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <StackPanel>
-                                        <TextBlock x:Name="SelectedRuleHeading" Text="Chọn hai loại cấu kiện" FontWeight="SemiBold" FontSize="14" Foreground="#F3F7FD" TextWrapping="Wrap" />
-                                        <TextBlock x:Name="SelectedRuleStateText" Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
-                                    </StackPanel>
-
-                                    <Border x:Name="SelectedRuleEditor" Grid.Row="2" Background="#101827" BorderBrush="#253047" BorderThickness="1" CornerRadius="4" Padding="10" IsEnabled="False">
-                                        <StackPanel>
-                                            <TextBlock Text="Lựa chọn của luật đang chọn" FontWeight="SemiBold" Foreground="#A9C7F4" Margin="0,0,0,6" />
-                                            <CheckBox Content="Trừ khối lượng bê tông giao cắt" IsChecked="{Binding SubtractConcrete, Mode=TwoWay}" Margin="0,3" />
-                                            <CheckBox Content="Trừ CP Thành bởi bê tông" IsChecked="{Binding SubtractSideFormworkByConcrete, Mode=TwoWay}" Margin="0,3" />
-                                            <CheckBox Content="Trừ CP Đáy bởi bê tông" IsChecked="{Binding SubtractBottomFormworkByConcrete, Mode=TwoWay}" Margin="0,3" />
-                                            <CheckBox Content="Trừ CP Thành bởi CP Thành" IsChecked="{Binding SubtractSideFormworkBySideFormwork, Mode=TwoWay}" Margin="0,3" />
-                                            <CheckBox Content="Trừ CP Đáy bởi CP Đáy" IsChecked="{Binding SubtractBottomFormworkByBottomFormwork, Mode=TwoWay}" Margin="0,3" />
-                                        </StackPanel>
-                                    </Border>
-
-                                    <Border Grid.Row="4" Background="#12131D" BorderBrush="#49344E" BorderThickness="1" CornerRadius="4" Padding="10">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Text="Luật đảo ngược" Foreground="#D6A8E6" FontWeight="SemiBold" />
-                                                <TextBlock x:Name="ReverseRuleSummaryText" Margin="0,4,8,0" Foreground="#AFA4B8" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <Button x:Name="ViewReverseRuleButton" Grid.Column="1" Content="Xem chiều ngược" Click="ViewReverseRule_Click" VerticalAlignment="Center" IsEnabled="False" />
-                                        </Grid>
-                                    </Border>
-
-                                    <TextBlock Grid.Row="6" Text="Chỉ dòng A → B đang chọn được chỉnh. Chuyển sang B → A để chỉnh luật chiều ngược; QS3D không tự sao chép giá trị giữa hai chiều."
-                                               Foreground="#79A7D7" TextWrapping="Wrap" />
-                                </Grid>
-                            </Border>
-                        </Grid>
-
-                        <TextBlock Grid.Row="4" Text="Toàn bộ ma trận vẫn được giữ khi lưu/xuất template, kể cả mã cấu kiện tương thích chưa có tên native QS3D."
-                                   Foreground="#79A7D7" />
+                    <Grid Margin="10"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><TextBlock Text="Quy tắc có hướng: chọn Cấu kiện chính → Cấu kiện tham chiếu. Hai chiều A → B và B → A luôn là hai luật độc lập." Foreground="{StaticResource MutedBrush}" />
+                        <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="190" /><ColumnDefinition Width="8" /><ColumnDefinition Width="190" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" MinWidth="310" /></Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="6"><DockPanel LastChildFill="True"><StackPanel DockPanel.Dock="Top" Margin="3,2,3,7"><TextBlock Text="Cấu kiện chính" FontWeight="SemiBold" Foreground="#A9C7F4" /><TextBlock Text="(bị trừ / nhận tác động)" FontSize="10" Foreground="{StaticResource MutedBrush}" /></StackPanel><ListBox x:Name="PrimaryCategoryList" ItemsSource="{Binding IntersectionCategoryChoices}" DisplayMemberPath="DisplayName" SelectionChanged="IntersectionCategorySelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto" /></DockPanel></Border>
+                            <Border Grid.Column="2" Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="6"><DockPanel LastChildFill="True"><StackPanel DockPanel.Dock="Top" Margin="3,2,3,7"><TextBlock Text="Cấu kiện tham chiếu" FontWeight="SemiBold" Foreground="#A9C7F4" /><TextBlock Text="(đối tượng giao với cấu kiện chính)" FontSize="10" Foreground="{StaticResource MutedBrush}" /></StackPanel><ListBox x:Name="ReferenceCategoryList" ItemsSource="{Binding IntersectionCategoryChoices}" DisplayMemberPath="DisplayName" SelectionChanged="IntersectionCategorySelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto" /></DockPanel></Border>
+                            <Border Grid.Column="4" Background="#0D1320" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="12"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><StackPanel><TextBlock x:Name="SelectedRuleHeading" Text="Chọn hai loại cấu kiện" FontWeight="SemiBold" FontSize="14" Foreground="#F3F7FD" TextWrapping="Wrap" /><TextBlock x:Name="SelectedRuleStateText" Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" /></StackPanel><Border x:Name="SelectedRuleEditor" Grid.Row="2" Background="#101827" BorderBrush="#253047" BorderThickness="1" CornerRadius="4" Padding="10" IsEnabled="False"><StackPanel><TextBlock Text="Lựa chọn của luật đang chọn" FontWeight="SemiBold" Foreground="#A9C7F4" Margin="0,0,0,6" /><CheckBox Content="Trừ khối lượng bê tông giao cắt" IsChecked="{Binding SubtractConcrete, Mode=TwoWay}" Margin="0,3" /><CheckBox Content="Trừ CP Thành bởi bê tông" IsChecked="{Binding SubtractSideFormworkByConcrete, Mode=TwoWay}" Margin="0,3" /><CheckBox Content="Trừ CP Đáy bởi bê tông" IsChecked="{Binding SubtractBottomFormworkByConcrete, Mode=TwoWay}" Margin="0,3" /><CheckBox Content="Trừ CP Thành bởi CP Thành" IsChecked="{Binding SubtractSideFormworkBySideFormwork, Mode=TwoWay}" Margin="0,3" /><CheckBox Content="Trừ CP Đáy bởi CP Đáy" IsChecked="{Binding SubtractBottomFormworkByBottomFormwork, Mode=TwoWay}" Margin="0,3" /></StackPanel></Border><Border Grid.Row="4" Background="#12131D" BorderBrush="#49344E" BorderThickness="1" CornerRadius="4" Padding="10"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Luật đảo ngược" Foreground="#D6A8E6" FontWeight="SemiBold" /><TextBlock x:Name="ReverseRuleSummaryText" Margin="0,4,8,0" Foreground="#AFA4B8" TextWrapping="Wrap" /></StackPanel><Button x:Name="ViewReverseRuleButton" Grid.Column="1" Content="Xem chiều ngược" Click="ViewReverseRule_Click" VerticalAlignment="Center" IsEnabled="False" /></Grid></Border><TextBlock Grid.Row="6" Text="Chỉ dòng A → B đang chọn được chỉnh. Chuyển sang B → A để chỉnh luật chiều ngược; QS3D không tự sao chép giá trị giữa hai chiều." Foreground="#79A7D7" TextWrapping="Wrap" /></Grid></Border>
+                        </Grid><TextBlock Grid.Row="4" Text="Toàn bộ ma trận vẫn được giữ khi lưu/xuất template, kể cả mã cấu kiện tương thích chưa có tên native QS3D." Foreground="#79A7D7" />
                     </Grid>
                 </TabItem>
-
                 <TabItem Header="🛠  Cài đặt nhà phát triển">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <Grid Margin="18">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="240" />
-                                <ColumnDefinition Width="150" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Dung sai cốp pha (mm)" /><TextBox x:Name="FormworkToleranceBox" Grid.Row="0" Grid.Column="1" /><TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Dung sai hình học khi nhận diện/so khớp bề mặt." />
-                            <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Offset bê tông lót (mm)" /><TextBox x:Name="BlindingConcreteOffsetBox" Grid.Row="1" Grid.Column="1" /><TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Khoảng bù phục vụ lớp bê tông lót." />
-                            <TextBlock Grid.Row="2" Style="{StaticResource FieldLabel}" Text="Diện tích trừ tối thiểu (mm²)" /><TextBox x:Name="MinSubtractAreaBox" Grid.Row="2" Grid.Column="1" /><TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Bỏ qua giao cắt có diện tích nhỏ hơn ngưỡng." />
-                            <TextBlock Grid.Row="3" Style="{StaticResource FieldLabel}" Text="Diện tích cốp pha tối thiểu (mm²)" /><TextBox x:Name="MinFormworkAreaBox" Grid.Row="3" Grid.Column="1" /><TextBlock Grid.Row="3" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Bỏ qua mặt cốp pha quá nhỏ." />
-                            <TextBlock Grid.Row="4" Style="{StaticResource FieldLabel}" Text="Thể tích bê tông tối thiểu (m³)" /><TextBox x:Name="MinConcreteVolumeBox" Grid.Row="4" Grid.Column="1" /><TextBlock Grid.Row="4" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng nhiễu cho thể tích bê tông." />
-                            <TextBlock Grid.Row="5" Style="{StaticResource FieldLabel}" Text="Tỷ lệ bao phủ tương đối (%)" /><TextBox x:Name="EngulfRelPercentBox" Grid.Row="5" Grid.Column="1" /><TextBlock Grid.Row="5" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng tương đối khi xét bao phủ/giao nhau." />
-                            <TextBlock Grid.Row="6" Style="{StaticResource FieldLabel}" Text="Diện tích bao phủ tối thiểu (mm²)" /><TextBox x:Name="EngulfMinAreaBox" Grid.Row="6" Grid.Column="1" /><TextBlock Grid.Row="6" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng tuyệt đối cho kiểm tra bao phủ." />
-                            <TextBlock Grid.Row="7" Style="{StaticResource FieldLabel}" Text="Lấp khe Phòng (mm)" /><TextBox x:Name="RoomGapFillBox" Grid.Row="7" Grid.Column="1" /><TextBlock Grid.Row="7" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Khoảng hở nhỏ được phép nối khi dò biên phòng." />
-                            <TextBlock Grid.Row="8" Style="{StaticResource FieldLabel}" Text="Bán kính tìm Phòng (mm)" /><TextBox x:Name="RoomSearchRadiusBox" Grid.Row="8" Grid.Column="1" /><TextBlock Grid.Row="8" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Giới hạn tìm kiếm hình học phòng." />
-                            <TextBlock Grid.Row="9" Style="{StaticResource FieldLabel}" Text="Màu kích thước (#RRGGBB)" /><TextBox x:Name="DimColorBox" Grid.Row="9" Grid.Column="1" /><TextBlock Grid.Row="9" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Màu annotation/kích thước do engine sinh." />
-                            <TextBlock Grid.Row="10" Style="{StaticResource FieldLabel}" Text="Chiều cao chữ kích thước" /><TextBox x:Name="DimTextHeightBox" Grid.Row="10" Grid.Column="1" /><TextBlock Grid.Row="10" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Chiều cao chữ theo đơn vị bản vẽ." />
-                        </Grid>
-                    </ScrollViewer>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="18">
+                        <Border Background="#17150E" BorderBrush="#5A4821" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,10"><TextBlock Text="⚠ Các ngưỡng nội bộ của engine tính khối lượng — chỉ chỉnh khi hiểu rõ tác động." Foreground="#F1BD55" FontWeight="SemiBold" TextWrapping="Wrap" /></Border>
+                        <StackPanel Margin="0,0,0,10"><TextBlock Text="📎 Thông số engine chung" Foreground="#8DB8F0" FontWeight="SemiBold" Margin="0,0,0,5" /><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Khoảng văng Cốp pha / Tolerance (mm)" /><TextBox x:Name="FormworkToleranceBox" Grid.Row="0" Grid.Column="1" /><TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Dung sai hình học khi nhận diện/so khớp bề mặt." /><TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Offset bê tông lót ra ngoài mép móng (mm)" /><TextBox x:Name="BlindingConcreteOffsetBox" Grid.Row="1" Grid.Column="1" /><TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Khoảng bù phục vụ lớp bê tông lót." /></Grid></StackPanel>
+                        <Separator Background="#263247" Margin="0,1,0,10" /><StackPanel Margin="0,0,0,10"><TextBlock Text="♟ Ngưỡng lọc khối lượng (bỏ qua mảnh nhỏ hơn ngưỡng)" Foreground="#8DB8F0" FontWeight="SemiBold" Margin="0,0,0,5" /><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Diện tích tấm TRỪ (giao) tối thiểu (mm²)" /><TextBox x:Name="MinSubtractAreaBox" Grid.Row="0" Grid.Column="1" /><TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Bỏ qua giao cắt có diện tích nhỏ hơn ngưỡng." /><TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Diện tích tấm cốp pha CÒN LẠI tối thiểu (mm²)" /><TextBox x:Name="MinFormworkAreaBox" Grid.Row="1" Grid.Column="1" /><TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Bỏ qua mặt cốp pha quá nhỏ." /><TextBlock Grid.Row="2" Style="{StaticResource FieldLabel}" Text="Thể tích bê tông tối thiểu (m³)" /><TextBox x:Name="MinConcreteVolumeBox" Grid.Row="2" Grid.Column="1" /><TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng nhiễu cho thể tích bê tông." /></Grid></StackPanel>
+                        <Separator Background="#263247" Margin="0,1,0,10" /><StackPanel Margin="0,0,0,10"><TextBlock Text="◖ Ngưỡng ‘nuốt’ tấm trừ (tránh trừ lặp khi một tấm nằm trong tấm khác)" Foreground="#8DB8F0" FontWeight="SemiBold" Margin="0,0,0,5" /><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Tỷ lệ lệch tối đa so với diện tích tấm (%)" /><TextBox x:Name="EngulfRelPercentBox" Grid.Row="0" Grid.Column="1" /><TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng tương đối khi xét bao phủ/giao nhau." /><TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Sàn tuyệt đối tối thiểu (mm²)" /><TextBox x:Name="EngulfMinAreaBox" Grid.Row="1" Grid.Column="1" /><TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng tuyệt đối cho kiểm tra bao phủ." /></Grid></StackPanel>
+                        <Separator Background="#263247" Margin="0,1,0,10" /><StackPanel Margin="0,0,0,10"><TextBlock Text="⌂ Pick Room (pick biên phòng trong View 3D)" Foreground="#8DB8F0" FontWeight="SemiBold" Margin="0,0,0,5" /><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Tự động vá (fill) khe hở ≤ (mm)" /><TextBox x:Name="RoomGapFillBox" Grid.Row="0" Grid.Column="1" /><TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Khoảng hở nhỏ được phép nối khi dò biên phòng." /><TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Bán kính quét quanh điểm pick (mm)" /><TextBox x:Name="RoomSearchRadiusBox" Grid.Row="1" Grid.Column="1" /><TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Giới hạn tìm kiếm hình học phòng." /></Grid></StackPanel>
+                        <Separator Background="#263247" Margin="0,1,0,10" /><StackPanel><TextBlock Text="◇ Nhãn kích thước (Dim) khi Diễn giải khối lượng" Foreground="#8DB8F0" FontWeight="SemiBold" Margin="0,0,0,5" /><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Màu dim (nét + chữ) #RRGGBB" /><TextBox x:Name="DimColorBox" Grid.Row="0" Grid.Column="1" /><StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Margin="14,4,0,4" VerticalAlignment="Center"><Border Width="28" Height="24" CornerRadius="3" BorderBrush="#7188A7" BorderThickness="1" Background="{Binding Text, ElementName=DimColorBox}" /><TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Text="Xem trước màu hiện tại; giá trị chỉ được lưu khi #RRGGBB hợp lệ." /></StackPanel><TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Cỡ chữ dim (px)" /><TextBox x:Name="DimTextHeightBox" Grid.Row="1" Grid.Column="1" /><TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Chiều cao chữ theo đơn vị bản vẽ/annotation hiện hành." /></Grid></StackPanel>
+                    </StackPanel></ScrollViewer>
                 </TabItem>
             </TabControl>
         </Border>
-
-        <Grid Grid.Row="4">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel VerticalAlignment="Center">
-                <TextBlock Text="Lưu theo máy:" Foreground="{StaticResource MutedBrush}" FontSize="11" />
-                <TextBlock x:Name="SettingsPathText" Foreground="#7188A7" FontSize="11" TextTrimming="CharacterEllipsis" />
-            </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button Content="⇧  Xuất template" Click="ExportTemplate_Click" />
-                <Button Content="⇩  Nạp template" Click="ImportTemplate_Click" />
-                <Button Content="Khôi phục mặc định" Click="RestoreDefaults_Click" />
-                <Button Style="{StaticResource PrimaryButton}" Content="💾  Lưu Cài Đặt" Click="Save_Click" />
-                <Button Content="Đóng" Click="Close_Click" />
-            </StackPanel>
-        </Grid>
+        <Grid Grid.Row="4"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock Text="Lưu theo máy:" Foreground="{StaticResource MutedBrush}" FontSize="11" /><TextBlock x:Name="SettingsPathText" Foreground="#7188A7" FontSize="11" TextTrimming="CharacterEllipsis" /></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal"><Button Content="⇧  Xuất template" Click="ExportTemplate_Click" /><Button Content="⇩  Nạp template" Click="ImportTemplate_Click" /><Button Content="Khôi phục mặc định" Click="RestoreDefaults_Click" /><Button x:Name="SaveSettingsButton" Style="{StaticResource PrimaryButton}" Content="💾  Lưu Cài Đặt" Click="Save_Click" /><Button Content="Đóng" Click="Close_Click" /></StackPanel></Grid>
     </Grid>
 </Window>

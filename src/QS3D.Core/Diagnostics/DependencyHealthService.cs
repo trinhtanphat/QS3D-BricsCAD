@@ -23,6 +23,7 @@ namespace QS3D.Core.Diagnostics
             var graph = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
             var selfReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var ambiguousTargets = new List<KeyValuePair<string, string>>();
+            var missingTargets = new List<KeyValuePair<string, string>>();
 
             foreach (var element in elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
@@ -43,7 +44,12 @@ namespace QS3D.Core.Diagnostics
                         ambiguousTargets.Add(new KeyValuePair<string, string>(element.Id, dependencyId));
                         continue;
                     }
-                    if (uniqueIds.Contains(dependencyId)) dependencies.Add(dependencyId);
+                    if (uniqueIds.Contains(dependencyId))
+                    {
+                        dependencies.Add(dependencyId);
+                        continue;
+                    }
+                    missingTargets.Add(new KeyValuePair<string, string>(element.Id, dependencyId));
                 }
                 dependencies.Sort(StringComparer.OrdinalIgnoreCase);
                 graph[element.Id] = dependencies.ToArray();
@@ -59,6 +65,17 @@ namespace QS3D.Core.Diagnostics
                     "DEPENDENCY_TARGET_AMBIGUOUS",
                     HealthSeverity.Error,
                     "Dependency trỏ tới mã semantic element bị trùng: " + pair.Value + ". Không thể xác định cạnh graph an toàn.",
+                    pair.Key));
+            }
+
+            foreach (var pair in missingTargets
+                .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Value, StringComparer.OrdinalIgnoreCase))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "DEPENDENCY_TARGET_MISSING",
+                    HealthSeverity.Error,
+                    "Dependency trỏ tới semantic element không tồn tại: " + pair.Value + ". Cần sửa dependency trước khi regenerate/release.",
                     pair.Key));
             }
 

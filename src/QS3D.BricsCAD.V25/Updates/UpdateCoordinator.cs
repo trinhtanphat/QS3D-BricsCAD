@@ -42,6 +42,7 @@ namespace QS3D.BricsCAD.V25.Updates
     {
         private readonly object _sync = new object();
         private readonly GitHubReleaseClient _client = new GitHubReleaseClient();
+        private readonly UpdateManifestProbe _manifestProbe = new UpdateManifestProbe();
         private Dispatcher? _dispatcher;
         private Task<UpdateCheckResult>? _inFlight;
         private int _inFlightGeneration = -1;
@@ -95,15 +96,16 @@ namespace QS3D.BricsCAD.V25.Updates
 
         internal async Task<UpdateCheckResult> ScheduleLatestAsync()
         {
+            var generation = CaptureGeneration();
             var fresh = await CheckAsync(false).ConfigureAwait(false);
             var release = fresh.Release;
             if (!fresh.CanAutoInstall || release == null)
                 return fresh;
 
-            if (!SecureUpdateLauncher.TrySchedule(release, out var error))
+            if (!TryScheduleCurrentGeneration(generation, release, out var lifecycleCurrent, out var error))
             {
                 var failed = new UpdateCheckResult(UpdateState.Error, fresh.CurrentVersion, release, "Không thể lên lịch cập nhật.", error);
-                Publish(failed, false);
+                if (lifecycleCurrent) Publish(failed, false);
                 return failed;
             }
 
@@ -113,8 +115,27 @@ namespace QS3D.BricsCAD.V25.Updates
                 release,
                 "Đã lên lịch cập nhật.",
                 "QS3D sẽ yêu cầu BricsCAD đóng theo cơ chế cửa sổ bình thường để giữ nguyên các nhắc lưu bản vẽ. Nếu bạn hủy đóng, updater chỉ tiếp tục chờ; khi mọi BricsCAD đã thoát, nó mới xác minh chữ ký, cập nhật và mở lại sau khi thành công.");
-            Publish(scheduled, false);
+            if (IsGenerationCurrent(generation)) Publish(scheduled, false);
             return scheduled;
+        }
+
+        private int CaptureGeneration()
+        {
+            lock (_sync) return _generation;
+        }
+
+        private bool TryScheduleCurrentGeneration(int generation, UpdateReleaseInfo release, out bool lifecycleCurrent, out string error)
+        {
+            lock (_sync)
+            {
+                lifecycleCurrent = _started && generation == _generation;
+                if (!lifecycleCurrent)
+                {
+                    error = "Phiên cập nhật đã thay đổi hoặc đã dừng trước khi lên lịch. Mở lại Update Center và thử lại.";
+                    return false;
+                }
+                return SecureUpdateLauncher.TrySchedule(release, out error);
+            }
         }
 
         private Task<UpdateCheckResult> CheckAsync(bool automatic)
@@ -160,7 +181,7 @@ namespace QS3D.BricsCAD.V25.Updates
                         "Có bản QS3D mới " + latest.Tag + ", nhưng release này không có signed update manifest.",
                         "Bạn có thể mở trang release để cài thủ công. One-click update bị khóa để không hạ chuẩn bảo mật.");
                 }
-                else if (!SecureUpdateLauncher.TryGetCurrentSignerThumbprint(out _, out var signerReason))
+                else if (!SecureUpdateLauncher.TryGetCurrentSignerThumbprint(out var signerThumbprint, out var signerReason))
                 {
                     result = new UpdateCheckResult(
                         UpdateState.ManualInstallRequired,
@@ -171,12 +192,25 @@ namespace QS3D.BricsCAD.V25.Updates
                 }
                 else
                 {
-                    result = new UpdateCheckResult(
-                        UpdateState.UpdateAvailable,
-                        current,
-                        latest,
-                        "Có bản QS3D mới " + latest.Tag + ".",
-                        "Bản phát hành có signed update manifest và đủ điều kiện cập nhật tự động sau khi BricsCAD đóng.");
+                    var manifestProbe = await _manifestProbe.ValidateAsync(latest, signerThumbprint).ConfigureAwait(false);
+                    if (!manifestProbe.IsEligible)
+                    {
+                        result = new UpdateCheckResult(
+                            UpdateState.ManualInstallRequired,
+                            current,
+                            latest,
+                            "Có bản QS3D mới " + latest.Tag + ", nhưng update manifest chưa vượt qua kiểm tra trước khi đóng BricsCAD.",
+                            manifestProbe.Detail + " Bạn vẫn có thể mở trang release để kiểm tra/cài thủ công.");
+                    }
+                    else
+                    {
+                        result = new UpdateCheckResult(
+                            UpdateState.UpdateAvailable,
+                            current,
+                            latest,
+                            "Có bản QS3D mới " + latest.Tag + ".",
+                            "Signed update manifest đã được xác minh trước khi đóng BricsCAD; package/chữ ký/hashes sẽ được xác minh lại bởi updater sau khi host thoát.");
+                    }
                 }
 
                 if (!IsGenerationCurrent(generation)) return result;

@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             XlsxHandleReaderCoordinateSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
             PersistenceHardeningSmoke.Run();
+            LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
             HardeningRegressionSmoke.Run();
             ReviewHardeningSmoke.Run();
@@ -26,6 +27,8 @@ namespace QS3D.Core.SmokeTests
             CompletionRegressionSmoke.Run();
             SemanticOverflowSmoke.Run();
             FormulaFiniteSafetySmoke.Run();
+            FormulaVariableCaseSmoke.Run();
+            FormulaVariableNameNormalizationSmoke.Run();
             RoomBoundaryRegressionSmoke.Run();
             GeometryCompletionSmoke.Run();
             AutoRoomLifecycleSmoke.Run();
@@ -49,6 +52,7 @@ namespace QS3D.Core.SmokeTests
             CurtainFrameOpeningHealthSmoke.Run();
             BomReleaseGuardSmoke.Run();
             HealthSummaryReadinessSmoke.Run();
+            DependencyHealthMissingTargetSmoke.Run();
             LevelReferenceSmoke.Run();
             FloorGeneratedIdentitySmoke.Run();
             ModelHealthIdentityAmbiguitySmoke.Run();

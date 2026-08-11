@@ -5,7 +5,6 @@ using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI;
-using QS3D.Core.Audit;
 using QS3D.Core.Geometry;
 using Teigha.DatabaseServices;
 using Teigha.Runtime;
@@ -30,14 +29,7 @@ namespace QS3D.BricsCAD.V25
 
                 QS3D.Core.Domain.ProjectState? project = null;
                 if (ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
-                {
-                    var expectedProjectId = previewProject.ProjectId;
-                    if (!ExistingProjectMutationContext.TryGet(document, out var canonicalProject) || canonicalProject == null)
-                        throw new InvalidOperationException("Wall Junction analysis không bind được QS3D project hiện hữu sau khi selection hoàn tất.");
-                    if (!string.Equals(canonicalProject.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("QS3D project đã thay đổi trong lúc chọn Wall Junction source. Hãy chạy lại lệnh.");
-                    project = canonicalProject;
-                }
+                    project = previewProject;
 
                 var tolerance = project == null ? 0.005d : MetadataNumber(project, "WallJunctionToleranceM", 0.005d, 0d);
                 var sagitta = project == null ? 0.002d : MetadataNumber(project, "WallArcSagittaM", 0.002d, 0d);
@@ -75,10 +67,6 @@ namespace QS3D.BricsCAD.V25
                 }
                 if (nodes.Count > 100 || plan.Adjustments.Count > 100)
                     document.Editor.WriteMessage("\n  … output truncated; nodes=" + nodes.Count.ToString(CultureInfo.InvariantCulture) + ", snapPlan=" + plan.Adjustments.Count.ToString(CultureInfo.InvariantCulture));
-                if (project != null)
-                    AuditTrail.ForProject(project).Record("wall.junction.analyze", string.Empty,
-                        summary + " • sourceSegments=" + segments.Count.ToString(CultureInfo.InvariantCulture) +
-                        " • planarityToleranceM=" + planarityTolerance.ToString("R", CultureInfo.InvariantCulture));
             }
             catch (System.Exception ex)
             {

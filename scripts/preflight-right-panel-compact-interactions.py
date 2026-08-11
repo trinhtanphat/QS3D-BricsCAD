@@ -5,20 +5,21 @@ import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-XAML = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml"
-CODE = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs"
-KEYBOARD = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.Keyboard.cs"
-COMPACT = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.CompactShell.cs"
+UI = ROOT / "src/QS3D.BricsCAD.V25/UI"
+XAML = UI / "RightPanel.xaml"
+CODE = UI / "RightPanel.xaml.cs"
+SHORTCUTS = UI / "RightPanel.SearchShortcuts.cs"
+COMPACT = UI / "RightPanel.CompactShell.cs"
 DOC = ROOT / "docs/UI-RIGHT-PANEL-COMPACT-INTERACTIONS-2026-08-11.md"
 errors = []
 
-for path in (XAML, CODE, KEYBOARD, COMPACT, DOC):
+for path in (XAML, CODE, SHORTCUTS, COMPACT, DOC):
     if not path.is_file():
         errors.append("missing RightPanel compact-interaction dependency: " + str(path.relative_to(ROOT)))
 
 xaml = XAML.read_text(encoding="utf-8") if XAML.is_file() else ""
 code = CODE.read_text(encoding="utf-8") if CODE.is_file() else ""
-keyboard = KEYBOARD.read_text(encoding="utf-8") if KEYBOARD.is_file() else ""
+shortcuts = SHORTCUTS.read_text(encoding="utf-8") if SHORTCUTS.is_file() else ""
 compact = COMPACT.read_text(encoding="utf-8") if COMPACT.is_file() else ""
 doc = DOC.read_text(encoding="utf-8") if DOC.is_file() else ""
 
@@ -56,31 +57,34 @@ if xaml:
         if token not in xaml:
             errors.append("RightPanel XAML contract missing: " + token)
 
-all_cs = "\n".join((code, keyboard, compact))
-callback_count = len(re.findall(r"\bvoid\s+OnRightPanelPreviewKeyDown\s*\(", all_cs))
+right_panel_code = "\n".join(
+    path.read_text(encoding="utf-8")
+    for path in sorted(UI.glob("RightPanel*.cs"))
+)
+callback_count = len(re.findall(r"\bvoid\s+OnRightPanelPreviewKeyDown\s*\(", right_panel_code))
 if callback_count != 1:
-    errors.append("OnRightPanelPreviewKeyDown must have exactly one implementation; found " + str(callback_count))
+    errors.append("OnRightPanelPreviewKeyDown must have exactly one implementation across RightPanel partials; found " + str(callback_count))
+if (UI / "RightPanel.Keyboard.cs").exists():
+    errors.append("RightPanel.Keyboard.cs must not return; RightPanel.SearchShortcuts.cs is the canonical key-handler owner")
 
-if keyboard:
-    required_keyboard = (
+if shortcuts:
+    required_shortcuts = (
         "public partial class RightPanel",
         "private void OnRightPanelPreviewKeyDown(object sender, KeyEventArgs e)",
         "var modifiers = Keyboard.Modifiers;",
         "modifiers == ModifierKeys.Control && e.Key == Key.F",
-        "LayerSearchBox.Focus();",
-        "LayerSearchBox.SelectAll();",
+        "LayerSearchBox?.Focus();",
+        "LayerSearchBox?.SelectAll();",
         "modifiers == ModifierKeys.None && e.Key == Key.F5",
-        "OnRefreshClick(this, new RoutedEventArgs());",
+        "Refresh();",
         "modifiers == ModifierKeys.None && e.Key == Key.Escape",
-        "string.IsNullOrWhiteSpace(LayerSearchBox.Text)",
+        "LayerSearchBox.IsKeyboardFocusWithin",
         "LayerSearchBox.Clear();",
-        "OnClearLayerSelectionClick(this, new RoutedEventArgs());",
-        "OnClearDrawingSelectionClick(this, new RoutedEventArgs());",
         "e.Handled = true;",
     )
-    for token in required_keyboard:
-        if token not in keyboard:
-            errors.append("RightPanel keyboard contract missing: " + token)
+    for token in required_shortcuts:
+        if token not in shortcuts:
+            errors.append("RightPanel canonical keyboard contract missing: " + token)
 
     for forbidden in (
         "XrefService",
@@ -88,11 +92,13 @@ if keyboard:
         "SendStringToExecute",
         "ProjectContextCoordinator",
         "ProjectState",
+        "PreviewKeyDown += OnRightPanelPreviewKeyDown",
+        "OnInitialized(",
         '"_XATTACH"',
         '"_MOVE"',
         '"_ZOOM',
     ):
-        if forbidden in keyboard:
+        if forbidden in shortcuts:
             errors.append("RightPanel keyboard routing must not duplicate behavior: " + forbidden)
 
 if compact:
@@ -145,6 +151,7 @@ if doc:
         "Ctrl+F",
         "F5",
         "Esc",
+        "RightPanel.SearchShortcuts.cs",
         "Quản lý bản vẽ",
         "Quản lý lớp",
         "238-DIP",
@@ -156,6 +163,8 @@ if doc:
     ):
         if token not in doc:
             errors.append("RightPanel compact-interaction documentation missing: " + token)
+    if "existing code-behind did not provide that callback" in doc:
+        errors.append("RightPanel compact documentation must not repeat the superseded missing-callback claim")
 
 if errors:
     print("RightPanel compact-interaction preflight FAILED:")
@@ -163,4 +172,4 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("RightPanel compact-interaction preflight PASS: the declared keyboard callback is implemented once, shortcuts route through existing handlers, and compact styling remains presentation-only.")
+print("RightPanel compact-interaction preflight PASS: the canonical SearchShortcuts partial owns the single XAML keyboard callback, and compact styling remains presentation-only.")

@@ -83,6 +83,7 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Evidence required: Exact SHA; before/after Z measurements; host-opening-rebar alignment; health/release blocker behavior; save/reopen and Level-edit invalidation results.
 - Evidence: PENDING_LOCAL
 - Related docs: `docs/LEVEL-REFERENCES.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`; `scripts/preflight-level-native-host-placement.py`
+- Current source wave: hosted Door/WallOpening placement is now shared across straight/curved cutters, physical-cut live fingerprints and Auto Host matching, with legacy arithmetic preserved. Native Level use remains policy-blocked and the Curtain/rebar chain plus exact-SHA V25 matrix remain `PENDING_LOCAL`.
 - Updated: 2026-08-11
 
 ## LOCAL-004 — source reconcile native atomicity

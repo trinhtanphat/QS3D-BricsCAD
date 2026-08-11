@@ -63,8 +63,7 @@ if command.is_file():
         "CadSelectionGuard.AcquireCurrentSelection(document)",
         "if (selectedIds.Length == 0)",
         "ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)",
-        "ExistingProjectMutationContext.TryGet(document, out var canonicalProject)",
-        "string.Equals(canonicalProject.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase)",
+        "project = previewProject;",
         "project == null ? 0.005d",
         "project == null ? 0.002d",
         "ReadSelection(document, selectedIds, sagitta, planarityTolerance)",
@@ -80,8 +79,6 @@ if command.is_file():
         "plan-view đồng phẳng",
         "BulgeArcTessellator.Tessellate",
         "SnapPlan=",
-        "if (project != null)",
-        'AuditTrail.ForProject(project).Record("wall.junction.analyze"',
     ):
         if needle not in text:
             errors.append("wall junction command guard missing: " + needle)
@@ -96,15 +93,27 @@ if command.is_file():
         method.find("CadSelectionGuard.AcquireCurrentSelection(document)"),
         method.find("if (selectedIds.Length == 0)"),
         method.find("ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)"),
-        method.find("ExistingProjectMutationContext.TryGet(document, out var canonicalProject)"),
+        method.find("project = previewProject;"),
         method.find("var tolerance = project == null ? 0.005d"),
         method.find("ReadSelection(document, selectedIds, sagitta, planarityTolerance)"),
         method.find("new WallJunctionAdjustmentPlanner().Plan"),
     )
     if min(lifecycle) < 0:
-        errors.append("cannot isolate QS3DWALLJUNCTIONS selection/project/analysis lifecycle")
+        errors.append("cannot isolate QS3DWALLJUNCTIONS selection/read-only-project/analysis lifecycle")
     elif tuple(sorted(lifecycle)) != lifecycle:
-        errors.append("QS3DWALLJUNCTIONS must acquire/nonempty-check selection before existing-project lookup/bind, then read geometry and plan")
+        errors.append("QS3DWALLJUNCTIONS must acquire/nonempty-check selection before read-only project lookup, then read geometry and plan")
+
+    for forbidden in (
+        "ExistingProjectMutationContext",
+        "AuditTrail.ForProject",
+        "ProjectContextCoordinator.GetOrCreate",
+        "ProjectContextCoordinator.Save(",
+        "ProjectContextCoordinator.TrySavePending",
+        ".Touch(",
+        ".Record(",
+    ):
+        if forbidden in method:
+            errors.append("QS3DWALLJUNCTIONS analysis must remain read-only; forbidden mutation surface: " + forbidden)
 
 if snap_command.is_file():
     text = snap_command.read_text(encoding="utf-8")
@@ -171,4 +180,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: deterministic wall-junction topology, non-creating selection-first analysis, review-gated endpoint snap apply, spatial indexing, finite-safe/coplanar CAD analysis, command/UI wiring and regression coverage are present.")
+print("PASS: deterministic wall-junction topology, non-creating selection-first read-only analysis, review-gated endpoint snap apply, spatial indexing, finite-safe/coplanar CAD analysis, command/UI wiring and regression coverage are present.")

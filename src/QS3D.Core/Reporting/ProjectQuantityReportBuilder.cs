@@ -28,6 +28,7 @@ namespace QS3D.Core.Reporting
         private static IReadOnlyList<QuantityReportRow> Build(ProjectState project, IEnumerable<string>? elementIds, bool detail)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ReportingProjectIdentityGuard.RequireUniqueElementIds(project, detail ? "Quantity detail report" : "Quantity report");
             RoomFinishIdentityService.ValidateProject(project);
             var selectedIds = ResolveSelection(project, elementIds);
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
@@ -35,13 +36,10 @@ namespace QS3D.Core.Reporting
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
-            var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var element in project.Elements)
             {
-                var elementId = (element.Id ?? string.Empty).Trim();
-                if (elementId.Length == 0) throw new InvalidOperationException("Quantity report contains an element with an empty id.");
-                if (!seenElementIds.Add(elementId)) throw new InvalidOperationException("Quantity report contains duplicate element id: " + elementId + ".");
+                var elementId = element.Id.Trim();
                 if (selectedIds != null && !selectedIds.Contains(elementId)) continue;
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
                 var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
