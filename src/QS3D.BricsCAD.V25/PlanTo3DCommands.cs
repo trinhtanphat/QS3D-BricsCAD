@@ -137,7 +137,7 @@ namespace QS3D.BricsCAD.V25
                         element.Properties["QS3D.PlanTo3D"] = "1";
                         element.MarkDirty(ElementDirtyFlags.Properties);
 
-                        regenerated += regenerator.RegenerateDirty(project);
+                        regenerated += regenerator.RegenerateDirtySubset(project, new[] { element.Id });
 
                         var built = source.Kind == SourceKind.Line
                             ? WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall)
