@@ -1,63 +1,33 @@
 # Work claim — Floor elevation update vertical-reference preflight
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-floor-update-vertical-preflight`
 - Registered: `2026-08-12T01:16:00+07:00`
 - Baseline main SHA: `c406188c5aeefea6e3612defee6c649f22590ca9`
+- Claim commit: `54a49ee08bacc66e3f59167dfdbb539ceaa65bdd`
+- Implementation commit: `7bf11f60358b967ac148ae797b265383366e5495`
+- Regression commit: `70c6ba58fe089cf09af3c78e74be365db8e8fa8e`
 - Priority: deterministic validate-before-mutate integrity defect found during owner-requested continue-all audit
 
-## Confirmed defect
+## Completed
 
-`ProjectFloorService.Update(...)` validates the new Floor elevation itself as finite, resolves all semantic elements referencing that Floor, then touches/mutates the project. It does not preflight the **prospective vertical placement** of elements whose `BottomLevelId` / `TopLevelId` references the Floor being moved.
+When a Floor elevation materially changes, `ProjectFloorService.Update(...)` now preflights only semantic elements whose `BottomLevelId` or `TopLevelId` references that Floor. It substitutes the candidate Floor elevation for the affected endpoint, resolves the counterpart Level when present, applies the existing finite offset parser plus finite-add guard, and preserves the established `top > bottom` invariant before any project/floor/element mutation.
 
-A finite Floor elevation update can therefore:
+Elements that reference the Floor only through legacy `FloorId` do not acquire the new Bottom/Top pair validation.
 
-- overflow with an existing finite Bottom/Top offset, producing a non-finite effective level elevation; or
-- move an effective Bottom Level to/above its Top Level (or Top to/below Bottom).
+## Validation actually performed
 
-Both states are rejected later by the vertical placement resolver / assignment contract, but the Floor update has already been persisted and marked dirty. This is a validate-before-mutate inconsistency.
+- Verified the claim commit remained an ancestor of moving `main`; the two intervening commits before implementation touched only V26 updater source and an unrelated Material smoke.
+- Inspected exact implementation diff: one preflight call was added before dependency-graph/`project.Touch()` work, plus one helper scoped to prospective Bottom/Top relations. No tolerance, canonical identity, dependency propagation or mutation semantics changed.
+- Re-fetched module-initialized regression from current `main` and reviewed: prospective Bottom overflow, Top overflow, Bottom inversion, Top inversion, failure non-mutation including attempted simultaneous rename, legacy `FloorId`-only update, and a valid vertical-reference update that still touches project and marks geometry/relation/quantity dirty.
+- The valid regression resolves final elevations through `ElementVerticalPlacementService` to confirm downstream consistency.
+- GitHub Actions were not dispatched and no BricsCAD V25/V26 runtime qualification is claimed.
 
-## Reserved scope
-
-When `elevationChanged` is true, preflight only elements whose Bottom or Top Level relation references the Floor being updated:
-
-- substitute the candidate Floor elevation for that referenced endpoint;
-- resolve the counterpart Level from the existing project when present;
-- apply existing finite offset parsing and finite-add closure;
-- if both endpoints are present, preserve the existing `top > bottom` invariant;
-- throw before `project.Touch()`, Floor mutation or element dirty propagation on failure.
-
-Elements referencing the Floor only through legacy `FloorId` and not through Bottom/Top Level relations are not subject to this new vertical-pair preflight.
-
-## Expected surfaces
-
-- `src/QS3D.Core/Domain/ProjectFloorService.cs`
-- `tests/QS3D.Core.SmokeTests/ProjectFloorUpdateVerticalPreflightSmoke.cs`
-- module-initializer registration in the new smoke file
-- this claim file
-
-## Excluded scope
+## Excluded scope retained
 
 - No changes to Floor/Zone canonical identity, tolerance/no-op policy, dependency propagation, `ElementVerticalPlacementService`, assignment APIs, persistence schema or V25/V26 UI/native workflows.
-- No repair of pre-existing unrelated invalid Level references.
-- No new engineering bounds on finite elevations/offsets.
-- No GitHub Actions dispatch.
-
-## Validation plan
-
-- Updating a Floor used as Bottom Level rejects prospective finite-add overflow before mutation.
-- Updating a Floor used as Top Level rejects prospective finite-add overflow before mutation.
-- Moving Bottom effective elevation to/above existing Top is rejected before mutation.
-- Moving Top effective elevation to/below existing Bottom is rejected before mutation.
-- A Floor referenced only via legacy `FloorId` remains updateable under the existing contract.
-- A valid vertical-reference Floor elevation update still mutates the Floor, touches project, and marks referenced semantic elements dirty as before.
-- Failure preserves Floor name/elevation, project ChangeVersion/UpdatedUtc, and element UpdatedUtc/Dirty.
-- Inspect exact implementation diff and read back final source/test from moving `main` before close-out.
-
-## Coordination
-
-The immediately preceding Floor assignment overflow lane is completed (`152d0779148f340f7fc777273a07e1b5c090ce32`). Existing Floor tolerance/canonical-reference lanes are also complete. Recent commit search found no active claim for prospective vertical-reference validation during `ProjectFloorService.Update`.
+- No repair of pre-existing unrelated Level-reference defects and no new engineering bounds.
 
 ## Completion condition
 
-Current `main` refuses Floor elevation updates that would make referenced Bottom/Top placement non-finite or inverted, without broadening unrelated FloorId behavior, focused deterministic regression coverage is present, and this claim is closed `COMPLETED`.
+Satisfied on current `main`; Floor elevation updates cannot introduce non-finite or inverted referenced Bottom/Top placement, legacy FloorId behavior remains unchanged, focused deterministic regression coverage is present, and this lane is released.
