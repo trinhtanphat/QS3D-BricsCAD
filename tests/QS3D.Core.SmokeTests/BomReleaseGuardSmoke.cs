@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             BasicBomGuard();
+            NonCanonicalPropertyKeyBlocksRelease();
             NonCanonicalQuantityKeyBlocksRelease();
             RoomFinishProvenanceReachesReleaseGuard();
             ProvenanceConflictDoesNotCrashReleaseGuard();
@@ -57,6 +58,23 @@ namespace QS3D.Core.SmokeTests
             var allFuture = new HashSet<string>(new[] { "2B", "3C", "3D" }, StringComparer.OrdinalIgnoreCase);
             if (BomReleaseGuardService.Inspect(project, allFuture).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
                 throw new Exception("Future Generated*Handles owner slot must use the shared BOM liveness registry without a hard-coded family update.");
+        }
+
+        private static void NonCanonicalPropertyKeyBlocksRelease()
+        {
+            var project = new ProjectState("bom-property-key", "BOM property key guard");
+            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+            var element = new ProjectElement("beam-property-key", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            element.SourceHandles.Add("1C");
+            element.Properties[" MaterialName "] = "C30";
+            element.SetQuantity("NetConcreteM3", 1.25d);
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Has(issues, "BOM_PROPERTY_KEY_INVALID");
+            if (!issues.Any(x => x.Code == "BOM_PROPERTY_KEY_INVALID" && x.Severity == HealthSeverity.Error && x.ElementId == element.Id))
+                throw new Exception("Non-canonical property key must be an Error-level BOM release blocker for its owning element.");
         }
 
         private static void NonCanonicalQuantityKeyBlocksRelease()
