@@ -168,11 +168,26 @@
                     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Border Style="{StaticResource StartCard}">
                         <Grid>
-                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                            <TextBlock Text="RECENT PROJECTS / DWG" FontWeight="SemiBold"/>
-                            <TextBlock Grid.Row="1" Text="Ghim, mở nhanh, phát hiện file thiếu. Remove/Clear không xóa DWG."
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="RECENT PROJECTS / DWG" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="RecentProjectCountText" Grid.Column="1" Foreground="{StaticResource MutedBrush}"/>
+                            </Grid>
+                            <TextBlock Grid.Row="1" Text="Ghim, tìm/lọc, mở nhanh, phát hiện file thiếu. Remove/Clear không xóa DWG."
                                        Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,8"/>
-                            <ListBox x:Name="RecentProjectList" Grid.Row="2" MouseDoubleClick="OnRecentProjectDoubleClick">
+                            <Grid Grid.Row="2" Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="112"/></Grid.ColumnDefinitions>
+                                <TextBox x:Name="RecentProjectSearchBox" MinHeight="30" ToolTip="Tìm theo tên hoặc đường dẫn DWG" TextChanged="OnRecentProjectSearchChanged"/>
+                                <ComboBox x:Name="RecentProjectFilter" Grid.Column="1" Margin="8,0,0,0" SelectionChanged="OnRecentProjectFilterChanged"/>
+                            </Grid>
+                            <ListBox x:Name="RecentProjectList" Grid.Row="3" MouseDoubleClick="OnRecentProjectDoubleClick">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel Margin="2,5">
@@ -185,7 +200,7 @@
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
-                            <WrapPanel Grid.Row="3" Margin="0,8,0,0">
+                            <WrapPanel Grid.Row="4" Margin="0,8,0,0">
                                 <Button Content="Mở" Style="{StaticResource StartAccentButton}" Click="OnOpenRecentProjectClick"/>
                                 <Button Content="Ghim / Bỏ ghim" Style="{StaticResource StartActionButton}" Click="OnToggleRecentProjectPinClick"/>
                                 <Button Content="Bỏ khỏi lịch sử" Style="{StaticResource StartActionButton}" Click="OnRemoveRecentProjectClick"/>
