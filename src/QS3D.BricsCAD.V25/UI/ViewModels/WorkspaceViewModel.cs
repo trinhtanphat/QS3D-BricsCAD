@@ -401,8 +401,24 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 return current;
             }
 
-            element.SetProperty(key, next);
-            project.Touch();
+            try
+            {
+                ProjectSemanticMutationExecutor.Execute(
+                    project,
+                    "Workspace single-instance property edit",
+                    () =>
+                    {
+                        element.SetProperty(key, next);
+                        project.Touch();
+                        return 0;
+                    });
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException || ex is OverflowException)
+            {
+                Status = "Không thể cập nhật " + DisplayNameFor(key) + ": " + ex.Message;
+                return current;
+            }
+
             row.CanReset = !string.Equals(next, familyValue, StringComparison.Ordinal);
             var displayValue = ToDisplayValue(key, next);
             Status = row.CanReset
