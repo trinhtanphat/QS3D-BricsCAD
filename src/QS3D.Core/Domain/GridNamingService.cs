@@ -92,7 +92,9 @@ namespace QS3D.Core.Domain
             foreach (var grid in projectElements.Values.Where(x => x.Category == ElementCategory.Grid && !targetIds.Contains(x.Id)))
             {
                 if (!grid.Properties.TryGetValue(GridLabelKey, out var existing) || string.IsNullOrWhiteSpace(existing)) continue;
-                reservedLabels.Add(existing.Trim());
+                var normalizedExisting = existing.Trim();
+                if (!reservedLabels.Add(normalizedExisting))
+                    throw new InvalidOperationException("Grid label is duplicated outside the renumber batch: " + normalizedExisting);
             }
 
             var plannedLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
