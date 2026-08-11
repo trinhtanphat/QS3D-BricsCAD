@@ -86,7 +86,7 @@ namespace QS3D.Core.SmokeTests
             ProjectInterchangeFieldMergeImporter.Import(target, json, policy, plan.CreateAuthorization());
             var element = target.FindElement("E-1") ?? throw new InvalidOperationException("Field-merge target element disappeared.");
             Equal("SOURCE", element.Properties["SemanticMark"]);
-            False(element.Properties.ContainsKey("CadHandle"));
+            Equal("TARGET-CAD", element.Properties["CadHandle"]);
         }
 
         private static string LegacySourceJson()
