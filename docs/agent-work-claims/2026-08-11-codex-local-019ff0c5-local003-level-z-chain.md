@@ -93,6 +93,12 @@ Baseline audited before this expansion: `origin/main@93aacb0e`. The full Core sm
 
 Reserve only that smoke file to replace the unreachable overflow setup with a direct fail-closed negative-quantity capture assertion while retaining the existing non-finite assertion. Do not edit `QuantityReportRevisionService`, `RevisionService`, `RevisionMath`, production quantity validation or comparison semantics. The concurrent ACTIVE revision-ID and dependency-canonicalization claims remain fully excluded. Re-run the complete Core smoke after this narrow reconciliation.
 
+## 2026-08-12 semantic-number hardening smoke reconciliation expansion
+
+Baseline audited before this expansion: `origin/main@67e822d0`. The next full Core smoke reaches a stale assertion in `tests/QS3D.Core.SmokeTests/HardeningRegressionSmoke.cs`: it expects a present `LengthM=NaN` value to regenerate as zero, but completed semantic-number hardening now requires every present malformed/non-finite numeric property to fail closed while only a missing property may use its fallback.
+
+Reserve only that smoke file to require `WallRegenerator.Regenerate(...)` to throw for the present NaN value and to prove no derived wall quantities were partially written. Preserve the remaining finite clamping assertions in the same smoke. Do not edit `SemanticNumber`, regenerators, quantity math or the dedicated semantic-number regression; their released production contract remains authoritative. Re-run the complete Core smoke after this narrow reconciliation.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
