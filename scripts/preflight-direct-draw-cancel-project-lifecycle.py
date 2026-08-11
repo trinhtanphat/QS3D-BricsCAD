@@ -61,21 +61,22 @@ for name, helper in (("p0", "private static void ExecuteDirect"), ("p1", "privat
 
 # Reference-wall authoring creates the project in the public command, so lock the
 # explicit ordering relative to every numeric prompt and the execute-boundary guard.
+# Use prompt labels rather than whitespace-sensitive whole call expressions.
 reference = sources["reference"]
 require(reference, read_only_defaults, "reference")
 require_count(reference, get_or_create, 1, "reference")
 create_index = reference.find(get_or_create)
 boundary_index = reference.find('EnsureActive(document, "QS3DDRAWWALLREF / execute boundary")')
-prompt_tokens = (
-    'PromptPositiveMeters(document.Editor, "Chiều dài Tường (m)"',
-    'PromptPositiveMeters(document.Editor, "Bề dày Tường (m)"',
-    'PromptPositiveMeters(document.Editor, "Chiều cao Tường (m)"',
-    'PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z tham chiếu (m)"',
+prompt_labels = (
+    '"Chiều dài Tường (m)"',
+    '"Bề dày Tường (m)"',
+    '"Chiều cao Tường (m)"',
+    '"Offset đáy Tường so với Z tham chiếu (m)"',
 )
-for token in prompt_tokens:
+for token in prompt_labels:
     index = reference.find(token)
     if index < 0:
-        errors.append("reference missing parameter prompt: " + token)
+        errors.append("reference missing parameter prompt label: " + token)
     elif create_index >= 0 and index > create_index:
         errors.append("reference must not GetOrCreate before prompt completes: " + token)
 if create_index < 0 or boundary_index < 0 or create_index < boundary_index:
