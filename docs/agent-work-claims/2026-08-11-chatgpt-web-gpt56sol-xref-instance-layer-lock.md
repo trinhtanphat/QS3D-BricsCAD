@@ -10,9 +10,10 @@
 
 - `src/QS3D.BricsCAD.V25/Cad/XrefService.cs`
 - `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml`
-- `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs`
+- `src/QS3D.BricsCAD.V25/UI/RightPanel.XrefLock.cs` (new partial containing only the two Xref lock handlers)
 - `scripts/preflight-xref-instance-layer-lock.py`
 - this claim file
+- `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs` is **audit-only / no edit planned**; the new partial deliberately avoids replacing the large concurrent interaction surface.
 
 ## Goal
 
@@ -20,8 +21,8 @@ Complete the visible `Khóa` state in the screenshot-inspired `QUẢN LÝ BẢN 
 
 ## Functional contract
 
-- Add `Khóa Xref` and `Mở khóa` controls to the drawing toolbar and drawing context menu.
-- Actions apply only to the currently selected Xref; the main DWG row must remain rejected by the existing `SelectedXref()` boundary.
+- Add `Khóa` and `Mở khóa` controls to the drawing toolbar plus `Khóa layer Xref` / `Mở khóa layer Xref` context-menu actions.
+- Actions apply only to the currently selected Xref; the main DWG row remains rejected by the existing `SelectedXref()` boundary.
 - Resolve the selected Xref block definition, enumerate only its live references in the current space, deduplicate their layer IDs, and set those native `LayerTableRecord.IsLocked` values inside a document lock + transaction.
 - If the Xref has zero current-space instances, return a zero count and do not touch unrelated layers.
 - Do not modify Xref source files, block definition contents, semantic project state or QSDB data.
