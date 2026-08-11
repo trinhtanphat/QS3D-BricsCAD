@@ -3,7 +3,7 @@
 - Status: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-rebar-xlsx-null-row-preflight-20260812-0135`
 - Registered: `2026-08-12T01:35:00+07:00`
-- Baseline main SHA: `fcc8910932741b2f6febbe3de181eec527c05824`
+- Baseline main SHA: `4ccc29908eeff51857ea6bf8553d9e3fbbc0e3fc`
 - Priority: evidence-driven remote-safe export atomicity hardening during owner-requested `continue all`
 
 ## Reserved scope
