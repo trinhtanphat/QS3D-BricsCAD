@@ -34,11 +34,12 @@ namespace QS3D.BricsCAD.V25
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
                 ProjectInterchangeValidatedSnapshotReader.Read(json);
-                var project = ExistingProjectMutationContext.Require(document, "Interchange field merge");
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var reviewedProject))
+                    throw new InvalidOperationException("Interchange field merge cần một QS3D project hiện hữu; preview không tạo hoặc bind project mới.");
 
                 if (!TryChoosePolicy(out var policy)) return;
 
-                var reviewedPlan = InterchangeFieldMergeImportService.Plan(project, json, policy);
+                var reviewedPlan = InterchangeFieldMergeImportService.Plan(reviewedProject, json, policy);
                 var plan = reviewedPlan.CorePlan;
                 if (!plan.CanExecute)
                     throw new InvalidOperationException(BuildBlockedText(plan));
@@ -67,11 +68,13 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxButton.YesNo,
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
-                InterchangeConfirmationGuard.RequireFresh(
-                    document,
-                    project,
-                    plan.TargetChangeVersion,
-                    "Interchange FieldMerge");
+                var currentProject = ExistingProjectMutationContext.Require(document, "Interchange field merge");
+                if (!string.Equals(currentProject.ProjectId, plan.TargetProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(currentProject.DrawingFingerprint ?? string.Empty, plan.TargetDrawingFingerprint ?? string.Empty, StringComparison.Ordinal) ||
+                    currentProject.ChangeVersion != plan.TargetChangeVersion)
+                    throw new InvalidOperationException(
+                        "Interchange FieldMerge target semantic project changed after preview or canonical binding normalized its identity. " +
+                        "No field merge was applied; run the command again to review a fresh canonical plan.");
 
                 var result = InterchangeFieldMergeImportService.Import(document, json, policy, reviewedPlan);
                 try { PaletteCoordinator.RefreshProject(); } catch { }
