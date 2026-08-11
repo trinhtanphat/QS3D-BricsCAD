@@ -6,19 +6,25 @@ import sys
 root = Path(__file__).resolve().parents[1]
 planner = root / "src/QS3D.Core/Export/ProjectInterchangeRemapPlanner.cs"
 importer = root / "src/QS3D.Core/Export/ProjectInterchangeRemapAppendImporter.cs"
+policy = root / "src/QS3D.Core/Export/ProjectInterchangeSemanticReferencePolicy.cs"
 command = root / "src/QS3D.BricsCAD.V25/ProjectInterchangeRemapAppendCommands.cs"
 dry_command = root / "src/QS3D.BricsCAD.V25/ProjectInterchangeRemapCommands.cs"
+planner_smoke = root / "tests/QS3D.Core.SmokeTests/ProjectInterchangeRemapPlannerSmoke.cs"
+level_smoke = root / "tests/QS3D.Core.SmokeTests/ProjectInterchangeRemapLevelReferenceSmoke.cs"
 
 errors = []
-for path in (planner, importer, command, dry_command):
+for path in (planner, importer, policy, command, dry_command, planner_smoke, level_smoke):
     if not path.exists():
         errors.append(f"missing remap-append contract source: {path.relative_to(root)}")
 
 if not errors:
     p = planner.read_text(encoding="utf-8")
     i = importer.read_text(encoding="utf-8")
+    r = policy.read_text(encoding="utf-8")
     c = command.read_text(encoding="utf-8")
     d = dry_command.read_text(encoding="utf-8")
+    ps = planner_smoke.read_text(encoding="utf-8")
+    ls = level_smoke.read_text(encoding="utf-8")
 
     required_importer = [
         "ProjectInterchangeValidatedSnapshotReader.Read(json)",
@@ -26,6 +32,7 @@ if not errors:
         "ValidateExecutionSafety(source, plan);",
         "ProjectStateSnapshot.Capture(target)",
         "rollback.Restore(target)",
+        "new AggregateException(operationError, restoreError)",
         "ProjectZoneService.Create(target, item.TargetId, item.TargetName)",
         "ProjectFloorService.Create(target, item.TargetId, item.TargetName, snapshot.ElevationM)",
         "ProjectFamilyService.Create(target, item.TargetId, item.TargetName, snapshot.Category)",
@@ -34,16 +41,28 @@ if not errors:
         "MapOptional(plan.Remap, InterchangeRemapIdentityKind.Floor",
         "MapOptional(plan.Remap, InterchangeRemapIdentityKind.Zone",
         "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, dependency)",
-        "string.Equals(property.Key, HostWallIdKey, StringComparison.OrdinalIgnoreCase)",
-        "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, sourceHost)",
-        "LooksLikeUnregisteredSemanticReference(property.Key, property.Value)",
+        "ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference)",
+        "MapPropertyReference(plan.Remap, reference, property.Value, ref rewrites)",
+        "ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key)",
+        "addedElementIds.Add(added.Id)",
+        "ValidateCombinedTarget(target, addedElementIds)",
+        "ValidateRegisteredPropertyReferences(target, element)",
+        "ValidateLevelReferenceConsistency(target, element)",
+        "ProjectInterchangeSemanticReferencePolicy.KnownPropertyReferences",
+        "ProjectFloorService.BottomLevelIdKey",
+        "ProjectFloorService.TopLevelIdKey",
+        "ElementVerticalPlacementService.ReadLevelOffset",
+        "has TopLevelId without BottomLevelId",
+        "has a level offset without its level reference",
+        "has TopLevelOffsetM without TopLevelId",
+        "top level elevation must be above bottom level elevation",
+        "AddFinite(",
         "IsImportedOwnershipMetadata(property.Key)",
         'k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
         'k.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)',
         'k.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0',
         "DrawingFingerprint = string.Empty",
         "added.MarkDirty(ElementDirtyFlags.All)",
-        "ValidateCombinedTarget(target)",
         "graph.Rebuild(target.Elements)",
         "graph.TopologicalDirtyOrder(target.Elements)",
         "No imported handle/fingerprint became target DWG ownership",
@@ -61,7 +80,7 @@ if not errors:
     ]
     for needle in required_importer:
         if needle not in i:
-            errors.append("remap append importer missing atomic/ownership/compatibility/rewrite contract: " + needle)
+            errors.append("remap append importer missing atomic/ownership/compatibility/reference contract: " + needle)
 
     plan_method = re.search(
         r"public static ProjectInterchangeRemapAppendPlan Plan\(ProjectState target, string json\)(.*?)public static ProjectInterchangeRemapAppendResult Import",
@@ -104,24 +123,69 @@ if not errors:
         "assignedIds.Contains(sourceId)",
         "assignedNames.Contains(sourceNameKey)",
         "NextId(sourceId, occupiedIds, maxIdLength)",
+        "ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference)",
+        "MapFor(reference.Kind, zoneMap, floorMap, familyMap, elementMap)",
+        '"Property" + reference.Kind + "Id"',
+        "does not resolve inside the source snapshot",
+        "ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key)",
     ]
     for needle in required_planner:
         if needle not in p:
-            errors.append("remap planner missing family/ownership/name-scope/runtime-bound contract: " + needle)
+            errors.append("remap planner missing family/ownership/name-scope/runtime-bound/reference contract: " + needle)
 
-    # Planner preview and executor must recognize the exact same conservative ID/ref suffix set.
+    required_policy = [
+        'public const string HostWallIdKey = "HostWallId"',
+        "ProjectFloorService.BottomLevelIdKey",
+        "ProjectFloorService.TopLevelIdKey",
+        "InterchangeRemapIdentityKind.Element",
+        "InterchangeRemapIdentityKind.Floor",
+        "TryGetPropertyReference",
+        "KnownPropertyReferences",
+        "LooksLikeSemanticReferenceKey",
+    ]
+    for needle in required_policy:
+        if needle not in r:
+            errors.append("semantic reference policy missing portable relation contract: " + needle)
+
     reference_suffixes = ["Id", "Ids", "Ref", "Refs", "RefId", "RefIds"]
     for suffix in reference_suffixes:
-        planner_needle = f'trimmedKey.EndsWith("{suffix}", StringComparison.OrdinalIgnoreCase)'
-        importer_needle = f'k.EndsWith("{suffix}", StringComparison.OrdinalIgnoreCase)'
-        if planner_needle not in p:
-            errors.append("remap planner opaque-reference policy missing suffix: " + suffix)
-        if importer_needle not in i:
-            errors.append("remap executor opaque-reference policy missing suffix: " + suffix)
-    if "sourceElementIds.Contains(value.Trim())" in p:
-        errors.append("remap planner must not hide unknown ID/ref-like properties just because their value is outside the source Element set")
+        needle = f'key.EndsWith("{suffix}", StringComparison.OrdinalIgnoreCase)'
+        if needle not in r:
+            errors.append("central semantic reference policy missing suffix: " + suffix)
+    if "EndsWith(" in p:
+        errors.append("remap planner must not maintain a second ID/ref suffix policy")
+    if "EndsWith(" in i:
+        errors.append("remap executor must not maintain a second ID/ref suffix policy")
+    if "private const string HostWallIdKey" in p or "private const string HostWallIdKey" in i:
+        errors.append("HostWallId registration must live only in ProjectInterchangeSemanticReferencePolicy")
 
-    # Re-plan and fail-closed validation must happen before snapshot capture/mutation.
+    required_planner_smoke = [
+        "BlockedAppendPlanRemainsInspectableAndImportFailsClosed",
+        "OverLimitCatalogIdentitiesAreBoundedBeforeImport",
+        "IncomingDuplicateNamesAreRemappedWithinBatch",
+        "PortableLevelReferencesAreTypedAndRemapped",
+        "RegisteredReferenceMissingFromSourceBlocksPreview",
+        'Equal("L0-import", bottom.TargetReferenceId)',
+        'Equal("L1-import", top.TargetReferenceId)',
+    ]
+    for needle in required_planner_smoke:
+        if needle not in ps:
+            errors.append("remap planner smoke missing regression: " + needle)
+
+    required_level_smoke = [
+        "ImportAsNewRemapsPortableLevelReferences",
+        "InvalidTopOnlyLevelRelationRollsBack",
+        "ProjectInterchangeRemapAppendImporter.Import(target, json)",
+        'Equal("L0-import", imported.Properties[ProjectFloorService.BottomLevelIdKey])',
+        'Equal("L1-import", imported.Properties[ProjectFloorService.TopLevelIdKey])',
+        "Equal(0, imported.SourceHandles.Count)",
+        "Equal(string.Empty, imported.DrawingFingerprint)",
+        "Equal(beforeVersion, target.ChangeVersion)",
+    ]
+    for needle in required_level_smoke:
+        if needle not in ls:
+            errors.append("remap level-reference smoke missing apply/rollback regression: " + needle)
+
     if i.index("var plan = Plan(target, json);") > i.index("ValidateExecutionSafety(source, plan);"):
         errors.append("Import As New must build plan before execution-safety validation")
     if i.index("ValidateExecutionSafety(source, plan);") > i.index("ProjectStateSnapshot.Capture(target)"):
@@ -169,7 +233,7 @@ if not errors:
     ]
     for needle in required_command:
         if needle not in c:
-            errors.append("remap append command missing guarded UX contract: " + needle)
+            errors.append("remap append command missing guarded UX/freshness contract: " + needle)
     if "ProjectInterchangeRemapAppendImporter.Import(project, json)" in c:
         errors.append("confirmed remap append must mutate the re-resolved current project, not the stale preview reference")
     if "Import As New plan is not executable. Run QS3DINTERCHANGEREMAPPLAN" in c:
@@ -193,7 +257,6 @@ if not errors:
     if registrations != 1:
         errors.append(f"QS3DINTERCHANGEREMAPAPPEND registration count must be 1, got {registrations}")
 
-    # Planner must remain dry-run and executor must depend on it instead of inventing a second remap scheme.
     for needle in [
         'suffix == 1 ? "-import" : "-import-" + suffix',
         'suffix == 1 ? " (Imported)" : " (Imported " + suffix + ")"',
@@ -209,4 +272,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New keeps blocked plans inspectable, previews runtime compatibility, binds confirmation to the reviewed project/version, fails closed before mutation, bounds target identities, and preserves semantic data without truncation.")
+print("Import As New keeps blocked plans inspectable, previews runtime compatibility, binds confirmation to the reviewed project/version, uses one typed HostWall/BottomLevel/TopLevel reference registry, rejects invalid level relations before success, strips native ownership, and preserves rollback diagnostics.")

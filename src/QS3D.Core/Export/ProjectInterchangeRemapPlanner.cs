@@ -65,8 +65,8 @@ namespace QS3D.Core.Export
 
     /// <summary>
     /// Plans an import-as-new identity/name remap without mutating target or source state.
-    /// Typed references are mapped explicitly. Property-carried references remain fail-closed unless
-    /// they are a recognized HostWallId relation; ID-looking opaque properties are reported for policy.
+    /// First-class references and explicitly registered property-carried semantic references are mapped.
+    /// Other ID/ref-looking properties remain fail-closed and are surfaced for policy.
     /// </summary>
     public static class ProjectInterchangeRemapPlanner
     {
@@ -77,7 +77,6 @@ namespace QS3D.Core.Export
         private const int FamilyMaxIdLength = 80;
         private const int FamilyMaxNameLength = 160;
         private const int ElementMaxIdLength = 128;
-        private const string HostWallIdKey = "HostWallId";
 
         public static ProjectInterchangeRemapPlan Plan(ProjectState target, string json)
         {
@@ -111,20 +110,19 @@ namespace QS3D.Core.Export
             var elementMap = BuildMap(items, InterchangeRemapIdentityKind.Element);
             var rewrites = new List<ProjectInterchangeReferenceRewrite>();
             var opaque = new List<ProjectInterchangeOpaqueReferenceWarning>();
-            var sourceElementIds = new HashSet<string>(source.Elements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
 
             foreach (var family in source.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
                 {
                     if (IsImportedOwnershipMetadata(property.Key)) continue;
-                    if (!LooksLikeOpaqueIdentityProperty(property.Key, property.Value)) continue;
+                    if (string.IsNullOrWhiteSpace(property.Value) || !ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key)) continue;
                     opaque.Add(new ProjectInterchangeOpaqueReferenceWarning
                     {
                         OwnerElementSourceId = "Family " + family.Id,
                         PropertyKey = property.Key,
                         PropertyValue = property.Value ?? string.Empty,
-                        Reason = "Family property looks like a semantic identity/reference but no explicit rewrite policy is registered for this key."
+                        Reason = "Family property looks like a semantic identity/reference but no explicit Family-property rewrite policy is registered for this key."
                     });
                 }
             }
@@ -140,26 +138,36 @@ namespace QS3D.Core.Export
                 foreach (var property in element.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
                 {
                     if (IsImportedOwnershipMetadata(property.Key)) continue;
-                    if (string.Equals(property.Key, HostWallIdKey, StringComparison.OrdinalIgnoreCase))
+
+                    if (ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference))
                     {
                         if (string.IsNullOrWhiteSpace(property.Value)) continue;
-                        var hostId = property.Value.Trim();
-                        if (!sourceElementIds.Contains(hostId))
+                        var sourceReference = property.Value.Trim();
+                        var referenceMap = MapFor(reference.Kind, zoneMap, floorMap, familyMap, elementMap);
+                        if (!referenceMap.ContainsKey(sourceReference))
                         {
                             opaque.Add(new ProjectInterchangeOpaqueReferenceWarning
                             {
                                 OwnerElementSourceId = element.Id,
                                 PropertyKey = property.Key,
                                 PropertyValue = property.Value ?? string.Empty,
-                                Reason = "HostWallId is drawing/project-local but does not resolve to an Element inside the source snapshot; import-as-new must not guess a target host."
+                                Reason = reference.PropertyKey + " is a registered " + reference.Label +
+                                         " reference but does not resolve inside the source snapshot; import-as-new must not guess a target identity."
                             });
                             continue;
                         }
-                        AddTypedRewrite(rewrites, element.Id, "PropertyElementId", property.Key, hostId, elementMap);
+
+                        AddTypedRewrite(
+                            rewrites,
+                            element.Id,
+                            "Property" + reference.Kind + "Id",
+                            reference.PropertyKey,
+                            sourceReference,
+                            referenceMap);
                         continue;
                     }
 
-                    if (LooksLikeOpaqueIdentityProperty(property.Key, property.Value))
+                    if (!string.IsNullOrWhiteSpace(property.Value) && ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key))
                     {
                         opaque.Add(new ProjectInterchangeOpaqueReferenceWarning
                         {
@@ -277,6 +285,23 @@ namespace QS3D.Core.Export
             items.Where(x => x.Kind == kind)
                 .ToDictionary(x => x.SourceId, x => x.TargetId, StringComparer.OrdinalIgnoreCase);
 
+        private static IReadOnlyDictionary<string, string> MapFor(
+            InterchangeRemapIdentityKind kind,
+            IReadOnlyDictionary<string, string> zoneMap,
+            IReadOnlyDictionary<string, string> floorMap,
+            IReadOnlyDictionary<string, string> familyMap,
+            IReadOnlyDictionary<string, string> elementMap)
+        {
+            switch (kind)
+            {
+                case InterchangeRemapIdentityKind.Zone: return zoneMap;
+                case InterchangeRemapIdentityKind.Floor: return floorMap;
+                case InterchangeRemapIdentityKind.Family: return familyMap;
+                case InterchangeRemapIdentityKind.Element: return elementMap;
+                default: throw new InvalidOperationException("Unsupported semantic reference kind: " + kind + ".");
+            }
+        }
+
         private static void AddTypedRewrite(
             ICollection<ProjectInterchangeReferenceRewrite> output,
             string owner,
@@ -298,18 +323,6 @@ namespace QS3D.Core.Export
                 SourceReferenceId = sourceId,
                 TargetReferenceId = targetId
             });
-        }
-
-        private static bool LooksLikeOpaqueIdentityProperty(string key, string value)
-        {
-            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) return false;
-            var trimmedKey = key.Trim();
-            return trimmedKey.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
-                   trimmedKey.EndsWith("Ids", StringComparison.OrdinalIgnoreCase) ||
-                   trimmedKey.EndsWith("Ref", StringComparison.OrdinalIgnoreCase) ||
-                   trimmedKey.EndsWith("Refs", StringComparison.OrdinalIgnoreCase) ||
-                   trimmedKey.EndsWith("RefId", StringComparison.OrdinalIgnoreCase) ||
-                   trimmedKey.EndsWith("RefIds", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsImportedOwnershipMetadata(string key)
