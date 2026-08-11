@@ -22,6 +22,7 @@ namespace QS3D.Core.SmokeTests
             RuleDependenciesAreDeterministic();
             RuleCyclesAreAtomic();
             TemplateRoundTripApply();
+            TemplateRejectsUndefinedNumericCategories();
             ProjectLayerMappingWins();
             ProjectLayerMappingOverridesFallback();
         }
@@ -121,6 +122,30 @@ namespace QS3D.Core.SmokeTests
                 var project = new ProjectState("p", "Project"); var result = store.Apply(project, loaded);
                 Equal(1, result.FamiliesAdded); Equal(1, result.RulesAdded); Equal(1, result.LayerMappingsApplied); Equal(ElementCategory.Beam.ToString(), project.Metadata[TemplateProfileStore.LayerMappingPrefix + "A-BEAM"]); True(project.Metadata[TemplateProfileStore.VisibleBqColumnsKey].Contains("NetConcreteM3"));
                 var exported = store.ExportProject(project, "copy", "Copy"); Equal(1, exported.Families.Count); Equal(1, exported.QuantityRules.Count); Equal(ElementCategory.Beam.ToString(), exported.LayerMappings["A-BEAM"]);
+            }
+            finally { DeleteDirectory(directory); }
+        }
+
+        private static void TemplateRejectsUndefinedNumericCategories()
+        {
+            var directory = TempDirectory("template-undefined-category");
+            var familyPath = Path.Combine(directory, "family.qstemplate");
+            var rulePath = Path.Combine(directory, "rule.qstemplate");
+            try
+            {
+                var store = new TemplateProfileStore();
+
+                var familyProfile = new TemplateProfile("family-invalid", "Family Invalid");
+                familyProfile.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+                store.Save(familyProfile, familyPath);
+                File.WriteAllText(familyPath, File.ReadAllText(familyPath).Replace("category=\"Beam\"", "category=\"999\""));
+                Throws<InvalidDataException>(() => store.Load(familyPath));
+
+                var ruleProfile = new TemplateProfile("rule-invalid", "Rule Invalid");
+                ruleProfile.QuantityRules.Add(new QuantityRule("beam-rule", ElementCategory.Beam, "Result", "1", "1"));
+                store.Save(ruleProfile, rulePath);
+                File.WriteAllText(rulePath, File.ReadAllText(rulePath).Replace("category=\"Beam\"", "category=\"999\""));
+                Throws<InvalidDataException>(() => store.Load(rulePath));
             }
             finally { DeleteDirectory(directory); }
         }
