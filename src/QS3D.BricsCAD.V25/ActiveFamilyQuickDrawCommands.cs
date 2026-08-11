@@ -36,9 +36,7 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var commandLabel = Dispatch(document, family);
-                if (!string.IsNullOrWhiteSpace(commandLabel))
-                    PaletteCoordinator.SetStatus("Vẽ Nhanh • " + family.Name + " • " + commandLabel);
+                Dispatch(document, family);
             }
             catch (Exception ex)
             {
@@ -46,7 +44,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static string Dispatch(Document document, ProjectFamily family)
+        private static void Dispatch(Document document, ProjectFamily family)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (family == null) throw new ArgumentNullException(nameof(family));
@@ -55,45 +53,45 @@ namespace QS3D.BricsCAD.V25
             {
                 case ElementCategory.ArchitecturalWall:
                     new DirectDrawCommands().DrawWall();
-                    return "Tường";
+                    return;
                 case ElementCategory.Beam:
                     new DirectDrawCommands().DrawBeam();
-                    return "Dầm";
+                    return;
                 case ElementCategory.Column:
                     new DirectDrawCommands().DrawColumn();
-                    return "Cột";
+                    return;
                 case ElementCategory.Slab:
                     new DirectDrawCommands().DrawSlab();
-                    return "Sàn";
+                    return;
                 case ElementCategory.GlassWall:
                     new DirectDrawP1Commands().DrawGlassWall();
-                    return "Vách Kính";
+                    return;
                 case ElementCategory.WallPier:
                     new DirectDrawP1Commands().DrawWallPier();
-                    return "Trụ Tường";
+                    return;
                 case ElementCategory.StructuralWall:
                     new DirectDrawP1Commands().DrawStructuralWall();
-                    return "Vách BTCT";
+                    return;
                 case ElementCategory.Foundation:
                     new DirectDrawP1Commands().DrawFoundation();
-                    return "Móng";
+                    return;
                 case ElementCategory.Door:
                     new DirectDrawOpeningCommands().DrawDoor();
-                    return "Cửa";
+                    return;
                 case ElementCategory.WallOpening:
                     if (IsWindowFamily(family))
                     {
                         new DirectDrawWindowCommands().DrawWindow();
-                        return "Cửa Sổ";
+                        return;
                     }
                     new DirectDrawOpeningCommands().DrawWallOpening();
-                    return "Lỗ Mở";
+                    return;
                 default:
                     Report(
                         document,
                         "QS3DDRAWACTIVE: Family '" + family.Name + "' thuộc " + family.Category +
                         " chưa có Direct Draw quick an toàn. Dùng workflow chuyên biệt hiện có cho category này.");
-                    return string.Empty;
+                    return;
             }
         }
 
