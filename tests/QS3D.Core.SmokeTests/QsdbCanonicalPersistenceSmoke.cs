@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             PaddedMapKeyFailsBeforePersistence();
+            PaddedMapKeyFailsOnLoad();
             PaddedQuantityNameFailsBeforePersistence();
             NonCanonicalHandleAndDependencyFailBeforePersistence();
             NullAuditEventFailsClosed();
@@ -29,6 +30,34 @@ namespace QS3D.Core.SmokeTests
             var element = AddElement(project);
             element.Properties[" WidthM "] = "1.2";
             RejectSave(project, "Padded element property key was silently persisted/normalized.");
+        }
+
+        private static void PaddedMapKeyFailsOnLoad()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-map-key-load-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var project = NewProject("map-key-load");
+                project.Metadata["CanonicalKey"] = "value";
+                var store = new QsdbProjectStore();
+                store.Save(project, path);
+
+                var original = File.ReadAllText(path);
+                var tampered = original.Replace("name=\"CanonicalKey\"", "name=\" CanonicalKey \"");
+                if (string.Equals(original, tampered, StringComparison.Ordinal))
+                    throw new Exception("Canonical metadata key fixture was not found in serialized QSDB.");
+                File.WriteAllText(path, tampered);
+
+                var rejected = false;
+                try { store.Load(path); }
+                catch (InvalidDataException) { rejected = true; }
+                if (!rejected) throw new Exception("Padded persisted metadata key was silently normalized while loading QSDB.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
         }
 
         private static void PaddedQuantityNameFailsBeforePersistence()
