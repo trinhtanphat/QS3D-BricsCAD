@@ -102,7 +102,16 @@ namespace QS3D.Core.Domain
             get => _otherAreaM2;
             set => _otherAreaM2 = RequireFinite(value, nameof(OtherAreaM2));
         }
-        public double NetConcreteM3 => GrossConcreteM3 - DeductionM3;
+        public double NetConcreteM3
+        {
+            get
+            {
+                var value = GrossConcreteM3 - DeductionM3;
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                    throw new OverflowException("Net concrete volume must be finite.");
+                return value;
+            }
+        }
 
         private static string NormalizeFloor(string value) =>
             string.IsNullOrWhiteSpace(value) ? "Nền 0.00" : value.Trim();
