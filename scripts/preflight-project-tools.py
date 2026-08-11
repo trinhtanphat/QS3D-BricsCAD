@@ -26,9 +26,12 @@ checks = {
         "Cửa sổ khóa theo bản vẽ đã mở",
     ],
     "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml.cs": [
-        "private readonly Document _document", "ProjectToolsWindow(Document document)", "ProjectContextCoordinator.GetOrCreate(_document)",
+        "private readonly Document _document", "ProjectToolsWindow(Document document)",
+        "DocumentBoundWindowLifetime.Attach(this, _document)",
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
         "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)", "EnsureBoundDrawingIsActive",
         "project.ActiveFloorId", "project.Families.Count", "project.Elements.Count", "_document.SendStringToExecute", "Activated +=", "DrawingLabel(_document)",
+        "không tạo replacement project khi mở/refresh",
     ],
     "src/QS3D.BricsCAD.V25/ProjectToolsCommands.cs": [
         'CommandMethod("QS3DPROJECTTOOLS"', "new ProjectToolsWindow(document)", "ShowModelessWindow", "khóa theo bản vẽ",
@@ -53,8 +56,12 @@ for relative, needles in checks.items():
         if needle not in text: errors.append(relative + " missing Project Tools guard/token: " + needle)
 
 code = ROOT / "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml.cs"
-if code.is_file() and "var document = Application.DocumentManager.MdiActiveDocument" in code.read_text(encoding="utf-8"):
-    errors.append("ProjectToolsWindow must not switch project ownership through MdiActiveDocument inside modeless event handlers")
+if code.is_file():
+    code_text = code.read_text(encoding="utf-8")
+    if "var document = Application.DocumentManager.MdiActiveDocument" in code_text:
+        errors.append("ProjectToolsWindow must not switch project ownership through MdiActiveDocument inside modeless event handlers")
+    if "ProjectContextCoordinator.GetOrCreate(_document)" in code_text:
+        errors.append("ProjectToolsWindow read/refresh callbacks must not create/cache replacement project state")
 
 commands = []
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
@@ -72,4 +79,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: document-bound Project Tools hub, Floor/Zone/Material setup, material XLSX, command wiring and additive QS3D_PROJECT ribbon shortcuts are present without rewriting the base ribbon spec.")
+print("PASS: document-bound Project Tools reads only existing project state, never creates replacement state on open/refresh, keeps Floor/Zone/Material wiring, and preserves additive QS3D_PROJECT ribbon shortcuts.")
