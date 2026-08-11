@@ -1,31 +1,53 @@
 using System;
 using System.IO;
 using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
+using QS3D.Core.Units;
+using Teigha.Geometry;
 
 namespace QS3D.BricsCAD.V25.Services
 {
     internal sealed class DirectDrawProjectPreviewContext
     {
-        private DirectDrawProjectPreviewContext(ProjectState? defaultsProject, string expectedProjectId)
+        private DirectDrawProjectPreviewContext(
+            ProjectState? defaultsProject,
+            string expectedProjectId,
+            long? expectedProjectChangeVersion,
+            LengthUnit expectedLengthUnit,
+            Matrix3d expectedUcs)
         {
             DefaultsProject = defaultsProject;
             ExpectedProjectId = expectedProjectId ?? string.Empty;
+            ExpectedProjectChangeVersion = expectedProjectChangeVersion;
+            ExpectedLengthUnit = expectedLengthUnit;
+            ExpectedUcs = expectedUcs;
         }
 
         public ProjectState? DefaultsProject { get; }
         public bool HasProject => DefaultsProject != null;
         public string ExpectedProjectId { get; }
+        public long? ExpectedProjectChangeVersion { get; }
+        public LengthUnit ExpectedLengthUnit { get; }
+        public Matrix3d ExpectedUcs { get; }
 
         public static DirectDrawProjectPreviewContext Capture(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
+
+            var expectedLengthUnit = CadUnitService.GetLengthUnit(document);
+            var expectedUcs = document.Editor.CurrentUserCoordinateSystem;
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
-                return new DirectDrawProjectPreviewContext(null, string.Empty);
+                return new DirectDrawProjectPreviewContext(null, string.Empty, null, expectedLengthUnit, expectedUcs);
             if (project == null || string.IsNullOrWhiteSpace(project.ProjectId))
                 throw new InvalidOperationException("Direct Draw preview resolved an invalid QS3D project identity.");
-            return new DirectDrawProjectPreviewContext(project, project.ProjectId.Trim());
+            return new DirectDrawProjectPreviewContext(
+                project,
+                project.ProjectId.Trim(),
+                project.ChangeVersion,
+                expectedLengthUnit,
+                expectedUcs);
         }
 
         public ProjectState ResolveForMutation(Document document, string operation)
@@ -33,12 +55,17 @@ namespace QS3D.BricsCAD.V25.Services
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (string.IsNullOrWhiteSpace(operation)) throw new ArgumentException("Operation is required.", nameof(operation));
 
+            EnsureCadContextFresh(document);
+
             if (HasProject)
             {
                 var project = ExistingProjectMutationContext.Require(document, operation);
                 if (!string.Equals(project.ProjectId, ExpectedProjectId, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(
                         "QS3D project đã thay đổi trong lúc xác nhận Direct Draw. Hãy chạy lại lệnh để dùng đúng project/Family defaults.");
+                if (!ExpectedProjectChangeVersion.HasValue || project.ChangeVersion != ExpectedProjectChangeVersion.Value)
+                    throw new InvalidOperationException(
+                        "QS3D project/Family defaults đã thay đổi trong lúc xác nhận Direct Draw. Hãy chạy lại lệnh để dùng trạng thái mới nhất.");
                 return project;
             }
 
@@ -54,6 +81,16 @@ namespace QS3D.BricsCAD.V25.Services
                 throw ProjectAppeared();
             }
             return created;
+        }
+
+        private void EnsureCadContextFresh(Document document)
+        {
+            if (CadUnitService.GetLengthUnit(document) != ExpectedLengthUnit)
+                throw new InvalidOperationException(
+                    "Drawing unit policy đã thay đổi trong lúc xác nhận Direct Draw. Hãy chạy lại lệnh để tính lại kích thước.");
+            if (!document.Editor.CurrentUserCoordinateSystem.Equals(ExpectedUcs))
+                throw new InvalidOperationException(
+                    "Current UCS đã thay đổi trong lúc xác nhận Direct Draw. Hãy chạy lại lệnh để dùng đúng hệ tọa độ.");
         }
 
         private static bool HasBackingStore(Document document)
