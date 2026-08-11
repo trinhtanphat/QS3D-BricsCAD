@@ -12,7 +12,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("đặt Family active");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Đặt Family active");
                 var family = RequireSelectedFamily(project);
                 var previous = ProjectFamilyActivationService.GetActive(project);
                 ExecuteAtomic(project, () =>
