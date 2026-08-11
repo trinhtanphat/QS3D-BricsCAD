@@ -11,7 +11,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
     {
         private const string AssemblyName = "BrxMgd";
         private const string TabId = "QS3D_PROJECT";
-        private const string PanelSourceId = "QS3D_PROJECT_PANEL_SOURCE";
+        private const string PanelSourceId = "QS3D_PROJECT_TOOLS_PANEL_SOURCE";
+        private const string PanelTitle = "Công cụ dự án";
         private static bool _initialized;
 
         private sealed class ButtonSpec
@@ -50,21 +51,17 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 foreach (var item in enumerable)
                 {
                     if (item == null) continue;
-                    if (string.Equals(GetProperty(item, "Id") as string, TabId, StringComparison.OrdinalIgnoreCase)) { projectTab = item; break; }
+                    if (string.Equals(GetProperty(item, "Id") as string, TabId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        projectTab = item;
+                        break;
+                    }
                 }
                 if (projectTab == null) return false;
+
                 var panels = GetProperty(projectTab, "Panels");
                 if (!(panels is IEnumerable panelEnumerable)) return false;
-                object? source = null;
-                foreach (var panel in panelEnumerable)
-                {
-                    if (panel == null) continue;
-                    var candidate = GetProperty(panel, "Source");
-                    if (candidate == null) continue;
-                    if (string.Equals(GetProperty(candidate, "Id") as string, PanelSourceId, StringComparison.OrdinalIgnoreCase)) { source = candidate; break; }
-                    if (source == null) source = candidate;
-                }
-                if (source == null) return false;
+                var source = FindPanelSource(panelEnumerable, PanelSourceId) ?? CreateProjectToolsPanel(panels);
                 var items = GetProperty(source, "Items");
                 if (items == null) return false;
 
@@ -89,6 +86,32 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         public static void Reset() => _initialized = false;
 
+        private static object? FindPanelSource(IEnumerable panels, string sourceId)
+        {
+            foreach (var panel in panels)
+            {
+                if (panel == null) continue;
+                var source = GetProperty(panel, "Source");
+                if (source == null) continue;
+                if (string.Equals(GetProperty(source, "Id") as string, sourceId, StringComparison.OrdinalIgnoreCase))
+                    return source;
+            }
+            return null;
+        }
+
+        private static object CreateProjectToolsPanel(object panels)
+        {
+            var source = Create("Bricscad.Windows.RibbonPanelSource");
+            SetProperty(source, "Id", PanelSourceId);
+            SetProperty(source, "Name", PanelTitle);
+            SetProperty(source, "Title", PanelTitle);
+
+            var panel = Create("Bricscad.Windows.RibbonPanel");
+            SetProperty(panel, "Source", source);
+            Add(panels, panel);
+            return source;
+        }
+
         private static object? FindRibbonControl()
         {
             var servicesType = Type.GetType("Bricscad.Ribbon.RibbonServices, " + AssemblyName, false);
@@ -108,14 +131,21 @@ namespace QS3D.BricsCAD.V25.Ribbon
             return null;
         }
 
-        private static object Create(string fullName) => Activator.CreateInstance(Type.GetType(fullName + ", " + AssemblyName, true)!) ?? throw new InvalidOperationException("Cannot create " + fullName);
-        private static object? GetProperty(object target, string name) => target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public)?.GetValue(target, null);
+        private static object Create(string fullName) =>
+            Activator.CreateInstance(Type.GetType(fullName + ", " + AssemblyName, true)!)
+            ?? throw new InvalidOperationException("Cannot create " + fullName);
+
+        private static object? GetProperty(object target, string name) =>
+            target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public)?.GetValue(target, null);
+
         private static void SetProperty(object target, string name, object value)
         {
             var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
             if (property == null || !property.CanWrite) return;
-            if (property.PropertyType.IsInstanceOfType(value) || property.PropertyType == value.GetType()) property.SetValue(target, value, null);
+            if (property.PropertyType.IsInstanceOfType(value) || property.PropertyType == value.GetType())
+                property.SetValue(target, value, null);
         }
+
         private static void Add(object collection, object item)
         {
             var method = collection.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public)
@@ -123,6 +153,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (method == null) throw new InvalidOperationException("Ribbon collection does not expose a compatible Add method.");
             method.Invoke(collection, new[] { item });
         }
+
         private static bool CollectionContainsId(object collection, string id)
         {
             if (!(collection is IEnumerable enumerable)) return false;
