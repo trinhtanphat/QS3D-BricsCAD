@@ -62,7 +62,7 @@ namespace QS3D.BricsCAD.V25.Services
             if (document == null) throw new ArgumentNullException(nameof(document));
             EnsureActive(document, "Interchange source-element import");
 
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var project = ExistingProjectMutationContext.Require(document, "Interchange source-element import");
             var prepared = Prepare(project, json);
             EnsureActive(document, "Interchange source-element import / mutation");
 
