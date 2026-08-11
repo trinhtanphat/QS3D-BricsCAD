@@ -27,19 +27,26 @@ else:
         '[CommandMethod("QS3DINTERSECTIONRULECREATE", CommandFlags.Modal)]',
         "var settings = store.Load().Clone()",
         "settings.NormalizeAndValidate()",
-        "settings.CategoryRules.Select(x => x.Category)",
-        ".Concat(settings.IntersectionRules.Select(x => x.Source))",
-        ".Concat(settings.IntersectionRules.Select(x => x.Target))",
+        "var observedCodes = CollectObservedCodes(settings)",
         "observedCodes.Contains(source.Value)",
         "observedCodes.Contains(target.Value)",
         "settings.FindIntersectionRule(source.Value, target.Value) != null",
         "document.Editor.GetKeywords(",
         'string.Equals(confirm.StringResult, "Yes", StringComparison.OrdinalIgnoreCase)',
-        "settings.IntersectionRules.Add(new QuantityIntersectionRuleSetting",
+        "var latestSettings = store.Load().Clone()",
+        "latestSettings.NormalizeAndValidate()",
+        "var latestObservedCodes = CollectObservedCodes(latestSettings)",
+        "latestObservedCodes.Contains(source.Value)",
+        "latestObservedCodes.Contains(target.Value)",
+        "latestSettings.FindIntersectionRule(source.Value, target.Value) != null",
+        "latestSettings.IntersectionRules.Add(new QuantityIntersectionRuleSetting",
         "Source = source.Value",
         "Target = target.Value",
-        "store.Save(settings)",
+        "store.Save(latestSettings)",
         "Luật chiều ngược không được tự tạo",
+        "settings.CategoryRules.Select(x => x.Category)",
+        ".Concat(settings.IntersectionRules.Select(x => x.Source))",
+        ".Concat(settings.IntersectionRules.Select(x => x.Target))",
     )
     for token in required:
         if token not in text:
@@ -48,16 +55,23 @@ else:
     load = text.find("var settings = store.Load().Clone()")
     duplicate = text.find("settings.FindIntersectionRule(source.Value, target.Value) != null")
     confirm = text.find("var confirm = document.Editor.GetKeywords(")
-    append = text.find("settings.IntersectionRules.Add(new QuantityIntersectionRuleSetting")
-    validate_after_append = text.find("settings.NormalizeAndValidate();", append)
-    save = text.find("store.Save(settings)")
-    if min(load, duplicate, confirm, append, validate_after_append, save) < 0 or not (
-        load < duplicate < confirm < append < validate_after_append < save
+    latest_load = text.find("var latestSettings = store.Load().Clone()")
+    latest_codes = text.find("var latestObservedCodes = CollectObservedCodes(latestSettings)")
+    latest_duplicate = text.find("latestSettings.FindIntersectionRule(source.Value, target.Value) != null")
+    append = text.find("latestSettings.IntersectionRules.Add(new QuantityIntersectionRuleSetting")
+    validate_after_append = text.find("latestSettings.NormalizeAndValidate();", append)
+    save = text.find("store.Save(latestSettings)")
+    if min(load, duplicate, confirm, latest_load, latest_codes, latest_duplicate, append, validate_after_append, save) < 0 or not (
+        load < duplicate < confirm < latest_load < latest_codes < latest_duplicate < append < validate_after_append < save
     ):
-        errors.append("rule creation must load/validate, reject duplicates, confirm, append one directed row, validate again, then save")
+        errors.append("rule creation must preflight initial settings, confirm, reload latest settings, revalidate categories/duplicate, append one directed row, validate again, then save latest state")
 
-    if text.count("settings.IntersectionRules.Add(new QuantityIntersectionRuleSetting") != 1:
-        errors.append("rule creation must append exactly one directed rule and must not auto-create the reverse pair")
+    if text.count("latestSettings.IntersectionRules.Add(new QuantityIntersectionRuleSetting") != 1:
+        errors.append("rule creation must append exactly one directed rule to the latest settings and must not auto-create the reverse pair")
+    if "settings.IntersectionRules.Add(new QuantityIntersectionRuleSetting" in text:
+        errors.append("rule creation must not persist the pre-prompt settings clone after confirmation")
+    if "store.Save(settings)" in text:
+        errors.append("rule creation must save the refreshed latest settings, not the pre-prompt clone")
 
     forbidden = (
         "ProjectContextCoordinator",
@@ -80,4 +94,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DRULECREATE has one canonical owner, creates exactly one confirmed missing A->B settings row, preserves reverse-rule independence, rejects unknown/duplicate pairs, validates before persistence, and writes only through QuantitySettingsStore.")
+print("PASS: QS3DRULECREATE has one canonical owner, preserves confirmation/cancel behavior, refreshes latest settings after confirmation, revalidates categories/duplicates, appends one A->B row, and persists only through QuantitySettingsStore.")
