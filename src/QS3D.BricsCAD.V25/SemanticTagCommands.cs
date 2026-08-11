@@ -14,14 +14,14 @@ namespace QS3D.BricsCAD.V25
     {
         private const double UcsAxisTolerance = 1e-9d;
 
-        [CommandMethod("QS3DTAG", CommandFlags.Modal)]
+        [CommandMethod("QS3DTAG", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void PlaceSemanticTag()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
             try
             {
-                var sourceHandle = PromptEntityHandle(document, "\nChọn authoritative CAD source của semantic element cần tag: ");
+                var sourceHandle = AcquireSourceHandle(document, "\nChọn authoritative CAD source của semantic element cần tag: ");
                 if (sourceHandle == null) return;
 
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
@@ -49,14 +49,14 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        [CommandMethod("QS3DTAGREFRESH", CommandFlags.Modal)]
+        [CommandMethod("QS3DTAGREFRESH", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void RefreshSemanticTag()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
             try
             {
-                var sourceHandle = PromptEntityHandle(document, "\nChọn authoritative CAD source của semantic element cần refresh tag: ");
+                var sourceHandle = AcquireSourceHandle(document, "\nChọn authoritative CAD source của semantic element cần refresh tag: ");
                 if (sourceHandle == null) return;
 
                 var project = ExistingProjectMutationContext.Require(document, "Semantic Tag refresh");
@@ -73,6 +73,22 @@ namespace QS3D.BricsCAD.V25
             {
                 Report(document, "QS3DTAGREFRESH lỗi: " + ex.Message);
             }
+        }
+
+        private static string? AcquireSourceHandle(Document document, string message)
+        {
+            var implied = EntitySnapshotReader.ReadCurrentSelection(document);
+            if (implied.Count > 1)
+                throw new InvalidOperationException("Semantic Tag PICKFIRST yêu cầu chọn đúng một authoritative CAD source; bỏ bớt selection rồi chạy lại.");
+            if (implied.Count == 1)
+            {
+                var handle = (implied[0].Handle ?? string.Empty).Trim();
+                if (handle.Length == 0)
+                    throw new InvalidOperationException("Semantic Tag PICKFIRST không đọc được CAD handle hợp lệ từ selection.");
+                return handle;
+            }
+
+            return PromptEntityHandle(document, message);
         }
 
         private static string? PromptEntityHandle(Document document, string message)
