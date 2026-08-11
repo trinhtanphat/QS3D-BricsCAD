@@ -69,7 +69,12 @@ Recent project state stores only normalized rooted `.dwg` paths. It:
 - bounds history size;
 - reports missing files without deleting history automatically;
 - requires a live file again before Open;
-- removes/clears **history only** — never the actual DWG.
+- removes/clears **history only** — never the actual DWG;
+- supports live search by display name or normalized path;
+- filters the bounded history by `Tất cả`, `Đã ghim`, `Sẵn sàng`, or `Thiếu file` without mutating the persisted history;
+- displays `filtered / total` so an empty filtered view is distinguishable from an empty history.
+
+The filter/search layer is view-only: pin/remove/clear/open continue to operate on the selected canonical recent item, and changing a filter does not rewrite timestamps, pin state, or the backing file.
 
 The settings format is bounded and stored under `%LOCALAPPDATA%\QS3D\BricsCAD-V25\start-center-v1.txt`. Dynamic values are Base64 encoded and saves use a temp file plus replacement/fallback pattern consistent with existing per-user UI settings.
 
@@ -97,6 +102,7 @@ Project summary is read-only. Existing business commands keep ownership of their
 - visible featured shortcuts for `QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DRULECREATE` and `QS3DQSETTINGSHEALTHEXPORT` through the common allowlisted click path;
 - tokenized AND-semantics launcher search;
 - Unicode decomposition, combining-mark removal and `đ/Đ` folding for accent-insensitive Vietnamese lookup;
+- recent-DWG search, pinned/available/missing filters and filtered/total count wiring;
 - source registration for `QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DQSETTINGSHEALTHEXPORT` and `QS3DRULECREATE` before those commands may appear in the launcher;
 - click-time `MdiActiveDocument` resolution;
 - non-creating `TryGetReadOnly` dashboard behavior;
@@ -127,6 +133,7 @@ Remote/source review is not BricsCAD runtime proof. Exact-candidate local qualif
 10. a disposable `start-center-v1.txt` containing one malformed Base64 line between valid favorite/recent/project records skips only the malformed line and preserves the later valid records after Start Center reload/restart;
 11. `QS3DQSETTINGSHEALTHEXPORT` launched from Start Center opens its normal guarded export flow rather than any Start Center-specific implementation;
 12. `QS3DRULECREATE` launched from Start Center enters the canonical command's existing prompt/validation/confirmation path and does not gain any Start Center-specific settings mutation path;
-13. the four featured shortcuts (`QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DRULECREATE`, `QS3DQSETTINGSHEALTHEXPORT`) are visible at normal and HiDPI scales and dispatch through the same click-time active-DWG allowlisted path as launcher results.
+13. the four featured shortcuts (`QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DRULECREATE`, `QS3DQSETTINGSHEALTHEXPORT`) are visible at normal and HiDPI scales and dispatch through the same click-time active-DWG allowlisted path as launcher results;
+14. seed at least one pinned existing DWG, one unpinned existing DWG and one missing DWG in Recent Projects; verify search-by-name/path plus each of `Tất cả`, `Đã ghim`, `Sẵn sàng`, `Thiếu file` returns the correct subset/count, then clear the filter and prove no search/filter action changed pin/timestamp/history state or deleted a DWG.
 
 Keep private paths/screenshots and proprietary runtime material out of Git; only sanitized exact-SHA evidence belongs in the local qualification record. These runtime checks remain `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until executed on licensed BricsCAD V25.
