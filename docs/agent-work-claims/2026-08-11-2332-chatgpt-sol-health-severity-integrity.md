@@ -1,0 +1,25 @@
+# Agent Work Claim
+
+- Status: ACTIVE
+- Agent: chatgpt-gpt56sol-health-severity-integrity-20260811-2332
+- Timestamp: 2026-08-11T23:32:00+07:00
+- Baseline `main` SHA: `874ccc3f7cbf37bf988d599e6848c4afd42ba423`
+- Priority: P1 diagnostic/readiness fail-closed integrity
+- Exact scope: Reject undefined `HealthSeverity` values at the `ModelHealthIssue` construction boundary so corrupt/out-of-range severities cannot be silently excluded from `HealthSummary` counters and accidentally report healthy/release-ready state. Preserve Info/Warning/Error semantics and null-summary-entry behavior.
+- Expected surfaces:
+  - `src/QS3D.Core/Diagnostics/ModelHealthService.cs`
+  - `tests/QS3D.Core.SmokeTests/HealthSummaryReadinessSmoke.cs`
+- Excluded scope:
+  - changes to existing health issue codes or severity assignments
+  - broader model-health inspection semantics
+  - BricsCAD/native/runtime/UI behavior
+  - GitHub Actions
+- Validation plan:
+  - focused smoke proving `(HealthSeverity)999` fails at issue construction
+  - preserve warning/error/info readiness semantics and existing null-entry summary behavior
+  - re-read current `main` target blobs before every write
+  - no local `dotnet` or BricsCAD runtime is available in this environment
+- Coordination:
+  - checked current claim registry and recent commit history immediately before registration; no HealthSeverity/HealthSummary integrity claim was present
+  - no GitHub Actions will be dispatched
+- Completion condition: undefined severity values fail closed before entering health summaries; focused regression is present; this claim is marked COMPLETED.
