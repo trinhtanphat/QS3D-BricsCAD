@@ -14,7 +14,14 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var selected = EntitySnapshotReader.ReadCurrentSelection(document);
+                if (selected.Count == 0)
+                {
+                    FinalizeUi(document, "Curtain Frames 3D: chọn GlassWall semantic LINE hoặc open/bulged POLYLINE WCS-XY.", string.Empty);
+                    return;
+                }
+
+                var project = ExistingProjectMutationContext.Require(document, "Curtain Frames 3D");
                 var line = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
                 var path = CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project);
                 var elements = checked(line.Elements + path.Elements);
