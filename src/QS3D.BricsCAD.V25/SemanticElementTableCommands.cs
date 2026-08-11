@@ -94,9 +94,7 @@ namespace QS3D.BricsCAD.V25
 
         private static QS3D.Core.Domain.ProjectState RequireExistingProject(Document document, string operation)
         {
-            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
-                throw new InvalidOperationException(operation + " cần một QS3D project hiện hữu; native documentation table không tạo project mới.");
-            return project;
+            return ExistingProjectMutationContext.Require(document, operation);
         }
 
         private static void RequireModelSpace(Document document)
