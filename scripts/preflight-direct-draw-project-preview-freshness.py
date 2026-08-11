@@ -20,16 +20,28 @@ def read(path):
 
 helper = read(HELPER)
 for token in (
+    "using System.IO;",
     "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
     "ExistingProjectMutationContext.Require(document, operation)",
     "string.Equals(project.ProjectId, ExpectedProjectId, StringComparison.OrdinalIgnoreCase)",
     "ProjectContextCoordinator.TryGetReadOnly(document, out _)",
-    "ProjectContextCoordinator.GetOrCreate(document)",
+    "private static bool HasBackingStore(Document document)",
+    "ProjectContextCoordinator.GetProjectPath(document)",
+    'File.Exists(path) || File.Exists(path + ".bak")',
+    "var created = ProjectContextCoordinator.GetOrCreate(document);",
+    "ProjectContextCoordinator.Forget(document);",
     "project đã thay đổi trong lúc xác nhận Direct Draw",
     "project đã xuất hiện trong lúc xác nhận Direct Draw",
 ):
     if token not in helper:
         errors.append("preview helper missing: " + token)
+
+projectless_probe = helper.find("ProjectContextCoordinator.TryGetReadOnly(document, out _) || HasBackingStore(document)")
+projectless_bind = helper.find("var created = ProjectContextCoordinator.GetOrCreate(document);", projectless_probe)
+post_bind_probe = helper.find("if (HasBackingStore(document))", projectless_bind)
+forget = helper.find("ProjectContextCoordinator.Forget(document);", post_bind_probe)
+if projectless_probe < 0 or projectless_bind < projectless_probe or post_bind_probe < projectless_bind or forget < post_bind_probe:
+    errors.append("projectless Direct Draw must check backing-store absence before bind, recheck after GetOrCreate, then forget any speculative bind before refusing")
 
 families = {
     "DirectDrawCommands.cs": {
@@ -103,6 +115,7 @@ if "var project = projectPreview.ResolveForMutation(document, operation);" not i
 for token in (
     "same-ProjectId",
     "projectless",
+    "backing store",
     "QS3DDRAWWALLADV",
     "QS3DDRAWDOORADV",
     "QS3DDRAWWINDOWADV",
@@ -127,4 +140,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: prompt-bearing Direct Draw families bind the same preview project identity, or remain projectless, before source/snapshot mutation while quick-path compatibility remains intact.")
+print("PASS: prompt-bearing Direct Draw binds the reviewed project identity, and projectless preview rechecks primary/backup backing-store absence on both sides of GetOrCreate so an appearing sidecar cannot be silently adopted before mutation.")

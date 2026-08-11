@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -41,11 +42,28 @@ namespace QS3D.BricsCAD.V25.Services
                 return project;
             }
 
-            if (ProjectContextCoordinator.TryGetReadOnly(document, out _))
-                throw new InvalidOperationException(
-                    "QS3D project đã xuất hiện trong lúc xác nhận Direct Draw. Hãy chạy lại lệnh để dùng đúng project/Family defaults.");
+            if (ProjectContextCoordinator.TryGetReadOnly(document, out _) || HasBackingStore(document))
+                throw ProjectAppeared();
 
-            return ProjectContextCoordinator.GetOrCreate(document);
+            var created = ProjectContextCoordinator.GetOrCreate(document);
+            if (HasBackingStore(document))
+            {
+                // A sidecar can appear in the narrow gap between the read-only absence check
+                // and GetOrCreate. Do not keep a speculative canonical bind in that case.
+                ProjectContextCoordinator.Forget(document);
+                throw ProjectAppeared();
+            }
+            return created;
         }
+
+        private static bool HasBackingStore(Document document)
+        {
+            var path = ProjectContextCoordinator.GetProjectPath(document);
+            return File.Exists(path) || File.Exists(path + ".bak");
+        }
+
+        private static InvalidOperationException ProjectAppeared() =>
+            new InvalidOperationException(
+                "QS3D project đã xuất hiện trong lúc xác nhận Direct Draw. Hãy chạy lại lệnh để dùng đúng project/Family defaults.");
     }
 }
