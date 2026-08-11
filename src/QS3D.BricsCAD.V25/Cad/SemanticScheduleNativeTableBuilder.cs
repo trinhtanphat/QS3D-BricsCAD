@@ -20,6 +20,7 @@ namespace QS3D.BricsCAD.V25.Cad
         internal const string MetadataPrefix = "QS3D.Documentation.NativeSemanticScheduleTable.";
         private const string RegAppName = "QS3DDOC";
         private const string OwnershipVersion = "1";
+        private const string ProjectIdentityTokenPrefix = "p1:";
         private const string DocumentId = "SemanticCustomSchedule";
         private const string DocumentKind = "SemanticScheduleTable";
         private const double TextHeightM = 0.0035d;
@@ -385,7 +386,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     issues.Add(Issue("CUSTOM_SCHEDULE_TABLE_OWNERSHIP_MISMATCH", HealthSeverity.Error, "QS3DDOC ownership does not match project/schedule/fingerprint metadata.", scheduleId));
                     transaction.Commit();
-                    return;
+                    return issues.AsReadOnly();
                 }
 
                 InspectPosition(project, keys, table, scheduleId, issues);
@@ -437,7 +438,6 @@ namespace QS3D.BricsCAD.V25.Cad
             issues.Add(Issue("CUSTOM_SCHEDULE_TABLE_CAD_TEXT_DRIFT", HealthSeverity.Warning, "Live Table cell differs from semantic snapshot at " + label + ".", scheduleId));
             details++;
         }
-
         private static void InspectPosition(ProjectState project, StateKeys keys, Table table, string scheduleId, ICollection<ModelHealthIssue> issues)
         {
             if (!TryFinite(project.Metadata, keys.PositionX, out var x) ||
@@ -465,7 +465,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var storedScheduleId = project.Metadata[keys.ScheduleId].Trim();
             if (!string.Equals(storedScheduleId, scheduleId, StringComparison.OrdinalIgnoreCase) || !string.Equals(keys.Token, Token(storedScheduleId), StringComparison.Ordinal))
                 throw new InvalidOperationException("Generated custom schedule Table schedule identity does not match its owner slot.");
-            if (!string.Equals(project.Metadata[keys.OwnerProjectId].Trim(), project.ProjectId, StringComparison.Ordinal))
+            if (!string.Equals(project.Metadata[keys.OwnerProjectId].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Generated custom schedule Table owner project does not match the active project.");
             if (!string.Equals(project.Metadata[keys.Version].Trim(), OwnershipVersion, StringComparison.Ordinal))
                 throw new InvalidOperationException("Unsupported custom schedule Table ownership version: " + project.Metadata[keys.Version]);
@@ -514,7 +514,7 @@ namespace QS3D.BricsCAD.V25.Cad
             using (var marker = new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, OwnershipVersion),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, projectId.Trim()),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, ProjectIdentityToken(projectId)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, DocumentId),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, DocumentKind),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, scheduleToken),
@@ -537,7 +537,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 return
                     string.Equals(Convert.ToString(values[0].Value, CultureInfo.InvariantCulture), RegAppName, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(Convert.ToString(values[1].Value, CultureInfo.InvariantCulture), OwnershipVersion, StringComparison.Ordinal) &&
-                    string.Equals(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId, StringComparison.Ordinal) &&
+                    MatchesProjectIdentity(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId) &&
                     string.Equals(Convert.ToString(values[3].Value, CultureInfo.InvariantCulture), DocumentId, StringComparison.Ordinal) &&
                     string.Equals(Convert.ToString(values[4].Value, CultureInfo.InvariantCulture), DocumentKind, StringComparison.Ordinal) &&
                     scheduleMatches &&
@@ -565,6 +565,26 @@ namespace QS3D.BricsCAD.V25.Cad
                 return !id.IsNull && id.IsValid;
             }
             catch { return false; }
+        }
+
+        private static string ProjectIdentityToken(string projectId)
+        {
+            var normalized = (projectId ?? string.Empty).Trim();
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(normalized));
+                var builder = new StringBuilder(ProjectIdentityTokenPrefix.Length + hash.Length * 2);
+                builder.Append(ProjectIdentityTokenPrefix);
+                foreach (var value in hash) builder.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+                return builder.ToString();
+            }
+        }
+
+        private static bool MatchesProjectIdentity(string storedIdentity, string projectId)
+        {
+            var normalized = (projectId ?? string.Empty).Trim();
+            return string.Equals(storedIdentity, ProjectIdentityToken(normalized), StringComparison.Ordinal) ||
+                string.Equals(storedIdentity, normalized, StringComparison.Ordinal);
         }
 
         private static IReadOnlyList<string> PersistedTokens(ProjectState project)
