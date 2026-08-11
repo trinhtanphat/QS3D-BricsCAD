@@ -9,6 +9,7 @@ using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI.ViewModels;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
+using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
 using BcadApplication = Bricscad.ApplicationServices.Application;
@@ -48,7 +49,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             try
             {
-                var rows = ProjectQuantityReportBuilder.Group(project);
+                var rows = BuildPreviewRows(project, out var regenerated);
                 var rowSnapshots = new Dictionary<QuantityInsightItemViewModel, QuantityReportRow>();
                 var floors = rows
                     .GroupBy(x => DisplayFloor(x.Floor), StringComparer.OrdinalIgnoreCase)
@@ -71,8 +72,8 @@ namespace QS3D.BricsCAD.V25.UI
                 EmptyHint.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
                 QuantityTree.Visibility = rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
                 _viewModel.Status = rows.Count == 0
-                    ? "Project hiện chưa có dòng khối lượng."
-                    : "Read-only • dữ liệu từ project QS3D hiện hành • nhấp đúp để định vị.";
+                    ? "Project hiện chưa có dòng khối lượng. Preview-regenerate " + regenerated.ToString("N0") + " lượt trên snapshot tách rời."
+                    : "Read-only • preview-regenerate " + regenerated.ToString("N0") + " lượt trên snapshot tách rời • nhấp đúp để định vị.";
                 ApplySelectionHighlights(project, false);
             }
             catch (Exception ex)
@@ -117,6 +118,14 @@ namespace QS3D.BricsCAD.V25.UI
         {
             Loaded -= OnLoaded;
             RefreshQuantityInsights();
+        }
+
+        private static IReadOnlyList<QuantityReportRow> BuildPreviewRows(ProjectState project, out int regenerated)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);
+            regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(previewProject);
+            return ProjectQuantityReportBuilder.Group(previewProject);
         }
 
         private static QuantityInsightItemViewModel ToInsightItem(
@@ -270,7 +279,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (displayedIds.Length == 0)
                 throw new InvalidOperationException("Dòng khối lượng không có semantic ElementId ổn định để định vị an toàn.");
 
-            var currentRows = ProjectQuantityReportBuilder.Group(project);
+            var currentRows = BuildPreviewRows(project, out _);
             var matches = currentRows.Where(x => x != null && SameElementIdentity(displayedIds, x)).ToList();
             if (matches.Count != 1)
                 throw new InvalidOperationException("Dòng khối lượng đã cũ hoặc không còn định danh duy nhất trong project hiện hành. Hãy bấm Làm mới.");
