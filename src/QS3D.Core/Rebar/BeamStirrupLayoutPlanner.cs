@@ -37,8 +37,10 @@ namespace QS3D.Core.Rebar
             bool hasHookTails,
             double bendRadiusM)
         {
-            StationOffsetsM = stationOffsetsM ?? throw new ArgumentNullException(nameof(stationOffsetsM));
-            SectionLoop = sectionLoop ?? throw new ArgumentNullException(nameof(sectionLoop));
+            if (stationOffsetsM == null) throw new ArgumentNullException(nameof(stationOffsetsM));
+            if (sectionLoop == null) throw new ArgumentNullException(nameof(sectionLoop));
+            StationOffsetsM = new List<double>(stationOffsetsM).AsReadOnly();
+            SectionLoop = new List<Point2>(sectionLoop).AsReadOnly();
             if (SectionLoop.Count < 5) throw new ArgumentException("Beam stirrup section path requires at least five points.", nameof(sectionLoop));
             ActualSpacingM = Finite(actualSpacingM, nameof(actualSpacingM));
             CenterlineLengthM = Positive(centerlineLengthM, nameof(centerlineLengthM));
