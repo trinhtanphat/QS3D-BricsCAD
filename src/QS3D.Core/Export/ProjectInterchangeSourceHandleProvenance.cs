@@ -63,6 +63,7 @@ namespace QS3D.Core.Export
         private const string ProjectRecordSuffix = ".Project";
         private const string ElementRecordSegment = ".Element.";
         private const string RecordVersion = "v1";
+        private const int MaxSourceHandleLength = 128;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static ProjectInterchangeSourceHandleProvenancePlan Plan(ProjectState target, string json)
@@ -167,7 +168,23 @@ namespace QS3D.Core.Export
             if (fields.Count != 4 + handleCount)
                 throw new InvalidOperationException("Interchange provenance record source-handle count does not match its encoded payload.");
 
-            return fields.Skip(4).ToList().AsReadOnly();
+            var handles = new List<string>(handleCount);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 4; i < fields.Count; i++)
+            {
+                var raw = fields[i] ?? string.Empty;
+                var handle = raw.Trim();
+                if (handle.Length == 0)
+                    throw new InvalidOperationException("Interchange provenance record contains an empty source handle.");
+                if (!string.Equals(raw, handle, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Interchange provenance record contains a non-canonical padded source handle.");
+                if (handle.Length > MaxSourceHandleLength)
+                    throw new InvalidOperationException("Interchange provenance record contains a source handle above the " + MaxSourceHandleLength + " character limit.");
+                if (!seen.Add(handle))
+                    throw new InvalidOperationException("Interchange provenance record contains duplicate source handle: " + handle + ".");
+                handles.Add(handle);
+            }
+            return handles.AsReadOnly();
         }
 
         private static ProjectInterchangeSourceHandleProvenancePlan PlanFromValidated(ProjectInterchangeValidatedSnapshot source)
