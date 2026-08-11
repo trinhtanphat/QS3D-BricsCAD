@@ -10,6 +10,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             ExplicitOrderAndTemplatesArePreserved();
+            PersistedScheduleBuildsDeterministically();
+            ScheduleRequiresScheduleView();
             BlankOptionalCellsAreAllowedWithoutWeakeningTagLabels();
             DuplicateElementIdsFailClosed();
             AmbiguousProjectElementFailsClosed();
@@ -47,6 +49,58 @@ namespace QS3D.Core.SmokeTests
             Equal("7.25", table.Rows[0].Cells[2]);
             Equal("E-1", table.Rows[1].ElementId);
             Equal("B1", table.Rows[1].Cells[0]);
+        }
+
+        private static void PersistedScheduleBuildsDeterministically()
+        {
+            var project = new ProjectState("schedule", "Schedule");
+            Element(project, "B-002", ElementCategory.Beam, "B2", 7.25);
+            Element(project, "B-001", ElementCategory.Beam, "B1", 3.5);
+            Element(project, "C-001", ElementCategory.Column, "C1", 4.0);
+
+            var view = new SemanticViewDefinition(
+                "V-BEAMS",
+                "Beam Schedule Source",
+                SemanticViewKind.Schedule,
+                categories: new[] { ElementCategory.Beam });
+            var schedule = new SemanticScheduleDefinition(
+                "SCH-BEAMS",
+                "Beam Schedule",
+                "V-BEAMS",
+                new[]
+                {
+                    new SemanticDocumentationColumn("Mark", "{P:Mark}"),
+                    new SemanticDocumentationColumn("Length", "{Q:LengthM}")
+                });
+            new SemanticDocumentationCatalogStore().Save(
+                project,
+                new[] { view },
+                Array.Empty<SemanticSheetDefinition>(),
+                new[] { schedule });
+
+            var table = new SemanticScheduleService().BuildTable(project, "sch-beams");
+            Equal("Beam Schedule", table.Title);
+            Equal(2, table.Rows.Count);
+            Equal("B-001", table.Rows[0].ElementId);
+            Equal("B1", table.Rows[0].Cells[0]);
+            Equal("3.5", table.Rows[0].Cells[1]);
+            Equal("B-002", table.Rows[1].ElementId);
+        }
+
+        private static void ScheduleRequiresScheduleView()
+        {
+            var project = new ProjectState("schedule", "Schedule");
+            var view = new SemanticViewDefinition("V-MODEL", "Model", SemanticViewKind.Model);
+            var schedule = new SemanticScheduleDefinition(
+                "SCH-BAD",
+                "Bad Schedule",
+                "V-MODEL",
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") });
+            Throws<InvalidOperationException>(() => new SemanticDocumentationCatalogStore().Save(
+                project,
+                new[] { view },
+                Array.Empty<SemanticSheetDefinition>(),
+                new[] { schedule }));
         }
 
         private static void BlankOptionalCellsAreAllowedWithoutWeakeningTagLabels()
