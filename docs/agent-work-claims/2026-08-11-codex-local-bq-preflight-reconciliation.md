@@ -12,6 +12,8 @@ Reconcile four stale BQ gates with the already-landed `QuantitySummaryWindow` re
 
 After the neighboring Project readiness, Quantity Settings, Zone/Family identity and Model Health claims reached `COMPLETED`, also reconcile their stale exact-token gates, restore the shared premium Theme merge omitted by the new Quantity Settings window, and repair their proven nullable-flow adapter build errors. This remains integration-only follow-up to source already present on `main`.
 
+After later concurrent UI/Ribbon/Room/README work landed, the aggregate exposed seven additional failures. Read-only audit proved two are lost README policy/product-boundary statements and five are stale or brittle static assertions whose dedicated feature gates already pass. This claim also owns that bounded documentation/gate reconciliation without modifying the corresponding product source.
+
 ## Expected surfaces
 
 - `scripts/preflight-bq-export-freshness.py`
@@ -24,6 +26,14 @@ After the neighboring Project readiness, Quantity Settings, Zone/Family identity
 - `src/QS3D.BricsCAD.V25/UI/FamilyManagerWindow.xaml.cs`
 - `src/QS3D.BricsCAD.V25/UI/ModelHealthWindow.xaml.cs`
 - `scripts/preflight-zone-family-refresh-identity.py`
+- `README.md` — restore manual-only workflow and BricsCAD-plugin product-boundary statements only
+- `scripts/preflight-ci-manual-only.py` (validation only; source edit only if the documented contract changes)
+- `scripts/preflight-product-boundary.py` (validation only; source edit only if the documented contract changes)
+- `scripts/preflight-project-tools.py`
+- `scripts/preflight-reference-wall-ribbon.py`
+- `scripts/preflight-right-panel-quantity-workspace.py`
+- `scripts/preflight-room-auto-project-lifecycle.py`
+- `scripts/preflight-workspace-quick-draw.py`
 - this claim file for close-out
 
 ## Excluded scope
