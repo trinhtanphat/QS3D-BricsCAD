@@ -84,6 +84,7 @@ namespace QS3D.Core.SmokeTests
             SelectionStateSmoke.Run();
             BulkEditCanonicalizationSmoke.Run();
             SemanticMutationAtomicitySmoke.Run();
+            TemplateApplyAtomicitySmoke.Run();
             RegenerationAtomicitySmoke.Run();
             HostLinkCanonicalizationSmoke.Run();
             ProjectFamilyAssignmentAtomicitySmoke.Run();
