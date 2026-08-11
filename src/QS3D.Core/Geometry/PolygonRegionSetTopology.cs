@@ -69,7 +69,7 @@ namespace QS3D.Core.Geometry
         {
             if (regions == null) throw new ArgumentNullException(nameof(regions));
 
-            var materialized = regions.ToList();
+            var materialized = regions.Take(MaxRegions + 1).ToList();
             if (materialized.Count == 0)
                 throw new ArgumentException("Polygon multi-region topology requires at least one island.", nameof(regions));
             if (materialized.Count > MaxRegions)
