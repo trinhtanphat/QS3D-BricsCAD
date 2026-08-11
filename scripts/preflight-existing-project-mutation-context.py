@@ -23,6 +23,16 @@ def forbid(text: str, needle: str, label: str) -> None:
         raise AssertionError(f"{label}: forbidden {needle!r}")
 
 
+def method_slice(text: str, start_token: str, end_token: str) -> str:
+    start = text.find(start_token)
+    if start < 0:
+        raise AssertionError(f"missing method start {start_token!r}")
+    end = text.find(end_token, start + len(start_token))
+    if end < 0:
+        raise AssertionError(f"missing method end {end_token!r}")
+    return text[start:end]
+
+
 def main() -> int:
     try:
         context = read("ExistingProjectMutationContext.cs")
@@ -69,11 +79,31 @@ def main() -> int:
         require(tag_remove, "ExistingProjectMutationContext.Require(document, \"Semantic Tag remove\")", "Semantic Tag remove")
         forbid(tags, "ProjectContextCoordinator.GetOrCreate(document)", "Semantic Tag mutation")
         forbid(tag_remove, "ProjectContextCoordinator.GetOrCreate(document)", "Semantic Tag remove")
+
+        modeless_regeneration = {
+            "UI/DoorOpeningScheduleWindow.xaml.cs": "Door/Opening modeless refresh/export",
+            "UI/RoomFinishScheduleWindow.xaml.cs": "Room Finish modeless refresh/export",
+            "UI/RebarScheduleWindow.xaml.cs": "BBS modeless export",
+        }
+        for name, label in modeless_regeneration.items():
+            text = read(name)
+            require(text, "ExistingProjectMutationContext.TryGet(_document, out var project)", label)
+            require(text, "RegenerateDirty(project)", label)
+            forbid(text, "ProjectContextCoordinator.GetOrCreate(_document)", label)
+            forbid(text, "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", label + " detached mutation")
+
+        bq = read("UI/QuantitySummaryWindow.xaml.cs")
+        require(bq, "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", "BQ preference read")
+        persist = method_slice(bq, "private void PersistColumnPreferences()", "private IEnumerable<CheckBox>")
+        require(persist, "ExistingProjectMutationContext.TryGet(_document, out var project)", "BQ preference mutation")
+        require(persist, "ProjectStateSnapshot.Capture(project)", "BQ preference rollback")
+        forbid(persist, "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", "BQ preference detached mutation")
+        forbid(bq, "ProjectContextCoordinator.GetOrCreate(_document)", "BQ modeless lifecycle")
     except AssertionError as exc:
         print("[FAIL] existing-project-mutation-context:", exc, file=sys.stderr)
         return 1
 
-    print("[PASS] existing-project-mutation-context: mutation paths bind an existing canonical project; read-only health/locate remain non-creating")
+    print("[PASS] existing-project-mutation-context: native/modeless mutation paths bind an existing canonical project while read-only health/locate/preference loads remain non-creating")
     return 0
 
 
