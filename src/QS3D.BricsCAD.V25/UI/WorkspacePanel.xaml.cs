@@ -229,7 +229,12 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-            var project = ProjectContextCoordinator.GetOrCreate(doc);
+            if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+            {
+                _viewModel.SetSelectedElement(null);
+                SetStatus("Bản vẽ hiện tại chưa có QS3D project; selection chỉ được inspect CAD.");
+                return;
+            }
             var matches = project.Elements.Where(x => SemanticReferenceHandles.MatchesSelection(x, handles)).Take(2).ToList();
             if (matches.Count != 1 || string.IsNullOrWhiteSpace(matches[0].FamilyId))
             {
@@ -298,8 +303,10 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var doc = Application.DocumentManager.MdiActiveDocument;
                 if (doc == null) throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active.");
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
                 var selected = FamilyList.SelectedItem as ProjectFamily;
+                var project = selected == null
+                    ? ProjectContextCoordinator.GetOrCreate(doc)
+                    : ExistingProjectMutationContext.Require(doc, "Nhân bản Family từ Workspace");
                 var basis = selected == null ? null : project.FindFamily(selected.Id);
                 if (selected != null && basis == null)
                     throw new InvalidOperationException("Family đang chọn không còn tồn tại trong project hiện tại. Hãy Refresh Workspace.");
@@ -346,7 +353,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var doc = Application.DocumentManager.MdiActiveDocument;
                 if (doc == null) throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active.");
                 if (!(FamilyList.SelectedItem is ProjectFamily selected)) return;
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var project = ExistingProjectMutationContext.Require(doc, "Xóa Family từ Workspace");
                 var family = project.FindFamily(selected.Id)
                     ?? throw new InvalidOperationException("Family đang chọn không còn tồn tại trong project hiện tại. Hãy Refresh Workspace.");
                 var used = ProjectFamilyService.ReferenceCount(project, family.Id);
@@ -460,7 +467,7 @@ namespace QS3D.BricsCAD.V25.UI
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null || _inspection.Count == 0) return 0;
             var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-            var project = ProjectContextCoordinator.GetOrCreate(doc);
+            if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project)) return 0;
             var sourceHandles = project.Elements
                 .Where(x => SemanticReferenceHandles.MatchesSelection(x, handles))
                 .SelectMany(x => x.SourceHandles)
