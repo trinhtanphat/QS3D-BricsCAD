@@ -77,8 +77,8 @@ namespace QS3D.Core.Diagnostics
         public static IReadOnlyList<string> CollectOwnerHandles(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            EnsureValidElementSet(project);
             return project.Elements
-                .Where(x => x != null)
                 .SelectMany(x => EnumerateOwnerHandles(x))
                 .Select(x => x.Key)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -94,11 +94,10 @@ namespace QS3D.Core.Diagnostics
             owner = null;
             propertyKey = string.Empty;
             if (normalized.Length == 0) return false;
-            EnsureUniqueElementIds(project);
+            EnsureValidElementSet(project);
 
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
                 foreach (var entry in EnumerateOwnerHandles(element))
                 {
                     if (!string.Equals(entry.Key, normalized, StringComparison.OrdinalIgnoreCase)) continue;
@@ -117,14 +116,18 @@ namespace QS3D.Core.Diagnostics
             return owner != null;
         }
 
-        private static void EnsureUniqueElementIds(ProjectState project)
+        private static void EnsureValidElementSet(ProjectState project)
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
-                if (!seen.Add(element.Id))
-                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry; generated CAD ownership cannot be resolved safely.");
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("Project contains a blank semantic element id; generated CAD ownership cannot be resolved safely.");
+                if (!seen.Add(elementId))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + elementId);
             }
         }
 
