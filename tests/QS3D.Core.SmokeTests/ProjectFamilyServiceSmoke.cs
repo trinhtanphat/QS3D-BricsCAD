@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
             PropertyUpdatesPreserveOverrides();
             FamilyAssignmentDropsOldInheritedDefaultsButKeepsOverrides();
             FamilyAssignmentRejectsSpoofedSameIdElement();
+            FamilyAssignmentRejectsInvalidTargetPropertiesAtomically();
             DuplicateRenameDeleteGuards();
             DuplicateRejectsInvalidSourcePropertiesAtomically();
         }
@@ -79,6 +80,27 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(project, nextFamily.Id, new[] { spoofed }));
             if (owned.FamilyId != oldFamily.Id) throw new Exception("Rejected spoofed Family assignment must not mutate the project-owned element.");
             if (spoofed.FamilyId != oldFamily.Id) throw new Exception("Rejected spoofed Family assignment must not mutate the foreign element.");
+        }
+
+        private static void FamilyAssignmentRejectsInvalidTargetPropertiesAtomically()
+        {
+            var project = new ProjectState("p-assign-invalid", "Family assignment invariants");
+            var oldFamily = ProjectFamilyService.Create(project, "old", "Cột cũ", ElementCategory.Column);
+            oldFamily.Properties["WidthM"] = "0.4";
+            var target = ProjectFamilyService.Create(project, "target", "Cột mới", ElementCategory.Column);
+            target.Properties["Material"] = new string('X', 1001);
+            var element = new ProjectElement("c-invalid", ElementCategory.Column, oldFamily.Id, "floor", "zone");
+            element.Properties["WidthM"] = "0.4";
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+            var beforeVersion = project.ChangeVersion;
+            var beforeDirty = element.Dirty;
+
+            Throws<ArgumentException>(() => ProjectFamilyService.Assign(project, target.Id, new[] { element }));
+            if (element.FamilyId != oldFamily.Id) throw new Exception("Rejected Family assignment must preserve the previous FamilyId.");
+            if (element.Properties.Count != 1 || element.Properties["WidthM"] != "0.4") throw new Exception("Rejected Family assignment must preserve instance properties.");
+            if (element.Dirty != beforeDirty) throw new Exception("Rejected Family assignment must preserve dirty flags.");
+            if (project.ChangeVersion != beforeVersion) throw new Exception("Rejected Family assignment must not advance ChangeVersion.");
         }
 
         private static void DuplicateRenameDeleteGuards()
