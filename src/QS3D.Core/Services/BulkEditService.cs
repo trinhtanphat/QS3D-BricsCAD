@@ -103,9 +103,9 @@ namespace QS3D.Core.Services
             var pending = new List<PendingFamilyAssignment>();
             foreach (var element in targets)
             {
-                if (string.Equals(element.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
-
                 var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
+                if (string.Equals(previousFamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
+
                 ProjectFamily? previousFamily = null;
                 if (previousFamilyId.Length > 0)
                 {
