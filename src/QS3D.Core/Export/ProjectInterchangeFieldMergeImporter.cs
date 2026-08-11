@@ -215,10 +215,11 @@ namespace QS3D.Core.Export
 
             var snapshot = ProjectStateSnapshot.Capture(target);
             var beforeVersion = target.ChangeVersion;
+            var originalElementProperties = CaptureElementProperties(target, prepared.Source);
             try
             {
                 ApplyCatalogChoices(target, prepared.Source, plan.FieldPlan);
-                ApplyElementChoices(target, prepared.Source, plan.FieldPlan, policy);
+                ApplyElementChoices(target, prepared.Source, plan.FieldPlan, policy, originalElementProperties);
 
                 foreach (var id in plan.AffectedTargetElementIds)
                 {
@@ -453,6 +454,20 @@ namespace QS3D.Core.Export
             return result.AsReadOnly();
         }
 
+        private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> CaptureElementProperties(
+            ProjectState target,
+            ProjectInterchangeValidatedSnapshot source)
+        {
+            var result = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var sourceElement in source.Elements)
+            {
+                var element = target.FindElement(sourceElement.Id) ??
+                    throw new InvalidOperationException("Target element disappeared before field merge property snapshot: " + sourceElement.Id);
+                result[element.Id] = new Dictionary<string, string>(element.Properties, StringComparer.OrdinalIgnoreCase);
+            }
+            return result;
+        }
+
         private static void ApplyCatalogChoices(
             ProjectState target,
             ProjectInterchangeValidatedSnapshot source,
@@ -502,12 +517,14 @@ namespace QS3D.Core.Export
             ProjectState target,
             ProjectInterchangeValidatedSnapshot source,
             ProjectInterchangeFieldMergePlan plan,
-            ProjectInterchangeFieldMergePolicy policy)
+            ProjectInterchangeFieldMergePolicy policy,
+            IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> originalElementProperties)
         {
             foreach (var sourceElement in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 var element = target.FindElement(sourceElement.Id) ?? throw new InvalidOperationException("Target element disappeared before field merge: " + sourceElement.Id);
-                var originalProperties = new Dictionary<string, string>(element.Properties, StringComparer.OrdinalIgnoreCase);
+                if (!originalElementProperties.TryGetValue(element.Id, out var originalProperties))
+                    throw new InvalidOperationException("Reviewed target property snapshot is missing for field merge element: " + element.Id);
 
                 if (UseSource(plan, InterchangeIdentityKind.Element, element.Id, "familyId"))
                     ApplyFamilyReference(target, element, sourceElement.FamilyId);
@@ -523,13 +540,9 @@ namespace QS3D.Core.Export
                     element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity | ElementDirtyFlags.Geometry);
                 }
 
-                var hasPropertyDecision = plan.Decisions.Any(x =>
-                    x.Kind == InterchangeIdentityKind.Element &&
-                    string.Equals(x.Id, element.Id, StringComparison.OrdinalIgnoreCase) &&
-                    x.Field.StartsWith("properties.", StringComparison.OrdinalIgnoreCase));
-                if (policy.ElementProperties == InterchangeFieldPrecedenceChoice.UseSource && hasPropertyDecision)
+                if (policy.ElementProperties == InterchangeFieldPrecedenceChoice.UseSource)
                     ApplySourcePortableProperties(element, sourceElement.Properties);
-                else if (UseSource(plan, InterchangeIdentityKind.Element, element.Id, "familyId"))
+                else
                     RestoreProperties(element, originalProperties);
 
                 var hasQuantityDecision = plan.Decisions.Any(x =>
@@ -594,21 +607,35 @@ namespace QS3D.Core.Export
 
         private static void ApplySourcePortableProperties(ProjectElement element, IReadOnlyDictionary<string, string> sourceProperties)
         {
-            var preserve = element.Properties
+            var desired = element.Properties
                 .Where(x => IsGeneratedOwnershipMetadata(x.Key))
                 .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
-            element.Properties.Clear();
-            foreach (var property in preserve) element.Properties[property.Key] = property.Value;
             foreach (var property in sourceProperties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-                element.Properties[property.Key] = property.Value ?? string.Empty;
+                desired[property.Key] = property.Value ?? string.Empty;
+            if (PropertiesEqual(element.Properties, desired)) return;
+
+            element.Properties.Clear();
+            foreach (var property in desired) element.Properties[property.Key] = property.Value;
             element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity | ElementDirtyFlags.Geometry);
         }
 
         private static void RestoreProperties(ProjectElement element, IReadOnlyDictionary<string, string> properties)
         {
+            if (PropertiesEqual(element.Properties, properties)) return;
             element.Properties.Clear();
             foreach (var property in properties) element.Properties[property.Key] = property.Value;
             element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity | ElementDirtyFlags.Geometry);
+        }
+
+        private static bool PropertiesEqual(IDictionary<string, string> current, IReadOnlyDictionary<string, string> expected)
+        {
+            if (current.Count != expected.Count) return false;
+            foreach (var property in expected)
+            {
+                if (!current.TryGetValue(property.Key, out var value) || !string.Equals(value ?? string.Empty, property.Value ?? string.Empty, StringComparison.Ordinal))
+                    return false;
+            }
+            return true;
         }
 
         private static bool UseSource(ProjectInterchangeFieldMergePlan plan, InterchangeIdentityKind kind, string id, string field)
