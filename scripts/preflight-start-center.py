@@ -33,7 +33,7 @@ def forbid(text, token, label):
 
 def registered_adapter_commands():
     registrations = {}
-    pattern = re.compile(r'CommandMethod\(\s*"([^"]+)"')
+    pattern = re.compile(r'CommandMethod\s*\(\s*"([^"]+)"')
     for path in sorted(ADAPTER.rglob("*.cs")):
         if "bin" in path.parts or "obj" in path.parts:
             continue
@@ -51,6 +51,13 @@ def main():
 
     require(commands, '[CommandMethod("QS3DSTART", CommandFlags.Modal)]', "QS3DSTART registration")
     require(commands, "Application.ShowModelessWindow", "modeless BricsCAD host")
+    require(commands, "Application.DocumentManager.DocumentActivated += OnDocumentActivated;", "active-DWG refresh subscription")
+    require(commands, "Application.DocumentManager.DocumentActivated -= OnDocumentActivated;", "active-DWG refresh unsubscription")
+    require(commands, "private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)", "BricsCAD document activation handler")
+    require(commands, "window.RefreshFromActiveDocument();", "active-DWG refresh callback")
+    require(commands, "_window.Closed += OnStartCenterClosed;", "named Start Center close lifecycle")
+    require(commands, "_documentActivatedSubscribed", "idempotent activation subscription guard")
+    forbid(commands, "_window.Closed += (_, __) => _window = null;", "anonymous Start Center close lifecycle")
     forbid(commands, "Process.Start", "Start Center command surface")
 
     require(xaml, 'ResourceDictionary Source="Theme.xaml"', "premium shared theme")
@@ -137,7 +144,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, registration-backed, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 

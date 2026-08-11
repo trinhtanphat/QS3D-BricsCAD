@@ -8,6 +8,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class StartCenterCommands
     {
         private static StartCenterWindow? _window;
+        private static bool _documentActivatedSubscribed;
 
         [CommandMethod("QS3DSTART", CommandFlags.Modal)]
         public void ShowStartCenter()
@@ -17,7 +18,8 @@ namespace QS3D.BricsCAD.V25
                 if (_window == null || !_window.IsLoaded)
                 {
                     _window = new StartCenterWindow();
-                    _window.Closed += (_, __) => _window = null;
+                    _window.Closed += OnStartCenterClosed;
+                    SubscribeToDocumentActivation();
                 }
 
                 if (!_window.IsVisible)
@@ -33,6 +35,34 @@ namespace QS3D.BricsCAD.V25
                 var document = Application.DocumentManager.MdiActiveDocument;
                 document?.Editor.WriteMessage("\nQS3DSTART error: " + ex.Message);
             }
+        }
+
+        private static void SubscribeToDocumentActivation()
+        {
+            if (_documentActivatedSubscribed) return;
+            Application.DocumentManager.DocumentActivated += OnDocumentActivated;
+            _documentActivatedSubscribed = true;
+        }
+
+        private static void UnsubscribeFromDocumentActivation()
+        {
+            if (!_documentActivatedSubscribed) return;
+            Application.DocumentManager.DocumentActivated -= OnDocumentActivated;
+            _documentActivatedSubscribed = false;
+        }
+
+        private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
+        {
+            var window = _window;
+            if (window == null || !window.IsLoaded) return;
+            window.RefreshFromActiveDocument();
+        }
+
+        private static void OnStartCenterClosed(object sender, EventArgs e)
+        {
+            UnsubscribeFromDocumentActivation();
+            if (ReferenceEquals(sender, _window))
+                _window = null;
         }
     }
 }
