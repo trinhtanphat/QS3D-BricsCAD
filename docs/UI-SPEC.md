@@ -11,6 +11,7 @@ This UI spec describes interfaces **hosted by the QS3D BricsCAD V25 plugin**. Br
 ## Final layout target
 
 - BricsCAD native viewport remains the center renderer.
+- The Workspace palette host remains resizable down to `460 x 420` device-independent pixels. Its upgraded three-column content keeps a `560`-pixel design width and uses explicit horizontal overflow at narrower docked widths, so compact hosting does not silently clip a pane or force the saved width back to `560`.
 - QS3D Ribbon tabs: `KHỞI ĐẦU`, `THIẾT LẬP DỰ ÁN`, `MÔ HÌNH BIM`, `NHẬN DẠNG`, `VẼ`, `TOOL`, `MODELING`, `XEM`, `ĐỊNH LƯỢNG`, `BẢN SỬA ĐỔI`.
 - main palette: active Zone/Floor → semantic tree → Family list/search/Add/Delete/**Bóc chọn**/Vẽ 3D + wall/host helpers → typed Family/Instance properties → selected CAD review.
 - right palette: live Drawing/Xref list and live Layer search/show/hide/multi-select.

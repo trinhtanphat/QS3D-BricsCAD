@@ -51,6 +51,19 @@ for token in [
 ]:
     require(placement, token, "vertical placement contract")
 
+level_lookup = placement.find("var bottomLevelId")
+legacy_branch = placement.find("if (bottomLevelId.Length == 0)", level_lookup)
+legacy_source_validation = placement.find("Finite(sourceBaseElevationM", legacy_branch)
+bottom_resolution = placement.find("var bottomLevel = FindFloor", legacy_source_validation)
+bottom_only_branch = placement.find("if (topLevelId.Length == 0)", bottom_resolution)
+bottom_height_validation = placement.find("Positive(legacyHeightM", bottom_only_branch)
+top_resolution = placement.find("var topLevel = FindFloor", bottom_height_validation)
+if min(level_lookup, legacy_branch, legacy_source_validation, bottom_resolution, bottom_only_branch, bottom_height_validation, top_resolution) < 0 or not (
+    level_lookup < legacy_branch < legacy_source_validation < bottom_resolution < bottom_only_branch < bottom_height_validation < top_resolution
+):
+    print("[FAIL] vertical placement must validate legacy source/offset/height only inside branches that consume those inputs")
+    sys.exit(1)
+
 for token in [
     '"BOTTOM_LEVEL_REFERENCE_INVALID"',
     '"TOP_LEVEL_REFERENCE_INVALID"',
@@ -75,6 +88,8 @@ require(health_all, "new LevelReferenceHealthService().Inspect(project)", "Healt
 require(release, "new LevelReferenceHealthService().Inspect(project)", "Release Check wiring")
 require(smoke, "LegacyPlacementRemainsSourceRelative", "legacy compatibility smoke")
 require(smoke, "BottomAndTopLevelsResolveAbsolutePlacement", "absolute placement smoke")
+require(smoke, "LevelReferencesValidateOnlyConsumedLegacyInputs", "branch-local legacy input validation smoke")
+require(smoke, "bounded-ignores-all-legacy", "Bottom+Top legacy-independence smoke")
 require(smoke, "TopAssignmentRequiresBottomAndValidRange", "assignment safety smoke")
 require(smoke, "FloorMutationTracksAllReferenceKinds", "floor lifecycle smoke")
 require(smoke, "HealthBlocksValidLevelReferencesUntilNativeQualification", "native qualification blocker smoke")

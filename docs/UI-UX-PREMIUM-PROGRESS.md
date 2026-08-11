@@ -31,6 +31,7 @@ The root contrast regression from the reference screenshot is guarded in `Theme.
 - Selected-object inspector keeps `Focus`, isolate/unisolate, locate and top-view workflows while adding a clear `CAD + SEMANTIC` marker.
 - Persistent bottom navigation remains tied to the native BricsCAD viewport.
 - Layout structure remains compatible with `WorkspacePanel.LayoutPersistence.cs`: root row 1 still exposes the 5-column main grid; Family remains column 2 and selected/room remains column 4 with split rows.
+- Compact host sizing is now separate from content sizing: BricsCAD may dock/restore the Workspace at `460 x 420`, while the three-column surface retains its `560`-DIP design width behind an explicit horizontal overflow viewport. The vertical axis stays constrained by the host so TreeView/ListView virtualization and their native scrolling are preserved.
 
 ### P2 — Drawing / Xref / Layer palette
 

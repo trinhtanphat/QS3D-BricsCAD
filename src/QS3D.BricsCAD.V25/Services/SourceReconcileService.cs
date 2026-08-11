@@ -243,6 +243,13 @@ namespace QS3D.BricsCAD.V25.Services
                 throw new InvalidOperationException("Source snapshot no longer belongs to semantic element " + element.Id + ".");
 
             element.SetProperty("Layer", snapshot.Layer ?? string.Empty);
+            // CAD.* is a replace-on-capture namespace. Native edits can remove optional
+            // source metadata (for example clearing DBText/MText content), so retaining a
+            // key merely because the new snapshot omits it would leave stale semantic data.
+            foreach (var key in element.Properties.Keys
+                .Where(x => x.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase))
+                .ToList())
+                element.Properties.Remove(key);
             element.SetProperty("CAD.EntityType", snapshot.EntityType.Trim());
             element.SetProperty("CAD.Layer", snapshot.Layer ?? string.Empty);
             UpdateOptionalCadMetadata(element, snapshot, "Color", "CAD.Color");

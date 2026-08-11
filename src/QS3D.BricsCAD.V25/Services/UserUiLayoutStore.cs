@@ -150,7 +150,7 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static void Normalize(UserUiLayout layout)
         {
-            layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, 560, 1600);
+            layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, 460, 1600);
             layout.WorkspacePaletteHeight = Clamp(layout.WorkspacePaletteHeight, 420, 2000);
             layout.RightPaletteWidth = Clamp(layout.RightPaletteWidth, 255, 1200);
             layout.RightPaletteHeight = Clamp(layout.RightPaletteHeight, 420, 2000);

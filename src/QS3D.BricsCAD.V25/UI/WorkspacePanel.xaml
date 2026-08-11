@@ -1,7 +1,9 @@
 <UserControl x:Class="QS3D.BricsCAD.V25.UI.WorkspacePanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             MinWidth="560" MinHeight="540"
+             MinWidth="0" MinHeight="0"
+             HorizontalContentAlignment="Stretch"
+             VerticalContentAlignment="Stretch"
              DataContextChanged="OnWorkspaceDataContextChanged">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -80,7 +82,26 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <Grid Background="{StaticResource Bg0Brush}">
+    <UserControl.Template>
+        <ControlTemplate TargetType="{x:Type UserControl}">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          CanContentScroll="False"
+                          PanningMode="HorizontalOnly"
+                          Focusable="False">
+                <ContentPresenter Content="{TemplateBinding Content}"
+                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                  ContentStringFormat="{TemplateBinding ContentStringFormat}"
+                                  MinWidth="560"
+                                  Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType={x:Type ScrollViewer}}}"
+                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+            </ScrollViewer>
+        </ControlTemplate>
+    </UserControl.Template>
+
+    <Grid MinWidth="560" Background="{StaticResource Bg0Brush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="44"/>
             <RowDefinition Height="*"/>
