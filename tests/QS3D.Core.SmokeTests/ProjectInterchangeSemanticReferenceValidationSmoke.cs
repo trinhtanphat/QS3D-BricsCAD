@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -12,8 +13,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             ExportRejectsMissingRegisteredReference();
-            TypedReaderRejectsMissingRegisteredReference();
-            TypedReaderRejectsInvalidLevelChain();
+            ValidatorAndTypedReaderRejectMissingRegisteredReference();
+            ValidatorAndTypedReaderRejectInvalidLevelChain();
             MixedFieldMergeRollsBackInvalidLevelComposition();
         }
 
@@ -27,7 +28,7 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectInterchangeJsonExporter.Build(project));
         }
 
-        private static void TypedReaderRejectsMissingRegisteredReference()
+        private static void ValidatorAndTypedReaderRejectMissingRegisteredReference()
         {
             var project = BaseProject("P-READ-REF");
             var wall = new ProjectElement("E-WALL", ElementCategory.Wall, string.Empty, "A", string.Empty);
@@ -41,11 +42,13 @@ namespace QS3D.Core.SmokeTests
                 "\"HostWallId\":\"E-MISSING\"",
                 StringComparison.Ordinal);
             True(!string.Equals(json, smuggled, StringComparison.Ordinal));
-            True(ProjectInterchangeJsonValidator.Validate(smuggled).IsValid);
+            var validation = ProjectInterchangeJsonValidator.Validate(smuggled);
+            True(!validation.IsValid);
+            True(validation.Issues.Any(x => string.Equals(x.Code, "SEMANTIC_PROPERTY_REF_MISSING", StringComparison.Ordinal)));
             Throws<InvalidDataException>(() => ProjectInterchangeValidatedSnapshotReader.Read(smuggled));
         }
 
-        private static void TypedReaderRejectsInvalidLevelChain()
+        private static void ValidatorAndTypedReaderRejectInvalidLevelChain()
         {
             var project = BaseProject("P-READ-LEVEL");
             var element = new ProjectElement("E-1", ElementCategory.Column, string.Empty, "A", string.Empty);
@@ -58,7 +61,9 @@ namespace QS3D.Core.SmokeTests
                 "\"TopLevelId\":\"A\"",
                 StringComparison.Ordinal);
             True(!string.Equals(json, invalid, StringComparison.Ordinal));
-            True(ProjectInterchangeJsonValidator.Validate(invalid).IsValid);
+            var validation = ProjectInterchangeJsonValidator.Validate(invalid);
+            True(!validation.IsValid);
+            True(validation.Issues.Any(x => string.Equals(x.Code, "LEVEL_ORDER", StringComparison.Ordinal)));
             Throws<InvalidDataException>(() => ProjectInterchangeValidatedSnapshotReader.Read(invalid));
         }
 
