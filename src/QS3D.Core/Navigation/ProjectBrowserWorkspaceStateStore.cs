@@ -215,7 +215,9 @@ namespace QS3D.Core.Navigation
                 !string.Equals(groupingRaw, grouping.ToString(), StringComparison.Ordinal))
                 throw new InvalidDataException("Project browser workspace grouping is invalid.");
             var dirtyRaw = (string)root.Attribute("dirtyOnly");
-            if (!bool.TryParse(dirtyRaw, out var dirtyOnly)) throw new InvalidDataException("Project browser workspace dirtyOnly is invalid.");
+            if (!bool.TryParse(dirtyRaw, out var dirtyOnly) ||
+                !string.Equals(dirtyRaw, dirtyOnly ? "true" : "false", StringComparison.Ordinal))
+                throw new InvalidDataException("Project browser workspace dirtyOnly is invalid.");
 
             var expectedChildren = new HashSet<XName>(new[]
             {
