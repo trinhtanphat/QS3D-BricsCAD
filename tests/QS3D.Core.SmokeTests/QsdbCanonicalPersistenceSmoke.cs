@@ -81,15 +81,15 @@ namespace QS3D.Core.SmokeTests
 
         private static void UndefinedCategoryFailsClosed()
         {
-            var project = NewProject("family-category");
-            project.Families.Add(new ProjectFamily("F1", "Family", (ElementCategory)999));
-            RejectSave(project, "Undefined family category was persisted.");
+            ThrowsArgumentOutOfRange(
+                () => new ProjectFamily("F1", "Family", (ElementCategory)999),
+                "Undefined family category reached persistence instead of failing at the domain boundary.");
 
-            project = NewProject("element-category");
-            project.Elements.Add(new ProjectElement("E1", (ElementCategory)999, string.Empty, string.Empty, string.Empty));
-            RejectSave(project, "Undefined element category was persisted.");
+            ThrowsArgumentOutOfRange(
+                () => new ProjectElement("E1", (ElementCategory)999, string.Empty, string.Empty, string.Empty),
+                "Undefined element category reached persistence instead of failing at the domain boundary.");
 
-            project = NewProject("rule-category");
+            var project = NewProject("rule-category");
             project.QuantityRules.Add(new QuantityRule("R1", (ElementCategory)999, "Area", "1", "v1"));
             RejectSave(project, "Undefined quantity-rule category was persisted.");
 
@@ -123,6 +123,13 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
             project.Elements.Add(element);
             return element;
+        }
+
+        private static void ThrowsArgumentOutOfRange(Action action, string message)
+        {
+            try { action(); }
+            catch (ArgumentOutOfRangeException) { return; }
+            throw new Exception(message);
         }
 
         private static void RejectSave(ProjectState project, string message)
