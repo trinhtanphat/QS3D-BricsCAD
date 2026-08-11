@@ -18,6 +18,7 @@ if SOURCE.is_file():
     text = SOURCE.read_text(encoding="utf-8")
     commands = re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', text)
     names = (
+        "QS3DDRAWWALL", "QS3DDRAWWALLADV",
         "QS3DDRAWBEAM", "QS3DDRAWBEAMADV",
         "QS3DDRAWSLAB", "QS3DDRAWSLABADV",
         "QS3DDRAWCOLUMN", "QS3DDRAWCOLUMNADV",
@@ -30,6 +31,19 @@ if SOURCE.is_file():
         errors.append("Direct Draw P0 configure callbacks must use ProjectElement.SetProperty, not direct element.Properties writes")
     if "element.MarkDirty(ElementDirtyFlags.Properties)" in text:
         errors.append("Direct Draw P0 must rely on SetProperty dirty/invalidation semantics, not manual Properties-only dirty flags")
+    if "ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject)" in text:
+        errors.append("Direct Draw P0 Family defaults must use DirectDrawProjectPreviewContext instead of an unguarded read-only snapshot")
+
+    freshness_counts = {
+        "DirectDrawProjectPreviewContext.Capture(document)": 8,
+        "var defaultsProject = projectPreview.DefaultsProject;": 8,
+        "var hasDefaultsProject = projectPreview.HasProject;": 8,
+        "projectPreview);": 8,
+    }
+    for token, expected in freshness_counts.items():
+        actual = text.count(token)
+        if actual != expected:
+            errors.append("Direct Draw P0 preview freshness contract mismatch for " + token + ": expected " + str(expected) + ", found " + str(actual))
 
     canonical_setter_counts = {
         'element.SetProperty("WidthM"': 4,
@@ -63,25 +77,25 @@ if SOURCE.is_file():
     quick_requirements = {
         "beam quick": (
             'AcquireFixedPath(document, "Dầm nhanh", 2)',
-            'FamilyNumber(defaultsProject, ElementCategory.Beam, "WidthM", 0.3d)',
-            'FamilyNumber(defaultsProject, ElementCategory.Beam, "HeightM", 0.5d)',
-            'FamilyFiniteNumber(defaultsProject, ElementCategory.Beam, "BottomOffsetM", 0d)',
+            'FamilyNumber(defaultsProject!, ElementCategory.Beam, "WidthM", 0.3d)',
+            'FamilyNumber(defaultsProject!, ElementCategory.Beam, "HeightM", 0.5d)',
+            'FamilyFiniteNumber(defaultsProject!, ElementCategory.Beam, "BottomOffsetM", 0d)',
             '() => CreateLine(document, points[0], points[1])',
             'QS3DDRAWBEAMADV',
         ),
         "slab quick": (
             'AcquirePath(document, "Sàn nhanh", minimumPoints: 3, close: true)',
-            'FamilyNumber(defaultsProject, ElementCategory.Slab, "ThicknessM", 0.12d)',
-            'FamilyFiniteNumber(defaultsProject, ElementCategory.Slab, "BottomOffsetM", 0d)',
+            'FamilyNumber(defaultsProject!, ElementCategory.Slab, "ThicknessM", 0.12d)',
+            'FamilyFiniteNumber(defaultsProject!, ElementCategory.Slab, "BottomOffsetM", 0d)',
             '() => CreatePolyline(document, points, true)',
             'QS3DDRAWSLABADV',
         ),
         "column quick": (
             'new PromptPointOptions("\\nChọn tâm Cột nhanh: ")',
-            'FamilyNumber(defaultsProject, ElementCategory.Column, "WidthM", 0.4d)',
-            'FamilyNumber(defaultsProject, ElementCategory.Column, "DepthM", 0.4d)',
-            'FamilyNumber(defaultsProject, ElementCategory.Column, "HeightM", 3.6d)',
-            'FamilyFiniteNumber(defaultsProject, ElementCategory.Column, "BottomOffsetM", 0d)',
+            'FamilyNumber(defaultsProject!, ElementCategory.Column, "WidthM", 0.4d)',
+            'FamilyNumber(defaultsProject!, ElementCategory.Column, "DepthM", 0.4d)',
+            'FamilyNumber(defaultsProject!, ElementCategory.Column, "HeightM", 3.6d)',
+            'FamilyFiniteNumber(defaultsProject!, ElementCategory.Column, "BottomOffsetM", 0d)',
             'CreateColumnFootprint(document, centerResult.Value, widthM, depthM)',
             'QS3DDRAWCOLUMNADV',
         ),
@@ -98,6 +112,8 @@ if SOURCE.is_file():
             errors.append(label + " must reuse ExecuteDirect")
         if "element.SetProperty(" not in body:
             errors.append(label + " must configure semantic overrides through ProjectElement.SetProperty")
+        if "DirectDrawProjectPreviewContext.Capture(document)" not in body or "projectPreview);" not in body:
+            errors.append(label + " must carry guarded project preview freshness through ExecuteDirect")
 
     advanced_requirements = {
         "beam advanced": (
@@ -129,6 +145,8 @@ if SOURCE.is_file():
             errors.append(label + " must reuse ExecuteDirect")
         if "element.SetProperty(" not in body:
             errors.append(label + " must configure semantic overrides through ProjectElement.SetProperty")
+        if "DirectDrawProjectPreviewContext.Capture(document)" not in body or "projectPreview);" not in body:
+            errors.append(label + " must carry guarded project preview freshness through ExecuteDirect")
 
 if RIBBON.is_file():
     text = RIBBON.read_text(encoding="utf-8")

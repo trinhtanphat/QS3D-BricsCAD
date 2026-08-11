@@ -64,7 +64,8 @@ checks = {
         'AuditTrail.ForProject(project).Record("material.assign"', 'AuditTrail.ForProject(project).Record("material.catalog.upsert"',
     ],
     "src/QS3D.BricsCAD.V25/MaterialCatalogCommands.cs": [
-        'CommandMethod("QS3DMATERIALS"', "new MaterialCatalogWindow(document)", "ShowModelessWindow",
+        'CommandMethod("QS3DMATERIALS"', "ExistingProjectMutationContext.TryGet(document, out var project)",
+        "new MaterialCatalogWindow(document, project)", "ShowModelessWindow",
     ],
     "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml": [
         'x:Class="QS3D.BricsCAD.V25.UI.FloorLevelWindow"', 'x:Name="FloorList"', 'x:Name="ActiveFloorText"',
@@ -124,8 +125,6 @@ if material_command.is_file():
     text = material_command.read_text(encoding="utf-8")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append("opening Material Catalog must not create/cache project state")
-    if "ExistingProjectMutationContext" in text:
-        errors.append("opening Material Catalog must not bind mutable project state")
 
 material_window = ROOT / "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs"
 if material_window.is_file():
@@ -136,8 +135,8 @@ if material_window.is_file():
 material_command = ROOT / "src/QS3D.BricsCAD.V25/MaterialCatalogCommands.cs"
 if material_command.is_file():
     text = material_command.read_text(encoding="utf-8")
-    if "ProjectContextCoordinator.GetOrCreate(document)" in text or "ExistingProjectMutationContext" in text:
-        errors.append("opening Material Catalog must not create/cache or bind mutable project state")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append("opening Material Catalog must not create/cache mutable project state")
 
 floor_window = ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs"
 if floor_window.is_file():
@@ -167,4 +166,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: persisted material catalog, non-creating Material launcher, selection-scoped ownership, constructor-bound modeless windows, read-only refresh paths, canonical existing-project Floor mutations, and Core-backed floor CRUD/active/assignment semantics are present.")
+print("PASS: persisted material catalog, non-creating canonical Material launcher, selection-scoped ownership, constructor-bound modeless windows, read-only refresh paths, canonical existing-project Floor mutations, and Core-backed floor CRUD/active/assignment semantics are present.")

@@ -118,25 +118,28 @@ namespace QS3D.Core.Domain
             if (selectedSourceHandles == null) throw new ArgumentNullException(nameof(selectedSourceHandles));
             if (utcNow.Kind != DateTimeKind.Utc) throw new ArgumentException("utcNow must have DateTimeKind.Utc.", nameof(utcNow));
             var selected = new HashSet<string>(selectedSourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
-            var rooms = ResolveProjectElements(project)
+            var stale = ResolveProjectElements(project)
                 .Where(IsAutoRoom)
-                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .Where(room => !activeRoomIds.Contains(room.Id))
+                .Where(room => string.Equals(room.FloorId, floorId ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                .Where(room => string.Equals(room.ZoneId, zoneId ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                .Where(room =>
+                {
+                    var handles = SourceSignature(room).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+                    return handles.Length > 0 && handles.All(selected.Contains);
+                })
+                .OrderBy(room => room.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var stale = new List<ProjectElement>();
-            foreach (var room in rooms)
+            if (stale.Count == 0) return stale;
+
+            project.Touch();
+            foreach (var room in stale)
             {
-                if (activeRoomIds.Contains(room.Id)) continue;
-                if (!string.Equals(room.FloorId, floorId ?? string.Empty, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!string.Equals(room.ZoneId, zoneId ?? string.Empty, StringComparison.OrdinalIgnoreCase)) continue;
-                var handles = SourceSignature(room).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-                if (handles.Length == 0 || !handles.All(selected.Contains)) continue;
                 room.Properties[BoundaryStateKey] = BoundaryStateStale;
                 room.Properties["BoundaryStaleUtc"] = utcNow.ToString("O");
                 room.Properties["BoundaryStaleReason"] = "TopologyChanged";
                 room.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
-                stale.Add(room);
             }
-            if (stale.Count > 0) project.Touch();
             return stale;
         }
 
@@ -167,8 +170,11 @@ namespace QS3D.Core.Domain
             var previousFamily = project.FindFamily(room.FamilyId);
             var prefix = FamilyDefaultSnapshotPrefix + room.Id + ":";
             var currentFamilyKeys = new HashSet<string>(family.Properties.Keys, StringComparer.OrdinalIgnoreCase);
+            var roomSets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var roomRemoves = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var metadataSets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var metadataRemoves = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var changed = 0;
-            var metadataChanged = false;
 
             foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
@@ -193,15 +199,12 @@ namespace QS3D.Core.Domain
 
                 if (inherited && (!hasCurrent || !string.Equals(currentValue, nextDefault, StringComparison.Ordinal)))
                 {
-                    room.Properties[key] = nextDefault;
+                    roomSets[key] = nextDefault;
                     changed++;
                 }
 
                 if (!project.Metadata.TryGetValue(snapshotKey, out var storedDefault) || !string.Equals(storedDefault, nextDefault, StringComparison.Ordinal))
-                {
-                    project.Metadata[snapshotKey] = nextDefault;
-                    metadataChanged = true;
-                }
+                    metadataSets[snapshotKey] = nextDefault;
             }
 
             if (previousFamily != null && !string.Equals(previousFamily.Id, family.Id, StringComparison.OrdinalIgnoreCase))
@@ -210,9 +213,9 @@ namespace QS3D.Core.Domain
                 {
                     if (currentFamilyKeys.Contains(previousProperty.Key)) continue;
                     if (room.Properties.TryGetValue(previousProperty.Key, out var currentValue) &&
-                        string.Equals(currentValue, previousProperty.Value ?? string.Empty, StringComparison.Ordinal))
+                        string.Equals(currentValue, previousProperty.Value ?? string.Empty, StringComparison.Ordinal) &&
+                        roomRemoves.Add(previousProperty.Key))
                     {
-                        room.Properties.Remove(previousProperty.Key);
                         changed++;
                     }
                 }
@@ -225,23 +228,27 @@ namespace QS3D.Core.Domain
             foreach (var snapshot in staleSnapshots)
             {
                 var propertyName = snapshot.Key.Substring(prefix.Length);
-                if (room.Properties.TryGetValue(propertyName, out var currentValue) && string.Equals(currentValue, snapshot.Value, StringComparison.Ordinal))
+                if (!roomRemoves.Contains(propertyName) &&
+                    room.Properties.TryGetValue(propertyName, out var currentValue) &&
+                    string.Equals(currentValue, snapshot.Value, StringComparison.Ordinal))
                 {
-                    room.Properties.Remove(propertyName);
+                    roomRemoves.Add(propertyName);
                     changed++;
                 }
-                project.Metadata.Remove(snapshot.Key);
-                metadataChanged = true;
+                metadataRemoves.Add(snapshot.Key);
             }
 
-            if (!string.Equals(room.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase))
-            {
-                room.FamilyId = family.Id;
-                changed++;
-            }
+            var familyChanged = !string.Equals(room.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase);
+            if (familyChanged) changed++;
+            if (changed == 0 && metadataSets.Count == 0 && metadataRemoves.Count == 0) return 0;
 
+            project.Touch();
+            foreach (var key in roomRemoves) room.Properties.Remove(key);
+            foreach (var property in roomSets) room.Properties[property.Key] = property.Value;
+            foreach (var key in metadataRemoves) project.Metadata.Remove(key);
+            foreach (var property in metadataSets) project.Metadata[property.Key] = property.Value;
+            if (familyChanged) room.FamilyId = family.Id;
             if (changed > 0) room.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
-            if (changed > 0 || metadataChanged) project.Touch();
             return changed;
         }
 

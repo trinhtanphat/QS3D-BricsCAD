@@ -115,10 +115,21 @@ namespace QS3D.Core.Domain
             {
                 var element = targets[i];
                 var assignment = plan[i];
-                changed |= SetIfChanged(element, GridLabelKey, assignment.Label);
-                changed |= SetIfChanged(element, GridSequenceIndexKey, assignment.SequenceIndex.ToString(CultureInfo.InvariantCulture));
+                changed |= WouldChange(element, GridLabelKey, assignment.Label);
+                changed |= WouldChange(element, GridSequenceIndexKey, assignment.SequenceIndex.ToString(CultureInfo.InvariantCulture));
             }
-            if (changed) project.Touch();
+
+            if (changed)
+            {
+                project.Touch();
+                for (var i = 0; i < targets.Count; i++)
+                {
+                    var element = targets[i];
+                    var assignment = plan[i];
+                    SetIfChanged(element, GridLabelKey, assignment.Label);
+                    SetIfChanged(element, GridSequenceIndexKey, assignment.SequenceIndex.ToString(CultureInfo.InvariantCulture));
+                }
+            }
             return plan;
         }
 
@@ -153,9 +164,14 @@ namespace QS3D.Core.Domain
             return resolved;
         }
 
+        private static bool WouldChange(ProjectElement element, string key, string value)
+        {
+            return !element.Properties.TryGetValue(key, out var current) || !string.Equals(current, value, StringComparison.Ordinal);
+        }
+
         private static bool SetIfChanged(ProjectElement element, string key, string value)
         {
-            if (element.Properties.TryGetValue(key, out var current) && string.Equals(current, value, StringComparison.Ordinal)) return false;
+            if (!WouldChange(element, key, value)) return false;
             element.SetProperty(key, value);
             return true;
         }

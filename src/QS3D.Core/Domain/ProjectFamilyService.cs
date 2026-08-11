@@ -33,8 +33,8 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("Family id already exists: " + normalizedId);
             EnsureUniqueName(project, normalizedName, category, string.Empty);
             var family = new ProjectFamily(normalizedId, normalizedName, category);
-            project.Families.Add(family);
             project.Touch();
+            project.Families.Add(family);
             return family;
         }
 
@@ -66,8 +66,8 @@ namespace QS3D.Core.Domain
             var normalized = Required(newName, nameof(newName), MaxNameLength);
             EnsureUniqueName(project, normalized, family.Category, family.Id);
             if (string.Equals(family.Name, normalized, StringComparison.Ordinal)) return family;
-            family.Name = normalized;
             project.Touch();
+            family.Name = normalized;
             return family;
         }
 
@@ -82,6 +82,7 @@ namespace QS3D.Core.Domain
             if (hadPrevious && string.Equals(previous, normalizedValue, StringComparison.Ordinal)) return new FamilyPropertyUpdateResult();
             var members = ResolveFamilyMembers(project, family.Id);
 
+            project.Touch();
             family.Properties[normalizedKey] = normalizedValue;
             var result = new FamilyPropertyUpdateResult();
             foreach (var element in members)
@@ -95,7 +96,6 @@ namespace QS3D.Core.Domain
                 }
                 else result.OverridesPreserved++;
             }
-            project.Touch();
             return result;
         }
 
@@ -108,6 +108,7 @@ namespace QS3D.Core.Domain
             var previous = previousRaw ?? string.Empty;
             var members = ResolveFamilyMembers(project, family.Id);
 
+            project.Touch();
             family.Properties.Remove(normalizedKey);
             var result = new FamilyPropertyUpdateResult();
             foreach (var element in members)
@@ -122,7 +123,6 @@ namespace QS3D.Core.Domain
                 }
                 else result.OverridesPreserved++;
             }
-            project.Touch();
             return result;
         }
 
@@ -159,6 +159,8 @@ namespace QS3D.Core.Domain
                 pending.Add(new PendingFamilyAssignment { Element = element, PreviousFamily = previous });
             }
 
+            if (pending.Count == 0) return 0;
+            project.Touch();
             foreach (var item in pending)
             {
                 var element = item.Element;
@@ -176,7 +178,6 @@ namespace QS3D.Core.Domain
                     if (!element.Properties.ContainsKey(pair.Key)) element.Properties[pair.Key] = pair.Value;
                 element.MarkDirty(ElementDirtyFlags.All);
             }
-            if (pending.Count > 0) project.Touch();
             return pending.Count;
         }
 
@@ -189,9 +190,8 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("Family '" + family.Name + "' is referenced by " + references + " semantic element(s). Reassign them before deletion.");
             if (project.Metadata.TryGetValue("ActiveFamilyId", out var active) && string.Equals(active, family.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active Family. Activate another Family first.");
-            var removed = project.Families.Remove(family);
-            if (removed) project.Touch();
-            return removed;
+            project.Touch();
+            return project.Families.Remove(family);
         }
 
         public static int ReferenceCount(ProjectState project, string familyId)

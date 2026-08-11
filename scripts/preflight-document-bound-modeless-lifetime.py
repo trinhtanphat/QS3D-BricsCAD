@@ -83,7 +83,7 @@ if not errors:
         "families": ("new FamilyManagerWindow(document)", "family_window"),
         "levels": ("new FloorLevelWindow(document)", "level_window"),
         "zones": ("new ZoneManagerWindow(document)", "zone_window"),
-        "materials": ("new MaterialCatalogWindow(document)", "material_window"),
+        "materials": ("new MaterialCatalogWindow(document, project)", "material_window"),
         "project_tools": ("new ProjectToolsWindow(document)", "project_tools_window"),
         "schedule_hub": ("new ScheduleHubWindow(document)", "schedule_hub_window"),
         "curtain_hub": ("new CurtainWallWindow(document)", "curtain_hub_window"),

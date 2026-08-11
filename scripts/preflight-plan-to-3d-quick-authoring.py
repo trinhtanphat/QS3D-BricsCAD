@@ -38,15 +38,16 @@ if not errors:
         '[CommandMethod("QS3DCONVERT2DADV", CommandFlags.Modal)]',
         'ConvertPlanWalls("QS3DCONVERT2DADV", promptStyle: true)',
         'private static void ConvertPlanWalls(string operation, bool promptStyle)',
-        'var projectPreview = DirectDrawProjectPreviewContext.Capture(document);',
+        'DirectDrawProjectPreviewContext.Capture(document)',
+        'var defaultsProject = projectPreview.DefaultsProject;',
         'var defaultThicknessM = defaultsProject != null ? FamilyNumber(defaultsProject, "ThicknessM", 0.2d) : 0.2d;',
         'var defaultHeightM = defaultsProject != null ? FamilyNumber(defaultsProject, "HeightM", 3.0d) : 3.0d;',
         'var defaultBottomOffsetM = defaultsProject != null ? FamilyFiniteNumber(defaultsProject, "BottomOffsetM", 0d) : 0d;',
-        'var project = projectPreview.ResolveForMutation(document, operation);',
         'promptStyle\n                    ? PromptPositiveMeters',
         'promptStyle\n                    ? PromptFiniteMeters',
-        'RegenerateDirtySubset(project, new[] { element.Id })',
         'RequireSameSources(sources, refreshedSources)',
+        'projectPreview.ResolveForMutation(document, operation)',
+        'RegenerateDirtySubset(project, new[] { element.Id })',
     ):
         if token not in source:
             errors.append("PlanTo3D quick-authoring contract missing: " + token)
@@ -56,6 +57,24 @@ if not errors:
     convert_start = source.find("private static void ConvertPlanWalls", adv_start + 1)
     if min(quick_start, adv_start, convert_start) < 0 or not (quick_start < adv_start < convert_start):
         errors.append("PlanTo3D quick/advanced command split is missing or ordered unexpectedly")
+
+    preview_at = source.find("DirectDrawProjectPreviewContext.Capture(document)", convert_start)
+    defaults_at = source.find("var defaultsProject = projectPreview.DefaultsProject;", preview_at)
+    prompts_at = source.find("double? thicknessM = promptStyle", defaults_at)
+    refresh_at = source.find("RequireSameSources(sources, refreshedSources)", prompts_at)
+    resolve_at = source.find("projectPreview.ResolveForMutation(document, operation)", refresh_at)
+    if min(preview_at, defaults_at, prompts_at, refresh_at, resolve_at) < 0 or not (
+        preview_at < defaults_at < prompts_at < refresh_at < resolve_at
+    ):
+        errors.append("quick/advanced paths must share preview defaults, then source revalidation, then guarded mutation resolution")
+
+    for stale in (
+        "hasDefaultsProject ? FamilyNumber",
+        "hasDefaultsProject ? FamilyFiniteNumber",
+        "ProjectContextCoordinator.GetOrCreate(document)",
+    ):
+        if stale in source:
+            errors.append("PlanTo3D quick-authoring preflight found stale/duplicated project-default path: " + stale)
 
     for token in (
         "QS3DCONVERT2DADV",
@@ -94,4 +113,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Plan-to-3D quick/advanced source tokens are present and their exact runtime/default/cancel/scoped-regeneration proof is assigned to LOCAL-014 without absorbing Direct Draw Window scope.")
+print("PASS: Plan-to-3D quick/advanced paths share guarded project preview defaults and mutation resolution; exact runtime/default/cancel/scoped-regeneration proof remains assigned to LOCAL-014 without absorbing Direct Draw Window scope.")

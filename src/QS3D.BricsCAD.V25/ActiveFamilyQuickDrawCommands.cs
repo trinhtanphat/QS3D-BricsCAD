@@ -41,12 +41,68 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                Dispatch(document, family, advanced, operation);
+                // Capture immutable routing values now. When TryGetReadOnly returns the canonical cached
+                // ProjectState, later semantic edits mutate that same object; retaining only object references
+                // would make a freshness comparison observe the new values on both sides and miss the change.
+                var expectedProjectId = project.ProjectId;
+                var expectedChangeVersion = project.ChangeVersion;
+                var expectedFamilyId = family.Id;
+                var expectedCategory = family.Category;
+                var expectedWindowRouting = family.Category == ElementCategory.WallOpening && IsWindowFamily(family);
+
+                var dispatchFamily = RequireCurrentDispatchSnapshot(
+                    document,
+                    expectedProjectId,
+                    expectedChangeVersion,
+                    expectedFamilyId,
+                    expectedCategory,
+                    expectedWindowRouting,
+                    operation);
+                Dispatch(document, dispatchFamily, advanced, operation);
             }
             catch (Exception ex)
             {
                 Report(document, operation + " lỗi: " + ex.Message);
             }
+        }
+
+        private static ProjectFamily RequireCurrentDispatchSnapshot(
+            Document document,
+            string expectedProjectId,
+            long expectedChangeVersion,
+            string expectedFamilyId,
+            ElementCategory expectedCategory,
+            bool expectedWindowRouting,
+            string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(
+                    operation + ": DWG active đã thay đổi trước khi dispatch. Hãy chạy lại lệnh trên bản vẽ hiện hành.");
+
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject))
+                throw new InvalidOperationException(
+                    operation + ": QS3D project không còn khả dụng trước khi dispatch. Hãy Refresh Workspace rồi chạy lại.");
+
+            if (!string.Equals(currentProject.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                currentProject.ChangeVersion != expectedChangeVersion)
+                throw new InvalidOperationException(
+                    operation + ": QS3D project đã thay đổi sau khi đọc Active Family. Hãy chạy lại để dùng đúng Family hiện hành.");
+
+            var currentFamily = ProjectFamilyActivationService.GetActive(currentProject);
+            if (currentFamily == null)
+                throw new InvalidOperationException(
+                    operation + ": Active Family đã bị xóa/bỏ chọn trước khi dispatch. Hãy chọn lại Family/Type.");
+
+            var currentWindowRouting = currentFamily.Category == ElementCategory.WallOpening && IsWindowFamily(currentFamily);
+            var routingChanged =
+                !string.Equals(currentFamily.Id, expectedFamilyId, StringComparison.OrdinalIgnoreCase) ||
+                currentFamily.Category != expectedCategory ||
+                currentWindowRouting != expectedWindowRouting;
+            if (routingChanged)
+                throw new InvalidOperationException(
+                    operation + ": Active Family/routing đã thay đổi trước khi dispatch. Hãy chạy lại lệnh.");
+
+            return currentFamily;
         }
 
         private static void Dispatch(Document document, ProjectFamily family, bool advanced, string operation)

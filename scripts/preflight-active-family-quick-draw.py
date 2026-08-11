@@ -24,7 +24,20 @@ if SOURCE.is_file():
         'DrawActiveFamilyCore(advanced: true, operation: "QS3DDRAWACTIVEADV")',
         "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "ProjectFamilyActivationService.GetActive(project)",
-        "Dispatch(document, family, advanced, operation)",
+        "var expectedProjectId = project.ProjectId;",
+        "var expectedChangeVersion = project.ChangeVersion;",
+        "var expectedFamilyId = family.Id;",
+        "var expectedCategory = family.Category;",
+        "var expectedWindowRouting = family.Category == ElementCategory.WallOpening && IsWindowFamily(family);",
+        "RequireCurrentDispatchSnapshot(",
+        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
+        "currentProject.ChangeVersion != expectedChangeVersion",
+        "ProjectFamilyActivationService.GetActive(currentProject)",
+        "!string.Equals(currentFamily.Id, expectedFamilyId, StringComparison.OrdinalIgnoreCase)",
+        "currentFamily.Category != expectedCategory",
+        "currentWindowRouting != expectedWindowRouting",
+        "Dispatch(document, dispatchFamily, advanced, operation)",
         "new DirectDrawCommands().DrawWall()",
         "new DirectDrawCommands().DrawBeam()",
         "new DirectDrawCommands().DrawColumn()",
@@ -54,9 +67,26 @@ if SOURCE.is_file():
         if token not in text:
             errors.append("active-family draw missing: " + token)
 
+    first_read = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
+    family_read = text.find("ProjectFamilyActivationService.GetActive(project)", first_read)
+    snapshot = text.find("var expectedProjectId = project.ProjectId;", family_read)
+    revalidate = text.find("RequireCurrentDispatchSnapshot(", snapshot)
+    dispatch = text.find("Dispatch(document, dispatchFamily, advanced, operation)", revalidate)
+    if min(first_read, family_read, snapshot, revalidate, dispatch) < 0 or not (first_read < family_read < snapshot < revalidate < dispatch):
+        errors.append("active-family dispatcher must read, freeze immutable routing values, revalidate them, then dispatch")
+
+    for stale_reference_compare in (
+        "currentProject.ChangeVersion != presentedProject.ChangeVersion",
+        "currentFamily.Category != presentedFamily.Category",
+        "IsWindowFamily(currentFamily) != IsWindowFamily(presentedFamily)",
+    ):
+        if stale_reference_compare in text:
+            errors.append("active-family freshness must not compare mutable presented ProjectState/Family references: " + stale_reference_compare)
+
     for forbidden in (
         "ProjectContextCoordinator.GetOrCreate(document)",
         "ExistingProjectMutationContext.Require(document",
+        "ExistingProjectMutationContext.TryGet(document",
         "SemanticCaptureService.Capture",
         "RegenerationEngine",
         "WallSolidBuilder",
@@ -79,6 +109,9 @@ if DOC.is_file():
         "Family / Type",
         "non-creating",
         "OpeningUsage=Window",
+        "dispatch freshness",
+        "immutable",
+        "ChangeVersion",
         "LOCAL-008",
         "Ctrl+Shift+D",
     ):
@@ -91,4 +124,4 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Active-family draw preflight PASS")
+print("Active-family draw preflight PASS: routing inputs are frozen as immutable values, then revalidated read-only immediately before Quick/Advanced delegation.")

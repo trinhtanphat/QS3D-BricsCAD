@@ -15,15 +15,14 @@ if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
     for token in (
         'CommandMethod("QS3DMATERIALS"',
-        "new MaterialCatalogWindow(document)",
+        "ExistingProjectMutationContext.TryGet(document, out var project)",
+        "new MaterialCatalogWindow(document, project)",
         "Application.ShowModelessWindow",
     ):
         if token not in text:
             errors.append("QS3DMATERIALS launcher missing lifecycle token: " + token)
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append("opening Material Catalog must not create/cache project state")
-    if "ExistingProjectMutationContext" in text:
-        errors.append("opening Material Catalog is observational and must not bind mutable project state")
 
 if WINDOW.is_file():
     text = WINDOW.read_text(encoding="utf-8")
@@ -62,4 +61,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Material Catalog open is non-creating; read-only refresh stays observational; Save/Delete/Apply bind canonical existing state and retain rollback")
+print("[PASS] Material Catalog open is non-creating and binds the canonical existing project; read-only refresh stays observational; Save/Delete/Apply revalidate existing state and retain rollback")

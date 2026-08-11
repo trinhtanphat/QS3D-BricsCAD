@@ -5,6 +5,7 @@ using System.Linq;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
+using QS3D.Core.Selection;
 using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
@@ -16,6 +17,8 @@ namespace QS3D.Core.SmokeTests
             BulkSetPropertyOverflowRollsBack();
             BulkMultiplyOverflowRollsBack();
             BulkAssignFamilyOverflowRollsBack();
+            SelectionBulkSetPropertyOverflowRollsBack();
+            SelectionBulkMultiplyOverflowRollsBack();
             HostRelinkAuditOverflowRollsBack();
             HostUnlinkAuditOverflowRollsBack();
             StaleAutoHostAuditOverflowRollsBack();
@@ -64,6 +67,34 @@ namespace QS3D.Core.SmokeTests
             Equal(ElementDirtyFlags.None, wall.Dirty, "Failed bulk family assignment partially changed dirty flags.");
             Equal(long.MaxValue, project.ChangeVersion, "Failed bulk family assignment changed the maximum project version.");
             Equal(beforeUtc, project.UpdatedUtc, "Failed bulk family assignment changed UpdatedUtc.");
+        }
+
+        private static void SelectionBulkSetPropertyOverflowRollsBack()
+        {
+            var project = AtVersion(BulkProject(), long.MaxValue);
+            var beforeUtc = project.UpdatedUtc;
+
+            Throws<OverflowException>(() => new SemanticSelectionBulkEditService().SetProperty(project, new[] { "W1" }, "WidthM", "0.25"));
+
+            var wall = RequiredElement(project, "W1");
+            Equal("0.2", wall.Properties["WidthM"], "Failed semantic-selection set partially changed the property.");
+            Equal(ElementDirtyFlags.None, wall.Dirty, "Failed semantic-selection set partially changed dirty flags.");
+            Equal(long.MaxValue, project.ChangeVersion, "Failed semantic-selection set changed the maximum project version.");
+            Equal(beforeUtc, project.UpdatedUtc, "Failed semantic-selection set changed UpdatedUtc.");
+        }
+
+        private static void SelectionBulkMultiplyOverflowRollsBack()
+        {
+            var project = AtVersion(BulkProject(), long.MaxValue);
+            var beforeUtc = project.UpdatedUtc;
+
+            Throws<OverflowException>(() => new SemanticSelectionBulkEditService().MultiplyNumericProperty(project, new[] { "W1" }, "WidthM", 2d));
+
+            var wall = RequiredElement(project, "W1");
+            Equal("0.2", wall.Properties["WidthM"], "Failed semantic-selection multiply partially changed the property.");
+            Equal(ElementDirtyFlags.None, wall.Dirty, "Failed semantic-selection multiply partially changed dirty flags.");
+            Equal(long.MaxValue, project.ChangeVersion, "Failed semantic-selection multiply changed the maximum project version.");
+            Equal(beforeUtc, project.UpdatedUtc, "Failed semantic-selection multiply changed UpdatedUtc.");
         }
 
         private static void HostRelinkAuditOverflowRollsBack()

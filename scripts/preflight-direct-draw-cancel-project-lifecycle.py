@@ -32,7 +32,8 @@ def require_count(text, token, count, label):
 
 sources = {name: read(path) for name, path in FILES.items()}
 get_or_create = "ProjectContextCoordinator.GetOrCreate(document)"
-read_only_defaults = "ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject)"
+preview_capture = "DirectDrawProjectPreviewContext.Capture(document)"
+preview_resolve = "projectPreview.ResolveForMutation(document, operation)"
 
 commands = {
     "p0": ("QS3DDRAWWALL", "QS3DDRAWBEAM", "QS3DDRAWSLAB", "QS3DDRAWCOLUMN"),
@@ -50,7 +51,8 @@ for name, names in commands.items():
 # create/cache a project until their private execution helper begins.
 for name, helper in (("p0", "private static void ExecuteDirect"), ("p1", "private static void Execute(")):
     text = sources[name]
-    require(text, read_only_defaults, name)
+    require(text, preview_capture, name)
+    require(text, preview_resolve, name)
     require_count(text, get_or_create, 1, name)
     helper_index = text.find(helper)
     create_index = text.find(get_or_create)
@@ -113,4 +115,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Direct Draw reads existing Family defaults without creating a project and defers GetOrCreate until all authoring prompts have completed successfully.")
+print("PASS: Direct Draw captures non-creating Family defaults, resolves the guarded project preview only after prompts, and keeps fallback GetOrCreate inside the private execution helper.")

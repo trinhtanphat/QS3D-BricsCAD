@@ -18,8 +18,8 @@ namespace QS3D.Core.Domain
             if (normalized.Length == 0) throw new ArgumentException("Family id is required.", nameof(familyId));
             var family = project.FindFamily(normalized) ?? throw new InvalidOperationException("Family not found: " + normalized);
             if (project.Metadata.TryGetValue("ActiveFamilyId", out var current) && string.Equals(current, family.Id, StringComparison.OrdinalIgnoreCase)) return;
-            project.Metadata["ActiveFamilyId"] = family.Id;
             project.Touch();
+            project.Metadata["ActiveFamilyId"] = family.Id;
         }
 
         public static void ClearIfMissing(ProjectState project)
@@ -27,8 +27,8 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (!project.Metadata.TryGetValue("ActiveFamilyId", out var current) || string.IsNullOrWhiteSpace(current)) return;
             if (project.FindFamily(current.Trim()) != null) return;
-            project.Metadata.Remove("ActiveFamilyId");
             project.Touch();
+            project.Metadata.Remove("ActiveFamilyId");
         }
     }
 }

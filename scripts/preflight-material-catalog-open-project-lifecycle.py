@@ -13,15 +13,14 @@ else:
     text = COMMAND.read_text(encoding="utf-8")
     for token in (
         'CommandMethod("QS3DMATERIALS"',
-        "new MaterialCatalogWindow(document)",
+        "ExistingProjectMutationContext.TryGet(document, out var project)",
+        "new MaterialCatalogWindow(document, project)",
         "Application.ShowModelessWindow",
     ):
         if token not in text:
             errors.append("Material Catalog launcher missing token: " + token)
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append("opening Material Catalog must not create/cache project state")
-    if "ExistingProjectMutationContext" in text:
-        errors.append("opening Material Catalog is not a semantic mutation and must not bind mutable project state")
 
 if not WINDOW.is_file():
     errors.append("missing MaterialCatalogWindow.xaml.cs")
@@ -39,4 +38,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: opening Material Catalog is non-creating; modeless reads stay read-only and writes bind canonical existing project state.")
+print("PASS: opening Material Catalog is non-creating and binds one canonical existing project identity; modeless reads stay read-only and writes revalidate that binding.")

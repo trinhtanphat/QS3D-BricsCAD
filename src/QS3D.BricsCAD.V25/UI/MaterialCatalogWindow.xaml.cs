@@ -15,12 +15,19 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class MaterialCatalogWindow : Window
     {
         private readonly Document _document;
+        private ProjectState _boundProject;
         private string _editingId = string.Empty;
         private bool _loading;
 
         public MaterialCatalogWindow(Document document)
+            : this(document, RequireExistingProject(document))
+        {
+        }
+
+        public MaterialCatalogWindow(Document document, ProjectState project)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
+            _boundProject = project ?? throw new ArgumentNullException(nameof(project));
             InitializeComponent();
             DocumentBoundWindowLifetime.Attach(this, _document);
             Loaded += (_, __) => RefreshAll();
@@ -41,30 +48,14 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnMaterialSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_loading || !(MaterialList.SelectedItem is ProjectMaterial material)) return;
-            if (!material.IsBuiltIn)
-            {
-                _editingId = material.Id;
-                NameBox.Text = material.Name;
-                UnitBox.Text = material.Unit;
-                DescriptionBox.Text = material.Description;
-            }
-            else
-            {
-                _editingId = string.Empty;
-                NameBox.Text = material.Name;
-                UnitBox.Text = material.Unit;
-                DescriptionBox.Text = material.Description;
-            }
-            SetStatus(material.IsBuiltIn ? "Built-in material: có thể áp dụng nhưng không sửa/xóa." : "Custom material: " + material.Name);
+            if (_loading) return;
+            if (MaterialList.SelectedItem is ProjectMaterial material)
+                LoadEditor(material, true);
         }
 
         private void OnNewClick(object sender, RoutedEventArgs e)
         {
-            _editingId = string.Empty;
-            NameBox.Text = string.Empty;
-            UnitBox.Text = string.Empty;
-            DescriptionBox.Text = string.Empty;
+            ClearEditor();
             MaterialList.SelectedItem = null;
             NameBox.Focus();
             SetStatus("Tạo custom material mới.");
@@ -77,6 +68,7 @@ namespace QS3D.BricsCAD.V25.UI
                 EnsureActive("lưu material");
                 if (!ExistingProjectMutationContext.TryGet(_document, out var project))
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Material Catalog không tạo project thay thế; hãy nạp project rồi Refresh trước khi lưu.");
+                RequireBoundProject(project, "thử lại lưu material");
                 var editingExisting = !string.IsNullOrWhiteSpace(_editingId);
                 if (editingExisting)
                 {
@@ -117,6 +109,7 @@ namespace QS3D.BricsCAD.V25.UI
                 EnsureActive("xóa material");
                 if (!ExistingProjectMutationContext.TryGet(_document, out var project))
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Material Catalog không tạo project thay thế; hãy nạp project rồi Refresh trước khi xóa.");
+                RequireBoundProject(project, "chọn lại material và thử xóa");
                 var material = ProjectMaterialCatalog.GetAll(project)
                     .FirstOrDefault(x => string.Equals(x.Id, selectedMaterial.Id, StringComparison.OrdinalIgnoreCase))
                     ?? throw new InvalidOperationException("Material đã thay đổi hoặc bị xóa khỏi project hiện tại. Hãy Refresh và chọn lại material.");
@@ -161,6 +154,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var target = (TargetCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Material";
                 if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject))
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Material Catalog không tạo project thay thế; hãy nạp project rồi Refresh trước khi áp dụng.");
+                RequireBoundProject(previewProject, "chọn lại material rồi thử Apply");
                 var previewMaterial = ProjectMaterialCatalog.GetAll(previewProject)
                     .FirstOrDefault(x => string.Equals(x.Id, selectedMaterial.Id, StringComparison.OrdinalIgnoreCase))
                     ?? throw new InvalidOperationException("Material đã thay đổi hoặc bị xóa khỏi project hiện tại. Hãy Refresh và chọn lại material.");
@@ -181,6 +175,9 @@ namespace QS3D.BricsCAD.V25.UI
 
                 if (!ExistingProjectMutationContext.TryGet(_document, out var project))
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Material Catalog không tạo project thay thế; hãy nạp project rồi Refresh trước khi áp dụng.");
+                RequireBoundProject(project, "chọn lại material rồi thử Apply");
+                if (!ReferenceEquals(project, previewProject))
+                    throw new InvalidOperationException("QS3D project đã thay đổi trong lúc chuẩn bị Apply. Không có material assignment nào được áp dụng; hãy Refresh rồi thử lại.");
                 if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("QS3D project đã thay đổi sau khi đọc selection. Không có material assignment nào được áp dụng; hãy Refresh và thử lại.");
                 var material = ProjectMaterialCatalog.GetAll(project)
@@ -239,18 +236,43 @@ namespace QS3D.BricsCAD.V25.UI
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Material Catalog không tạo replacement project; hãy đóng và chạy lại QS3DMATERIALS.");
                 var previous = string.IsNullOrWhiteSpace(selectedId) ? (MaterialList.SelectedItem as ProjectMaterial)?.Id : selectedId;
                 var materials = ProjectMaterialCatalog.GetAll(project).ToList();
+                var selectedMaterial = materials.FirstOrDefault(x => string.Equals(x.Id, previous, StringComparison.OrdinalIgnoreCase));
                 _loading = true;
                 try
                 {
                     MaterialList.ItemsSource = materials;
-                    MaterialList.SelectedItem = materials.FirstOrDefault(x => string.Equals(x.Id, previous, StringComparison.OrdinalIgnoreCase));
+                    MaterialList.SelectedItem = selectedMaterial;
                 }
                 finally { _loading = false; }
+
+                if (selectedMaterial != null) LoadEditor(selectedMaterial, false);
+                else ClearEditor();
+
                 var referenced = ProjectMaterialCatalog.ReferencedMaterialNames(project);
                 ReferencedText.Text = referenced.Count == 0 ? "—" : string.Join(" • ", referenced);
                 Title = "QS3D • Vật liệu • " + DrawingLabel(_document);
+                _boundProject = project;
             }
             catch (Exception ex) { SetStatus("Đọc Material Catalog lỗi: " + ex.Message); }
+        }
+
+        private void LoadEditor(ProjectMaterial material, bool announce)
+        {
+            if (material == null) throw new ArgumentNullException(nameof(material));
+            _editingId = material.IsBuiltIn ? string.Empty : material.Id;
+            NameBox.Text = material.Name;
+            UnitBox.Text = material.Unit;
+            DescriptionBox.Text = material.Description;
+            if (announce)
+                SetStatus(material.IsBuiltIn ? "Built-in material: có thể áp dụng nhưng không sửa/xóa." : "Custom material: " + material.Name);
+        }
+
+        private void ClearEditor()
+        {
+            _editingId = string.Empty;
+            NameBox.Text = string.Empty;
+            UnitBox.Text = string.Empty;
+            DescriptionBox.Text = string.Empty;
         }
 
         private void RefreshAfterCommit(Action refresh, string successMessage, string context)
@@ -268,6 +290,21 @@ namespace QS3D.BricsCAD.V25.UI
                 try { PaletteCoordinator.SetStatus(warning); } catch { }
                 try { _document.Editor.WriteMessage("\nQS3D " + context + " đã commit; UI sync warning: " + refreshError.Message); } catch { }
             }
+        }
+
+        private static ProjectState RequireExistingProject(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                throw new InvalidOperationException("Material Catalog cần QS3D project hiện hữu. Hãy chạy QS3DINIT hoặc mở/nạp project trước.");
+            return project;
+        }
+
+        private void RequireBoundProject(ProjectState project, string operation)
+        {
+            if (ReferenceEquals(project, _boundProject)) return;
+            throw new InvalidOperationException(
+                "QS3D project đã được reload/thay đổi kể từ lần Material Catalog Refresh gần nhất. Hãy Refresh rồi " + operation + ".");
         }
 
         private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError, string operation)

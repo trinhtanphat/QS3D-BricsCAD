@@ -42,9 +42,13 @@ namespace QS3D.Core.Selection
                 updates.Add(element);
             }
 
-            foreach (var element in updates) element.SetProperty(key, next);
-            if (updates.Count > 0) project.Touch();
-            return Result("SetProperty", key, selection.Count, updates);
+            if (updates.Count == 0) return Result("SetProperty", key, selection.Count, updates);
+            return ProjectSemanticMutationExecutor.Execute(project, "selection.bulk.set-property", () =>
+            {
+                foreach (var element in updates) element.SetProperty(key, next);
+                project.Touch();
+                return Result("SetProperty", key, selection.Count, updates);
+            });
         }
 
         public SemanticSelectionBulkEditResult MultiplyNumericProperty(ProjectState project, IEnumerable<string> elementIds, string propertyName, double factor)
@@ -70,13 +74,19 @@ namespace QS3D.Core.Selection
                 updates.Add(new PendingValue(element, formatted));
             }
 
-            foreach (var update in updates) update.Element.SetProperty(key, update.Value);
-            if (updates.Count > 0) project.Touch();
-            return new SemanticSelectionBulkEditResult(
-                "MultiplyNumericProperty",
-                key,
-                selection.Count,
-                updates.Select(x => x.Element.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ThenBy(x => x, StringComparer.Ordinal).ToArray());
+            if (updates.Count == 0)
+                return new SemanticSelectionBulkEditResult("MultiplyNumericProperty", key, selection.Count, Array.Empty<string>());
+
+            return ProjectSemanticMutationExecutor.Execute(project, "selection.bulk.multiply-numeric-property", () =>
+            {
+                foreach (var update in updates) update.Element.SetProperty(key, update.Value);
+                project.Touch();
+                return new SemanticSelectionBulkEditResult(
+                    "MultiplyNumericProperty",
+                    key,
+                    selection.Count,
+                    updates.Select(x => x.Element.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ThenBy(x => x, StringComparer.Ordinal).ToArray());
+            });
         }
 
         public SemanticSelectionBulkEditResult AssignFamily(ProjectState project, IEnumerable<string> elementIds, string familyId)
