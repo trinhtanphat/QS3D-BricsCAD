@@ -50,21 +50,34 @@ namespace QS3D.BricsCAD.V25
             }
 
             var handles = snapshots.Select(x => x.Handle).ToArray();
+            if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var previewProject))
+            {
+                ReportUntrackError(doc, label, new InvalidOperationException("Untrack semantic elements yêu cầu QS3D project hiện hữu; lệnh không tạo project mới."));
+                return;
+            }
+
+            var expectedProjectId = previewProject.ProjectId;
+            var expectedChangeVersion = previewProject.ChangeVersion;
+            List<string> previewTargetIds;
+            try
+            {
+                previewTargetIds = ResolveUntrackTargetIds(previewProject, handles, predicate);
+            }
+            catch (Exception ex)
+            {
+                ReportUntrackError(doc, label, ex);
+                return;
+            }
+
+            if (previewTargetIds.Count == 0)
+            {
+                FinalizeUntrackUi(doc, 0, label);
+                return;
+            }
+
             SemanticUntrackResult result;
             try
             {
-                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var previewProject))
-                    throw new InvalidOperationException("Untrack semantic elements yêu cầu QS3D project hiện hữu; lệnh không tạo project mới.");
-
-                var expectedProjectId = previewProject.ProjectId;
-                var expectedChangeVersion = previewProject.ChangeVersion;
-                var previewTargetIds = ResolveUntrackTargetIds(previewProject, handles, predicate);
-                if (previewTargetIds.Count == 0)
-                {
-                    FinalizeUntrackUi(doc, 0, label);
-                    return;
-                }
-
                 var project = ExistingProjectMutationContext.Require(doc, "Untrack semantic elements");
                 if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
                     project.ChangeVersion != expectedChangeVersion)
