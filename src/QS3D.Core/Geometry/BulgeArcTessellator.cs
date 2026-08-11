@@ -25,7 +25,8 @@ namespace QS3D.Core.Geometry
             if (!(absTheta > 1e-12d) || absTheta >= Math.PI * 2d) throw new ArgumentOutOfRangeException(nameof(bulge), "Polyline bulge produced an invalid included angle.");
 
             var absBulge = Math.Abs(bulge);
-            var radius = chord * (1d + absBulge * absBulge) / (4d * absBulge);
+            var inverseAbsBulge = 1d / absBulge;
+            var radius = chord * 0.25d * (absBulge + inverseAbsBulge);
             if (double.IsNaN(radius) || double.IsInfinity(radius) || radius <= 0d) throw new OverflowException("Arc radius is not finite.");
 
             var dx = end.X - start.X;
@@ -33,7 +34,7 @@ namespace QS3D.Core.Geometry
             var midpoint = new Point2((start.X + end.X) * 0.5d, (start.Y + end.Y) * 0.5d);
             var nx = -dy / chord;
             var ny = dx / chord;
-            var centerOffset = chord * (1d - bulge * bulge) / (4d * bulge);
+            var centerOffset = chord * 0.25d * (1d / bulge - bulge);
             if (double.IsNaN(centerOffset) || double.IsInfinity(centerOffset)) throw new OverflowException("Arc center offset is not finite.");
             var center = new Point2(midpoint.X + nx * centerOffset, midpoint.Y + ny * centerOffset);
             ValidatePoint(center, "arcCenter");
