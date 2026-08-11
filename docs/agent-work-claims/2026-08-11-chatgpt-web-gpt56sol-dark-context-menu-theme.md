@@ -42,6 +42,13 @@ The implementation is intentionally isolated in a new `WorkspacePanel` presentat
 
 The prior premium-theme-v2 and Workspace overlap claims are `COMPLETED`. The active Project Browser XML namespace guard is Core-only and non-overlapping. Current Xref scale, export preflight, reporting, quantity, updater/rebar/reference-search lanes are explicitly excluded.
 
+## Implementation readiness
+
+- Source commit: `3a555f2fe58c508d15aa68fbb91f33cf782ba31a`.
+- Current-main reconciliation merge on the feature branch: `2170cedcf8c8bc040d44ecbe794150948583e542`.
+- PR: `#499`.
+- The focused preflight is auto-discovered by `scripts/preflight-all.py`; no GitHub Actions were dispatched.
+
 ## Completion condition
 
 Workspace dark context-menu chrome and its focused static regression guard are integrated into current `main`, existing menu actions remain untouched, the claim is marked `COMPLETED` with exact implementation/integration SHA(s), and native visual proof remains correctly parked under the existing local UI qualification boundary.
