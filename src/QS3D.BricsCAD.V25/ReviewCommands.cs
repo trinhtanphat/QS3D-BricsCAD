@@ -65,7 +65,8 @@ namespace QS3D.BricsCAD.V25
                     if (liveSnapshots.Count != 1)
                         throw new InvalidOperationException("Recognition Apply: CAD handle " + result.Handle + " không còn tồn tại. Hãy chạy lại Recognition.");
 
-                    var currentProject = ProjectContextCoordinator.GetOrCreate(doc);
+                    if (!ExistingProjectMutationContext.TryGet(doc, out var currentProject))
+                        throw new InvalidOperationException("Recognition Apply: QS3D project hiện hành không còn khả dụng. Hãy chạy lại Recognition.");
                     var refreshed = new ProjectRecognitionService().Suggest(currentProject, liveSnapshots[0]);
                     var candidate = refreshed.TopCandidate
                         ?? throw new InvalidOperationException("Recognition Apply: đối tượng " + result.Handle + " không còn candidate hợp lệ. Hãy chạy lại Recognition.");
@@ -107,7 +108,8 @@ namespace QS3D.BricsCAD.V25
                         catch (System.Exception ex)
                         {
                             skipped++;
-                            AuditTrail.ForProject(ProjectContextCoordinator.GetOrCreate(doc)).Record("recognition.skip", result.Handle, ex.Message);
+                            if (ExistingProjectMutationContext.TryGet(doc, out var auditProject))
+                                AuditTrail.ForProject(auditProject).Record("recognition.skip", result.Handle, ex.Message);
                             doc.Editor.WriteMessage("\nQS3D Recognition skip " + result.Handle + ": " + ex.Message);
                         }
                     }

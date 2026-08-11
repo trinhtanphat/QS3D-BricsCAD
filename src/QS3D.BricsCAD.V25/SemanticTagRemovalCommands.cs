@@ -18,7 +18,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Semantic Tag remove");
                 var element = PromptTagOwner(document, project);
                 if (element == null) return;
 
