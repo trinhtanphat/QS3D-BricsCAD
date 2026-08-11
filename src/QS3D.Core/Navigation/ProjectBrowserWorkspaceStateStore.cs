@@ -152,13 +152,16 @@ namespace QS3D.Core.Navigation
             if (project.Metadata.TryGetValue(MetadataKey, out var existing) && string.Equals(existing, serialized, StringComparison.Ordinal))
                 return false;
             project.Metadata[MetadataKey] = serialized;
+            project.Touch();
             return true;
         }
 
         public bool Clear(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            return project.Metadata.Remove(MetadataKey);
+            if (!project.Metadata.Remove(MetadataKey)) return false;
+            project.Touch();
+            return true;
         }
 
         public string Serialize(ProjectBrowserWorkspaceState state)
