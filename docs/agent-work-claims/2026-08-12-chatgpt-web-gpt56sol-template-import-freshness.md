@@ -2,17 +2,21 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: make `QS3DTEMPLATEIMPORT` bind an existing canonical project before user review, fail closed if the project changes during file-load/confirmation, and isolate rollback/UI reporting from committed semantic state.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/TemplateCommands.cs`
   - `scripts/preflight-template-import-freshness.py`
   - this claim file
-- Contract:
-  - import must require/read the existing project before opening/loading a template;
-  - freeze primitive `ProjectId` + `ChangeVersion` before the OpenFileDialog/template load/confirmation boundary;
-  - after confirmation, canonical mutation bind must revalidate both values before `Apply`;
-  - rollback restoration remains authoritative; palette refresh failure must not be mislabeled as rollback failure;
-  - successful import must not be reported as business failure solely because palette/editor finalization fails;
+- Implemented contract:
+  - import now requires/read-probes an existing project before opening/loading a template and never bootstraps replacement project state;
+  - primitive `ProjectId` + `ChangeVersion` are frozen before the OpenFileDialog/template load/confirmation boundary;
+  - after confirmation, active-DWG identity plus canonical `ProjectId`/`ChangeVersion` are revalidated before `Apply`;
+  - authoritative `ProjectStateSnapshot` restore is isolated from best-effort palette refresh, so a UI refresh fault is not mislabeled as rollback failure;
+  - successful import UI finalization is best effort and cannot turn committed semantic state into a reported business failure;
   - template schema/apply semantics, export cancel-first behavior, persistence policy and LOCAL_ONLY V25 qualification are unchanged.
-- No GitHub Actions dispatch authorized. No BricsCAD runtime PASS will be claimed from this web session.
+- Source commit: `4522f04ba9b845a7bdb64dc936d118a0cdaa3ca2` — `fix(template): pin import confirmation freshness`.
+- Regression guard: `97dc22229092e2f07a2f5b5d749e5ee70858892d` — `scripts/preflight-template-import-freshness.py`.
+- Validation actually performed: connector-side exact source diff review, regression-guard source review, and compatibility review against existing `scripts/preflight-template-project-lifecycle.py`. The preflight scripts were not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.
