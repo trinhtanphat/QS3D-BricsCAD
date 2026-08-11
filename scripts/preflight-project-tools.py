@@ -26,7 +26,7 @@ checks = {
         "Cửa sổ khóa theo bản vẽ đã mở",
     ],
     "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml.cs": [
-        "private readonly Document _document", "ProjectToolsWindow(Document document)", "ProjectContextCoordinator.GetOrCreate(_document)",
+        "private readonly Document _document", "ProjectToolsWindow(Document document)", "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
         "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)", "EnsureBoundDrawingIsActive",
         "project.ActiveFloorId", "project.Families.Count", "project.Elements.Count", "_document.SendStringToExecute", "Activated +=", "DrawingLabel(_document)",
     ],
@@ -55,6 +55,8 @@ for relative, needles in checks.items():
 code = ROOT / "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml.cs"
 if code.is_file() and "var document = Application.DocumentManager.MdiActiveDocument" in code.read_text(encoding="utf-8"):
     errors.append("ProjectToolsWindow must not switch project ownership through MdiActiveDocument inside modeless event handlers")
+if code.is_file() and "ProjectContextCoordinator.GetOrCreate(_document)" in code.read_text(encoding="utf-8"):
+    errors.append("ProjectToolsWindow refresh must not create or replace project state")
 
 commands = []
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
