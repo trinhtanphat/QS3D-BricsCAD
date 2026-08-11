@@ -94,11 +94,11 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Priority: P1
 - Status: OPEN
 - Area: Wall junctions
-- Why local: Safe multi-owner physical reconciliation depends on native Solid3d geometry/booleans and ownership behavior in V25.
-- Scenario: Qualify dedicated junction-owned output without ambiguously reassigning one solid to multiple walls. Cover L/T/X, 2/3/4 owners, mixed thicknesses, incompatible vertical ranges, source changes, removal/rebuild, and Door/Opening host retention.
-- Evidence required: Exact SHA; junction ownership/dependency checks; geometry matrix; invalidation/rebuild result; opening host-retention result.
+- Why local: Core now defines deterministic multi-owner identity/dependency/rebuild plans, but safe native Solid3d materialization, booleans, replacement and ownership verification still require V25.
+- Scenario: Materialize only from current `WallJunctionOwnershipPlanner` output. Persist/verify dedicated `OwnerToken` (`WJX1:`) plus `InputFingerprint` (`WJF1:`), never reuse one wall's generated-solid owner. Cover L/T/X/Multi, 2/3/4+ owners, mixed thicknesses, incompatible vertical ranges, source/profile/elevation changes, removal/rebuild, foreign/corrupt ownership refusal, and Door/Opening host retention.
+- Evidence required: Exact SHA; `OwnerToken`/dependency/fingerprint persistence checks; L/T/X geometry matrix; invalidation/rebuild after fingerprint changes; no cross-DWG/project mutation; opening host-retention result; save/reopen and Undo/Redo result.
 - Evidence: PENDING_LOCAL
-- Related docs: `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
+- Related docs: `docs/WALL-JUNCTION-OWNERSHIP.md`; `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
 - Updated: 2026-08-11
 
 ## LOCAL-008 — Direct Draw transient preview and repeated mode
