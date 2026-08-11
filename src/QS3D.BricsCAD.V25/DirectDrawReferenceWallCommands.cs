@@ -93,6 +93,7 @@ namespace QS3D.BricsCAD.V25
                 Execute(
                     document,
                     project,
+                    hasDefaultsProject,
                     () => CreateWcsLine(document, endpoints.Start, endpoints.End),
                     element =>
                     {
@@ -160,6 +161,7 @@ namespace QS3D.BricsCAD.V25
         private static void Execute(
             Document document,
             ProjectState project,
+            bool projectExistedBeforeAuthoring,
             Func<ObjectId> createSource,
             Action<ProjectElement> configureElement)
         {
@@ -254,6 +256,7 @@ namespace QS3D.BricsCAD.V25
                 catch (Exception ex) { cleanupError = ex; }
                 try { rollback.Restore(project); }
                 catch (Exception ex) { restoreError = ex; }
+                if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);
                 try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
                 catch { }
 
