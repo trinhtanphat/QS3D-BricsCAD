@@ -35,7 +35,11 @@ namespace QS3D.Core.Services
         public RegenerationEngine(DependencyGraph graph, IEnumerable<IElementRegenerator> regenerators)
         {
             _graph = graph ?? throw new ArgumentNullException(nameof(graph));
-            _regenerators = new List<IElementRegenerator>(regenerators ?? throw new ArgumentNullException(nameof(regenerators)));
+            if (regenerators == null) throw new ArgumentNullException(nameof(regenerators));
+            var materialized = new List<IElementRegenerator>(regenerators);
+            if (materialized.Any(x => x == null))
+                throw new ArgumentException("Regenerator collection cannot contain null entries.", nameof(regenerators));
+            _regenerators = materialized;
             _ruleEngine = new QuantityRuleEngine();
         }
 
