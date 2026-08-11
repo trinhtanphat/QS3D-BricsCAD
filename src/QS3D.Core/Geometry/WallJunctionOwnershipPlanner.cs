@@ -149,10 +149,10 @@ namespace QS3D.Core.Geometry
             if (!Finite(verticalToleranceM) || verticalToleranceM <= 0d)
                 throw new ArgumentOutOfRangeException(nameof(verticalToleranceM), "Vertical tolerance must be finite and > 0.");
 
-            var junctionList = junctions.ToList();
-            var mappingList = ownerMappings.ToList();
+            var junctionList = junctions.Take(MaxJunctions + 1).ToList();
             if (junctionList.Count > MaxJunctions)
                 throw new InvalidOperationException("Physical wall-junction ownership planning supports at most " + MaxJunctions + " junctions per batch.");
+            var mappingList = ownerMappings.Take(MaxOwnerMappings + 1).ToList();
             if (mappingList.Count > MaxOwnerMappings)
                 throw new InvalidOperationException("Physical wall-junction ownership planning supports at most " + MaxOwnerMappings + " source-owner mappings per batch.");
 
@@ -221,7 +221,6 @@ namespace QS3D.Core.Geometry
                     .OrderBy(x => x.WallElementId, StringComparer.Ordinal)
                     .ToList();
 
-                // A polyline corner or split source belonging to one semantic wall is not a multi-owner physical junction.
                 if (distinctOwners.Count < 2) continue;
 
                 var bottomM = distinctOwners.Max(x => x.BottomM);
