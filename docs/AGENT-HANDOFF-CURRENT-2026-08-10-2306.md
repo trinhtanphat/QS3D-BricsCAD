@@ -55,6 +55,14 @@ The summary contains schema/count/category/health-code aggregates only. It exclu
 
 Earlier in the same source wave, interchange Validator / Typed Reader / Preview / Diff were also aligned around canonical IDs/references/keys and explicit timezone handling. Preview uses the typed reader directly; timestamp diff compares the normalized instant rather than raw offset text.
 
+### Family category fail-closed boundary
+
+`ProjectFamily` and the reporting/domain `FamilyDefinition` now reject undefined numeric `ElementCategory` values both at construction and later category assignment. A rejected setter leaves the previous valid category unchanged.
+
+This closes an in-memory integrity gap before persistence/import/browser validation: callers can no longer introduce an invalid family category and rely on a later save/load or diagnostic path to detect it. `ProjectFamilyAssignmentAtomicitySmoke` now covers constructor/setter rejection, and `scripts/preflight-family-category-integrity.py` is auto-discovered by the aggregate feature preflight.
+
+This is a Core/source invariant only; it does not change the LOCAL_ONLY BricsCAD V25 qualification boundary.
+
 ## Product logic / detailed roadmap
 
 Read `docs/SOURCE-PRODUCT-PLAN-2026-08-10.md` for the new detailed architecture and execution plan.

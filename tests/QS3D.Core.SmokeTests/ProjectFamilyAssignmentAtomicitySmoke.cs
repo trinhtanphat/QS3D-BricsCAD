@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
             DuplicatePreviousFamilyBlocksWholeAssignmentBatch();
             DuplicatePreviousFamilyBlocksBulkEditBatch();
             CorruptProjectElementListBlocksPropertyPropagationBeforeMutation();
+            UndefinedProjectFamilyCategoryFailsClosed();
+            UndefinedFamilyDefinitionCategoryFailsClosed();
         }
 
         private static void DuplicatePreviousFamilyBlocksWholeAssignmentBatch()
@@ -41,6 +43,28 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => ProjectFamilyService.SetProperty(project, family.Id, "WidthM", "0.3"));
             Equal("0.2", family.Properties["WidthM"], "Family property mutated before corrupt member list validation completed.");
+        }
+
+        private static void UndefinedProjectFamilyCategoryFailsClosed()
+        {
+            var invalid = (ElementCategory)int.MaxValue;
+            Throws<ArgumentOutOfRangeException>(() => new ProjectFamily("BAD", "Invalid", invalid));
+
+            var family = new ProjectFamily("GOOD", "Valid", ElementCategory.Room);
+            Throws<ArgumentOutOfRangeException>(() => family.Category = invalid);
+            if (family.Category != ElementCategory.Room)
+                throw new Exception("Rejected ProjectFamily category assignment mutated the previous category.");
+        }
+
+        private static void UndefinedFamilyDefinitionCategoryFailsClosed()
+        {
+            var invalid = (ElementCategory)int.MaxValue;
+            Throws<ArgumentOutOfRangeException>(() => new FamilyDefinition("Invalid", invalid));
+
+            var family = new FamilyDefinition("Valid", ElementCategory.Room);
+            Throws<ArgumentOutOfRangeException>(() => family.Category = invalid);
+            if (family.Category != ElementCategory.Room)
+                throw new Exception("Rejected FamilyDefinition category assignment mutated the previous category.");
         }
 
         private static Setup CreateDuplicatePreviousFamilyProject(string id)

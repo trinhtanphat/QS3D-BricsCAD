@@ -68,7 +68,7 @@ namespace QS3D.Core.Domain
         {
             Id = string.IsNullOrWhiteSpace(id) ? throw new ArgumentException("Family id is required.", nameof(id)) : id.Trim();
             _name = RequireName(name);
-            _category = category;
+            _category = RequireCategory(category);
             Properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -90,8 +90,9 @@ namespace QS3D.Core.Domain
             get => _category;
             set
             {
-                if (_category == value) return;
-                _category = value;
+                var next = RequireCategory(value);
+                if (_category == next) return;
+                _category = next;
                 OnPropertyChanged();
             }
         }
@@ -100,6 +101,12 @@ namespace QS3D.Core.Domain
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private static string RequireName(string value) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Family name is required.", nameof(value)) : value.Trim();
+        private static ElementCategory RequireCategory(ElementCategory value)
+        {
+            if (!Enum.IsDefined(typeof(ElementCategory), value))
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Family category must be a defined ElementCategory.");
+            return value;
+        }
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
