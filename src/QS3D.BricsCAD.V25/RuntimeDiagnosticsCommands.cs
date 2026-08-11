@@ -31,7 +31,7 @@ namespace QS3D.BricsCAD.V25
                 var pluginDirectory = Path.GetDirectoryName(pluginAssembly.Location) ?? string.Empty;
                 var metadataPath = Path.Combine(pluginDirectory, "PACKAGE-METADATA.json");
                 var metadata = ReadPackageMetadata(metadataPath);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var project);
 
                 var v25Runtime = Major(brxAssembly) == 25 && Major(tdAssembly) == 25;
                 var x64Runtime = Environment.Is64BitProcess;
@@ -47,7 +47,9 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\n  Product version: " + metadata.ProductVersion);
                 document.Editor.WriteMessage("\n  BrxMgd: " + brxVersion + " • TD_Mgd: " + tdVersion);
                 document.Editor.WriteMessage("\n  Runtime: " + (v25Runtime ? "V25" : "NOT V25") + " • " + (x64Runtime ? "x64" : "NOT x64"));
-                document.Editor.WriteMessage("\n  Project: " + project.Elements.Count + " element(s) • " + project.Families.Count + " family/families");
+                document.Editor.WriteMessage(hasProject
+                    ? "\n  Project: " + project.Elements.Count + " element(s) • " + project.Families.Count + " family/families"
+                    : "\n  Project: not loaded/persisted • runtime diagnostics remain read-only and do not create project state.");
                 if (File.Exists(metadataPath))
                 {
                     document.Editor.WriteMessage("\n  Package metadata: " + (packageVersionMatches ? "assembly version OK" : "ASSEMBLY VERSION MISMATCH") +
