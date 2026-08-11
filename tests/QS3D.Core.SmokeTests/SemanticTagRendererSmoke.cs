@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             OptionalPropertyAndQuantityRender();
             GeneratedOwnershipCannotLeakIntoTag();
             UnsupportedTokenFailsClosed();
+            MalformedBraceGrammarFailsClosed();
             MissingReferenceFailsClosed();
             DetachedElementWithSameIdFailsClosed();
             DuplicateElementIdFailsClosed();
@@ -52,6 +53,16 @@ namespace QS3D.Core.SmokeTests
             try { SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{NativeObjectId}"); }
             catch (FormatException) { failed = true; }
             if (!failed) throw new Exception("Unknown semantic tag tokens must fail closed.");
+        }
+
+        private static void MalformedBraceGrammarFailsClosed()
+        {
+            var fixture = BuildFixture();
+            MustFormatFail(() => SemanticTagRenderer.ValidateTemplate("abc}"), "A stray closing brace must fail template validation.");
+            MustFormatFail(() => SemanticTagRenderer.ValidateTemplate("{Id}}"), "A trailing closing brace must fail template validation.");
+            MustFormatFail(() => SemanticTagRenderer.ValidateTemplate("{{Id}"), "Nested/opening brace ambiguity must fail template validation.");
+            MustFormatFail(() => SemanticTagRenderer.ValidateTemplate("prefix {Id"), "An unclosed semantic token must fail template validation.");
+            MustFormatFail(() => SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{Id}}"), "Rendering must enforce the same brace grammar as validation.");
         }
 
         private static void MissingReferenceFailsClosed()
@@ -104,6 +115,14 @@ namespace QS3D.Core.SmokeTests
             var failed = false;
             try { action(); }
             catch (InvalidOperationException) { failed = true; }
+            if (!failed) throw new Exception(message);
+        }
+
+        private static void MustFormatFail(Action action, string message)
+        {
+            var failed = false;
+            try { action(); }
+            catch (FormatException) { failed = true; }
             if (!failed) throw new Exception(message);
         }
 
