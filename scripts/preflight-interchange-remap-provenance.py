@@ -30,9 +30,16 @@ for token in (
     "target.FindElement",
     "one-to-one",
     "ProjectStateSnapshot.Capture",
+    "catch (Exception operationError)",
+    "catch (Exception rollbackError)",
+    "new AggregateException(operationError, rollbackError)",
+    "Interchange provenance target-map storage failed and project rollback also failed.",
 ):
     if token not in mapping:
         errors.append("provenance target map missing contract token: " + token)
+
+if "catch\n            {\n                rollback.Restore(target);\n                throw;\n            }" in mapping:
+    errors.append("provenance target map still allows rollback failure to mask the original storage error")
 
 for token in (
     'ImportMode = "RemapAppendAsNewPreserveSourceHandleProvenance"',
@@ -81,4 +88,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Import As New can retain canonical raw-handle provenance plus explicit source-to-target semantic lineage without assigning source CAD ownership.")
+print("PASS: Import As New retains canonical raw-handle provenance plus semantic lineage, and target-map rollback failures cannot mask the original storage failure.")

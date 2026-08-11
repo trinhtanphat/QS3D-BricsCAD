@@ -99,9 +99,18 @@ namespace QS3D.Core.Export
                 target.Touch();
                 return new ProjectInterchangeProvenanceTargetMapResult(sourceId, normalized.Count);
             }
-            catch
+            catch (Exception operationError)
             {
-                rollback.Restore(target);
+                try
+                {
+                    rollback.Restore(target);
+                }
+                catch (Exception rollbackError)
+                {
+                    throw new InvalidOperationException(
+                        "Interchange provenance target-map storage failed and project rollback also failed.",
+                        new AggregateException(operationError, rollbackError));
+                }
                 throw;
             }
         }
