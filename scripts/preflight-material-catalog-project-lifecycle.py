@@ -13,8 +13,10 @@ for path in (COMMAND, WINDOW):
 
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
-    if "ProjectContextCoordinator.GetOrCreate(document);" not in text:
-        errors.append("explicit QS3DMATERIALS entry point must initialize the authoring project before opening the modeless catalog")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append("opening QS3DMATERIALS must not create/cache project state")
+    if "ExistingProjectMutationContext" in text:
+        errors.append("opening QS3DMATERIALS is not a semantic mutation and must not bind mutable project state")
     if "new MaterialCatalogWindow(document)" not in text:
         errors.append("QS3DMATERIALS must keep binding the catalog to its source Document")
 
@@ -55,4 +57,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Material Catalog creates project only on explicit open; read-only refresh stays observational; Save/Delete/Apply bind canonical existing state and retain rollback")
+print("[PASS] Material Catalog opening is non-creating; read-only refresh stays observational; Save/Delete/Apply bind canonical existing state and retain rollback")
