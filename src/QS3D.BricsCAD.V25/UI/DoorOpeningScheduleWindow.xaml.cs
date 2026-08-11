@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.Core.Export;
+using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
 using Application = Bricscad.ApplicationServices.Application;
@@ -82,7 +83,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _rows = BuildCurrentRows(out var regenerated);
                 Title = "QS3D • Cửa / Lỗ mở • " + DrawingLabel(_document);
                 ApplyFilter();
-                SetStatus("Đã nạp " + _rows.Count + " nhóm schedule • regen " + regenerated + " cấu kiện dirty.");
+                SetStatus("Đã nạp " + _rows.Count + " nhóm schedule • regen " + regenerated + " cấu kiện dirty trên snapshot đọc-only.");
             }
             catch (Exception ex)
             {
@@ -97,8 +98,9 @@ namespace QS3D.BricsCAD.V25.UI
             EnsureActive("đọc Door/Opening Schedule hiện hành");
             if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng Door/Opening Schedule và mở lại sau khi nạp project.");
-            regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-            return DoorOpeningScheduleBuilder.Build(project);
+            var snapshot = ProjectStateSnapshot.CreateDetachedCopy(project);
+            regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(snapshot);
+            return DoorOpeningScheduleBuilder.Build(snapshot);
         }
 
         private void ApplyFilter()
