@@ -36,14 +36,19 @@ namespace QS3D.BricsCAD.V25
                 }
                 if (selected.Count == 0) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    Report(document, "Tie QTY: BLOCKED • chưa có QS3D project state/sidecar; lệnh không tạo project mới từ selection.");
+                    return;
+                }
+
                 var targets = project.Elements
                     .Where(x => x.Category == ElementCategory.Column && x.SourceHandles.Any(selected.Contains))
                     .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 if (targets.Count == 0)
                 {
-                    PaletteCoordinator.SetStatus("Tie QTY: selection không chứa Column semantic.");
+                    Report(document, "Tie QTY: selection không chứa Column semantic.");
                     return;
                 }
 
@@ -77,9 +82,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
-                var message = "QS3DREBARTIEQTY lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                Report(document, "QS3DREBARTIEQTY lỗi: " + ex.Message);
             }
         }
 
@@ -102,6 +105,12 @@ namespace QS3D.BricsCAD.V25
                     // Semantic quantities are already committed; UI reporting is best effort only.
                 }
             }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
     }
 }
