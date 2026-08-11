@@ -8,24 +8,26 @@ namespace QS3D.BricsCAD.V25.Services
 {
     internal sealed class DirectDrawProjectPreviewContext
     {
-        private DirectDrawProjectPreviewContext(ProjectState? defaultsProject, string expectedProjectId)
+        private DirectDrawProjectPreviewContext(ProjectState? defaultsProject, string expectedProjectId, long? expectedChangeVersion)
         {
             DefaultsProject = defaultsProject;
             ExpectedProjectId = expectedProjectId ?? string.Empty;
+            ExpectedChangeVersion = expectedChangeVersion;
         }
 
         public ProjectState? DefaultsProject { get; }
         public bool HasProject => DefaultsProject != null;
         public string ExpectedProjectId { get; }
+        public long? ExpectedChangeVersion { get; }
 
         public static DirectDrawProjectPreviewContext Capture(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
-                return new DirectDrawProjectPreviewContext(null, string.Empty);
+                return new DirectDrawProjectPreviewContext(null, string.Empty, null);
             if (project == null || string.IsNullOrWhiteSpace(project.ProjectId))
                 throw new InvalidOperationException("Direct Draw preview resolved an invalid QS3D project identity.");
-            return new DirectDrawProjectPreviewContext(project, project.ProjectId.Trim());
+            return new DirectDrawProjectPreviewContext(project, project.ProjectId.Trim(), project.ChangeVersion);
         }
 
         public ProjectState ResolveForMutation(Document document, string operation)
@@ -39,6 +41,9 @@ namespace QS3D.BricsCAD.V25.Services
                 if (!string.Equals(project.ProjectId, ExpectedProjectId, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(
                         "QS3D project đã thay đổi trong lúc xác nhận Direct Draw. Hãy chạy lại lệnh để dùng đúng project/Family defaults.");
+                if (!ExpectedChangeVersion.HasValue || project.ChangeVersion != ExpectedChangeVersion.Value)
+                    throw new InvalidOperationException(
+                        "QS3D project đã được chỉnh sửa trong lúc xác nhận Direct Draw. Hãy chạy lại lệnh để dùng đúng project/Family defaults.");
                 return project;
             }
 
