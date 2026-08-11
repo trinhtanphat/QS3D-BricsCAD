@@ -4,6 +4,7 @@ using Bricscad.ApplicationServices;
 using Bricscad.Windows;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
+using QS3D.Core.Domain;
 using QS3D.Core.Model;
 using DrawingSize = System.Drawing.Size;
 using WpfSize = System.Windows.Size;
@@ -76,7 +77,16 @@ namespace QS3D.BricsCAD.V25
             SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
         }
 
-        public static void SetInspection(IReadOnlyList<EntitySnapshot> snapshots) { EnsureCreated(); _workspacePanel?.SetInspection(snapshots); }
+        public static void SetInspection(IReadOnlyList<EntitySnapshot> snapshots)
+        {
+            EnsureCreated();
+            ProjectState? project = null;
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document != null && ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject))
+                project = currentProject;
+            _workspacePanel?.SetInspectionReadOnly(snapshots, project);
+        }
+
         public static void SetStatus(string status) { EnsureCreated(); _workspacePanel?.SetStatus(status); }
         public static void RefreshProject() { EnsureCreated(); _workspacePanel?.RefreshProject(); }
         public static void RefreshCad() { EnsureCreated(); _rightPanel?.Refresh(); }
