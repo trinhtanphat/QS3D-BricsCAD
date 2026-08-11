@@ -15,7 +15,6 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var window = new FloorLevelWindow(document);
-                DocumentBoundWindowLifetime.Attach(window, document);
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
                 PaletteCoordinator.SetStatus("Level Picker: active floor + semantic floor assignment • khóa theo bản vẽ đang mở; CAD geometry không tự di chuyển.");
             }
