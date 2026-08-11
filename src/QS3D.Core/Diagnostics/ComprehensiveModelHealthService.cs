@@ -97,7 +97,7 @@ namespace QS3D.Core.Diagnostics
                     new ModelHealthIssue(
                         "HEALTH_PROVIDER_FAILED",
                         HealthSeverity.Error,
-                        providerName + " không thể hoàn tất chẩn đoán do project state không hợp lệ: " + ex.Message)
+                        providerName + " could not complete diagnostics because project state is invalid. Review project data and run Model Health again.")
                 });
             }
         }
