@@ -121,20 +121,26 @@ namespace QS3D.Core.Persistence
                 foreach (var handles in element.Elements("handles"))
                 {
                     ValidateElement(handles, "handles", Array.Empty<string>(), new[] { "h" });
+                    var seenHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var handle in handles.Elements("h"))
                     {
                         ValidateElement(handle, "h", Array.Empty<string>(), Array.Empty<string>(), true);
                         ValidateCanonicalText(handle, "source handle");
+                        if (!seenHandles.Add(handle.Value))
+                            throw new InvalidDataException("QSDB element contains duplicate source handle: " + handle.Value + ".");
                     }
                 }
 
                 foreach (var dependencies in element.Elements("dependencies"))
                 {
                     ValidateElement(dependencies, "dependencies", Array.Empty<string>(), new[] { "d" });
+                    var seenDependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var dependency in dependencies.Elements("d"))
                     {
                         ValidateElement(dependency, "d", Array.Empty<string>(), Array.Empty<string>(), true);
                         ValidateCanonicalText(dependency, "dependency id");
+                        if (!seenDependencies.Add(dependency.Value))
+                            throw new InvalidDataException("QSDB element contains duplicate dependency id: " + dependency.Value + ".");
                     }
                 }
 
