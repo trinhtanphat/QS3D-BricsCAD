@@ -209,8 +209,10 @@ namespace QS3D.Core.Navigation
             RequireAttribute(root, "format", FormatName);
             RequireAttribute(root, "version", FormatVersion.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
-            if (!Enum.TryParse((string)root.Attribute("grouping"), false, out ProjectBrowserGrouping grouping) ||
-                !Enum.IsDefined(typeof(ProjectBrowserGrouping), grouping))
+            var groupingRaw = (string)root.Attribute("grouping");
+            if (!Enum.TryParse(groupingRaw, false, out ProjectBrowserGrouping grouping) ||
+                !Enum.IsDefined(typeof(ProjectBrowserGrouping), grouping) ||
+                !string.Equals(groupingRaw, grouping.ToString(), StringComparison.Ordinal))
                 throw new InvalidDataException("Project browser workspace grouping is invalid.");
             var dirtyRaw = (string)root.Attribute("dirtyOnly");
             if (!bool.TryParse(dirtyRaw, out var dirtyOnly)) throw new InvalidDataException("Project browser workspace dirtyOnly is invalid.");
@@ -272,7 +274,9 @@ namespace QS3D.Core.Navigation
             foreach (var element in container.Elements("Category"))
             {
                 ValidateItemShape(element, "Category");
-                if (!Enum.TryParse(element.Value, false, out ElementCategory value) || !Enum.IsDefined(typeof(ElementCategory), value))
+                if (!Enum.TryParse(element.Value, false, out ElementCategory value) ||
+                    !Enum.IsDefined(typeof(ElementCategory), value) ||
+                    !string.Equals(element.Value, value.ToString(), StringComparison.Ordinal))
                     throw new InvalidDataException("Project browser workspace category is invalid: " + element.Value + ".");
                 result.Add(value);
             }
