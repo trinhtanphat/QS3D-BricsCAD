@@ -1,6 +1,6 @@
 # Interchange ProjectElement property portability
 
-Status: `SOURCE_IMPLEMENTED` on `main` by PR #389 / squash commit `746fd721397e01bd70e7f829709ccfe9afa67ce0`.
+Status: `SOURCE_IMPLEMENTED` on `main` by PR #389 / squash commit `746fd721397e01bd70e7f829709ccfe9afa67ce0`, with the FieldMerge target-local preservation correction tracked by the follow-up portability regression batch.
 
 This document records the semantic/native boundary for `ProjectElement.Properties` so later import/export work does not reintroduce drawing-local CAD ownership through an otherwise semantic snapshot.
 
@@ -27,9 +27,15 @@ The explicit top-level element fields `sourceHandles`, `drawingFingerprint` and 
 
 `ProjectInterchangeJsonValidator` remains compatible with a legacy otherwise-valid snapshot containing an arbitrary element property such as `CadHandle`. Generated/native ownership properties already rejected by the validator remain errors.
 
-After validation, `ProjectInterchangeValidatedSnapshotReader` filters element properties through the same portability policy before creating immutable `InterchangeElementSnapshot` objects. Therefore canonical planners/importers never receive legacy arbitrary handle-bearing element properties as portable semantic data.
+After validation, `ProjectInterchangeValidatedSnapshotReader` filters element properties through the same portability policy before creating immutable `InterchangeElementSnapshot` objects. Therefore canonical planners/importers never receive legacy arbitrary handle-bearing **source** element properties as portable semantic data.
 
-This protects AppendOnly, KeepTarget, ImportAsNew/remap, UseSource, field-level merge and provenance compositions through their common typed-read boundary instead of relying on each mutation path to remember a separate filter.
+This protects AppendOnly, KeepTarget, ImportAsNew/remap, UseSource, field-level merge and provenance compositions through their common typed-read boundary instead of relying on each mutation path to remember a separate source filter.
+
+## FieldMerge target-local boundary
+
+FieldMerge builds its reviewed semantic plan from exported/typed target and source snapshots, so drawing-local target properties such as `CadHandle` are intentionally outside the semantic decision set. They must therefore not be deleted merely because `ElementProperties=UseSource` is selected for the portable semantic property group.
+
+When applying source portable properties, `ProjectInterchangeFieldMergeImporter` preserves target properties rejected by `ProjectInterchangeElementPropertyPolicy.IsPortable(...)`. Canonical generated/native ownership metadata remains subject to the existing affected-element cleanup/invalidation path; arbitrary target-local nonportable metadata is not silently replaced by source data or removed by a semantic decision that never reviewed it.
 
 ## Regression contract
 
@@ -37,11 +43,11 @@ This protects AppendOnly, KeepTarget, ImportAsNew/remap, UseSource, field-level 
 
 - exporter omits an element `CadHandle`;
 - exporter preserves a Family `HandleHeight`;
-- a legacy snapshot with `CadHandle` can remain validator-compatible but the typed reader does not materialize that property;
+- a legacy snapshot with `CadHandle` can remain validator-compatible but the typed reader does not materialize that source property;
 - AppendOnly and KeepTarget do not rebind the legacy source handle property;
-- field-level merge does not surface `properties.CadHandle` as a reviewable source decision and does not adopt the source value.
+- field-level merge does not surface `properties.CadHandle` as a portable semantic decision, does not adopt the source value, and preserves the target-local `TARGET-CAD` value while applying reviewed portable source properties.
 
-`scripts/preflight-interchange-element-property-portability.py` is auto-discovered by `scripts/preflight-all.py` and statically locks the shared policy, exporter boundary, typed-reader boundary, semantic-reference validation retention and smoke coverage.
+`scripts/preflight-interchange-element-property-portability.py` is auto-discovered by `scripts/preflight-all.py` and statically locks the shared policy, exporter boundary, typed-reader boundary, FieldMerge target-local preservation, semantic-reference validation retention and smoke coverage.
 
 ## Do not weaken this boundary
 
