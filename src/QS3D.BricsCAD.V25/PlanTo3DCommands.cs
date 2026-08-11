@@ -39,12 +39,15 @@ namespace QS3D.BricsCAD.V25
         }
 
         [CommandMethod("QS3DCONVERT2D", CommandFlags.Modal)]
-        public void Convert2D() => ConvertPlanWalls("QS3DCONVERT2D");
+        public void Convert2D() => ConvertPlanWalls("QS3DCONVERT2D", promptStyle: false);
 
         [CommandMethod("QS3DPLAN2WALLS", CommandFlags.Modal)]
-        public void PlanToWalls() => ConvertPlanWalls("QS3DPLAN2WALLS");
+        public void PlanToWalls() => ConvertPlanWalls("QS3DPLAN2WALLS", promptStyle: false);
 
-        private static void ConvertPlanWalls(string operation)
+        [CommandMethod("QS3DCONVERT2DADV", CommandFlags.Modal)]
+        public void Convert2DAdvanced() => ConvertPlanWalls("QS3DCONVERT2DADV", promptStyle: true);
+
+        private static void ConvertPlanWalls(string operation, bool promptStyle)
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
@@ -64,22 +67,23 @@ namespace QS3D.BricsCAD.V25
                 var expectedProjectId = hasDefaultsProject ? defaultsProject.ProjectId : null;
                 if (hasDefaultsProject) RequireFreshSources(defaultsProject, sources);
 
-                var thicknessM = PromptPositiveMeters(
-                    document.Editor,
-                    "Bề dày Tường cho toàn bộ selection (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, "ThicknessM", 0.2d) : 0.2d);
+                var defaultThicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject, "ThicknessM", 0.2d) : 0.2d;
+                var defaultHeightM = hasDefaultsProject ? FamilyNumber(defaultsProject, "HeightM", 3.0d) : 3.0d;
+                var defaultBottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, "BottomOffsetM", 0d) : 0d;
+
+                double? thicknessM = promptStyle
+                    ? PromptPositiveMeters(document.Editor, "Bề dày Tường cho toàn bộ selection (m)", defaultThicknessM)
+                    : defaultThicknessM;
                 if (!thicknessM.HasValue) return;
 
-                var heightM = PromptPositiveMeters(
-                    document.Editor,
-                    "Chiều cao Tường cho toàn bộ selection (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, "HeightM", 3.0d) : 3.0d);
+                double? heightM = promptStyle
+                    ? PromptPositiveMeters(document.Editor, "Chiều cao Tường cho toàn bộ selection (m)", defaultHeightM)
+                    : defaultHeightM;
                 if (!heightM.HasValue) return;
 
-                var bottomOffsetM = PromptFiniteMeters(
-                    document.Editor,
-                    "Offset đáy Tường so với Z source (m)",
-                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, "BottomOffsetM", 0d) : 0d);
+                double? bottomOffsetM = promptStyle
+                    ? PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z source (m)", defaultBottomOffsetM)
+                    : defaultBottomOffsetM;
                 if (!bottomOffsetM.HasValue) return;
 
                 EnsureActive(document, operation);
