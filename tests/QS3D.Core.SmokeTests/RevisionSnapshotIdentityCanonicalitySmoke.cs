@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             PaddedOptionalIdentityFailsClosed("familyId");
             PaddedOptionalIdentityFailsClosed("floorId");
             PaddedOptionalIdentityFailsClosed("zoneId");
+            NonCanonicalCategoryFailsClosed();
         }
 
         private static void CanonicalAndLegacyOptionalIdentityLoads()
@@ -65,6 +66,13 @@ namespace QS3D.Core.SmokeTests
             var floor = string.Equals(attribute, "floorId", StringComparison.Ordinal) ? " L1 " : string.Empty;
             var zone = string.Equals(attribute, "zoneId", StringComparison.Ordinal) ? " Z1 " : string.Empty;
             Reject(Document("R1", "E1", family, floor, zone), "padded " + attribute);
+        }
+
+        private static void NonCanonicalCategoryFailsClosed()
+        {
+            var canonical = Document("R1", "E1", string.Empty, string.Empty, string.Empty);
+            Reject(canonical.Replace("category='Beam'", "category='beam'"), "non-canonical category casing");
+            Reject(canonical.Replace("category='Beam'", "category=' Beam '"), "padded category");
         }
 
         private static void Reject(string xml, string label)
