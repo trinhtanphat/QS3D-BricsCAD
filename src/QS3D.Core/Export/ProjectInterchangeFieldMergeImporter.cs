@@ -282,7 +282,9 @@ namespace QS3D.Core.Export
 
             AddRuntimeCompatibilityBlocks(target, source, fieldPlan, blockers);
             var affected = BuildAffectedTargetElementIds(target, fieldPlan);
-            var cleanup = BuildNativeCleanupRequirements(target, affected);
+            var cleanup = BuildNativeCleanupRequirements(target, affected, blockers);
+            if (cleanup.Count > 0 && string.IsNullOrWhiteSpace(target.DrawingFingerprint))
+                blockers.Add("Field merge native cleanup requires a non-empty target drawing fingerprint before cleanup authorization can be created.");
             var plan = new ProjectInterchangeFieldMergeExecutionPlan(
                 fieldPlan,
                 target.ProjectId,
@@ -436,8 +438,10 @@ namespace QS3D.Core.Export
 
         private static IReadOnlyList<ProjectInterchangeNativeCleanupRequirement> BuildNativeCleanupRequirements(
             ProjectState target,
-            IEnumerable<string> affectedIds)
+            IEnumerable<string> affectedIds,
+            ICollection<string> blockers)
         {
+            if (blockers == null) throw new ArgumentNullException(nameof(blockers));
             var result = new List<ProjectInterchangeNativeCleanupRequirement>();
             foreach (var id in affectedIds)
             {
@@ -448,7 +452,32 @@ namespace QS3D.Core.Export
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
-                if (handles.Length > 0) result.Add(new ProjectInterchangeNativeCleanupRequirement(element.Id, handles));
+                if (handles.Length == 0) continue;
+
+                var ownershipSafe = true;
+                foreach (var handle in handles)
+                {
+                    try
+                    {
+                        if (!GeneratedHandleOwnershipPolicy.TryFindOwner(target, handle, out var owner, out _) ||
+                            owner == null ||
+                            !ReferenceEquals(owner, element))
+                        {
+                            blockers.Add(
+                                "Field merge native cleanup handle " + handle + " is not exclusively owned by affected target element " + element.Id + ".");
+                            ownershipSafe = false;
+                        }
+                    }
+                    catch (InvalidOperationException error)
+                    {
+                        blockers.Add(
+                            "Field merge native cleanup ownership is ambiguous for handle " + handle + "/" + element.Id + ": " + error.Message);
+                        ownershipSafe = false;
+                    }
+                }
+
+                if (ownershipSafe)
+                    result.Add(new ProjectInterchangeNativeCleanupRequirement(element.Id, handles));
             }
             return result.AsReadOnly();
         }
