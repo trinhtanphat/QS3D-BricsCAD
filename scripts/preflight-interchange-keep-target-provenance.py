@@ -49,6 +49,7 @@ for token in (
     if token not in test:
         errors.append("KeepTarget provenance smoke missing regression token: " + token)
 
+doc_lower = doc.lower()
 for token in (
     "does not create false lineage",
     "raw source-handle provenance",
@@ -57,7 +58,7 @@ for token in (
     "never target CAD ownership",
     "portable semantic re-export",
 ):
-    if token not in doc:
+    if token.lower() not in doc_lower:
         errors.append("KeepTarget provenance documentation missing boundary token: " + token)
 
 if errors:

@@ -257,7 +257,7 @@ namespace QS3D.BricsCAD.V25
         private static string SnapshotName(string path, string fallback)
         {
             var name = Path.GetFileNameWithoutExtension(path ?? string.Empty)?.Trim();
-            return string.IsNullOrWhiteSpace(name) ? fallback : name;
+            return name == null || name.Length == 0 ? fallback : name;
         }
 
         private static void ReportRegenerationPreview(Document document, RegenerationPreview preview, string scope)

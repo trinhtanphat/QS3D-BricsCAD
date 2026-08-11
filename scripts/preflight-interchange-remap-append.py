@@ -42,7 +42,7 @@ if not errors:
         "MapOptional(plan.Remap, InterchangeRemapIdentityKind.Zone",
         "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, dependency)",
         "ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference)",
-        "MapPropertyReference(plan.Remap, reference, property.Value, ref rewrites)",
+        "MapPropertyReference(plan.Remap, reference, property.Value ?? string.Empty, ref rewrites)",
         "ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key)",
         "addedElementIds.Add(added.Id)",
         "ValidateCombinedTarget(target, addedElementIds)",

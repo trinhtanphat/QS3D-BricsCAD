@@ -115,7 +115,7 @@ namespace QS3D.Core.SmokeTests
                 target,
                 json,
                 request,
-                ProjectInterchangeNativeCleanupAuthorization.ForElementIds(plan.NativeCleanupElementIds));
+                plan.NativeCleanupAuthorization);
 
             Equal(ProjectInterchangeImportExecutionMode.UseSourceSemanticData, result.Mode);
             Equal(1, result.SemanticIdentitiesReplaced);

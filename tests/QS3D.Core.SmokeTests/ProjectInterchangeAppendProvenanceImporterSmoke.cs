@@ -121,7 +121,7 @@ namespace QS3D.Core.SmokeTests
                 DrawingFingerprint = withFingerprint ? "SOURCE-DWG" : string.Empty,
                 UpdatedUtc = new DateTime(2026, 8, 11, 0, 35, 0, DateTimeKind.Utc)
             };
-            var element = new ProjectElement("E-SOURCE", ElementCategory.Beam)
+            var element = new ProjectElement("E-SOURCE", ElementCategory.Beam, string.Empty, string.Empty, string.Empty)
             {
                 DrawingFingerprint = source.DrawingFingerprint
             };

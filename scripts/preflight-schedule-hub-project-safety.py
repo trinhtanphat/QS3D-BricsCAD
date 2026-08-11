@@ -14,11 +14,12 @@ else:
         "DocumentBoundWindowLifetime.Attach(this, _document);",
         "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
         "ClearSnapshotCounts();",
-        "ProjectQuantityReportBuilder.Group(project)",
-        "RoomFinishScheduleBuilder.Build(project)",
-        "DoorOpeningScheduleBuilder.Build(project)",
-        "CurtainWallScheduleBuilder.Build(project)",
-        "MaterialUsageScheduleBuilder.Build(project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "ProjectQuantityReportBuilder.Group(previewProject)",
+        "RoomFinishScheduleBuilder.Build(previewProject)",
+        "DoorOpeningScheduleBuilder.Build(previewProject)",
+        "CurtainWallScheduleBuilder.Build(previewProject)",
+        "MaterialUsageScheduleBuilder.Build(previewProject)",
     ):
         if token not in text:
             errors.append("ScheduleHubWindow.xaml.cs missing project-safety token: " + token)

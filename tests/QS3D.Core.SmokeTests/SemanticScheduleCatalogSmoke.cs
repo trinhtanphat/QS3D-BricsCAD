@@ -24,7 +24,7 @@ namespace QS3D.Core.SmokeTests
         private static void SaveLoadRoundTripIsDeterministic()
         {
             var project = Project();
-            var definition = Definition("S1", "Beam schedule", "BEAMS", "F1", "Z1", new[] { "E1", "E2" }, new[] { "E2" });
+            var definition = Definition("S1", "Beam schedule", "BEAMS", "F1", "Z1", new[] { "E1" }, new[] { "E2" });
             SemanticScheduleCatalog.Save(project, new[] { definition });
             var payload = project.Metadata[SemanticScheduleCatalog.MetadataKey];
             var version = project.ChangeVersion;
@@ -63,7 +63,7 @@ namespace QS3D.Core.SmokeTests
         private static void BuildFiltersAndUsesCanonicalTemplateRenderer()
         {
             var project = Project();
-            var definition = Definition("S1", "Beam schedule", "BEAMS", "F1", "Z1", new[] { "E1", "E2" }, new[] { "E2" });
+            var definition = Definition("S1", "Beam schedule", "BEAMS", "F1", "Z1", new[] { "E1" }, new[] { "E2" });
             var table = SemanticScheduleCatalog.Build(project, definition);
 
             Equal("BEAMS", table.Title);

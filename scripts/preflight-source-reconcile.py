@@ -124,6 +124,7 @@ checks = {
         "Equal(dirtyBefore, selected.Dirty);",
         "True(unrelated.Dirty != ElementDirtyFlags.None)",
         'True(!unrelated.Quantities.ContainsKey("Count"))',
+        "Throws<ArgumentException>",
         "Throws<KeyNotFoundException>",
         "Throws<InvalidOperationException>",
     ],
