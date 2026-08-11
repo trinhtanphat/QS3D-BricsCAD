@@ -8,14 +8,14 @@ namespace QS3D.BricsCAD.V25.Services
 {
     internal sealed class UserUiLayout
     {
-        public int WorkspacePaletteWidth { get; set; } = 540;
+        public int WorkspacePaletteWidth { get; set; } = 640;
         public int WorkspacePaletteHeight { get; set; } = 720;
         public int RightPaletteWidth { get; set; } = 300;
         public int RightPaletteHeight { get; set; } = 720;
-        public double ModelColumnWidth { get; set; } = 150d;
-        public double FamilyColumnWidth { get; set; } = 180d;
-        public double FamilyTopHeight { get; set; } = 235d;
-        public double RoomTopHeight { get; set; } = 210d;
+        public double ModelColumnWidth { get; set; } = 160d;
+        public double FamilyColumnWidth { get; set; } = 245d;
+        public double FamilyTopHeight { get; set; } = 250d;
+        public double RoomTopHeight { get; set; } = 218d;
     }
 
     internal static class UserUiLayoutStore
@@ -150,14 +150,14 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static void Normalize(UserUiLayout layout)
         {
-            layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, 460, 1600);
+            layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, 560, 1600);
             layout.WorkspacePaletteHeight = Clamp(layout.WorkspacePaletteHeight, 420, 2000);
             layout.RightPaletteWidth = Clamp(layout.RightPaletteWidth, 255, 1200);
             layout.RightPaletteHeight = Clamp(layout.RightPaletteHeight, 420, 2000);
-            layout.ModelColumnWidth = Clamp(layout.ModelColumnWidth, 125d, 500d, 150d);
-            layout.FamilyColumnWidth = Clamp(layout.FamilyColumnWidth, 150d, 700d, 180d);
-            layout.FamilyTopHeight = Clamp(layout.FamilyTopHeight, 145d, 900d, 235d);
-            layout.RoomTopHeight = Clamp(layout.RoomTopHeight, 130d, 900d, 210d);
+            layout.ModelColumnWidth = Clamp(layout.ModelColumnWidth, 135d, 500d, 160d);
+            layout.FamilyColumnWidth = Clamp(layout.FamilyColumnWidth, 220d, 700d, 245d);
+            layout.FamilyTopHeight = Clamp(layout.FamilyTopHeight, 160d, 900d, 250d);
+            layout.RoomTopHeight = Clamp(layout.RoomTopHeight, 135d, 900d, 218d);
         }
 
         private static int Int(IDictionary<string, string> values, string key, int fallback) =>
