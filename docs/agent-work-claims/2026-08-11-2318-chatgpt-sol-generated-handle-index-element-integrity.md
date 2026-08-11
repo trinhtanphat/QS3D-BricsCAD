@@ -1,0 +1,25 @@
+# Agent Work Claim
+
+- Status: ACTIVE
+- Agent: chatgpt-gpt56sol-generated-handle-index-integrity-20260811-2318
+- Timestamp: 2026-08-11T23:18:00+07:00
+- Baseline `main` SHA: `80b808080ebc37a59f385dec5ed77d60a257dc6a`
+- Priority: P1 generated-output ownership integrity / fail-closed diagnostics
+- Exact scope: Align `GeneratedHandleOwnershipIndex.Build` element-set validation with `GeneratedHandleOwnershipPolicy`: reject null semantic elements, reject blank/whitespace IDs, and detect duplicate IDs after trimming with ordinal-ignore-case comparison before indexing any generated handle. Preserve handle ownership/ambiguity semantics.
+- Expected surfaces:
+  - `src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipIndex.cs`
+  - `tests/QS3D.Core.SmokeTests/GeneratedHandleOwnershipIndexSmoke.cs`
+- Excluded scope:
+  - changes to `GeneratedHandleOwnershipPolicy` semantics
+  - BricsCAD/native/runtime/UI behavior
+  - unrelated diagnostics, regeneration or persistence
+  - GitHub Actions
+- Validation plan:
+  - focused smoke coverage for null element, blank ID, and trim/case-colliding duplicate IDs
+  - preserve existing ownership-index smoke behavior
+  - re-read current `main` target blobs immediately before each implementation write
+  - no local `dotnet` or BricsCAD runtime is available in this environment
+- Coordination:
+  - checked current claim registry and recent commit search immediately before registration; no GeneratedHandleOwnershipIndex claim was present
+  - no GitHub Actions will be dispatched
+- Completion condition: corrupt semantic element sets fail closed consistently across policy and index before ownership indexing; regression coverage is present; this claim is marked COMPLETED.
