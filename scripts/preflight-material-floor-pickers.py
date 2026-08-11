@@ -64,7 +64,7 @@ checks = {
         'AuditTrail.ForProject(project).Record("material.assign"', 'AuditTrail.ForProject(project).Record("material.catalog.upsert"',
     ],
     "src/QS3D.BricsCAD.V25/MaterialCatalogCommands.cs": [
-        'CommandMethod("QS3DMATERIALS"', "ProjectContextCoordinator.GetOrCreate(document)", "new MaterialCatalogWindow(document)", "ShowModelessWindow",
+        'CommandMethod("QS3DMATERIALS"', "new MaterialCatalogWindow(document)", "ShowModelessWindow",
     ],
     "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml": [
         'x:Class="QS3D.BricsCAD.V25.UI.FloorLevelWindow"', 'x:Name="FloorList"', 'x:Name="ActiveFloorText"',
@@ -119,6 +119,14 @@ if resolver.is_file():
         if obsolete in text:
             errors.append("SemanticSelectionResolver still contains obsolete whole-project ownership logic: " + obsolete)
 
+material_command = ROOT / "src/QS3D.BricsCAD.V25/MaterialCatalogCommands.cs"
+if material_command.is_file():
+    text = material_command.read_text(encoding="utf-8")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append("opening Material Catalog must not create/cache project state")
+    if "ExistingProjectMutationContext" in text:
+        errors.append("opening Material Catalog must not bind mutable project state")
+
 material_window = ROOT / "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs"
 if material_window.is_file():
     text = material_window.read_text(encoding="utf-8")
@@ -153,4 +161,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: persisted material catalog, selection-scoped ownership, constructor-bound modeless windows, read-only refresh paths, canonical existing-project Floor mutations, and Core-backed floor CRUD/active/assignment semantics are present.")
+print("PASS: persisted material catalog, non-creating Material launcher, selection-scoped ownership, constructor-bound modeless windows, read-only refresh paths, canonical existing-project Floor mutations, and Core-backed floor CRUD/active/assignment semantics are present.")
