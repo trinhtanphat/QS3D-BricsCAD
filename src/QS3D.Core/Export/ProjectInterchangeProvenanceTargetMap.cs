@@ -33,6 +33,7 @@ namespace QS3D.Core.Export
         private const string RecordVersion = "v1";
         private const int MaxMappings = 50000;
         private const int MaxEncodedChars = 1024 * 1024;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static ProjectInterchangeProvenanceTargetMapResult Store(
             ProjectState target,
@@ -156,8 +157,11 @@ namespace QS3D.Core.Export
             var fields = new List<string>();
             for (var i = 1; i < parts.Length; i++)
             {
-                try { fields.Add(Encoding.UTF8.GetString(Convert.FromBase64String(parts[i]))); }
-                catch (FormatException ex) { throw new InvalidOperationException("Interchange provenance target-map record contains invalid base64 data.", ex); }
+                try { fields.Add(StrictUtf8.GetString(Convert.FromBase64String(parts[i]))); }
+                catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
+                {
+                    throw new InvalidOperationException("Interchange provenance target-map record contains invalid base64 or UTF-8 data.", ex);
+                }
             }
             return fields.AsReadOnly();
         }
