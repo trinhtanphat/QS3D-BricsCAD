@@ -46,16 +46,23 @@ def main():
     require(guard, "EnsurePhysicalOpeningAliasMatchesHostSolid", "native cleanup coverage guard", failures)
     require(guard, "does not match", "physical-opening alias guard", failures)
 
-    guard_call = service.find("GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);")
+    guard_token = "GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);"
+    first_guard = service.find(guard_token)
+    second_guard = service.find(guard_token, first_guard + len(guard_token)) if first_guard >= 0 else -1
     snapshot = service.find("ProjectStateSnapshot.Capture(project)")
     transaction = service.find("StartTransaction()")
     invalidation = service.find("GeneratedDependentGeometryInvalidator.Prepare(")
-    if min(guard_call, snapshot, transaction, invalidation) < 0:
-        failures.append("field merge service is missing cleanup guard, rollback snapshot, transaction, or invalidator call")
-    elif not (guard_call < snapshot < transaction < invalidation):
+    if min(first_guard, second_guard, snapshot, transaction, invalidation) < 0:
         failures.append(
-            "field merge cleanup coverage must fail before rollback capture/native transaction and before destructive invalidator preparation"
+            "field merge service must contain both cleanup coverage checks, rollback snapshot, transaction, and invalidator preparation"
         )
+    else:
+        if not (first_guard < snapshot < transaction):
+            failures.append("field merge must perform an early cleanup-coverage precheck before rollback capture/native transaction")
+        if not (transaction < second_guard < invalidation):
+            failures.append("field merge must recheck cleanup coverage under the document lock immediately before destructive invalidator preparation")
+        if service.count(guard_token) != 2:
+            failures.append("field merge cleanup coverage must have exactly the early precheck and locked pre-invalidation recheck")
 
     # Keep the explicit native handlers visible in the invalidator. If a handler is removed,
     # the coverage whitelist must not continue advertising that slot as safely erasable.
@@ -72,6 +79,7 @@ def main():
         return 1
 
     print("PASS: FieldMerge rejects unsupported generated ownership slots before native mutation.")
+    print("PASS: cleanup coverage is rechecked under the document lock immediately before native invalidation.")
     print("PASS: physical-opening owner aliases must identify the same generated host Solid3d handle.")
     print("PASS: known native cleanup handlers remain present for solid/rebar/curtain/grid ownership slots.")
     return 0
