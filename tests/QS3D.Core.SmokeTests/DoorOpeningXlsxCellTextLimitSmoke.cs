@@ -45,7 +45,7 @@ namespace QS3D.Core.SmokeTests
             }
             finally
             {
-                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+                DeleteDirectory(directory);
             }
         }
 
@@ -62,13 +62,13 @@ namespace QS3D.Core.SmokeTests
                     Material = "Glass"
                 };
 
-                Throws<InvalidOperationException>(() =>
+                Throws<ArgumentOutOfRangeException>(() =>
                     DoorOpeningXlsxExporter.Export(Path.Combine(directory, "direct.xlsx"), new[] { row }));
                 AssertDirectoryWasNotCreated(directory, "oversized direct cell");
             }
             finally
             {
-                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+                DeleteDirectory(directory);
             }
         }
 
@@ -81,13 +81,13 @@ namespace QS3D.Core.SmokeTests
                 row.ElementIds.Add(new string('E', 16384));
                 row.ElementIds.Add(new string('I', 16383));
 
-                Throws<InvalidOperationException>(() =>
+                Throws<ArgumentOutOfRangeException>(() =>
                     DoorOpeningXlsxExporter.Export(Path.Combine(directory, "element-ids.xlsx"), new[] { row }));
                 AssertDirectoryWasNotCreated(directory, "oversized Element IDs cell");
             }
             finally
             {
-                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+                DeleteDirectory(directory);
             }
         }
 
@@ -100,13 +100,13 @@ namespace QS3D.Core.SmokeTests
                 row.HostIds.Add(new string('H', 16384));
                 row.HostIds.Add(new string('W', 16383));
 
-                Throws<InvalidOperationException>(() =>
+                Throws<ArgumentOutOfRangeException>(() =>
                     DoorOpeningXlsxExporter.Export(Path.Combine(directory, "host-ids.xlsx"), new[] { row }));
                 AssertDirectoryWasNotCreated(directory, "oversized Host IDs cell");
             }
             finally
             {
-                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+                DeleteDirectory(directory);
             }
         }
 
@@ -124,7 +124,7 @@ namespace QS3D.Core.SmokeTests
         private static string NewMissingDirectory()
         {
             var directory = Path.Combine(Path.GetTempPath(), "qs3d-door-xlsx-cell-limit-" + Guid.NewGuid().ToString("N"));
-            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            DeleteDirectory(directory);
             return directory;
         }
 
@@ -132,6 +132,16 @@ namespace QS3D.Core.SmokeTests
         {
             if (Directory.Exists(directory))
                 throw new InvalidOperationException("Door/opening XLSX created filesystem state before rejecting " + scenario + ".");
+        }
+
+        private static void DeleteDirectory(string directory)
+        {
+            try
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         private static void Throws<TException>(Action action) where TException : Exception
