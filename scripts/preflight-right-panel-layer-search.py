@@ -5,6 +5,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs"
+SHORTCUTS = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.SearchShortcuts.cs"
 errors = []
 
 if not SOURCE.is_file():
@@ -56,6 +57,27 @@ else:
     elif "DrawingCatalogReader.ReadLayers" in filter_method.group("body"):
         errors.append("ApplyLayerFilter must remain presentation-only and use _layerSnapshots")
 
+if not SHORTCUTS.is_file():
+    errors.append("missing RightPanel.SearchShortcuts.cs")
+else:
+    text = SHORTCUTS.read_text(encoding="utf-8")
+    for token in (
+        "protected override void OnInitialized(EventArgs e)",
+        "base.OnInitialized(e);",
+        "PreviewKeyDown += OnRightPanelPreviewKeyDown;",
+        "modifiers == ModifierKeys.Control && e.Key == Key.F",
+        "LayerSearchBox?.Focus();",
+        "LayerSearchBox?.SelectAll();",
+        "e.Key == Key.Escape",
+        "LayerSearchBox.IsKeyboardFocusWithin",
+        "LayerSearchBox.Clear();",
+    ):
+        if token not in text:
+            errors.append("RightPanel layer-search shortcut contract missing: " + token)
+    for forbidden in ("DrawingCatalogReader.ReadLayers", "LayerVisibilityService", "SendStringToExecute"):
+        if forbidden in text:
+            errors.append("RightPanel search shortcuts must remain presentation-only: " + forbidden)
+
 print("QS3D RightPanel cached layer-search preflight")
 if errors:
     for error in errors:
@@ -63,4 +85,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: layer search is bounded multi-term filtering over cached CAD snapshots; keystrokes do not reopen the layer table, while real layer mutations explicitly reload live CAD state.")
+print("PASS: layer search is bounded multi-term filtering over cached CAD snapshots; keystrokes do not reopen the layer table, Ctrl+F/Escape stay presentation-only, and real layer mutations explicitly reload live CAD state.")
