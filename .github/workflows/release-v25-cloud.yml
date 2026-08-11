@@ -64,8 +64,8 @@ jobs:
           if (-not [Uri]::TryCreate($env:BRICSCAD_V25_MSI_URL, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'https') {
             throw "BRICSCAD_V25_MSI_URL must be an absolute HTTPS URL."
           }
-          if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256) -and $env:BRICSCAD_V25_MSI_SHA256 -notmatch '^[0-9A-Fa-f]{64}$') {
-            throw "BRICSCAD_V25_MSI_SHA256 must be a 64-hex SHA-256 value when configured."
+          if ([string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256) -or $env:BRICSCAD_V25_MSI_SHA256 -notmatch '^[0-9A-Fa-f]{64}$') {
+            throw "Repository variable BRICSCAD_V25_MSI_SHA256 is required and must be the 64-hex SHA-256 of the exact authorized BricsCAD V25 MSI."
           }
 
       - name: Manual-only CI policy gate
@@ -98,11 +98,9 @@ jobs:
             throw 'BricsCAD V25 MSI download did not produce a file.'
           }
 
-          if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256)) {
-            $actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
-            if (-not [string]::Equals($actual, $env:BRICSCAD_V25_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
-              throw "BricsCAD V25 MSI SHA-256 mismatch. Expected $env:BRICSCAD_V25_MSI_SHA256, got $actual."
-            }
+          $actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
+          if (-not [string]::Equals($actual, $env:BRICSCAD_V25_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "BricsCAD V25 MSI SHA-256 mismatch. Expected $env:BRICSCAD_V25_MSI_SHA256, got $actual."
           }
 
           $arguments = @('/a', ('"' + $msi + '"'), '/qn', '/norestart', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress')
