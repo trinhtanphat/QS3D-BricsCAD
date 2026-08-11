@@ -141,7 +141,7 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("  if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $signature.SignerCertificate) { throw ('Installed updater signature is not valid: ' + $signature.Status) }");
             script.AppendLine("  $actualSigner = $signature.SignerCertificate.Thumbprint.Replace(' ', '').ToUpperInvariant()");
             script.AppendLine("  if ($actualSigner -ne $expectedSigner) { throw ('Installed updater signer mismatch. Expected ' + $expectedSigner + ', got ' + $actualSigner) }");
-            script.AppendLine("  & $updater -ManifestUri $manifest -ExpectedSignerThumbprint $expectedSigner -InstallDirectory $install -AllowedPackageHost @('github.com') -Confirm:$false");
+            script.AppendLine("  & $updater -ManifestUri $manifest -ExpectedSignerThumbprint $expectedSigner -InstallDirectory $install -AllowedPackageHost @('github.com') -AllowSameVersion -Confirm:$false");
             script.AppendLine("  if (-not $?) { throw 'QS3D update script reported failure.' }");
             script.AppendLine("  Stop-Transcript | Out-Null");
             script.AppendLine("  Start-Process -FilePath $bricscad | Out-Null");
