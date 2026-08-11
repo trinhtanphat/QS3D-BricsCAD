@@ -23,17 +23,20 @@ namespace QS3D.Core.Documentation
             return Render(context, element, template, allowEmpty);
         }
 
+        public static void ValidateTemplate(string template)
+        {
+            ValidateTemplateSource(NormalizeTemplate(template));
+        }
+
         internal static string Render(SemanticTagRenderContext context, ProjectElement element, string template, bool allowEmpty)
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
             if (element == null) throw new ArgumentNullException(nameof(element));
             context.EnsureElement(element);
-            var source = (template ?? string.Empty).Trim();
-            if (source.Length == 0) throw new ArgumentException("Semantic tag template is required.", nameof(template));
-            if (source.Length > MaxTemplateLength) throw new ArgumentException("Semantic tag template exceeds " + MaxTemplateLength + " characters.", nameof(template));
+            var source = NormalizeTemplate(template);
+            ValidateTemplateSource(source);
 
             var output = new StringBuilder(Math.Min(source.Length + 64, MaxRenderedLength));
-            var tokenCount = 0;
             for (var index = 0; index < source.Length;)
             {
                 var open = source.IndexOf('{', index);
@@ -45,14 +48,7 @@ namespace QS3D.Core.Documentation
 
                 AppendBounded(output, source.Substring(index, open - index));
                 var close = source.IndexOf('}', open + 1);
-                if (close < 0) throw new FormatException("Semantic tag template has an unclosed token at character " + open + ".");
-                if (source.IndexOf('{', open + 1, close - open - 1) >= 0)
-                    throw new FormatException("Semantic tag tokens cannot be nested.");
-
                 var token = source.Substring(open + 1, close - open - 1).Trim();
-                if (token.Length == 0) throw new FormatException("Semantic tag token cannot be empty.");
-                tokenCount++;
-                if (tokenCount > MaxTokens) throw new FormatException("Semantic tag template exceeds the supported " + MaxTokens + " token limit.");
                 AppendBounded(output, Resolve(context, element, token));
                 index = close + 1;
             }
@@ -61,8 +57,65 @@ namespace QS3D.Core.Documentation
             return output.ToString();
         }
 
+        private static string NormalizeTemplate(string? template)
+        {
+            var source = (template ?? string.Empty).Trim();
+            if (source.Length == 0) throw new ArgumentException("Semantic tag template is required.", nameof(template));
+            if (source.Length > MaxTemplateLength) throw new ArgumentException("Semantic tag template exceeds " + MaxTemplateLength + " characters.", nameof(template));
+            return source;
+        }
+
+        private static void ValidateTemplateSource(string source)
+        {
+            var tokenCount = 0;
+            for (var index = 0; index < source.Length;)
+            {
+                var open = source.IndexOf('{', index);
+                if (open < 0) break;
+                var close = source.IndexOf('}', open + 1);
+                if (close < 0) throw new FormatException("Semantic tag template has an unclosed token at character " + open + ".");
+                if (source.IndexOf('{', open + 1, close - open - 1) >= 0)
+                    throw new FormatException("Semantic tag tokens cannot be nested.");
+
+                var token = source.Substring(open + 1, close - open - 1).Trim();
+                if (token.Length == 0) throw new FormatException("Semantic tag token cannot be empty.");
+                tokenCount++;
+                if (tokenCount > MaxTokens) throw new FormatException("Semantic tag template exceeds the supported " + MaxTokens + " token limit.");
+                ValidateToken(token);
+                index = close + 1;
+            }
+        }
+
+        private static void ValidateToken(string token)
+        {
+            if (string.Equals(token, "Id", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(token, "Category", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(token, "Family", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(token, "Floor", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(token, "Zone", StringComparison.OrdinalIgnoreCase)) return;
+
+            if (token.StartsWith("P:", StringComparison.OrdinalIgnoreCase))
+            {
+                var key = token.Substring(2).Trim();
+                if (key.Length == 0) throw new FormatException("P: semantic tag token requires a property name.");
+                if (!IsDocumentableProperty(key))
+                    throw new InvalidOperationException("Semantic tag cannot expose generated/native runtime property: " + key + ".");
+                return;
+            }
+
+            if (token.StartsWith("Q:", StringComparison.OrdinalIgnoreCase))
+            {
+                var key = token.Substring(2).Trim();
+                if (key.Length == 0) throw new FormatException("Q: semantic tag token requires a quantity name.");
+                return;
+            }
+
+            throw new FormatException("Unsupported semantic tag token: {" + token + "}.");
+        }
+
         private static string Resolve(SemanticTagRenderContext context, ProjectElement element, string token)
         {
+            ValidateToken(token);
             if (string.Equals(token, "Id", StringComparison.OrdinalIgnoreCase)) return element.Id;
             if (string.Equals(token, "Category", StringComparison.OrdinalIgnoreCase)) return element.Category.ToString();
             if (string.Equals(token, "Family", StringComparison.OrdinalIgnoreCase)) return context.ResolveFamily(element);
@@ -72,23 +125,14 @@ namespace QS3D.Core.Documentation
             if (token.StartsWith("P:", StringComparison.OrdinalIgnoreCase))
             {
                 var key = token.Substring(2).Trim();
-                if (key.Length == 0) throw new FormatException("P: semantic tag token requires a property name.");
-                if (!IsDocumentableProperty(key))
-                    throw new InvalidOperationException("Semantic tag cannot expose generated/native runtime property: " + key + ".");
                 return element.Properties.TryGetValue(key, out var value) ? value ?? string.Empty : string.Empty;
             }
 
-            if (token.StartsWith("Q:", StringComparison.OrdinalIgnoreCase))
-            {
-                var key = token.Substring(2).Trim();
-                if (key.Length == 0) throw new FormatException("Q: semantic tag token requires a quantity name.");
-                if (!element.Quantities.TryGetValue(key, out var value)) return string.Empty;
-                if (double.IsNaN(value) || double.IsInfinity(value))
-                    throw new InvalidOperationException("Semantic tag quantity is not finite: " + key + ".");
-                return value.ToString("R", CultureInfo.InvariantCulture);
-            }
-
-            throw new FormatException("Unsupported semantic tag token: {" + token + "}.");
+            var quantityKey = token.Substring(2).Trim();
+            if (!element.Quantities.TryGetValue(quantityKey, out var quantity)) return string.Empty;
+            if (double.IsNaN(quantity) || double.IsInfinity(quantity))
+                throw new InvalidOperationException("Semantic tag quantity is not finite: " + quantityKey + ".");
+            return quantity.ToString("R", CultureInfo.InvariantCulture);
         }
 
         private static bool IsDocumentableProperty(string key)
