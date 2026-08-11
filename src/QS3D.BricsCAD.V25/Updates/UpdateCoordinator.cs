@@ -44,6 +44,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private readonly GitHubReleaseClient _client = new GitHubReleaseClient();
         private Dispatcher? _dispatcher;
         private Task<UpdateCheckResult>? _inFlight;
+        private int _inFlightGeneration = -1;
         private UpdateCheckResult _last;
         private int _generation;
         private bool _started;
@@ -82,6 +83,8 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 _started = false;
                 _generation++;
+                _inFlight = null;
+                _inFlightGeneration = -1;
             }
         }
 
@@ -118,8 +121,11 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             lock (_sync)
             {
-                if (_inFlight != null && !_inFlight.IsCompleted) return _inFlight;
                 var generation = _generation;
+                if (_inFlight != null && !_inFlight.IsCompleted && _inFlightGeneration == generation)
+                    return _inFlight;
+
+                _inFlightGeneration = generation;
                 _inFlight = CheckCoreAsync(automatic, generation);
                 return _inFlight;
             }
