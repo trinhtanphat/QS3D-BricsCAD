@@ -56,8 +56,8 @@ namespace QS3D.BricsCAD.V25.Cad
             using (var marker = new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, OwnershipVersion),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, projectId.Trim()),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, elementId.Trim()),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, GeneratedOwnershipIdentityToken.Project(projectId)),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, GeneratedOwnershipIdentityToken.Element(elementId)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, category.ToString())))
                 entity.XData = marker;
         }
@@ -132,8 +132,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 return values.Length >= 5 &&
                     string.Equals(Convert.ToString(values[0].Value, CultureInfo.InvariantCulture), RegAppName, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(Convert.ToString(values[1].Value, CultureInfo.InvariantCulture), OwnershipVersion, StringComparison.Ordinal) &&
-                    string.Equals(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(Convert.ToString(values[3].Value, CultureInfo.InvariantCulture), elementId, StringComparison.OrdinalIgnoreCase) &&
+                    GeneratedOwnershipIdentityToken.MatchesProject(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId) &&
+                    GeneratedOwnershipIdentityToken.MatchesElement(Convert.ToString(values[3].Value, CultureInfo.InvariantCulture), elementId) &&
                     string.Equals(Convert.ToString(values[4].Value, CultureInfo.InvariantCulture), category.ToString(), StringComparison.OrdinalIgnoreCase);
             }
         }
