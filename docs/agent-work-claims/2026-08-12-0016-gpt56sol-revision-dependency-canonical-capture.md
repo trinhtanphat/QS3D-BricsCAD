@@ -1,44 +1,37 @@
 # Work claim — revision dependency canonical capture
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-revision-dependency-canonical-capture-20260812-0016`
 - Registered: `2026-08-12T00:16:00+07:00`
 - Baseline main SHA: `83b7ae41046db126288caa413ac7188d917cc239`
+- Integrated main SHA: `b462b1cf69bade4a477025e860658f2a9cfccc07`
+- PR: `#569`
 - Priority: evidence-driven Core revision integrity during owner-requested `continue all`
 
-## Reserved scope
+## Completed scope
 
-Make Revision capture fail closed on non-canonical semantic dependency lists instead of silently trimming, dropping blanks or deduplicating them before snapshot creation.
+Revision capture now fails closed on non-canonical semantic dependency lists instead of silently trimming, dropping blanks or deduplicating them before snapshot creation.
 
-## Expected surfaces
+## Changes
 
-- `src/QS3D.Core/Revisions/RevisionService.cs`
-- focused Core smoke regression for revision dependency capture integrity
-- this claim file for close-out
+- `RevisionService.Capture()` validates each dependency as canonical before copying it to the snapshot.
+- Blank dependency IDs, leading/trailing whitespace and case-insensitive duplicates now fail closed.
+- Canonical dependency lists remain deterministically sorted case-insensitively.
+- `CompareDependencies()` reuses the same strict canonicalization helper; existing snapshot index/store validation remains unchanged.
+- Preserved the concurrent `RevisionService.Capture()` revision-ID validation by branching after that change landed on `main`.
+- Added dedicated module-initializer smoke coverage without touching the shared smoke runner.
 
-## Concrete defect
+## Validation actually performed
 
-`ProjectElement.DependsOn` is a mutable public list. `RevisionService.Capture()` currently routes it through `CanonicalDependencies()`, which trims entries and silently skips blank/duplicate dependencies. In contrast, `RevisionService.Index()` and `RevisionSnapshotStore.ValidateSnapshot()` require dependency values to be canonical, non-empty and unique. Capture can therefore hide corrupt source dependency state and produce a clean-looking revision artifact that no longer faithfully represents the project being audited.
+- Inspected concurrent commit `1a46aca8d70db0730c6ae23ae2449212fd6d063f`; it changed only revision-ID validation at the start of `Capture()` and did not overlap dependency handling.
+- Branched from subsequent current `main` and compared moving `main` again before PR publication; no later `RevisionService.cs` overlap was present.
+- Reviewed PR #569 exact diff: only `RevisionService.cs` dependency canonicalization plus focused smoke coverage.
+- Confirmed PR #569 mergeable and squash-merged exact head `3024dd06cb1a0e1bec76053c7c3ea720d1e19579`.
+- Re-read merged `RevisionService.cs` and `RevisionDependencyCanonicalCaptureSmoke.cs` from remote `main`.
+- Regression covers deterministic canonical ordering plus blank, padded and case-insensitive duplicate dependency rejection.
+- No GitHub Actions were dispatched.
+- No local .NET compile, licensed BricsCAD V25 runtime or LOCAL_PASS is claimed from this environment.
 
-## Contract
+## Integration
 
-- Capture must reject blank dependency IDs.
-- Capture must reject leading/trailing whitespace rather than silently trim it.
-- Capture must reject case-insensitive duplicate dependency IDs rather than silently deduplicate them.
-- Canonical dependency lists remain deterministically sorted case-insensitively in snapshots.
-
-## Explicit exclusions
-
-- No dependency graph semantics or cycle policy changes.
-- No revision XML/schema/file-size, source-handle, quantity math, comparison semantics, V25/native/UI, Actions/release/LOCAL_PASS work.
-
-## Validation plan
-
-- Canonical dependency lists capture successfully and are deterministically ordered.
-- Blank, padded and case-insensitive duplicate dependencies fail during capture.
-- Existing comparison/store canonical validation remains unchanged.
-- Re-fetch/compare moving `main`, publish through a feature branch/PR without force-push, then re-read remote `main` after integration.
-
-## Completion condition
-
-Revision capture no longer normalizes away malformed dependency evidence, focused regression is integrated on current `main`, and this claim is marked `COMPLETED` with exact integration SHA and validation actually performed.
+PR #569 was squash-merged into `main` as `b462b1cf69bade4a477025e860658f2a9cfccc07` without force-push.
