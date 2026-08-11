@@ -36,7 +36,14 @@ namespace QS3D.BricsCAD.V25
                 if (selected.Count > MaxGridBatch)
                     throw new InvalidOperationException("Grid intersection selection vượt giới hạn " + MaxGridBatch + ".");
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    var blocked = "Grid Intersections: BLOCKED • chưa có QS3D project state/sidecar; lệnh inspect không tạo project mới.";
+                    try { PaletteCoordinator.SetStatus(blocked); } catch { }
+                    TryWriteMessage(document, "\nQS3D " + blocked);
+                    return;
+                }
+
                 var extraction = ExtractCurves(document, project, selected);
                 var intersections = GridIntersectionPlanner.FindIntersections(extraction.Curves);
                 Report(document, project, intersections, extraction.PlanElevation);

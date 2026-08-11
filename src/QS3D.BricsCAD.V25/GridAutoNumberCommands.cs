@@ -26,7 +26,6 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
-            var project = ProjectContextCoordinator.GetOrCreate(document);
 
             try
             {
@@ -35,6 +34,7 @@ namespace QS3D.BricsCAD.V25
                 if (selected.Count > MaxGridBatch)
                     throw new InvalidOperationException("Grid auto-number selection vượt giới hạn " + MaxGridBatch + ".");
 
+                var project = ExistingProjectMutationContext.Require(document, "Grid Auto Number");
                 var extraction = ExtractParallelLineCandidates(document, project, selected);
                 var orderingAxis = AcquireOrderingAxis(document.Editor);
                 if (!orderingAxis.HasValue) return;
