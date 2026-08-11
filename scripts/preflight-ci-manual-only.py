@@ -5,6 +5,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
+RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml"}
 errors = []
 
 
@@ -31,6 +32,126 @@ def collect_job_blocks(lines):
         blocks.append((current_name, current_lines))
     return blocks
 
+
+def strip_yaml_inline_comment(value):
+    quote = None
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if quote == "'":
+            if char == "'":
+                if index + 1 < len(value) and value[index + 1] == "'":
+                    index += 2
+                    continue
+                quote = None
+            index += 1
+            continue
+        if quote == '"':
+            if char == "\\" and index + 1 < len(value):
+                index += 2
+                continue
+            if char == '"':
+                quote = None
+            index += 1
+            continue
+        if char in ("'", '"'):
+            quote = char
+            index += 1
+            continue
+        if char == "#":
+            return value[:index].rstrip()
+        index += 1
+    return value.rstrip()
+
+
+def extract_job_if_expression(job_lines):
+    expressions = []
+    for line in job_lines:
+        match = re.match(r"^\s{4}if\s*:\s*(.*)$", line)
+        if match:
+            expressions.append(strip_yaml_inline_comment(match.group(1)).strip())
+    if len(expressions) != 1:
+        return None
+
+    expression = expressions[0]
+    if not expression:
+        return None
+    if expression.startswith("${{"):
+        if not expression.endswith("}}"):
+            return None
+        expression = expression[3:-2].strip()
+    return expression or None
+
+
+def is_hard_manual_dispatch_guard(expression):
+    if expression is None or "||" in expression:
+        return False
+    return bool(re.fullmatch(
+        r"github\.event_name\s*==\s*'workflow_dispatch'(?:\s*&&\s*.+)?",
+        expression,
+    ))
+
+
+def is_hard_release_confirmation_guard(expression):
+    if not is_hard_manual_dispatch_guard(expression):
+        return False
+    return bool(re.fullmatch(
+        r"github\.event_name\s*==\s*'workflow_dispatch'\s*&&\s*"
+        r"inputs\.confirm_release\s*==\s*'RELEASE'(?:\s*&&\s*.+)?",
+        expression,
+    ))
+
+
+def validate_guard_parser():
+    cases = (
+        ("manual equality", ["    if: ${{ github.event_name == 'workflow_dispatch' }}"], True, False),
+        (
+            "release conjunction",
+            ["    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}"],
+            True,
+            True,
+        ),
+        ("comment-only equality", ["    if: # github.event_name == 'workflow_dispatch'"], False, False),
+        (
+            "not-equal with comment decoy",
+            ["    if: github.event_name != 'workflow_dispatch' # github.event_name == 'workflow_dispatch'"],
+            False,
+            False,
+        ),
+        (
+            "negated equality",
+            ["    if: ${{ !(github.event_name == 'workflow_dispatch') }}"],
+            False,
+            False,
+        ),
+        (
+            "OR bypass",
+            ["    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"],
+            False,
+            False,
+        ),
+        (
+            "release comment decoy",
+            ["    if: ${{ github.event_name == 'workflow_dispatch' }} # inputs.confirm_release == 'RELEASE'"],
+            True,
+            False,
+        ),
+    )
+    for name, lines, expected_manual, expected_release in cases:
+        expression = extract_job_if_expression(lines)
+        actual_manual = is_hard_manual_dispatch_guard(expression)
+        actual_release = is_hard_release_confirmation_guard(expression)
+        if actual_manual != expected_manual:
+            errors.append(
+                f"manual guard parser regression ({name}): expected {expected_manual}, got {actual_manual}"
+            )
+        if actual_release != expected_release:
+            errors.append(
+                f"release guard parser regression ({name}): expected {expected_release}, got {actual_release}"
+            )
+
+
+validate_guard_parser()
 
 if not WORKFLOWS.is_dir():
     errors.append("missing .github/workflows directory")
@@ -83,21 +204,24 @@ else:
         if not job_blocks:
             errors.append(f"{path.name}: jobs: must contain at least one executable job")
         for job_name, job_lines in job_blocks:
-            job_block = "\n".join(job_lines)
-            manual_guard = re.search(
-                r"(?m)^\s{4}if\s*:\s*.*github\.event_name\s*==\s*'workflow_dispatch'",
-                job_block,
-            )
-            if not manual_guard:
-                errors.append(f"{path.name}/{job_name}: job must hard-guard github.event_name == 'workflow_dispatch'")
+            expression = extract_job_if_expression(job_lines)
+            if not is_hard_manual_dispatch_guard(expression):
+                errors.append(
+                    f"{path.name}/{job_name}: job must hard-guard "
+                    "github.event_name == 'workflow_dispatch' as the leading conjunction"
+                )
 
-        if path.name == "release-v25.yml":
-            for token in ("confirm_release", "inputs.confirm_release == 'RELEASE'", "contents: write"):
+        if path.name in RELEASE_WORKFLOWS:
+            for token in ("confirm_release", "contents: write"):
                 if token not in text:
-                    errors.append("release-v25.yml missing explicit manual publish guard: " + token)
+                    errors.append(f"{path.name} missing explicit manual publish guard: {token}")
             release_job = next((block for name, block in job_blocks if name == "release"), None)
-            if release_job is None or "inputs.confirm_release == 'RELEASE'" not in "\n".join(release_job):
-                errors.append("release-v25.yml/release: publish job must require inputs.confirm_release == 'RELEASE'")
+            release_expression = extract_job_if_expression(release_job) if release_job is not None else None
+            if not is_hard_release_confirmation_guard(release_expression):
+                errors.append(
+                    f"{path.name}/release: publish job must hard-require "
+                    "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'"
+                )
 
 policy = (ROOT / "CI_POLICY.md").read_text(encoding="utf-8") if (ROOT / "CI_POLICY.md").is_file() else ""
 for token in ("workflow_dispatch", "manual-only", "explicitly requests", "MANUAL-BUILD-RELEASE"):
@@ -115,4 +239,7 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: every GitHub Actions workflow is workflow_dispatch-only, every job is independently hard-guarded to the manual event, and release publication requires explicit RELEASE confirmation.")
+print(
+    "PASS: every GitHub Actions workflow is workflow_dispatch-only, every job is independently "
+    "hard-guarded to the manual event, and both release workflows require explicit RELEASE confirmation."
+)
