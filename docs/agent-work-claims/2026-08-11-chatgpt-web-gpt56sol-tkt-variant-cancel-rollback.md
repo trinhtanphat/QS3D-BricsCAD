@@ -1,0 +1,21 @@
+# Agent work claim — TKT variant cancel/rollback lifecycle
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `ACTIVE`
+- Scope: make `QS3DGLASSWALL` / `QS3DWALLPIER` selection-cancel safe and batch-atomic without changing their Family defaults.
+- Files reserved:
+  - `src/QS3D.BricsCAD.V25/TktVariantCommands.cs`
+  - `scripts/preflight-tkt-variant-cancel-rollback.py`
+  - this claim file for close-out
+- Evidence: current TKT commands call `ProjectContextCoordinator.GetOrCreate`, create/backfill a Family and change ActiveFamily before calling `SemanticCaptureService.Capture`. `SemanticCaptureService.Capture` itself intentionally reads selection before project bootstrap, but the TKT wrapper defeats that lifecycle: an empty/cancel selection can leave a new project, Family/default and ActiveFamily mutation despite capturing zero elements.
+- Intended contract:
+  - acquire PICKFIRST/interactive snapshots before any project/Family mutation;
+  - if selection is empty/cancelled, return without project bootstrap or Family/ActiveFamily changes;
+  - after selection, preserve existing TKT Family discovery/backfill/defaults and activation;
+  - capture exactly the acquired snapshots through `SemanticCaptureService.CaptureSnapshot` without a second selection prompt;
+  - wrap Family setup + whole capture batch in one ProjectState snapshot; on any failure restore the pre-command project and forget only a project bootstrapped by this command;
+  - post-success palette/editor UI remains best effort and must not turn a successful capture into a reported business failure.
+- Non-overlap: no changes to `SemanticCaptureService`, generic family defaults, Direct Draw, Ribbon, active quantity/persistence/licensing lanes or LOCAL_ONLY V25 execution.
+- Validation: exact diff/current-source review plus focused static preflight. No GitHub Actions; no V25 runtime PASS claimed.
+- Completion condition: cancel/empty selection has zero project mutation and failed variant batch is atomic, with exact SHAs recorded and reservation released.
