@@ -14,6 +14,7 @@ namespace QS3D.BricsCAD.V25
         private static readonly Dictionary<Document, ProjectState> Projects = new Dictionary<Document, ProjectState>();
         private static readonly Dictionary<Document, ProjectPersistenceStamp> PersistenceStamps = new Dictionary<Document, ProjectPersistenceStamp>();
         private static readonly Dictionary<Document, string> UnsavedProjectKeys = new Dictionary<Document, string>();
+        private static readonly Dictionary<Document, string> UnsavedProjectPaths = new Dictionary<Document, string>();
         private static readonly QsdbProjectStore Store = new QsdbProjectStore();
 
         public static ProjectState GetOrCreate(Document document)
@@ -83,6 +84,7 @@ namespace QS3D.BricsCAD.V25
             {
                 using (ProjectFileLock.Acquire(path)) Store.Save(project, path);
                 GetPersistenceStamp(document, project).MarkSaved(project);
+                CleanupObsoleteUnsavedProject(document, path);
                 return path;
             }
             catch
@@ -151,6 +153,7 @@ namespace QS3D.BricsCAD.V25
             Projects.Remove(document);
             PersistenceStamps.Remove(document);
             UnsavedProjectKeys.Remove(document);
+            UnsavedProjectPaths.Remove(document);
         }
 
         public static void ForgetByName(string? drawingName)
@@ -161,6 +164,7 @@ namespace QS3D.BricsCAD.V25
                 Projects.Remove(document);
                 PersistenceStamps.Remove(document);
                 UnsavedProjectKeys.Remove(document);
+                UnsavedProjectPaths.Remove(document);
             }
         }
 
@@ -170,15 +174,40 @@ namespace QS3D.BricsCAD.V25
             var drawing = document.Name;
             if (string.IsNullOrWhiteSpace(drawing) || !Path.IsPathRooted(drawing))
             {
+                if (UnsavedProjectPaths.TryGetValue(document, out var existingPath)) return existingPath;
+
                 var stem = SafeFileStem(string.IsNullOrWhiteSpace(drawing) ? "Untitled" : Path.GetFileNameWithoutExtension(drawing));
                 if (!UnsavedProjectKeys.TryGetValue(document, out var key))
                 {
                     key = Guid.NewGuid().ToString("N");
                     UnsavedProjectKeys[document] = key;
                 }
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QS3D", "Projects", stem + "-" + key + ".qsdb");
+                var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QS3D", "Projects", stem + "-" + key + ".qsdb");
+                UnsavedProjectPaths[document] = path;
+                return path;
             }
             return Path.ChangeExtension(drawing, ".qsdb");
+        }
+
+        private static void CleanupObsoleteUnsavedProject(Document document, string currentPath)
+        {
+            if (!UnsavedProjectPaths.TryGetValue(document, out var obsoletePath) || string.IsNullOrWhiteSpace(obsoletePath)) return;
+
+            try
+            {
+                if (SameDrawingName(obsoletePath, currentPath)) return;
+                if (File.Exists(obsoletePath)) File.Delete(obsoletePath);
+                if (File.Exists(obsoletePath + ".bak")) File.Delete(obsoletePath + ".bak");
+                if (!File.Exists(obsoletePath) && !File.Exists(obsoletePath + ".bak"))
+                {
+                    UnsavedProjectPaths.Remove(document);
+                    UnsavedProjectKeys.Remove(document);
+                }
+            }
+            catch (Exception)
+            {
+                // The named sidecar has already committed. Keep the recovery path so a later explicit save can retry cleanup.
+            }
         }
 
         private static bool TryGetExistingProjectPath(Document document, out string path)
