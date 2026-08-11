@@ -69,8 +69,10 @@ require("policy", (
 ))
 require("regen", ("MeasuredSolidQuantityPolicy.Apply(element)",))
 require("review", (
-    "var captured = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, result.Handle)",
-    'Record("recognition.apply", captured.Id',
+    "var currentProject = ProjectContextCoordinator.GetOrCreate(doc);",
+    "SemanticCaptureService.CaptureSnapshot(doc, refreshed.Snapshot, candidate.Category)",
+    "var captured = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(currentProject, result.Handle)",
+    'AuditTrail.ForProject(currentProject).Record("recognition.apply", captured.Id',
 ))
 require("logic_smoke", (
     "RecognitionRejectsEntityTypeMismatch",
@@ -91,4 +93,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: B4D hard-gates recognition by CAD entity type, separates Solid3d surface from planar area, preserves native mass provenance and reports measured volume through stable semantic ownership.")
+print("PASS: B4D re-resolves current project/source ownership after guarded capture while preserving native Solid3d mass provenance and entity-type recognition gates.")
