@@ -37,10 +37,10 @@ for path in FILES:
 
 if POLICY.is_file():
     text = POLICY.read_text(encoding="utf-8")
-    if ".Where(x => x != null)" not in text:
-        errors.append("GeneratedHandleOwnershipPolicy.CollectOwnerHandles is not null-safe.")
-    if "if (element == null) continue;" not in text:
-        errors.append("GeneratedHandleOwnershipPolicy.TryFindOwner is not null-safe.")
+    if text.count("EnsureValidElementSet(project);") < 2:
+        errors.append("GeneratedHandleOwnershipPolicy scans must validate the complete semantic element set.")
+    if "Project contains a null semantic element entry; generated CAD ownership cannot be resolved safely." not in text:
+        errors.append("GeneratedHandleOwnershipPolicy must fail closed on corrupt null semantic elements.")
     if "is ambiguously claimed by" not in text:
         errors.append("GeneratedHandleOwnershipPolicy must remain fail-closed on ambiguous generated owners.")
 
@@ -57,7 +57,9 @@ if SMOKE.is_file():
         "BeamStirrupLaterOwnerIsConflict();",
         "TieLaterOwnerIsConflict();",
         "LongitudinalRebarLaterOwnerIsConflict();",
-        "OwnershipPolicyAndIndexIgnoreNullEntries();",
+        "OwnershipPolicyFailsClosedAndIndexIgnoresNullEntries();",
+        "Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project));",
+        "Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, \"AD\"",
         '"BEAM_STIRRUP_GENERATED_OWNERSHIP_CONFLICT"',
         '"TIE_REBAR_GENERATED_OWNERSHIP_CONFLICT"',
         '"REBAR_GENERATED_OWNERSHIP_CONFLICT"',
@@ -74,4 +76,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: generated rebar/wall/tie/stirrup Core diagnostics are null-safe and ownership conflicts are independent of project iteration order.")
+print("PASS: generated rebar/wall/tie/stirrup diagnostics tolerate corrupt entries, destructive ownership policy scans fail closed, and conflicts are independent of project iteration order.")

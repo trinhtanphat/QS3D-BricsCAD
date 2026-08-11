@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
             BeamStirrupLaterOwnerIsConflict();
             TieLaterOwnerIsConflict();
             LongitudinalRebarLaterOwnerIsConflict();
-            OwnershipPolicyAndIndexIgnoreNullEntries();
+            OwnershipPolicyFailsClosedAndIndexIgnoresNullEntries();
         }
 
         private static void BeamStirrupLaterOwnerIsConflict()
@@ -64,22 +64,18 @@ namespace QS3D.Core.SmokeTests
                 "longitudinal rebar later-owner conflict was missed");
         }
 
-        private static void OwnershipPolicyAndIndexIgnoreNullEntries()
+        private static void OwnershipPolicyFailsClosedAndIndexIgnoresNullEntries()
         {
             var project = ProjectWithNull("index");
             var owner = new ProjectElement("O1", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
             owner.Properties["GeneratedFutureOwnershipHandle"] = "AD";
             project.Elements.Add(owner);
 
-            var handles = GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project);
-            Require(handles.Count == 1 && string.Equals(handles[0], "AD", StringComparison.OrdinalIgnoreCase),
-                "ownership policy changed or crashed on null semantic entry");
-
-            Require(GeneratedHandleOwnershipPolicy.TryFindOwner(project, "AD", out var found, out _) && ReferenceEquals(found, owner),
-                "ownership policy failed to resolve unique owner after null semantic entry");
+            Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project));
+            Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "AD", out _, out _));
 
             var index = GeneratedHandleOwnershipIndex.Build(project);
-            Require(index.TryFindOwner("AD", out found, out _) && ReferenceEquals(found, owner),
+            Require(index.TryFindOwner("AD", out var found, out _) && ReferenceEquals(found, owner),
                 "ownership index failed to resolve unique owner after null semantic entry");
         }
 
@@ -100,6 +96,12 @@ namespace QS3D.Core.SmokeTests
         private static void Require(bool condition, string message)
         {
             if (!condition) throw new InvalidOperationException("GeneratedRebarProviderOwnershipSmoke: " + message);
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            try { action(); } catch (T) { return; }
+            throw new InvalidOperationException("GeneratedRebarProviderOwnershipSmoke: expected " + typeof(T).Name + ".");
         }
 
     }
