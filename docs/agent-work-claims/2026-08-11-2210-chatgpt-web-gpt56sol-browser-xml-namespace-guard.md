@@ -1,6 +1,6 @@
 # Work claim — Project Browser workspace XML namespace guard
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-11T22:10:00+07:00`
 - Baseline main SHA: `aac1e9b148fdf775ba70ae35b867fded02fc92be`
@@ -23,15 +23,16 @@ Make Project Browser workspace-state v1 reject namespaced root child elements in
 - No quantity, updater, export, formula, persistence QSDB, Direct Draw, Curtain or release work.
 - No GitHub Actions dispatch.
 
-## Validation plan
+## Validation performed
 
-- Extend the existing strict-schema smoke so a canonical workspace XML document with an additional namespaced child whose LocalName matches a supported child fails with `InvalidDataException`.
-- Preserve canonical no-namespace v1 round-trip behavior and all existing strict-schema failures.
+- Re-read source and focused smoke from current `main` before each write.
+- Replaced LocalName-only root-child acceptance with an exact no-namespace `HashSet<XName>` allowlist.
+- Added focused smoke tampering a canonical document with an additional `future:Categories` child sharing the supported LocalName; deserialization is required to throw `InvalidDataException`.
+- No GitHub Actions or BricsCAD runtime validation was run.
 
-## Coordination
+## Completion
 
-This claim is limited to XML namespace fail-closed behavior in the existing workspace-state serializer/deserializer and its focused smoke.
-
-## Completion condition
-
-Guard + regression are pushed to current `main`, then this claim is closed with exact commits and validation performed.
+- Claim commit: `e2253598e044b845f61cc88bf75cca4524426551`
+- Implementation commit: `4f4cc84f3248e94cd6b7a9686d8ce490619b7f83`
+- Regression commit: `26ac5ee1c3cbdaf335a8949875f2592eda0ca256`
+- Remaining runtime/local gates: none introduced by this Core-only strict-schema change.
