@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             TargetRevisionChangeRejectsReviewedAuthorization();
             SourceSnapshotChangeRejectsReviewedAuthorization();
             GeneratedHandleChangeRejectsReviewedAuthorization();
+            AmbiguousGeneratedOwnershipBlocksAuthorization();
+            DestructiveCleanupRequiresTargetDrawingFingerprint();
             SourceOnlyIdentityBlocksExecution();
             FamilyReassignmentPreservesTargetPropertiesWhenRequested();
         }
@@ -92,6 +94,49 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectInterchangeFieldMergeImporter.Import(target, json, policy, authorization));
             Equal("TARGET", target.FindElement("E-1")!.Properties["Mark"]);
             Equal("BB22", target.FindElement("E-1")!.Properties["GeneratedSolidHandle"]);
+        }
+
+        private static void AmbiguousGeneratedOwnershipBlocksAuthorization()
+        {
+            var target = BuildTarget();
+            target.FindElement("E-1")!.Properties["GeneratedSolidHandle"] = "AA11";
+            var conflicting = new ProjectElement("E-2", ElementCategory.Beam, "FAM-B", "F-1", "Z-1");
+            conflicting.Properties["GeneratedSolidHandle"] = "AA11";
+            target.Elements.Add(conflicting);
+
+            var source = BuildSource("SOURCE");
+            var plan = ProjectInterchangeFieldMergeImporter.Plan(
+                target,
+                ProjectInterchangeJsonExporter.Build(source),
+                MixedPolicy());
+
+            True(!plan.CanExecute);
+            True(plan.ExecutionBlockers.Any(x =>
+                x.IndexOf("ambiguous", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                x.IndexOf("exclusively owned", StringComparison.OrdinalIgnoreCase) >= 0));
+            Throws<InvalidOperationException>(() => plan.CreateAuthorization());
+            Equal("TARGET", target.FindElement("E-1")!.Properties["Mark"]);
+            Equal("AA11", target.FindElement("E-1")!.Properties["GeneratedSolidHandle"]);
+            Equal("AA11", target.FindElement("E-2")!.Properties["GeneratedSolidHandle"]);
+        }
+
+        private static void DestructiveCleanupRequiresTargetDrawingFingerprint()
+        {
+            var target = BuildTarget();
+            target.DrawingFingerprint = string.Empty;
+            target.FindElement("E-1")!.Properties["GeneratedSolidHandle"] = "AA11";
+
+            var source = BuildSource("SOURCE");
+            var plan = ProjectInterchangeFieldMergeImporter.Plan(
+                target,
+                ProjectInterchangeJsonExporter.Build(source),
+                MixedPolicy());
+
+            True(!plan.CanExecute);
+            True(plan.ExecutionBlockers.Any(x => x.IndexOf("drawing fingerprint", StringComparison.OrdinalIgnoreCase) >= 0));
+            Throws<InvalidOperationException>(() => plan.CreateAuthorization());
+            Equal("TARGET", target.FindElement("E-1")!.Properties["Mark"]);
+            Equal("AA11", target.FindElement("E-1")!.Properties["GeneratedSolidHandle"]);
         }
 
         private static void SourceOnlyIdentityBlocksExecution()
