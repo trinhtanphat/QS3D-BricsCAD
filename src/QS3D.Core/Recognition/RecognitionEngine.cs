@@ -149,20 +149,23 @@ namespace QS3D.Core.Recognition
             Results = materialized.AsReadOnly();
         }
         public IReadOnlyList<RecognitionResult> Results { get; }
-        public IReadOnlyList<RecognitionResult> AutoAccepted => CurrentAutoAccepted();
-        public IReadOnlyList<RecognitionResult> ReviewRequired => Results.Except(CurrentAutoAccepted()).ToList().AsReadOnly();
+        public IReadOnlyList<RecognitionResult> AutoAccepted => CurrentPartition(autoAccepted: true);
+        public IReadOnlyList<RecognitionResult> ReviewRequired => CurrentPartition(autoAccepted: false);
 
-        private IReadOnlyList<RecognitionResult> CurrentAutoAccepted()
+        private IReadOnlyList<RecognitionResult> CurrentPartition(bool autoAccepted)
         {
             foreach (var result in Results) result.ValidateCurrentCandidates();
             return Results
-                .Where(x => x.TopCandidate is RecognitionCandidate candidate &&
-                            candidate.Confidence >= _autoAcceptConfidence &&
-                            x.Margin >= _minimumMargin &&
-                            x.IsCaptureReady)
+                .Where(x => IsAutoAccepted(x) == autoAccepted)
                 .ToList()
                 .AsReadOnly();
         }
+
+        private bool IsAutoAccepted(RecognitionResult result) =>
+            result.TopCandidate is RecognitionCandidate candidate &&
+            candidate.Confidence >= _autoAcceptConfidence &&
+            result.Margin >= _minimumMargin &&
+            result.IsCaptureReady;
 
         private static void ValidateProbability(double value, string name)
         {
