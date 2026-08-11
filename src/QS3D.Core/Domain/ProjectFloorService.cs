@@ -76,7 +76,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var floor = FindRequired(project, floorId);
-            if (string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase)) return;
+            if (string.Equals((project.ActiveFloorId ?? string.Empty).Trim(), floor.Id, StringComparison.OrdinalIgnoreCase)) return;
             project.Touch();
             project.ActiveFloorId = floor.Id;
         }
@@ -87,7 +87,7 @@ namespace QS3D.Core.Domain
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var floor = FindRequired(project, floorId);
             var targets = ResolveOwnedElements(project, elements);
-            var changed = targets.Where(x => !string.Equals(x.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+            var changed = targets.Where(x => !string.Equals((x.FloorId ?? string.Empty).Trim(), floor.Id, StringComparison.OrdinalIgnoreCase)).ToList();
             if (changed.Count == 0) return 0;
 
             project.Touch();
@@ -240,7 +240,8 @@ namespace QS3D.Core.Domain
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Floor mutation target collection contains a null element.");
                 if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
                     throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
                 unique[element.Id] = owned;
