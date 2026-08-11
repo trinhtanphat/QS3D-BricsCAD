@@ -149,8 +149,9 @@ namespace QS3D.Core.Domain
             }
             foreach (var element in scope.Elements)
             {
-                RenameElementReference(element, "Material", previousName, nextName, inheritedMaterialFamilies.Contains(element.FamilyId));
-                RenameElementReference(element, "CurtainFrameMaterial", previousName, nextName, inheritedFrameFamilies.Contains(element.FamilyId));
+                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                RenameElementReference(element, "Material", previousName, nextName, inheritedMaterialFamilies.Contains(familyId));
+                RenameElementReference(element, "CurtainFrameMaterial", previousName, nextName, inheritedFrameFamilies.Contains(familyId));
             }
         }
 
