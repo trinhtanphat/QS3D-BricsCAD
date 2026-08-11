@@ -3,7 +3,7 @@
 - Status: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-interchange-export-validator-parity-20260812-0117`
 - Registered: `2026-08-12T01:17:00+07:00`
-- Baseline main SHA: `df8ee6865e9fcd3e1b80ba6abc535098a960af03`
+- Baseline main SHA: `224202b915207f8548871251a0f2464ab301f9cc`
 - Priority: evidence-driven remote-safe interchange integrity hardening during owner-requested `continue all`
 
 ## Reserved scope
