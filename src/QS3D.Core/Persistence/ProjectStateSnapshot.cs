@@ -68,8 +68,11 @@ namespace QS3D.Core.Persistence
             target.Elements.Clear();
             foreach (var element in source.Elements)
             {
-                var copy = new ProjectElement(element.Id, element.Category, element.FamilyId, element.FloorId, element.ZoneId)
+                var copy = new ProjectElement(element.Id, element.Category)
                 {
+                    FamilyId = element.FamilyId ?? string.Empty,
+                    FloorId = element.FloorId ?? string.Empty,
+                    ZoneId = element.ZoneId ?? string.Empty,
                     DrawingFingerprint = element.DrawingFingerprint ?? string.Empty
                 };
                 foreach (var handle in element.SourceHandles) copy.SourceHandles.Add(handle ?? string.Empty);
