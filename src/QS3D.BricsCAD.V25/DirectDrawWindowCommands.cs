@@ -225,7 +225,7 @@ namespace QS3D.BricsCAD.V25
 
         private static double? PromptPositiveMeters(Editor editor, string label, double defaultValue)
         {
-            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = false,
                 AllowZero = false,
@@ -244,7 +244,7 @@ namespace QS3D.BricsCAD.V25
 
         private static double? PromptNonNegativeMeters(Editor editor, string label, double defaultValue)
         {
-            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = false,
                 AllowZero = true,
