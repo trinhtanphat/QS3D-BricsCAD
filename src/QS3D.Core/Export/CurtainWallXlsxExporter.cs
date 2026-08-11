@@ -13,6 +13,7 @@ namespace QS3D.Core.Export
     public static class CurtainWallXlsxExporter
     {
         private const int MaxDataRows = 1048575;
+        private const int MaxCellTextCharacters = 32767;
 
         public static void Export(string path, IReadOnlyList<CurtainWallScheduleRow> rows)
         {
@@ -20,8 +21,13 @@ namespace QS3D.Core.Export
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             if (rows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Curtain XLSX export supports at most " + MaxDataRows + " data rows.");
             for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-                if (rows[rowIndex] == null)
+            {
+                var row = rows[rowIndex];
+                if (row == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                ValidateCellText(row.Floor, rowIndex, "Floor");
+                ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
+            }
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -101,6 +107,15 @@ namespace QS3D.Core.Export
                 foreach (var name in new[] { "[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet1.xml" })
                     if (archive.GetEntry(name) == null) throw new InvalidDataException("Generated curtain XLSX package is missing " + name + ".");
             }
+        }
+
+        private static void ValidateCellText(string value, int rowIndex, string fieldName)
+        {
+            var text = value ?? string.Empty;
+            if (text.Length > MaxCellTextCharacters)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Curtain XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
         }
 
         private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)
