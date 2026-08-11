@@ -1,47 +1,41 @@
 # Work claim — BQ modeless project identity
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-20260812-bq-modeless-project-identity`
 - Registered: `2026-08-12T00:37:17+07:00`
-- Last Updated: `2026-08-12T00:42:00+07:00`
+- Last Updated: `2026-08-12T00:52:00+07:00`
 - Baseline main SHA: `987f3da5230636e192d7283d71198e3660a23c99`
 - Priority: evidence-driven stale modeless mutation gap found during owner-requested continue-all audit
 - Task Key: `BQ-MODELESS-PROJECT-IDENTITY`
 
 ## Confirmed defect
 
-`QuantitySummaryWindow` is source-DWG-bound but does not retain the semantic `ProjectId` represented by the rows/window. `EnsureCurrentProject(...)` only proves that some project currently exists for the same DWG, while `PersistColumnPreferences()` then binds and mutates that current canonical project.
+`QuantitySummaryWindow` was source-DWG-bound but did not retain the semantic `ProjectId` represented by the rows/window. `EnsureCurrentProject(...)` only proved that some project currently existed for the same DWG, while `PersistColumnPreferences()` then bound and mutated that current canonical project.
 
-This preserves the intended same-project reload rebind, but it also allows an already-open BQ window to write its visible-column preference into a different replacement project loaded into the same DWG. That is inconsistent with the modeless exact-project freshness boundary already enforced for other mutating manager windows and with the documented requirement that modeless writes rebind canonical same-ProjectId state or fail closed.
+This preserved the intended same-project reload rebind, but it also allowed an already-open BQ window to write its visible-column preference into a different replacement project loaded into the same DWG. That was inconsistent with the modeless exact-project freshness boundary already enforced for other mutating manager windows and with the documented requirement that modeless writes rebind canonical same-ProjectId state or fail closed.
 
-## Reserved scope
+## Implemented scope
 
-Capture the BQ window's reviewed project identity without retaining a stale mutable `ProjectState`. The current `QS3DBQ` launcher recalculates the initial rows and constructs the window synchronously with no prompt/await/modeless boundary between those two statements, so this lane deliberately leaves `Commands.cs` untouched and captures the current existing `ProjectId` in the window constructor before the window becomes modeless. Allow canonical rebind after reload only when the current project still has the same `ProjectId`; fail closed when the project is missing or replaced by another ID. Apply this guard before the preference metadata mutation and other BQ callbacks that claim current-project freshness.
+`QuantitySummaryWindow` now captures the current existing `ProjectId` during synchronous construction before `InitializeComponent()` and retains only that stable string identity, not a mutable `ProjectState`. The current `QS3DBQ` launcher recalculates the initial rows and constructs the window synchronously with no prompt/await/modeless boundary between those two statements, so `Commands.cs` remains untouched.
 
-## Expected surfaces
+Every callback that claims a current project now resolves existing state and verifies the same `ProjectId`. The canonical column-preference write also verifies project identity after `ExistingProjectMutationContext.TryGet(...)` and before rollback snapshot / metadata / `Touch()`. Same-`ProjectId` reload therefore remains accepted while a different replacement project in the same DWG fails closed.
 
-- `src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs`
-- `scripts/preflight-bq-modeless-project-safety.py`
-- this claim file
+## Committed evidence
 
-## Coordination / exclusions
+- Source fix: `c11e4ded41d0e49541f5d5fb3bb467a5d9c0953e` — `fix(bq): bind modeless callbacks to project identity`
+- Focused regression gate: `c6d7f7ee9a6ef4a0ad3583c5ae9e12e32111c6ce` — `test(bq): guard modeless project identity`
+- Source blob re-read on later moving-main snapshots, including `de02fb0253f9caeeddf312a76ab93817ac161562`, still contains stable `_projectId` capture and canonical preference-write identity verification.
+- Preflight blob re-read on `de02fb0253f9caeeddf312a76ab93817ac161562` still requires constructor identity capture, same-ProjectId equality, exact mutation ordering, existing-project-only behavior, and forbids a retained mutable project field.
+- No GitHub Actions were dispatched. No BricsCAD V25/local runtime execution or qualification is claimed by this remote batch.
 
-- Preserve same-`ProjectId` reload behavior introduced by the existing BQ reload-safe preference work; do not restore a retained mutable `ProjectState` reference.
-- Do not modify `Commands.cs`, BQ native Table placement/refresh, quantity arithmetic/report builders, ED2 implementation, unit-resolution work, or detail viewport-reveal behavior.
-- Do not touch any ACTIVE claim scope, including current Floor/Grid/Semantic ownership lanes.
-- No GitHub Actions/build/release dispatch and no BricsCAD V25 runtime qualification claim.
+## Preserved behavior / exclusions
 
-## Validation plan
-
-- `QuantitySummaryWindow` captures the current existing `ProjectId` during synchronous construction and retains only that stable string identity, not a mutable `ProjectState`.
-- Same-DWG same-`ProjectId` reload remains accepted and preference persistence binds canonical current state.
-- Same-DWG replacement with a different `ProjectId` is rejected before preference metadata/timestamp mutation.
-- Project unload remains fail-closed and non-creating.
-- Source-DWG active-document guard, rollback, recalculation, locate, export, and current BQ row-freshness contracts remain intact.
-- Focused preflight must require project-ID capture/equality and must forbid reintroducing a retained mutable project field.
-- Re-fetch `main` and re-check claim collision immediately before every source/test write batch; read back resulting source and commits. Do not claim local runtime execution unless actually run.
+- Same-`ProjectId` reload rebind remains valid; no stale mutable `ProjectState` reference was restored.
+- `Commands.cs`, BQ native Table placement/refresh, quantity arithmetic/report builders, ED2 implementation, unit-resolution work, and detail viewport-reveal behavior were not modified by this lane.
+- Existing source-DWG active-document guard, rollback, recalculation, locate, export, and current BQ row-freshness contracts remain in place.
+- No concurrent ACTIVE claim was overwritten and no force-push was used.
 
 ## Completion condition
 
-An already-open BQ modeless window can rebind after a same-project reload but cannot mutate or operate as current against a different semantic project loaded into the same DWG, with focused static regression evidence committed.
+Satisfied: an already-open BQ modeless window can rebind after a same-project reload but cannot mutate or operate as current against a different semantic project loaded into the same DWG, with focused static regression evidence committed.
