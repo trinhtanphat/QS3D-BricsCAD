@@ -245,8 +245,13 @@ namespace QS3D.Core.Navigation
                 if (!Enum.IsDefined(typeof(ElementCategory), element.Category)) throw new InvalidOperationException("Project browser found undefined element category on: " + elementId + ".");
 
                 var familyId = (element.FamilyId ?? string.Empty).Trim();
-                if (familyId.Length > 0 && !families.ContainsKey(familyId))
-                    throw new InvalidOperationException("Project browser found missing family reference " + familyId + " on element " + elementId + ".");
+                if (familyId.Length > 0)
+                {
+                    if (!families.TryGetValue(familyId, out var family))
+                        throw new InvalidOperationException("Project browser found missing family reference " + familyId + " on element " + elementId + ".");
+                    if (family.Category != element.Category)
+                        throw new InvalidOperationException("Project browser found family/category mismatch on element " + elementId + ": family " + family.Id + " is " + family.Category + " while element is " + element.Category + ".");
+                }
                 var floorId = (element.FloorId ?? string.Empty).Trim();
                 if (floorId.Length > 0 && !floors.ContainsKey(floorId))
                     throw new InvalidOperationException("Project browser found missing floor reference " + floorId + " on element " + elementId + ".");
