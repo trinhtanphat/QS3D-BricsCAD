@@ -95,10 +95,11 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() =>
                 ProjectInterchangeFieldMergeImporter.Import(target, json, policy, authorization));
 
+            var restoredElement = target.FindElement("E-1") ?? throw new InvalidOperationException("Rollback lost E-1.");
             Equal(beforeA, target.FindFloor("A")!.ElevationM);
             Equal(beforeB, target.FindFloor("B")!.ElevationM);
-            Equal("A", targetElement.Properties[ProjectFloorService.BottomLevelIdKey]);
-            Equal("B", targetElement.Properties[ProjectFloorService.TopLevelIdKey]);
+            Equal("A", restoredElement.Properties[ProjectFloorService.BottomLevelIdKey]);
+            Equal("B", restoredElement.Properties[ProjectFloorService.TopLevelIdKey]);
             Equal(beforeVersion, target.ChangeVersion);
         }
 
