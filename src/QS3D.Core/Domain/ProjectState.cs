@@ -113,11 +113,12 @@ namespace QS3D.Core.Domain
     public sealed class ProjectState
     {
         public const int CurrentSchemaVersion = 3;
+        private string _name;
 
         public ProjectState(string projectId, string name)
         {
             ProjectId = string.IsNullOrWhiteSpace(projectId) ? throw new ArgumentException("Project id is required.", nameof(projectId)) : projectId.Trim();
-            Name = string.IsNullOrWhiteSpace(name) ? "QS3D Project" : name.Trim();
+            _name = string.IsNullOrWhiteSpace(name) ? "QS3D Project" : name.Trim();
             Zones = new List<ZoneDefinition>();
             Floors = new List<FloorDefinition>();
             Families = new List<ProjectFamily>();
@@ -129,7 +130,11 @@ namespace QS3D.Core.Domain
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string ProjectId { get; }
-        public string Name { get; set; }
+        public string Name
+        {
+            get => _name;
+            set => _name = RequireProjectName(value);
+        }
         public string DrawingPath { get; set; } = string.Empty;
         public string DrawingFingerprint { get; set; } = string.Empty;
         public string ActiveZoneId { get; set; } = string.Empty;
@@ -167,6 +172,7 @@ namespace QS3D.Core.Domain
             ChangeVersion = changeVersion;
         }
 
+        private static string RequireProjectName(string value) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Project name is required.", nameof(value)) : value.Trim();
         private static string NormalizeLookupId(string id) => (id ?? string.Empty).Trim();
 
         private static T? FindUnique<T>(IEnumerable<T> items, string normalizedId, Func<T, string> idSelector, string label) where T : class
