@@ -2,18 +2,21 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: source-safe low-click lifecycle for generic `QS3DLOCATE` and `QS3DEXCELLOCATE` in `Commands.cs`.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/Commands.cs`
   - `scripts/preflight-locate-before-user-input.py`
-  - this claim file for close-out
-- Problem: both commands require an existing QS3D project, but generic Locate asks for an Element Id first and Excel Locate asks the user to choose a workbook / row first; only afterward do they reject a projectless DWG.
-- Intended contract:
-  - require/read the existing project before any Locate text/file/row interaction;
-  - preserve cancel behavior and all existing modern/legacy Excel provenance validation;
-  - no project creation or mutation;
-  - do not overlap the active quantity-locate stale-selection claim, which explicitly excludes Excel locate and reserves different files.
-- Non-overlap: excludes `CadHandleService`, QuantitySummaryWindow, QuantityInsightPanel, viewport/selection semantics, Ribbon, updater, Reference Wall and LOCAL_ONLY V25 execution.
-- Validation: exact diff/current-source review plus focused static preflight; no GitHub Actions under `continue all`.
-- Completion condition: projectless Locate/Excel Locate fail before user input/dialog while valid-project behavior remains unchanged.
+  - this claim file
+- Completed commits:
+  - `c5a508cc2a39a1d9dd706a13fcddffd5f37cbb78` — existing-project preflight now precedes generic Locate text prompt and Excel Locate file/row prompts.
+  - `e27bf9a17be1a29a20e84b65613ea21ccb6c1005` — focused static ordering/non-creation guard.
+- Verified source contract:
+  - `QS3DLOCATE` stays inside its existing Guard, requires `TryGetReadOnly` project, then asks for Element Id;
+  - `QS3DEXCELLOCATE` requires `TryGetReadOnly` project before `OpenFileDialog` and row prompt;
+  - modern Excel fingerprint resolution, legacy decimal-handle YES confirmation, partial-handle fail-closed behavior, implied-selection update and zoom gating are unchanged;
+  - neither command calls `GetOrCreate` or mutates project state.
+- Coordination: active quantity-locate stale-selection work reserves `CadHandleService`/Quantity UI and explicitly excludes Excel locate; no overlapping source was edited.
+- Validation performed: exact commit diff + current-source/preflight source review. The preflight was not executed in this web session and no GitHub Actions were dispatched.
+- Runtime boundary: no BricsCAD V25 runtime PASS claimed.
+- Reservation: released.
