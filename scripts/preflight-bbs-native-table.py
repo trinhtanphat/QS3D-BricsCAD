@@ -89,8 +89,17 @@ if BBS_SMOKE.is_file():
     ):
         if token not in text: errors.append("BbsRegressionSmoke.cs missing project identity fail-closed regression: " + token)
 
-if CSV_COMMANDS.is_file() and 'ProjectRebarScheduleBuilder.Build(project)' not in CSV_COMMANDS.read_text(encoding="utf-8"):
-    errors.append("BBS CSV command no longer shares ProjectRebarScheduleBuilder authority")
+if CSV_COMMANDS.is_file():
+    text = CSV_COMMANDS.read_text(encoding="utf-8")
+    for token in (
+        'ProjectContextCoordinator.TryGetReadOnly(document, out var project)',
+        'ProjectStateSnapshot.CreateDetachedCopy(project)',
+        'ProjectRebarScheduleBuilder.Build(snapshot)',
+    ):
+        if token not in text:
+            errors.append("BBS CSV command no longer shares detached ProjectRebarScheduleBuilder authority: " + token)
+    if 'ProjectRebarScheduleBuilder.Build(project)' in text:
+        errors.append("BBS CSV command must not build from live read-only project state")
 
 if SHARED.is_file():
     text = SHARED.read_text(encoding="utf-8")
@@ -130,4 +139,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BBS native Table consumes authoritative ProjectRebarScheduleBuilder rows across all 15 schedule/provenance fields, rejects corrupt project semantic identities before extraction, forbids native rebar calculation/parsing duplication, regenerates semantic state before build/refresh, uses shared project-level QS3DDOC ownership/rollback/live drift health, remains read-only in health, is fail-isolated in Release Check runtime health and is discoverable from Schedule Hub without claiming licensed V25 qualification.")
+print("PASS: BBS native Table consumes authoritative ProjectRebarScheduleBuilder rows across all 15 schedule/provenance fields, rejects corrupt project semantic identities before extraction, forbids native rebar calculation/parsing duplication, keeps CSV authority on a detached read-only snapshot, regenerates semantic state before native build/refresh, uses shared project-level QS3DDOC ownership/rollback/live drift health, remains read-only in health, is fail-isolated in Release Check runtime health and is discoverable from Schedule Hub without claiming licensed V25 qualification.")
