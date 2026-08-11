@@ -59,7 +59,7 @@ After Import As New with provenance:
 - imported target Elements have empty `ProjectElement.SourceHandles`;
 - imported target Elements have no imported drawing fingerprint;
 - generated/native ownership remains absent and requires explicit target-DWG generation;
-- raw source handles remain provenance only;
+- raw source handles remain provenance only and are never target CAD ownership;
 - source-to-target semantic lineage remains metadata only;
 - neither record can be treated as target CAD ownership.
 

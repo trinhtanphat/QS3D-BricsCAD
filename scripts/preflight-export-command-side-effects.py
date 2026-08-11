@@ -7,54 +7,63 @@ CASES = (
     (
         "Curtain",
         ROOT / "src/QS3D.BricsCAD.V25/CurtainWallScheduleCommands.cs",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "CurtainWallScheduleBuilder.Build(project)",
         "panels = QuantityReportMath.AddCount(panels, row.PanelCount);",
         "CurtainWallXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
+        True,
     ),
     (
         "Door/Opening",
         ROOT / "src/QS3D.BricsCAD.V25/DoorOpeningScheduleCommands.cs",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "DoorOpeningScheduleBuilder.Build(project)",
         "count = QuantityReportMath.AddCount(count, row.Count);",
         "DoorOpeningXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
+        True,
     ),
     (
         "Material",
         ROOT / "src/QS3D.BricsCAD.V25/MaterialUsageScheduleCommands.cs",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "MaterialUsageScheduleBuilder.Build(project)",
         "elements = QuantityReportMath.AddCount(elements, row.ElementCount);",
         "MaterialUsageXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
+        True,
     ),
     (
         "Room finish",
         ROOT / "src/QS3D.BricsCAD.V25/RoomFinishScheduleCommands.cs",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "RoomFinishScheduleBuilder.Build(project)",
         "primary = QuantityReportMath.Add(primary, row.PrimaryQuantity, \"HT_Phòng export primary quantity\");",
         "RoomFinishXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
+        True,
     ),
     (
         "BBS CSV",
         ROOT / "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs",
+        "ProjectContextCoordinator.GetOrCreate(document)",
         "ProjectRebarScheduleBuilder.Build(project)",
         "totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, \"BBS CSV total weight\");",
         "RebarCsvExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status);",
+        False,
     ),
 )
 
 errors = []
-for label, path, build, aggregate, export, finalize in CASES:
+for label, path, project, build, aggregate, export, finalize, existing_only in CASES:
     if not path.is_file():
         errors.append("missing " + str(path.relative_to(ROOT)))
         continue
 
     text = path.read_text(encoding="utf-8")
     dialog = "if (dialog.ShowDialog() != true) return;"
-    project = "ProjectContextCoordinator.GetOrCreate(document)"
     regenerate = "RegenerateDirty(project)"
     positions = {
         dialog: text.find(dialog),
@@ -91,6 +100,8 @@ for label, path, build, aggregate, export, finalize in CASES:
         if "PaletteCoordinator." in between_export_and_finalize or "Editor.WriteMessage" in between_export_and_finalize:
             errors.append(label + " must not perform fallible UI work between persistent export and FinalizeUi")
 
+    if existing_only and "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append(label + " read-only export must not create a replacement project")
     if "Cảnh báo UI sau export" not in text:
         errors.append(label + " missing best-effort post-export UI warning boundary")
 
@@ -137,4 +148,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: schedule/template exporters confirm destination before project/regeneration work, validate/build before writing, and isolate post-export UI from persistent success.")
+print("PASS: schedule/template exporters confirm destination before project/regeneration work, enforce each command's existing-vs-create project boundary, validate/build before writing, and isolate post-export UI from persistent success.")

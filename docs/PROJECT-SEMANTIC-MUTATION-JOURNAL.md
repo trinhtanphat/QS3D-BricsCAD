@@ -6,7 +6,7 @@ Status: `SOURCE_IMPLEMENTED` for CAD-independent `ProjectState` mutation boundar
 
 ## Phases
 
-The journal records deterministic ordered phases:
+The journal records deterministic ordered phases while capacity remains available:
 
 - `Planned` — semantic snapshot captured;
 - `Running` — mutation delegate executing;
@@ -18,13 +18,15 @@ The journal records deterministic ordered phases:
 
 The journal is detached from `ProjectState`: rollback does not erase diagnostic phase evidence, and writing the journal itself does not change project audit/metadata or `ChangeVersion`.
 
+The journal is also deliberately non-authoritative. Its bounded 256-entry capacity protects diagnostics from unbounded growth, but diagnostic saturation must never fail, roll back, skip validation, or otherwise change a semantic mutation outcome. Executor phase writes are therefore best-effort once the journal is full; normal unsaturated operations still record the complete ordered phase sequence.
+
 ## Pre-commit validation
 
 A caller may provide a pre-commit validation callback after the mutation delegate returns but before `Committed` is recorded.
 
-This is useful for deterministic fault injection and cross-checks that need to observe the fully mutated semantic state. If validation throws, the executor restores the captured semantic project.
+This is useful for deterministic fault injection and cross-checks that need to observe the fully mutated semantic state. If validation throws, the executor restores the captured semantic project. Diagnostic saturation does not bypass this validation callback.
 
-Smoke coverage deliberately runs a complete interchange AppendOnly+provenance mutation and then injects a validation failure. The outer scope must restore elements, metadata/provenance, audits, `UpdatedUtc` and `ChangeVersion` to the pre-operation snapshot.
+Smoke coverage deliberately runs a complete interchange AppendOnly+provenance mutation and then injects a validation failure. The outer scope must restore elements, metadata/provenance, audits, `UpdatedUtc` and `ChangeVersion` to the pre-operation snapshot. Separate saturation coverage fills one detached journal to its cap and verifies that the next semantic mutation still commits normally.
 
 ## Rollback failure
 

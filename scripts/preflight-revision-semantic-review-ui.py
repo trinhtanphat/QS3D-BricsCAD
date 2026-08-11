@@ -61,12 +61,18 @@ for forbidden in (
 
 for token in (
     "LocateCurrentElement(doc, row.ElementId, \"Revision Locate\")",
-    "var currentProject = ProjectContextCoordinator.GetOrCreate(document);",
+    "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
     "var element = currentProject.FindElement(elementId)",
     "SourceHandleResolver.Resolve(currentProject, new[] { element.Id })",
 ):
     if token not in commands:
-        errors.append("ReviewCommands current-state locate contract missing token: " + token)
+        errors.append("ReviewCommands current-state read-only locate contract missing token: " + token)
+
+helper_start = commands.find("private static int LocateCurrentElement")
+helper_end = commands.find("private static HashSet<string> CollectGeneratedHandles", helper_start)
+helper = commands[helper_start:helper_end] if helper_start >= 0 and helper_end > helper_start else ""
+if "ProjectContextCoordinator.GetOrCreate(document)" in helper:
+    errors.append("Revision modeless Locate must not create/cache replacement project state")
 
 if "new RevisionService().Compare(before, after)" not in core:
     errors.append("semantic review UI must remain backed by RevisionService.Compare through the Core review builder")
@@ -78,4 +84,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: RevisionWindow presents quantity and grouped semantic changes, hides raw source handles, and reuses the current-state stable-ID locate path without native mutation.")
+print("PASS: RevisionWindow presents quantity and grouped semantic changes, hides raw source handles, and reuses the current-state read-only stable-ID locate path without native mutation.")

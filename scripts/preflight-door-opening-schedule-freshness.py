@@ -12,7 +12,7 @@ else:
     text = WINDOW.read_text(encoding="utf-8")
     required = (
         "private IReadOnlyList<DoorOpeningScheduleRow> BuildCurrentRows(out int regenerated)",
-        "ProjectContextCoordinator.GetOrCreate(_document)",
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
         "RegenerateDirty(project)",
         "DoorOpeningScheduleBuilder.Build(project)",
         "var current = BuildCurrentRows(out var regenerated);",
@@ -21,6 +21,8 @@ else:
     for token in required:
         if token not in text:
             errors.append("Door/Opening schedule missing freshness token: " + token)
+    if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
+        errors.append("Door/Opening modeless schedule must not create/cache replacement project state")
 
     export_pos = text.find("private void OnExportClick")
     refresh_pos = text.find("private void RefreshRows", export_pos)
@@ -39,4 +41,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Door/Opening XLSX export rebuilds current project rows only after Save confirmation and never exports stale cached schedule data")
+print("[PASS] Door/Opening XLSX export re-resolves existing project state after Save confirmation and never exports stale cached schedule data")

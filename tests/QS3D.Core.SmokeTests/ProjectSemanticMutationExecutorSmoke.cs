@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             SuccessfulMutationRecordsOrderedPhases();
             MutationExceptionRestoresCompleteProjectState();
             PreCommitFaultRollsBackCompletedInterchangeMutation();
+            SaturatedJournalCannotChangeMutationOutcome();
             InvalidOperationNameFailsBeforeMutation();
         }
 
@@ -115,6 +116,30 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeVersion, target.ChangeVersion);
             Equal(0, ProjectInterchangeSourceHandleProvenance.ReadSourceHandles(target, "SOURCE", "E2").Count);
             Equal("Planned|Running|Validating|RollingBack|RolledBack", string.Join("|", journal.Entries.Select(x => x.Phase.ToString())));
+        }
+
+        private static void SaturatedJournalCannotChangeMutationOutcome()
+        {
+            var project = new ProjectState("SATURATED", "Saturated Journal");
+            var journal = new ProjectSemanticMutationJournal();
+            for (var i = 0; i < 85; i++)
+                Equal(i, ProjectSemanticMutationExecutor.Execute(project, "fill-" + i, () => i, journal));
+
+            Equal(255, journal.Entries.Count);
+            var result = ProjectSemanticMutationExecutor.Execute(
+                project,
+                "commit-after-saturation",
+                () =>
+                {
+                    project.Metadata["CommittedAfterSaturation"] = "yes";
+                    project.Touch();
+                    return 86;
+                },
+                journal);
+
+            Equal(86, result);
+            Equal("yes", project.Metadata["CommittedAfterSaturation"]);
+            Equal(256, journal.Entries.Count);
         }
 
         private static void InvalidOperationNameFailsBeforeMutation()

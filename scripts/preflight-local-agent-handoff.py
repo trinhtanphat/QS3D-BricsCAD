@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
 AGENTS = ROOT / "AGENTS.md"
 REMOTE_SCOPE = ROOT / "docs" / "REMOTE-AGENT-SCOPE.md"
+INBOX_REF = "`docs/LOCAL-AGENT-INBOX.md`"
 
 VALID_PRIORITIES = {"P0", "P1", "P2"}
 VALID_STATUSES = {"OPEN", "IN_PROGRESS", "PASS", "BLOCKED"}
@@ -55,8 +56,16 @@ def main() -> int:
         errors.append("inbox must declare itself as the single live LOCAL_ONLY queue")
     if "LOCAL_ONLY" not in agents or "## Handoff rule" not in agents:
         errors.append("AGENTS.md lost the LOCAL_ONLY handoff contract")
+    if INBOX_REF not in agents:
+        errors.append("AGENTS.md must route local work through docs/LOCAL-AGENT-INBOX.md")
+    if "same source/docs batch" not in agents:
+        errors.append("AGENTS.md must require same-batch registration of new/changed LOCAL_ONLY scenarios")
     if "LOCAL_ONLY" not in remote_scope or "LOCAL_PASS" not in remote_scope:
         errors.append("REMOTE-AGENT-SCOPE.md lost LOCAL_ONLY/LOCAL_PASS vocabulary")
+    if INBOX_REF not in remote_scope:
+        errors.append("REMOTE-AGENT-SCOPE.md must route local work through docs/LOCAL-AGENT-INBOX.md")
+    if "same batch" not in remote_scope:
+        errors.append("REMOTE-AGENT-SCOPE.md must require same-batch inbox updates")
 
     matches = list(
         re.finditer(
@@ -110,7 +119,7 @@ def main() -> int:
 
     print(
         f"[PASS] local-agent-handoff: {len(matches)} structured LOCAL_ONLY items; "
-        "priority/status/evidence contract valid"
+        "canonical inbox routing + same-batch priority/status/evidence contract valid"
     )
     return 0
 

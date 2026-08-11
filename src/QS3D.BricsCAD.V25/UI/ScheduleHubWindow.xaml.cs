@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
 using Application = Bricscad.ApplicationServices.Application;
+using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
 
@@ -49,14 +50,21 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
-                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                {
+                    ClearSnapshotCounts();
+                    SetStatus("QS3D project hiện hành không còn khả dụng. Schedule Hub không tạo project mới; hãy nạp project rồi Refresh.");
+                    return;
+                }
 
-                var bqRows = ProjectQuantityReportBuilder.Group(project);
-                var finishRows = RoomFinishScheduleBuilder.Build(project);
-                var doorRows = DoorOpeningScheduleBuilder.Build(project);
-                var curtainRows = CurtainWallScheduleBuilder.Build(project);
-                var materialRows = MaterialUsageScheduleBuilder.Build(project);
+                var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);
+                var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(previewProject);
+
+                var bqRows = ProjectQuantityReportBuilder.Group(previewProject);
+                var finishRows = RoomFinishScheduleBuilder.Build(previewProject);
+                var doorRows = DoorOpeningScheduleBuilder.Build(previewProject);
+                var curtainRows = CurtainWallScheduleBuilder.Build(previewProject);
+                var materialRows = MaterialUsageScheduleBuilder.Build(previewProject);
 
                 ElementCountText.Text = CountBqElements(bqRows).ToString(CultureInfo.InvariantCulture);
                 FinishCountText.Text = CountFinishElements(finishRows).ToString(CultureInfo.InvariantCulture);
@@ -64,9 +72,18 @@ namespace QS3D.BricsCAD.V25.UI
                 CurtainCountText.Text = CountCurtainElements(curtainRows).ToString(CultureInfo.InvariantCulture);
                 MaterialCountText.Text = materialRows.Select(x => x.MaterialName).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).Count().ToString(CultureInfo.InvariantCulture);
 
-                SetStatus("Schedule snapshot đã đồng bộ từ dữ liệu schedule hợp lệ" + (regenerated > 0 ? " • regen " + regenerated + " cấu kiện dirty." : "."));
+                SetStatus("Schedule snapshot đã tính trên bản sao semantic read-only" + (regenerated > 0 ? " • preview regen " + regenerated + " cấu kiện dirty." : "."));
             }
             catch (Exception ex) { SetStatus("Đọc Schedule Hub lỗi: " + ex.Message); }
+        }
+
+        private void ClearSnapshotCounts()
+        {
+            ElementCountText.Text = "0";
+            FinishCountText.Text = "0";
+            DoorCountText.Text = "0";
+            CurtainCountText.Text = "0";
+            MaterialCountText.Text = "0";
         }
 
         private static int CountBqElements(System.Collections.Generic.IEnumerable<QuantityReportRow> rows)

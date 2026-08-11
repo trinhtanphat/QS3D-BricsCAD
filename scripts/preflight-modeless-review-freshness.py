@@ -17,13 +17,19 @@ if REVIEW.is_file():
     for token in (
         'LocateCurrentElement(doc, row.ElementId, "BBS Locate")',
         'LocateCurrentElement(doc, row.ElementId, "Revision Locate")',
-        "var currentProject = ProjectContextCoordinator.GetOrCreate(document);",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
         "var element = currentProject.FindElement(elementId)",
         "SourceHandleResolver.Resolve(currentProject, new[] { element.Id })",
         "Application.DocumentManager.MdiActiveDocument, document",
     ):
         if token not in text:
-            errors.append("BBS/Revision modeless Locate missing current-project re-resolution token: " + token)
+            errors.append("BBS/Revision modeless Locate missing current-project read-only re-resolution token: " + token)
+
+    helper_start = text.find("private static int LocateCurrentElement")
+    helper_end = text.find("private static HashSet<string> CollectGeneratedHandles", helper_start)
+    helper = text[helper_start:helper_end] if helper_start >= 0 and helper_end > helper_start else ""
+    if "ProjectContextCoordinator.GetOrCreate(document)" in helper:
+        errors.append("BBS/Revision modeless Locate must not create/cache replacement project state")
 
     apply_pos = text.find("Action<RecognitionResult> apply = result =>")
     locate_pos = text.find("Action<RecognitionResult> locate = result =>", apply_pos)
@@ -69,4 +75,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] BBS/Revision Locate re-resolve current semantic state and Recognition Apply re-reads live CAD before modeless commit")
+print("[PASS] BBS/Revision Locate re-resolve current semantic state read-only and Recognition Apply re-reads live CAD before modeless commit")
