@@ -177,7 +177,8 @@ namespace QS3D.Core.Services
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Bulk edit target collection contains a null semantic element entry.");
                 var elementId = (element.Id ?? string.Empty).Trim();
                 if (elementId.Length == 0)
                     throw new InvalidOperationException("Bulk edit target contains an element with a blank semantic id.");
