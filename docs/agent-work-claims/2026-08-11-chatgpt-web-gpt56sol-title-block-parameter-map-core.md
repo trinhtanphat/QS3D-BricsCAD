@@ -1,6 +1,6 @@
 # Work claim — Title Block parameter mapping Core P0
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-title-block-parameter-map-core`
 - Registered: `2026-08-11T22:20:00+07:00`
 - Baseline main SHA: `d2e5c2e4d009193970e1a346da5dfd098e274d4d`
@@ -11,26 +11,20 @@
 
 Add a pure-Core mapping contract that turns validated `SemanticSheetPlan` fields into deterministic title-block parameter values. Native BricsCAD block/attribute discovery and mutation remain outside this lane.
 
-## Reserved files
+## Completion
 
-- `src/QS3D.Core/Documentation/SemanticTitleBlockParameterMapBuilder.cs` (new)
-- `tests/QS3D.Core.SmokeTests/SemanticViewSheetPlannerSmoke.cs`
-- `scripts/preflight-semantic-title-block-map.py` (new)
-- `docs/DOCUMENTATION-LAYER.md` for a minimal status update
-- this claim file for close-out
-
-## Contract
-
-- treat the destination parameter/attribute tag as a bounded opaque key; do not invent BricsCAD tag syntax rules in Core;
-- support only explicit semantic Sheet fields in P0: stable SheetId, SheetNumber, SheetName, optional TitleBlockName and PlacedViewCount;
-- reject null definitions, blank/overlong tags, duplicate destination tags case-insensitively, over-bounded maps and unknown enum values;
-- render numeric values invariant-culture and optional title-block name as empty when absent;
-- sort output deterministically by destination tag and return a defensive read-only snapshot;
-- remain handle-free and independent from BricsCAD/Teigha APIs;
-- do not create BlockReference/AttributeReference entities or assume a customer-private title-block definition exists;
-- no Revision, Floor/Level, Quantity, updater, installer, CI/release or other active lane changes;
-- no GitHub Actions dispatch/re-run and no licensed V25 runtime claim.
-
-## Completion condition
-
-Core mapping builder + deterministic/fail-closed smoke coverage + focused static gate are merged/read back on `main`, documentation status is accurate, and this claim closes with exact pushed SHA(s).
+- Claim: `f15cd94b90e7190ddf1f176ef880768360743911`.
+- Core mapping builder: `acb57f5a9573579be1e209b1bc7fe7671f4e9a04`.
+- Smoke coverage: `7351b9650bc45fb258e1b86f0ae3e0e89a4a2fcc`.
+- Focused static gate: `2ba4b3a2da2b088e3cd8a6621a8f8f5b43391e03`.
+- Canonical documentation status: `8dfcc7ab81bdee86a54eef2a64e1f8fdf52672f5`.
+- Destination parameter tags remain bounded opaque Core keys; no BricsCAD tag syntax or BlockReference/AttributeReference behavior is invented in this lane.
+- P0 supports only explicit semantic Sheet fields: stable SheetId, SheetNumber, SheetName, optional TitleBlockName and PlacedViewCount.
+- Mapping rejects null definitions, blank/overlong tags, duplicate destination tags case-insensitively, >128 definitions and unknown enum values; numeric rendering uses invariant culture.
+- Output is deterministically sorted by destination tag and defensively copied into a read-only snapshot.
+- GitHub builder/gate/smoke readback after merge: PASS.
+- Python preflight: NOT RUN in this remote session; gate source was merged/read back only.
+- Core build/smoke executable: NOT RUN in this remote session.
+- BricsCAD V25 / Windows UI / native title-block discovery/mutation: NOT RUN.
+- GitHub Actions: NOT DISPATCHED / NOT RE-RUN.
+- Issue #77 remains OPEN for native MLeader and Layout/PaperSpace/Viewport/title-block/Sheet-Index-Table materialization.
