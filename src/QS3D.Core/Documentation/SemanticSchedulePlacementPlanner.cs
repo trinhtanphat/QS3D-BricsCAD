@@ -108,7 +108,7 @@ namespace QS3D.Core.Documentation
             if (right <= options.MarginLeftMm || bottom <= options.MarginTopMm)
                 throw new InvalidOperationException("Semantic schedule placement margins/reserved area leave no usable paper region.");
 
-            var occupied = BuildOccupiedRegions(sheet, options, right, bottom);
+            var occupied = BuildOccupiedRegions(sheet);
             var uniqueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var normalized = new List<SemanticSchedulePlacementItem>(materialized.Count);
             for (var i = 0; i < materialized.Count; i++)
@@ -166,11 +166,7 @@ namespace QS3D.Core.Documentation
             return result;
         }
 
-        private static List<Region> BuildOccupiedRegions(
-            SemanticSheetPlan sheet,
-            SemanticSchedulePlacementOptions options,
-            double right,
-            double bottom)
+        private static List<Region> BuildOccupiedRegions(SemanticSheetPlan sheet)
         {
             var result = new List<Region>(sheet.Placements.Count);
             foreach (var placement in sheet.Placements)
@@ -180,9 +176,9 @@ namespace QS3D.Core.Documentation
                 NonNegativeFinite(placement.Ymm, "sheet.Placements.Ymm");
                 PositiveFinite(placement.WidthMm, "sheet.Placements.WidthMm");
                 PositiveFinite(placement.HeightMm, "sheet.Placements.HeightMm");
-                if (placement.Xmm < options.MarginLeftMm || placement.Ymm < options.MarginTopMm ||
-                    placement.Xmm + placement.WidthMm > right || placement.Ymm + placement.HeightMm > bottom)
-                    throw new InvalidOperationException("Existing semantic view placement lies outside the usable schedule-placement region: " + placement.ViewId + ".");
+                if (placement.Xmm + placement.WidthMm > sheet.WidthMm ||
+                    placement.Ymm + placement.HeightMm > sheet.HeightMm)
+                    throw new InvalidOperationException("Existing semantic view placement lies outside the paper bounds: " + placement.ViewId + ".");
                 result.Add(new Region(placement.Xmm, placement.Ymm, placement.WidthMm, placement.HeightMm));
             }
             return result;
