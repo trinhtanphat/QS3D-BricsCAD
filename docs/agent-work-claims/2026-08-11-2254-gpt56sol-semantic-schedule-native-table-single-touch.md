@@ -1,43 +1,42 @@
 # Work claim — Semantic Schedule native Table single ChangeVersion touch
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `gpt56sol-chatgpt-web`
 - Registered: `2026-08-11T22:54:00+07:00`
+- Completed: `2026-08-11T23:01:00+07:00`
 - Baseline main SHA: `104d4f741849ac286065be01f5a529310d0e62c3`
+- Merged PR: `#517`
+- Main implementation SHA: `ac26c1a164f508287bfc8928789f643ccece9325`
+- Replaced PR: `#516` (closed unmerged after GitHub reported the base branch changed during merge)
 - Priority: prevent custom Semantic Schedule native Table Build/Remove from advancing `ProjectState.ChangeVersion` twice for one logical mutation.
 
-## Confirmed defect
+## Defect fixed
 
-`AuditTrail.ForProject(project).Record(...)` already owns a `ProjectState.Touch()`. `SemanticScheduleNativeTableBuilder.Build(...)` and `Remove(...)` each call `project.Touch()` again immediately after the audit event. One successful custom-schedule Table mutation therefore advances `ChangeVersion` twice, creating artificial freshness/version churn.
+`AuditTrail.ForProject(project).Record(...)` already owns a `ProjectState.Touch()`. `SemanticScheduleNativeTableBuilder.Build(...)` and `Remove(...)` each called `project.Touch()` again immediately after the audit event. One successful custom-schedule Table mutation therefore advanced `ChangeVersion` twice, creating artificial freshness/version churn.
 
-## Reserved scope
+## Completed implementation
 
-- `src/QS3D.BricsCAD.V25/Cad/SemanticScheduleNativeTableBuilder.cs`
-- one focused auto-discovered source regression gate under `scripts/`
-- this claim file
-
-## Intended contract
-
-- Build/Remove retain the same metadata mutations and audit events.
+- Removed only the redundant explicit `project.Touch()` after `BuildSemanticCustomScheduleTable` audit.
+- Removed only the redundant explicit `project.Touch()` after `RemoveSemanticCustomScheduleTable` audit.
+- Preserved header-only zero-match rendering (`Rows.Count + 2`), metadata, per-schedule owner slots, XData ownership, CAD transaction ordering, rollback, stored placement and health diagnostics.
 - `AuditTrail.Record(...)` remains the single project-version advancement for these logical native Table mutations.
-- Preserve header-only zero-match rendering, per-schedule owner slots, XData ownership, transaction/rollback behavior, health diagnostics, and stored placement.
 
-## Excluded scope
+## Regression gate
 
-- active Core Semantic Schedule placement planner claim (`docs/agent-work-claims/20260811T2229-semantic-schedule-placement-core.md`)
-- Semantic Schedule schema/catalog/rendering changes
-- generic `ProjectOwnedNativeTableArtifactService` single-touch lane already completed via PR #510
-- UI/Schedule Hub, quantity/reporting, updater/installer and local runtime work
-- global `AuditTrail` behavior
-- BricsCAD V25 native/runtime qualification
+Added auto-discovered `scripts/preflight-semantic-schedule-native-table-single-touch.py`.
 
-## Validation plan
+The gate requires Build/Remove audit actions, snapshot rollback and header-only rendering tokens, forbids explicit `project.Touch()` in the native custom-schedule builder, and verifies `AuditTrail.Record` still owns both project Touch and audit-event append.
 
-- remove only the redundant explicit `project.Touch()` calls after custom-schedule native Table audit records;
-- add a focused source gate that keeps Build/Remove audit events while prohibiting explicit project Touch in this builder and confirming `AuditTrail.Record` remains the touch owner;
-- compare latest `main` for overlap before PR/merge;
-- do not dispatch GitHub Actions.
+## Coordination / merge safety
 
-## Completion condition
+- The active Core Semantic Schedule placement planner claim explicitly excluded native BricsCAD Table mutation and was left untouched.
+- Original branch production diff was 0 additions / 2 deletions plus one focused gate.
+- Concurrent main changes were compared and did not touch either reserved path.
+- PR `#516` was closed unmerged after GitHub returned `405 Base branch was modified` during merge.
+- A replacement commit was rebuilt object-level on the then-current main tree at `528cbdbfb03ee25c4d17929be0f9e2fa0daa03a5`, overlaying only the verified builder and gate blobs; no force-push or stale-tree overwrite was used.
+- Replacement PR `#517` was squash-merged with exact expected head SHA `16a66b8150e99f80cda716c1e92707d159fd61ea`.
+- No GitHub Actions were dispatched.
 
-The focused source fix and regression gate are merged to `main`, this claim is marked `COMPLETED`, and exact V25 runtime evidence remains `LOCAL_ONLY` unless produced by a local agent.
+## Runtime qualification
+
+BricsCAD V25 native interaction/runtime evidence remains `LOCAL_ONLY`. This source-side completion does not claim `LOCAL_PASS`.
