@@ -21,6 +21,8 @@ namespace QS3D.Core.Export
 
     public sealed class ProjectInterchangeImportCoordinatorPlan
     {
+        private readonly ProjectInterchangeUseSourceSemanticPlan? _useSourceSemanticPlan;
+
         internal ProjectInterchangeImportCoordinatorPlan(
             ProjectInterchangeImportExecutionMode mode,
             bool preserveSourceHandleProvenance,
@@ -33,7 +35,8 @@ namespace QS3D.Core.Export
             int namesToRemap,
             int sourceHandleCount,
             int blockerCount,
-            IReadOnlyList<string> nativeCleanupElementIds)
+            IReadOnlyList<ProjectInterchangeNativeCleanupRequirement> nativeCleanupRequirements,
+            ProjectInterchangeUseSourceSemanticPlan? useSourceSemanticPlan)
         {
             Mode = mode;
             PreserveSourceHandleProvenance = preserveSourceHandleProvenance;
@@ -46,7 +49,23 @@ namespace QS3D.Core.Export
             NamesToRemap = namesToRemap;
             SourceHandleCount = sourceHandleCount;
             BlockerCount = blockerCount;
-            NativeCleanupElementIds = nativeCleanupElementIds ?? throw new ArgumentNullException(nameof(nativeCleanupElementIds));
+            NativeCleanupRequirements = nativeCleanupRequirements ?? throw new ArgumentNullException(nameof(nativeCleanupRequirements));
+            _useSourceSemanticPlan = useSourceSemanticPlan;
+
+            if (Mode == ProjectInterchangeImportExecutionMode.UseSourceSemanticData && _useSourceSemanticPlan == null)
+                throw new InvalidOperationException("UseSource coordinator plan requires its canonical semantic plan.");
+            if (Mode != ProjectInterchangeImportExecutionMode.UseSourceSemanticData && _useSourceSemanticPlan != null)
+                throw new InvalidOperationException("Only UseSource coordinator plans may retain a canonical UseSource semantic plan.");
+
+            var cleanupIds = new List<string>();
+            foreach (var requirement in NativeCleanupRequirements)
+            {
+                if (requirement == null)
+                    throw new InvalidOperationException("Coordinator cleanup requirements cannot contain null entries.");
+                cleanupIds.Add(requirement.ElementId);
+            }
+            cleanupIds.Sort(StringComparer.OrdinalIgnoreCase);
+            NativeCleanupElementIds = new ReadOnlyCollection<string>(cleanupIds);
         }
 
         public ProjectInterchangeImportExecutionMode Mode { get; }
@@ -60,9 +79,17 @@ namespace QS3D.Core.Export
         public int NamesToRemap { get; }
         public int SourceHandleCount { get; }
         public int BlockerCount { get; }
+        public IReadOnlyList<ProjectInterchangeNativeCleanupRequirement> NativeCleanupRequirements { get; }
         public IReadOnlyList<string> NativeCleanupElementIds { get; }
-        public bool RequiresNativeCleanup => NativeCleanupElementIds.Count > 0;
+        public bool RequiresNativeCleanup => NativeCleanupRequirements.Count > 0;
         public bool CanExecute => BlockerCount == 0;
+
+        public ProjectInterchangeNativeCleanupAuthorization CreateNativeCleanupAuthorization()
+        {
+            if (Mode != ProjectInterchangeImportExecutionMode.UseSourceSemanticData || _useSourceSemanticPlan == null)
+                throw new InvalidOperationException("Native cleanup authorization can be created only from a reviewed UseSourceSemanticData coordinator plan.");
+            return ProjectInterchangeNativeCleanupAuthorization.ForPlan(_useSourceSemanticPlan);
+        }
     }
 
     public sealed class ProjectInterchangeImportCoordinatorResult
@@ -197,7 +224,7 @@ namespace QS3D.Core.Export
                     0,
                     plan.SourceHandlesToDiscard,
                     0,
-                    Array.Empty<string>());
+                    Array.Empty<ProjectInterchangeNativeCleanupRequirement>());
             }
 
             var semantic = ProjectInterchangeAppendOnlyImporter.Plan(target, json);
@@ -213,7 +240,7 @@ namespace QS3D.Core.Export
                 0,
                 semantic.SourceHandlesToDiscard,
                 0,
-                Array.Empty<string>());
+                Array.Empty<ProjectInterchangeNativeCleanupRequirement>());
         }
 
         private static ProjectInterchangeImportCoordinatorPlan PlanKeepTarget(ProjectState target, string json, bool preserve)
@@ -234,7 +261,7 @@ namespace QS3D.Core.Export
                     0,
                     plan.SourceHandlesToDiscard,
                     0,
-                    Array.Empty<string>());
+                    Array.Empty<ProjectInterchangeNativeCleanupRequirement>());
             }
 
             var semantic = ProjectInterchangeKeepTargetImporter.Plan(target, json);
@@ -250,7 +277,7 @@ namespace QS3D.Core.Export
                 0,
                 semantic.SourceHandlesToDiscard,
                 0,
-                Array.Empty<string>());
+                Array.Empty<ProjectInterchangeNativeCleanupRequirement>());
         }
 
         private static ProjectInterchangeImportCoordinatorPlan PlanImportAsNew(ProjectState target, string json, bool preserve)
@@ -275,7 +302,7 @@ namespace QS3D.Core.Export
                 plan.NameRemapCount,
                 plan.SourceHandleCount,
                 plan.BlockerCount,
-                Array.Empty<string>());
+                Array.Empty<ProjectInterchangeNativeCleanupRequirement>());
         }
 
         private static ProjectInterchangeImportCoordinatorPlan PlanUseSource(ProjectState target, string json, bool preserve)
@@ -298,7 +325,8 @@ namespace QS3D.Core.Export
                 0,
                 plan.SourceHandlesToDiscard,
                 0,
-                plan.TargetElementIdsRequiringNativeCleanup);
+                plan.NativeCleanupRequirements,
+                plan);
         }
 
         private static ProjectInterchangeImportCoordinatorPlan Build(
@@ -313,10 +341,17 @@ namespace QS3D.Core.Export
             int nameRemaps,
             int sourceHandleCount,
             int blockers,
-            IEnumerable<string> cleanupIds)
+            IEnumerable<ProjectInterchangeNativeCleanupRequirement> cleanupRequirements,
+            ProjectInterchangeUseSourceSemanticPlan? useSourceSemanticPlan = null)
         {
-            var cleanup = new List<string>(cleanupIds ?? Array.Empty<string>());
-            cleanup.Sort(StringComparer.OrdinalIgnoreCase);
+            var cleanup = new List<ProjectInterchangeNativeCleanupRequirement>();
+            foreach (var requirement in cleanupRequirements ?? Array.Empty<ProjectInterchangeNativeCleanupRequirement>())
+            {
+                if (requirement == null)
+                    throw new InvalidOperationException("Coordinator cleanup requirements cannot contain null entries.");
+                cleanup.Add(requirement);
+            }
+            cleanup.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.ElementId, right.ElementId));
             return new ProjectInterchangeImportCoordinatorPlan(
                 mode,
                 preserve,
@@ -329,7 +364,8 @@ namespace QS3D.Core.Export
                 nameRemaps,
                 sourceHandleCount,
                 blockers,
-                new ReadOnlyCollection<string>(cleanup));
+                new ReadOnlyCollection<ProjectInterchangeNativeCleanupRequirement>(cleanup),
+                useSourceSemanticPlan);
         }
 
         private static void ValidateMode(ProjectInterchangeImportExecutionMode mode)

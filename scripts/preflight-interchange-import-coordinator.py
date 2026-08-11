@@ -37,7 +37,10 @@ for token in (
     "ProjectInterchangeUseSourceSemanticImporter.Import",
     "ProjectInterchangeUseSourceProvenanceImporter.Import",
     "nativeCleanupAuthorization.ElementIds.Count",
+    "NativeCleanupRequirements",
     "NativeCleanupElementIds",
+    "CreateNativeCleanupAuthorization",
+    "ProjectInterchangeNativeCleanupAuthorization.ForPlan(_useSourceSemanticPlan)",
     "Enum.IsDefined",
 ):
     if token not in source:
@@ -51,20 +54,27 @@ for token in (
     "UseSourceExecuteRequiresAndConsumesExplicitAuthorization",
     "ProvenanceToggleSelectsCombinedExecution",
     "InvalidModeFailsClosed",
-    "ProjectInterchangeUseSourceSemanticImporter.Plan(target, json)",
-    "ProjectInterchangeNativeCleanupAuthorization.ForPlan(semanticPlan)",
+    "plan.NativeCleanupRequirements[0].OwnerHandles.Single()",
+    "coordinatorPlan.CreateNativeCleanupAuthorization()",
+    "appendPlan.CreateNativeCleanupAuthorization()",
     "ModuleInitializer",
 ):
     if token not in test:
         errors.append("import coordinator smoke missing regression token: " + token)
 
-if "ProjectInterchangeNativeCleanupAuthorization.ForElementIds(plan.NativeCleanupElementIds)" in test:
-    errors.append("import coordinator smoke must not treat element-id-only cleanup authorization as executable UseSource authority")
+for forbidden in (
+    "ProjectInterchangeNativeCleanupAuthorization.ForElementIds(plan.NativeCleanupElementIds)",
+    "ProjectInterchangeUseSourceSemanticImporter.Plan(target, json);\n            Equal(string.Join",
+):
+    if forbidden in test:
+        errors.append("import coordinator smoke bypasses the exact coordinator cleanup plan: " + forbidden)
 
 for token in (
     "one explicit mode",
     "never falls back",
     "cleanup authorization",
+    "exact generated-handle requirements",
+    "CreateNativeCleanupAuthorization()",
     "Core coordinator",
     "does not create a BricsCAD command",
     "LOCAL_ONLY",
@@ -79,4 +89,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: one Core coordinator selects an explicit import policy/provenance mode, never falls back silently, and preserves handle-bound UseSource native-cleanup authorization.")
+print("PASS: one Core coordinator selects an explicit import policy/provenance mode, exposes exact UseSource cleanup handles, creates reviewed handle-bound authority, and never falls back silently.")
