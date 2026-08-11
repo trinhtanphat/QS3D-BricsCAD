@@ -94,7 +94,7 @@ namespace QS3D.BricsCAD.V25.UI
         private IReadOnlyList<RoomFinishScheduleRow> BuildCurrentRows(out int regenerated)
         {
             EnsureActive("đọc HT_Phòng Schedule hiện hành");
-            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+            if (!ExistingProjectMutationContext.TryGet(_document, out var project))
                 throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng HT_Phòng Schedule và mở lại sau khi nạp project.");
             regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
             return RoomFinishScheduleBuilder.Build(project);
