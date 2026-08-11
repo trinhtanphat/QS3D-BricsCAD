@@ -22,12 +22,14 @@ else:
         block = text[start:end]
 
     required = (
+        'ExistingProjectMutationContext.Require(doc, "Link opening host")',
         "SemanticReferenceHandles.MatchesSelection",
         "openings.Count != 1 || hosts.Count != 1",
         "ProjectStateSnapshot.Capture(project)",
         "new HostLinkService().LinkOpening(project, opening.Id, wall.Id)",
         "RegenerateProject(project)",
-        'opening.Properties.TryGetValue("HostWallId"',
+        "var currentOpening = project.FindElement(opening.Id)",
+        'currentOpening.Properties.TryGetValue("HostWallId"',
         "string.Equals(persistedHostId, wall.Id, StringComparison.OrdinalIgnoreCase)",
         "rollback.Restore(project)",
         "PaletteCoordinator.RefreshProject()",
@@ -45,6 +47,7 @@ else:
         "CutLinkedOpenings",
         "QS3DCUTOPENINGS",
         "SendStringToExecute",
+        "ProjectContextCoordinator.GetOrCreate(doc)",
     )
     for token in forbidden:
         if token in block:
@@ -53,16 +56,15 @@ else:
     capture = block.find("ProjectStateSnapshot.Capture(project)")
     link = block.find("new HostLinkService().LinkOpening")
     regen = block.find("RegenerateProject(project)")
-    verify = block.find('opening.Properties.TryGetValue("HostWallId"')
+    resolve = block.find("var currentOpening = project.FindElement(opening.Id)")
+    verify = block.find('currentOpening.Properties.TryGetValue("HostWallId"')
     restore = block.find("rollback.Restore(project)")
     refresh = block.find("PaletteCoordinator.RefreshProject()")
-    if min(capture, link, regen, verify, restore, refresh) < 0:
-        pass
-    else:
-        if not (capture < link < regen < verify):
-            errors.append("QS3DLINKHOST must snapshot before link, regenerate, then verify persisted HostWallId")
+    if min(capture, link, regen, resolve, verify, restore, refresh) >= 0:
+        if not (capture < link < regen < resolve < verify):
+            errors.append("QS3DLINKHOST must snapshot before link, regenerate, re-resolve canonical opening, then verify persisted HostWallId")
         if refresh < verify:
-            errors.append("QS3DLINKHOST UI refresh must occur only after semantic HostWallId verification")
+            errors.append("QS3DLINKHOST UI refresh must occur only after canonical semantic HostWallId verification")
 
 if errors:
     print("QS3D manual host-link preflight")
@@ -71,4 +73,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DLINKHOST requires exactly one opening and one compatible host, resolves semantic source/generated selection, snapshots before mutation, regenerates and verifies HostWallId, restores project state on semantic failure, keeps UI sync non-destructive, and never invokes physical cutting.")
+print("PASS: QS3DLINKHOST binds existing project state, requires exactly one opening and one compatible host, snapshots before mutation, regenerates, re-resolves the canonical opening before HostWallId verification, rolls back semantic failure, and never invokes physical cutting.")
