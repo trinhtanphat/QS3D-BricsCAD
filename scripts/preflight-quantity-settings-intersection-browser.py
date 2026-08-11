@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "QuantitySettingsWindow.xaml"
@@ -22,6 +23,12 @@ def method_body(text, signature, next_signature):
 
 
 def main():
+    try:
+        ET.parse(str(XAML))
+    except ET.ParseError as exc:
+        print("ERROR: QuantitySettingsWindow.xaml is not well-formed XML:", exc)
+        return 1
+
     xaml = XAML.read_text(encoding="utf-8")
     code = CODE.read_text(encoding="utf-8")
 
