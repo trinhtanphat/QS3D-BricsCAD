@@ -19,7 +19,12 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    ReportBlocked(document, "Rebar Health All: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.");
+                    return;
+                }
+
                 var columnHandles = Collect(project, "GeneratedRebarHandles");
                 var shapeHandles = Collect(project, "GeneratedShapeRebarHandles");
                 var tieHandles = Collect(project, "GeneratedTieRebarHandles");
@@ -65,6 +70,12 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\n" + message);
             }
+        }
+
+        private static void ReportBlocked(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
 
         private static string[] Collect(ProjectState project, string key) => project.Elements
