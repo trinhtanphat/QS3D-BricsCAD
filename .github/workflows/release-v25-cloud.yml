@@ -143,14 +143,14 @@ jobs:
 
           $installer = New-Object -ComObject WindowsInstaller.Installer
           $database = $installer.OpenDatabase($msi, 0)
-          $versionView = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
+          $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
           $versionView.Execute()
           $versionRecord = $versionView.Fetch()
           $productVersion = if ($versionRecord) { [string]$versionRecord.StringData(1) } else { [string]::Empty }
           if ($productVersion -notmatch '^25\.2\.10(?:\.|$)') {
             throw "Downloaded MSI is not the pinned BricsCAD V25.2.10 product. ProductVersion=$productVersion"
           }
-          $nameView = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductName'")
+          $nameView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')
           $nameView.Execute()
           $nameRecord = $nameView.Fetch()
           $productName = if ($nameRecord) { [string]$nameRecord.StringData(1) } else { [string]::Empty }
