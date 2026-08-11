@@ -26,6 +26,8 @@ The guard itself must remain valid Python. A syntax failure in repository toolin
 
 This gate parses every Python file under `scripts/` with `ast.parse` and protects the generic cross-platform artifact/workflow checks. Its purpose is to catch broken repository tooling before a feature gate can be trusted.
 
+The repository-health gate is fail-closed around its own coordination dependencies: `scripts/preflight.py` and `AGENTS.md` must exist. It also reads the `AGENTS.md` **Mandatory handoff reading order**, extracts repository-relative Markdown paths from that section and verifies that every referenced file exists. This prevents a documentation rename/removal from silently leaving new agents with a broken mandatory startup path.
+
 Because its filename matches `preflight-*.py`, it is automatically discovered by the aggregate runner.
 
 ### Aggregate runner — `scripts/preflight-all.py`
