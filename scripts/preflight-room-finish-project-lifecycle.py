@@ -43,16 +43,20 @@ require(finishes, "if (snapshots.Count == 0) return 0;", "Room Finish cancel bou
 require(finishes, 'ExistingProjectMutationContext.Require(document, "Room finish generation")', "Room Finish existing-project boundary")
 require(finishes, "ProjectStateSnapshot.Capture(project)", "Room Finish rollback snapshot")
 require(finishes, "RoomFinishSynchronizationService.Synchronize", "Room Finish semantic synchronization")
+require(finishes, "Regenerate(project, finish);", "Room Finish element-scoped regeneration")
 if "ProjectContextCoordinator.GetOrCreate(document)" in finishes:
     errors.append("GenerateRoomFinishes must not create/cache a replacement project")
+if "RegenerateDirty(" in finishes or "RegenerateProject(" in finishes:
+    errors.append("GenerateRoomFinishes must not consume unrelated project dirty state through full-project regeneration")
 
 selection = finishes.find("EntitySnapshotReader.ReadCurrentSelection(document)")
 empty_return = finishes.find("if (snapshots.Count == 0) return 0;")
 bind = finishes.find('ExistingProjectMutationContext.Require(document, "Room finish generation")')
 snapshot = finishes.find("ProjectStateSnapshot.Capture(project)")
 sync = finishes.find("RoomFinishSynchronizationService.Synchronize")
-if min(selection, empty_return, bind, snapshot, sync) < 0 or not selection < empty_return < bind < snapshot < sync:
-    errors.append("Room Finish must finish selection and return on cancel/empty before canonical binding, then snapshot before mutation")
+scoped_regen = finishes.find("Regenerate(project, finish);")
+if min(selection, empty_return, bind, snapshot, sync, scoped_regen) < 0 or not selection < empty_return < bind < snapshot < sync < scoped_regen:
+    errors.append("Room Finish must finish selection and return on cancel/empty before canonical binding, snapshot before mutation, and regenerate only the synchronized finish")
 
 for token, label in [
     ("LOCAL-001 — exact V25 build/load baseline", "canonical local baseline item"),
@@ -68,4 +72,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: new semantic capture remains an intentional bootstrap path, while QS3DFINISH returns on cancel/empty before canonical binding, remains existing-project-only for valid selection, and LOCAL-001 owns native V25 proof.")
+print("PASS: QS3DFINISH remains selection-scoped, existing-project-only, rollback-protected, and regenerates only synchronized Room Finish elements without consuming unrelated project dirty state; LOCAL-001 owns native V25 proof.")
