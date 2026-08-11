@@ -36,6 +36,7 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
+                if (element == null) continue;
                 foreach (var ownerHandle in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
                 {
                     var handle = (ownerHandle.Key ?? string.Empty).Trim();
@@ -81,8 +82,7 @@ namespace QS3D.Core.Diagnostics
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                if (element == null)
-                    throw new InvalidOperationException("Project contains a null element entry.");
+                if (element == null) continue;
                 if (!seen.Add(element.Id))
                     throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
             }

@@ -57,7 +57,7 @@ namespace QS3D.Core.Navigation
         public static ProjectBrowserSelectionRevealPlan PlanReveal(
             ProjectBrowserNode root,
             IEnumerable<string> selectedElementIds,
-            string primaryElementId = null)
+            string? primaryElementId = null)
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
             var selected = NormalizeSelection(selectedElementIds);
@@ -79,7 +79,7 @@ namespace QS3D.Core.Navigation
                     throw new InvalidOperationException("Project browser tree lost semantic element id: " + elementId + ".");
 
                 var deepest = matches.Max(x => x.Depth);
-                NodeEntry target = null;
+                NodeEntry? target = null;
                 var deepestCount = 0;
                 foreach (var match in matches)
                 {
@@ -147,9 +147,9 @@ namespace QS3D.Core.Navigation
             return result.AsReadOnly();
         }
 
-        private static string NormalizePrimary(string raw, IReadOnlyList<string> selected)
+        private static string NormalizePrimary(string? raw, IReadOnlyList<string> selected)
         {
-            if (string.IsNullOrWhiteSpace(raw)) return selected.Count == 0 ? string.Empty : selected[0];
+            if (raw == null || string.IsNullOrWhiteSpace(raw)) return selected.Count == 0 ? string.Empty : selected[0];
             var primary = CanonicalRequired(raw, "project browser primary selected element id");
             if (!selected.Contains(primary, StringComparer.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Project browser primary selection must belong to the selected semantic element set: " + primary + ".");
@@ -168,7 +168,7 @@ namespace QS3D.Core.Navigation
             ProjectBrowserNode node,
             string parentPath,
             int depth,
-            HashSet<string> parentElementIds,
+            HashSet<string>? parentElementIds,
             IDictionary<string, NodeEntry> byPath,
             IDictionary<string, List<NodeEntry>> memberships)
         {

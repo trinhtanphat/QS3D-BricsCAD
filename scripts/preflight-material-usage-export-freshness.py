@@ -12,16 +12,16 @@ else:
     text = SOURCE.read_text(encoding="utf-8")
     dialog = text.find("var dialog = new SaveFileDialog")
     confirmed = text.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
-    project = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
-    detached = text.find("ProjectStateSnapshot.CreateDetachedCopy(project)", project + 1)
-    regen = text.find("RegenerateDirty(snapshot)", detached + 1)
+    project = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)", confirmed + 1)
+    snapshot = text.find("ProjectStateSnapshot.CreateDetachedCopy(project)", project + 1)
+    regen = text.find("RegenerateDirty(snapshot)", snapshot + 1)
     build = text.find("MaterialUsageScheduleBuilder.Build(snapshot)", regen + 1)
     export = text.find("MaterialUsageXlsxExporter.Export(dialog.FileName, rows)", build + 1)
 
-    if min(dialog, confirmed, project, detached, regen, build, export) < 0:
-        errors.append("MaterialUsageScheduleCommands.cs missing save/existing-project/regenerate/build/export contract token")
-    elif not dialog < confirmed < project < detached < regen < build < export:
-        errors.append("Material Usage XLSX must confirm Save before existing-project lookup, detached regeneration, fresh schedule build, and export")
+    if min(dialog, confirmed, project, snapshot, regen, build, export) < 0:
+        errors.append("MaterialUsageScheduleCommands.cs missing save/read-only-project/detached-regenerate/build/export contract token")
+    elif not dialog < confirmed < project < snapshot < regen < build < export:
+        errors.append("Material Usage XLSX must confirm Save before read-only lookup, detached regeneration, fresh schedule build, and export")
 
     pre_confirm = text[:confirmed if confirmed >= 0 else 0]
     for forbidden in (
@@ -33,8 +33,14 @@ else:
         if forbidden in pre_confirm:
             errors.append("Material Usage Cancel path must not execute before Save confirmation: " + forbidden)
 
-    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
-        errors.append("Material Usage export must not create replacement project state")
+    for forbidden in (
+        "ProjectContextCoordinator.GetOrCreate(document)",
+        "ExistingProjectMutationContext",
+        "RegenerateDirty(project)",
+        "MaterialUsageScheduleBuilder.Build(project)",
+    ):
+        if forbidden in text:
+            errors.append("Material Usage read-only export must not mutate/bind the live project: " + forbidden)
 
     for token in (
         "FinalizeUi(document, status, dialog.FileName);",
@@ -51,4 +57,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Material Usage XLSX confirms the destination before existing-project lookup/regeneration, exports fresh rows without creating replacement project state, and isolates UI reporting.")
+print("PASS: Material Usage XLSX confirms the destination, resolves existing state read-only, regenerates/builds a detached snapshot, exports fresh rows, and isolates UI reporting.")

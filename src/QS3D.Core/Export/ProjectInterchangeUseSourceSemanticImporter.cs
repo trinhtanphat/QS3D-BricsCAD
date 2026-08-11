@@ -583,9 +583,9 @@ namespace QS3D.Core.Export
             ProjectFamily family,
             InterchangeFamilySnapshot source)
         {
-            var sourceProperties = new Dictionary<string, string>(source.Properties, StringComparer.OrdinalIgnoreCase);
+            var sourcePropertyKeys = new HashSet<string>(source.Properties.Keys, StringComparer.OrdinalIgnoreCase);
             var removedKeys = family.Properties.Keys
-                .Where(x => !sourceProperties.ContainsKey(x))
+                .Where(x => !sourcePropertyKeys.Contains(x))
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             foreach (var key in removedKeys)
