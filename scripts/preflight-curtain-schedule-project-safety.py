@@ -14,7 +14,7 @@ else:
         errors.append("QS3DCURTAINXLSX must require an existing QS3D project")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append("QS3DCURTAINXLSX must not create/cache project state as an export side effect")
-    if "CurtainWallScheduleBuilder.Build(project)" not in text:
+    if "ProjectStateSnapshot.CreateDetachedCopy(project)" not in text or "CurtainWallScheduleBuilder.Build(snapshot)" not in text:
         errors.append("Curtain XLSX must continue using the authoritative schedule builder")
 
 if errors:

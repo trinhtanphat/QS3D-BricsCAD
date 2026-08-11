@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
             BeamStirrupLaterOwnerIsConflict();
             TieLaterOwnerIsConflict();
             LongitudinalRebarLaterOwnerIsConflict();
-            OwnershipPolicyAndIndexIgnoreNullEntries();
+            OwnershipLookupsRejectNullEntries();
         }
 
         private static void BeamStirrupLaterOwnerIsConflict()
@@ -64,7 +64,7 @@ namespace QS3D.Core.SmokeTests
                 "longitudinal rebar later-owner conflict was missed");
         }
 
-        private static void OwnershipPolicyAndIndexIgnoreNullEntries()
+        private static void OwnershipLookupsRejectNullEntries()
         {
             var project = ProjectWithNull("index");
             var owner = new ProjectElement("O1", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
@@ -75,12 +75,10 @@ namespace QS3D.Core.SmokeTests
             Require(handles.Count == 1 && string.Equals(handles[0], "AD", StringComparison.OrdinalIgnoreCase),
                 "ownership policy changed or crashed on null semantic entry");
 
-            Require(GeneratedHandleOwnershipPolicy.TryFindOwner(project, "AD", out var found, out _) && ReferenceEquals(found, owner),
-                "ownership policy failed to resolve unique owner after null semantic entry");
-
-            var index = GeneratedHandleOwnershipIndex.Build(project);
-            Require(index.TryFindOwner("AD", out found, out _) && ReferenceEquals(found, owner),
-                "ownership index failed to resolve unique owner after null semantic entry");
+            ExpectInvalid(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "AD", out _, out _),
+                "ownership policy accepted a null semantic entry");
+            ExpectInvalid(() => GeneratedHandleOwnershipIndex.Build(project),
+                "ownership index accepted a null semantic entry");
         }
 
         private static ProjectState ProjectWithNull(string id)
@@ -100,6 +98,13 @@ namespace QS3D.Core.SmokeTests
         private static void Require(bool condition, string message)
         {
             if (!condition) throw new InvalidOperationException("GeneratedRebarProviderOwnershipSmoke: " + message);
+        }
+
+        private static void ExpectInvalid(Action action, string message)
+        {
+            try { action(); }
+            catch (InvalidOperationException) { return; }
+            throw new InvalidOperationException("GeneratedRebarProviderOwnershipSmoke: " + message);
         }
     }
 }

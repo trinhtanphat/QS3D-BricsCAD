@@ -13,20 +13,22 @@ else:
     dialog = text.find("var dialog = new SaveFileDialog")
     confirmed = text.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
     project = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
-    regen = text.find("RegenerateDirty(project)", project + 1)
-    build = text.find("MaterialUsageScheduleBuilder.Build(project)", regen + 1)
+    detached = text.find("ProjectStateSnapshot.CreateDetachedCopy(project)", project + 1)
+    regen = text.find("RegenerateDirty(snapshot)", detached + 1)
+    build = text.find("MaterialUsageScheduleBuilder.Build(snapshot)", regen + 1)
     export = text.find("MaterialUsageXlsxExporter.Export(dialog.FileName, rows)", build + 1)
 
-    if min(dialog, confirmed, project, regen, build, export) < 0:
+    if min(dialog, confirmed, project, detached, regen, build, export) < 0:
         errors.append("MaterialUsageScheduleCommands.cs missing save/existing-project/regenerate/build/export contract token")
-    elif not dialog < confirmed < project < regen < build < export:
-        errors.append("Material Usage XLSX must confirm Save before existing-project lookup, regeneration, fresh schedule build, and export")
+    elif not dialog < confirmed < project < detached < regen < build < export:
+        errors.append("Material Usage XLSX must confirm Save before existing-project lookup, detached regeneration, fresh schedule build, and export")
 
     pre_confirm = text[:confirmed if confirmed >= 0 else 0]
     for forbidden in (
         "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
-        "RegenerateDirty(project)",
-        "MaterialUsageScheduleBuilder.Build(project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(snapshot)",
+        "MaterialUsageScheduleBuilder.Build(snapshot)",
     ):
         if forbidden in pre_confirm:
             errors.append("Material Usage Cancel path must not execute before Save confirmation: " + forbidden)

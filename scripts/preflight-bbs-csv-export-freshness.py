@@ -13,20 +13,22 @@ else:
     dialog = text.find("var dialog = new SaveFileDialog")
     confirmed = text.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
     project = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
-    regen = text.find("RegenerateDirty(project)", project + 1)
-    build = text.find("ProjectRebarScheduleBuilder.Build(project)", regen + 1)
+    detached = text.find("ProjectStateSnapshot.CreateDetachedCopy(project)", project + 1)
+    regen = text.find("RegenerateDirty(snapshot)", detached + 1)
+    build = text.find("ProjectRebarScheduleBuilder.Build(snapshot)", regen + 1)
     export = text.find("RebarCsvExporter.Export(dialog.FileName, rows)", build + 1)
 
-    if min(dialog, confirmed, project, regen, build, export) < 0:
+    if min(dialog, confirmed, project, detached, regen, build, export) < 0:
         errors.append("BbsCsvCommands.cs missing save/existing-project/regenerate/build/export contract token")
-    elif not dialog < confirmed < project < regen < build < export:
-        errors.append("BBS CSV must confirm Save before existing-project lookup, regeneration, fresh schedule build, and export")
+    elif not dialog < confirmed < project < detached < regen < build < export:
+        errors.append("BBS CSV must confirm Save before existing-project lookup, detached regeneration, fresh schedule build, and export")
 
     pre_dialog = text[:confirmed if confirmed >= 0 else 0]
     for forbidden in (
         "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
-        "RegenerateDirty(project)",
-        "ProjectRebarScheduleBuilder.Build(project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(snapshot)",
+        "ProjectRebarScheduleBuilder.Build(snapshot)",
     ):
         if forbidden in pre_dialog:
             errors.append("BBS CSV Cancel path must not execute before Save confirmation: " + forbidden)

@@ -39,15 +39,15 @@ if POLICY.is_file():
     text = POLICY.read_text(encoding="utf-8")
     if ".Where(x => x != null)" not in text:
         errors.append("GeneratedHandleOwnershipPolicy.CollectOwnerHandles is not null-safe.")
-    if "if (element == null) continue;" not in text:
-        errors.append("GeneratedHandleOwnershipPolicy.TryFindOwner is not null-safe.")
+    if "EnsureUniqueElementIds(project);" not in text or "Project contains a null element entry." not in text:
+        errors.append("GeneratedHandleOwnershipPolicy.TryFindOwner must reject invalid null/duplicate project identity.")
     if "is ambiguously claimed by" not in text:
         errors.append("GeneratedHandleOwnershipPolicy must remain fail-closed on ambiguous generated owners.")
 
 if INDEX.is_file():
     text = INDEX.read_text(encoding="utf-8")
-    if "if (element == null) continue;" not in text:
-        errors.append("GeneratedHandleOwnershipIndex.Build is not null-safe.")
+    if "EnsureUniqueElementIds(project);" not in text or "Project contains a null element entry." not in text:
+        errors.append("GeneratedHandleOwnershipIndex.Build must reject invalid null/duplicate project identity.")
     if "if (entry.Ambiguity != null) throw new InvalidOperationException" not in text:
         errors.append("GeneratedHandleOwnershipIndex must remain fail-closed on ambiguous generated owners.")
 
@@ -57,7 +57,9 @@ if SMOKE.is_file():
         "BeamStirrupLaterOwnerIsConflict();",
         "TieLaterOwnerIsConflict();",
         "LongitudinalRebarLaterOwnerIsConflict();",
-        "OwnershipPolicyAndIndexIgnoreNullEntries();",
+        "OwnershipLookupsRejectNullEntries();",
+        "ExpectInvalid(() => GeneratedHandleOwnershipPolicy.TryFindOwner",
+        "ExpectInvalid(() => GeneratedHandleOwnershipIndex.Build(project)",
         '"BEAM_STIRRUP_GENERATED_OWNERSHIP_CONFLICT"',
         '"TIE_REBAR_GENERATED_OWNERSHIP_CONFLICT"',
         '"REBAR_GENERATED_OWNERSHIP_CONFLICT"',

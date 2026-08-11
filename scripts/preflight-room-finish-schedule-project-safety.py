@@ -28,7 +28,7 @@ if COMMAND.is_file():
         errors.append("QS3DFINISHXLSX must require an existing project")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append("QS3DFINISHXLSX must not create/cache project state as an export side effect")
-    if "RoomFinishScheduleBuilder.Build(project)" not in text:
+    if "ProjectStateSnapshot.CreateDetachedCopy(project)" not in text or "RoomFinishScheduleBuilder.Build(snapshot)" not in text:
         errors.append("QS3DFINISHXLSX must use the authoritative finish schedule builder")
 
 if errors:

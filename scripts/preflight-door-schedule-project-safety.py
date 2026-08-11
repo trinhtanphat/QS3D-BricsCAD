@@ -26,7 +26,7 @@ if COMMAND.is_file():
         errors.append("QS3DDOORXLSX must require an existing QS3D project")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append("QS3DDOORXLSX must not create/cache a project as an export side effect")
-    if "DoorOpeningScheduleBuilder.Build(project)" not in text:
+    if "ProjectStateSnapshot.CreateDetachedCopy(project)" not in text or "DoorOpeningScheduleBuilder.Build(snapshot)" not in text:
         errors.append("Door/Opening export must continue using the authoritative schedule builder")
 
 if errors:

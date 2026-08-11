@@ -14,7 +14,7 @@ else:
         errors.append("QS3DMATERIALXLSX must require an existing QS3D project")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append("QS3DMATERIALXLSX must not create/cache project state as an export side effect")
-    if "MaterialUsageScheduleBuilder.Build(project)" not in text:
+    if "ProjectStateSnapshot.CreateDetachedCopy(project)" not in text or "MaterialUsageScheduleBuilder.Build(snapshot)" not in text:
         errors.append("Material usage export must continue using the authoritative schedule builder")
 
 if errors:
