@@ -49,7 +49,7 @@ namespace QS3D.Core.SmokeTests
                 901, 403, 1d, 9.999d, 100d, 10d, 9.5d));
 
             True(plan.RuleFound);
-            False(plan.HasAnyDeduction == false);
+            True(plan.HasAnyDeduction);
             Near(0d, plan.ConcreteVolumeM3);
             Near(0d, plan.SideFormworkByConcreteAreaMm2);
             Near(0d, plan.BottomFormworkByConcreteAreaMm2);
