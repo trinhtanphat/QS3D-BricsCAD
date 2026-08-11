@@ -104,7 +104,7 @@ namespace QS3D.Core.Selection
                     throw new InvalidOperationException("Cannot assign family " + family.Id + " to mixed/incompatible selection; element " + element.Id + " is " + element.Category + " while family is " + family.Category + ".");
 
             var changedIds = selection.Elements
-                .Where(x => !string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase))
+                .Where(x => !string.Equals((x.FamilyId ?? string.Empty).Trim(), family.Id, StringComparison.OrdinalIgnoreCase))
                 .Select(x => x.Id)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x, StringComparer.Ordinal)
