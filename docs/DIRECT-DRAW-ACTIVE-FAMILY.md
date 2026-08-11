@@ -74,13 +74,32 @@ For `WallOpening`, Window remains the canonical WallOpening semantic category. B
 
 Unsupported categories fail closed with guidance to use their specialized workflow. The dispatchers do not invent Direct Draw behavior for Grid, Room, Stair, Railing, Earthwork, finishes, or other categories whose source/native lifecycle is different.
 
+## Active-Family dispatch freshness
+
+The dispatcher is intentionally read-only, but a cold-cache `TryGetReadOnly(...)` can return a detached snapshot. The `.qsdb` may then be reloaded/replaced, another Workspace action may change the active Family, or the active DWG may change before category routing occurs. Delegating from that stale snapshot could choose the wrong Quick/Advanced category even though the target command itself remains guarded.
+
+Immediately before delegation, `QS3DDRAWACTIVE` and `QS3DDRAWACTIVEADV` now re-read the project through the non-creating path and fail closed unless all routing inputs are still authoritative:
+
+- the same DWG remains active;
+- the same `ProjectId` is visible;
+- `ProjectState.ChangeVersion` is unchanged;
+- the same active Family ID still exists;
+- the Family category is unchanged;
+- for canonical `WallOpening`, the Window-vs-opening routing signal is unchanged.
+
+Only the revalidated live Family snapshot is passed to the category switch. If any check fails, no target Direct Draw command is invoked; the user is told to refresh/re-run instead of dispatching from stale Family state.
+
+This is a **dispatch freshness** guard only. It does not replace the target command's own project/source/UCS/unit/ownership/rollback checks.
+
 ## Non-creating boundary
 
 The dispatcher layer is **read-only / non-creating**:
 
 - it uses `ProjectContextCoordinator.TryGetReadOnly(...)`;
 - it requires an existing active Family;
+- its freshness recheck also uses `TryGetReadOnly(...)` and never canonical-binds for mutation;
 - it never calls `GetOrCreate`;
+- it never calls `ExistingProjectMutationContext`;
 - it never canonical-binds a project merely because the user invoked Quick/Advanced active-family draw;
 - it never creates CAD, semantic state, audit state or native output by itself.
 
@@ -119,7 +138,8 @@ Local proof should include:
 9. Workspace Family double-click / `Ctrl+D` / context-menu Quick each activate exactly the selected live Family and launch one Quick command only;
 10. `Ctrl+Shift+D` / context-menu **Vẽ tùy chỉnh** each activate exactly the selected live Family and launch one Advanced command only;
 11. stale/reloaded Workspace Family rows still fail closed through the existing canonical `SetActiveFamily` boundary instead of dispatching against a stale Family;
-12. repeated load/unload of the modeless Workspace does not accumulate duplicate key, double-click, or context-menu handlers.
+12. hold the dispatcher between its first read and delegation, then reload/replace the project, change active Family, switch Window/opening routing metadata, or change active DWG: it must refuse before invoking a target command;
+13. repeated load/unload of the modeless Workspace does not accumulate duplicate key, double-click, or context-menu handlers.
 
 Transient DrawJig preview, true continuous/repeated authoring and native editor lifecycle remain LOCAL_ONLY under `LOCAL-008`; these dispatchers/gestures do not claim those runtime behaviors are complete.
 
