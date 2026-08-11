@@ -27,8 +27,8 @@ if COMMANDS.is_file():
     total_index = text.find('QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight")')
     dialog_index = text.find('Title = "Xuất Bar Bending Schedule"')
     export_index = text.find("XlsxRebarScheduleExporter.Export(dialog.FileName, rows);")
-    if min(total_index, dialog_index, export_index) >= 0 and not total_index < dialog_index < export_index:
-        errors.append("QS3DBBS must validate aggregate weight before opening/writing the export")
+    if min(total_index, dialog_index, export_index) >= 0 and not dialog_index < total_index < export_index:
+        errors.append("QS3DBBS must confirm the destination first, then validate finite aggregate weight before writing the export")
 
 if WINDOW.is_file():
     text = WINDOW.read_text(encoding="utf-8")
@@ -47,4 +47,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] QS3DBBS validates finite aggregate weight before export and matches modeless BBS arithmetic")
+print("[PASS] QS3DBBS confirms destination before project work, validates finite aggregate weight before file write, and matches modeless BBS arithmetic")
