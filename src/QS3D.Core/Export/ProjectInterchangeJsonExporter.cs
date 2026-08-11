@@ -141,6 +141,7 @@ namespace QS3D.Core.Export
             if (normalized.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return false;
             if (normalized.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return false;
             if (normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return false;
+            if (normalized.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return false;
             return true;
         }
 
