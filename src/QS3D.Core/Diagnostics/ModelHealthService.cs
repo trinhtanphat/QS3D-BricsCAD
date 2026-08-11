@@ -13,6 +13,9 @@ namespace QS3D.Core.Diagnostics
     {
         public ModelHealthIssue(string code, HealthSeverity severity, string message, string elementId = "")
         {
+            if (!Enum.IsDefined(typeof(HealthSeverity), severity))
+                throw new ArgumentOutOfRangeException(nameof(severity), severity, "Health severity must be defined.");
+
             Code = code ?? string.Empty;
             Severity = severity;
             Message = message ?? string.Empty;
