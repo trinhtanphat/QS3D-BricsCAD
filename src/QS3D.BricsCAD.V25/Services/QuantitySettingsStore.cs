@@ -53,8 +53,8 @@ namespace QS3D.BricsCAD.V25.Services
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             var copy = settings.Clone();
-            if (copy.SchemaVersion <= 0) copy.SchemaVersion = QuantityCalculationSettings.CurrentSchemaVersion;
             copy.NormalizeAndValidate();
+            copy.SchemaVersion = QuantityCalculationSettings.CurrentSchemaVersion;
             return copy;
         }
 
