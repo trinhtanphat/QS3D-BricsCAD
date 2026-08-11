@@ -11,6 +11,8 @@ COMMANDS = {
     "ShapeRebarHealthCommands.cs": True,
     "FoundationMeshHealthCommands.cs": True,
     "StructuralWallMeshHealthCommands.cs": False,
+    "CurtainWallFrameHealthCommands.cs": True,
+    "RebarModeHealthCommands.cs": True,
 }
 
 errors = []
@@ -36,6 +38,38 @@ for name, has_modeless_locate in COMMANDS.items():
             errors.append(name + " Locate callback must resolve the selected element from the current project.")
         if "var element = project.FindElement(issue.ElementId);" in text:
             errors.append(name + " Locate callback must not use the ProjectState captured when the window opened.")
+
+room_finish = SRC / "RoomFinishHealthCommands.cs"
+if not room_finish.is_file():
+    errors.append("missing RoomFinishHealthCommands.cs")
+else:
+    text = room_finish.read_text(encoding="utf-8")
+    for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
+        "SourceHandleResolver.Resolve(currentProject, new[] { issue.ElementId })",
+        "lệnh kiểm tra không tạo project mới",
+    ):
+        if token not in text:
+            errors.append("RoomFinishHealthCommands.cs missing read-only token: " + token)
+    if "ProjectContextCoordinator.GetOrCreate" in text:
+        errors.append("RoomFinishHealthCommands.cs must not create/cache project state merely to inspect Health.")
+    if "SourceHandleResolver.Resolve(project, new[] { issue.ElementId })" in text:
+        errors.append("RoomFinishHealthCommands.cs Locate callback must not resolve handles from the snapshot captured at window open.")
+
+semantic_tag = SRC / "SemanticTagHealthCommands.cs"
+if not semantic_tag.is_file():
+    errors.append("missing SemanticTagHealthCommands.cs")
+else:
+    text = semantic_tag.read_text(encoding="utf-8")
+    for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "lệnh kiểm tra không tạo project mới",
+    ):
+        if token not in text:
+            errors.append("SemanticTagHealthCommands.cs missing read-only token: " + token)
+    if "ProjectContextCoordinator.GetOrCreate" in text:
+        errors.append("SemanticTagHealthCommands.cs must not create/cache project state merely to inspect Health.")
 
 health_all = SRC / "HealthAllCommands.cs"
 if not health_all.is_file():
