@@ -15,7 +15,7 @@ else:
 for token in (
     'CommandMethod("QS3DBBSCSV"',
     "if (dialog.ShowDialog() != true) return;",
-    "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+    "ExistingProjectMutationContext.TryGet(document, out var project)",
     "export không tạo project mới",
     "RegenerateDirty(project)",
     "ProjectRebarScheduleBuilder.Build(project)",
@@ -26,15 +26,17 @@ for token in (
         errors.append("BBS CSV lifecycle missing token: " + token)
 
 if "ProjectContextCoordinator.GetOrCreate(document)" in source:
-    errors.append("BBS CSV export must not create/cache an empty QS3D project")
+    errors.append("BBS CSV export must not create/cache an empty QS3D project directly")
+if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" in source:
+    errors.append("BBS CSV regeneration must not mutate a potentially detached read-only project instance")
 
 cancel = source.find("if (dialog.ShowDialog() != true) return;")
-lookup = source.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
+lookup = source.find("ExistingProjectMutationContext.TryGet(document, out var project)")
 regenerate = source.find("RegenerateDirty(project)")
 export = source.find("RebarCsvExporter.Export(dialog.FileName, rows)")
 finalize = source.find("FinalizeUi(document, status)")
 if min(cancel, lookup, regenerate, export, finalize) >= 0 and not cancel < lookup < regenerate < export < finalize:
-    errors.append("BBS CSV lifecycle order must be cancel -> existing project -> regenerate -> export -> best-effort UI")
+    errors.append("BBS CSV lifecycle order must be cancel -> canonical existing project -> regenerate -> export -> best-effort UI")
 
 finalize_start = source.find("private static void FinalizeUi")
 if finalize_start >= 0:
@@ -48,4 +50,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DBBSCSV cancels before project lookup, requires an existing project, and isolates UI failures after export.")
+print("PASS: QS3DBBSCSV cancels before canonical existing-project lookup and isolates UI failures after export.")
