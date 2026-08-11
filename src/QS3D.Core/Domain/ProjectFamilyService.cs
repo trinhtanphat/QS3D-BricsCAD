@@ -15,7 +15,7 @@ namespace QS3D.Core.Domain
         private sealed class PendingFamilyAssignment
         {
             public ProjectElement Element { get; set; } = null!;
-            public ProjectFamily? PreviousFamily { get; set; }
+            public IReadOnlyList<KeyValuePair<string, string>> PreviousProperties { get; set; } = Array.Empty<KeyValuePair<string, string>>();
         }
 
         private const int MaxFamilies = 10000;
@@ -125,18 +125,24 @@ namespace QS3D.Core.Domain
 
             var owned = ResolveOwnedElements(project, elements, target);
             var pending = new List<PendingFamilyAssignment>();
+            var previousSnapshots = new Dictionary<string, IReadOnlyList<KeyValuePair<string, string>>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var element in owned)
             {
                 if (string.Equals(element.FamilyId, target.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
-                ProjectFamily? previous = null;
+                IReadOnlyList<KeyValuePair<string, string>> previousProperties = Array.Empty<KeyValuePair<string, string>>();
                 if (previousFamilyId.Length > 0)
                 {
-                    previous = project.FindFamily(previousFamilyId) ??
+                    var previous = project.FindFamily(previousFamilyId) ??
                         throw new InvalidOperationException("Element " + element.Id + " references missing family id: " + previousFamilyId + ". Repair the relation before reassignment.");
+                    if (!previousSnapshots.TryGetValue(previous.Id, out previousProperties))
+                    {
+                        previousProperties = SnapshotProperties(previous, "Previous", "assignment");
+                        previousSnapshots.Add(previous.Id, previousProperties);
+                    }
                 }
-                pending.Add(new PendingFamilyAssignment { Element = element, PreviousFamily = previous });
+                pending.Add(new PendingFamilyAssignment { Element = element, PreviousProperties = previousProperties });
             }
 
             if (pending.Count == 0) return 0;
@@ -144,14 +150,10 @@ namespace QS3D.Core.Domain
             foreach (var item in pending)
             {
                 var element = item.Element;
-                var previous = item.PreviousFamily;
-                if (previous != null)
+                foreach (var pair in item.PreviousProperties)
                 {
-                    foreach (var pair in previous.Properties)
-                    {
-                        if (!element.Properties.TryGetValue(pair.Key, out var instance)) continue;
-                        if (string.Equals(instance, pair.Value, StringComparison.Ordinal)) element.Properties.Remove(pair.Key);
-                    }
+                    if (!element.Properties.TryGetValue(pair.Key, out var instance)) continue;
+                    if (string.Equals(instance, pair.Value, StringComparison.Ordinal)) element.Properties.Remove(pair.Key);
                 }
                 element.FamilyId = target.Id;
                 foreach (var pair in targetProperties)
