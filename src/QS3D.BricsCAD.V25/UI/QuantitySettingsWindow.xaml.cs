@@ -13,7 +13,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class QuantitySettingsWindow : Window
     {
         private readonly QuantitySettingsStore _store;
-        private QuantityCalculationSettings _loadedSettings;
+        private QuantityCalculationSettings _loadedSettings = QuantityCalculationSettings.CreateDefault();
 
         public QuantitySettingsWindow(QuantitySettingsStore store)
         {
@@ -76,7 +76,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             var result = new QuantityCalculationSettings
             {
-                SchemaVersion = _loadedSettings == null || _loadedSettings.SchemaVersion <= 0
+                SchemaVersion = _loadedSettings.SchemaVersion <= 0
                     ? QuantityCalculationSettings.CurrentSchemaVersion
                     : _loadedSettings.SchemaVersion,
                 FormworkTolerance = ParseNonNegative(FormworkToleranceBox.Text, "Dung sai cốp pha"),
@@ -344,7 +344,7 @@ namespace QS3D.BricsCAD.V25.UI
             return Compatibility(code) != null;
         }
 
-        private static string Compatibility(int code)
+        private static string? Compatibility(int code)
         {
             switch (code)
             {
