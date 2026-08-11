@@ -49,7 +49,7 @@ namespace QS3D.Core.Audit
 
         public void Record(string action, string elementId, string detail, string actor = "", string correlationId = "")
         {
-            _events.Add(new AuditEvent
+            var item = new AuditEvent
             {
                 Utc = DateTime.UtcNow,
                 Action = action ?? string.Empty,
@@ -57,15 +57,16 @@ namespace QS3D.Core.Audit
                 Detail = detail ?? string.Empty,
                 Actor = actor ?? string.Empty,
                 CorrelationId = correlationId ?? string.Empty
-            });
+            };
             _project?.Touch();
+            _events.Add(item);
         }
 
         public void Clear()
         {
             if (_events.Count == 0) return;
-            _events.Clear();
             _project?.Touch();
+            _events.Clear();
         }
 
         private static AuditEvent Clone(AuditEvent item)
