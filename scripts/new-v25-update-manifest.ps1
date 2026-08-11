@@ -93,6 +93,21 @@ function Read-PluginProductVersion {
     }
 }
 
+function Get-ZipEntrySha256 {
+    param([System.IO.Compression.ZipArchiveEntry]$Entry)
+
+    $input = $Entry.Open()
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = $sha.ComputeHash($input)
+        return ([BitConverter]::ToString($bytes)).Replace('-', '').ToUpperInvariant()
+    }
+    finally {
+        $sha.Dispose()
+        $input.Dispose()
+    }
+}
+
 function Assert-ZipPayloadMatchesSignedStaging {
     param([string]$ZipPath, [string]$PackageRoot, [string]$ExpectedSigner)
     $temp = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-manifest-verify-' + [Guid]::NewGuid().ToString('N'))
@@ -100,22 +115,56 @@ function Assert-ZipPayloadMatchesSignedStaging {
     $archive = $null
     try {
         $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
-        foreach ($name in @('PACKAGE-METADATA.json') + $SignedPayloadNames) {
-            $matches = @($archive.Entries | Where-Object { [string]::Equals($_.FullName, $name, [StringComparison]::Ordinal) })
-            if ($matches.Count -ne 1) { throw "Package ZIP must contain exactly one root entry named $name." }
+        $packageRootPath = [IO.Path]::GetFullPath($PackageRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        $packageRootPrefix = $packageRootPath + [IO.Path]::DirectorySeparatorChar
+        $stagedFiles = @(Get-ChildItem -LiteralPath $PackageRoot -File -Recurse)
+        if ($stagedFiles.Count -eq 0) { throw 'Signed staging package contains no regular files.' }
+
+        $stagedByName = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($stagedFile in $stagedFiles) {
+            $fullPath = [IO.Path]::GetFullPath($stagedFile.FullName)
+            if (-not $fullPath.StartsWith($packageRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Staged package file escaped package root: $($stagedFile.FullName)"
+            }
+            $relative = $fullPath.Substring($packageRootPrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
+            if ($stagedByName.ContainsKey($relative)) { throw "Duplicate/case-colliding staged package path: $relative" }
+            $stagedByName.Add($relative, $fullPath)
+        }
+
+        $zipByName = [Collections.Generic.Dictionary[string,System.IO.Compression.ZipArchiveEntry]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $archive.Entries) {
+            if ([string]::IsNullOrEmpty([string]$entry.Name)) { continue }
+            $name = [string]$entry.FullName
+            if ([string]::IsNullOrWhiteSpace($name) -or $name.IndexOf([char]0) -ge 0 -or [IO.Path]::IsPathRooted($name) -or $name.Contains('\') -or $name.Contains(':')) {
+                throw "Unsafe package ZIP entry: $name"
+            }
+            $segments = @($name.Split('/'))
+            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+                throw "Unsafe package ZIP entry: $name"
+            }
+            if ($zipByName.ContainsKey($name)) { throw "Duplicate/case-colliding package ZIP path: $name" }
+            if (-not $stagedByName.ContainsKey($name)) { throw "Package ZIP contains file not present in signed staging: $name" }
+            $zipByName.Add($name, $entry)
+        }
+
+        foreach ($name in $stagedByName.Keys) {
+            if (-not $zipByName.ContainsKey($name)) { throw "Package ZIP is missing signed staging file: $name" }
+            $stagedHash = (Get-FileHash -LiteralPath $stagedByName[$name] -Algorithm SHA256).Hash.ToUpperInvariant()
+            $zippedHash = Get-ZipEntrySha256 -Entry $zipByName[$name]
+            if ($stagedHash -ne $zippedHash) { throw "Package ZIP payload does not match signed staging file: $name" }
+        }
+        if ($zipByName.Count -ne $stagedByName.Count) {
+            throw "Package ZIP/staging file-count mismatch. ZIP=$($zipByName.Count), staging=$($stagedByName.Count)."
+        }
+
+        foreach ($name in $SignedPayloadNames) {
+            if (-not $zipByName.ContainsKey($name)) { throw "Package ZIP is missing signed executable payload: $name" }
             $destination = Join-Path $temp $name
-            $input = $matches[0].Open()
+            $input = $zipByName[$name].Open()
             $output = [IO.File]::Create($destination)
             try { $input.CopyTo($output) }
             finally { $output.Dispose(); $input.Dispose() }
-
-            $staged = Join-Path $PackageRoot $name
-            $stagedHash = (Get-FileHash -LiteralPath $staged -Algorithm SHA256).Hash.ToUpperInvariant()
-            $zippedHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToUpperInvariant()
-            if ($stagedHash -ne $zippedHash) { throw "Package ZIP payload does not match signed staging file: $name" }
-        }
-        foreach ($name in $SignedPayloadNames) {
-            Assert-AuthenticodeSigner -Path (Join-Path $temp $name) -ExpectedSigner $ExpectedSigner -Label ("Zipped QS3D executable payload " + $name)
+            Assert-AuthenticodeSigner -Path $destination -ExpectedSigner $ExpectedSigner -Label ("Zipped QS3D executable payload " + $name)
         }
     }
     finally {
