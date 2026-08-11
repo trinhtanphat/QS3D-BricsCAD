@@ -37,6 +37,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var combo = FindPropertyEditorAncestor<ComboBox>(source);
                 if (combo != null && combo.IsEditable)
                 {
+                    if (combo.IsDropDownOpen) return;
                     combo.GetBindingExpression(ComboBox.TextProperty)?.UpdateSource();
                     e.Handled = true;
                     return;
