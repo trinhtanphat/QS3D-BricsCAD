@@ -8,11 +8,12 @@ planner = root / "src/QS3D.Core/Export/ProjectInterchangeRemapPlanner.cs"
 importer = root / "src/QS3D.Core/Export/ProjectInterchangeRemapAppendImporter.cs"
 policy = root / "src/QS3D.Core/Export/ProjectInterchangeSemanticReferencePolicy.cs"
 command = root / "src/QS3D.BricsCAD.V25/ProjectInterchangeRemapAppendCommands.cs"
+dry_command = root / "src/QS3D.BricsCAD.V25/ProjectInterchangeRemapCommands.cs"
 planner_smoke = root / "tests/QS3D.Core.SmokeTests/ProjectInterchangeRemapPlannerSmoke.cs"
 level_smoke = root / "tests/QS3D.Core.SmokeTests/ProjectInterchangeRemapLevelReferenceSmoke.cs"
 
 errors = []
-for path in (planner, importer, policy, command, planner_smoke, level_smoke):
+for path in (planner, importer, policy, command, dry_command, planner_smoke, level_smoke):
     if not path.exists():
         errors.append(f"missing remap-append contract source: {path.relative_to(root)}")
 
@@ -21,6 +22,7 @@ if not errors:
     i = importer.read_text(encoding="utf-8")
     r = policy.read_text(encoding="utf-8")
     c = command.read_text(encoding="utf-8")
+    d = dry_command.read_text(encoding="utf-8")
     ps = planner_smoke.read_text(encoding="utf-8")
     ls = level_smoke.read_text(encoding="utf-8")
 
@@ -42,26 +44,43 @@ if not errors:
         "ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference)",
         "MapPropertyReference(plan.Remap, reference, property.Value, ref rewrites)",
         "ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key)",
+        "addedElementIds.Add(added.Id)",
+        "ValidateCombinedTarget(target, addedElementIds)",
         "ValidateRegisteredPropertyReferences(target, element)",
+        "ValidateLevelReferenceConsistency(target, element)",
         "ProjectInterchangeSemanticReferencePolicy.KnownPropertyReferences",
         "ProjectFloorService.BottomLevelIdKey",
         "ProjectFloorService.TopLevelIdKey",
+        "ElementVerticalPlacementService.ReadLevelOffset",
         "has TopLevelId without BottomLevelId",
+        "has a level offset without its level reference",
+        "has TopLevelOffsetM without TopLevelId",
+        "top level elevation must be above bottom level elevation",
+        "AddFinite(",
         "IsImportedOwnershipMetadata(property.Key)",
         'k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
         'k.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)',
         'k.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0',
-        "GeneratedHandleOwnershipPolicy.IsOwnerSlot(k)",
         "DrawingFingerprint = string.Empty",
         "added.MarkDirty(ElementDirtyFlags.All)",
-        "ValidateCombinedTarget(target)",
         "graph.Rebuild(target.Elements)",
         "graph.TopologicalDirtyOrder(target.Elements)",
         "No imported handle/fingerprint became target DWG ownership",
+        "EvaluateCompatibility(target, source)",
+        "CompatibilityBlockers",
+        "public int BlockerCount",
+        "Remap.CanAppendAsNew && CompatibilityBlockers.Count == 0",
+        "private const int MaxZones = 2000;",
+        "private const int MaxFloors = 2000;",
+        "private const int MaxFamilies = 10000;",
+        "private const int FamilyMaxPropertyKeyLength = 120;",
+        "private const int FamilyMaxPropertyValueLength = 1000;",
+        "EnsureFamilyPropertyRuntimeCompatible",
+        "Import As New will not truncate semantic data",
     ]
     for needle in required_importer:
         if needle not in i:
-            errors.append("remap append importer missing atomic/ownership/rewrite contract: " + needle)
+            errors.append("remap append importer missing atomic/ownership/compatibility/reference contract: " + needle)
 
     plan_method = re.search(
         r"public static ProjectInterchangeRemapAppendPlan Plan\(ProjectState target, string json\)(.*?)public static ProjectInterchangeRemapAppendResult Import",
@@ -74,8 +93,8 @@ if not errors:
         plan_body = plan_method.group(1)
         if "ValidateExecutionSafety" in plan_body:
             errors.append("remap append Plan must remain inspectable for blocked plans; execution safety belongs in Import")
-        if "return new ProjectInterchangeRemapAppendPlan(remap, ownershipProperties)" not in plan_body:
-            errors.append("remap append Plan must return blocked/ready plan metadata without mutation")
+        if "return new ProjectInterchangeRemapAppendPlan(remap, ownershipProperties, compatibilityBlockers)" not in plan_body:
+            errors.append("remap append Plan must return blocked/ready compatibility metadata without mutation")
 
     required_planner = [
         "foreach (var family in source.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))",
@@ -121,13 +140,13 @@ if not errors:
         "InterchangeRemapIdentityKind.Element",
         "InterchangeRemapIdentityKind.Floor",
         "TryGetPropertyReference",
+        "KnownPropertyReferences",
         "LooksLikeSemanticReferenceKey",
     ]
     for needle in required_policy:
         if needle not in r:
             errors.append("semantic reference policy missing portable relation contract: " + needle)
 
-    # Planner preview and executor consume one canonical conservative ID/ref suffix policy.
     reference_suffixes = ["Id", "Ids", "Ref", "Refs", "RefId", "RefIds"]
     for suffix in reference_suffixes:
         needle = f'key.EndsWith("{suffix}", StringComparison.OrdinalIgnoreCase)'
@@ -143,6 +162,7 @@ if not errors:
     required_planner_smoke = [
         "BlockedAppendPlanRemainsInspectableAndImportFailsClosed",
         "OverLimitCatalogIdentitiesAreBoundedBeforeImport",
+        "IncomingDuplicateNamesAreRemappedWithinBatch",
         "PortableLevelReferencesAreTypedAndRemapped",
         "RegisteredReferenceMissingFromSourceBlocksPreview",
         'Equal("L0-import", bottom.TargetReferenceId)',
@@ -166,7 +186,6 @@ if not errors:
         if needle not in ls:
             errors.append("remap level-reference smoke missing apply/rollback regression: " + needle)
 
-    # Re-plan and fail-closed validation must happen before snapshot capture/mutation.
     if i.index("var plan = Plan(target, json);") > i.index("ValidateExecutionSafety(source, plan);"):
         errors.append("Import As New must build plan before execution-safety validation")
     if i.index("ValidateExecutionSafety(source, plan);") > i.index("ProjectStateSnapshot.Capture(target)"):
@@ -187,10 +206,18 @@ if not errors:
     required_command = [
         '[CommandMethod("QS3DINTERCHANGEREMAPAPPEND", CommandFlags.Modal)]',
         "ProjectInterchangeRemapAppendImporter.Plan(project, json)",
-        "ProjectInterchangeRemapAppendImporter.Import(project, json)",
+        "var previewChangeVersion = project.ChangeVersion;",
+        "var currentProject = ProjectContextCoordinator.GetOrCreate(document);",
+        "ReferenceEquals(currentProject, project)",
+        "currentProject.ChangeVersion != previewChangeVersion",
+        "ProjectInterchangeRemapAppendImporter.Import(currentProject, json)",
         "if (!plan.CanImport)",
         "Interchange Import As New BLOCKED",
+        "plan.BlockerCount",
         "plan.Remap.OpaqueReferenceWarnings.Count",
+        "plan.CompatibilityBlockers.Count",
+        "runtime compatibility",
+        "không truncate semantic data",
         "QS3DINTERCHANGEREMAPPLAN",
         "chưa mutate project/DWG",
         "if (plan.IdRemapCount == 0 && plan.NameRemapCount == 0)",
@@ -199,7 +226,6 @@ if not errors:
         "new UTF8Encoding(false, true)",
         "MessageBoxButton.YesNo",
         "Existing target Zone/Floor/Family/Element KHÔNG bị replace hoặc rename",
-        "Property ID/ref chưa có rewrite policy sẽ BLOCK",
         "SourceHandles, drawing fingerprint và Generated*/PhysicalOpeningCut*/handle owner metadata không trở thành CAD ownership",
         "semantic-only import",
         "re-plan ngay trước mutation",
@@ -207,9 +233,24 @@ if not errors:
     ]
     for needle in required_command:
         if needle not in c:
-            errors.append("remap append command missing guarded UX contract: " + needle)
+            errors.append("remap append command missing guarded UX/freshness contract: " + needle)
+    if "ProjectInterchangeRemapAppendImporter.Import(project, json)" in c:
+        errors.append("confirmed remap append must mutate the re-resolved current project, not the stale preview reference")
     if "Import As New plan is not executable. Run QS3DINTERCHANGEREMAPPLAN" in c:
         errors.append("blocked remap plans should surface as normal BLOCKED status, not generic command exceptions")
+
+    required_dry_run = [
+        '[CommandMethod("QS3DINTERCHANGEREMAPPLAN", CommandFlags.Modal)]',
+        "ProjectInterchangeRemapAppendImporter.Plan(project, json)",
+        "var plan = appendPlan.Remap;",
+        "appendPlan.CompatibilityBlockers.Count",
+        "BLOCK RUNTIME",
+        "appendPlan.CanImport ? \"READY\" : \"BLOCKED\"",
+        "target runtime compatibility",
+    ]
+    for needle in required_dry_run:
+        if needle not in d:
+            errors.append("remap dry-run missing execution-compatibility preview contract: " + needle)
 
     all_cs = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in (root / "src").rglob("*.cs"))
     registrations = len(re.findall(r'\[CommandMethod\("QS3DINTERCHANGEREMAPAPPEND"', all_cs))
@@ -231,4 +272,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New keeps blocked plans inspectable, fails closed before mutation, bounds catalog identities to runtime services, uses one typed HostWall/BottomLevel/TopLevel property-reference registry, strips native ownership, preserves target identities, and retains rollback-failure diagnostics.")
+print("Import As New keeps blocked plans inspectable, previews runtime compatibility, binds confirmation to the reviewed project/version, uses one typed HostWall/BottomLevel/TopLevel reference registry, rejects invalid level relations before success, strips native ownership, and preserves rollback diagnostics.")
