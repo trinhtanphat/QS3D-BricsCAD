@@ -61,8 +61,12 @@ if policy.is_file():
 
 if review.is_file():
     text = review.read_text(encoding="utf-8")
-    if "SemanticCaptureService.CaptureSnapshot(doc, result.Snapshot, candidate.Category)" not in text:
-        errors.append("Recognition/B4D apply must flow through guarded CaptureSnapshot")
+    for needle in (
+        "var refreshed = new ProjectRecognitionService().Suggest(currentProject, liveSnapshots[0]);",
+        "SemanticCaptureService.CaptureSnapshot(doc, refreshed.Snapshot, candidate.Category)",
+    ):
+        if needle not in text:
+            errors.append("Recognition/B4D apply must re-read live source state and flow the refreshed snapshot through guarded CaptureSnapshot: " + needle)
 
 if snapshot.is_file():
     text = snapshot.read_text(encoding="utf-8")
@@ -77,4 +81,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: semantic capture rejects generated output before mutation; capture and room-finish batches restore full project state on failure.")
+print("PASS: semantic capture rejects generated output before mutation; recognition captures refreshed live snapshots and room-finish batches restore full project state on failure.")
