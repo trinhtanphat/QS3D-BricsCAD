@@ -1,6 +1,6 @@
 # Work claim — Material Catalog refresh lifecycle regression gate
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-material-refresh-20260811-1937`
 - Registered: `2026-08-11T19:37:30+07:00`
 - Baseline main SHA: `6c4d1775a0f55424bb6e1d4aa35c07e5682a41e7`
@@ -33,6 +33,14 @@ Extend the existing Material Catalog project-lifecycle static preflight so a Ref
 
 Current active claims reserve registration protocol, Direct Draw Create Similar, Workspace multi-selection policy, modeless viewer project identity, Core mutation atomicity and Room Finish mutation safety. This lane is intentionally limited to the existing Material Catalog lifecycle preflight and does not touch those source/test surfaces.
 
+## Completion
+
+- Implementation commit: `85aac86b0be9ee7467ba5da94f826cfed227d411` — `test(materials): lock refresh editor lifecycle`.
+- The existing preflight now checks current-material resolution, `LoadEditor`/`ClearEditor` editor synchronization, and ordering that accepts `_boundProject = project` only after editor state is synchronized or cleared.
+- Validation actually performed: exact-HEAD source inspection plus pushed commit diff/truncation review; `main` was observed at `85aac86b0be9ee7467ba5da94f826cfed227d411` immediately before close-out.
+- Not claimed: execution of the Python preflight, BricsCAD V25 runtime qualification, GitHub Actions, release, signing or installer work.
+- No LOCAL_ONLY inbox change was needed because this batch only strengthens static regression coverage for an already-known source lifecycle contract.
+
 ## Completion condition
 
-The existing Material Catalog lifecycle gate protects refresh/editor synchronization and rebind ordering on current `main`, the final diff is reviewed, and this claim is marked `COMPLETED` with the actual implementation SHA and validation boundary.
+Completed: the existing Material Catalog lifecycle gate protects refresh/editor synchronization and rebind ordering on current `main`, the final diff was reviewed, and this claim records the actual implementation SHA and validation boundary.
