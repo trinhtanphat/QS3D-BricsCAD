@@ -32,7 +32,14 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    const string blocked = "Interchange UseSource: target drawing chưa có QS3D project để replace. Dùng QS3DINTERCHANGEIMPORT để import vào target mới/trống.";
+                    try { PaletteCoordinator.SetStatus(blocked); } catch { }
+                    document.Editor.WriteMessage("\nQS3D " + blocked);
+                    return;
+                }
+
                 var previewChangeVersion = project.ChangeVersion;
                 var plan = InterchangeUseSourceElementImportService.Plan(project, json);
                 if (plan.ElementsToReplace <= 0)
