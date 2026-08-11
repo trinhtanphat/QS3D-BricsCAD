@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             MissingScheduleFailsClosed();
             DuplicateRequestedScheduleFailsClosed();
             DuplicateAvailableScheduleFailsClosed();
+            TooManyAvailableSchedulesFailClosed();
+            TooManyPlacementItemsFailClosed();
             OversizedScheduleFailsClosed();
             InvalidGeometryFailsClosed();
         }
@@ -118,6 +120,38 @@ namespace QS3D.Core.SmokeTests
                     new[] { Schedule("SCH-1"), Schedule("sch-1") },
                     new[] { new SemanticSchedulePlacementItem("SCH-1", 100d, 60d) }),
                 "Duplicate available schedule ids must fail closed.");
+        }
+
+        private static void TooManyAvailableSchedulesFailClosed()
+        {
+            var schedules = new List<SemanticScheduleDefinition>();
+            for (var i = 0; i < 129; i++) schedules.Add(Schedule("SCH-" + i));
+
+            MustFail(
+                () => SemanticSchedulePlacementPlanner.Build(
+                    EmptySheet(297d, 210d),
+                    schedules,
+                    new[] { new SemanticSchedulePlacementItem("SCH-0", 100d, 60d) }),
+                "Available schedule enumeration must fail closed at the 129th definition.");
+        }
+
+        private static void TooManyPlacementItemsFailClosed()
+        {
+            var schedules = new List<SemanticScheduleDefinition>();
+            var items = new List<SemanticSchedulePlacementItem>();
+            for (var i = 0; i < 128; i++)
+            {
+                schedules.Add(Schedule("SCH-" + i));
+                items.Add(new SemanticSchedulePlacementItem("SCH-" + i, 1d, 1d));
+            }
+            items.Add(new SemanticSchedulePlacementItem("SCH-0", 1d, 1d));
+
+            MustFail(
+                () => SemanticSchedulePlacementPlanner.Build(
+                    EmptySheet(297d, 210d),
+                    schedules,
+                    items),
+                "Placement-item enumeration must fail closed at the 129th request.");
         }
 
         private static void OversizedScheduleFailsClosed()
