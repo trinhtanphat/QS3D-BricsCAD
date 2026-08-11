@@ -133,23 +133,11 @@ namespace QS3D.Core.Rebar
                 if (input.DistributionLengthM <= 0d) throw new InvalidOperationException("Rebar distribution length must be greater than zero for spacing notation.");
                 var millimeters = RebarMath.Multiply(input.DistributionLengthM, 1000d, "spacing distribution length");
                 var intervals = RebarMath.Divide(millimeters, group.SpacingMm.Value, "spacing interval count");
-                var nearestInteger = Math.Round(intervals);
-                var floatingTolerance = IntegerSnapTolerance(intervals);
-                if (Math.Abs(intervals - nearestInteger) <= floatingTolerance) intervals = nearestInteger;
-                var rounded = Math.Ceiling(intervals);
+                var rounded = RebarMath.CeilingNearInteger(intervals, "spacing interval count");
                 if (rounded > int.MaxValue - 1d) throw new OverflowException("Rebar spacing produces too many bars.");
                 return checked((int)rounded + 1);
             }
             throw new InvalidOperationException("Rebar quantity cannot be inferred. Provide count notation, spacing + distribution length, or CountOverride.");
-        }
-
-        private static double IntegerSnapTolerance(double value)
-        {
-            var magnitude = Math.Abs(value);
-            if (magnitude == double.MaxValue) return 0d;
-            var bits = BitConverter.DoubleToInt64Bits(magnitude);
-            var next = BitConverter.Int64BitsToDouble(bits + 1L);
-            return (next - magnitude) * 8d;
         }
 
         private static string Normalize(string value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();

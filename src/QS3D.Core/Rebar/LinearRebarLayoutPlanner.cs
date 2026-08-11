@@ -57,7 +57,8 @@ namespace QS3D.Core.Rebar
             {
                 var spacingMm = RebarMath.Positive(input.SpacingMm!.Value, nameof(input.SpacingMm));
                 var usableMm = RebarMath.Multiply(usableSpanM, 1000d, "linear rebar usable span mm");
-                var intervals = Math.Ceiling(RebarMath.Divide(usableMm, spacingMm, "linear rebar spacing intervals"));
+                var intervalRatio = RebarMath.Divide(usableMm, spacingMm, "linear rebar spacing intervals");
+                var intervals = RebarMath.CeilingNearInteger(intervalRatio, "linear rebar spacing intervals");
                 if (double.IsNaN(intervals) || double.IsInfinity(intervals) || intervals > MaxBars - 1d)
                     throw new InvalidOperationException("Linear rebar spacing requires too many bars.");
                 count = checked((int)intervals + 1);

@@ -71,7 +71,8 @@ namespace QS3D.Core.Rebar
             }
             else
             {
-                var intervalCountRaw = Math.Ceiling(usable / requestedSpacingM);
+                var intervalRatio = RebarMath.Divide(usable, requestedSpacingM, "column tie spacing intervals");
+                var intervalCountRaw = RebarMath.CeilingNearInteger(intervalRatio, "column tie spacing intervals");
                 if (double.IsNaN(intervalCountRaw) || double.IsInfinity(intervalCountRaw) || intervalCountRaw >= MaxTies)
                     throw new InvalidOperationException("Column tie layout exceeds the supported tie count.");
                 var intervals = Math.Max(1, (int)intervalCountRaw);

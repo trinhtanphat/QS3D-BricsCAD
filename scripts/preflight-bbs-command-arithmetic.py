@@ -7,10 +7,11 @@ COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
 WINDOW = ROOT / "src/QS3D.BricsCAD.V25/UI/RebarScheduleWindow.xaml.cs"
 EXPORTER = ROOT / "src/QS3D.Core/Export/XlsxRebarScheduleExporter.cs"
 SCHEDULE = ROOT / "src/QS3D.Core/Rebar/RebarSchedule.cs"
+REBAR_MATH = ROOT / "src/QS3D.Core/Rebar/RebarMath.cs"
 REGRESSION = ROOT / "tests/QS3D.Core.SmokeTests/BbsRegressionSmoke.cs"
 errors = []
 
-for path in (COMMANDS, WINDOW, EXPORTER, SCHEDULE, REGRESSION):
+for path in (COMMANDS, WINDOW, EXPORTER, SCHEDULE, REBAR_MATH, REGRESSION):
     if not path.is_file():
         errors.append("missing " + str(path.relative_to(ROOT)))
 
@@ -46,8 +47,16 @@ if EXPORTER.is_file():
 
 if SCHEDULE.is_file():
     text = SCHEDULE.read_text(encoding="utf-8")
+    if 'RebarMath.CeilingNearInteger(intervals, "spacing interval count")' not in text:
+        errors.append("BBS spacing count must use the shared bounded-ULP interval ceiling")
+    if "Math.Max(1d, Math.Abs(intervals)) * 1e-12d" in text:
+        errors.append("BBS spacing count must not use scale-growing relative tolerance")
+
+if REBAR_MATH.is_file():
+    text = REBAR_MATH.read_text(encoding="utf-8")
     required = (
-        "IntegerSnapTolerance(intervals)",
+        "public static double CeilingNearInteger(double value, string label)",
+        "IntegerSnapTolerance(value)",
         "BitConverter.DoubleToInt64Bits(magnitude)",
         "BitConverter.Int64BitsToDouble(bits + 1L)",
         "return (next - magnitude) * 8d;",
@@ -55,8 +64,6 @@ if SCHEDULE.is_file():
     for token in required:
         if token not in text:
             errors.append("BBS spacing count missing bounded ULP snap token: " + token)
-    if "Math.Max(1d, Math.Abs(intervals)) * 1e-12d" in text:
-        errors.append("BBS spacing count must not use scale-growing relative tolerance")
 
 if REGRESSION.is_file():
     text = REGRESSION.read_text(encoding="utf-8")

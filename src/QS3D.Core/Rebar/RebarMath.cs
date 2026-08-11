@@ -44,5 +44,22 @@ namespace QS3D.Core.Rebar
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Rebar division overflow: " + label);
             return result;
         }
+
+        public static double CeilingNearInteger(double value, string label)
+        {
+            NonNegative(value, label);
+            var nearestInteger = Math.Round(value);
+            if (Math.Abs(value - nearestInteger) <= IntegerSnapTolerance(value)) value = nearestInteger;
+            return Math.Ceiling(value);
+        }
+
+        private static double IntegerSnapTolerance(double value)
+        {
+            var magnitude = Math.Abs(value);
+            if (magnitude == double.MaxValue) return 0d;
+            var bits = BitConverter.DoubleToInt64Bits(magnitude);
+            var next = BitConverter.Int64BitsToDouble(bits + 1L);
+            return (next - magnitude) * 8d;
+        }
     }
 }
