@@ -2,47 +2,39 @@
 
 - Claim ID: `UPDATER-RELEASE-SNAPSHOT-BINDING-20260811`
 - Owner: `ChatGPT Web / GPT-5.6 Sol`
-- Status: `ACTIVE`
+- Status: `RELEASED`
 - Registered: `2026-08-11T23:02:30+07:00`
 - Updated: `2026-08-11T23:04:30+07:00`
+- Released: `2026-08-11T23:08:00+07:00`
 - Baseline main SHA: `0581b5db3a0e185b6855d1dbfce58282439c74e6`
 - Parent updater lane: `GITHUB-RELEASE-AUTO-UPDATE-20260811`
 
 ## Verified defect
 
-The pre-close manifest probe binds the selected GitHub release tag to schema/productVersion/package URL before enabling one-click. After BricsCAD closes, however, the detached worker re-fetches the manifest. The final updater verifies that the newly fetched manifest/package is internally consistent, signed and newer than installed state, but it does not bind those re-fetched fields back to the release identity that was approved before host close.
+The pre-close manifest probe bound the selected GitHub release tag before enabling one-click, but the final post-close updater re-fetched the manifest and previously verified only internal consistency, publisher and monotonicity. A changed manifest could therefore substitute a different newer package signed by the same QS3D publisher after the user had approved another release.
 
-If the release manifest asset changes between pre-close validation and post-close fetch, a different valid QS3D package signed by the same publisher and newer than the installed version can satisfy the final updater. The UI can therefore approve release A while the post-close worker installs release B. This is a release-identity TOCTOU/mix-and-match gap, even though publisher and monotonic-version security remain intact.
+## Completed changes
 
-## Reserved scope
+- `ebf67b9055634e335dd01a47437833c0b76e76ee` — registered this claim before implementation.
+- `1d1caae8be1344ff0c6a46f40226b936b33edd19` — committed the final release-snapshot binding plan before code.
+- `b21846d1ac51951c797b8e9e9f374d93a5784274` — reconciled the claim to the lower-surface design: derive the expected release tag from the immutable official manifest URI already frozen into the detached worker rather than adding a parallel C# tag argument.
+- `2f65d7df702f44960b59677e81ee1b6750bd6d6f` — `update-v25.ps1` now recognizes the exact official QS3D GitHub manifest path, decodes and strictly validates its `v<SemVer>` tag, derives the expected productVersion, requires the re-fetched manifest productVersion to match, and requires the re-fetched package URI to resolve to the exact same repository/tag and `QS3D-BricsCAD-V25.zip` asset before package download.
+- `b8d12904b97f580ed95f497b2978f8cbd0c2b3ab` — added auto-discovered `preflight-update-release-snapshot.py`, locking snapshot derivation and product/package identity checks before ZIP download and installer invocation while preserving mutex, signer, hash, monotonic version and stale-installed-state gates.
 
-- `scripts/update-v25.ps1`
-- `scripts/preflight-update-release-snapshot.py` (new)
-- `scripts/preflight-auto-update.py` / product-version gates only if narrow compatibility updates are required
-- `docs/UPDATER-RELEASE-SNAPSHOT-BINDING-PLAN-2026-08-11.md` (new)
-- this claim file
+## Resulting contract
 
-`SecureUpdateLauncher.cs` was initially reserved but no edit is required: it already freezes the selected release's exact manifest URI into the detached worker before graceful host close. The safer design derives the expected tag from that immutable URI instead of adding a second parallel tag parameter.
+1. Official one-click updates are anchored to the manifest URI frozen before graceful host close.
+2. A post-close replacement of that manifest cannot switch the release productVersion or package to another repo/tag/asset, even if that other package is otherwise valid and signed by the same publisher.
+3. Snapshot mismatch fails before ZIP download/install; the existing post-close failure recovery can restore BricsCAD best effort.
+4. Non-official/manual HTTPS manifests retain their existing signed/hash/monotonic behavior instead of being forced into the GitHub-specific path convention.
+5. Current cross-entry mutex, archive safety, Authenticode, package metadata/productVersion and transactional installer contracts remain intact.
 
-## Non-overlap / preservation
+## Integration verification
 
-- Preserve current pre-close manifest probe, readiness/cancellation, cross-process/manual-entry mutexes, post-failure restart, WinVerifyTrust/current signer pinning, installed updater Authenticode validation, archive/hash/product-version gates and installer rollback.
-- Do not edit SecureUpdateLauncher, GitHubReleaseClient, UpdateCoordinator/UI, manifest generator, release workflow or unrelated lanes.
-- No Actions dispatch or release publication.
+- Re-fetched current updater source after the change; official manifest/package helpers and ordering are present in blob `8c61df921a418e41725541f6e3b459cba5e3ef1e`.
+- Compare from `b8d12904b97f580ed95f497b2978f8cbd0c2b3ab` to current `main` reported `ahead_by: 0`, `behind_by: 0` at verification time.
+- No GitHub Actions workflow was dispatched and no release was published.
 
-## Intended contract
+## Validation boundary
 
-1. Final updater recognizes the frozen official manifest URI shape `https://github.com/trinhtanphat/QS3D-BricsCAD/releases/download/<tag>/QS3D-BricsCAD-V25.update.json` and derives the expected decoded release tag from that already-scheduled URI.
-2. The derived tag must be exact lowercase `v` + strict SemVer; final updater derives expected `productVersion` by removing that one leading `v`.
-3. Re-fetched manifest `productVersion` must equal the derived expected productVersion exactly.
-4. Re-fetched `packageUri` must be the exact QS3D-BricsCAD release-download path for the same decoded tag and exact `QS3D-BricsCAD-V25.zip`, rejecting another repo/tag/asset even when it is signed by the same publisher.
-5. Direct/manual updater compatibility remains for non-official manifest hosts/paths; official QS3D GitHub manifests automatically receive the stronger snapshot binding.
-6. Any post-close release-snapshot mismatch fails before package download/install; existing worker failure-restart restores BricsCAD best effort.
-
-## Validation / release conditions
-
-- Planning MD `docs/UPDATER-RELEASE-SNAPSHOT-BINDING-PLAN-2026-08-11.md` was committed before implementation.
-- Add auto-discovered regression coverage proving exact official manifest-path derivation and final productVersion/package-path binding before package download/install.
-- Re-fetch source/gates and verify ancestry with `behind_by: 0`.
-- Native TOCTOU/update behavior remains `LOCAL-009 / PENDING_LOCAL`; no remote runtime PASS claim.
-- Release claim only after source + gate are on `main`.
+Source/static final-release identity is hardened. Actual GitHub asset-replacement timing and signed post-close update execution remain `LOCAL-009 / PENDING_LOCAL`; this lane does not claim native/runtime PASS.
