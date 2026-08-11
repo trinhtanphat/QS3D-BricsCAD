@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using QS3D.Core.Domain;
 
@@ -35,24 +36,31 @@ namespace QS3D.Core.Export
         public static void Validate(ProjectInterchangeValidatedSnapshot snapshot)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
-            var zones = new HashSet<string>(snapshot.Zones.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
-            var floors = snapshot.Floors.ToDictionary(x => x.Id, x => x.ElevationM, StringComparer.OrdinalIgnoreCase);
-            var families = new HashSet<string>(snapshot.Families.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
-            var elements = new HashSet<string>(snapshot.Elements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
-
-            foreach (var element in snapshot.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            try
             {
-                ValidateRegisteredReferences(
-                    element.Id,
-                    element.Properties,
-                    zones.Contains,
-                    floors.ContainsKey,
-                    families.Contains,
-                    elements.Contains);
-                ValidateLevelConsistency(
-                    element.Id,
-                    element.Properties,
-                    id => floors.TryGetValue(id, out var elevation) ? elevation : (double?)null);
+                var zones = new HashSet<string>(snapshot.Zones.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+                var floors = snapshot.Floors.ToDictionary(x => x.Id, x => x.ElevationM, StringComparer.OrdinalIgnoreCase);
+                var families = new HashSet<string>(snapshot.Families.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+                var elements = new HashSet<string>(snapshot.Elements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+
+                foreach (var element in snapshot.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+                {
+                    ValidateRegisteredReferences(
+                        element.Id,
+                        element.Properties,
+                        zones.Contains,
+                        floors.ContainsKey,
+                        families.Contains,
+                        elements.Contains);
+                    ValidateLevelConsistency(
+                        element.Id,
+                        element.Properties,
+                        id => floors.TryGetValue(id, out var elevation) ? elevation : (double?)null);
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidDataException("Semantic snapshot contains invalid registered property-carried references or level relations.", ex);
             }
         }
 
