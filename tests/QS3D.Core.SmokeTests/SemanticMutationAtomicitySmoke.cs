@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             HostRelinkAuditOverflowRollsBack();
             HostUnlinkAuditOverflowRollsBack();
             StaleAutoHostAuditOverflowRollsBack();
+            DirtyPropagationOverflowRollsBack();
         }
 
         private static void BulkSetPropertyOverflowRollsBack()
@@ -123,6 +124,30 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeAudits, project.AuditEvents.Count, "Failed stale auto-host cleanup appended an audit event.");
             Equal(long.MaxValue - 1L, project.ChangeVersion, "Failed stale auto-host cleanup did not restore the pre-operation project version.");
             Equal(beforeUtc, project.UpdatedUtc, "Failed stale auto-host cleanup did not restore UpdatedUtc.");
+        }
+
+        private static void DirtyPropagationOverflowRollsBack()
+        {
+            var source = new ProjectState("P-DIRTY-ATOMIC", "Dirty propagation atomicity");
+            var root = new ProjectElement("ROOT", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            var dependent = new ProjectElement("DEPENDENT", ElementCategory.WallOpening, string.Empty, string.Empty, string.Empty);
+            dependent.DependsOn.Add(root.Id);
+            root.MarkClean(ElementDirtyFlags.All);
+            dependent.MarkClean(ElementDirtyFlags.All);
+            source.Elements.Add(root);
+            source.Elements.Add(dependent);
+            var project = AtVersion(source, long.MaxValue);
+            var beforeUtc = project.UpdatedUtc;
+            var engine = new RegenerationEngine(new DependencyGraph(), Array.Empty<IElementRegenerator>());
+
+            Throws<OverflowException>(() => engine.MarkChanged(project, "ROOT", ElementDirtyFlags.Properties));
+
+            root = RequiredElement(project, "ROOT");
+            dependent = RequiredElement(project, "DEPENDENT");
+            Equal(ElementDirtyFlags.None, root.Dirty, "Failed dirty propagation changed the source dirty flags.");
+            Equal(ElementDirtyFlags.None, dependent.Dirty, "Failed dirty propagation changed dependent dirty flags.");
+            Equal(long.MaxValue, project.ChangeVersion, "Failed dirty propagation changed the maximum project version.");
+            Equal(beforeUtc, project.UpdatedUtc, "Failed dirty propagation changed UpdatedUtc.");
         }
 
         private static ProjectState BulkProject()
