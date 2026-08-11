@@ -10,7 +10,7 @@
 
 Reconcile four stale BQ gates with the already-landed `QuantitySummaryWindow` refresh-helper and footer contracts. Preserve the stronger Save-confirmation, current-project, mode-aware refresh, filtering and export ordering.
 
-After the neighboring Project readiness and Ribbon claims reached `COMPLETED`, also reconcile two stale exact-token gates left by those delivered commits. This remains integration-only follow-up to source already present on `main`.
+After the neighboring Project readiness, Ribbon, Quantity Settings and Model Health claims reached `COMPLETED`, also reconcile their stale exact-token gates and restore the shared premium Theme merge omitted by the new Quantity Settings window. This remains integration-only follow-up to source already present on `main`.
 
 ## Expected surfaces
 
@@ -20,13 +20,14 @@ After the neighboring Project readiness and Ribbon claims reached `COMPLETED`, a
 - `scripts/preflight-ui-premium-layout.py`
 - `scripts/preflight-project-maintenance-actions.py`
 - `scripts/preflight-ribbon-augmenter-panel-targets.py`
+- `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.xaml` — shared `Theme.xaml` merge only
 - this claim file for close-out
 
 ## Excluded scope
 
 - No changes to `QuantitySummaryWindow.xaml`, `QuantitySummaryWindow.xaml.cs`, `Commands.cs`, Core reporting, quantity formulas, CAD locate behavior or user-visible feature behavior.
 - No takeover of the active BQ detail/viewport, quantity-description, modeless-project-identity or Core schedule-reporting feature lanes.
-- No redesign of Right quantity, Project Tools, Ribbon or Start Center; only stale post-merge gate reconciliation is owned.
+- No redesign of Right quantity, Project Tools, Ribbon, Quantity Settings, Model Health or Start Center; only stale post-merge gate reconciliation and the missing shared-theme merge are owned.
 - `QuantityInsightPanel.xaml.cs` and its compile/affinity hardening remain owned by the active Quantity Insight affinity claim.
 - No BricsCAD/private-DWG qualification, GitHub Actions, release, signing or packaging work.
 
@@ -38,8 +39,8 @@ After the neighboring Project readiness and Ribbon claims reached `COMPLETED`, a
 
 ## Coordination
 
-The active BQ/modeless and Quantity Insight affinity claims continue to own product source and user-facing feature behavior. The Project readiness and Ribbon reconciliation claims are now `COMPLETED`, releasing their gate fallout for this bounded integration repair. This lane does not reinterpret their product contract.
+The active BQ/modeless and Quantity Insight affinity claims continue to own product source and user-facing feature behavior. The Project readiness, Ribbon reconciliation, Quantity Settings and Model Health claims are now `COMPLETED`, releasing their gate/theme fallout for this bounded integration repair. This lane does not reinterpret their product contract.
 
 ## Completion condition
 
-All six focused gates, Core smoke and aggregate preflight pass on current `main`; no product source is changed; the claim is marked `COMPLETED` with pushed commit and validation evidence. Adapter V25 build is re-run when the separately owned Quantity Insight compile blocker is resolved.
+All six focused gates, Core smoke, adapter V25 build and aggregate preflight pass on current `main`; the only product-source edit is the shared-theme merge; the claim is marked `COMPLETED` with pushed commit and validation evidence.
