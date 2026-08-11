@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <OutputType>Library</OutputType>
+    <AssemblyName>QS3D.BricsCAD.V26</AssemblyName>
+    <RootNamespace>QS3D.BricsCAD.V25</RootNamespace>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>0.1.0-preview.2</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.2</FileVersion>
+    <InformationalVersion>0.1.0-preview.2+bricscad-v26</InformationalVersion>
+    <DefineConstants>$(DefineConstants);BRICSCAD_V26</DefineConstants>
+  </PropertyGroup>
+
+  <!--
+    BricsCAD V26 moved its managed host to .NET 8. Keep the proven adapter source
+    shared with V25, but build it in an isolated project/output so the net48 V25
+    product lane remains unchanged. PluginEntry and Updates are version-specific:
+    V26 must never consume the V25 signed-update channel.
+  -->
+  <ItemGroup>
+    <Compile Include="..\QS3D.BricsCAD.V25\**\*.cs"
+             Exclude="..\QS3D.BricsCAD.V25\bin\**\*;..\QS3D.BricsCAD.V25\obj\**\*;..\QS3D.BricsCAD.V25\PluginEntry.cs;..\QS3D.BricsCAD.V25\Updates\**\*.cs">
+      <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+    <Page Include="..\QS3D.BricsCAD.V25\UI\**\*.xaml">
+      <Link>UI\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Page>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\QS3D.Core\QS3D.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="BrxMgd">
+      <HintPath>$(BRICSCAD_V26_DIR)\BrxMgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TD_Mgd">
+      <HintPath>$(BRICSCAD_V26_DIR)\TD_Mgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="ValidateBricsCadV26References" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(BRICSCAD_V26_DIR)' == ''" Text="BRICSCAD_V26_DIR is not set. Point it to the licensed BricsCAD V26 installation directory." />
+    <Error Condition="!Exists('$(BRICSCAD_V26_DIR)\BrxMgd.dll')" Text="BrxMgd.dll not found under BRICSCAD_V26_DIR." />
+    <Error Condition="!Exists('$(BRICSCAD_V26_DIR)\TD_Mgd.dll')" Text="TD_Mgd.dll not found under BRICSCAD_V26_DIR." />
+  </Target>
+</Project>
