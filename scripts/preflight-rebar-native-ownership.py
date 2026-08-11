@@ -6,6 +6,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 CAD = ROOT / "src" / "QS3D.BricsCAD.V25" / "Cad"
 SERVICE = CAD / "GeneratedRebarNativeOwnershipService.cs"
+OWNERSHIP_GUARD = CAD / "GeneratedRebarOwnershipGuard.cs"
 INVALIDATOR = CAD / "GeneratedDependentGeometryInvalidator.cs"
 BUILDERS = {
     "BeamRebarSolidBuilder.cs": "GeneratedRebarHandles",
@@ -45,6 +46,37 @@ else:
         if token not in text:
             errors.append("native ownership service missing token: " + token)
 
+if not OWNERSHIP_GUARD.is_file():
+    errors.append("missing GeneratedRebarOwnershipGuard.cs")
+else:
+    text = OWNERSHIP_GUARD.read_text(encoding="utf-8")
+    for token in (
+        "CadHandleService.NormalizeHexHandle(handle)",
+        "EnsureCompleteLiveSet(element, propertyKey, expectedOwner);",
+        "ReferenceEquals(_document, Application.DocumentManager.MdiActiveDocument)",
+        "CadHandleService.Resolve(_document, expectedHandles)",
+        "ids.Count != expectedHandles.Count",
+        "StartOpenCloseTransaction()",
+        "OpenMode.ForRead",
+        "GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(",
+        "Refusing destructive replacement before any rebar is erased.",
+        "_validatedLiveSets.Add(expectedOwner);",
+    ):
+        if token not in text:
+            errors.append("rebar exact-set ownership guard missing token: " + token)
+
+    validate_start = text.find("private void EnsureCompleteLiveSet(")
+    validate_end = text.find("public static OwnershipIndex Build(", validate_start)
+    if validate_start < 0 or validate_end <= validate_start:
+        errors.append("rebar ownership guard must keep a dedicated complete-live-set validator")
+    else:
+        validate = text[validate_start:validate_end]
+        resolve = validate.find("CadHandleService.Resolve(_document, expectedHandles)")
+        native = validate.find("GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(")
+        mark_validated = validate.find("_validatedLiveSets.Add(expectedOwner);")
+        if resolve < 0 or native < 0 or mark_validated < 0 or not (resolve < native < mark_validated):
+            errors.append("rebar ownership guard must resolve the complete set and verify native ownership before caching validation")
+
 for name, owner_slot in BUILDERS.items():
     path = CAD / name
     if not path.is_file():
@@ -56,8 +88,11 @@ for name, owner_slot in BUILDERS.items():
     if "solid.Erase();" in text:
         erase = text.find("solid.Erase();")
         require = text.rfind("RequireMatchingOwnership(", 0, erase)
+        ensure_owned = text.rfind("ownership.", 0, erase)
         if require < 0:
             errors.append(name + " erases generated Solid3d without a preceding native ownership check")
+        if ensure_owned < 0 or ensure_owned > erase:
+            errors.append(name + " must route destructive replacement through the strict ownership/exact-set guard before erase")
     if owner_slot not in text:
         errors.append(name + " missing canonical owner slot " + owner_slot)
     if "MarkGenerated(" not in text and "MarkFreshGeneratedHandles(" not in text:
@@ -99,4 +134,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: generated rebar builders and dependent invalidation use project/element/owner-slot native ownership markers and fail closed before destructive erase; helper validation is independent of source method ordering.")
+print("PASS: all eight generated rebar replacement families route destructive erase through canonical exact-live-set prevalidation plus project/element/owner-slot native ownership; dependent invalidation keeps its dedicated strict path.")
