@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             MultipleRootsUseStableShortestCause();
             InvalidRootsFailClosed();
             OverBoundRootEnumerationStopsAtProjectCardinality();
+            MutationDuringRootEnumerationFailsFreshness();
         }
 
         private static void ImpactPlanIsDeterministicAndReadOnly()
@@ -84,6 +85,21 @@ namespace QS3D.Core.SmokeTests
 
             Throws<ArgumentException>(() => new DependencyImpactPlanner().Plan(project, Roots()));
             Equal(project.Elements.Count + 1, yielded);
+        }
+
+        private static void MutationDuringRootEnumerationFailsFreshness()
+        {
+            var project = Fixture();
+            var beforeVersion = project.ChangeVersion;
+
+            IEnumerable<string> Roots()
+            {
+                project.Touch();
+                yield return "ROOT";
+            }
+
+            Throws<InvalidOperationException>(() => new DependencyImpactPlanner().Plan(project, Roots()));
+            Equal(beforeVersion + 1L, project.ChangeVersion);
         }
 
         private static ProjectState Fixture()
