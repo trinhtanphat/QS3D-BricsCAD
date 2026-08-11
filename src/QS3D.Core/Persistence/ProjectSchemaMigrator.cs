@@ -39,7 +39,9 @@ namespace QS3D.Core.Persistence
                 root.SetAttributeValue("schema", schema.ToString(CultureInfo.InvariantCulture));
             }
 
-            ValidateCurrentPersistenceTimestamps(root);
+            if (root.Attribute("changeVersion") == null) root.SetAttributeValue("changeVersion", "0");
+            ValidateCurrentPersistenceState(root);
+            QsdbProjectXmlSchemaValidator.ValidateCurrent(root);
             return document;
         }
 
@@ -75,26 +77,47 @@ namespace QS3D.Core.Persistence
             SetMigrationOrigin(root, "2");
         }
 
-        private static void ValidateCurrentPersistenceTimestamps(XElement root)
+        private static void ValidateCurrentPersistenceState(XElement root)
         {
-            RequireTimestamp(root, "updatedUtc", "Project root");
+            RequirePersistenceValue(root, "updatedUtc", "Project root");
+            RequirePersistenceValue(root, "changeVersion", "Project root");
+            RequireSingleContainer(root, "metadata");
+            RequireSingleContainer(root, "zones");
+            var floors = RequireSingleContainer(root, "floors");
+            RequireSingleContainer(root, "families");
+            RequireSingleContainer(root, "rules");
+            var elements = RequireSingleContainer(root, "elements");
+            var audit = RequireSingleContainer(root, "audit");
 
-            var elements = root.Element("elements");
-            if (elements != null)
+            foreach (var floor in floors.Elements("floor"))
+                RequirePersistenceValue(floor, "elevationM", "Project floor");
+
+            foreach (var element in elements.Elements("element"))
             {
-                foreach (var element in elements.Elements("element"))
-                    RequireTimestamp(element, "updatedUtc", "Project element");
+                RequirePersistenceValue(element, "updatedUtc", "Project element");
+                RequirePersistenceValue(element, "dirty", "Project element");
+
+                var quantities = element.Element("quantities");
+                if (quantities != null)
+                {
+                    foreach (var quantity in quantities.Elements("q"))
+                        RequirePersistenceValue(quantity, "value", "Project quantity");
+                }
             }
 
-            var audit = root.Element("audit");
-            if (audit != null)
-            {
-                foreach (var auditEvent in audit.Elements("event"))
-                    RequireTimestamp(auditEvent, "utc", "Audit event");
-            }
+            foreach (var auditEvent in audit.Elements("event"))
+                RequirePersistenceValue(auditEvent, "utc", "Audit event");
         }
 
-        private static void RequireTimestamp(XElement element, string attributeName, string owner)
+        private static XElement RequireSingleContainer(XElement root, string name)
+        {
+            var matches = root.Elements(name).Take(2).ToArray();
+            if (matches.Length != 1)
+                throw new InvalidDataException("QSDB requires exactly one " + name + " section.");
+            return matches[0];
+        }
+
+        private static void RequirePersistenceValue(XElement element, string attributeName, string owner)
         {
             if (string.IsNullOrWhiteSpace(element.Attribute(attributeName)?.Value))
                 throw new InvalidDataException(owner + " is missing required " + attributeName + ".");

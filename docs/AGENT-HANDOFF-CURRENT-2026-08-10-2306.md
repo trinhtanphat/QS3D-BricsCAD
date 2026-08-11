@@ -2,6 +2,36 @@
 
 This is the newest short canonical source delta for agents continuing from `main`. Always fetch current `main` first; current source wins over this text if concurrent commits move ahead.
 
+## Superseding Direct Draw productivity delta — 2026-08-11
+
+Owner feedback identifies excessive modeling interaction as the current product bottleneck. Current source therefore uses a **Quick by default / Advanced for exceptions** authoring pattern while preserving the existing semantic/native safety pipeline.
+
+Primary quick commands now include:
+
+- `QS3DDRAWWALL` — two-point straight wall using compatible ArchitecturalWall Family values;
+- `QS3DDRAWBEAM` — two-point Beam using Family Width/Height/BottomOffset;
+- `QS3DDRAWCOLUMN` — center-point Column using Family Width/Depth/Height/BottomOffset;
+- `QS3DDRAWSLAB` — picked closed boundary, then Family Thickness/BottomOffset without post-boundary numeric prompts;
+- `QS3DDRAWGLASSWALL`, `QS3DDRAWWALLPIER`, `QS3DDRAWSTRUCTWALL`, `QS3DDRAWFOUNDATION` — guarded P1 geometry with compatible Family values and no normal numeric prompt sequence after accepted geometry;
+- `QS3DDRAWDOOR`, `QS3DDRAWOPENING` — picked two-point width plus Family Height/Sill/Clearance, then the established selection-scoped Auto Host lifecycle;
+- `QS3DDRAWWINDOW` — picked two-point width plus WallOpening WindowHeight/Sill/Clearance, `OpeningUsage=Window`, then the same guarded Auto Host lifecycle;
+- `QS3DDRAWWALLREF` — read-only reference LINE length/direction plus compatible ArchitecturalWall Family values.
+
+The prior explicit parameter-entry behavior is retained under corresponding `*ADV` commands (`QS3DDRAWWALLADV`, `QS3DDRAWBEAMADV`, `QS3DDRAWCOLUMNADV`, `QS3DDRAWSLABADV`, the four guarded P1 `*ADV` commands, `QS3DDRAWDOORADV`, `QS3DDRAWOPENINGADV`, `QS3DDRAWWINDOWADV`, and `QS3DDRAWWALLREFADV`). The existing primary Ribbon/Domain Hub buttons intentionally keep the primary command names, so the normal UI becomes faster without duplicating rows of buttons.
+
+This wave does **not** introduce a second geometry/model system. It preserves real DWG source provenance, compatible Family lookup, `SemanticCaptureService`, `ProjectStateSnapshot`, `ProjectElement.SetProperty()` where applicable, deterministic regeneration, canonical wall/structural builders or `QS3DBUILD3D`, generated ownership verification, operation-scoped rollback, Door/Opening/Window Auto Host guards and explicit physical opening cutting. The existing `QS3DCONVERT2D` / `QS3DPLAN2WALLS` batch path remains the fast conversion route for pre-existing 2D wall centerlines.
+
+Focused static-contract sources are in:
+
+- `scripts/preflight-quick-wall-authoring.py`;
+- `scripts/preflight-quick-structure-authoring.py`;
+- `scripts/preflight-quick-p1-authoring.py`;
+- `scripts/preflight-quick-opening-authoring.py`;
+- `scripts/preflight-quick-window-authoring.py`;
+- `scripts/preflight-quick-reference-wall-authoring.py`.
+
+Focused docs are `docs/DIRECT-DRAW-QUICK-*.md`. Exact BricsCAD V25 editor/cancel/Auto-Host/reference behavior, transient DrawJig preview and repeated authoring remain `LOCAL-008 / PENDING_LOCAL / DO_NOT_RETRY_REMOTE`; current source/static review must not be promoted to runtime qualification.
+
 ## Product/source wave added in this continue-all batch
 
 The owner requested a detailed product-logic review plus implementation of meaningful remote-safe features. The source wave deliberately focused on BLT-style review-before-mutation, semantic transaction safety and supportability rather than adding cosmetic features or pretending LOCAL_ONLY native gaps are complete.

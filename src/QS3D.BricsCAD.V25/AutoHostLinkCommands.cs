@@ -109,21 +109,29 @@ namespace QS3D.BricsCAD.V25
                     var rollback = ProjectStateSnapshot.Capture(project);
                     try
                     {
+                        var regenerationTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                         foreach (var item in planned)
                         {
                             var existing = item.Opening.Properties.TryGetValue("HostWallId", out var hostId) ? hostId : string.Empty;
-                            if (string.Equals(existing?.Trim(), item.HostId, StringComparison.OrdinalIgnoreCase))
+                            var previousHostId = (existing ?? string.Empty).Trim();
+                            if (HasCanonicalHostLink(item.Opening, item.HostId))
                             {
                                 if (UpdateAutoHostMetadata(item.Opening, item.GapM)) project.Touch();
                                 unchanged++;
                                 continue;
                             }
+
+                            regenerationTargets.Add(item.Opening.Id);
+                            regenerationTargets.Add(item.HostId);
+                            if (previousHostId.Length > 0 && project.FindElement(previousHostId) != null)
+                                regenerationTargets.Add(previousHostId);
+
                             service.LinkOpening(project, item.Opening.Id, item.HostId);
                             if (UpdateAutoHostMetadata(item.Opening, item.GapM)) project.Touch();
                             linked++;
                         }
 
-                        regenerated = linked > 0 ? Regenerate(project) : 0;
+                        regenerated = linked > 0 ? Regenerate(project, regenerationTargets) : 0;
                     }
                     catch (System.Exception operationError)
                     {
@@ -297,6 +305,22 @@ namespace QS3D.BricsCAD.V25
             category == ElementCategory.WallPier ||
             category == ElementCategory.StructuralWall;
 
+        private static bool HasCanonicalHostLink(ProjectElement opening, string hostId)
+        {
+            if (!opening.Properties.TryGetValue("HostWallId", out var rawHostId) ||
+                !string.Equals(rawHostId, hostId, StringComparison.Ordinal))
+                return false;
+
+            var matches = 0;
+            foreach (var dependency in opening.DependsOn)
+            {
+                if (!string.Equals((dependency ?? string.Empty).Trim(), hostId, StringComparison.OrdinalIgnoreCase)) continue;
+                matches++;
+                if (!string.Equals(dependency, hostId, StringComparison.Ordinal)) return false;
+            }
+            return matches == 1;
+        }
+
         private static bool UpdateAutoHostMetadata(ProjectElement opening, double gapM)
         {
             var gap = gapM.ToString("R", CultureInfo.InvariantCulture);
@@ -327,6 +351,7 @@ namespace QS3D.BricsCAD.V25
             return value;
         }
 
-        private static int Regenerate(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+        private static int Regenerate(ProjectState project, IEnumerable<string> elementIds) =>
+            new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirtySubset(project, elementIds);
     }
 }

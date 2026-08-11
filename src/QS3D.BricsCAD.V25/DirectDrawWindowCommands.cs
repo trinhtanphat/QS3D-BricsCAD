@@ -26,13 +26,18 @@ namespace QS3D.BricsCAD.V25
         private const double UcsAxisTolerance = 1e-9d;
 
         [CommandMethod("QS3DDRAWWINDOW", CommandFlags.Modal)]
-        public void DrawWindow()
+        public void DrawWindow() => DrawWindowCore(promptParameters: false, operation: "QS3DDRAWWINDOW");
+
+        [CommandMethod("QS3DDRAWWINDOWADV", CommandFlags.Modal)]
+        public void DrawWindowAdvanced() => DrawWindowCore(promptParameters: true, operation: "QS3DDRAWWINDOWADV");
+
+        private static void DrawWindowCore(bool promptParameters, string operation)
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
-            Guard(document, () =>
+            Guard(document, operation, () =>
             {
-                EnsureActive(document, "QS3DDRAWWINDOW");
+                EnsureActive(document, operation);
                 RequireModelSpace(document);
                 var promptUnit = CadUnitService.GetLengthUnit(document);
                 var promptUcs = document.Editor.CurrentUserCoordinateSystem;
@@ -55,22 +60,40 @@ namespace QS3D.BricsCAD.V25
                 var sillDefault = hasProjectBeforePrompts ? FamilyWindowNumber(defaultsProject, "WindowSillHeightM", 0.9d, positive: false) : 0.9d;
                 var clearanceDefault = hasProjectBeforePrompts ? FamilyWindowNumber(defaultsProject, "BooleanClearanceM", 0.01d, positive: false) : 0.01d;
 
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Cửa Sổ (m)", heightDefault);
-                if (!heightM.HasValue) return;
-                var sillM = PromptNonNegativeMeters(document.Editor, "Cao độ bậu Cửa Sổ so với đáy host (m)", sillDefault);
-                if (!sillM.HasValue) return;
-                var clearanceM = PromptNonNegativeMeters(document.Editor, "Khe hở boolean (m)", clearanceDefault);
-                if (!clearanceM.HasValue) return;
+                var heightM = heightDefault;
+                var sillM = sillDefault;
+                var clearanceM = clearanceDefault;
+                if (promptParameters)
+                {
+                    var promptedHeight = PromptPositiveMeters(document.Editor, "Chiều cao Cửa Sổ (m)", heightDefault);
+                    if (!promptedHeight.HasValue) return;
+                    heightM = promptedHeight.Value;
+                    var promptedSill = PromptNonNegativeMeters(document.Editor, "Cao độ bậu Cửa Sổ so với đáy host (m)", sillDefault);
+                    if (!promptedSill.HasValue) return;
+                    sillM = promptedSill.Value;
+                    var promptedClearance = PromptNonNegativeMeters(document.Editor, "Khe hở boolean (m)", clearanceDefault);
+                    if (!promptedClearance.HasValue) return;
+                    clearanceM = promptedClearance.Value;
+                }
+                else
+                {
+                    document.Editor.WriteMessage(
+                        "\nQS3D Cửa Sổ nhanh: width theo 2 điểm, dùng Family WallOpening hiện tại (cao " +
+                        heightM.ToString("0.###", CultureInfo.InvariantCulture) + " m, bậu " +
+                        sillM.ToString("0.###", CultureInfo.InvariantCulture) + " m, clearance " +
+                        clearanceM.ToString("0.###", CultureInfo.InvariantCulture) +
+                        " m). Dùng QS3DDRAWWINDOWADV khi cần nhập tham số riêng.");
+                }
 
-                EnsureActive(document, "QS3DDRAWWINDOW / prompt freshness");
+                EnsureActive(document, operation + " / prompt freshness");
                 RequireModelSpace(document);
                 if (!document.Editor.CurrentUserCoordinateSystem.Equals(promptUcs))
                     throw new InvalidOperationException("Current UCS đã thay đổi trong lúc nhập Cửa Sổ. Hãy chạy lại lệnh.");
                 if (CadUnitService.GetLengthUnit(document) != promptUnit)
                     throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc nhập Cửa Sổ. Hãy chạy lại lệnh.");
 
-                var project = BindProjectAfterPrompts(document, expectedProjectId, expectedProjectChangeVersion);
-                Execute(document, project, points[0], points[1], widthM, heightM.Value, sillM.Value, clearanceM.Value);
+                var project = BindProjectAfterPrompts(document, expectedProjectId, expectedProjectChangeVersion, operation);
+                Execute(document, project, points[0], points[1], widthM, heightM, sillM, clearanceM);
             });
         }
 
@@ -162,12 +185,13 @@ namespace QS3D.BricsCAD.V25
         private static ProjectState BindProjectAfterPrompts(
             Document document,
             string? expectedProjectId,
-            long? expectedProjectChangeVersion)
+            long? expectedProjectChangeVersion,
+            string operation)
         {
-            EnsureActive(document, "QS3DDRAWWINDOW / project freshness");
+            EnsureActive(document, operation + " / project freshness");
             if (!string.IsNullOrWhiteSpace(expectedProjectId))
             {
-                var project = ExistingProjectMutationContext.Require(document, "QS3DDRAWWINDOW");
+                var project = ExistingProjectMutationContext.Require(document, operation);
                 if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
                     !expectedProjectChangeVersion.HasValue ||
                     project.ChangeVersion != expectedProjectChangeVersion.Value)
@@ -361,13 +385,13 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException(operation + " yêu cầu đúng DWG đã bắt đầu lệnh vẫn là bản vẽ active.");
         }
 
-        private static void Guard(Document document, Action action)
+        private static void Guard(Document document, string operation, Action action)
         {
             try { action(); }
             catch (Exception ex)
             {
-                try { document.Editor.WriteMessage("\nQS3DDRAWWINDOW lỗi: " + ex.Message); } catch { }
-                try { PaletteCoordinator.SetStatus("QS3DDRAWWINDOW lỗi: " + ex.Message); } catch { }
+                try { document.Editor.WriteMessage("\n" + operation + " lỗi: " + ex.Message); } catch { }
+                try { PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } catch { }
             }
         }
     }

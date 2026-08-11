@@ -16,7 +16,10 @@ namespace QS3D.Core.SmokeTests
 
         private static void ReplacementPreservesOverridesAndPropagatesInheritedDefaults()
         {
-            var target = new ProjectState("TARGET-FAMILY-INHERITANCE", "Target family inheritance");
+            var target = new ProjectState("TARGET-FAMILY-INHERITANCE", "Target family inheritance")
+            {
+                DrawingFingerprint = "TARGET-FAMILY-INHERITANCE-DWG"
+            };
             var family = new ProjectFamily("FAM-1", "Target Beam", ElementCategory.Beam);
             family.Properties["WidthM"] = "0.4";
             family.Properties["Material"] = "C30";

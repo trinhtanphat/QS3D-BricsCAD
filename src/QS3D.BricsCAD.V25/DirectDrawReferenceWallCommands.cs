@@ -27,45 +27,66 @@ namespace QS3D.BricsCAD.V25
         private const double PlanarityToleranceM = 0.005d;
 
         [CommandMethod("QS3DDRAWWALLREF", CommandFlags.Modal)]
-        public void DrawWallFromReference()
+        public void DrawWallFromReference() => DrawWallFromReferenceCore(promptParameters: false, operation: "QS3DDRAWWALLREF");
+
+        [CommandMethod("QS3DDRAWWALLREFADV", CommandFlags.Modal)]
+        public void DrawWallFromReferenceAdvanced() => DrawWallFromReferenceCore(promptParameters: true, operation: "QS3DDRAWWALLREFADV");
+
+        private static void DrawWallFromReferenceCore(bool promptParameters, string operation)
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
 
-            Guard(document, "QS3DDRAWWALLREF", () =>
+            Guard(document, operation, () =>
             {
                 RequireModelSpace(document);
                 var reference = AcquireReferenceLine(document);
                 if (reference == null) return;
 
-                EnsureActive(document, "QS3DDRAWWALLREF / parameters");
+                EnsureActive(document, operation + " / parameters");
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var lengthM = PromptPositiveMeters(document.Editor, "Chiều dài Tường (m)", reference.LengthM);
-                if (!lengthM.HasValue) return;
-                var thicknessM = PromptPositiveMeters(
-                    document.Editor,
-                    "Bề dày Tường (m)",
-                    hasDefaultsProject
-                        ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d)
-                        : 0.2d);
-                if (!thicknessM.HasValue) return;
-                var heightM = PromptPositiveMeters(
-                    document.Editor,
-                    "Chiều cao Tường (m)",
-                    hasDefaultsProject
-                        ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "HeightM", 3.6d)
-                        : 3.6d);
-                if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(
-                    document.Editor,
-                    "Offset đáy Tường so với Z tham chiếu (m)",
-                    hasDefaultsProject
-                        ? FamilyFiniteNumber(defaultsProject, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d)
-                        : 0d);
-                if (!bottomOffsetM.HasValue) return;
+                var lengthM = reference.LengthM;
+                var thicknessM = hasDefaultsProject
+                    ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d)
+                    : 0.2d;
+                var heightM = hasDefaultsProject
+                    ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "HeightM", 3.6d)
+                    : 3.6d;
+                var bottomOffsetM = hasDefaultsProject
+                    ? FamilyFiniteNumber(defaultsProject, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d)
+                    : 0d;
 
-                var endpoints = reference.CreateCenteredEndpoints(document, lengthM.Value);
-                EnsureActive(document, "QS3DDRAWWALLREF / execute boundary");
+                if (promptParameters)
+                {
+                    var promptedLength = PromptPositiveMeters(document.Editor, "Chiều dài Tường (m)", lengthM);
+                    if (!promptedLength.HasValue) return;
+                    lengthM = promptedLength.Value;
+
+                    var promptedThickness = PromptPositiveMeters(document.Editor, "Bề dày Tường (m)", thicknessM);
+                    if (!promptedThickness.HasValue) return;
+                    thicknessM = promptedThickness.Value;
+
+                    var promptedHeight = PromptPositiveMeters(document.Editor, "Chiều cao Tường (m)", heightM);
+                    if (!promptedHeight.HasValue) return;
+                    heightM = promptedHeight.Value;
+
+                    var promptedBottomOffset = PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z tham chiếu (m)", bottomOffsetM);
+                    if (!promptedBottomOffset.HasValue) return;
+                    bottomOffsetM = promptedBottomOffset.Value;
+                }
+                else
+                {
+                    document.Editor.WriteMessage(
+                        "\nQS3D Tường theo tham chiếu nhanh: giữ chiều dài LINE tham chiếu " +
+                        lengthM.ToString("0.###", CultureInfo.InvariantCulture) + " m, dùng Family hiện tại (dày " +
+                        thicknessM.ToString("0.###", CultureInfo.InvariantCulture) + " m, cao " +
+                        heightM.ToString("0.###", CultureInfo.InvariantCulture) + " m, offset " +
+                        bottomOffsetM.ToString("0.###", CultureInfo.InvariantCulture) +
+                        " m). Dùng QS3DDRAWWALLREFADV khi cần đổi chiều dài hoặc tham số riêng.");
+                }
+
+                var endpoints = reference.CreateCenteredEndpoints(document, lengthM);
+                EnsureActive(document, operation + " / execute boundary");
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 Execute(
                     document,
@@ -73,9 +94,9 @@ namespace QS3D.BricsCAD.V25
                     () => CreateWcsLine(document, endpoints.Start, endpoints.End),
                     element =>
                     {
-                        element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
-                        element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
-                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("QS3D.DirectDraw.Mode", "ReferenceLine");
                     });
             });
@@ -144,7 +165,8 @@ namespace QS3D.BricsCAD.V25
                 createdElementId = createdElement.Id;
                 configureElement(createdElement);
 
-                regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                    .RegenerateDirtySubset(project, new[] { createdElementId });
                 createdElement = project.Elements.SingleOrDefault(x =>
                     string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase));
                 if (createdElement == null)
@@ -314,7 +336,7 @@ namespace QS3D.BricsCAD.V25
         private static double? PromptPositiveMeters(Editor editor, string label, double defaultValue)
         {
             var safeDefault = CadGeometryGuard.Positive(defaultValue, label + " default");
-            var options = new PromptDoubleOptions("\n" + label + " <" + safeDefault.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = false,
                 AllowZero = false,
@@ -332,7 +354,7 @@ namespace QS3D.BricsCAD.V25
         private static double? PromptFiniteMeters(Editor editor, string label, double defaultValue)
         {
             var safeDefault = CadGeometryGuard.Finite(defaultValue, label + " default");
-            var options = new PromptDoubleOptions("\n" + label + " <" + safeDefault.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = true,
                 AllowZero = true,

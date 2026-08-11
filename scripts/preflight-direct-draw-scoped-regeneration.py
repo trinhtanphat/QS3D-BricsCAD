@@ -61,11 +61,11 @@ if not errors:
             "var promptUcs = document.Editor.CurrentUserCoordinateSystem;",
             "var expectedProjectId = hasProjectBeforePrompts ? defaultsProject.ProjectId : null;",
             "var expectedProjectChangeVersion = hasProjectBeforePrompts ? (long?)defaultsProject.ChangeVersion : null;",
-            'EnsureActive(document, "QS3DDRAWWINDOW / prompt freshness")',
+            'EnsureActive(document, operation + " / prompt freshness")',
             "RequireModelSpace(document);",
             "CurrentUserCoordinateSystem.Equals(promptUcs)",
             "CadUnitService.GetLengthUnit(document) != promptUnit",
-            "BindProjectAfterPrompts(document, expectedProjectId, expectedProjectChangeVersion)",
+            "BindProjectAfterPrompts(document, expectedProjectId, expectedProjectChangeVersion, operation)",
             "Execute(document, project,",
         ):
             if token not in draw:
@@ -75,11 +75,11 @@ if not errors:
         capture_project = draw.find("var expectedProjectId = hasProjectBeforePrompts ? defaultsProject.ProjectId : null;")
         point_prompt = draw.find("AcquireTwoPoints(document)")
         last_numeric_prompt = draw.find("PromptNonNegativeMeters(document.Editor, \"Khe hở boolean (m)\"")
-        active = draw.find('EnsureActive(document, "QS3DDRAWWINDOW / prompt freshness")')
+        active = draw.find('EnsureActive(document, operation + " / prompt freshness")')
         space = draw.find("RequireModelSpace(document);", active)
         ucs = draw.find("CurrentUserCoordinateSystem.Equals(promptUcs)", space)
         unit = draw.find("CadUnitService.GetLengthUnit(document) != promptUnit", ucs)
-        bind = draw.find("BindProjectAfterPrompts(document, expectedProjectId, expectedProjectChangeVersion)", unit)
+        bind = draw.find("BindProjectAfterPrompts(document, expectedProjectId, expectedProjectChangeVersion, operation)", unit)
         dispatch = draw.find("Execute(document, project,", bind)
         if min(capture_unit, capture_project, point_prompt, last_numeric_prompt, active, space, ucs, unit, bind, dispatch) < 0 or not (
             capture_unit < point_prompt and capture_project < point_prompt < last_numeric_prompt < active < space < ucs < unit < bind < dispatch

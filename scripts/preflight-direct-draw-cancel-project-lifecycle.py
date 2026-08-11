@@ -66,7 +66,7 @@ reference = sources["reference"]
 require(reference, read_only_defaults, "reference")
 require_count(reference, get_or_create, 1, "reference")
 create_index = reference.find(get_or_create)
-boundary_index = reference.find('EnsureActive(document, "QS3DDRAWWALLREF / execute boundary")')
+boundary_index = reference.find('EnsureActive(document, operation + " / execute boundary")')
 prompt_labels = (
     '"Chiều dài Tường (m)"',
     '"Bề dày Tường (m)"',

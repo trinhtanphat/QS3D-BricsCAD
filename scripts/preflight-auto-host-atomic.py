@@ -14,7 +14,7 @@ else:
         "using QS3D.Core.Persistence;",
         "var rollback = ProjectStateSnapshot.Capture(project);",
         "service.LinkOpening(project, item.Opening.Id, item.HostId);",
-        "regenerated = linked > 0 ? Regenerate(project) : 0;",
+        "regenerated = linked > 0 ? Regenerate(project, regenerationTargets) : 0;",
         "rollback.Restore(project);",
         "new AggregateException(operationError, restoreError)",
     )
@@ -24,7 +24,7 @@ else:
 
     capture = text.find("var rollback = ProjectStateSnapshot.Capture(project);")
     link = text.find("service.LinkOpening(project, item.Opening.Id, item.HostId);")
-    regen = text.find("regenerated = linked > 0 ? Regenerate(project) : 0;")
+    regen = text.find("regenerated = linked > 0 ? Regenerate(project, regenerationTargets) : 0;")
     restore = text.find("rollback.Restore(project);")
     if min(capture, link, regen, restore) >= 0 and not (capture < link < regen < restore):
         errors.append("Auto Host snapshot must precede link mutations, and rollback must cover both link application and regeneration")

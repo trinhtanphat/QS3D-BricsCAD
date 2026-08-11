@@ -46,7 +46,7 @@ for token, label in (
     ('createdElementId', "stable semantic id across Auto Host"),
     ('var promptUnit = CadUnitService.GetLengthUnit(document);', "unit captured before prompts"),
     ('var expectedProjectId = hasProjectBeforePrompts ? defaultsProject.ProjectId : null;', "project identity captured before prompts"),
-    ('BindProjectAfterPrompts(document, expectedProjectId, expectedProjectChangeVersion)', "post-prompt project freshness bind"),
+    ('BindProjectAfterPrompts(document, expectedProjectId, expectedProjectChangeVersion, operation)', "post-prompt project freshness bind"),
     ('RequireExactProject(document, project', "exact canonical project execution"),
     ('RegenerateDirtySubset(project, new[] { createdElement.Id })', "opening-only first regeneration"),
     ('RegenerateDirtySubset(project, new[] { createdElement.Id, host.Id })', "opening-and-host second regeneration"),
