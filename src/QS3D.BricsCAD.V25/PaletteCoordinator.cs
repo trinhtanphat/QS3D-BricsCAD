@@ -30,45 +30,53 @@ namespace QS3D.BricsCAD.V25
         public static void EnsureCreated()
         {
             if (_workspace != null && _right != null && _quantityInsight != null) return;
-            if (_workspace != null || _right != null || _quantityInsight != null) Dispose();
+            if (_workspace != null || _right != null || _quantityInsight != null) DisposeCore(false);
 
             var layout = UserUiLayoutStore.Get();
-            _workspacePanel = new WorkspacePanel();
-            _rightPanel = new RightPanel();
-            _quantityInsightPanel = new QuantityInsightPanel();
-
-            _workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid)
+            try
             {
-                DockEnabled = DockSides.Left | DockSides.Right,
-                Dock = DockSides.Left,
-                Visible = false,
-                KeepFocus = false,
-                MinimumSize = new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight)
-            };
-            _workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);
-            _workspace.AddVisual("Mô hình", _workspacePanel, true);
+                _workspacePanel = new WorkspacePanel();
+                _rightPanel = new RightPanel();
+                _quantityInsightPanel = new QuantityInsightPanel();
 
-            _right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid)
-            {
-                DockEnabled = DockSides.Left | DockSides.Right,
-                Dock = DockSides.Right,
-                Visible = false,
-                KeepFocus = false,
-                MinimumSize = new DrawingSize(UserUiLayoutStore.RightPaletteMinWidth, UserUiLayoutStore.RightPaletteMinHeight)
-            };
-            _right.DeviceIndependentSize = new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight);
-            _right.AddVisual("Quản lý", _rightPanel, true);
+                _workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid)
+                {
+                    DockEnabled = DockSides.Left | DockSides.Right,
+                    Dock = DockSides.Left,
+                    Visible = false,
+                    KeepFocus = false,
+                    MinimumSize = new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight)
+                };
+                _workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);
+                _workspace.AddVisual("Mô hình", _workspacePanel, true);
 
-            _quantityInsight = new PaletteSet("QS3D — Diễn giải khối lượng", QuantityInsightGuid)
+                _right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid)
+                {
+                    DockEnabled = DockSides.Left | DockSides.Right,
+                    Dock = DockSides.Right,
+                    Visible = false,
+                    KeepFocus = false,
+                    MinimumSize = new DrawingSize(UserUiLayoutStore.RightPaletteMinWidth, UserUiLayoutStore.RightPaletteMinHeight)
+                };
+                _right.DeviceIndependentSize = new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight);
+                _right.AddVisual("Quản lý", _rightPanel, true);
+
+                _quantityInsight = new PaletteSet("QS3D — Diễn giải khối lượng", QuantityInsightGuid)
+                {
+                    DockEnabled = DockSides.Left | DockSides.Right,
+                    Dock = DockSides.Right,
+                    Visible = false,
+                    KeepFocus = false,
+                    MinimumSize = new DrawingSize(UserUiLayoutStore.QuantityPaletteMinWidth, UserUiLayoutStore.QuantityPaletteMinHeight)
+                };
+                _quantityInsight.DeviceIndependentSize = new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight);
+                _quantityInsight.AddVisual("Khối lượng", _quantityInsightPanel, true);
+            }
+            catch
             {
-                DockEnabled = DockSides.Left | DockSides.Right,
-                Dock = DockSides.Right,
-                Visible = false,
-                KeepFocus = false,
-                MinimumSize = new DrawingSize(UserUiLayoutStore.QuantityPaletteMinWidth, UserUiLayoutStore.QuantityPaletteMinHeight)
-            };
-            _quantityInsight.DeviceIndependentSize = new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight);
-            _quantityInsight.AddVisual("Khối lượng", _quantityInsightPanel, true);
+                DisposeCore(false);
+                throw;
+            }
         }
 
         public static void Show()
@@ -151,13 +159,30 @@ namespace QS3D.BricsCAD.V25
 
         public static void Dispose()
         {
-            PersistPaletteLayout();
-            if (_workspace != null) { _workspace.Dispose(); _workspace = null; }
-            if (_right != null) { _right.Dispose(); _right = null; }
-            if (_quantityInsight != null) { _quantityInsight.Dispose(); _quantityInsight = null; }
+            DisposeCore(true);
+        }
+
+        private static void DisposeCore(bool persistLayout)
+        {
+            if (persistLayout) PersistPaletteLayout();
+            DisposePalette(ref _workspace);
+            DisposePalette(ref _right);
+            DisposePalette(ref _quantityInsight);
             _workspacePanel = null;
             _rightPanel = null;
             _quantityInsightPanel = null;
+        }
+
+        private static void DisposePalette(ref PaletteSet? palette)
+        {
+            var current = palette;
+            palette = null;
+            if (current == null) return;
+            try { current.Dispose(); }
+            catch
+            {
+                // Native palette teardown is best-effort; one failed palette must not block the others.
+            }
         }
 
         private static void PersistPaletteLayout()
