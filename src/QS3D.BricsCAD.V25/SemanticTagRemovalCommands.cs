@@ -18,9 +18,11 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var selectedHandle = PromptTagHandle(document);
+                if (selectedHandle == null) return;
+
                 var project = ExistingProjectMutationContext.Require(document, "Semantic Tag remove");
-                var element = PromptTagOwner(document, project);
-                if (element == null) return;
+                var element = ResolveTagOwner(project, selectedHandle);
 
                 var erased = SemanticTagRemovalService.Remove(document, project, element);
                 var message = erased > 0
@@ -34,12 +36,15 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static ProjectElement? PromptTagOwner(Document document, ProjectState project)
+        private static string? PromptTagHandle(Document document)
         {
             var result = document.Editor.GetEntity(new PromptEntityOptions("\nChọn Semantic Tag MText hoặc authoritative CAD source cần bỏ tag: "));
             if (result.Status != PromptStatus.OK) return null;
-            var handle = result.ObjectId.Handle.ToString();
+            return result.ObjectId.Handle.ToString();
+        }
 
+        private static ProjectElement ResolveTagOwner(ProjectState project, string handle)
+        {
             var generated = GeneratedHandleOwnershipIndex.Build(project);
             if (generated.TryFindOwner(handle, out var generatedOwner, out var generatedSlot) && generatedOwner != null)
             {
