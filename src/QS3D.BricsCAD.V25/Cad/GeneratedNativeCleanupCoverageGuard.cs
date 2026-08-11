@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using CoreOwnershipPolicy = QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy;
 
@@ -46,7 +47,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 string.Equals(ownerSlot, PhysicalOpeningCutSolidHandleKey, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(ownerSlot, CurtainFrameHandlesKey, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(ownerSlot, CurtainPanelHandlesKey, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(ownerSlot, GridAnnotationBuilder.HandlesKey, StringComparison.OrdinalIgnoreCase))
+                string.Equals(ownerSlot, GridAnnotationBuilder.HandlesKey, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(ownerSlot, GeneratedSemanticTagHealthService.HandlesKey, StringComparison.OrdinalIgnoreCase))
                 return true;
 
             return CoreOwnershipPolicy.IsRebarOwnerSlot(ownerSlot);
