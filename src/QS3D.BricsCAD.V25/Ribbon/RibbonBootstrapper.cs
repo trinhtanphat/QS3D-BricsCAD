@@ -136,6 +136,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 "KHỞI ĐẦU",
                 Panel("PROJECT", "Dự án",
                     Button("Workspace", "QS3D"),
+                    Button("Start Center", "QS3DSTART"),
                     Button("Lưu", "QS3DSAVE")),
                 Panel("COORDINATION", "Điều phối",
                     Button("Regenerate", "QS3DREGEN"),

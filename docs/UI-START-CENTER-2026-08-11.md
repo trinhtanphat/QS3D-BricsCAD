@@ -73,7 +73,7 @@ Project summary is read-only. Existing business commands keep ownership of their
 - `Enter` runs the selected command while the command list has focus.
 - `Esc` closes Start Center.
 
-## Static regression gate
+## Static regression gates
 
 `scripts/preflight-start-center.py` is auto-discovered by `scripts/preflight-all.py`. It locks:
 
@@ -86,22 +86,25 @@ Project summary is read-only. Existing business commands keep ownership of their
 - active Family / pending-save summary;
 - normalized `.dwg` recent-project persistence;
 - bounded state and replacement save;
-- absence of `Process.Start`, `ProjectContextCoordinator.GetOrCreate`, or Ribbon implementation inside this source lane.
+- absence of `Process.Start` and `ProjectContextCoordinator.GetOrCreate` from the Start Center source lane.
 
-## Ribbon coordination
+`scripts/preflight-start-center-ribbon.py` separately locks discoverability: the implemented `QS3DSTART` command must appear exactly once in Ribbon source, inside `KHỞI ĐẦU` → `Dự án`, while Ribbon execution continues to resolve `MdiActiveDocument` at click time.
 
-The Start Center source reservation was created while the Ribbon information-architecture claim was active, so this implementation deliberately does not edit Ribbon files. `QS3DSTART` is a complete command entry point by itself. A Ribbon button may be added only in a separate conflict-safe reservation after re-checking current claims/current grouped Ribbon source.
+## Ribbon discoverability
+
+The first Start Center implementation deliberately avoided Ribbon edits because the grouped Ribbon information-architecture lane was still active. After that lane completed, a separate conflict-safe reservation added exactly one **Start Center** button to `KHỞI ĐẦU` → `Dự án`, bound to `QS3DSTART`. No tab/panel regrouping or existing command removal is part of this follow-up.
 
 ## LOCAL_ONLY V25 qualification
 
 Remote/source review is not BricsCAD runtime proof. Exact-candidate local qualification must verify:
 
 1. `QS3DSTART` registration, one-window modeless reopen/activate and focus behavior;
-2. Vietnamese Unicode plus 100/125/150/200% DPI and common 1366×768 / larger desktop fit;
-3. `NEW`, `OPEN`, `QSAVE`, `SAVEAS` prompt/file-dialog behavior in real V25;
-4. two-DWG switching while Start Center stays open, with dashboard/command dispatch always following the active DWG and no project creation merely from viewing;
-5. Favorites/recent commands survive BricsCAD restart;
-6. recent-DWG dedupe, pin/unpin, successful open, missing-file status and Remove/Clear no-delete behavior;
-7. `Ctrl+F`, `Enter`, double-click and `Esc` interaction.
+2. the `KHỞI ĐẦU` → `Dự án` Start Center Ribbon button renders once and dispatches `QS3DSTART` to the click-time active DWG;
+3. Vietnamese Unicode plus 100/125/150/200% DPI and common 1366×768 / larger desktop fit;
+4. `NEW`, `OPEN`, `QSAVE`, `SAVEAS` prompt/file-dialog behavior in real V25;
+5. two-DWG switching while Start Center stays open, with dashboard/command/Ribbon dispatch always following the active DWG and no project creation merely from viewing;
+6. Favorites/recent commands survive BricsCAD restart;
+7. recent-DWG dedupe, pin/unpin, successful open, missing-file status and Remove/Clear no-delete behavior;
+8. `Ctrl+F`, `Enter`, double-click and `Esc` interaction.
 
 Keep private paths/screenshots and proprietary runtime material out of Git; only sanitized exact-SHA evidence belongs in the local qualification record.

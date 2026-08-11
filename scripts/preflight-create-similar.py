@@ -126,13 +126,31 @@ if RIBBON.is_file():
     if text.count(button) != 1:
         errors.append("Quick Workflow Ribbon must contain exactly one stable Vẽ Tương Tự/Create Similar button")
     for token in (
+        'private const string PanelSourceId = "QS3D_AUTHOR_QUICK_PANEL_SOURCE";',
+        'private const string PanelTitle = "Tác vụ nhanh";',
+        "FindPanelSource(panelItems, PanelSourceId) ?? CreateQuickPanel(panels)",
+        "private static object? FindPanelSource(IEnumerable panels, string sourceId)",
+        "private static object CreateQuickPanel(object panels)",
+        'Create("Bricscad.Windows.RibbonPanelSource")',
+        'SetProperty(source, "Id", PanelSourceId);',
+        'SetProperty(source, "Title", PanelTitle);',
+        'Create("Bricscad.Windows.RibbonPanel")',
+        'SetProperty(panel, "Source", source);',
+        "Add(panels, panel);",
         "if (CollectionContainsId(items, spec.Id)) continue;",
         'SetProperty(button, "CommandParameter", spec.Command);',
         'SetProperty(button, "CommandHandler", new CommandHandler());',
         "Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + \" \", true, false, false);",
     ):
         if token not in text:
-            errors.append("Quick Workflow Ribbon lost its idempotent active-document command contract: " + token)
+            errors.append("Quick Workflow Ribbon lost its deterministic/idempotent panel contract: " + token)
+
+    for forbidden in (
+        'PanelSourceId = "QS3D_AUTHOR_PANEL_SOURCE"',
+        "if (source == null) source = candidate;",
+    ):
+        if forbidden in text:
+            errors.append("Quick Workflow Ribbon must not fall back to an unrelated grouped authoring panel: " + forbidden)
 
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
@@ -145,6 +163,8 @@ if DOC.is_file():
         "QS3DDRAWACTIVE",
         "QS3DDRAWACTIVEADV",
         "QS3D_AUTHOR_CREATE_SIMILAR",
+        "QS3D_AUTHOR_QUICK_PANEL_SOURCE",
+        "Tác vụ nhanh",
         "Vẽ Tương Tự",
         "LOCAL-008",
         "intentional user selection state",
@@ -158,4 +178,4 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Create Similar preflight PASS: sample selection is cancel-safe/non-creating, semantic/generated ownership is revalidated before canonical Family activation, unsupported categories are rejected before mutation, route support stays identical to the Active Family dispatcher, authoring delegates to Active Family Quick/Advanced, and the primary Ribbon entry stays stable/idempotent on the active document.")
+print("Create Similar preflight PASS: selection/ownership/Family freshness stays guarded, authoring delegates to Active Family Quick/Advanced, and BLT quick actions use one deterministic dedicated Ribbon panel instead of falling back to a grouped authoring panel.")

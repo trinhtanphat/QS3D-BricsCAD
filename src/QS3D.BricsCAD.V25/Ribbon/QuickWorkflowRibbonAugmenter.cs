@@ -9,13 +9,15 @@ namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
     /// Adds BLT-style quick workflow entry points to the existing TẠO MỚI tab without
-    /// duplicating the tab itself. Existing ribbon IDs stay stable.
+    /// duplicating the tab itself. Quick actions live in one exact dedicated panel so later
+    /// Ribbon information-architecture regrouping cannot silently append them to an unrelated panel.
     /// </summary>
     internal static class QuickWorkflowRibbonAugmenter
     {
         private const string AssemblyName = "BrxMgd";
         private const string TabId = "QS3D_AUTHOR";
-        private const string PanelSourceId = "QS3D_AUTHOR_PANEL_SOURCE";
+        private const string PanelSourceId = "QS3D_AUTHOR_QUICK_PANEL_SOURCE";
+        private const string PanelTitle = "Tác vụ nhanh";
         private static bool _initialized;
 
         private sealed class ButtonSpec
@@ -65,20 +67,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
                 var panels = GetProperty(authorTab, "Panels");
                 if (!(panels is IEnumerable panelItems)) return false;
-                object? source = null;
-                foreach (var panel in panelItems)
-                {
-                    if (panel == null) continue;
-                    var candidate = GetProperty(panel, "Source");
-                    if (candidate == null) continue;
-                    if (string.Equals(GetProperty(candidate, "Id") as string, PanelSourceId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        source = candidate;
-                        break;
-                    }
-                    if (source == null) source = candidate;
-                }
-                if (source == null) return false;
+                var source = FindPanelSource(panelItems, PanelSourceId) ?? CreateQuickPanel(panels);
 
                 var items = GetProperty(source, "Items");
                 if (items == null) return false;
@@ -106,6 +95,32 @@ namespace QS3D.BricsCAD.V25.Ribbon
         }
 
         public static void Reset() => _initialized = false;
+
+        private static object? FindPanelSource(IEnumerable panels, string sourceId)
+        {
+            foreach (var panel in panels)
+            {
+                if (panel == null) continue;
+                var source = GetProperty(panel, "Source");
+                if (source == null) continue;
+                if (string.Equals(GetProperty(source, "Id") as string, sourceId, StringComparison.OrdinalIgnoreCase))
+                    return source;
+            }
+            return null;
+        }
+
+        private static object CreateQuickPanel(object panels)
+        {
+            var source = Create("Bricscad.Windows.RibbonPanelSource");
+            SetProperty(source, "Id", PanelSourceId);
+            SetProperty(source, "Name", PanelTitle);
+            SetProperty(source, "Title", PanelTitle);
+
+            var panel = Create("Bricscad.Windows.RibbonPanel");
+            SetProperty(panel, "Source", source);
+            Add(panels, panel);
+            return source;
+        }
 
         private static object? FindRibbonControl()
         {
