@@ -53,7 +53,28 @@ namespace QS3D.BricsCAD.V25
             SemanticUntrackResult result;
             try
             {
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var previewProject))
+                    throw new InvalidOperationException("Untrack semantic elements yêu cầu QS3D project hiện hữu; lệnh không tạo project mới.");
+
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
+                var previewTargetIds = ResolveUntrackTargetIds(previewProject, handles, predicate);
+                if (previewTargetIds.Count == 0)
+                {
+                    FinalizeUntrackUi(doc, 0, label);
+                    return;
+                }
+
                 var project = ExistingProjectMutationContext.Require(doc, "Untrack semantic elements");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Untrack semantic elements: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
+                var currentTargetIds = ResolveUntrackTargetIds(project, handles, predicate);
+                var expectedTargets = new HashSet<string>(previewTargetIds, StringComparer.OrdinalIgnoreCase);
+                if (!expectedTargets.SetEquals(currentTargetIds))
+                    throw new InvalidOperationException("Untrack semantic elements: semantic target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
                 result = SemanticUntrackService.Untrack(project, handles, predicate);
             }
             catch (Exception ex)
@@ -64,6 +85,17 @@ namespace QS3D.BricsCAD.V25
 
             FinalizeUntrackUi(doc, result.Count, label);
         }
+
+        private static List<string> ResolveUntrackTargetIds(
+            ProjectState project,
+            IEnumerable<string> handles,
+            Func<ProjectElement, bool>? predicate) =>
+            SemanticHandleOwnershipResolver.Resolve(project, handles)
+                .Where(x => predicate == null || predicate(x))
+                .Select(x => x.Id)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
         private static void FinalizeUntrackUi(Document document, int count, string label)
         {
