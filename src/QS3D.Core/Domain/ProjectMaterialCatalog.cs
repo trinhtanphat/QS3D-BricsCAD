@@ -41,6 +41,7 @@ namespace QS3D.Core.Domain
     {
         public const string MetadataKey = "QS3D.MaterialCatalog.v1";
         private const int MaxCustomMaterials = 500;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         private static readonly ProjectMaterial[] BuiltIns =
         {
@@ -255,8 +256,11 @@ namespace QS3D.Core.Domain
 
         private static string Decode(string value)
         {
-            try { return Encoding.UTF8.GetString(Convert.FromBase64String(value ?? string.Empty)); }
-            catch (FormatException ex) { throw new InvalidOperationException("Material catalog contains invalid Base64 data.", ex); }
+            try { return StrictUtf8.GetString(Convert.FromBase64String(value ?? string.Empty)); }
+            catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
+            {
+                throw new InvalidOperationException("Material catalog contains invalid Base64 or UTF-8 data.", ex);
+            }
         }
 
         private sealed class MaterialReferenceScope
