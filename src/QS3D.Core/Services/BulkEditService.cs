@@ -24,18 +24,28 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
-            var changed = new List<string>();
+            var updates = new List<PendingPropertyUpdate>();
+            var next = value ?? string.Empty;
             foreach (var element in OwnedDistinct(project, elements))
             {
                 element.Properties.TryGetValue(key, out var before);
-                var next = value ?? string.Empty;
                 if (string.Equals(before ?? string.Empty, next, StringComparison.Ordinal)) continue;
-                element.Properties[key] = next;
-                element.MarkDirty(DirtyFlags(element, key));
-                changed.Add(element.Id);
+                updates.Add(new PendingPropertyUpdate { Element = element, Value = next });
             }
-            if (changed.Count > 0) project.Touch();
-            return changed.AsReadOnly();
+
+            if (updates.Count == 0) return Array.Empty<string>();
+            return ProjectSemanticMutationExecutor.Execute(project, "bulk.set-property", () =>
+            {
+                var changed = new List<string>(updates.Count);
+                foreach (var update in updates)
+                {
+                    update.Element.Properties[key] = update.Value;
+                    update.Element.MarkDirty(DirtyFlags(update.Element, key));
+                    changed.Add(update.Element.Id);
+                }
+                project.Touch();
+                return changed.AsReadOnly();
+            });
         }
 
         public IReadOnlyList<string> MultiplyNumericProperty(ProjectState project, IEnumerable<ProjectElement> elements, string propertyName, double factor)
@@ -59,15 +69,18 @@ namespace QS3D.Core.Services
             }
 
             if (updates.Count == 0) return Array.Empty<string>();
-            var changed = new List<string>(updates.Count);
-            foreach (var update in updates)
+            return ProjectSemanticMutationExecutor.Execute(project, "bulk.multiply-numeric-property", () =>
             {
-                update.Element.Properties[key] = update.Value;
-                update.Element.MarkDirty(DirtyFlags(update.Element, key));
-                changed.Add(update.Element.Id);
-            }
-            project.Touch();
-            return changed.AsReadOnly();
+                var changed = new List<string>(updates.Count);
+                foreach (var update in updates)
+                {
+                    update.Element.Properties[key] = update.Value;
+                    update.Element.MarkDirty(DirtyFlags(update.Element, key));
+                    changed.Add(update.Element.Id);
+                }
+                project.Touch();
+                return changed.AsReadOnly();
+            });
         }
 
         public int SetProperty(ProjectState project, IEnumerable<string> elementIds, string propertyName, string value)
@@ -107,22 +120,26 @@ namespace QS3D.Core.Services
                 pending.Add(new PendingFamilyAssignment { Element = element, InheritedKeys = inheritedKeys });
             }
 
-            foreach (var item in pending)
+            if (pending.Count == 0) return 0;
+            return ProjectSemanticMutationExecutor.Execute(project, "bulk.assign-family", () =>
             {
-                var element = item.Element;
-                foreach (var inheritedKey in item.InheritedKeys)
-                    if (!family.Properties.ContainsKey(inheritedKey)) element.Properties.Remove(inheritedKey);
-                foreach (var property in family.Properties)
-                    if (item.InheritedKeys.Contains(property.Key) || !element.Properties.ContainsKey(property.Key))
-                        element.Properties[property.Key] = property.Value ?? string.Empty;
+                foreach (var item in pending)
+                {
+                    var element = item.Element;
+                    foreach (var inheritedKey in item.InheritedKeys)
+                        if (!family.Properties.ContainsKey(inheritedKey)) element.Properties.Remove(inheritedKey);
+                    foreach (var property in family.Properties)
+                        if (item.InheritedKeys.Contains(property.Key) || !element.Properties.ContainsKey(property.Key))
+                            element.Properties[property.Key] = property.Value ?? string.Empty;
 
-                element.FamilyId = family.Id;
-                var dirty = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
-                if (ElementGeometryPolicy.RequiresGeneratedGeometry(element.Category)) dirty |= ElementDirtyFlags.Geometry;
-                element.MarkDirty(dirty);
-            }
-            if (pending.Count > 0) project.Touch();
-            return pending.Count;
+                    element.FamilyId = family.Id;
+                    var dirty = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
+                    if (ElementGeometryPolicy.RequiresGeneratedGeometry(element.Category)) dirty |= ElementDirtyFlags.Geometry;
+                    element.MarkDirty(dirty);
+                }
+                project.Touch();
+                return pending.Count;
+            });
         }
 
         private static IReadOnlyList<ProjectElement> OwnedDistinctByIds(ProjectState project, IEnumerable<string> elementIds)
