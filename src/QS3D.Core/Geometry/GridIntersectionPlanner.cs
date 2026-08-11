@@ -331,13 +331,17 @@ namespace QS3D.Core.Geometry
             var crossTolerance = tolerance * Math.Max(1.0, length);
             EnsureFiniteDerived("Grid LINE point tolerance", crossTolerance);
             if (Math.Abs(Cross(px, py, dx, dy)) > crossTolerance) return false;
-            var dot = px * dx + py * dy;
-            var length2 = dx * dx + dy * dy;
-            var paramTolerance = tolerance / Math.Max(tolerance, length);
-            var lower = -paramTolerance * length2;
-            var upper = (1.0 + paramTolerance) * length2;
-            EnsureFiniteDerived("Grid LINE point projection", dot, length2, paramTolerance, lower, upper);
-            return dot >= lower && dot <= upper;
+
+            var ux = dx / length;
+            var uy = dy / length;
+            EnsureFiniteDerived("Grid LINE point direction", ux, uy);
+            var along = DotWithUnit(px, py, ux, uy);
+            var projectionTolerance = Math.Min(tolerance, length);
+            if (along < -projectionTolerance) return false;
+            if (along <= length) return true;
+            var beyondEnd = along - length;
+            EnsureFiniteDerived("Grid LINE point beyond-end projection", beyondEnd);
+            return beyondEnd <= projectionTolerance;
         }
 
         private static void Validate(GridReferenceCurve curve, double tolerance, int index)
@@ -412,6 +416,18 @@ namespace QS3D.Core.Geometry
             if (!IsFinite(scaled)) throw new OverflowException("Grid intersection cross product exceeds the supported numeric range.");
             var value = scaled * largerScale;
             if (!IsFinite(value)) throw new OverflowException("Grid intersection cross product exceeds the supported numeric range.");
+            return value;
+        }
+
+        private static double DotWithUnit(double x, double y, double ux, double uy)
+        {
+            EnsureFiniteDerived("Grid LINE point projection input", x, y, ux, uy);
+            var scale = Math.Max(Math.Abs(x), Math.Abs(y));
+            if (scale == 0.0) return 0.0;
+            var normalized = x / scale * ux + y / scale * uy;
+            if (!IsFinite(normalized)) throw new OverflowException("Grid LINE point projection exceeds the supported numeric range.");
+            var value = normalized * scale;
+            if (!IsFinite(value)) throw new OverflowException("Grid LINE point projection exceeds the supported numeric range.");
             return value;
         }
 
