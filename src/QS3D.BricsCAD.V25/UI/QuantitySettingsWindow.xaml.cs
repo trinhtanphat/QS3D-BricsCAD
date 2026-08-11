@@ -327,7 +327,13 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var imported = _store.Import(dialog.FileName);
                 LoadIntoView(imported);
-                var unknown = imported.CategoryRules.Count(x => !QuantityCategoryDisplayName.IsKnown(x.Category));
+                var unknown = imported.CategoryRules.Select(x => x.Category)
+                    .Concat(imported.IntersectionRules.Select(x => x.Source))
+                    .Concat(imported.IntersectionRules.Select(x => x.Target))
+                    .Where(code => !QuantityCategoryDisplayName.IsKnown(code))
+                    .Distinct()
+                    .OrderBy(code => code)
+                    .Count();
                 var note = unknown == 0
                     ? string.Empty
                     : "\n\nCó " + unknown + " mã cấu kiện chưa có tên QS3D; mã số vẫn được giữ nguyên để không làm mất luật.";
