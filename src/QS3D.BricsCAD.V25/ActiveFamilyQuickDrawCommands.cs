@@ -21,6 +21,27 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DDRAWACTIVEADV", CommandFlags.Modal)]
         public void DrawActiveFamilyAdvanced() => DrawActiveFamilyCore(advanced: true, operation: "QS3DDRAWACTIVEADV");
 
+        internal static bool SupportsFamily(ProjectFamily family)
+        {
+            if (family == null) return false;
+            switch (family.Category)
+            {
+                case ElementCategory.ArchitecturalWall:
+                case ElementCategory.Beam:
+                case ElementCategory.Column:
+                case ElementCategory.Slab:
+                case ElementCategory.GlassWall:
+                case ElementCategory.WallPier:
+                case ElementCategory.StructuralWall:
+                case ElementCategory.Foundation:
+                case ElementCategory.Door:
+                case ElementCategory.WallOpening:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private static void DrawActiveFamilyCore(bool advanced, string operation)
         {
             var document = Application.DocumentManager.MdiActiveDocument;
@@ -114,6 +135,15 @@ namespace QS3D.BricsCAD.V25
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (family == null) throw new ArgumentNullException(nameof(family));
+            if (!SupportsFamily(family))
+            {
+                Report(
+                    document,
+                    operation + ": Family '" + family.Name + "' thuộc " + family.Category +
+                    " chưa có Direct Draw " + (advanced ? "Advanced" : "Quick") +
+                    " an toàn. Dùng workflow chuyên biệt hiện có cho category này.");
+                return;
+            }
 
             switch (family.Category)
             {
@@ -164,12 +194,7 @@ namespace QS3D.BricsCAD.V25
                     else new DirectDrawOpeningCommands().DrawWallOpening();
                     return;
                 default:
-                    Report(
-                        document,
-                        operation + ": Family '" + family.Name + "' thuộc " + family.Category +
-                        " chưa có Direct Draw " + (advanced ? "Advanced" : "Quick") +
-                        " an toàn. Dùng workflow chuyên biệt hiện có cho category này.");
-                    return;
+                    throw new InvalidOperationException("Direct Draw support predicate and dispatcher are inconsistent for " + family.Category + ".");
             }
         }
 
