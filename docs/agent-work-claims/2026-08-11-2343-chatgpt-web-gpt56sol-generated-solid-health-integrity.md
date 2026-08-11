@@ -1,6 +1,6 @@
 # Work claim — generated solid runtime health integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-generated-solid-health-integrity`
 - Registered: `2026-08-11T23:43:00+07:00`
 - Baseline main SHA: `f90209264abc80b644aaff7f21ce93a8bfbbb0f0`
@@ -8,7 +8,7 @@
 
 ## Confirmed defect
 
-`GeneratedSolidRuntimeHealthService.InspectGeneratedSolidOwnership(...)` silently skips malformed `GeneratedSolidHandle` values, handle-resolution failures, invalid object ids, unreadable/erased entities, and handles resolving to a non-`Solid3d` entity. A project can therefore retain stale/corrupt generated-solid metadata while `QS3DHEALTHALL` reports no generated-solid issue.
+`GeneratedSolidRuntimeHealthService.InspectGeneratedSolidOwnership(...)` silently skipped malformed `GeneratedSolidHandle` values, handle-resolution failures, invalid object ids, unreadable/erased entities, and handles resolving to a non-`Solid3d` entity. A project could therefore retain stale/corrupt generated-solid metadata while `QS3DHEALTHALL` reported no generated-solid issue.
 
 ## Reserved scope
 
@@ -23,7 +23,7 @@ Make generated-solid ownership inspection fail-visible while preserving the heal
 ## Expected surfaces
 
 - `src/QS3D.BricsCAD.V25/Cad/GeneratedSolidRuntimeHealthService.cs`
-- focused regression/preflight coverage under `scripts/` if no equivalent current gate exists
+- focused regression/preflight coverage under `scripts/`
 - this claim file
 
 ## Excluded scope
@@ -34,14 +34,20 @@ Make generated-solid ownership inspection fail-visible while preserving the heal
 - No licensed BricsCAD V25 runtime validation claim.
 - No force-push or overwrite of concurrent agent work.
 
-## Validation plan
+## Completed implementation
 
-- Re-fetch exact source after registration before editing.
-- Verify every stale/corrupt handle state creates a deterministic `ModelHealthIssue` instead of silently continuing.
-- Add a source regression gate that keeps the inspection path free from write/mutation APIs (`OpenMode.ForWrite`, `UpgradeOpen`, project `Touch`, mutation context, audit/save/get-or-create paths).
-- Re-fetch final files from current `main` and inspect commit diffs.
-- Do not claim GitHub Actions/full build/licensed runtime PASS without evidence.
+- Source fix: `56349def85997ce9bb6dcca1add4ba6bb2beb480` (`fix(health): surface corrupt generated solids`).
+- Focused regression gate: `109218bcdd68526c5fc8414429964cad20a19476` (`test(health): pin generated solid integrity`).
+- Gate: `scripts/preflight-generated-solid-runtime-health-integrity.py`; aggregate `scripts/preflight-all.py` discovers every `preflight-*.py` automatically, so no shared runner edit was required.
+
+## Validation actually performed
+
+- Re-fetched `GeneratedSolidRuntimeHealthService.cs` from current `main` after the gate commit; blob remained `3afc8199fcc2240346645cd9fb82e23dcbadcdcc` while `main` advanced concurrently.
+- Verified fail-visible source coverage for malformed handle, handle-resolution exception/invalid ObjectId, unreadable/null DBObject, erased DBObject, non-`Solid3d`, and ownership mismatch.
+- Verified ownership inspection still reads the CAD object with `OpenMode.ForRead` and the focused gate rejects `OpenMode.ForWrite`, `UpgradeOpen`, project `Touch`, mutation context, audit/save/get-or-create, erase, ownership stamping, and XData mutation tokens.
+- Verified the existing provider-isolation gate remains separate; the new gate covers this lane's false-clean/read-only contract without changing shared provider semantics.
+- Did not run or claim a full solution build, GitHub Actions PASS, or licensed BricsCAD V25 runtime PASS from the remote connector.
 
 ## Completion condition
 
-Current `main` reports stale/corrupt generated-solid handle states instead of hiding them, the inspection contract remains read-only, regression coverage prevents both false negatives and accidental health-time mutation, and this claim is closed as `COMPLETED` with exact commit SHAs and validation actually performed.
+Satisfied on the source contract: current `main` reports stale/corrupt generated-solid handle states instead of hiding them, regression coverage pins both fail-visible diagnostics and read-only ownership inspection, and this claim is closed as `COMPLETED`.
