@@ -14,7 +14,9 @@ Canonical policy remains `docs/AGENT-WORK-REGISTRATION.md` and `AGENTS.md`; this
 ## Reserved scope
 
 - `src/QS3D.Core/Reporting/QuantityReportBuilder.cs`
-- `tests/QS3D.Core.SmokeTests/ProjectQuantitySmoke.cs`
+- `tests/QS3D.Core.SmokeTests/ProjectQuantitySmoke.cs` (reserved for compatibility review; no edit required if a focused regression file is safer)
+- `tests/QS3D.Core.SmokeTests/LegacyQuantityReportIdentitySmoke.cs`
+- `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs`
 - `docs/REPOSITORY-AUDIT-PLAN-2026-08-11.md`
 - this reservation record
 
@@ -37,8 +39,10 @@ No edits are permitted from this claim in currently reserved atomicity work (`sr
    - Fail closed with a precise `InvalidOperationException` rather than silently double-counting.
 
 3. **Regression coverage**
-   - Extend `ProjectQuantitySmoke` so both duplicate object reuse and separate instances carrying the same case-insensitive identity are rejected by `QuantityReportBuilder.Group`.
-   - Keep the existing project-backed quantity/report regression suite unchanged except for the new coverage.
+   - Add a focused `LegacyQuantityReportIdentitySmoke` covering exact object reuse and separate instances carrying the same case-insensitive identity.
+   - Register that focused smoke in `SmokeTestRegistration.RunAll()`.
+   - Keep `ProjectQuantitySmoke` unchanged unless an integration review proves the focused file is insufficient; this reduces contention in a large, frequently reviewed test file while preserving the same executable smoke suite.
+   - Prove valid distinct identities still group and total exactly as before.
 
 4. **Repository-wide planning document**
    - Summarize architecture/build/test/release/BricsCAD-local boundaries observed during audit.
@@ -49,13 +53,14 @@ No edits are permitted from this claim in currently reserved atomicity work (`sr
 5. **Validation**
    - Static source review against current HEAD.
    - Confirm modified file SHAs have not changed since reservation before write.
-   - Inspect smoke-test registration so the extended `ProjectQuantitySmoke.Run()` remains executed.
+   - Confirm `SmokeTestRegistration.RunAll()` executes the focused regression.
    - Check commit status/workflow metadata after push when available.
    - Any BricsCAD V25/runtime-only validation remains a local-agent handoff and must not be falsely reported as remote proof.
 
 ## Dependencies / risks
 
 - `main` is highly concurrent; HEAD may advance during this task. Writes must be fast-forward only and rebased/reconstructed on the newest tree if needed.
+- `SmokeTestRegistration.cs` is a shared integration point; it must be re-read immediately before the atomic implementation commit and current-main additions must be preserved.
 - Do not edit another agent's ACTIVE files merely to make a broader cleanup look complete.
 - GitHub connector cannot execute the Windows/BricsCAD runtime itself; source-safe validation and runtime-local validation must be reported separately.
 
