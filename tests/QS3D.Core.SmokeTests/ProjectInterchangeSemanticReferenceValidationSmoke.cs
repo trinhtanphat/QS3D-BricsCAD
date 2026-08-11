@@ -42,7 +42,7 @@ namespace QS3D.Core.SmokeTests
                 StringComparison.Ordinal);
             True(!string.Equals(json, smuggled, StringComparison.Ordinal));
             True(ProjectInterchangeJsonValidator.Validate(smuggled).IsValid);
-            Throws<InvalidOperationException>(() => ProjectInterchangeValidatedSnapshotReader.Read(smuggled));
+            Throws<InvalidDataException>(() => ProjectInterchangeValidatedSnapshotReader.Read(smuggled));
         }
 
         private static void TypedReaderRejectsInvalidLevelChain()
@@ -59,7 +59,7 @@ namespace QS3D.Core.SmokeTests
                 StringComparison.Ordinal);
             True(!string.Equals(json, invalid, StringComparison.Ordinal));
             True(ProjectInterchangeJsonValidator.Validate(invalid).IsValid);
-            Throws<InvalidOperationException>(() => ProjectInterchangeValidatedSnapshotReader.Read(invalid));
+            Throws<InvalidDataException>(() => ProjectInterchangeValidatedSnapshotReader.Read(invalid));
         }
 
         private static void MixedFieldMergeRollsBackInvalidLevelComposition()
