@@ -3,7 +3,8 @@
 - Agent: `chatgpt-web-gpt56sol-project-readiness-2012`
 - Registered: `2026-08-11T20:12:00+07:00`
 - Status: `ACTIVE`
-- Baseline main SHA: `2c367e4d8d40acf4ef4a6ee932ef2aeaef26d8ea`
+- Baseline main SHA: `94d0b0d6f712663a38e91570fffa6fa30b4d4e89`
+- Registration commit: `a91e27913ff679bd65c737c3e3a706e499a0ecd8`
 - Priority: continue the owner-requested BLT3D-inspired UI/UX wave with a compact, source-safe project readiness surface inside the existing document-bound Project Tools window.
 
 ## Reserved scope
@@ -38,6 +39,10 @@ Enhance Project Tools with a read-only readiness/status dashboard derived only f
 - Re-fetch exact Project Tools source blobs and preserve document-bound lifecycle/command dispatch.
 - Extend the existing auto-discovered `preflight-project-tools.py` so it guards readiness fields, read-only project lookup and forbidden mutation calls in the refresh path.
 - Inspect final pushed diff/ancestry and available commit status metadata. Native visual fit/HiDPI/document-switch behavior remains LOCAL_ONLY.
+
+## Coordination note
+
+The initial claim write raced a concurrent `main` merge; GitHub attached registration commit `a91e2791...` to actual parent `94d0b0d6...`. This claim-only correction records that exact registration baseline before substantive implementation. No product source was touched before this correction.
 
 ## Completion condition
 
