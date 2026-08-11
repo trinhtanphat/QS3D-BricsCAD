@@ -53,4 +53,4 @@ The source fix commit on the implementation branch is `38da4e4cca66a91188a550210
 
 ## Result
 
-Source-side malformed-project visibility is complete on the implementation branch. The claim is released when the focused PR is merged to `main`; final merge SHA/readback will be recorded or reported after merge.
+PR #597 was squash-merged to `main` as `318d39766eaa93da84d698e638e526bb18ad752f`. Post-merge readback confirmed `SafeGeneratedHandleOwnershipHealthService.cs` on `main` at blob `215f0fd76574e0f14f1be95ae75e7dd70d4c200c` with canonical validation/Error mapping and no silent null skip, and the auto-registered smoke on `main` at blob `4239f690e3f123808106e627be5a550391c75ff8`. The claim is released. No executable smoke/build/runtime PASS is inferred from source readback.
