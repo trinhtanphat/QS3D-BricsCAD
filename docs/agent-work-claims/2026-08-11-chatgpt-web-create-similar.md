@@ -14,7 +14,7 @@ Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane:
 
 - `src/QS3D.BricsCAD.V25/CreateSimilarCommands.cs`
 - `src/QS3D.BricsCAD.V25/ActiveFamilyQuickDrawCommands.cs` only for one shared read-only support predicate
-- `src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs` only for one stable/idempotent **Vẽ Tương Tự** primary action
+- `src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs` for the stable/idempotent **Vẽ Tương Tự** primary action and the narrow compatibility repair required by the later grouped Ribbon information architecture
 - existing semantic ownership / Family activation services only as canonical dependencies; no parallel ownership model
 - `scripts/preflight-create-similar.py`
 - `docs/DIRECT-DRAW-CREATE-SIMILAR-2026-08-11.md`
@@ -26,6 +26,7 @@ Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane:
 - No DrawJig/transient preview implementation or runtime PASS claim.
 - No continuous/repeated authoring implementation owned by `LOCAL-008`.
 - No geometry-builder rewrite, second semantic model, or broad Workspace redesign.
+- No broad `RibbonBootstrapper.cs` information-architecture rewrite; the completed Ribbon IA lane remains authoritative.
 - No GitHub Actions dispatch, release operation, signing, installer, or live BricsCAD V25 qualification.
 - No competing changes to the agent-registration protocol claim.
 
@@ -39,9 +40,19 @@ Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane:
 
 The source lane deliberately does not duplicate Direct Draw category dispatch, generated-handle parsing, geometry builders, project bootstrap, semantic capture or regeneration logic.
 
+## Confirmed concurrent Ribbon integration defect
+
+After this lane added the Quick Workflow button, the completed Ribbon information-architecture lane (`9f2ce05895b3ecf308c21915ddeb3bcb90ec57fc`) replaced the old flat `QS3D_AUTHOR_PANEL_SOURCE` with grouped panel sources such as `QS3D_AUTHOR_SETUP_PANEL_SOURCE`, `QS3D_AUTHOR_ARCHITECTURE_PANEL_SOURCE`, `QS3D_AUTHOR_STRUCTURE_PANEL_SOURCE` and `QS3D_AUTHOR_OUTPUT_PANEL_SOURCE`.
+
+Current `QuickWorkflowRibbonAugmenter` still searches for the removed `QS3D_AUTHOR_PANEL_SOURCE` and, if it cannot find it, silently falls back to the **first** panel source. On the grouped Ribbon that can append all BLT quick actions to the Setup panel by enumeration order, making placement non-deterministic relative to the new information architecture.
+
+This claim therefore reserves one narrow compatibility repair **inside `QuickWorkflowRibbonAugmenter.cs` only**: stop falling back to an unrelated grouped panel and create/reuse one exact dedicated quick-workflow panel source under the existing `QS3D_AUTHOR` tab. The repair must remain idempotent and must not modify `RibbonBootstrapper.cs` or re-group the completed Ribbon IA.
+
+The focused Create Similar/Ribbon preflight and feature documentation may be updated to lock this deterministic panel contract. This is an integration repair of an already-reserved surface, not a new broad Ribbon lane.
+
 ## Current blocker
 
-The remaining close-out edit is the canonical `docs/LOCAL-AGENT-INBOX.md` update under existing `LOCAL-008`. In this connector session that file is large and actively changing, while the available GitHub write action replaces the entire file rather than applying a bounded line patch. Replacing the whole inbox from a partial/truncated remote read would risk deleting concurrent local evidence and violates the repository's no-overwrite rule.
+The remaining close-out edit after source integration repairs is the canonical `docs/LOCAL-AGENT-INBOX.md` update under existing `LOCAL-008`. In this connector session that file is large and actively changing, while the available GitHub write action replaces the entire file rather than applying a bounded line patch. Replacing the whole inbox from a partial/truncated remote read would risk deleting concurrent local evidence and violates the repository's no-overwrite rule.
 
 The exact Create Similar V25 qualification delta is already recorded in `docs/DIRECT-DRAW-CREATE-SIMILAR-2026-08-11.md`, but that supporting document is **not** treated as a second queue and does not substitute for the required canonical inbox edit. This claim therefore remains `BLOCKED` rather than falsely `COMPLETED`.
 
@@ -54,15 +65,15 @@ A patch-capable writer or local agent should update only `LOCAL-008` on the newe
 - ambiguity/non-semantic/missing-Family/category-mismatch/unsupported-Family refusal before Active Family changes;
 - project reload/replacement, owner remap, source/generated ownership drift and active-DWG switch refusal;
 - Quick/Advanced delegated cancel/no-residue behavior while intentional sampled Family activation may remain;
-- exact one-button Ribbon idempotence/active-document routing;
+- exact one-button Ribbon idempotence/active-document routing and deterministic dedicated Quick Workflow panel placement;
 - sanitized evidence only, with no private path/raw Handle list.
 
 After that bounded inbox change is pushed, this same claim can be marked `COMPLETED`; exact V25 execution remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until real evidence exists.
 
 ## Coordination
 
-The generated-native source-recognition lane explicitly excludes Create Similar command-side ownership. The Workspace multi-selection policy lane is complete. Other concurrent claims should not modify the Create Similar command/route/Ribbon surfaces while this blocker remains reserved unless the split is coordinated in both claims.
+The generated-native source-recognition lane explicitly excludes Create Similar command-side ownership. The Workspace multi-selection/property-origin lanes are complete. The Ribbon information-architecture lane is complete and its grouped `RibbonBootstrapper.cs` remains untouched by this repair. Other concurrent claims should not modify the Create Similar command/route/QuickWorkflowRibbonAugmenter surfaces while this blocker remains reserved unless the split is coordinated in both claims.
 
 ## Completion condition
 
-`LOCAL-008` carries the exact Create Similar interactive qualification delta on current `main`, this claim is marked `COMPLETED`, and all live BricsCAD V25-only evidence remains explicitly unclaimed/LOCAL_ONLY.
+The Quick Workflow augmenter is deterministic against the grouped Ribbon, `LOCAL-008` carries the exact Create Similar interactive qualification delta on current `main`, this claim is marked `COMPLETED`, and all live BricsCAD V25-only evidence remains explicitly unclaimed/LOCAL_ONLY.
