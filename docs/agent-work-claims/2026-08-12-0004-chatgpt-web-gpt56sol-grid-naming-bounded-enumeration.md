@@ -1,74 +1,57 @@
 # Work claim — Grid naming bounded enumeration
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T00:04:00+07:00`
+- Completed: `2026-08-12T00:09:14+07:00`
 - Baseline main SHA observed: `a269ba2e35530daa7b7c03dc472227948b3c626c`
+- Claim commit: `c324c7e8447cbb4d66ef823db5c27a624cc8c9b3`
+- PR: `#556`
+- Squash merge on `main`: `af34a621133360f3ca19982f3fbef1ff034f0721`
 - Priority: P1 — deterministic Core resource-bound correctness.
 
-## Confirmed defect
+## Defect closed
 
-`GridNamingService.Renumber()` declares `MaxGridBatch = 2000`, but currently executes `orderedGridElementIds.Select(...).ToList()` before checking `ids.Count > MaxGridBatch`.
+`GridNamingService.Renumber()` declared `MaxGridBatch = 2000` but previously executed `orderedGridElementIds.Select(...).ToList()` before checking `ids.Count > MaxGridBatch`. The capacity therefore limited only accepted cardinality, not enumeration/allocation: a huge or non-terminating lazy source could be consumed without bound before the guard executed.
 
-The declared batch cap therefore limits only accepted cardinality, not enumeration or allocation. A huge, expensive, adversarial, or non-terminating lazy enumerable can be consumed without bound before the method reaches the 2,000-item guard.
+## Implemented
 
-This defect is independent of the currently active Grid intersection identity/spatial bounded-enumeration claims: this lane reserves only semantic Grid naming input materialization and its isolated regression/static gate.
+- Replaced unrestricted LINQ materialization with one-pass bounded buffering.
+- Accepted inputs of up to 2,000 continue to use the existing indexed `Required(...)` normalization.
+- The 2,001st yielded item now triggers the existing capacity `InvalidOperationException` immediately.
+- `Renumber()` never requests item 2,002 after oversize input is known.
+- Existing empty-input, duplicate-id, naming-format, sequence, target/category, label-collision, ordering, no-op and real-mutation semantics remain unchanged.
+- Added `GridNamingBoundedEnumerationSmoke` with an adversarial unbounded source that throws if item 2,002 is requested.
+- Added isolated module registration, `scripts/preflight-grid-naming-bounded-enumeration.py`, and detailed plan `docs/plans/2026-08-12-grid-naming-bounded-enumeration.md`.
 
-## Reserved scope
+## Regression contract
 
-- `src/QS3D.Core/Domain/GridNamingService.cs`
-- `tests/QS3D.Core.SmokeTests/GridNamingBoundedEnumerationSmoke.cs` (new)
-- `tests/QS3D.Core.SmokeTests/GridNamingBoundedEnumerationSmokeRegistration.cs` (new)
-- `scripts/preflight-grid-naming-bounded-enumeration.py` (new)
-- `docs/plans/2026-08-12-grid-naming-bounded-enumeration.md` (new)
-- this claim file for close-out
+For an unbounded valid-id source:
 
-## Detailed implementation plan
+- yield count reaches exactly 2,001;
+- `GridNamingService.Renumber()` throws `A Grid renumber batch supports at most 2000 elements.`;
+- source item 2,002 is not requested;
+- `ProjectState.ChangeVersion` remains unchanged.
 
-### Phase 1 — revalidate moving-main boundaries
+The focused preflight rejects the legacy `.Select(...).ToList()` / post-materialization capacity path and requires the capacity check to precede normalization/add and project resolution.
 
-- Re-fetch exact current `main` and `GridNamingService.cs` after this claim lands.
-- Re-check recent Grid claims/commits; stop if another ACTIVE/BLOCKED claim has reserved `GridNamingService.cs`.
-- Preserve existing Grid label formatting, duplicate-id validation, target/category validation, reserved-label collision checks, no-op behavior, dirty/timestamp semantics, and renumber ordering.
+## Moving-main safety
 
-### Phase 2 — make `MaxGridBatch` bound enumeration
+- Post-claim source was re-fetched from `main` at `c324c7e8447cbb4d66ef823db5c27a624cc8c9b3` before writes and still contained the defect.
+- Before PR creation, moving `main` was 10 commits ahead with no overlap in `GridNamingService.cs` or this lane's new files.
+- Before merge, moving `main` was 22 commits ahead; compare again showed no overlap.
+- Five additional commits landed immediately before merge; those also had no overlap with this lane.
+- PR #556 was squash-merged through GitHub's merge endpoint with expected head `43d64a7b99184cea6150a8ee351eaa09a4c012a0`; GitHub returned merge success. No force update was used.
 
-- Replace full LINQ materialization with one-pass bounded materialization.
-- Consume at most the first `MaxGridBatch + 1` source items: accepted inputs of up to 2,000 are normalized exactly as today; the 2,001st yielded item triggers the existing oversize error immediately.
-- Do not request a 2,002nd item after the cap is known to be exceeded.
-- Preserve indexed `Required(...)` validation for accepted items and the current public error message.
+## Validation
 
-### Phase 3 — deterministic adversarial regression
+- PR #556 changed exactly five expected files: one Core source file plus new smoke, module registration, focused preflight and detailed plan.
+- Source/diff review confirms the Core change is limited to bounded materialization in `Renumber()`.
+- The adversarial smoke distinguishes the fix from the old implementation because the legacy `.ToList()` path would request item 2,002 and hit the sentinel exception instead of the public capacity error.
+- The current container's earlier direct GitHub checkout attempt failed DNS resolution, so no executable smoke/preflight PASS is claimed.
+- No GitHub Actions workflow was dispatched, in accordance with repository manual-only policy.
+- No BricsCAD V25 runtime PASS is claimed; this lane is pure Core logic and changes no native CAD surface.
 
-- Add a lazy source that can keep yielding indefinitely but throws if `Renumber()` requests item 2,002.
-- Assert the method throws the existing 2,000-item `InvalidOperationException` after exactly 2,001 yielded items, before project element resolution or semantic mutation.
-- Assert `ProjectState.ChangeVersion` remains unchanged.
-- Module-register the new smoke without editing the shared smoke registration hotspot.
+## Completion evidence
 
-### Phase 4 — focused static gate
-
-- Add an auto-discovered preflight requiring bounded one-pass enumeration before project resolution.
-- Reject reintroduction of the legacy `.Select(...).ToList()` materialization path in `Renumber()`.
-- Require the oversize regression and isolated module registration.
-
-### Phase 5 — moving-main integration
-
-- Implement on an isolated branch from the post-claim `main`.
-- Compare moving `main` before PR and before merge; if `GridNamingService.cs` changed concurrently, do not overwrite the winner and re-read/reconcile only if scopes are non-overlapping.
-- Open a focused PR and squash-merge using expected head SHA; never force-update `main`.
-- Close this claim on `main` with exact PR/merge evidence and validation limitations.
-
-## Explicit exclusions
-
-- No Grid intersection identity, spatial ordering, annotation rendering, native CAD geometry, command lifecycle, UI, updater, release, or persistence-format changes.
-- No change to numeric/alphabetic label formatting, prefix/suffix semantics, duplicate detection, label collision rules, or 2,000-item public capacity.
-- No GitHub Actions dispatch.
-- No BricsCAD V25 runtime PASS claim.
-
-## Validation level
-
-Source/static review plus committed CAD-independent Core smoke regression and focused preflight. The current web/container environment cannot be relied upon for a repository checkout, so no executable smoke/preflight PASS will be claimed unless an actual run succeeds.
-
-## Completion condition
-
-`GridNamingService.Renumber()` enforces the existing 2,000-item capacity while enumerating, never requests item 2,002 for oversize lazy input, regression/preflight coverage is merged on current `main`, and this claim is marked `COMPLETED` with exact evidence.
+PR #556 is merged on `main` as `af34a621133360f3ca19982f3fbef1ff034f0721`. Grid naming capacity now bounds lazy-source enumeration itself, not only post-materialization accepted cardinality.
