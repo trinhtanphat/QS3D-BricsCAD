@@ -57,7 +57,7 @@
                                        FontWeight="SemiBold" FontSize="9"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock Text="BQ tổng • HT_Phòng • vật liệu • curtain • cửa/lỗ mở • cốt thép"
+                    <TextBlock Text="BQ tổng • Tường • HT_Phòng • vật liệu • curtain • cửa/lỗ mở • cốt thép"
                                Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
                 </StackPanel>
                 <Button Grid.Column="1" Content="Làm mới" Click="OnRefreshClick"
@@ -112,6 +112,8 @@
                             <StackPanel>
                                 <TextBlock Text="BẢNG TỔNG HỢP" Style="{StaticResource PanelTitle}"/>
                                 <Button Content="BQ tổng hợp" Tag="QS3DBQ" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Khối lượng Tường" Tag="QS3DWALLQTY" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"
+                                        ToolTip="Mở Wall Quantity: lọc, chi tiết, tổng, XLSX và Bám 3D/Định vị 3D."/>
                                 <Button Content="Tạo/Cập nhật BQ DWG Table" Tag="QS3DBQTABLE" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
                                 <Button Content="Refresh BQ DWG Table" Tag="QS3DBQTABLEREFRESH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Kiểm tra BQ DWG Table" Tag="QS3DBQTABLEHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
