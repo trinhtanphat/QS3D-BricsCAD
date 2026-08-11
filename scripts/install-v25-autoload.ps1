@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
-    [string]$PackageDirectory = $PSScriptRoot,
+    [string]$PackageDirectory,
     [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'QS3D\BricsCAD-V25'),
     [ValidateSet('OnCommand', 'OnStartup')]
     [string]$LoadMode = 'OnCommand',
@@ -216,6 +216,17 @@ function Restore-DemandLoadSnapshot {
 
 if (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {
     throw 'Close all BricsCAD processes before installing or upgrading QS3D.'
+}
+
+$scriptDirectory = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($scriptDirectory) -and -not [string]::IsNullOrWhiteSpace([string]$MyInvocation.MyCommand.Path)) {
+    $scriptDirectory = Split-Path -Parent ([IO.Path]::GetFullPath([string]$MyInvocation.MyCommand.Path))
+}
+if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
+    $PackageDirectory = $scriptDirectory
+}
+if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
+    throw 'PackageDirectory could not be resolved from the installer script location. Pass -PackageDirectory explicitly.'
 }
 
 $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
