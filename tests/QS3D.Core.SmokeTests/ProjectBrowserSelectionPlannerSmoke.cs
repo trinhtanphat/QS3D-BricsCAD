@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             SingleSelectionRevealsAncestors();
+            CaseInsensitiveSelectionIdentityReveals();
             MultiSelectionUnionsExpansionPaths();
             InvalidSemanticSelectionFailsClosed();
             NodeSelectionUsesDeterministicPaging();
@@ -30,6 +31,19 @@ namespace QS3D.Core.SmokeTests
             True(plan.ExpansionPaths[0] == ProjectBrowserVirtualizationPlanner.GetRootPath(root));
             True(plan.TargetNodePaths[0].EndsWith("/category%3ABeam", StringComparison.Ordinal));
             True(!plan.IsMultiSelection);
+        }
+
+        private static void CaseInsensitiveSelectionIdentityReveals()
+        {
+            var root = BuildRoot();
+            var plan = ProjectBrowserSelectionPlanner.PlanReveal(root, new[] { "b-001" }, "B-001");
+
+            Equal(1, plan.SelectedElementIds.Count);
+            Equal("b-001", plan.SelectedElementIds[0]);
+            Equal("b-001", plan.PrimaryElementId);
+            Equal(1, plan.TargetNodePaths.Count);
+            Equal(2, plan.ExpansionPaths.Count);
+            True(plan.TargetNodePaths[0].EndsWith("/category%3ABeam", StringComparison.Ordinal));
         }
 
         private static void MultiSelectionUnionsExpansionPaths()
