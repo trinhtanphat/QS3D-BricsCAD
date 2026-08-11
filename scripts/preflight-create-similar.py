@@ -137,20 +137,39 @@ if RIBBON.is_file():
         'Create("Bricscad.Windows.RibbonPanel")',
         'SetProperty(panel, "Source", source);',
         "Add(panels, panel);",
-        "if (CollectionContainsId(items, spec.Id)) continue;",
+        "var button = FindById(items, spec.Id);",
+        "if (button == null)",
+        'button = Create("Bricscad.Windows.RibbonButton");',
+        'SetProperty(button, "Id", spec.Id);',
+        "Add(items, button);",
+        'SetProperty(button, "Name", spec.Text);',
+        'SetProperty(button, "Text", spec.Text);',
         'SetProperty(button, "CommandParameter", spec.Command);',
         'SetProperty(button, "CommandHandler", new CommandHandler());',
+        "private static object? FindById(object collection, string id)",
         "Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + \" \", true, false, false);",
     ):
         if token not in text:
-            errors.append("Quick Workflow Ribbon lost its deterministic/idempotent panel contract: " + token)
+            errors.append("Quick Workflow Ribbon lost its deterministic/idempotent reconciliation contract: " + token)
 
     for forbidden in (
         'PanelSourceId = "QS3D_AUTHOR_PANEL_SOURCE"',
         "if (source == null) source = candidate;",
+        "if (CollectionContainsId(items, spec.Id)) continue;",
+        "private static bool CollectionContainsId(object collection, string id)",
     ):
         if forbidden in text:
-            errors.append("Quick Workflow Ribbon must not fall back to an unrelated grouped authoring panel: " + forbidden)
+            errors.append("Quick Workflow Ribbon must not use stale flat-panel/create-only routing: " + forbidden)
+
+    loop = text.find("foreach (var spec in Buttons)")
+    find_button = text.find("var button = FindById(items, spec.Id);", loop)
+    create_button = text.find("if (button == null)", find_button)
+    reconcile_name = text.find('SetProperty(button, "Name", spec.Text);', create_button)
+    reconcile_command = text.find('SetProperty(button, "CommandParameter", spec.Command);', reconcile_name)
+    if min(loop, find_button, create_button, reconcile_name, reconcile_command) < 0 or not (
+        loop < find_button < create_button < reconcile_name < reconcile_command
+    ):
+        errors.append("Quick Workflow must find-or-create stable buttons before reconciling current presentation/command state")
 
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
@@ -178,4 +197,4 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Create Similar preflight PASS: selection/ownership/Family freshness stays guarded, authoring delegates to Active Family Quick/Advanced, and BLT quick actions use one deterministic dedicated Ribbon panel instead of falling back to a grouped authoring panel.")
+print("Create Similar preflight PASS: selection/ownership/Family freshness stays guarded, authoring delegates to Active Family Quick/Advanced, and Quick Workflow uses one deterministic dedicated panel whose stable buttons reconcile current state after reinitialize.")
