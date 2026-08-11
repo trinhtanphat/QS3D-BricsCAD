@@ -69,7 +69,7 @@ namespace QS3D.BricsCAD.V25
                     : "Release Check: BLOCKED • " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin.";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
-                Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue => Locate(document, project, issue)), true);
+                Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue => Locate(document, issue)), true);
             }
             catch (System.Exception ex)
             {
@@ -85,10 +85,11 @@ namespace QS3D.BricsCAD.V25
             try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
 
-        private static void Locate(Document document, QS3D.Core.Domain.ProjectState project, ModelHealthIssue issue)
+        private static void Locate(Document document, ModelHealthIssue issue)
         {
             if (string.IsNullOrWhiteSpace(issue.ElementId)) return;
-            var element = project.FindElement(issue.ElementId);
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+            var element = currentProject.FindElement(issue.ElementId);
             if (element == null) return;
             var handles = SemanticReferenceHandles.Get(element)
                 .Concat(GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element).Select(x => x.Key))
