@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             UpsertIsIdempotentAndPersists();
+            ContentOnlyUpsertDoesNotReportPlacementRewrite();
             ReferencedViewRemovalFailsWithoutCascade();
             CascadedViewRemovalDropsOnlyItsPlacements();
             ViewIdentityReplacementCanRewriteSheets();
@@ -36,6 +37,19 @@ namespace QS3D.Core.SmokeTests
             var catalog = new SemanticDocumentationCatalogStore().Load(project);
             Equal(1, catalog.Views.Count);
             Equal(1, catalog.Sheets.Count);
+            Equal("V-1", catalog.Sheets[0].Placements[0].ViewId);
+        }
+
+        private static void ContentOnlyUpsertDoesNotReportPlacementRewrite()
+        {
+            var project = SeedCatalog();
+            var editor = new SemanticDocumentationCatalogEditor();
+            var result = editor.UpsertView(project, View("V-1", "Model 1 renamed"));
+            Equal(true, result.Changed);
+            Equal(0, result.RewrittenPlacementCount);
+
+            var catalog = new SemanticDocumentationCatalogStore().Load(project);
+            Equal("Model 1 renamed", catalog.Views.Single(x => x.Id == "V-1").Name);
             Equal("V-1", catalog.Sheets[0].Placements[0].ViewId);
         }
 
