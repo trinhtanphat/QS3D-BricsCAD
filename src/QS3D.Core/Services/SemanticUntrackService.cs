@@ -35,14 +35,17 @@ namespace QS3D.Core.Services
             var targetIds = new HashSet<string>(targets.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             EnsureNoExternalDependents(project, targets, targetIds);
 
-            foreach (var target in targets)
+            return ProjectSemanticMutationExecutor.Execute(project, "semantic.untrack", () =>
             {
-                if (!project.Elements.Remove(target))
-                    throw new InvalidOperationException("Semantic untrack target is no longer owned by this project: " + target.Id);
-            }
+                foreach (var target in targets)
+                {
+                    if (!project.Elements.Remove(target))
+                        throw new InvalidOperationException("Semantic untrack target is no longer owned by this project: " + target.Id);
+                }
 
-            project.Touch();
-            return new SemanticUntrackResult(targets.Select(x => x.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly());
+                project.Touch();
+                return new SemanticUntrackResult(targets.Select(x => x.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly());
+            });
         }
 
         private static void EnsureNoExternalDependents(
