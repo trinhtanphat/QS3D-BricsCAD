@@ -184,14 +184,14 @@ namespace QS3D.BricsCAD.V25.Services
 
                     if (line.StartsWith("F=", StringComparison.Ordinal))
                     {
-                        var command = Decode(line.Substring(2));
+                        if (!TryDecode(line.Substring(2), out var command)) continue;
                         if (StartCenterCommandCatalog.TryGet(command, out var favorite)) state.FavoriteCommands.Add(favorite.Command);
                         continue;
                     }
 
                     if (line.StartsWith("C=", StringComparison.Ordinal))
                     {
-                        var command = Decode(line.Substring(2));
+                        if (!TryDecode(line.Substring(2), out var command)) continue;
                         if (StartCenterCommandCatalog.TryGet(command, out var recent)) state.RecentCommands.Add(recent.Command);
                         continue;
                     }
@@ -200,7 +200,7 @@ namespace QS3D.BricsCAD.V25.Services
                     var parts = line.Substring(2).Split(new[] { '|' }, 3);
                     if (parts.Length != 3) continue;
                     if (!long.TryParse(parts[1], out var ticks) || ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks) continue;
-                    var decoded = Decode(parts[2]);
+                    if (!TryDecode(parts[2], out var decoded)) continue;
                     if (!TryNormalizeDwgPath(decoded, out var normalized)) continue;
                     state.RecentProjects.Add(new StartCenterRecentProject
                     {
@@ -212,7 +212,6 @@ namespace QS3D.BricsCAD.V25.Services
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
-            catch (FormatException) { }
             catch (ArgumentException) { }
 
             return Normalize(state);
@@ -329,7 +328,24 @@ namespace QS3D.BricsCAD.V25.Services
         }
 
         private static string Encode(string value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
-        private static string Decode(string value) => Encoding.UTF8.GetString(Convert.FromBase64String(value ?? string.Empty));
+
+        private static bool TryDecode(string value, out string decoded)
+        {
+            decoded = string.Empty;
+            try
+            {
+                decoded = Encoding.UTF8.GetString(Convert.FromBase64String(value ?? string.Empty));
+                return true;
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
 
         private static void RemoveCommand(IList<string> commands, string command)
         {

@@ -8,6 +8,9 @@ WINDOW = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "StartCenterWindow.xaml.cs"
 XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "StartCenterWindow.xaml"
 CATALOG = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "StartCenterCommandCatalog.cs"
 STATE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "StartCenterUserStateStore.cs"
+WALL_QUANTITY = ROOT / "src" / "QS3D.BricsCAD.V25" / "WallQuantityCommands.cs"
+REFERENCE_SEARCH = ROOT / "src" / "QS3D.BricsCAD.V25" / "ReferenceSearchCommands.cs"
+QUANTITY_SETTINGS_HEALTH = ROOT / "src" / "QS3D.BricsCAD.V25" / "QuantitySettingsDiagnosticExportCommands.cs"
 
 
 def read(path):
@@ -28,6 +31,9 @@ def forbid(text, token, label):
 
 def main():
     commands, window, xaml, catalog, state = map(read, (COMMANDS, WINDOW, XAML, CATALOG, STATE))
+    wall_quantity, reference_search, quantity_settings_health = map(
+        read, (WALL_QUANTITY, REFERENCE_SEARCH, QUANTITY_SETTINGS_HEALTH))
+
     require(commands, '[CommandMethod("QS3DSTART", CommandFlags.Modal)]', "QS3DSTART registration")
     require(commands, "Application.ShowModelessWindow", "modeless BricsCAD host")
     forbid(commands, "Process.Start", "Start Center command surface")
@@ -54,18 +60,30 @@ def main():
 
     for token in ("Path.GetFullPath", "Path.IsPathRooted", '".dwg"', "StringComparer.OrdinalIgnoreCase", "Convert.ToBase64String", "File.Replace", "MaxRecentProjects", "StartCenterCommandCatalog.TryGet"):
         require(state, token, "bounded user-state store")
+    require(state, "TryDecode", "corrupt-line tolerant user-state loader")
+    require(state, "Convert.FromBase64String", "encoded user-state loader")
+    require(state, "if (!TryDecode(line.Substring(2), out var command)) continue;", "favorite/recent corrupt-line isolation")
+    require(state, "if (!TryDecode(parts[2], out var decoded)) continue;", "recent-project corrupt-line isolation")
     forbid(state, "Process.Start", "Start Center state store")
 
+    require(catalog, "StringSplitOptions.RemoveEmptyEntries", "multi-token launcher search")
+    require(catalog, "ScoreTerm", "multi-token launcher scoring")
+    require(catalog, "if (termScore == 0) return 0;", "AND-semantics launcher search")
+
     declared = re.findall(r'New\("(QS3D[A-Z0-9]*)"', catalog)
-    if len(declared) < 45:
+    if len(declared) < 48:
         raise AssertionError("Start Center command catalog is unexpectedly small: " + str(len(declared)))
     if len(declared) != len(set(declared)):
         raise AssertionError("Start Center command catalog contains duplicate command literals.")
-    for command in ("QS3D", "QS3DFAMILIES", "QS3DDRAWWALL", "QS3DDRAWBEAM", "QS3DDRAWCOLUMN", "QS3DDRAWSLAB", "QS3DDRAWDOOR", "QS3DDRAWWINDOW", "QS3DCREATESIMILAR", "QS3DBQ", "QS3DED2", "QS3DREBARHEALTHALL", "QS3DRULEPREVIEW", "QS3DREGENPREVIEW", "QS3DHEALTHALL", "QS3DDIAGSUMMARY", "QS3DRELEASECHECK", "QS3DSAVE", "QS3DRELOAD"):
+    for command in ("QS3D", "QS3DFAMILIES", "QS3DDRAWWALL", "QS3DDRAWBEAM", "QS3DDRAWCOLUMN", "QS3DDRAWSLAB", "QS3DDRAWDOOR", "QS3DDRAWWINDOW", "QS3DCREATESIMILAR", "QS3DWALLQTY", "QS3DBQ", "QS3DED2", "QS3DREBARHEALTHALL", "QS3DRULEPREVIEW", "QS3DREGENPREVIEW", "QS3DHEALTHALL", "QS3DDIAGSUMMARY", "QS3DQSETTINGSHEALTHEXPORT", "QS3DREFSEARCH", "QS3DRELEASECHECK", "QS3DSAVE", "QS3DRELOAD"):
         if command not in declared:
             raise AssertionError("Missing representative Start Center command: " + command)
 
-    print("PASS: Start Center source contract is present, allowlisted, bounded and non-creating on dashboard reads.")
+    require(wall_quantity, '[CommandMethod("QS3DWALLQTY", CommandFlags.Modal)]', "Wall Quantity source registration")
+    require(reference_search, '[CommandMethod("QS3DREFSEARCH", CommandFlags.Modal)]', "reference-search source registration")
+    require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
+
+    print("PASS: Start Center source contract is present, allowlisted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 

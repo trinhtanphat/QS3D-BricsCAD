@@ -57,14 +57,15 @@ namespace QS3D.BricsCAD.V25.Services
         public static IReadOnlyList<StartCenterCommandItem> Search(string query, string group)
         {
             var normalizedQuery = (query ?? string.Empty).Trim();
+            var terms = normalizedQuery.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
             var normalizedGroup = (group ?? string.Empty).Trim();
             var hasGroup = normalizedGroup.Length > 0 &&
                            !string.Equals(normalizedGroup, "Tất cả", StringComparison.CurrentCultureIgnoreCase);
 
             var ranked = Items
                 .Where(x => !hasGroup || string.Equals(x.Group, normalizedGroup, StringComparison.CurrentCultureIgnoreCase))
-                .Select(x => new { Item = x, Score = Score(x, normalizedQuery) })
-                .Where(x => normalizedQuery.Length == 0 || x.Score > 0)
+                .Select(x => new { Item = x, Score = Score(x, terms) })
+                .Where(x => terms.Length == 0 || x.Score > 0)
                 .OrderByDescending(x => x.Score)
                 .ThenBy(x => x.Item.Priority)
                 .ThenBy(x => x.Item.Title, StringComparer.CurrentCultureIgnoreCase)
@@ -74,9 +75,21 @@ namespace QS3D.BricsCAD.V25.Services
             return ranked.AsReadOnly();
         }
 
-        private static int Score(StartCenterCommandItem item, string query)
+        private static int Score(StartCenterCommandItem item, IReadOnlyList<string> terms)
         {
-            if (query.Length == 0) return 1;
+            if (terms.Count == 0) return 1;
+            var score = 0;
+            foreach (var term in terms)
+            {
+                var termScore = ScoreTerm(item, term);
+                if (termScore == 0) return 0;
+                score += termScore;
+            }
+            return score;
+        }
+
+        private static int ScoreTerm(StartCenterCommandItem item, string query)
+        {
             var score = 0;
             if (item.Command.StartsWith(query, StringComparison.OrdinalIgnoreCase)) score += 120;
             else if (item.Command.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0) score += 70;
@@ -102,6 +115,7 @@ namespace QS3D.BricsCAD.V25.Services
                 New("QS3DLEVELS", "Tầng / Level", "Quản lý cao độ và tầng dự án.", "Khởi đầu", "floor level cao độ", 5),
                 New("QS3DZONES", "Zone", "Quản lý Zone và gán đối tượng.", "Khởi đầu", "zone khu vực", 6),
                 New("QS3DMATERIALS", "Vật liệu", "Mở Material Catalog.", "Khởi đầu", "material vật liệu", 7),
+                New("QS3DREFSEARCH", "Tham khảo thi công", "Mở trình tìm kiếm tham khảo thi công modeless theo bản vẽ hiện hành.", "Khởi đầu", "reference search tham khảo ảnh web video vật tư", 8),
 
                 New("QS3DDRAWWALL", "Vẽ Tường", "Direct Draw tường nhanh bằng Family đang active.", "Tạo mới", "wall tường kiến trúc quick", 10),
                 New("QS3DDRAWGLASSWALL", "Vẽ Vách Kính", "Direct Draw GlassWall nhanh.", "Tạo mới", "glass wall curtain vách kính", 11),
@@ -142,6 +156,7 @@ namespace QS3D.BricsCAD.V25.Services
                 New("QS3DRECOGNIZEAUTO", "Nhận dạng tự động", "Tự áp dụng kết quả đủ độ tin cậy.", "Nhận dạng", "recognize auto confidence", 61),
                 New("QS3DB4D", "B4D Scan", "Quét Current Space theo boundary nhận dạng sạch.", "Nhận dạng", "b4d scan takeoff", 62),
 
+                New("QS3DWALLQTY", "Khối lượng Tường", "Mở wall takeoff read-only với Locate 3D và XLSX.", "Khối lượng", "wall qty quantity tường takeoff locate 3d excel", 69),
                 New("QS3DBQ", "Bóc khối lượng", "Mở quantity summary/filter/group/Locate/XLSX.", "Khối lượng", "bq quantity bóc khối lượng", 70),
                 New("QS3DED2", "ED2 chi tiết", "Xuất chi tiết semantic theo Selection/Floor/Zone/All.", "Khối lượng", "ed2 excel chi tiết", 71),
                 New("QS3DTAKEOFF", "Quick Takeoff", "Takeoff nhanh có quy đổi drawing unit.", "Khối lượng", "takeoff quantity nhanh", 72),
@@ -166,6 +181,7 @@ namespace QS3D.BricsCAD.V25.Services
                 New("QS3DOWNERSHIPHEALTH", "Ownership Health", "Kiểm tra ownership generated handle.", "Review & Health", "ownership generated health", 95),
                 New("QS3DDIAGSUMMARY", "Diagnostic Summary", "Xuất diagnostic summary privacy-safe.", "Review & Health", "diagnostic support privacy", 96),
                 New("QS3DRELEASECHECK", "Release Check", "Review readiness theo guard hiện có.", "Review & Health", "release check readiness", 97),
+                New("QS3DQSETTINGSHEALTHEXPORT", "Quantity Settings Health", "Xuất JSON diagnostic ma trận Quantity Settings hiện tại.", "Review & Health", "quantity settings health export json diagnostic matrix", 98),
 
                 New("QS3DSAVE", "Lưu QS3D Project", "Lưu sidecar project hiện hữu.", "Dự án", "save project qsdb", 100),
                 New("QS3DRELOAD", "Reload QS3D Project", "Nạp lại project hiện hữu từ sidecar.", "Dự án", "reload project qsdb", 101),
