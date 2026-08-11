@@ -3,7 +3,7 @@
 - Status: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-rebar-xlsx-xml-sanitization-20260812-0130`
 - Registered: `2026-08-12T01:30:00+07:00`
-- Baseline main SHA: `3f0d5946f45ef3c8d9cdd4848b967516f145494e`
+- Baseline main SHA: `45991a9b38e3968f047bcd83b38f7ba6625ed186`
 - Priority: evidence-driven remote-safe XLSX integrity hardening during owner-requested `continue all`
 
 ## Reserved scope
