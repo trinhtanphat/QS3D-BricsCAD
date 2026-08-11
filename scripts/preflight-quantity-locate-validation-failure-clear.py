@@ -36,6 +36,15 @@ if "<EnableDefaultCompileItems>false</EnableDefaultCompileItems>" in project:
     errors.append("V25 project must not disable default Compile item discovery")
 
 for name, guard in (("Summary", summary_guard), ("Insight", insight_guard)):
+    ctor = "static QuantitySummaryWindow()" if name == "Summary" else "static QuantityInsightPanel()"
+    if ctor not in guard:
+        errors.append(name + " guard must use an explicit static constructor so class-handler registration precedes instance initialization")
+    if "static readonly bool LocateSelectionFailureGuardRegistered" in guard:
+        errors.append(name + " guard must not depend on beforefieldinit static-field timing")
+    register_pos = guard.find("RegisterLocateSelectionFailureGuard();")
+    handler_pos = guard.find("EventManager.RegisterClassHandler")
+    if not (0 <= register_pos < handler_pos):
+        errors.append(name + " explicit type initialization must register handlers before runtime events")
     if "EventManager.RegisterClassHandler" not in guard:
         errors.append(name + " guard must use WPF class handlers so pre-clear runs before instance locate handlers")
     if "BcadApplication.DocumentManager.MdiActiveDocument" not in guard:
