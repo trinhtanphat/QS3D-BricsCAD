@@ -7,6 +7,7 @@ This file is the **single live queue for LOCAL_ONLY work**. Detailed runbooks re
 ## Mandatory handoff contract
 
 - A remote/hybrid agent that discovers a new LOCAL_ONLY requirement must add or update the matching item in this file **in the same source/docs batch that introduced or exposed the requirement**.
+- If a non-local agent cannot complete or prove a step because the required machine/runtime/private asset is unavailable, it must park that step here and continue source-safe work. Other non-local agents must treat the recorded LOCAL_ONLY item as a skip marker and must not repeatedly re-audit or retry the same environment-dependent gate unless current source materially changes the scenario.
 - Do not create a second live queue. Historical `docs/LOCAL-AGENT-*.md` files are supporting detail/evidence; this inbox is the current priority index.
 - Local agents work `P0` before `P1` before `P2`, always from a clean checkout of the newest intended SHA.
 - `LOCAL_PASS` requires real evidence tied to the exact tested SHA. Source review, static preflight, mock tests, `-SkipRuntime`, or a remote build cannot manufacture `LOCAL_PASS`.
@@ -147,6 +148,18 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Evidence required: Exact SHA; failure stage/exception; before/after semantic snapshot summary; native owner counts; transaction/Undo result; active-DWG identity; Recognition no-project-creation result; Door/Room/BBS detached live-state invariants; BQ canonical preference result; post-commit UI result; save/reopen result; sanitized evidence where useful.
 - Evidence: PENDING_LOCAL
 - Related docs: `docs/PROJECT-ROLLBACK-FAILURE-MATRIX.md`; `docs/EXISTING-PROJECT-MUTATION-CONTEXT.md`; `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
+- Updated: 2026-08-11
+
+## LOCAL-012 — Project Browser native workspace and CAD selection bridge
+
+- Priority: P1
+- Status: OPEN
+- Area: Project Browser / Workspace / modeless selection
+- Why local: Core query/grouping/virtualization/selection/workspace-state coordination is source-safe, but final integration depends on real BricsCAD Editor implied selection, live ObjectId/handle resolution, modeless WPF palette lifecycle, document switching, focus/zoom behavior and Unicode/HiDPI rendering.
+- Scenario: Starting from the exact SHA containing `ProjectBrowserWorkspaceCoordinator`, wire/qualify the native Workspace/Project Browser adapter without persisting CAD ObjectIds/handles in Core state. CAD selection must re-resolve to stable semantic IDs, reveal/expand the correct Browser paths and update the multi-selection inspector. Browser node/element selection must re-resolve the current canonical project and live CAD handles at action time, select/zoom only the bound active DWG, and fail closed for stale/deleted/ambiguous IDs. Keep the modeless UI open while switching DWGs, forgetting/reloading project cache, deleting selected semantics, changing grouping/filter/query, paging large nodes, saving/reopening, and cancelling operations. Verify presentation-only browser state never increments semantic `ChangeVersion` or invalidates quantity/regeneration previews.
+- Evidence required: Exact QS3D SHA; Windows and BricsCAD V25 build; CAD→Browser and Browser→CAD selection matrix; single/multi-selection; stale/deleted/ambiguous ID refusal; active-DWG/document-affinity result; cache reload result; paging/filter/grouping state result; before/after semantic `ChangeVersion`; save/reopen; 100/125/150/200% DPI screenshots or sanitized notes; no cross-DWG mutation.
+- Evidence: PENDING_LOCAL
+- Related source/docs: `src/QS3D.Core/Navigation/ProjectBrowserWorkspaceCoordinator.cs`; `src/QS3D.Core/Navigation/ProjectBrowserSelectionPlanner.cs`; `src/QS3D.Core/Navigation/ProjectBrowserWorkspaceStateStore.cs`; `docs/REMOTE-AGENT-SCOPE.md`; `docs/LOCAL-V25-QUALIFICATION.md`
 - Updated: 2026-08-11
 
 ## Close-out rule
