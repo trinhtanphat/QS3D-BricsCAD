@@ -39,6 +39,9 @@ for token in (
     'PersistedTokenCandidates(project)',
     'if (!IsToken(token))',
     '"Persisted custom schedule Table metadata contains a malformed owner token."',
+    'Token = token;',
+    'public string Token { get; }',
+    '!string.Equals(keys.Token, Token(storedScheduleId), StringComparison.Ordinal)',
 ):
     if token not in builder:
         errors.append("custom schedule builder missing contract token: " + token)
@@ -47,6 +50,14 @@ if "semanticTable.Rows.Count == 0" in builder:
     errors.append("valid zero-match custom schedules must remain renderable as header-only native Tables")
 if "table.Erase();" not in builder or builder.find("HasMatchingOwnership(table, project.ProjectId, scheduleId, fingerprint)") > builder.find("table.Erase();"):
     errors.append("native replacement/removal must verify exact project/schedule/fingerprint ownership before erase")
+
+validate_start = builder.find("private static void ValidatePersistedState")
+validate_end = builder.find("private static void ErasePrevious", validate_start + 1)
+validate = builder[validate_start:validate_end] if validate_start >= 0 and validate_end > validate_start else ""
+if "keys.Token" not in validate or "Token(storedScheduleId)" not in validate:
+    errors.append("persisted custom schedule metadata must bind the actual owner bucket token to the stored ScheduleId hash")
+if "Token(storedScheduleId), Token(scheduleId)" in validate:
+    errors.append("persisted custom schedule validation must not self-compare hashes derived only from schedule IDs while ignoring the actual metadata bucket token")
 
 inspect_start = builder.find("public static IReadOnlyList<ModelHealthIssue> Inspect")
 inspect_end = builder.find("private static void InspectToken", inspect_start + 1)
@@ -141,4 +152,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: native custom semantic schedules preserve header-only rendering, prompt-before-bind freshness, fail closed on malformed/partial owner metadata, retain canonical-token selection safety, keep per-schedule ownership-safe Table lifecycle, Hub wiring, and Health/Release diagnostics without becoming a BQ/BBS engine.")
+print("PASS: native custom semantic schedules preserve header-only rendering, prompt-before-bind freshness, bind ScheduleId to the actual owner bucket token, fail closed on malformed/partial owner metadata, retain canonical-token selection safety, keep per-schedule ownership-safe Table lifecycle, Hub wiring, and Health/Release diagnostics without becoming a BQ/BBS engine.")
