@@ -40,6 +40,7 @@ namespace QS3D.Core.Persistence
             }
 
             ValidateCurrentPersistenceState(root);
+            QsdbProjectXmlSchemaValidator.ValidateCurrent(root);
             return document;
         }
 
