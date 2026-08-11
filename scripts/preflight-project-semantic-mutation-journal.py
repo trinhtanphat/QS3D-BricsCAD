@@ -34,6 +34,10 @@ for token in (
     "rollback.Restore(project)",
     "new AggregateException(operationError, rollbackError)",
     "preCommitValidation",
+    "TryRecord(effectiveJournal, operation, ProjectSemanticMutationPhase.Planned",
+    "TryRecord(effectiveJournal, operation, ProjectSemanticMutationPhase.Running",
+    "TryRecord(effectiveJournal, operation, ProjectSemanticMutationPhase.Validating",
+    "TryRecord(effectiveJournal, operation, ProjectSemanticMutationPhase.Committed",
     "This executor restores semantic project state only",
 ):
     if token not in source:
@@ -43,10 +47,13 @@ for token in (
     "SuccessfulMutationRecordsOrderedPhases",
     "MutationExceptionRestoresCompleteProjectState",
     "PreCommitFaultRollsBackCompletedInterchangeMutation",
+    "SaturatedJournalCannotChangeMutationOutcome",
     "InvalidOperationNameFailsBeforeMutation",
     "ProjectInterchangeImportCoordinator.Execute",
     "PreserveSourceHandleProvenance = true",
     "injected post-import validation fault",
+    'project.Metadata["CommittedAfterSaturation"] = "yes"',
+    "Equal(256, journal.Entries.Count)",
     "ChangeVersion",
     "ModuleInitializer",
 ):
@@ -56,6 +63,7 @@ for token in (
 for token in (
     "semantic-only",
     "detached journal",
+    "diagnostic saturation",
     "pre-commit validation",
     "does not roll back native DWG",
     "fault injection",
@@ -71,4 +79,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: semantic mutation scope journals deterministic phases and rolls back ProjectState after mutation/pre-commit faults without claiming native DWG rollback.")
+print("PASS: semantic mutation scope keeps journal saturation diagnostic-only, journals normal ordered phases, and rolls back ProjectState after real mutation/pre-commit faults without claiming native DWG rollback.")
