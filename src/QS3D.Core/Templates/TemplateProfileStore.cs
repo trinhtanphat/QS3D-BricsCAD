@@ -147,7 +147,6 @@ namespace QS3D.Core.Templates
                 }
 
                 result.AffectedElements = affected.Count;
-                project.Touch();
                 AuditTrail.ForProject(project).Record("template.apply", string.Empty, profile.Id + " • families +" + result.FamiliesAdded + "/~" + result.FamiliesUpdated + " • rules +" + result.RulesAdded + "/~" + result.RulesUpdated + " • mappings " + result.LayerMappingsApplied);
                 return result;
             }
