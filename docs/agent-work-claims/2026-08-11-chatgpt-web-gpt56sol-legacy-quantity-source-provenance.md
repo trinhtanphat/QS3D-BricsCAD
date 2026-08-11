@@ -1,6 +1,6 @@
 # Work claim — legacy quantity source provenance normalization
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-legacy-quantity-source-provenance`
 - Registered: `2026-08-11T20:52:00+07:00`
 - Baseline main SHA: `30e15375da1c85a7770d9fb2467deb3a57257bad`
@@ -8,7 +8,7 @@
 
 ## Confirmed defect
 
-`QuantityReportBuilder.Group` currently checks `row.SourceHandles.Contains(handle, StringComparer.OrdinalIgnoreCase)` before trimming `handle`, then stores `handle.Trim()`. As a result, existing `"AA"` followed by `" AA "` passes the pre-trim duplicate check and stores a second `"AA"`. The row therefore exposes duplicate provenance despite equivalent CAD identity.
+`QuantityReportBuilder.Group` checked `row.SourceHandles.Contains(handle, StringComparer.OrdinalIgnoreCase)` before trimming `handle`, then stored `handle.Trim()`. As a result, existing `"AA"` followed by `" AA "` passed the pre-trim duplicate check and stored a second `"AA"`. The row therefore exposed duplicate provenance despite equivalent CAD identity.
 
 ## Reserved scope
 
@@ -38,6 +38,19 @@ Replace the legacy ad-hoc source-handle loop with the shared reporting provenanc
 
 The earlier repository-audit reporting-identity claim is `COMPLETE` and explicitly released these paths. Current BQ/UI/Core mutation/Room Auto claims do not reserve these two files. This lane reuses the just-completed schedule provenance normalization rather than creating a second policy.
 
+## Completion
+
+- PR: `#454` — `fix(reporting): normalize legacy quantity source provenance`
+- Reviewed feature head before squash: `4ea41f83a8b193e4ed2e200e87b649cb91fe6aad`
+- Squash merge on `main`: `22d2aac87404bd7596c83a1dbc3c0638f2c40ae1`
+- `QuantityReportBuilder.Group` now calls the shared `ReportingRowProvenance.AppendSourceHandles(...)` contract instead of its pre-trim ad-hoc duplicate check.
+- The existing registered `LegacyQuantityReportIdentitySmoke` now proves `"AA"`, `" aa "`, blank and `"Bb"` produce exactly `AA`, `Bb` in deterministic first-seen order.
+- Final PR diff: 2 files / 6 additions / 3 deletions.
+- Repeated current-main comparisons confirmed concurrent updater/UI/claim work did not touch either reserved file before integration.
+- Element-ID fail-closed handling, quantity arithmetic and grouping keys were unchanged.
+- GitHub Actions/build/release were not dispatched.
+- No native BricsCAD V25/WPF runtime PASS is claimed.
+
 ## Completion condition
 
-Legacy quantity reporting uses the shared normalized source-provenance contract, the existing smoke guards the regression, the change is merged onto current `main` without overwriting concurrent work, and this claim is closed with exact SHAs and truthful validation scope.
+Satisfied by PR `#454` and merge `22d2aac87404bd7596c83a1dbc3c0638f2c40ae1`: legacy quantity reporting now uses the shared normalized source-provenance contract, the existing smoke guards the regression, and the change was merged without overwriting concurrent work.
