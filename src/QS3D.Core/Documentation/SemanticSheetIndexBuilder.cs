@@ -46,10 +46,7 @@ namespace QS3D.Core.Documentation
         {
             if (sheets == null) throw new ArgumentNullException(nameof(sheets));
 
-            var materialized = sheets.ToList();
-            if (materialized.Count > MaxSheets)
-                throw new InvalidOperationException("Semantic sheet index supports at most " + MaxSheets + " sheets.");
-
+            var materialized = MaterializeBounded(sheets);
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var numbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var rows = new List<SemanticSheetIndexRow>(materialized.Count);
@@ -57,9 +54,6 @@ namespace QS3D.Core.Documentation
             for (var i = 0; i < materialized.Count; i++)
             {
                 var sheet = materialized[i];
-                if (sheet == null)
-                    throw new ArgumentException("Semantic sheet index source cannot contain a null sheet at index " + i + ".", nameof(sheets));
-
                 if (!ids.Add(sheet.Id))
                     throw new InvalidOperationException("Semantic sheet index contains duplicate sheet id: " + sheet.Id + ".");
                 if (!numbers.Add(sheet.Number))
@@ -76,6 +70,24 @@ namespace QS3D.Core.Documentation
             return new SemanticSheetIndex(rows
                 .OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.SheetId, StringComparer.OrdinalIgnoreCase));
+        }
+
+        private static List<SemanticSheetPlan> MaterializeBounded(IEnumerable<SemanticSheetPlan> sheets)
+        {
+            var result = new List<SemanticSheetPlan>(Math.Min(MaxSheets, 256));
+            using (var enumerator = sheets.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxSheets)
+                        throw new InvalidOperationException("Semantic sheet index supports at most " + MaxSheets + " sheets.");
+                    var sheet = enumerator.Current;
+                    if (sheet == null)
+                        throw new ArgumentException("Semantic sheet index source cannot contain a null sheet at index " + result.Count + ".", nameof(sheets));
+                    result.Add(sheet);
+                }
+            }
+            return result;
         }
     }
 }
