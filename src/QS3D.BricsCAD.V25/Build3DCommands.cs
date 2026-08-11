@@ -135,15 +135,18 @@ namespace QS3D.BricsCAD.V25
                     .Select(x => x.Id)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                var regenerationScope = BuildRegenerationScope(project, selectedElements);
                 var semanticRollback = ProjectStateSnapshot.Capture(project);
                 var ownershipBefore = CaptureGeneratedSolidHandles(project, elementIds);
                 int regenerated;
                 int built;
                 try
                 {
-                    // Semantic validation/regeneration can fail on rules/dependencies. Run it before
-                    // committing any replacement Solid3d so those blockers cannot leave a partial CAD rebuild.
-                    regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                    // Semantic validation/regeneration can fail on rules/dependencies. Regenerate only
+                    // the selected elements plus their transitive upstream dependencies before committing
+                    // any replacement Solid3d. Unrelated dirty/downstream elements stay outside this build.
+                    regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                        .RegenerateDirtySubset(project, regenerationScope);
 
                     var sourceType = NativeBuildCapability.IsWallCategory(category)
                         ? sourceSnapshots.Select(x => x.EntityType).Distinct(StringComparer.OrdinalIgnoreCase).Single()
@@ -187,6 +190,43 @@ namespace QS3D.BricsCAD.V25
             {
                 Report(document, "QS3DBUILD3D lỗi: " + ex.Message);
             }
+        }
+
+        private static IReadOnlyList<string> BuildRegenerationScope(
+            ProjectState project,
+            IReadOnlyCollection<ProjectElement> selectedElements)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (selectedElements == null) throw new ArgumentNullException(nameof(selectedElements));
+
+            var scope = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var pending = new Queue<ProjectElement>(selectedElements.Where(x => x != null));
+            while (pending.Count > 0)
+            {
+                var element = pending.Dequeue();
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("QS3DBUILD3D: regeneration scope contains a semantic element with an empty ID.");
+                if (!scope.Add(elementId)) continue;
+
+                foreach (var rawDependencyId in element.DependsOn)
+                {
+                    var dependencyId = (rawDependencyId ?? string.Empty).Trim();
+                    if (dependencyId.Length == 0)
+                        throw new InvalidOperationException("QS3DBUILD3D: semantic element " + elementId + " contains an empty dependency ID.");
+                    var dependency = project.FindElement(dependencyId);
+                    if (dependency == null)
+                        throw new InvalidOperationException(
+                            "QS3DBUILD3D: semantic dependency " + dependencyId + " referenced by " + elementId + " is missing. Run Health/repair dependencies before native rebuild.");
+                    pending.Enqueue(dependency);
+                }
+            }
+
+            return scope
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x, StringComparer.Ordinal)
+                .ToList()
+                .AsReadOnly();
         }
 
         private static Dictionary<string, string> CaptureGeneratedSolidHandles(ProjectState project, IEnumerable<string> elementIds)
