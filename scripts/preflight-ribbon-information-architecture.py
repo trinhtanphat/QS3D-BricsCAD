@@ -65,6 +65,18 @@ remove_calls = text.count("Remove(panels, legacyPanel);")
 if remove_calls != 1:
     errors.append("RibbonBootstrapper may remove only the one exact legacy flat QS3D panel path")
 
+reconcile_start = text.find("private static void ReconcileTab(object tabs, RibbonTabSpec tabSpec)")
+ensure_loop = text.find("foreach (var panelSpec in tabSpec.Panels)", reconcile_start)
+ensure_call = text.find("EnsurePanel(tabSpec, panelSpec, panels);", ensure_loop)
+retire_legacy = text.find('RemoveLegacyFlatPanel(panels, tabSpec.Id + "_PANEL_SOURCE");', ensure_call)
+add_fresh_tab = text.find("if (created)", retire_legacy)
+if min(reconcile_start, ensure_loop, ensure_call, retire_legacy, add_fresh_tab) < 0 or not (
+    reconcile_start < ensure_loop < ensure_call < retire_legacy < add_fresh_tab
+):
+    errors.append(
+        "Ribbon reconciliation must establish every grouped panel/button before retiring the exact legacy flat panel"
+    )
+
 required_tabs = {
     "QS3D_HOME": {"Dự án", "Điều phối", "Chất lượng"},
     "QS3D_PROJECT": {"Trạng thái", "Template", "Phạm vi"},
@@ -138,5 +150,6 @@ if errors:
 
 print(
     "PASS: fresh and already-loaded QS3D Ribbon states reconcile to the current named functional panels/buttons, "
-    "legacy flat QS3D panels are removed narrowly, unknown augmenter panels are preserved, and native command dispatch stays click-time active-document routed."
+    "legacy flat QS3D panels retire only after grouped reconciliation succeeds, unknown augmenter panels are preserved, "
+    "and native command dispatch stays click-time active-document routed."
 )
