@@ -20,7 +20,7 @@ def main():
         "var currentRow = ResolveCurrentRow(item, project);",
         "SourceHandleResolver.Resolve(project, currentRow.ElementIds)",
         "private QuantityReportRow ResolveCurrentRow(QuantityInsightItemViewModel item, ProjectState project)",
-        "var currentRows = ProjectQuantityReportBuilder.Group(project);",
+        "var currentRows = BuildPreviewRows(project, out _);",
         "SameElementIdentity(displayedIds, x)",
         "if (matches.Count != 1)",
         "if (!SameRow(displayedRow, matches[0]))",
@@ -46,11 +46,11 @@ def main():
         return 1
 
     resolve_method = text.find("private QuantityReportRow ResolveCurrentRow")
-    group_pos = text.find("ProjectQuantityReportBuilder.Group(project)", resolve_method)
-    match_pos = text.find("SameElementIdentity(displayedIds, x)", group_pos)
+    preview_pos = text.find("BuildPreviewRows(project, out _)", resolve_method)
+    match_pos = text.find("SameElementIdentity(displayedIds, x)", preview_pos)
     same_row_pos = text.find("if (!SameRow(displayedRow, matches[0]))", match_pos)
-    if min(resolve_method, group_pos, match_pos, same_row_pos) < 0 or not (
-        resolve_method < group_pos < match_pos < same_row_pos
+    if min(resolve_method, preview_pos, match_pos, same_row_pos) < 0 or not (
+        resolve_method < preview_pos < match_pos < same_row_pos
     ):
         print("ERROR: live row revalidation ordering is incomplete.")
         return 1
@@ -59,15 +59,16 @@ def main():
         "ProjectContextCoordinator.GetOrCreate",
         "ExistingProjectMutationContext.Require",
         "SourceHandleResolver.Resolve(project, item.ElementIds)",
+        "var currentRows = ProjectQuantityReportBuilder.Group(project);",
     ]
     found = [token for token in forbidden if token in text]
     if found:
-        print("ERROR: Quantity Insight locate must remain read-only and must not resolve stale item IDs directly:")
+        print("ERROR: Quantity Insight locate must remain read-only and must not resolve stale item IDs/direct live rows:")
         for token in found:
             print(" - forbidden:", token)
         return 1
 
-    print("PASS: Quantity Insight fails closed across DWG/project changes and revalidates the live grouped row before native CAD selection/zoom.")
+    print("PASS: Quantity Insight fails closed across DWG/project changes and revalidates the detached-preview live grouped row before native CAD selection/zoom.")
     return 0
 
 
