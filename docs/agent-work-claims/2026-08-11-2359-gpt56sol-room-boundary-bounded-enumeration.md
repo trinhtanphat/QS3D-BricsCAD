@@ -1,36 +1,39 @@
 # Work claim — Room boundary bounded enumeration
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-room-boundary-bounded-enumeration-20260811-2359`
 - Registered: `2026-08-11T23:59:00+07:00`
+- Completed: `2026-08-12T00:03:00+07:00`
 - Baseline main SHA: `2976e554568902964e6079c3fb0ed66c3fa5094a`
 - Priority: evidence-driven Core resource-bound hardening during owner-requested `continue all`
 
-## Reserved scope
+## Completed scope
 
-Make `RoomBoundaryEngine.Discover` enforce its existing `MaxInputSegments = 5000` contract while enumerating `IEnumerable<BoundarySegment>`, rather than after unrestricted materialization.
+`RoomBoundaryEngine.Discover` now enforces its existing `MaxInputSegments = 5000` contract while enumerating `IEnumerable<BoundarySegment>`, rather than after unrestricted materialization.
 
-## Expected surfaces
+## Changed surfaces
 
 - `src/QS3D.Core/Geometry/RoomBoundaryEngine.cs`
-- isolated focused Core smoke regression
-- this claim file for close-out
+- `tests/QS3D.Core.SmokeTests/RoomBoundaryEnumerationCapSmoke.cs`
+- this claim file
 
-## Concrete defect
+## Concrete defect fixed
 
-`Discover` currently calls `source.ToList()` before checking `segments.Count > MaxInputSegments`. A huge or non-terminating enumerable can therefore be consumed without limit before the declared 5,000-segment guard; broad-phase pair discovery, subdivision and graph processing occur only after that late check.
+`Discover` called `source.ToList()` before checking `segments.Count > MaxInputSegments`. A huge or non-terminating enumerable could therefore be consumed without limit before the declared 5,000-segment guard; broad-phase pair discovery, subdivision and graph processing all occurred only after that late check.
 
-## Explicit exclusions
+## Validation performed
 
-- No boundary geometry validation, pair broad-phase, cut/subdivision, graph/bridge/face tracing, boundary-key, minimum-area, Auto Room/native V25, UI, Actions, release, or LOCAL_PASS semantics changes.
+- Re-read remote source after implementation: input enumeration is now capped with `Take(MaxInputSegments + 1)` before materialization; the existing oversize rejection precedes segment validation and all broad-phase/subdivision/graph work.
+- Added isolated `ModuleInitializer` regression coverage with a non-terminating valid segment source that throws if item 5,002 is requested; oversize discovery rejects after exactly 5,001 yielded segments.
+- Re-read source and regression blobs from remote `main`; intended changes remain present.
+- No geometry validation, broad-phase, subdivision, graph/bridge/face tracing, boundary-key or minimum-area behavior was intentionally changed.
+- No GitHub Actions were run or dispatched. No local .NET/BricsCAD runtime PASS is claimed from this environment.
 
-## Validation plan
+## Implementation commits
 
-- Preserve all existing Room boundary behavior.
-- Add a non-terminating valid-segment enumerable that throws if item 5,002 is requested; verify oversize input is rejected after exactly 5,001 yielded segments, before per-segment validation/broad-phase work.
-- Re-fetch current source before implementation and do not overwrite concurrent edits.
-- No GitHub Actions will be dispatched and no BricsCAD runtime PASS will be claimed from this web session.
+- `22c4cc4bf1fa016f20d9330e094225526492d458` — `fix(room): bound boundary source enumeration`
+- `7dd7e9f22a425cb343387cb1a30eaa5bfb08e77c` — `test(room): guard boundary enumeration cap`
 
-## Completion condition
+## Result
 
-The 5,000-segment safety limit bounds enumeration/allocation as well as accepted cardinality, focused regression is integrated on current `main`, and this claim is marked `COMPLETED` with exact implementation SHA(s) and validation performed.
+The 5,000-segment Room boundary safety limit now bounds source enumeration/allocation as well as accepted cardinality before broad-phase and graph processing.
