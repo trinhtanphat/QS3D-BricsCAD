@@ -36,6 +36,12 @@ The aggregate runner discovers every `scripts/preflight-*.py` gate except itself
 
 `scripts/preflight.py` is intentionally run separately as the generic source guard; CI then runs the aggregate feature/repository-health gates.
 
+### Package hash-manifest integrity — `scripts/preflight-package-hash-manifest-coverage.py`
+
+Release package producers hash every regular package file except `SHA256SUMS.txt`. The installer mirrors that contract at the final mutation boundary: manifest names are case-insensitively unique and the manifest set must exactly equal the recursively enumerated regular package-file set (again excluding only the manifest itself). An unlisted file, stale manifest-only entry or case-colliding duplicate therefore fails before payload copy or DemandLoad registration.
+
+The secure updater keeps a separate outer boundary: it verifies the SHA-256 of the complete downloaded ZIP before extraction, validates archive safety, and only then delegates installation to the packaged installer. The package-integrity regression protects this producer → whole-ZIP hash → exact internal manifest coverage chain without duplicating the installer algorithm inside the updater.
+
 ## Command/UI wiring
 
 `scripts/preflight-command-wiring.py` collects QS3D `CommandMethod` registrations and checks command references from XAML buttons, Ribbon specs and simple UI dispatch paths. UI/Ribbon references must resolve to registered commands so multi-agent rename races do not become BricsCAD `Unknown command` failures.
