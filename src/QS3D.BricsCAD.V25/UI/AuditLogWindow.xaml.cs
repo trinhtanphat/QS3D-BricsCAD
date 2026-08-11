@@ -26,7 +26,15 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                {
+                    _rows = Array.Empty<AuditEvent>();
+                    if (Grid != null) Grid.ItemsSource = _rows;
+                    if (Summary != null) Summary.Text = "Chưa có QS3D project hiện hữu; Audit Log không tạo project mới.";
+                    Title = "QS3D • Nhật ký thay đổi • " + DrawingLabel(_document);
+                    return;
+                }
+
                 _rows = project.AuditEvents
                     .Where(x => x != null)
                     .OrderByDescending(x => x.Utc)
