@@ -29,6 +29,7 @@ else:
         'rollback.Restore(project)',
         'GeneratedGeometryService.RequireMatchingOwnership(',
         'element.SetProperty("QS3D.DirectDraw.Mode", "ReferenceLine")',
+        'CadGeometryGuard.Hypot(dx, dy, "Reference wall / planar length drawing units")',
     ]
     for needle in required:
         if needle not in text:
@@ -57,10 +58,11 @@ else:
         'reference.Handle',
         'result.ObjectId.Handle',
         'OpenMode.ForWrite) as Line',
+        'new Vector3d(dx, dy, 0d).Length',
     ]
     for needle in forbidden:
         if needle in text:
-            errors.append("reference-wall must not persist/mutate CAD reference identity: " + needle)
+            errors.append("reference-wall must not persist/mutate CAD reference identity or use unstable planar-length arithmetic: " + needle)
 
     rollback_index = text.find('var rollback = ProjectStateSnapshot.Capture(project);')
     create_source_index = text.find('sourceId = createSource();')
@@ -73,4 +75,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: reference-driven wall flow is read-only on the reference, dimension-first after selection, ownership-safe, and rollback-covered.")
+print("PASS: reference-driven wall flow is read-only on the reference, dimension-first after selection, numerically guarded, ownership-safe, and rollback-covered.")
