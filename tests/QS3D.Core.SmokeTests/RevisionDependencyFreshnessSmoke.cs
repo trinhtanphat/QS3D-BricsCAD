@@ -33,7 +33,7 @@ namespace QS3D.Core.SmokeTests
             var deltas = service.Compare(before, after);
             Require(deltas.Count == 1, "dependency-only mutation was not detected");
             var field = deltas[0].Fields.SingleOrDefault(x => string.Equals(x.Field, "Dependencies", StringComparison.Ordinal));
-            Require(field != null, "dependency-only mutation did not emit a Dependencies field delta");
+            if (field == null) throw new InvalidOperationException("dependency-only mutation did not emit a Dependencies field delta");
             Require(string.Equals(field.Before, "HOST-A", StringComparison.Ordinal), "unexpected dependency before value");
             Require(string.Equals(field.After, "HOST-B", StringComparison.Ordinal), "unexpected dependency after value");
         }

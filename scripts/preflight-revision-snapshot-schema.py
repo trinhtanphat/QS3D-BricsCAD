@@ -24,13 +24,15 @@ if not errors:
     required = [
         'ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc" }, new[] { "elements" })',
         'RequireAtMostOne(root, "elements")',
-        'ValidateElement(element, "element", new[] { "id", "category", "familyId", "floorId", "zoneId" }, new[] { "properties", "quantities", "sourceHandles" })',
+        'ValidateElement(element, "element", new[] { "id", "category", "familyId", "floorId", "zoneId" }, new[] { "properties", "quantities", "sourceHandles", "dependencies" })',
         'RequireAtMostOne(element, "properties")',
         'RequireAtMostOne(element, "quantities")',
         'RequireAtMostOne(element, "sourceHandles")',
+        'RequireAtMostOne(element, "dependencies")',
         'ValidateElement(property, "p", new[] { "name", "value" }, Array.Empty<string>())',
         'ValidateElement(quantity, "q", new[] { "name", "value" }, Array.Empty<string>())',
         'ValidateElement(handle, "h", new[] { "value" }, Array.Empty<string>())',
+        'ValidateElement(dependency, "d", new[] { "value" }, Array.Empty<string>())',
         'element.Name != expected',
         'attribute.IsNamespaceDeclaration || attribute.Name.Namespace != XNamespace.None || !attributes.Contains(attribute.Name)',
         'child.Name.Namespace != XNamespace.None || !children.Contains(child.Name)',
@@ -51,4 +53,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: revision XML load fails closed on foreign namespaces, unknown nodes/attributes/content, and duplicate singleton containers.")
+print("PASS: revision XML load fails closed on foreign namespaces, unknown nodes/attributes/content, dependency shape, and duplicate singleton containers.")

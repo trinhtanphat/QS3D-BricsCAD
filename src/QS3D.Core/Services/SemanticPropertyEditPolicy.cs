@@ -42,7 +42,7 @@ namespace QS3D.Core.Services
             return key;
         }
 
-        private static string EditBlockReason(string key)
+        private static string? EditBlockReason(string key)
         {
             if (SourceDerivedKeys.Contains(key) || key.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase))
                 return "Property is derived from CAD/source geometry and cannot be edited as a generic semantic property: ";
