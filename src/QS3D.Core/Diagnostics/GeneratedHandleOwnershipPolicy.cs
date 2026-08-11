@@ -94,16 +94,16 @@ namespace QS3D.Core.Diagnostics
             owner = null;
             propertyKey = string.Empty;
             if (normalized.Length == 0) return false;
+            EnsureUniqueElementIds(project);
 
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
                 foreach (var entry in EnumerateOwnerHandles(element))
                 {
                     if (!string.Equals(entry.Key, normalized, StringComparison.OrdinalIgnoreCase)) continue;
                     if (owner != null)
                     {
-                        var sameElement = string.Equals(owner.Id, element.Id, StringComparison.OrdinalIgnoreCase);
+                        var sameElement = ReferenceEquals(owner, element);
                         var sameLogicalSlot = AreSameLogicalOwnerSlots(propertyKey, entry.Value);
                         if (!sameElement || !sameLogicalSlot)
                             throw new InvalidOperationException("Generated CAD handle " + normalized + " is ambiguously claimed by " + owner.Id + "/" + propertyKey + " and " + element.Id + "/" + entry.Value + ".");
@@ -114,6 +114,18 @@ namespace QS3D.Core.Diagnostics
                 }
             }
             return owner != null;
+        }
+
+        private static void EnsureUniqueElementIds(ProjectState project)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null element entry.");
+                if (!seen.Add(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+            }
         }
 
         private static bool IsHostSolidAlias(string key) =>
