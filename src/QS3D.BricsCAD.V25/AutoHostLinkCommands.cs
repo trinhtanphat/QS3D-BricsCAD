@@ -146,18 +146,37 @@ namespace QS3D.BricsCAD.V25
                     }
                 }
 
-                PaletteCoordinator.RefreshProject();
                 var summary = "Auto Host: linked=" + linked + " • unchanged=" + unchanged + " • ambiguous=" + ambiguous + " • unmatched=" + unmatched + " • invalid=" + invalid;
                 if (regenerated > 0) summary += " • regen=" + regenerated;
-                PaletteCoordinator.SetStatus(summary);
-                document.Editor.WriteMessage("\nQS3D " + summary + ". Chạy QS3DCUTOPENINGS khi muốn áp physical boolean.");
+                FinalizeAutoHostUi(document, summary);
             }
             catch (System.Exception ex)
             {
-                var message = "QS3DAUTOLINKHOSTS lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                ReportAutoHostError(document, ex);
             }
+        }
+
+        private static void FinalizeAutoHostUi(Document document, string summary)
+        {
+            System.Exception? warning = null;
+            try { PaletteCoordinator.RefreshProject(); }
+            catch (System.Exception ex) { warning = ex; }
+            try { PaletteCoordinator.SetStatus(summary); }
+            catch (System.Exception ex) { if (warning == null) warning = ex; }
+            try { document.Editor.WriteMessage("\nQS3D " + summary + ". Chạy QS3DCUTOPENINGS khi muốn áp physical boolean."); }
+            catch (System.Exception ex) { if (warning == null) warning = ex; }
+            if (warning == null) return;
+            try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau Auto Host commit: " + warning.Message); }
+            catch { }
+        }
+
+        private static void ReportAutoHostError(Document document, System.Exception error)
+        {
+            var message = "QS3DAUTOLINKHOSTS lỗi: " + error.Message;
+            try { PaletteCoordinator.SetStatus(message); }
+            catch { }
+            try { document.Editor.WriteMessage("\n" + message); }
+            catch { }
         }
 
         internal static string LinkSingleOpening(Document document, ProjectState project, string openingId)
