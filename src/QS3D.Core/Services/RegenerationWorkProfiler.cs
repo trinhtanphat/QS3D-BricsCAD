@@ -24,6 +24,11 @@ namespace QS3D.Core.Services
             int directPlannedDependentCount)
         {
             if (orderIndex < 0) throw new ArgumentOutOfRangeException(nameof(orderIndex));
+            if (!Enum.IsDefined(typeof(ElementCategory), category)) throw new ArgumentOutOfRangeException(nameof(category));
+            if ((dirtyFlags & ~ElementDirtyFlags.All) != ElementDirtyFlags.None) throw new ArgumentOutOfRangeException(nameof(dirtyFlags));
+            if (dependencyDepth < 0) throw new ArgumentOutOfRangeException(nameof(dependencyDepth));
+            if (directPlannedDependencyCount < 0) throw new ArgumentOutOfRangeException(nameof(directPlannedDependencyCount));
+            if (directPlannedDependentCount < 0) throw new ArgumentOutOfRangeException(nameof(directPlannedDependentCount));
             OrderIndex = orderIndex;
             ElementId = string.IsNullOrWhiteSpace(elementId)
                 ? throw new ArgumentException("Regeneration work item element id is required.", nameof(elementId))
@@ -50,6 +55,7 @@ namespace QS3D.Core.Services
     {
         public RegenerationCategoryWork(ElementCategory category, int plannedElementCount, int semanticDirtyElementCount)
         {
+            if (!Enum.IsDefined(typeof(ElementCategory), category)) throw new ArgumentOutOfRangeException(nameof(category));
             if (plannedElementCount < 0) throw new ArgumentOutOfRangeException(nameof(plannedElementCount));
             if (semanticDirtyElementCount < 0 || semanticDirtyElementCount > plannedElementCount)
                 throw new ArgumentOutOfRangeException(nameof(semanticDirtyElementCount));
@@ -81,6 +87,7 @@ namespace QS3D.Core.Services
                 ? throw new ArgumentException("Project id is required.", nameof(projectId))
                 : projectId;
             if (sourceChangeVersion < 0L) throw new ArgumentOutOfRangeException(nameof(sourceChangeVersion));
+            if (!Enum.IsDefined(typeof(RegenerationWorkScope), scope)) throw new ArgumentOutOfRangeException(nameof(scope));
             if (projectElementCount < 0) throw new ArgumentOutOfRangeException(nameof(projectElementCount));
             if (dirtyProjectElementCount < 0 || dirtyProjectElementCount > projectElementCount)
                 throw new ArgumentOutOfRangeException(nameof(dirtyProjectElementCount));
