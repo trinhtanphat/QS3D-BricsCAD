@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             RehostRemovesLegacyPreviousHostVariants();
             UnlinkRemovesLegacyHostVariants();
             AmbiguousPreviousHostFailsBeforeMutation();
+            CanonicalRelinkIsSideEffectFree();
+            MissingHostUnlinkIsSideEffectFree();
         }
 
         private static void RelinkCollapsesLegacyDependencyVariants()
@@ -72,6 +74,45 @@ namespace QS3D.Core.SmokeTests
             Equal("WALL-A", unlinkOpening.Properties["HostWallId"]);
             Equal(1, unlinkOpening.DependsOn.Count);
             Equal("WALL-A", unlinkOpening.DependsOn.Single());
+        }
+
+        private static void CanonicalRelinkIsSideEffectFree()
+        {
+            var project = Project(out var wallA, out _, out var opening);
+            opening.Properties["HostWallId"] = wallA.Id;
+            opening.DependsOn.Add(wallA.Id);
+            opening.MarkClean(ElementDirtyFlags.All);
+            wallA.MarkClean(ElementDirtyFlags.All);
+            var version = project.ChangeVersion;
+            var audits = project.AuditEvents.Count;
+
+            new HostLinkService().LinkOpening(project, opening.Id, wallA.Id);
+
+            Equal(version, project.ChangeVersion);
+            Equal(audits, project.AuditEvents.Count);
+            Equal(ElementDirtyFlags.None, opening.Dirty);
+            Equal(ElementDirtyFlags.None, wallA.Dirty);
+            Equal(1, opening.DependsOn.Count);
+            Equal(wallA.Id, opening.DependsOn.Single());
+        }
+
+        private static void MissingHostUnlinkIsSideEffectFree()
+        {
+            var project = Project(out _, out var wallB, out var opening);
+            opening.DependsOn.Add(wallB.Id);
+            opening.MarkClean(ElementDirtyFlags.All);
+            wallB.MarkClean(ElementDirtyFlags.All);
+            var version = project.ChangeVersion;
+            var audits = project.AuditEvents.Count;
+
+            new HostLinkService().UnlinkOpening(project, opening.Id);
+
+            Equal(version, project.ChangeVersion);
+            Equal(audits, project.AuditEvents.Count);
+            Equal(ElementDirtyFlags.None, opening.Dirty);
+            Equal(ElementDirtyFlags.None, wallB.Dirty);
+            Equal(1, opening.DependsOn.Count);
+            Equal(wallB.Id, opening.DependsOn.Single());
         }
 
         private static ProjectState Project(out ProjectElement wallA, out ProjectElement wallB, out ProjectElement opening)
