@@ -21,7 +21,8 @@ if not errors:
         "ProjectInterchangeImportPreview.Plan(project, json)",
         "if (preview.CollisionCount == 0)",
         "ProjectInterchangeAppendOnlyImporter.Plan(project, json)",
-        "ProjectInterchangeAppendOnlyImporter.Import(project, json)",
+        "InterchangeConfirmationGuard.RequireFresh(",
+        "ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)",
         "ProjectInterchangeKeepTargetImporter.Plan(project, json)",
         "ProjectInterchangeKeepTargetImporter.Import(project, json)",
         "InterchangeUseSourceElementImportService.Plan(project, json)",
@@ -67,8 +68,6 @@ if not errors:
         if needle in c:
             errors.append(f"selector must delegate exactly one mutation policy instead of duplicating lower-layer behavior: {needle}")
 
-    # A selected route may reference all importer methods in separate helpers, but no helper/case may
-    # sequence multiple mutation services. Keep the dispatch branches one-call-only.
     switch_match = re.search(r"switch \(choice\.Value\)(.*?)default:", c, re.S)
     if not switch_match:
         errors.append("generic selector switch dispatch not found")
@@ -117,4 +116,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-import-selector: PASS")
-print("Generic import command routes explicitly to Append-only, KeepTarget, atomic all-scope UseSource, or one partial UseSource scope without duplicating/sequencing lower-layer mutation logic.")
+print("Generic import routes to one policy only; append-only revalidates project freshness before mutation and all lower-layer mutation boundaries remain delegated.")
