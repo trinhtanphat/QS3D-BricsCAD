@@ -144,7 +144,7 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            var requested = CanonicalTargetIds(elementIds);
+            var requested = CanonicalTargetIds(elementIds, project.Elements.Count);
             if (requested.Count == 0)
                 return Build(project, RegenerationWorkScope.Subset, Array.Empty<string>(), Array.Empty<ProjectElement>());
 
@@ -259,7 +259,7 @@ namespace QS3D.Core.Services
                 maxDepth);
         }
 
-        private static IReadOnlyList<string> CanonicalTargetIds(IEnumerable<string> elementIds)
+        private static IReadOnlyList<string> CanonicalTargetIds(IEnumerable<string> elementIds, int maxCount)
         {
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -271,8 +271,11 @@ namespace QS3D.Core.Services
                     throw new ArgumentException("Regeneration target id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                     throw new ArgumentException("Regeneration target id must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
-                if (!seen.Add(raw))
+                if (seen.Contains(raw))
                     throw new ArgumentException("Duplicate regeneration target id: " + raw + ".", nameof(elementIds));
+                if (result.Count >= maxCount)
+                    throw new ArgumentException("Regeneration profile target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                seen.Add(raw);
                 result.Add(raw);
                 index++;
             }
