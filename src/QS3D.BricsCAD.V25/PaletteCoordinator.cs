@@ -65,9 +65,9 @@ namespace QS3D.BricsCAD.V25
                 Dock = DockSides.Right,
                 Visible = false,
                 KeepFocus = false,
-                MinimumSize = new DrawingSize(280, 360)
+                MinimumSize = new DrawingSize(UserUiLayoutStore.QuantityPaletteMinWidth, UserUiLayoutStore.QuantityPaletteMinHeight)
             };
-            _quantityInsight.DeviceIndependentSize = new WpfSize(Math.Max(310, layout.RightPaletteWidth), layout.RightPaletteHeight);
+            _quantityInsight.DeviceIndependentSize = new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight);
             _quantityInsight.AddVisual("Khối lượng", _quantityInsightPanel, true);
         }
 
@@ -162,11 +162,12 @@ namespace QS3D.BricsCAD.V25
 
         private static void PersistPaletteLayout()
         {
-            if (_workspace == null && _right == null) return;
+            if (_workspace == null && _right == null && _quantityInsight == null) return;
             try
             {
                 var workspaceSize = _workspace?.DeviceIndependentSize;
                 var rightSize = _right?.DeviceIndependentSize;
+                var quantitySize = _quantityInsight?.DeviceIndependentSize;
                 UserUiLayoutStore.Update(layout =>
                 {
                     if (workspaceSize.HasValue)
@@ -178,6 +179,11 @@ namespace QS3D.BricsCAD.V25
                     {
                         layout.RightPaletteWidth = checked((int)Math.Round(rightSize.Value.Width, MidpointRounding.AwayFromZero));
                         layout.RightPaletteHeight = checked((int)Math.Round(rightSize.Value.Height, MidpointRounding.AwayFromZero));
+                    }
+                    if (quantitySize.HasValue)
+                    {
+                        layout.QuantityPaletteWidth = checked((int)Math.Round(quantitySize.Value.Width, MidpointRounding.AwayFromZero));
+                        layout.QuantityPaletteHeight = checked((int)Math.Round(quantitySize.Value.Height, MidpointRounding.AwayFromZero));
                     }
                 });
             }
