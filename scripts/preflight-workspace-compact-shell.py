@@ -70,6 +70,8 @@ if XAML.is_file():
         'Click="OnHealthClick"',
         'Click="OnSaveClick"',
         'PHẠM VI LÀM VIỆC',
+        'MÔ HÌNH',
+        'Content="Làm mới"',
         'FAMILY / TYPE',
         'THUỘC TÍNH',
         'ĐỐI TƯỢNG ĐANG CHỌN',
@@ -79,7 +81,7 @@ if XAML.is_file():
         if token not in xaml:
             errors.append("Workspace XAML contract missing: " + token)
 
-    for forbidden in ("<Viewport3D", "x:Class=\"QS3D.BricsCAD.V25.UI.RightPanel\""):
+    for forbidden in ("<Viewport3D", 'x:Class="QS3D.BricsCAD.V25.UI.RightPanel"'):
         if forbidden in xaml:
             errors.append("Workspace must not embed a parallel viewport/right-panel implementation: " + forbidden)
 
@@ -110,6 +112,17 @@ if PARTIAL.is_file():
         '"FAMILY / TYPE"',
         '"THUỘC TÍNH"',
         '"ĐỐI TƯỢNG ĐANG CHỌN"',
+        "TuneModelHeaderCollision()",
+        'FindButton("Làm mới")',
+        'string.Equals(text.Text, "MÔ HÌNH"',
+        "header.LastChildFill = false",
+        "DockPanel.SetDock(titleStack, Dock.Left)",
+        "DockPanel.SetDock(refreshButton, Dock.Right)",
+        "TextWrapping.NoWrap",
+        "TextTrimming.CharacterEllipsis",
+        "titleStack.MaxWidth = Math.Max(48, header.ActualWidth - refreshWidth - 7)",
+        "header.SizeChanged +=",
+        "refreshButton.SizeChanged +=",
     )
     for token in required_partial:
         if token not in partial:
@@ -125,9 +138,11 @@ if PARTIAL.is_file():
         "OnDeleteClick(",
         "OnQuantityClick(",
         "OnSaveClick(",
+        "Canvas.Set",
+        "Margin = new Thickness(-",
     ):
         if forbidden in partial:
-            errors.append("Workspace compact presentation must remain presentation-only: " + forbidden)
+            errors.append("Workspace compact presentation must remain presentation-only/collision-safe: " + forbidden)
 
 if DOC.is_file():
     doc = DOC.read_text(encoding="utf-8")
@@ -153,4 +168,8 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Workspace compact-shell preflight PASS: screenshot-inspired density is presentation-only, existing Workspace actions remain wired, and the BricsCAD viewport boundary is preserved.")
+print(
+    "Workspace compact-shell preflight PASS: screenshot-inspired density remains presentation-only, "
+    "the narrow MÔ HÌNH/Làm mới header reserves non-overlapping space, existing Workspace actions remain wired, "
+    "and the BricsCAD viewport boundary is preserved."
+)
