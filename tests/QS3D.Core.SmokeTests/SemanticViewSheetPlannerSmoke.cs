@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ViewFilteringIsDeterministic();
             ViewReferencesFailClosed();
             DuplicateProjectElementIdsFailClosed();
+            ViewCatalogDoesNotOverEnumeratePastBound();
             SheetCompositionIsDeterministic();
             SheetOverlapFailsClosed();
             SheetBoundsFailClosed();
@@ -23,6 +24,7 @@ namespace QS3D.Core.SmokeTests
             SheetIndexDoesNotOverEnumeratePastBound();
             TitleBlockParameterMapIsDeterministicAndImmutable();
             TitleBlockParameterMapFailsClosed();
+            TitleBlockParameterMapDoesNotOverEnumeratePastBound();
         }
 
         private static void ViewFilteringIsDeterministic()
@@ -63,6 +65,20 @@ namespace QS3D.Core.SmokeTests
             MustFail(
                 () => SemanticViewPlanner.Build(project, new SemanticViewDefinition("V1", "Ambiguous project")),
                 "Duplicate semantic element IDs must fail closed before view planning.");
+        }
+
+        private static void ViewCatalogDoesNotOverEnumeratePastBound()
+        {
+            MustFail(
+                () => SemanticViewPlanner.BuildCatalog(BuildProject(), OverBoundedViewDefinitions()),
+                "Semantic view catalog must stop enumeration as soon as its configured view bound is exceeded.");
+        }
+
+        private static IEnumerable<SemanticViewDefinition> OverBoundedViewDefinitions()
+        {
+            for (var i = 0; i <= 10000; i++)
+                yield return new SemanticViewDefinition("V-" + i, "View " + i);
+            throw new ApplicationException("Semantic view catalog enumerated beyond the first over-bound definition.");
         }
 
         private static void SheetCompositionIsDeterministic()
@@ -311,6 +327,26 @@ namespace QS3D.Core.SmokeTests
                     new SemanticTitleBlockParameterDefinition(" ", SemanticTitleBlockSheetField.SheetId)
                 }),
                 "Blank title-block destination tags must fail closed.");
+        }
+
+        private static void TitleBlockParameterMapDoesNotOverEnumeratePastBound()
+        {
+            var project = BuildProject();
+            var views = SemanticViewPlanner.BuildCatalog(project, new[] { new SemanticViewDefinition("V1", "Plan") });
+            var sheet = SemanticSheetPlanner.Build(
+                new SemanticSheetDefinition("SHEET-1", "A-101", "Plan", 420d, 297d, Array.Empty<SemanticSheetPlacementDefinition>()),
+                views);
+
+            MustFail(
+                () => SemanticTitleBlockParameterMapBuilder.Build(sheet, OverBoundedTitleBlockMappings()),
+                "Title-block parameter mapping must stop enumeration as soon as its configured bound is exceeded.");
+        }
+
+        private static IEnumerable<SemanticTitleBlockParameterDefinition> OverBoundedTitleBlockMappings()
+        {
+            for (var i = 0; i <= 128; i++)
+                yield return new SemanticTitleBlockParameterDefinition("TAG-" + i, SemanticTitleBlockSheetField.SheetId);
+            throw new ApplicationException("Title-block parameter mapping enumerated beyond the first over-bound definition.");
         }
 
         private static ProjectState BuildProject()
