@@ -30,13 +30,13 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Dependency graph contains duplicate semantic element id: " + element.Id);
                 nextElements.Add(element.Id, element);
 
-                foreach (var source in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)))
+                ValidateDependencies(element);
+                foreach (var source in element.DependsOn)
                 {
-                    var normalizedSource = source.Trim();
-                    if (!next.TryGetValue(normalizedSource, out var set))
+                    if (!next.TryGetValue(source, out var set))
                     {
                         set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        next[normalizedSource] = set;
+                        next[source] = set;
                     }
                     set.Add(element.Id);
                 }
@@ -100,6 +100,7 @@ namespace QS3D.Core.Services
             foreach (var element in elements)
             {
                 if (element == null) throw new InvalidOperationException("Dependency ordering cannot contain a null semantic element.");
+                ValidateDependencies(element);
                 if (element.Dirty != ElementDirtyFlags.None) list.Add(element);
             }
 
@@ -127,8 +128,8 @@ namespace QS3D.Core.Services
                     var frame = stack.Peek();
                     if (frame.NextDependencyIndex < frame.Element.DependsOn.Count)
                     {
-                        var dependencyId = (frame.Element.DependsOn[frame.NextDependencyIndex++] ?? string.Empty).Trim();
-                        if (dependencyId.Length == 0 || !byId.TryGetValue(dependencyId, out var dependency) || permanent.Contains(dependency.Id)) continue;
+                        var dependencyId = frame.Element.DependsOn[frame.NextDependencyIndex++];
+                        if (!byId.TryGetValue(dependencyId, out var dependency) || permanent.Contains(dependency.Id)) continue;
                         if (!temporary.Add(dependency.Id))
                             throw new InvalidOperationException("Dependency cycle detected at " + dependency.Id + ".");
                         stack.Push(new VisitFrame(dependency));
@@ -141,6 +142,24 @@ namespace QS3D.Core.Services
                 }
             }
             return result.AsReadOnly();
+        }
+
+        private static void ValidateDependencies(ProjectElement element)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var index = 0; index < element.DependsOn.Count; index++)
+            {
+                var dependency = element.DependsOn[index] ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(dependency))
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " contains a blank dependency at index " + index + ". Repair semantic relations before graph evaluation.");
+                if (!string.Equals(dependency, dependency.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " contains a non-canonical dependency at index " + index + ". Repair semantic relations before graph evaluation.");
+                if (!seen.Add(dependency))
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " contains duplicate dependency id: " + dependency + ". Repair semantic relations before graph evaluation.");
+            }
         }
     }
 }
