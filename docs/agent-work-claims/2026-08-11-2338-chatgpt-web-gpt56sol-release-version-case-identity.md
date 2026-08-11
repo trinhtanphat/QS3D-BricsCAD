@@ -1,40 +1,35 @@
 # Work claim — release version case identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release-version-case-identity`
 - Registered: `2026-08-11T23:38:00+07:00`
+- Completed: `2026-08-11T23:42:00+07:00`
 - Baseline main SHA: `0ab55e0e96e0a386bc76f5f8aedb432bf81fd43a`
-- Priority: owner-requested whole-repository review; close a verified identity mismatch where release code says product/tag versions must match exactly but compares them case-insensitively.
+- Priority: owner-requested whole-repository review; close a verified identity mismatch where release code said product/tag versions must match exactly but compared them case-insensitively.
 
 ## Reserved scope
 
 Make exact product-version and `v<productVersion>` identity comparisons ordinal/case-sensitive at the release package boundary and in the customer-release regression. SemVer prerelease identity must not silently treat `preview` and `PREVIEW` as the same release string. Preserve strict SemVer validation, version ordering semantics, assembly-version checks and existing workflow order.
 
-## Expected surfaces
+## Completed changes
 
-- `scripts/package-v25.ps1`
-- `scripts/preflight-customer-release.py`
-- `docs/HEALTH-AND-PREFLIGHT.md`
-- this claim file for close-out
+- `6a6ae20bd8907fa7e58d0ec63d18bf1e99ef0bbe` — changed only the plugin/Core product-version comparison and `RELEASE_TAG` comparison in `scripts/package-v25.ps1` from `OrdinalIgnoreCase` to `Ordinal`.
+- `64cbbb7d823cfd9bfa1733652d30160179048e28` — strengthened `scripts/preflight-customer-release.py` with exact-case identity model cases, exact current project-version comparison, required ordinal package tokens and a regression ban on `OrdinalIgnoreCase` in the shared package boundary.
+- `6dac8ae0fab07708d90a6ad577afe90fba51a5e6` — documented ordinal/case-sensitive release identity in `docs/HEALTH-AND-PREFLIGHT.md`.
 
-## Reviewed but not necessarily changed
+## Validation evidence
 
-- `.github/workflows/release-v25.yml`
-- `.github/workflows/release-v25-cloud.yml`
+- Inspected exact source commit `6a6ae20b...`; GitHub diff contains exactly two comparator changes and no packaging/build/hash/signature changes.
+- Regression model accepts identical `1.2.3-preview.2` product/Core/tag identity and rejects Core `1.2.3-PREVIEW.2` or tag `v1.2.3-PREVIEW.2` when source is lowercase.
+- Current plugin/Core versions remain the same exact string and strict SemVer; no source project version was changed.
+- Existing release workflows remain ordered through aggregate preflight and `package-v25.ps1` before publication, so the shared ordinal package boundary cannot be bypassed by their redundant case-insensitive display/validation checks.
+- One regression write encountered a transient `409` during concurrent `main` movement; the file was re-fetched and the update retried without force or overwriting other work.
+- No GitHub Actions were dispatched/re-run. No release was published and no licensed BricsCAD V25 runtime qualification was performed or claimed.
 
-Both workflows route publication through aggregate preflight and `package-v25.ps1`; workflow-local duplicate comparisons need not be the semantic authority if the shared boundary is strict and regression-protected.
+## Coordination / exclusions respected
 
-## Excluded scope
+No updater SemVer ordering, `src/**`, `tests/**`, workflow behavior, signing/package payload semantics or active feature lane was changed. Concurrent work was preserved with SHA-guarded writes and no force-push.
 
-- updater SemVer precedence/comparison logic, build metadata ordering, release numbering policy or changing current project version.
-- `src/**`, `tests/**`, active product lanes, signing/package payload logic, workflow dispatch/re-run and licensed V25 runtime qualification.
+## Result
 
-## Validation plan
-
-- Re-fetch target blobs and inspect exact diffs.
-- Regression must reject case-only differences between plugin/Core product version and between `RELEASE_TAG` and `v<productVersion>` while preserving valid exact matches.
-- Execute Python model/source regression where possible; no Actions dispatch.
-
-## Completion condition
-
-The shared release package boundary enforces true exact case-sensitive identity, regression/docs are on `main`, and this claim is marked `COMPLETED`.
+The repository's documented “exact” source/Core/tag release identity is now actually exact and case-sensitive at the mandatory package boundary. This lane is complete and released.
