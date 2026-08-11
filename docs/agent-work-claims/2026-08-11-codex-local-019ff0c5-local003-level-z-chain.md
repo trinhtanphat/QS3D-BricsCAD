@@ -50,6 +50,18 @@ This is a deliberately broad but single coherent vertical-placement lane because
 
 If a concurrent commit touches a required builder for another feature, this agent will re-read and preserve that implementation, limiting changes to vertical-placement consumption and its tests.
 
+## 2026-08-11 bounded exact-V25 compile prerequisite expansion
+
+Baseline observed before expansion: `origin/main@11486e0726727269df821603d12f202ebd56b412`.
+
+The exact-V25/Core gate is blocked before any Level-owned source compiles by two released-lane compatibility defects already present on current `main`. This claim therefore reserves only the minimum behavior-preserving repairs needed to unblock LOCAL-003 qualification:
+
+- `src/QS3D.Core/Persistence/QsdbProjectXmlSchemaValidator.cs`: make the already-required `name` attribute non-null to nullable flow analysis after the existing empty/whitespace rejection; do not change QSDB validation semantics.
+- `src/QS3D.Core/Geometry/CurtainFrameOpeningPlanner.cs`: replace `double.IsFinite(...)`, which is unavailable to the repository's `netstandard2.0` target, with equivalent NaN/Infinity checks; do not change Curtain geometry, bounds or exception policy.
+- validate with the existing focused smokes/preflights plus Core Release/smoke and V25 x64 Release build. Add only a narrowly necessary regression token if the current gates do not protect target-framework compatibility.
+
+The earlier claims for these exact surfaces are `COMPLETED` and released; current ACTIVE/BLOCKED claim audit found no owner for either file. This expansion excludes any broader persistence, Curtain topology, geometry-planning or refactor work. The prerequisite fixes will be committed with the coherent LOCAL-003 implementation batch, not as an unrelated feature stream.
+
 ## Completion condition
 
 The complete shared Level Z-chain is integrated on current `main`, deterministic tests/static guards pass, the exact-V25 build and required sanitized runtime matrix are recorded, `LOCAL-003` status/evidence is updated truthfully, no dependent family remains on a conflicting Z calculation, and this claim is marked `COMPLETED` with exact pushed SHA(s).
