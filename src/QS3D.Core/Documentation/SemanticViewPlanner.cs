@@ -105,8 +105,8 @@ namespace QS3D.Core.Documentation
             EnsureFilterIdsExist(excludeIds, elementIndex, "excluded");
 
             IEnumerable<ProjectElement> query = project.Elements;
-            if (floorId != null) query = query.Where(x => string.Equals(x.FloorId, floorId, StringComparison.OrdinalIgnoreCase));
-            if (zoneId != null) query = query.Where(x => string.Equals(x.ZoneId, zoneId, StringComparison.OrdinalIgnoreCase));
+            if (floorId != null) query = query.Where(x => string.Equals((x.FloorId ?? string.Empty).Trim(), floorId, StringComparison.OrdinalIgnoreCase));
+            if (zoneId != null) query = query.Where(x => string.Equals((x.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase));
             if (categories.Count > 0) query = query.Where(x => categories.Contains(x.Category));
             if (includeIds.Count > 0) query = query.Where(x => includeIds.Contains(x.Id));
             if (excludeIds.Count > 0) query = query.Where(x => !excludeIds.Contains(x.Id));
