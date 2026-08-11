@@ -8,6 +8,8 @@ namespace QS3D.Core.Reporting
 {
     public sealed class MaterialUsageRow
     {
+        public string ProjectId { get; set; } = string.Empty;
+        public string DrawingFingerprint { get; set; } = string.Empty;
         public string Floor { get; set; } = string.Empty;
         public string MaterialName { get; set; } = string.Empty;
         public string UnitHint { get; set; } = string.Empty;
@@ -20,6 +22,7 @@ namespace QS3D.Core.Reporting
         public double VolumeM3 { get; set; }
         public double MassKg { get; set; }
         public IList<string> ElementIds { get; } = new List<string>();
+        public IList<string> SourceHandles { get; } = new List<string>();
 
         public double PrimaryQuantity
         {
@@ -153,6 +156,8 @@ namespace QS3D.Core.Reporting
             {
                 row = new MaterialUsageRow
                 {
+                    ProjectId = project.ProjectId,
+                    DrawingFingerprint = project.DrawingFingerprint,
                     Floor = floor,
                     MaterialName = material,
                     UnitHint = units.TryGetValue(material, out var unit) ? unit : string.Empty,
@@ -169,6 +174,7 @@ namespace QS3D.Core.Reporting
             row.VolumeM3 = QuantityReportMath.Add(row.VolumeM3, metrics.VolumeM3, element.Id + "/material volume");
             row.MassKg = QuantityReportMath.Add(row.MassKg, metrics.MassKg, element.Id + "/material mass");
             row.ElementIds.Add(element.Id);
+            ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
         }
 
         private static string Effective(ProjectElement element, ProjectFamily? family, string key)
