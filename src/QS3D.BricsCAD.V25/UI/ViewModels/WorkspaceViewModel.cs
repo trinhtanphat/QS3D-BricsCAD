@@ -272,7 +272,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                     row.CanReset = hasInstance && !string.Equals(current, familyValue, StringComparison.Ordinal);
                     row.Value = ToDisplayValue(key, current);
                     row.Apply = value => ToDisplayValue(key, ApplyInstanceProperty(element, family, key, unit, row, value));
-                    row.Reset = () => row.Value = ToDisplayValue(key, familyValue);
+                    row.Reset = () => ResetInstanceProperty(element, family, key, row);
                 }
                 Properties.Add(row);
             }
@@ -402,6 +402,33 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 ? "Instance override: " + DisplayNameFor(key) + " = " + displayValue + (unit.Length > 0 ? " " + unit : string.Empty)
                 : "Đã đưa " + DisplayNameFor(key) + " về giá trị Family.";
             return next;
+        }
+
+        private void ResetInstanceProperty(ProjectElement element, ProjectFamily family, string key, PropertyRowViewModel row)
+        {
+            if (!TryGetCurrentProjectForMutation("Đặt lại Instance property", out var project)) return;
+
+            try
+            {
+                var ownedElement = project.FindElement(element.Id);
+                var ownedFamily = project.FindFamily(family.Id);
+                if (ownedElement == null || !ReferenceEquals(ownedElement, element) || ownedFamily == null || !ReferenceEquals(ownedFamily, family))
+                {
+                    Status = "Không thể đặt lại Instance vì lựa chọn đã stale hoặc không thuộc project đang mở.";
+                    return;
+                }
+                if (!ownedFamily.Properties.TryGetValue(key, out var liveFamilyRaw))
+                {
+                    Status = "Không thể đặt lại " + DisplayNameFor(key) + " vì property không còn tồn tại trên Family hiện hành. Hãy Refresh Workspace.";
+                    return;
+                }
+
+                row.Value = ToDisplayValue(key, liveFamilyRaw ?? string.Empty);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Status = "Không thể đặt lại Instance: " + ex.Message;
+            }
         }
 
         private bool TryGetCurrentProjectForMutation(string operation, out ProjectState project)

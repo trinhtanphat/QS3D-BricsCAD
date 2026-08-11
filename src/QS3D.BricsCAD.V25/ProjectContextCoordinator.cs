@@ -82,7 +82,7 @@ namespace QS3D.BricsCAD.V25
         public static string Save(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            var project = GetOrCreate(document, true);
+            var project = ExistingProjectMutationContext.Require(document, "Save Project");
             SyncDrawingIdentity(project, document);
             var path = GetProjectPath(document);
             if ((File.Exists(path) || File.Exists(path + ".bak")) && project.Metadata.TryGetValue(RecoveryRequiredKey, out var blocked) && string.Equals(blocked, "true", StringComparison.OrdinalIgnoreCase))
