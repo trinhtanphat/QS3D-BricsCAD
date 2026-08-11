@@ -2,19 +2,24 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: make `QS3DSUPPORTBUNDLE` publish its privacy-safe text report atomically without changing bundle contents or read-only/cancel behavior.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/SupportBundleCommands.cs`
   - `scripts/preflight-support-bundle-readonly.py`
   - `scripts/preflight-support-bundle-atomic-publish.py`
   - this claim file
-- Contract:
-  - keep SaveFileDialog confirmation before project access;
-  - keep `ProjectContextCoordinator.TryGetReadOnly` and the existing aggregate/version-only privacy payload;
-  - serialize/write to a unique same-directory temp, flush durable bytes, then replace an existing destination or move into a new destination;
-  - always clean leftover temp best-effort without masking the original publish error;
-  - never truncate/open the selected destination before temp write succeeds;
-  - reconcile the existing read-only/privacy preflight so it accepts the atomic publisher while preserving its cancel/read-only/privacy/UI ordering checks;
-  - post-write UI remains best-effort;
-  - no GitHub Actions dispatch and no BricsCAD V25 runtime PASS from this web session.
+- Implemented contract:
+  - SaveFileDialog confirmation remains before project access;
+  - `ProjectContextCoordinator.TryGetReadOnly` and the existing aggregate/version-only privacy payload are unchanged;
+  - support reports now write to a unique same-directory temp using UTF-8 without BOM, flush writer + durable file bytes, then replace an existing destination or move into a new destination;
+  - leftover temp cleanup is best-effort in `finally` and cannot mask the original publish failure;
+  - the selected destination is never opened/truncated before the temp write succeeds;
+  - the existing read-only/privacy preflight was reconciled from direct `File.WriteAllLines` to the atomic publisher while preserving cancel/read-only/privacy/UI ordering checks;
+  - post-write UI remains best-effort.
+- Source commit: `bc550049b4fc82268761d9feef4d3f47f4e55673` — `fix(support): publish support bundle atomically`.
+- Existing guard reconciliation: `97bae915b4fc35ba63bb32b5f60b9b9edd287243` — `test(support): align readonly guard with atomic publish`.
+- Atomic regression guard: `770746f9de840e6fc7681a6bb085b16eee2d8eb9` — `scripts/preflight-support-bundle-atomic-publish.py`.
+- Validation actually performed: connector-side exact source diff review, existing preflight source review/reconciliation, and atomic guard source review. Preflight scripts were not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.
