@@ -55,7 +55,12 @@
                                Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
                 </StackPanel>
                 <WrapPanel Grid.Column="1" VerticalAlignment="Center">
-                    <Button Content="Tính lại" Click="OnRefreshClick" Style="{StaticResource DenseButton}"/>
+                    <CheckBox x:Name="AutoRevealCheck" Content="Bám 3D" IsChecked="True"
+                              VerticalAlignment="Center" Margin="0,0,10,0"
+                              ToolTip="Khi bật, chọn một dòng Tường sẽ revalidate semantic hiện hành rồi chọn + zoom đối tượng tương ứng trong View 3D."/>
+                    <Button Content="Định vị 3D" Click="OnLocateClick" Style="{StaticResource DenseButton}"
+                            ToolTip="Revalidate dòng Tường hiện hành rồi chọn và zoom đối tượng CAD nguồn."/>
+                    <Button Content="Tính lại" Click="OnRefreshClick" Style="{StaticResource DenseButton}" Margin="8,0,0,0"/>
                     <Button Content="Xuất Excel" Click="OnExportClick" Style="{StaticResource AccentButton}" Margin="8,0,0,0"/>
                 </WrapPanel>
             </Grid>
@@ -108,6 +113,7 @@
                         </DockPanel>
                     </Border>
                     <ListBox x:Name="WallList" Grid.Row="1" SelectionChanged="OnWallSelectionChanged"
+                             MouseDoubleClick="OnWallListDoubleClick"
                              BorderThickness="0" HorizontalContentAlignment="Stretch">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
@@ -193,7 +199,7 @@
                     <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" CornerRadius="5" Padding="10"
                             BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1">
                         <TextBlock x:Name="SelectedNoteText"
-                                   Text="Khối lượng lấy từ cùng một pipeline ProjectQuantityReportBuilder.Detail; cửa sổ này không có công thức tính riêng."
+                                   Text="Khối lượng dùng pipeline chung. Bật Bám 3D để chọn một dòng và đối chiếu trực tiếp trong View 3D."
                                    Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
                     </Border>
                 </Grid>
@@ -208,6 +214,7 @@
                 </Border>
                 <DataGrid x:Name="TakeoffGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
                           CanUserAddRows="False" SelectionMode="Single" SelectionChanged="OnGridSelectionChanged"
+                          MouseDoubleClick="OnGridDoubleClick"
                           HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderThickness="0" FrozenColumnCount="4">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="42"/>
