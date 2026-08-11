@@ -1,39 +1,44 @@
 # Work claim — Quantity revision summary null-row integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-revision-null-row`
 - Registered: `2026-08-12T00:19:00+07:00`
+- Completed: `2026-08-12T00:22:00+07:00`
 - Baseline main SHA: `fa73d76c8d76de5c53ebaa458a492d4b1716f0f0`
+- Reservation commit: `f5f2ec2295c464f65b7ce7fb6209f2c094a0cf44`
 - Priority: P2 — malformed public revision report input must not be silently dropped from summary processing.
 
-## Confirmed defect
+## Defect fixed
 
-`QuantityRevisionReport.Summarize(IEnumerable<QuantityRevisionRow>)` currently begins with `rows.Where(x => x != null && !string.IsNullOrWhiteSpace(x.QuantityName))`. A null row is therefore silently ignored. This differs from other current Core collection boundaries, which fail closed on null entries, and can hide corruption in caller-supplied review data.
+`QuantityRevisionReport.Summarize(IEnumerable<QuantityRevisionRow>)` previously began with `rows.Where(x => x != null && !string.IsNullOrWhiteSpace(x.QuantityName))`, so a null row was silently ignored. This could hide corruption in caller-supplied review data.
 
-Rows with a blank `QuantityName` are intentionally retained as ignorable element-only add/remove rows and must continue to be skipped. Only null collection entries become invalid.
+Summary preprocessing now walks the input explicitly, rejects a null row with its index, and still skips non-null rows whose `QuantityName` is blank so element-only add/remove rows retain their prior behavior.
 
 ## Reserved scope
 
 - `src/QS3D.Core/Revisions/QuantityRevisionReport.cs`
-- `tests/QS3D.Core.SmokeTests/QuantityRevisionSummaryNullRowSmoke.cs` (new auto-registered focused smoke)
+- `tests/QS3D.Core.SmokeTests/QuantityRevisionSummaryNullRowSmoke.cs`
 - this claim file
 
-## Intended contract
+## Published commits
 
-- `Summarize(...)` rejects a null row with `ArgumentException` and identifies its input index.
-- Blank-quantity rows remain ignored exactly as before.
-- Valid grouping, case-insensitive quantity names, finite/overflow math, ordering, and report build behavior remain unchanged.
+- `f844e03d38827b6b4986f60b21d4bf517a32245a` — reject null summary rows before grouping while preserving blank-quantity filtering.
+- `32cdb7d547b95a42e3367a6385dfff395b1f6b9e` — add isolated auto-registered smoke covering null rejection, blank-row behavior, and case-insensitive aggregation.
 
-## Coordination
+## Delivered contract
 
-Recent revision claims cover capture IDs, snapshot payloads, dependencies and canonical identities. No current claim was found for `QuantityRevisionReport.Summarize` null-entry handling.
+- A null `QuantityRevisionRow` cannot disappear silently from summary input.
+- Blank `QuantityName` rows remain intentionally ignored.
+- Valid grouping, case-insensitive quantity names, finite/overflow math, ordering, and report build behavior are unchanged.
 
-## Validation plan
+## Validation notes
 
-- Add focused auto-registered smoke for null-row rejection, continued blank-name skipping, and normal case-insensitive aggregation.
-- Re-fetch source before update, SHA-guard write, inspect exact diffs, and close this claim.
-- No GitHub Actions dispatch; no executable .NET or BricsCAD V25 runtime PASS claim from this hosted environment.
+- Exact source/test diffs were fetched after publication and are limited to reserved surfaces.
+- The first source write encountered a concurrent 409; the target file was re-fetched, verified unchanged semantically, and the retry used the current blob without force-push or overwrite.
+- Dedicated smoke auto-registers via `ModuleInitializer`; no shared test registry was edited.
+- No GitHub Actions dispatch.
+- This hosted environment does not provide the repository .NET/BricsCAD V25 qualification toolchain, so executable/native runtime PASS is not claimed.
 
 ## Completion condition
 
-Null summary rows can no longer disappear silently, valid summary semantics are preserved, regression is on `main`, and this claim is closed.
+Satisfied for the remote-safe source/static contract. Exact executable/native qualification remains separate.
