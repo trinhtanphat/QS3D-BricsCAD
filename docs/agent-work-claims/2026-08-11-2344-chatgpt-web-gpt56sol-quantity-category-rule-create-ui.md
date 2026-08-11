@@ -19,12 +19,12 @@
 - do not persist until the existing `Lưu Cài Đặt` flow;
 - after creation, refresh category choices and the intersection browser without synthesizing intersection rules.
 
-## Expected surfaces
+## Actual implementation surfaces
 
 - `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.xaml`
-- `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.xaml.cs`
+- `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.CategoryRuleCreation.cs` — isolated partial-class behavior, keeping the already busy base code-behind untouched.
 - `scripts/preflight-quantity-category-rule-create-ui.py`
-- this claim file for close-out
+- this claim file for close-out/corrected evidence
 
 ## Explicit exclusions
 
@@ -36,14 +36,14 @@
 
 ## Implementation evidence
 
-- `37d2eefc4accf5eb8671823b856cbaa1549e0934` — implementation commit on `agent/chatgpt-rule-category-ui-20260811-2344`: added the contextual category-rule creation action, conservative default row creation, read-only/duplicate/cancel guards, refresh behavior and focused static preflight.
-- `4522f04ba9b845a7bdb64dc936d118a0cdaa3ca2` — PR #546 squash-merged the complete implementation onto `main` as `feat(quantity): create missing category rules in setup UI (#546)`.
-- The merge changes only the two Quantity Settings WPF source files plus the focused static preflight; Core quantity arithmetic/storage, Build3D and concurrent ownership lanes were not modified.
+- `37d2eefc4accf5eb8671823b856cbaa1549e0934` — implementation commit on `agent/chatgpt-rule-category-ui-20260811-2344`.
+- PR #546 (`feat(quantity): create missing category rules in setup UI`) was merged to `main`; the authoritative merge commit is `c4bddd92b2e932f3bb87cd865acab6fe52633058`.
+- The merge adds the focused partial class and preflight plus the WPF surface changes; Core quantity arithmetic/storage, Build3D and concurrent ownership lanes remain untouched.
 
 ## Validation actually performed
 
-- Reviewed the exact implementation source and merge patch after push.
-- Verified missing category candidates are derived from selected intersection source/target codes absent from `CategoryRows`, and existing category codes cannot be duplicated.
+- Reviewed the exact implementation source and merged PR patch after push.
+- Verified missing category candidates are derived from intersection source/target codes absent from `CategoryRows`, and existing category codes cannot be duplicated.
 - Verified future-schema read-only state disables/blocks creation before confirmation.
 - Verified confirmed creation appends exactly one in-memory category row with `ExtractSide=false`, `ExtractBottom=false`, `FaceAngleThresholdDeg=30d`, then rebuilds the intersection browser.
 - Verified the handler does not call `_store.Save`, Import/Export, project lifecycle APIs, CAD transactions/selections or direct JSON/file writes; persistence remains the existing Save action.
@@ -52,7 +52,11 @@
 
 ## Coordination
 
-Concurrent Core quantity, project-session recovery, Build3D/geometry, release, persistence and other agent lanes remained outside this scope. High `main` churn was handled by rebasing the prepared content onto current `main`, then merging PR #546 without force-pushing or overwriting concurrent work.
+Concurrent Core quantity, project-session recovery, Build3D/geometry, release, persistence and other agent lanes remained outside this scope. High `main` churn was handled through a dedicated branch + PR merge without force-pushing or overwriting concurrent work.
+
+## Evidence correction
+
+A prior close-out revision referenced `4522f04ba9b845a7bdb64dc936d118a0cdaa3ca2` as the PR #546 merge SHA. That SHA belongs to an unrelated concurrent template-import commit. This correction records the GitHub PR metadata source of truth: PR #546 head `37d2eefc4accf5eb8671823b856cbaa1549e0934`, merge commit `c4bddd92b2e932f3bb87cd865acab6fe52633058`.
 
 ## Completion condition
 
