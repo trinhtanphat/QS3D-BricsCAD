@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             ProductAndTimeWindowsAreEnforced();
             FeatureDelimiterIsRejected();
             CanonicalTokenWhitespaceIsRejected();
+            NamespacedLicenseRootsAreRejected();
             DtdLicenseIsRejected();
         }
 
@@ -76,6 +77,26 @@ namespace QS3D.Core.SmokeTests
             var paddedFeature = License();
             paddedFeature.Features.Add(" admin ");
             Throws<InvalidDataException>(() => paddedFeature.CanonicalPayload());
+        }
+
+        private static void NamespacedLicenseRootsAreRejected()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-license-namespace-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var defaultNamespacePath = Path.Combine(directory, "default-namespace.qslic");
+                File.WriteAllText(defaultNamespacePath, "<qs3dLicense xmlns='urn:unexpected' schema='1' id='x' customer='c' product='p' nonce='n'><valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/><signature algorithm='RSA-SHA256'>AA==</signature></qs3dLicense>");
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(defaultNamespacePath));
+
+                var prefixedNamespacePath = Path.Combine(directory, "prefixed-namespace.qslic");
+                File.WriteAllText(prefixedNamespacePath, "<x:qs3dLicense xmlns:x='urn:unexpected' schema='1' id='x' customer='c' product='p' nonce='n'><valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/><signature algorithm='RSA-SHA256'>AA==</signature></x:qs3dLicense>");
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(prefixedNamespacePath));
+            }
+            finally
+            {
+                try { Directory.Delete(directory, true); } catch { }
+            }
         }
 
         private static void DtdLicenseIsRejected()

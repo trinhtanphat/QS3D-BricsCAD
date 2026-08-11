@@ -141,7 +141,9 @@ namespace QS3D.Core.Licensing
                 document = XDocument.Load(reader, LoadOptions.None);
 
             var root = document.Root ?? throw new InvalidDataException("License has no root element.");
-            if (!string.Equals(root.Name.LocalName, "qs3dLicense", StringComparison.Ordinal)) throw new InvalidDataException("Invalid QS3D license root.");
+            if (!string.IsNullOrEmpty(root.Name.NamespaceName) ||
+                !string.Equals(root.Name.LocalName, "qs3dLicense", StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid QS3D license root.");
             if (!string.Equals(Required(root, "schema"), "1", StringComparison.Ordinal)) throw new InvalidDataException("Unsupported QS3D license schema.");
 
             var valid = root.Element("valid") ?? throw new InvalidDataException("License is missing validity data.");
