@@ -1,40 +1,52 @@
 # Work claim — Quantity Settings health export
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-settings-health-export`
 - Registered: `2026-08-11T22:24:00+07:00`
+- Completed: `2026-08-11T22:29:00+07:00`
 - Baseline main SHA observed: `254e97aa0535d2a1cf85a1a979821f03d63d7f42`
+- Claim commit: `c41ac047b2ea9c46eef34437af9989928a6c574c`
 - Priority: P1 — make the completed matrix diagnostics portable for local qualification/support without exporting the machine settings path or mutating project/drawing/settings state.
 
-## Reserved scope
+## Delivered scope
 
-- `src/QS3D.Core/Reporting/QuantityCalculationMatrixDiagnosticSnapshot.cs` (new)
-- `tests/QS3D.Core.SmokeTests/QuantityCalculationMatrixDiagnosticSnapshotSmoke.cs` (new)
-- `tests/QS3D.Core.SmokeTests/QuantityCalculationMatrixDiagnosticSnapshotSmokeRegistration.cs` (new)
-- `src/QS3D.BricsCAD.V25/QuantitySettingsDiagnosticExportCommands.cs` (new)
-- `scripts/preflight-quantity-settings-diagnostics-export.py` (new)
-- this claim file for close-out
+- `src/QS3D.Core/Reporting/QuantityCalculationMatrixDiagnosticSnapshot.cs`
+- `tests/QS3D.Core.SmokeTests/QuantityCalculationMatrixDiagnosticSnapshotSmoke.cs`
+- `tests/QS3D.Core.SmokeTests/QuantityCalculationMatrixDiagnosticSnapshotSmokeRegistration.cs`
+- `src/QS3D.BricsCAD.V25/QuantitySettingsDiagnosticExportCommands.cs`
+- `scripts/preflight-quantity-settings-diagnostics-export.py`
+- this claim file
 
-## Contract
+## Implemented contract
 
-- Build an immutable portable snapshot from validated Quantity Settings via `QuantityCalculationMatrixDiagnostics.Analyze(...)`.
-- Snapshot contains schema version, observed codes, intersection-only codes, unreferenced category-rule codes, existing/expected directed-rule counts, completeness and every missing directed pair.
-- Unknown integer category codes must remain exact; A -> B and B -> A remain distinct.
-- Snapshot must contain no machine settings path, project/drawing identity, user identity, timestamps, CAD handles or inferred category mappings.
-- Add modal command `QS3DQSETTINGSHEALTHEXPORT` that loads through `QuantitySettingsStore.Load()`, builds the snapshot, asks for a destination JSON path, and serializes only that snapshot.
-- Export command may write only the user-selected diagnostics file. It must not call settings Save/Export/Import, project lifecycle APIs, CAD transactions or drawing mutation.
+- Added immutable externally read-only portable snapshot types for schema version, observed codes, intersection-only codes, unreferenced category-rule codes, existing/expected directed-rule counts, matrix completeness and every missing directed pair.
+- Snapshot creation clones/validates Quantity Settings and delegates matrix analysis to `QuantityCalculationMatrixDiagnostics.Analyze(...)`; unknown integer category codes stay exact and directed pair ordering is preserved.
+- Added `QuantityCalculationMatrixDiagnosticSnapshotExporter` using `DataContractJsonSerializer`; the serialized schema contains only matrix diagnostic data and no settings path, project/drawing identity, user identity, timestamps, CAD handles or inferred native category mapping.
+- Added modal BricsCAD command `QS3DQSETTINGSHEALTHEXPORT`: Load settings -> create sanitized snapshot -> show Save dialog -> write only the selected JSON file. The command reports only the output file name plus matrix counts on the command line.
+- The command never writes through `QuantitySettingsStore.Save/Export`, never creates/binds a QS3D project, never opens a CAD transaction and never mutates the drawing.
 
-## Excluded scope
+## Product commits
 
-- No edits to existing Quantity Settings WPF/store/core settings files, report builders, CAD geometry, Ribbon/updater/release or GitHub Actions.
-- No native-runtime PASS claim from this remote session.
+- `39fcfe4c3a308a2971b4e9b75af8620a5d94872d` — `feat(quantity): add portable matrix diagnostic snapshot`
+- `3d0af15b6187d112e78cfc123fe5a3fee13dd58e` — `test(quantity): cover portable matrix diagnostic snapshot`
+- `a65a150c0a586128e3d857f3b130893af8979452` — `test(quantity): register matrix diagnostic snapshot smoke`
+- `7824812f4389aeb23dd587320624dc9a75adc9c9` — `feat(quantity): export sanitized settings health snapshot`
+- `7cbf69f26c40a4042d73ede4de0d5e32f7bd1bc4` — `test(quantity): guard sanitized settings health export`
 
-## Validation plan
+## Validation evidence
 
-- Core smoke covers exact deterministic snapshot content, directed missing pairs, unknown codes and defensive caller non-mutation.
-- Focused source preflight guards Load -> snapshot -> save-dialog -> JSON-write ordering and forbids settings/project/drawing writes or sensitive identity fields.
-- Re-fetch final files from latest `main` and preserve concurrent winners.
+- Re-fetched final snapshot implementation, V25 export command, smoke and focused preflight from current `main` after concurrent repository movement; the registered files remained intact.
+- Core smoke source covers exact unknown-code preservation (`1301`, `1302`), deterministic directed missing-pair content, JSON field presence, explicit sensitive-field absence and caller non-mutation.
+- Focused preflight requires Load -> snapshot -> Save dialog -> selected-file write ordering, and rejects settings-store writes/import/export, project lifecycle access, CAD transactions/geometry, process launch and sensitive identity fields.
+- Two create operations encountered GitHub 409 because `main` advanced concurrently; each was retried only after confirming the target new file remained absent, so concurrent winners were preserved without overwrite/force push.
+- A direct public `git clone` was attempted only to run local Core validation, but the execution container could not resolve `github.com`; therefore no local smoke/preflight execution is claimed from this session.
+- No GitHub Actions were dispatched. No licensed BricsCAD runtime PASS is claimed.
 
-## Completion condition
+## Remaining boundary
 
-- Local/support workflows can export one sanitized JSON integrity report from BricsCAD without exposing the settings location or changing QS3D/drawing state.
+- The exported health JSON is diagnostic only; it does not expose or repair rule values and does not infer engineering semantics.
+- Native CAD intersection measurement, face/contact classification, engulf behavior, multiple-overlap precedence and double-deduction prevention remain the next real parity boundary requiring authoritative reference behavior plus local V25 qualification rather than remote inference.
+
+## Completion
+
+Reservation released. Local/support workflows can now export a sanitized portable Quantity Settings matrix-health JSON directly from BricsCAD without exposing the machine settings location or changing QS3D/drawing state.

@@ -55,6 +55,8 @@ namespace QS3D.Core.SmokeTests
 
         private static void RuleDrivenRegeneration()
         {
+            Throws<ArgumentOutOfRangeException>(() => new QuantityRule("invalid-category", (ElementCategory)999, "Bad", "1", "1"));
+
             var project = NewBeamProject();
             project.QuantityRules.Add(new QuantityRule("beam-double", ElementCategory.Beam, "DoubleVolume", "NetVolumeM3*2", "1"));
             var element = project.Elements.Single(); element.MarkDirty(ElementDirtyFlags.All);
