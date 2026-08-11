@@ -1,46 +1,52 @@
 # Work claim — Right Panel compact interactions
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-right-panel-compact-interactions-20260811-2118`
 - Registered: `2026-08-11T21:18:00+07:00`
+- Completed: `2026-08-11T21:26:00+07:00`
 - Baseline main SHA: `d032fbb0699d6f03ec17f55304a59af88fd1af39`
+- Claim registration commit: `586ff531f50a9ca71162fe7c9622e6329995dfbc`
 - Priority: P0 source correctness + P1 screenshot parity
 
-## Why this lane exists
+## Source defect fixed
 
-The current `RightPanel.xaml` advertises `PreviewKeyDown="OnRightPanelPreviewKeyDown"` and a `Ctrl+F` layer-search shortcut, but the current `RightPanel.xaml.cs` has no `OnRightPanelPreviewKeyDown` implementation. That is a source-level WPF callback defect and also leaves the advertised keyboard workflow incomplete. The owner-provided BLT3D reference also favors a compact drawing/layer manager, so this lane adds presentation-only density without changing Xref/layer business behavior.
+`RightPanel.xaml` declares `PreviewKeyDown="OnRightPanelPreviewKeyDown"` and advertises `Ctrl+F`, while the audited `RightPanel.xaml.cs` had no implementation of that callback. The delivered `RightPanel.Keyboard.cs` partial restores the WPF callback contract without duplicating Xref/layer business logic.
 
-## Reserved scope
+## Delivered behavior
 
-- `src/QS3D.BricsCAD.V25/UI/RightPanel.Keyboard.cs` — new partial implementing the existing XAML keyboard callback only.
-- `src/QS3D.BricsCAD.V25/UI/RightPanel.CompactShell.cs` — new idempotent presentation-only compact/density layer over existing named controls.
-- `scripts/preflight-right-panel-compact-interactions.py` — focused auto-discovered source contract.
-- `docs/UI-RIGHT-PANEL-COMPACT-INTERACTIONS-2026-08-11.md` — focused screenshot mapping/qualification note.
-- this claim file for close-out.
+- `9db576528f640ccc5d5e9654f146ae57f6424b56` — implemented `OnRightPanelPreviewKeyDown`:
+  - `Ctrl+F` focuses/selects the existing `LayerSearchBox`;
+  - `F5` delegates to the existing `OnRefreshClick` handler;
+  - `Esc` clears a non-empty layer filter first, otherwise delegates to the existing clear-layer-selection and clear-drawing/Xref-selection handlers.
+- `41396dedfafdee7ac073b4c01e9498bc27068d63` — added `RightPanel.CompactShell.cs`, an idempotent presentation-only layer that:
+  - compacts the drawing region to a 238-DIP preferred / 145-DIP minimum height;
+  - preserves a larger flexible layer region;
+  - gives drawing/layer lists explicit minimum working areas;
+  - enables preview resizing on the existing splitter;
+  - strengthens section-title hierarchy and surfaces Ctrl+F/F5/Esc hints without new decorative actions.
+- `7777c7aa6dd4c327ec7ebe9aca308ef4f4b187b7` — added the focused screenshot-mapping/qualification note.
+- `3c3f4d5a101f5ef92955769e2020ee849f1fb3d0` — added `scripts/preflight-right-panel-compact-interactions.py`, guarding callback uniqueness, existing real action bindings, keyboard delegation and presentation-only boundaries.
 
-`RightPanel.xaml` and `RightPanel.xaml.cs` are read/contract surfaces and should remain unchanged unless a source-proven integration blocker makes a direct edit unavoidable.
+## Integration
 
-## Functional contract
+- PR: `#463` — `fix(ui): restore and compact RightPanel interactions`.
+- Integrated main commit: `19a40ff629122a0e2258c3a7a066a945e380a033`.
+- PR changed exactly four implementation files: the keyboard partial, compact-shell partial, focused preflight and focused UI note.
+- Re-fetched moving `main` at `2c88e13dc1ade4a68b8696b8b90b6181fed6324d`; compare from the integration commit reported `ahead`, `behind_by=0`, with the only later change being an unrelated coordination-preflight claim. The RightPanel batch therefore remains an ancestor and was not replaced by the immediately following concurrent commit.
 
-- Implement the already-declared `OnRightPanelPreviewKeyDown` callback in the same partial class.
-- `Ctrl+F` focuses/selects the real `LayerSearchBox`; `F5` calls the real existing refresh handler; `Esc` clears the layer search first, otherwise clears panel selections/CAD implied Xref selection through the existing real handlers.
-- Do not create duplicate Xref/layer mutation code. Existing attach/reload/move/detach/window, visibility, lock and selection handlers remain the single behavior paths.
-- Compact drawing/layer sections for a narrow right-docked palette, strengthen list minimum working space and section hierarchy, and surface shortcut hints without adding decorative/stub controls.
-- Keep all styling presentation-only: no CAD command sender, project state, reporting, quantity formulas, Xref service or layer mutation service in the compact-shell partial.
+## Coordination / exclusions honored
 
-## Coordination / exclusions
+No edits were made to `RightPanel.xaml`, `RightPanel.xaml.cs`, `PaletteCoordinator.cs`, `QuantityInsightPanel*`, `WallQuantityWindow*`, `QuantitySummaryWindow*`, `WorkspacePanel*`, Ribbon, Start Center, Project Tools, Core reporting/persistence/semantic mutation, updater/release/signing or GitHub Actions. Active quantity-description 3D-locate and wall-quantity viewport-locate work remained untouched.
 
-- Do not touch `PaletteCoordinator.cs`, `QuantityInsightPanel*`, `WallQuantityWindow*`, `QuantitySummaryWindow*`, `WorkspacePanel*`, Ribbon, Start Center, Project Tools, Core reporting/persistence/semantic mutation, updater/release/signing or GitHub Actions.
-- The active quantity-description 3D locate and wall-quantity viewport-locate claims remain untouched.
-- No native BricsCAD V25/WPF/HiDPI PASS claim from this remote connector session; existing local qualification boundaries remain authoritative.
+## Validation evidence
 
-## Validation plan
+- Audited the current RightPanel XAML and full code-behind before implementation and verified the callback was declared but absent.
+- Source-reviewed the new keyboard and compact-shell partials after branch commits.
+- PR #463 reported mergeable and was merged successfully with expected head `3c3f4d5a101f5ef92955769e2020ee849f1fb3d0`.
+- The focused preflight is auto-discoverable under `scripts/preflight-*.py`; it was source-reviewed but not executed because this GitHub connector session has no repository checkout/runtime attached.
+- No GitHub Actions workflow was dispatched.
+- No licensed BricsCAD V25/WPF/HiDPI runtime PASS is claimed; native dock/focus/render verification remains under the repository's existing local qualification boundary.
 
-- Re-fetch current `main`, RightPanel XAML/code-behind and neighboring active claims before integration.
-- Add a static gate proving the XAML callback has exactly one implementation, keyboard routes delegate to existing handlers, compact presentation remains mutation-free, and existing Xref/layer action bindings stay present.
-- Source-review the focused gate and final diff. Do not dispatch GitHub Actions.
-- Integrate by PR/fast-forward-safe merge on current `main`; never force push.
+## Completion
 
-## Completion condition
-
-The missing RightPanel keyboard callback is source-fixed, the narrow docked drawing/layer palette is compacted without duplicating behavior, the focused regression guard is on `main`, and this claim is closed with exact implementation/integration SHAs and truthful validation evidence.
+The missing RightPanel keyboard callback is source-fixed, the narrow drawing/layer palette is compacted using the existing real handlers and controls, the focused regression guard is on `main`, and this claim is closed with exact implementation/integration SHAs.

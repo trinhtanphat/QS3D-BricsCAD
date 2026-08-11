@@ -95,8 +95,7 @@ namespace QS3D.Core.Formulas
                 var value = ParseExpression(0);
                 SkipWhiteSpace();
                 if (_index != _text.Length) throw Error($"Unexpected token '{_text[_index]}'.");
-                if (double.IsNaN(value) || double.IsInfinity(value)) throw Error("Expression produced a non-finite result.");
-                return value;
+                return EnsureFinite(value, "Expression produced a non-finite result.");
             }
 
             private double ParseExpression(int depth)
@@ -106,8 +105,8 @@ namespace QS3D.Core.Formulas
                 while (true)
                 {
                     SkipWhiteSpace();
-                    if (Match('+')) value += ParseTerm(depth);
-                    else if (Match('-')) value -= ParseTerm(depth);
+                    if (Match('+')) value = EnsureFinite(value + ParseTerm(depth), "Addition produced a non-finite result.");
+                    else if (Match('-')) value = EnsureFinite(value - ParseTerm(depth), "Subtraction produced a non-finite result.");
                     else return value;
                 }
             }
@@ -118,12 +117,12 @@ namespace QS3D.Core.Formulas
                 while (true)
                 {
                     SkipWhiteSpace();
-                    if (Match('*')) value *= ParseUnary(depth);
+                    if (Match('*')) value = EnsureFinite(value * ParseUnary(depth), "Multiplication produced a non-finite result.");
                     else if (Match('/'))
                     {
                         var divisor = ParseUnary(depth);
                         if (divisor == 0d) throw Error("Division by zero.");
-                        value /= divisor;
+                        value = EnsureFinite(value / divisor, "Division produced a non-finite result.");
                     }
                     else return value;
                 }
@@ -133,7 +132,7 @@ namespace QS3D.Core.Formulas
             {
                 SkipWhiteSpace();
                 if (Match('+')) return ParseUnary(depth + 1);
-                if (Match('-')) return -ParseUnary(depth + 1);
+                if (Match('-')) return EnsureFinite(-ParseUnary(depth + 1), "Unary negation produced a non-finite result.");
                 return ParsePrimary(depth);
             }
 
@@ -153,7 +152,7 @@ namespace QS3D.Core.Formulas
                     var name = ParseIdentifier();
                     SkipWhiteSpace();
                     if (Match('(')) return ParseFunction(name, depth + 1);
-                    if (_variables.TryGetValue(name, out var value)) return value;
+                    if (_variables.TryGetValue(name, out var value)) return EnsureFinite(value, $"Variable '{name}' contains a non-finite value.");
                     throw Error($"Unknown variable '{name}'.");
                 }
                 throw Error("Expected a number, variable, function, or parenthesized expression.");
@@ -178,30 +177,30 @@ namespace QS3D.Core.Formulas
                 Expect(')');
                 switch (name.ToLowerInvariant())
                 {
-                    case "abs": RequireArgCount(name, args, 1); return Math.Abs(args[0]);
-                    case "ceil": RequireArgCount(name, args, 1); return Math.Ceiling(args[0]);
-                    case "floor": RequireArgCount(name, args, 1); return Math.Floor(args[0]);
+                    case "abs": RequireArgCount(name, args, 1); return EnsureFinite(Math.Abs(args[0]), "abs produced a non-finite result.");
+                    case "ceil": RequireArgCount(name, args, 1); return EnsureFinite(Math.Ceiling(args[0]), "ceil produced a non-finite result.");
+                    case "floor": RequireArgCount(name, args, 1); return EnsureFinite(Math.Floor(args[0]), "floor produced a non-finite result.");
                     case "round":
-                        if (args.Count == 1) return Math.Round(args[0], MidpointRounding.AwayFromZero);
+                        if (args.Count == 1) return EnsureFinite(Math.Round(args[0], MidpointRounding.AwayFromZero), "round produced a non-finite result.");
                         if (args.Count == 2)
                         {
                             var digitsValue = args[1];
                             var roundedDigits = Math.Round(digitsValue, MidpointRounding.AwayFromZero);
                             if (digitsValue < 0d || digitsValue > 15d || Math.Abs(digitsValue - roundedDigits) > 1e-12)
                                 throw Error("round(value, digits) requires an integer digits argument from 0 to 15.");
-                            return Math.Round(args[0], (int)roundedDigits, MidpointRounding.AwayFromZero);
+                            return EnsureFinite(Math.Round(args[0], (int)roundedDigits, MidpointRounding.AwayFromZero), "round produced a non-finite result.");
                         }
                         throw Error("round expects 1 or 2 arguments.");
                     case "min":
                         RequireAtLeast(name, args, 1);
                         var min = args[0];
                         for (var i = 1; i < args.Count; i++) min = Math.Min(min, args[i]);
-                        return min;
+                        return EnsureFinite(min, "min produced a non-finite result.");
                     case "max":
                         RequireAtLeast(name, args, 1);
                         var max = args[0];
                         for (var i = 1; i < args.Count; i++) max = Math.Max(max, args[i]);
-                        return max;
+                        return EnsureFinite(max, "max produced a non-finite result.");
                     default: throw Error($"Unknown function '{name}'.");
                 }
             }
@@ -241,6 +240,12 @@ namespace QS3D.Core.Formulas
                     else break;
                 }
                 return _text.Substring(start, _index - start);
+            }
+
+            private double EnsureFinite(double value, string message)
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value)) throw Error(message);
+                return value;
             }
 
             private void GuardDepth(int depth)
