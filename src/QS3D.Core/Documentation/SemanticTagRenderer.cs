@@ -71,7 +71,11 @@ namespace QS3D.Core.Documentation
             for (var index = 0; index < source.Length;)
             {
                 var open = source.IndexOf('{', index);
+                var strayClose = source.IndexOf('}', index);
+                if (strayClose >= 0 && (open < 0 || strayClose < open))
+                    throw new FormatException("Semantic tag template has an unexpected closing brace at character " + strayClose + ".");
                 if (open < 0) break;
+
                 var close = source.IndexOf('}', open + 1);
                 if (close < 0) throw new FormatException("Semantic tag template has an unclosed token at character " + open + ".");
                 if (source.IndexOf('{', open + 1, close - open - 1) >= 0)
