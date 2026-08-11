@@ -129,7 +129,8 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (frameCount > MaxFramesPerElement) throw new InvalidOperationException(element.Id + " cần " + frameCount + " curtain frame fragment solids, vượt giới hạn native " + MaxFramesPerElement + ". Tăng panel size, giảm opening hoặc chia vách.");
                         if (batchFrames > MaxFramesPerBatch - frameCount) throw new InvalidOperationException("Curtain frame batch vượt giới hạn " + MaxFramesPerBatch + " solid.");
 
-                        ErasePrevious(document, transaction, project, element, ownership);
+                        var previous = ValidatePrevious(document, transaction, project, element, ownership);
+                        ErasePrevious(transaction, project, element, previous);
                         var angle = CadGeometryGuard.Finite(Math.Atan2(uy, ux), element.Id + "/curtain angle");
                         var baseZ = CadGeometryGuard.Add(line.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/curtain base Z");
                         var update = new PendingUpdate
@@ -296,19 +297,59 @@ namespace QS3D.BricsCAD.V25.Cad
             finally { solid?.Dispose(); }
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element, GeneratedCurtainFrameOwnershipGuard.OwnershipIndex ownership)
+        private static IReadOnlyList<KeyValuePair<string, ObjectId>> ValidatePrevious(
+            Document document,
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement element,
+            GeneratedCurtainFrameOwnershipGuard.OwnershipIndex ownership)
         {
-            if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
-            foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
+            if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw))
+                return Array.Empty<KeyValuePair<string, ObjectId>>();
+
+            var expected = new List<KeyValuePair<string, string>>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var token in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                ownership.EnsureOwned(handle, element);
-                var ids = CadHandleService.Resolve(document, new[] { handle });
-                if (ids.Count == 0) continue;
-                if (ids.Count > 1) throw new InvalidOperationException("Generated curtain frame handle " + handle + " resolves to multiple live CAD objects.");
-                var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
-                if (entity == null || entity.IsErased) continue;
-                if (!(entity is Solid3d solid)) throw new InvalidOperationException("Generated curtain frame handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
-                GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(solid, project, element, "erase generated curtain LINE frame " + handle);
+                var original = token.Trim();
+                if (original.Length == 0) continue;
+                ownership.EnsureOwned(original, element);
+                var canonical = CadHandleService.NormalizeHexHandle(original);
+                if (canonical == null)
+                    throw new InvalidOperationException("Generated curtain LINE frame metadata contains an invalid handle. Refusing destructive replacement before any frame is erased: " + original + ".");
+                if (seen.Add(canonical)) expected.Add(new KeyValuePair<string, string>(canonical, original));
+            }
+            if (expected.Count == 0)
+                throw new InvalidOperationException("Generated curtain LINE frame metadata contains no valid handles. Refusing destructive replacement before any frame is erased.");
+
+            var ids = CadHandleService.Resolve(document, expected.Select(x => x.Key));
+            if (ids.Count != expected.Count)
+                throw new InvalidOperationException("Generated curtain LINE frame live-handle set is incomplete. Refusing destructive replacement before any frame is erased.");
+
+            var result = new List<KeyValuePair<string, ObjectId>>(expected.Count);
+            for (var i = 0; i < expected.Count; i++)
+            {
+                var entity = transaction.GetObject(ids[i], OpenMode.ForRead, false) as Entity;
+                if (!(entity is Solid3d solid) || solid.IsErased)
+                    throw new InvalidOperationException("Generated curtain LINE frame is missing, erased, or not a Solid3d. Refusing destructive replacement before any frame is erased: " + expected[i].Key + ".");
+                GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(solid, project, element, "validate generated curtain LINE frame " + expected[i].Key);
+                result.Add(new KeyValuePair<string, ObjectId>(expected[i].Key, ids[i]));
+            }
+            return result;
+        }
+
+        private static void ErasePrevious(
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement element,
+            IReadOnlyList<KeyValuePair<string, ObjectId>> previous)
+        {
+            foreach (var item in previous)
+            {
+                var entity = transaction.GetObject(item.Value, OpenMode.ForWrite, false) as Entity;
+                if (!(entity is Solid3d solid) || solid.IsErased)
+                    throw new InvalidOperationException("Generated curtain LINE frame changed after validation. Refusing partial destructive replacement: " + item.Key + ".");
+                GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(solid, project, element, "erase generated curtain LINE frame " + item.Key);
                 solid.Erase();
             }
         }
