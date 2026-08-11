@@ -43,21 +43,31 @@ if COMMANDS.is_file():
         'ReadGuardedSnapshotText(dialog.FileName)',
         'ProjectInterchangeJsonValidator.MaxFileBytes',
         'new UTF8Encoding(false, true)',
+        'var project = ProjectContextCoordinator.GetOrCreate(document);',
         'ProjectInterchangeImportPreview.Plan(project, json)',
         'preview.CollisionCount > 0',
         'ProjectInterchangeAppendOnlyImporter.Plan(project, json)',
         'MessageBoxButton.YesNo',
-        'var currentProject = ProjectContextCoordinator.GetOrCreate(document);',
-        'currentProject.ChangeVersion != previewChangeVersion',
+        'var currentProject = InterchangeConfirmationGuard.RequireFresh(',
+        'previewChangeVersion,',
+        '"Interchange Append"',
         'ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)',
         'Chưa tự lưu .qsdb',
     ):
         if token not in text:
             errors.append("interchange append command missing safety/freshness token: " + token)
+    if text.count('ProjectContextCoordinator.GetOrCreate(document)') != 1:
+        errors.append("standalone append may bootstrap only its reviewed target before preview; post-confirmation reacquisition must be non-creating")
     if 'File.ReadAllText(dialog.FileName)' in text:
         errors.append("append command must not re-read the selected file through an unbounded second path")
     if '[CommandMethod("QS3DINTERCHANGEIMPORT"' in text:
         errors.append("dedicated append command source must remain separate from the generic policy selector")
+    preview_bind = text.find('var project = ProjectContextCoordinator.GetOrCreate(document);')
+    confirmation = text.find('MessageBoxButton.YesNo')
+    freshness = text.find('var currentProject = InterchangeConfirmationGuard.RequireFresh(')
+    mutation = text.find('ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)')
+    if min(preview_bind, confirmation, freshness, mutation) < 0 or not preview_bind < confirmation < freshness < mutation:
+        errors.append("standalone append lifecycle must be target bootstrap/review -> confirmation -> non-creating freshness guard -> mutation")
 
 if PROJECT_TOOLS.is_file():
     text = PROJECT_TOOLS.read_text(encoding="utf-8")
@@ -87,7 +97,7 @@ if REGISTRATION.is_file() and 'ProjectInterchangeAppendOnlyImporterSmoke.Run();'
 
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
-    for token in ('QS3DINTERCHANGEAPPEND', 'does **not** copy', 'Still open for issue #84'):
+    for token in ('QS3DINTERCHANGEAPPEND', 'does **not** copy', 'Still open for issue #84', 'InterchangeConfirmationGuard.RequireFresh'):
         if token not in text:
             errors.append("append-only import documentation missing boundary token: " + token)
 

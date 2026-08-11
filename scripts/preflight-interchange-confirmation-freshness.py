@@ -24,13 +24,15 @@ if APPEND.is_file():
     for token in [
         "previewChangeVersion = project.ChangeVersion",
         "ProjectContextCoordinator.GetOrCreate(document)",
-        "ReferenceEquals(currentProject, project)",
-        "currentProject.ChangeVersion != previewChangeVersion",
-        "changed after preview",
+        "var currentProject = InterchangeConfirmationGuard.RequireFresh(",
+        "project,\n                    previewChangeVersion",
+        '"Interchange Append"',
         "ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)",
     ]:
         if token not in text:
             errors.append(str(APPEND.relative_to(ROOT)) + " missing append freshness guard token: " + token)
+    if text.count("ProjectContextCoordinator.GetOrCreate(document)") != 1:
+        errors.append(str(APPEND.relative_to(ROOT)) + " may bootstrap only the reviewed target before preview; post-confirmation freshness must be non-creating")
 
 # Import-As-New preview is intentionally non-creating and freshness-binds to semantic stamps rather
 # than ProjectState object identity, so a cache replacement cannot make an old preview authoritative.

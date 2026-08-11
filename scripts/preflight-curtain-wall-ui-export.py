@@ -49,8 +49,12 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs": [
         "GeneratedCurtainFrameOwnershipGuard.Build(project)", "CurtainWallDetailPlanner.Plan", "CurtainFrameDepthM",
-        "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192", "ownership.EnsureOwned", "Refusing destructive replacement",
+        "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192",
+        "ValidatePrevious(document, transaction, project, element, ownership)",
+        "ownership.EnsureOwned(original, element)",
         "GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership",
+        "ErasePrevious(transaction, project, element, previous)",
+        "Refusing destructive replacement before any frame is erased",
         "GeneratedCurtainFrameHandles", "ClearGeneratedCurtainFrameStale();",
     ],
     "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml": [
@@ -97,4 +101,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Curtain Hub is source-DWG-bound, summary arithmetic fails closed, native frame ownership/stale rebuild safety, frame health, schedule grouping and real XLSX export are present.")
+print("PASS: Curtain Hub is source-DWG-bound, summary arithmetic fails closed, exact-set native frame replacement/ownership safety, frame health, schedule grouping and real XLSX export are present.")
