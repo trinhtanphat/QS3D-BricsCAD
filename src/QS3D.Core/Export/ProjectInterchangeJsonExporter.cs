@@ -20,6 +20,7 @@ namespace QS3D.Core.Export
             if (project == null) throw new ArgumentNullException(nameof(project));
             ValidateProjectIdentity(project);
             ProjectInterchangeSemanticReferenceValidator.Validate(project);
+            ValidateSemanticCollections(project);
 
             var json = new StringBuilder(32768);
             json.Append("{\n");
@@ -206,6 +207,16 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(project.ProjectId)) throw new InvalidDataException("Interchange export requires a project id.");
             if (project.SchemaVersion <= 0) throw new InvalidDataException("Interchange export requires a positive project schema version.");
+        }
+
+        private static void ValidateSemanticCollections(ProjectState project)
+        {
+            if (project.Zones.Any(x => x == null))
+                throw new InvalidDataException("Interchange export Zones contains a null entry.");
+            if (project.Floors.Any(x => x == null))
+                throw new InvalidDataException("Interchange export Floors contains a null entry.");
+            if (project.Families.Any(x => x == null))
+                throw new InvalidDataException("Interchange export Families contains a null entry.");
         }
 
         private static void Property(StringBuilder json, int indent, string name, string value, bool comma)
