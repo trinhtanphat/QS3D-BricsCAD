@@ -130,6 +130,30 @@ namespace QS3D.Core.SmokeTests
             element = AddElement(project);
             element.SourceHandles.Add("   ");
             RejectSave(project, "Blank source handle was silently dropped during persistence.");
+
+            project = NewProject("duplicate-handle-exact");
+            element = AddElement(project);
+            element.SourceHandles.Add("1A");
+            element.SourceHandles.Add("1A");
+            RejectSave(project, "Exact duplicate source handles were persisted even though the QSDB reader rejects them.");
+
+            project = NewProject("duplicate-handle-case");
+            element = AddElement(project);
+            element.SourceHandles.Add("1A");
+            element.SourceHandles.Add("1a");
+            RejectSave(project, "Case-only duplicate source handles were persisted even though source identity is case-insensitive.");
+
+            project = NewProject("duplicate-dependency-exact");
+            element = AddElement(project);
+            element.DependsOn.Add("E2");
+            element.DependsOn.Add("E2");
+            RejectSave(project, "Exact duplicate dependency ids were persisted even though the QSDB reader rejects them.");
+
+            project = NewProject("duplicate-dependency-case");
+            element = AddElement(project);
+            element.DependsOn.Add("E2");
+            element.DependsOn.Add("e2");
+            RejectSave(project, "Case-only duplicate dependency ids were persisted even though dependency identity is case-insensitive.");
         }
 
         private static void NullAuditEventFailsClosed()
