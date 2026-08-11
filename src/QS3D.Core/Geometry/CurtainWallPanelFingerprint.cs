@@ -81,6 +81,9 @@ namespace QS3D.Core.Geometry
             Positive(piece.HeightM, nameof(piece.HeightM));
             Finite(piece.X_M + piece.WidthM, "panel right");
             Finite(piece.Z_M + piece.HeightM, "panel top");
+            var area = piece.WidthM * piece.HeightM;
+            if (double.IsNaN(area) || double.IsInfinity(area))
+                throw new OverflowException("Curtain panel fingerprint piece area must remain finite.");
             return piece;
         }
 
