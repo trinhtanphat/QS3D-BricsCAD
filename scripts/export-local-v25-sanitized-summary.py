@@ -9,6 +9,23 @@ SHA40 = re.compile(r"^[0-9a-fA-F]{40}$")
 SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._/+:-]{1,160}$")
 ALLOWED_STATUS = {"PASS", "FAIL", "SKIPPED", "NOT_RUN", "FAIL_OR_INCOMPLETE"}
+SAFE_STEP_NAMES = frozenset(
+    {
+        "Exact Git SHA / clean tree",
+        "Manual-only CI policy",
+        "Generic source preflight",
+        "Aggregate feature preflights",
+        "Core Release build",
+        "Core deterministic smoke suite",
+        "BricsCAD V25 adapter Release build",
+        "Offline WPF theme / Workspace / RightPanel smoke",
+        "Licensed V25 NETLOAD / Ribbon / Palette runtime probe",
+        "Build local V25 package",
+        "Authenticode sign packaged executable payload",
+        "Verify Authenticode signer and trusted timestamp",
+        "Finalize signed package metadata / hashes / ZIP",
+    }
+)
 
 
 def safe_token(value, fallback="(not recorded)"):
@@ -21,6 +38,13 @@ def safe_token(value, fallback="(not recorded)"):
 def normalized_status(value, fallback="UNKNOWN"):
     text = str(value or "").strip().upper()
     return text if text in ALLOWED_STATUS else fallback
+
+
+def sanitized_step_name(value, ordinal):
+    text = str(value or "").strip()
+    if text in SAFE_STEP_NAMES:
+        return text
+    return f"Step {ordinal} (redacted label)"
 
 
 def yes_no(value):
@@ -90,11 +114,10 @@ def build_summary(report):
     steps = report.get("steps")
     if isinstance(steps, list):
         lines.extend(["", "## Automated steps", "", "| Step | Status |", "|---|---|"])
-        for item in steps:
+        for ordinal, item in enumerate(steps, start=1):
             if not isinstance(item, dict):
                 continue
-            name = str(item.get("name") or "Unnamed step").replace("|", "\\|")
-            name = " ".join(name.split())[:180]
+            name = sanitized_step_name(item.get("name"), ordinal)
             step_status = normalized_status(item.get("status"))
             lines.append(f"| {name} | **{step_status}** |")
 
