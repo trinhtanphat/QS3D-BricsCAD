@@ -10,10 +10,12 @@ namespace QS3D.Core.SmokeTests
         {
             CaptureRejectsNonFiniteQuantities();
             CaptureRejectsDuplicateElementIds();
+            CaptureRejectsPaddedReferenceIds();
             QuantityDiffRejectsOverflow();
             SummaryRejectsOverflow();
             DuplicateElementIdsAreRejected();
             PaddedElementIdsAreRejected();
+            CompareRejectsPaddedReferenceIds();
         }
 
         private static void CaptureRejectsNonFiniteQuantities()
@@ -31,6 +33,24 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(new ProjectElement("E1", ElementCategory.Beam, string.Empty, "f", "z"));
             project.Elements.Add(new ProjectElement("e1", ElementCategory.Beam, string.Empty, "f", "z"));
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "duplicate-capture"));
+        }
+
+        private static void CaptureRejectsPaddedReferenceIds()
+        {
+            var familyProject = NewProject();
+            var familyElement = new ProjectElement("E-FAMILY", ElementCategory.Beam, string.Empty, "f", "z") { FamilyId = " F1 " };
+            familyProject.Elements.Add(familyElement);
+            Throws<InvalidOperationException>(() => new RevisionService().Capture(familyProject, "padded-family"));
+
+            var floorProject = NewProject();
+            var floorElement = new ProjectElement("E-FLOOR", ElementCategory.Beam, string.Empty, "f", "z") { FloorId = " f " };
+            floorProject.Elements.Add(floorElement);
+            Throws<InvalidOperationException>(() => new RevisionService().Capture(floorProject, "padded-floor"));
+
+            var zoneProject = NewProject();
+            var zoneElement = new ProjectElement("E-ZONE", ElementCategory.Beam, string.Empty, "f", "z") { ZoneId = " z " };
+            zoneProject.Elements.Add(zoneElement);
+            Throws<InvalidOperationException>(() => new RevisionService().Capture(zoneProject, "padded-zone"));
         }
 
         private static void QuantityDiffRejectsOverflow()
@@ -76,6 +96,26 @@ namespace QS3D.Core.SmokeTests
             var empty = new RevisionSnapshot { Id = "empty", CreatedUtc = DateTime.UtcNow };
             Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(collision, empty));
             Throws<InvalidOperationException>(() => new RevisionService().Compare(collision, empty));
+        }
+
+        private static void CompareRejectsPaddedReferenceIds()
+        {
+            var canonical = Snapshot("canonical-references", "E1", 1d);
+            canonical.Elements[0].FamilyId = "F1";
+            canonical.Elements[0].FloorId = "FLOOR-1";
+            canonical.Elements[0].ZoneId = "ZONE-1";
+
+            var paddedFamily = Snapshot("padded-family-reference", "E1", 1d);
+            paddedFamily.Elements[0].FamilyId = " F1 ";
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(paddedFamily, canonical));
+
+            var paddedFloor = Snapshot("padded-floor-reference", "E1", 1d);
+            paddedFloor.Elements[0].FloorId = " FLOOR-1 ";
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(paddedFloor, canonical));
+
+            var paddedZone = Snapshot("padded-zone-reference", "E1", 1d);
+            paddedZone.Elements[0].ZoneId = " ZONE-1 ";
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(paddedZone, canonical));
         }
 
         private static RevisionSnapshot Snapshot(string id, string elementId, double quantity)
