@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Reporting
@@ -56,7 +57,7 @@ namespace QS3D.Core.Reporting
                 var familyName = family?.Name ?? familyId;
                 var category = ScheduleCategory(element);
                 var hostId = element.Properties.TryGetValue("HostWallId", out var hostRaw) ? (hostRaw ?? string.Empty).Trim() : string.Empty;
-                var key = string.Join("\u001f",
+                var key = GroupKey(
                     floorId,
                     category,
                     familyId,
@@ -92,6 +93,19 @@ namespace QS3D.Core.Reporting
 
             foreach (var row in rows.Values) row.HostCount = row.HostIds.Count;
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static string GroupKey(params string[] tokens)
+        {
+            var key = new StringBuilder();
+            foreach (var raw in tokens)
+            {
+                var token = raw ?? string.Empty;
+                key.Append(token.Length.ToString(CultureInfo.InvariantCulture))
+                    .Append(':')
+                    .Append(token);
+            }
+            return key.ToString();
         }
 
         private static string ScheduleCategory(ProjectElement element)
