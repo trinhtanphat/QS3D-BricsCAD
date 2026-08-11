@@ -63,6 +63,8 @@ The active BQ/modeless, Quantity Insight, Wall Quantity, Updater and Ribbon augm
 - PASS: Core Release build with 0 warnings/errors and full Core smoke `ALL PASS`.
 - Local V25 adapter build proves the owned Zone/Family/Model Health nullable errors are gone. The remaining errors are confined to active Updater, Quantity Insight, Workspace compact-shell and Wall Quantity claims; those files were not touched here.
 - Aggregate remains externally red on README manual-only/product-boundary markers plus active Quantity Insight/Ribbon gate drift. No GitHub Actions were dispatched.
+- Follow-up reconciliation restored the canonical README product/runtime and `workflow_dispatch`/owner-confirmed release statements. Project Tools and Reference Wall gates now enforce find-or-create/reconcile augmenters; Quantity Insight uses detached preview rows plus current-row locate; Room Auto locates the post-target stale loop; Workspace Quick Draw permits the intentional compact-shell static initializer while still requiring one public instance constructor.
+- PASS after the follow-up: manual-only CI, product boundary, Project Tools, Ribbon augmenter targets, Reference Wall Ribbon, Right Quantity workspace, Quantity Insight affinity/preview/single-click, Room Auto lifecycle, Workspace Quick Draw and compact-shell focused gates.
 
 ## Completion condition
 

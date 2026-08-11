@@ -53,9 +53,9 @@ for needle in (
 
 for needle in (
     "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
-    "ProjectQuantityReportBuilder.Group(project)",
+    "ProjectQuantityReportBuilder.Group(previewProject)",
     "QuantityReportTotals.FromRows(rows)",
-    "SourceHandleResolver.Resolve(project, item.ElementIds)",
+    "SourceHandleResolver.Resolve(project, currentRow.ElementIds)",
     "Cad.CadHandleService.Select(document, handles)",
     'DispatchExistingCommand("QS3DREGEN "',
     'DispatchExistingCommand("QS3DBQ "',
