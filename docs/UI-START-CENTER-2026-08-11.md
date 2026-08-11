@@ -57,6 +57,8 @@ To reduce command hunting further, the visible Quick Workflow row now also surfa
 
 Favorites and the recent-command list are per-user state. Only commands still present in the hard-coded allowlist survive load/normalization, so a modified settings file cannot turn the launcher into arbitrary command execution.
 
+Favorite mutation targets are explicit. The launcher button **★ Ghim / Bỏ ghim lệnh** only acts on `CommandList.SelectedItem`; it never falls through to a Favorites selection. The Favorites card has a separate **Bỏ ghim mục chọn** action that only acts on `FavoriteList.SelectedItem`. This prevents a permanently selected launcher row from causing the wrong command to be toggled when the user intended to remove a different favorite.
+
 The settings loader treats each Base64 record independently. A malformed favorite/recent/recent-DWG record is skipped without aborting the rest of an otherwise valid bounded settings file. This keeps user-state corruption local to the bad line rather than silently dropping all later valid history.
 
 ### Recent Projects / DWG
@@ -108,6 +110,7 @@ This keeps the common launcher path keyboard-only: `Ctrl+F` → type → `Enter`
 - Unicode decomposition, combining-mark removal and `đ/Đ` folding for accent-insensitive Vietnamese lookup;
 - recent-DWG search, pinned/available/missing filters and filtered/total count wiring;
 - `Ctrl+F` search plus SearchBox `Enter` execution and `↓` result-list focus/scroll behavior;
+- explicit favorite targeting: launcher toggle binds only to `CommandList`, Favorites removal binds only to `FavoriteList`, and the old ambiguous fallback expression is forbidden;
 - source registration for `QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DQSETTINGSHEALTHEXPORT` and `QS3DRULECREATE` before those commands may appear in the launcher;
 - click-time `MdiActiveDocument` resolution;
 - non-creating `TryGetReadOnly` dashboard behavior;
@@ -139,6 +142,7 @@ Remote/source review is not BricsCAD runtime proof. Exact-candidate local qualif
 11. `QS3DQSETTINGSHEALTHEXPORT` launched from Start Center opens its normal guarded export flow rather than any Start Center-specific implementation;
 12. `QS3DRULECREATE` launched from Start Center enters the canonical command's existing prompt/validation/confirmation path and does not gain any Start Center-specific settings mutation path;
 13. the four featured shortcuts (`QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DRULECREATE`, `QS3DQSETTINGSHEALTHEXPORT`) are visible at normal and HiDPI scales and dispatch through the same click-time active-DWG allowlisted path as launcher results;
-14. seed at least one pinned existing DWG, one unpinned existing DWG and one missing DWG in Recent Projects; verify search-by-name/path plus each of `Tất cả`, `Đã ghim`, `Sẵn sàng`, `Thiếu file` returns the correct subset/count, then clear the filter and prove no search/filter action changed pin/timestamp/history state or deleted a DWG.
+14. seed at least one pinned existing DWG, one unpinned existing DWG and one missing DWG in Recent Projects; verify search-by-name/path plus each of `Tất cả`, `Đã ghim`, `Sẵn sàng`, `Thiếu file` returns the correct subset/count, then clear the filter and prove no search/filter action changed pin/timestamp/history state or deleted a DWG;
+15. select command A in the launcher and a different command B in Favorites; verify **★ Ghim / Bỏ ghim lệnh** changes only A, then select B and verify **Bỏ ghim mục chọn** removes only B. Repeat with a different launcher selection and prove no favorite mutation ever follows the unrelated `CommandList` selection.
 
 Keep private paths/screenshots and proprietary runtime material out of Git; only sanitized exact-SHA evidence belongs in the local qualification record. These runtime checks remain `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until executed on licensed BricsCAD V25.

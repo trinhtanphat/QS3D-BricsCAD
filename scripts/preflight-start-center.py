@@ -49,6 +49,9 @@ def main():
     require(xaml, "hỗ trợ tiếng Việt có/không dấu", "Vietnamese search discoverability")
     for token in ("RecentProjectSearchBox", "RecentProjectFilter", "RecentProjectCountText", "OnRecentProjectSearchChanged", "OnRecentProjectFilterChanged"):
         require(xaml, token, "recent-DWG search/filter UI")
+    require(xaml, 'Content="★ Ghim / Bỏ ghim lệnh"', "launcher favorite action label")
+    require(xaml, 'Content="Bỏ ghim mục chọn"', "favorite-list removal action")
+    require(xaml, 'Click="OnRemoveFavoriteClick"', "favorite-list removal wiring")
 
     require(window, "StartCenterCommandCatalog.TryGet", "allowlisted command dispatch")
     require(window, "Application.DocumentManager.MdiActiveDocument", "click-time active document resolution")
@@ -72,6 +75,11 @@ def main():
     require(window, "e.Key == Key.Enter && (CommandList.IsKeyboardFocusWithin || SearchBox.IsKeyboardFocusWithin)", "search-box Enter execution")
     require(window, "e.Key == Key.Down && SearchBox.IsKeyboardFocusWithin && CommandList.Items.Count > 0", "search-box Down navigation")
     require(window, "CommandList.ScrollIntoView(CommandList.SelectedItem);", "keyboard result visibility")
+    require(window, "private void OnToggleFavoriteClick", "launcher favorite handler")
+    require(window, "if (!(CommandList.SelectedItem is StartCenterCommandItem item))", "launcher-specific favorite target")
+    require(window, "private void OnRemoveFavoriteClick", "favorite removal handler")
+    require(window, "if (!(FavoriteList.SelectedItem is StartCenterCommandItem item))", "favorite-list-specific removal target")
+    forbid(window, "CommandList.SelectedItem as StartCenterCommandItem ?? FavoriteList.SelectedItem as StartCenterCommandItem", "ambiguous favorite target")
     forbid(window, "ProjectContextCoordinator.GetOrCreate", "Start Center read-only dashboard")
     forbid(window, "System.Diagnostics.Process", "Start Center window")
     forbid(window, "Ribbon", "Start Center reserved scope")
@@ -107,7 +115,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, accent-insensitive, featured, recent-filtered, keyboard-complete, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 

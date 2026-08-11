@@ -314,16 +314,28 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnToggleFavoriteClick(object sender, RoutedEventArgs e)
         {
-            var item = CommandList.SelectedItem as StartCenterCommandItem ?? FavoriteList.SelectedItem as StartCenterCommandItem;
-            if (item == null)
+            if (!(CommandList.SelectedItem is StartCenterCommandItem item))
             {
-                SetStatus("Chọn một command trước khi ghim.");
+                SetStatus("Chọn một command trong launcher trước khi ghim hoặc bỏ ghim.");
                 return;
             }
 
             StartCenterUserStateStore.ToggleFavorite(item.Command);
             RefreshStateLists();
             SetStatus("Đã cập nhật Favorites cho " + item.Command + ".");
+        }
+
+        private void OnRemoveFavoriteClick(object sender, RoutedEventArgs e)
+        {
+            if (!(FavoriteList.SelectedItem is StartCenterCommandItem item))
+            {
+                SetStatus("Chọn một mục trong Favorites trước khi bỏ ghim.");
+                return;
+            }
+
+            StartCenterUserStateStore.ToggleFavorite(item.Command);
+            RefreshStateLists();
+            SetStatus("Đã bỏ " + item.Command + " khỏi Favorites.");
         }
 
         private void OnNewDrawingClick(object sender, RoutedEventArgs e) => ExecuteNativeDocumentAction(NativeDocumentAction.NewDrawing);
