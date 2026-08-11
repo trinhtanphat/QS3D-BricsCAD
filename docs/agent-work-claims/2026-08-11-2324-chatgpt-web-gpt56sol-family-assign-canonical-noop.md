@@ -1,26 +1,49 @@
 # Work claim — Family assignment canonical no-op identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-11T23:24:00+07:00`
+- Completed: `2026-08-11T23:34:00+07:00`
 - Baseline main SHA: `11486e07d818ec1df718f3775a4b3c23e15123da`
+- Claim commit: `53bca226655d8a4e3fb71f249d3b001e6836ca75`
+- Source branch commit: `453ccc580104be162454892e09fc0f4e0e2c82d2`
+- Regression branch commit: `07632402e7c49e95b49a28c0b9400aec56a6f911`
+- Final rebased branch head: `32fc042ce6aa2b70c2ad5907e3212f2a3defcedd`
+- PR: `#527`
+- Merged main SHA: `22bcb9e738672a1680ed2633d8436bce7e070c1b`
 - Priority: evidence-driven remote-safe Core mutation correctness
 
 ## Reason
 
-`ProjectFamilyService.Assign()` resolves previous Family references using a trimmed `FamilyId`, and `ResolveFamilyMembers()` also uses trimmed case-insensitive identity, but its early no-op check compares raw `element.FamilyId` directly with the target ID. An element whose mutable `FamilyId` is `" TARGET "` is therefore treated as a real reassignment to Family `TARGET`, causing unnecessary `ProjectState.Touch()`, `FamilyId` rewrite, dirty flags, and changed-count reporting even though semantic ownership is already the target Family.
+`ProjectFamilyService.Assign()` resolved previous Family references using a trimmed `FamilyId`, and `ResolveFamilyMembers()` also used trimmed case-insensitive identity, but its early no-op check compared raw `element.FamilyId` directly with the target ID. An element whose mutable `FamilyId` was `" TARGET "` was therefore treated as a real reassignment to Family `TARGET`, causing unnecessary `ProjectState.Touch()`, `FamilyId` rewrite, dirty flags, and changed-count reporting even though semantic ownership was already the target Family.
 
-## Reserved scope
+## Implemented scope
 
-Use the same canonical trimmed/case-insensitive Family identity for the `Assign()` no-op decision. Preserve stored padded identity on true no-op, target/default validation, corrupt previous-Family fail-closed behavior, assignment of genuinely different Families, instance overrides, dirty semantics, and batch atomicity. Add focused CAD-independent regression coverage.
+`Assign()` now computes the trimmed previous Family ID before its no-op check and compares that canonical value case-insensitively with the target ID. True semantic no-ops preserve stored padded/case-varied identity, element state, and project persistence state. Genuine reassignments and existing fail-closed previous-Family validation remain unchanged.
 
-## Expected surfaces
+## Implemented surfaces
 
 - `src/QS3D.Core/Domain/ProjectFamilyService.cs`
 - `tests/QS3D.Core.SmokeTests/ProjectFamilyAssignmentAtomicitySmoke.cs`
-- this claim file for close-out
+- this claim file
 
-## Explicit exclusions
+## Regression coverage
+
+`SemanticallyIdenticalTargetAssignmentIsNoOp()` mutates an element FamilyId after construction to `"  target  "`, marks the element clean, and invokes `Assign()` using padded target input. It verifies:
+
+- changed count is zero;
+- stored FamilyId is not rewritten;
+- instance properties remain unchanged;
+- element dirty flags and timestamp remain unchanged;
+- project ChangeVersion and UpdatedUtc remain unchanged.
+
+All existing assignment atomicity regressions were preserved.
+
+## Coordination / moving-main handling
+
+The repository advanced rapidly during this batch. Target-file overlap checks repeatedly showed that concurrent work did not modify `ProjectFamilyService.cs` or `ProjectFamilyAssignmentAtomicitySmoke.cs`. The agent-owned branch was structurally rebuilt on moving `main` using only the two reviewed blobs; the final one-parent head `32fc042ce6aa2b70c2ad5907e3212f2a3defcedd` was based on `18f905c3b33e9e2604a654d23fa008fcc67a53d4` and then squash-merged through PR #527 using the exact expected head SHA. No concurrent branch or `main` history was force-updated.
+
+## Explicit exclusions honored
 
 - No Workspace/WPF/native UI changes.
 - No Family delete/property propagation changes.
@@ -28,19 +51,14 @@ Use the same canonical trimmed/case-insensitive Family identity for the `Assign(
 - No BricsCAD V25 runtime work.
 - No GitHub Actions dispatch/workflow edit.
 
-## Validation plan
+## Validation actually performed
 
-- Re-fetch exact current source/test blobs before implementation.
-- Add a regression with `FamilyId` mutated after construction to padded/case-varied target identity, mark the element clean, then call `Assign()`.
-- Assert changed count is zero, project ChangeVersion/timestamp remain unchanged, stored `FamilyId` remains untouched, properties/dirty/timestamp remain untouched.
-- Preserve all existing assignment atomicity regressions.
-- Re-check moving `main` for target-file overlap before PR/merge.
-- Source/static readback plus committed smoke coverage only; no local .NET/BricsCAD/Actions PASS claim.
-
-## Coordination
-
-Recent Family work covers active-Family delete canonicalization and target default validation. No active claim or recent commit was found for the `Assign()` semantically-identical target no-op check. Current active Grid/Quantity/Release work is on separate surfaces.
+- Re-fetched exact source/test blobs before implementation.
+- Read back the patched assignment loop after write.
+- Compared every moving-main interval used for rebase and confirmed no target-file overlap.
+- PR #527 was merged successfully with expected branch head `32fc042ce6aa2b70c2ad5907e3212f2a3defcedd`.
+- Source/static review plus committed CAD-independent smoke coverage only. No local .NET/Core smoke execution, BricsCAD V25 runtime PASS, or GitHub Actions execution is claimed.
 
 ## Completion condition
 
-Semantically identical padded/case-varied target Family assignments are true no-ops without persistence or element mutation, regression coverage is on `main`, and this claim is marked `COMPLETED` with exact SHAs.
+Completed on `main` at `22bcb9e738672a1680ed2633d8436bce7e070c1b`.
