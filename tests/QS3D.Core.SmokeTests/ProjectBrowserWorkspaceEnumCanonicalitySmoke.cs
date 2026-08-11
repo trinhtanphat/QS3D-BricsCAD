@@ -23,12 +23,12 @@ namespace QS3D.Core.SmokeTests
             var numericGrouping = XDocument.Parse(canonical);
             numericGrouping.Root!.SetAttributeValue(
                 "grouping",
-                Convert.ToInt32(ProjectBrowserGrouping.FloorThenCategory, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture));
+                ((int)ProjectBrowserGrouping.FloorThenCategory).ToString(CultureInfo.InvariantCulture));
             Throws<InvalidDataException>(() => store.Deserialize(numericGrouping.ToString(SaveOptions.DisableFormatting)));
 
             var numericCategory = XDocument.Parse(canonical);
             numericCategory.Root!.Element("Categories")!.Element("Category")!.Value =
-                Convert.ToInt32(ElementCategory.Grid, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
+                ((int)ElementCategory.Grid).ToString(CultureInfo.InvariantCulture);
             Throws<InvalidDataException>(() => store.Deserialize(numericCategory.ToString(SaveOptions.DisableFormatting)));
         }
 
