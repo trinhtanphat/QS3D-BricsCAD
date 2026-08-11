@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             HostUnlinkAuditOverflowRollsBack();
             StaleAutoHostAuditOverflowRollsBack();
             DirtyPropagationOverflowRollsBack();
+            SemanticUntrackOverflowRollsBack();
         }
 
         private static void BulkSetPropertyOverflowRollsBack()
@@ -148,6 +149,27 @@ namespace QS3D.Core.SmokeTests
             Equal(ElementDirtyFlags.None, dependent.Dirty, "Failed dirty propagation changed dependent dirty flags.");
             Equal(long.MaxValue, project.ChangeVersion, "Failed dirty propagation changed the maximum project version.");
             Equal(beforeUtc, project.UpdatedUtc, "Failed dirty propagation changed UpdatedUtc.");
+        }
+
+        private static void SemanticUntrackOverflowRollsBack()
+        {
+            var source = new ProjectState("P-UNTRACK-ATOMIC", "Semantic untrack atomicity");
+            var wall = new ProjectElement("W-UNTRACK", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            wall.SourceHandles.Add("A1");
+            wall.MarkClean(ElementDirtyFlags.All);
+            source.Elements.Add(wall);
+            var project = AtVersion(source, long.MaxValue);
+            var beforeUtc = project.UpdatedUtc;
+
+            Throws<OverflowException>(() => SemanticUntrackService.Untrack(project, new[] { "A1" }));
+
+            wall = RequiredElement(project, "W-UNTRACK");
+            Equal(1, project.Elements.Count, "Failed semantic untrack removed the target element.");
+            Equal(1, wall.SourceHandles.Count, "Failed semantic untrack changed source handles.");
+            Equal("A1", wall.SourceHandles.Single(), "Failed semantic untrack changed source ownership.");
+            Equal(ElementDirtyFlags.None, wall.Dirty, "Failed semantic untrack changed dirty flags.");
+            Equal(long.MaxValue, project.ChangeVersion, "Failed semantic untrack changed the maximum project version.");
+            Equal(beforeUtc, project.UpdatedUtc, "Failed semantic untrack changed UpdatedUtc.");
         }
 
         private static ProjectState BulkProject()
