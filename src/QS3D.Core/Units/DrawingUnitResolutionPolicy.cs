@@ -48,7 +48,7 @@ namespace QS3D.Core.Units
                 return false;
             }
 
-            if (!Enum.TryParse(raw.Trim(), true, out LengthUnit parsed) || !Enum.IsDefined(typeof(LengthUnit), parsed))
+            if (!TryParseNamedUnitToken(raw, out var parsed))
                 throw new InvalidOperationException("Project drawing-unit override is invalid: " + raw + ".");
             resolution = new DrawingUnitResolution(parsed, DrawingUnitResolutionSource.ProjectOverride);
             return true;
@@ -110,9 +110,18 @@ namespace QS3D.Core.Units
         {
             unit = default(LengthUnit);
             if (!metadata.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return false;
-            if (!Enum.TryParse(raw.Trim(), true, out unit) || !Enum.IsDefined(typeof(LengthUnit), unit))
+            if (!TryParseNamedUnitToken(raw, out unit))
                 throw new InvalidOperationException("Project drawing-unit metadata is invalid: " + key + "=" + raw + ".");
             return true;
+        }
+
+        private static bool TryParseNamedUnitToken(string raw, out LengthUnit unit)
+        {
+            unit = default(LengthUnit);
+            var token = (raw ?? string.Empty).Trim();
+            if (!Enum.TryParse(token, true, out unit) || !Enum.IsDefined(typeof(LengthUnit), unit)) return false;
+            var name = Enum.GetName(typeof(LengthUnit), unit);
+            return name != null && string.Equals(token, name, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void Validate(LengthUnit unit)
