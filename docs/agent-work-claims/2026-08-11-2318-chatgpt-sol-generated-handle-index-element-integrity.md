@@ -1,8 +1,9 @@
 # Agent Work Claim
 
-- Status: ACTIVE
+- Status: COMPLETED
 - Agent: chatgpt-gpt56sol-generated-handle-index-integrity-20260811-2318
 - Timestamp: 2026-08-11T23:18:00+07:00
+- Completed: 2026-08-11T23:24:00+07:00
 - Baseline `main` SHA: `80b808080ebc37a59f385dec5ed77d60a257dc6a`
 - Priority: P1 generated-output ownership integrity / fail-closed diagnostics
 - Exact scope: Align `GeneratedHandleOwnershipIndex.Build` element-set validation with `GeneratedHandleOwnershipPolicy`: reject null semantic elements, reject blank/whitespace IDs, and detect duplicate IDs after trimming with ordinal-ignore-case comparison before indexing any generated handle. Preserve handle ownership/ambiguity semantics.
@@ -14,12 +15,17 @@
   - BricsCAD/native/runtime/UI behavior
   - unrelated diagnostics, regeneration or persistence
   - GitHub Actions
-- Validation plan:
-  - focused smoke coverage for null element, blank ID, and trim/case-colliding duplicate IDs
-  - preserve existing ownership-index smoke behavior
-  - re-read current `main` target blobs immediately before each implementation write
-  - no local `dotnet` or BricsCAD runtime is available in this environment
+- Validation performed:
+  - re-read current `main` source after implementation: the full semantic element set is validated before any generated handle is indexed; null elements and blank IDs fail closed; duplicate comparison uses trimmed IDs with ordinal-ignore-case semantics
+  - removed the later null-element skip because the validated element-set invariant now guarantees non-null entries before ownership enumeration
+  - extended the existing registered smoke with null-element, corrupted blank-ID, and whitespace/case duplicate-ID coverage while preserving prior handle ownership/ambiguity scenarios
+  - audited implementation and regression commit payloads; each changed only its claimed surface
+  - a concurrent `main` write caused the first smoke update attempt to return HTTP 409; the current target was re-read and the update was retried without overwriting concurrent work
+  - no local `dotnet` or BricsCAD runtime is available in this environment; no GitHub Actions were run
 - Coordination:
   - checked current claim registry and recent commit search immediately before registration; no GeneratedHandleOwnershipIndex claim was present
-  - no GitHub Actions will be dispatched
-- Completion condition: corrupt semantic element sets fail closed consistently across policy and index before ownership indexing; regression coverage is present; this claim is marked COMPLETED.
+  - no GitHub Actions were dispatched
+- Implementation commits:
+  - `23dba63c5c5b0da5ad04750735cb2d03613687e3` — `fix(ownership): fail closed on invalid index elements`
+  - `9ab1f7fac87927a275846d34391092b1605b6d0b` — `test(ownership): cover invalid index element set`
+- Result: corrupt semantic element collections can no longer be partially/silently indexed by `GeneratedHandleOwnershipIndex`; ownership policy and index now share the same fail-closed element identity boundary.
