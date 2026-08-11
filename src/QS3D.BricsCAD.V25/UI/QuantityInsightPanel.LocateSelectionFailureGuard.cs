@@ -10,9 +10,12 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class QuantityInsightPanel
     {
-        private static readonly bool LocateSelectionFailureGuardRegistered = RegisterLocateSelectionFailureGuard();
+        static QuantityInsightPanel()
+        {
+            RegisterLocateSelectionFailureGuard();
+        }
 
-        private static bool RegisterLocateSelectionFailureGuard()
+        private static void RegisterLocateSelectionFailureGuard()
         {
             EventManager.RegisterClassHandler(
                 typeof(Button),
@@ -29,7 +32,6 @@ namespace QS3D.BricsCAD.V25.UI
                 Control.MouseDoubleClickEvent,
                 new MouseButtonEventHandler(OnInsightLocateDoubleClickClass),
                 true);
-            return true;
         }
 
         private static void OnInsightLocateButtonClassClick(object sender, RoutedEventArgs e)
