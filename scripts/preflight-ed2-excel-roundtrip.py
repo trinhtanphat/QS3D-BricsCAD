@@ -154,7 +154,7 @@ require("reader", (
 require("window", ("OnEd2ExportClick", "OnExcelLocateClick", "BQ • 1 sheet",))
 require("window_code", ('SendStringToExecute("QS3DED2 "', 'SendStringToExecute("QS3DEXCELLOCATE "', '"Zone"',))
 require("hub", ('Tag="QS3DED2"', 'Tag="QS3DEXCELLOCATE"'))
-require("ribbon", ('new RibbonButtonSpec("ED2 • Excel ↔ CAD", "QS3DED2")', 'new RibbonButtonSpec("Excel → CAD", "QS3DEXCELLOCATE")'))
+require("ribbon", ('Button("ED2 • Excel ↔ CAD", "QS3DED2")', 'Button("Excel → CAD", "QS3DEXCELLOCATE")'))
 require("quantity_smoke", (
     "DetailRowsPreserveOneElementProvenance",
     "same Floor/Family across different Zones",

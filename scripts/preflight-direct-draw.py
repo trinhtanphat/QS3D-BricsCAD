@@ -135,7 +135,8 @@ required = {
         "GeneratedGeometryService.CommitReplacement",
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
-        'RibbonTabSpec("QS3D_AUTHOR", "TẠO MỚI"',
+        '"QS3D_AUTHOR"',
+        '"TẠO MỚI"',
         '"QS3DDRAWWALL"',
         '"QS3DDRAWBEAM"',
         '"QS3DDRAWCOLUMN"',

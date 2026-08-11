@@ -180,11 +180,11 @@ checks = {
         'Tag="QS3DREBAR3D"', 'Tag="QS3DREBAR3DSHAPE"', 'Tag="QS3DREBARHEALTH"', 'Tag="QS3DREBARSHAPEHEALTH"'
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
-        'new RibbonButtonSpec("Vách Kính", "QS3DGLASSWALL")', 'new RibbonButtonSpec("Trụ Tường", "QS3DWALLPIER")',
-        'new RibbonButtonSpec("Giao tường", "QS3DWALLJUNCTIONS")', 'new RibbonButtonSpec("Khoét Cửa/Lỗ", "QS3DCUTOPENINGS")',
-        'new RibbonButtonSpec("Focus", "QS3DFOCUS")', 'new RibbonButtonSpec("Cô lập", "QS3DISOLATE")', 'new RibbonButtonSpec("Khôi phục", "QS3DUNISOLATE")',
-        'new RibbonButtonSpec("Cốt thép cột 3D", "QS3DREBAR3D")', 'new RibbonButtonSpec("Cốt thép shape 3D", "QS3DREBAR3DSHAPE")',
-        'new RibbonButtonSpec("Health shape", "QS3DREBARSHAPEHEALTH")'
+        'Button("Vách Kính", "QS3DGLASSWALL")', 'Button("Trụ Tường", "QS3DWALLPIER")',
+        'Button("Giao tường", "QS3DWALLJUNCTIONS")', 'Button("Khoét Cửa/Lỗ", "QS3DCUTOPENINGS")',
+        'Button("Focus", "QS3DFOCUS")', 'Button("Cô lập", "QS3DISOLATE")', 'Button("Khôi phục", "QS3DUNISOLATE")',
+        'Button("Cốt thép cột 3D", "QS3DREBAR3D")', 'Button("Cốt thép shape 3D", "QS3DREBAR3DSHAPE")',
+        'Button("Health shape", "QS3DREBARSHAPEHEALTH")'
     ],
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs": [
         "StraightWallFootprint", "PolylineWallCorner", "FarOriginWallFootprint", "OpeningCutPlan", "RectangularRebarLayout", "GeneratedRebarHealth",

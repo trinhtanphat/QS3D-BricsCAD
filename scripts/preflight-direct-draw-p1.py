@@ -68,7 +68,8 @@ required = {
         "category == ElementCategory.Foundation",
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
-        'RibbonTabSpec("QS3D_AUTHOR", "TẠO MỚI"',
+        '"QS3D_AUTHOR"',
+        '"TẠO MỚI"',
         '"QS3DDRAWGLASSWALL"',
         '"QS3DDRAWWALLPIER"',
         '"QS3DDRAWSTRUCTWALL"',

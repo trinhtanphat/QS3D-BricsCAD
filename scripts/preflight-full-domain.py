@@ -105,7 +105,7 @@ if room_hub.exists() and 'Tag="QS3DROOMAUTO"' not in room_hub.read_text(encoding
 room_ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 if room_ribbon.exists():
     text = room_ribbon.read_text(encoding="utf-8")
-    if 'new RibbonButtonSpec("Phòng Auto", "QS3DROOMAUTO")' not in text:
+    if 'Button("Phòng Auto", "QS3DROOMAUTO")' not in text:
         errors.append("Ribbon does not expose QS3DROOMAUTO")
 
 completion = ROOT / "tests/QS3D.Core.SmokeTests/CompletionRegressionSmoke.cs"

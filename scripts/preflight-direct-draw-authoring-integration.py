@@ -19,8 +19,9 @@ required = {
     ],
     "src/QS3D.BricsCAD.V25/FamilyManagerCommands.cs": ['CommandMethod("QS3DFAMILIES"'],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
-        'RibbonTabSpec("QS3D_AUTHOR", "TẠO MỚI"',
-        'RibbonButtonSpec("Family / Type", "QS3DFAMILIES")',
+        '"QS3D_AUTHOR"',
+        '"TẠO MỚI"',
+        'Button("Family / Type", "QS3DFAMILIES")',
         '"QS3DDRAWDOOR"',
         '"QS3DDRAWOPENING"',
     ],

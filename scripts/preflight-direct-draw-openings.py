@@ -93,7 +93,7 @@ if not ribbon.is_file():
     errors.append("missing RibbonBootstrapper.cs")
 else:
     ribbon_text = ribbon.read_text(encoding="utf-8")
-    for needle in ('new RibbonButtonSpec("Vẽ Cửa", "QS3DDRAWDOOR")', 'new RibbonButtonSpec("Vẽ Lỗ Mở", "QS3DDRAWOPENING")'):
+    for needle in ('Button("Vẽ Cửa", "QS3DDRAWDOOR")', 'Button("Vẽ Lỗ Mở", "QS3DDRAWOPENING")'):
         if needle not in ribbon_text:
             errors.append("Ribbon missing Door/Opening Direct Draw action: " + needle)
 

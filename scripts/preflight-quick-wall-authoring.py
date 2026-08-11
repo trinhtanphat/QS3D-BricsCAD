@@ -72,7 +72,7 @@ if SOURCE.is_file():
 
 if RIBBON.is_file():
     text = RIBBON.read_text(encoding="utf-8")
-    if 'new RibbonButtonSpec("Vẽ Tường", "QS3DDRAWWALL")' not in text:
+    if 'Button("Vẽ Tường", "QS3DDRAWWALL")' not in text:
         errors.append("TẠO MỚI Ribbon primary Vẽ Tường must continue to invoke QS3DDRAWWALL")
 
 if HUB.is_file():

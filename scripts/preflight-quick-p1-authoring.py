@@ -108,10 +108,10 @@ if SOURCE.is_file():
 if RIBBON.is_file():
     text = RIBBON.read_text(encoding="utf-8")
     for token in (
-        'new RibbonButtonSpec("Vẽ Vách Kính", "QS3DDRAWGLASSWALL")',
-        'new RibbonButtonSpec("Vẽ Trụ Tường", "QS3DDRAWWALLPIER")',
-        'new RibbonButtonSpec("Vẽ Vách BTCT", "QS3DDRAWSTRUCTWALL")',
-        'new RibbonButtonSpec("Vẽ Móng", "QS3DDRAWFOUNDATION")',
+        'Button("Vẽ Vách Kính", "QS3DDRAWGLASSWALL")',
+        'Button("Vẽ Trụ Tường", "QS3DDRAWWALLPIER")',
+        'Button("Vẽ Vách BTCT", "QS3DDRAWSTRUCTWALL")',
+        'Button("Vẽ Móng", "QS3DDRAWFOUNDATION")',
     ):
         if token not in text:
             errors.append("primary quick P1 Ribbon wiring missing: " + token)

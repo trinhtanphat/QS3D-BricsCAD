@@ -78,8 +78,8 @@ if SOURCE.is_file():
 if RIBBON.is_file():
     text = RIBBON.read_text(encoding="utf-8")
     for token in (
-        'new RibbonButtonSpec("Vẽ Cửa", "QS3DDRAWDOOR")',
-        'new RibbonButtonSpec("Vẽ Lỗ Mở", "QS3DDRAWOPENING")',
+        'Button("Vẽ Cửa", "QS3DDRAWDOOR")',
+        'Button("Vẽ Lỗ Mở", "QS3DDRAWOPENING")',
     ):
         if token not in text:
             errors.append("primary quick opening Ribbon wiring missing: " + token)
