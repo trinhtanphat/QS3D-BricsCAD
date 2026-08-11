@@ -84,7 +84,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
                 if (rebarOwnership != null)
                     foreach (var key in CoreOwnershipPolicy.RebarHandleKeys)
-                        EraseRebarSet(document, transaction, element, key, rebarOwnership);
+                        EraseRebarSet(document, transaction, project, element, key, rebarOwnership);
                 if (curtainOwnership != null) EraseCurtainFrames(document, transaction, element, curtainOwnership);
                 EraseGridAnnotations(document, transaction, project, element);
             }
@@ -109,7 +109,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                         var expected = ParseExpectedHandles(raw, element, key);
                         foreach (var handle in expected) rebarOwnership.EnsureOwned(handle, element, key);
-                        EnsureSolidSetLive(document, element, key, expected);
+                        EnsureRebarSetLive(document, project, element, key, expected);
                     }
                 }
 
@@ -145,6 +145,37 @@ namespace QS3D.BricsCAD.V25.Cad
                     throw new InvalidOperationException(
                         "Generated " + GeneratedSolidHandleKey + " " + expected[0] + " for " + element.Id + " is live but is not a Solid3d. Refusing destructive invalidation before any generated geometry is erased.");
                 GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "validate generated Solid3d " + expected[0]);
+                validation.Commit();
+            }
+        }
+
+        private static void EnsureRebarSetLive(
+            Document document,
+            ProjectState project,
+            ProjectElement element,
+            string propertyKey,
+            IReadOnlyList<string> expected)
+        {
+            var ids = ResolveCompleteSet(document, element, propertyKey, expected);
+            using (var validation = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                foreach (var id in ids)
+                {
+                    var entity = validation.GetObject(id, OpenMode.ForRead, false) as Entity;
+                    if (entity == null || entity.IsErased)
+                        throw new InvalidOperationException(
+                            "Generated " + propertyKey + " for " + element.Id + " resolved to a non-live Entity. Refusing destructive invalidation before any generated geometry is erased.");
+                    var solid = entity as Solid3d;
+                    if (solid == null)
+                        throw new InvalidOperationException(
+                            "Generated " + propertyKey + " handle " + id.Handle + " for " + element.Id + " is live but is not a Solid3d. Refusing destructive invalidation before any generated geometry is erased.");
+                    GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(
+                        solid,
+                        project,
+                        element,
+                        propertyKey,
+                        "validate generated rebar " + id.Handle);
+                }
                 validation.Commit();
             }
         }
@@ -248,6 +279,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private static void EraseRebarSet(
             Document document,
             Transaction transaction,
+            ProjectState project,
             ProjectElement element,
             string propertyKey,
             GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
@@ -255,7 +287,26 @@ namespace QS3D.BricsCAD.V25.Cad
             if (!element.Properties.TryGetValue(propertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             var expected = ParseExpectedHandles(raw, element, propertyKey);
             foreach (var handle in expected) ownership.EnsureOwned(handle, element, propertyKey);
-            EraseSolidSet(document, transaction, element, propertyKey, expected);
+
+            var ids = ResolveCompleteSet(document, element, propertyKey, expected);
+            foreach (var id in ids)
+            {
+                var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
+                if (entity == null || entity.IsErased)
+                    throw new InvalidOperationException(
+                        "Generated " + propertyKey + " handle " + id.Handle + " is no longer live. Refusing partial destructive invalidation.");
+                var solid = entity as Solid3d;
+                if (solid == null)
+                    throw new InvalidOperationException(
+                        "Generated " + propertyKey + " handle " + id.Handle + " is live but is not a Solid3d. Refusing destructive invalidation.");
+                GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(
+                    solid,
+                    project,
+                    element,
+                    propertyKey,
+                    "erase stale generated rebar " + id.Handle);
+                solid.Erase();
+            }
         }
 
         private static void EraseCurtainFrames(
