@@ -67,7 +67,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             Guard(document, "QS3DWALLSNAPPREVIEW", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Wall Snap Preview");
                 var plan = BuildPlan(document, project, true);
                 if (plan.Segments.Count == 0)
                 {
@@ -102,7 +102,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             Guard(document, "QS3DWALLSNAPAPPLY", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Wall Snap Apply");
                 var plan = BuildPlan(document, project, true);
                 if (plan.Segments.Count == 0)
                 {
