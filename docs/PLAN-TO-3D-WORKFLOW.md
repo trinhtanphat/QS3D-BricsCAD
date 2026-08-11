@@ -9,6 +9,7 @@ Mục tiêu của workflow này là đưa luồng thao tác trong hình tham chi
 - Dùng CAD 2D đang có trong Model Space, hoặc `QS3DPLANIMPORT` để nhập plan được QS3D hỗ trợ.
 - Wall centerline đầu vào cho batch conversion là `LINE` hoặc **open `POLYLINE`**.
 - Closed `POLYLINE` không được tự đoán là centerline tường; tách/BREAK thành LINE hoặc open POLYLINE trước để tránh tạo mô hình sai.
+- QS3D chạy trực tiếp trong BricsCAD V25; không yêu cầu AutoCAD/BLT3D làm trung gian.
 
 ### Bước 2 — Chuyển mặt bằng sang tường 3D
 
@@ -65,20 +66,38 @@ Exact BricsCAD V25 proof cho project xuất hiện/thay project, Model Space/UCS
 
 ## Bước 3 — Hoàn thiện mô hình
 
-Sau khi có tường 3D, tiếp tục bằng các công cụ QS3D hiện hữu:
+Sau khi có tường 3D, tiếp tục trực tiếp trong BricsCAD bằng các công cụ QS3D:
 
-- `QS3DDRAWDOOR` / door workflow để thêm cửa đi;
-- `QS3DDRAWWINDOW` / window workflow để thêm cửa sổ;
-- Family / Material Catalog để đổi family, vật liệu và thông số;
-- `QS3DSETWALL` để chỉnh các tường đã capture;
-- `QS3DREFRESH` để đồng bộ lại native geometry khi source/semantic thay đổi.
+- `QS3DDRAWDOOR` — vẽ Cửa Đi và Auto Host vào tường semantic duy nhất;
+- `QS3DDRAWWINDOW` — vẽ Cửa Sổ bằng `WallOpening` canonical, mặc định gợi ý cao `1.2 m` và bậu `0.9 m`, gắn `OpeningUsage=Window`, rồi Auto Host;
+- `QS3DDRAWOPENING` — tạo lỗ mở/vách tổng quát;
+- `QS3DMATERIALS` — mở Material Catalog để đổi vật liệu và thông số;
+- `QS3DCUTSELECTEDOPENINGS` — khoét vật lý các Cửa/Lỗ/Cửa Sổ đã chọn khi người dùng sẵn sàng commit boolean;
+- `QS3DSETWALL` — chỉnh các tường đã capture;
+- `QS3DREFRESH` — đồng bộ lại native geometry khi source/semantic thay đổi.
+
+`QS3DDRAWWINDOW` không tạo thêm một `ElementCategory.Window` song song. Nó dùng `WallOpening` hiện hữu để giữ nguyên host/boolean/health/quantity contract và chỉ thêm semantic usage `Window` cho UI/schedule. Door/Opening schedule vì vậy vẫn đi qua cùng pipeline nhưng có thể hiển thị Cửa Sổ thành nhóm riêng.
+
+Window authoring cũng fail-closed: source LINE do command tạo sẽ bị xóa và semantic snapshot được restore nếu không tìm được host duy nhất hoặc Auto Host làm state không còn hợp lệ. Việc khoét vật lý vẫn là một bước explicit qua `QS3DCUTSELECTEDOPENINGS`, không âm thầm boolean trong lúc authoring.
+
+## Ribbon nhanh
+
+Tab **TẠO MỚI** được augment thêm các entry point theo đúng workflow tham chiếu:
+
+- **2D → Tường 3D** → `QS3DCONVERT2D`;
+- **Vẽ Cửa Sổ** → `QS3DDRAWWINDOW`;
+- **Vật liệu** → `QS3DMATERIALS`.
+
+Các nút Direct Draw hiện hữu như Vẽ Tường, Vẽ Dầm, Vẽ Cột, Vẽ Sàn, Vẽ Cửa và Vẽ Lỗ Mở vẫn giữ nguyên. Augmenter chỉ bổ sung discoverability vào tab hiện hữu và dùng ID ổn định để không tạo nút/tab trùng khi plugin được khởi tạo lại.
 
 Như vậy luồng sử dụng trở thành:
 
-`2D plan -> select walls -> QS3DCONVERT2D -> immediate 3D -> doors/windows/materials`
+`2D plan -> select walls -> QS3DCONVERT2D -> immediate 3D -> QS3DDRAWDOOR / QS3DDRAWWINDOW -> QS3DMATERIALS -> optional targeted cut`
 
 thay vì phải lặp `select -> capture -> set property -> build 3D` cho từng đối tượng.
 
 ## Product boundary
 
 Hình tham chiếu có nhắc AutoCAD/BLT3D và copy sang BricsCAD. QS3D **không** thêm AutoCAD adapter hay phụ thuộc BLT3D. Tính năng này triển khai cùng ý tưởng UX trực tiếp trên BricsCAD V25 và tái sử dụng semantic capture + native builders + QS3D ownership hiện có.
+
+Exact-current-sha compile/NETLOAD/runtime validation vẫn cần môi trường BricsCAD V25 có license; source-side implementation không được mô tả là runtime-certified nếu chưa chạy trên môi trường đó.
