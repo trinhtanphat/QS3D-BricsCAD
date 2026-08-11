@@ -482,6 +482,7 @@ namespace QS3D.Core.Export
             if (key.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return true;
             if (key.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return true;
             if (key.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             return false;
         }
 
