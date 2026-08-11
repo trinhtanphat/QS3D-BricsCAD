@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             CanonicalTokenWhitespaceIsRejected();
             NamespacedLicenseRootsAreRejected();
             DuplicateLicenseSectionsAreRejected();
+            NestedSignatureMarkupIsRejected();
             DtdLicenseIsRejected();
         }
 
@@ -127,6 +128,22 @@ namespace QS3D.Core.SmokeTests
                 var duplicateSignaturePath = Path.Combine(directory, "duplicate-signature.qslic");
                 File.WriteAllText(duplicateSignaturePath, rootStart + valid + signature + signature + rootEnd);
                 Throws<InvalidDataException>(() => new LicenseVerifier().Load(duplicateSignaturePath));
+            }
+            finally
+            {
+                try { Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static void NestedSignatureMarkupIsRejected()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-license-signature-shape-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "nested-signature.qslic");
+            try
+            {
+                File.WriteAllText(path, "<qs3dLicense schema='1' id='x' customer='c' product='p' nonce='n'><valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/><signature algorithm='RSA-SHA256'><shadow>AA==</shadow></signature></qs3dLicense>");
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(path));
             }
             finally
             {
