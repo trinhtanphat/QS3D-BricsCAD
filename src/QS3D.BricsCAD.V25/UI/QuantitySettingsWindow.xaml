@@ -5,7 +5,8 @@
         Width="980" Height="700" MinWidth="860" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="#0B101A" Foreground="#E8EEF9"
-        FontFamily="Segoe UI" FontSize="13">
+        FontFamily="Segoe UI" FontSize="13"
+        Loaded="QuantitySettingsWindow_Loaded">
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -36,7 +37,24 @@
         </Grid>
         <Border Grid.Row="2" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="5" Padding="1">
             <TabControl Background="{StaticResource PanelBrush}" BorderThickness="0">
-                <TabItem Header="◇  Thông số Cốp pha"><Grid Margin="10"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions><TextBlock Text="Chọn bề mặt cốp pha cần lấy cho từng loại cấu kiện và ngưỡng phân loại mặt." Foreground="{StaticResource MutedBrush}" /><DataGrid Grid.Row="2" ItemsSource="{Binding CategoryRows}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column" RowHeaderWidth="0" AlternationCount="2" EnableRowVirtualization="True" EnableColumnVirtualization="True"><DataGrid.Columns><DataGridTextColumn Header="Loại cấu kiện" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*" MinWidth="220" /><DataGridCheckBoxColumn Header="Lấy CP Thành" Binding="{Binding ExtractSide, Mode=TwoWay}" Width="125" /><DataGridCheckBoxColumn Header="Lấy CP Đáy" Binding="{Binding ExtractBottom, Mode=TwoWay}" Width="115" /><DataGridTextColumn Header="Góc ngưỡng mặt ngang (°)" Binding="{Binding FaceAngleThresholdDeg, Mode=TwoWay}" Width="190" /></DataGrid.Columns></DataGrid></Grid></TabItem>
+                <TabItem Header="◇  Thông số Cốp pha">
+                    <Grid Margin="10">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <TextBlock Text="Chọn bề mặt cốp pha cần lấy cho từng loại cấu kiện và ngưỡng phân loại mặt." Foreground="{StaticResource MutedBrush}" />
+                        <Border Grid.Row="2" Background="#101827" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="10">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Mã có trong luật giao cắt nhưng chưa có quy tắc loại" FontWeight="SemiBold" Foreground="#A9C7F4" />
+                                    <TextBlock x:Name="MissingCategoryRuleStatusText" Margin="0,4,10,0" Text="Đang kiểm tra cấu hình…" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <ComboBox x:Name="MissingCategoryRuleList" Grid.Column="1" Width="230" Margin="8,0,0,0" VerticalAlignment="Center" ItemsSource="{Binding MissingCategoryRuleChoices}" DisplayMemberPath="DisplayName" SelectionChanged="MissingCategoryRuleSelectionChanged" IsEnabled="False" />
+                                <Button x:Name="CreateCategoryRuleButton" Grid.Column="2" Content="＋  Tạo quy tắc loại" Click="CreateCategoryRule_Click" Margin="8,0,0,0" VerticalAlignment="Center" IsEnabled="False" />
+                            </Grid>
+                        </Border>
+                        <DataGrid Grid.Row="4" ItemsSource="{Binding CategoryRows}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column" RowHeaderWidth="0" AlternationCount="2" EnableRowVirtualization="True" EnableColumnVirtualization="True"><DataGrid.Columns><DataGridTextColumn Header="Loại cấu kiện" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*" MinWidth="220" /><DataGridCheckBoxColumn Header="Lấy CP Thành" Binding="{Binding ExtractSide, Mode=TwoWay}" Width="125" /><DataGridCheckBoxColumn Header="Lấy CP Đáy" Binding="{Binding ExtractBottom, Mode=TwoWay}" Width="115" /><DataGridTextColumn Header="Góc ngưỡng mặt ngang (°)" Binding="{Binding FaceAngleThresholdDeg, Mode=TwoWay}" Width="190" /></DataGrid.Columns></DataGrid>
+                    </Grid>
+                </TabItem>
                 <TabItem Header="✂  Luật Giao Cắt (Intersection Rules)">
                     <Grid Margin="10"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><TextBlock Text="Quy tắc có hướng: chọn Cấu kiện chính → Cấu kiện tham chiếu. Hai chiều A → B và B → A luôn là hai luật độc lập." Foreground="{StaticResource MutedBrush}" />
                         <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="190" /><ColumnDefinition Width="8" /><ColumnDefinition Width="190" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" MinWidth="310" /></Grid.ColumnDefinitions>
