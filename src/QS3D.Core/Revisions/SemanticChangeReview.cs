@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.Export;
 
 namespace QS3D.Core.Revisions
 {
@@ -112,6 +113,7 @@ namespace QS3D.Core.Revisions
     public sealed class SemanticChangeReviewBuilder
     {
         private const string SourceHandlesField = "SourceHandles";
+        private const string PropertyFieldPrefix = "Property:";
 
         public SemanticChangeReview Build(RevisionSnapshot before, RevisionSnapshot after)
         {
@@ -138,7 +140,7 @@ namespace QS3D.Core.Revisions
                 {
                     if (field == null || string.IsNullOrWhiteSpace(field.Field))
                         throw new InvalidOperationException("Revision comparison returned an invalid field delta for " + delta.ElementId + ".");
-                    if (string.Equals(field.Field, SourceHandlesField, StringComparison.OrdinalIgnoreCase))
+                    if (!IsPortableReviewField(field.Field))
                     {
                         omittedSourceReferences++;
                         continue;
@@ -185,6 +187,14 @@ namespace QS3D.Core.Revisions
             return new SemanticChangeReview(before.Id, after.Id, orderedElements, summary);
         }
 
+        private static bool IsPortableReviewField(string field)
+        {
+            if (string.Equals(field, SourceHandlesField, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!field.StartsWith(PropertyFieldPrefix, StringComparison.OrdinalIgnoreCase)) return true;
+            var propertyKey = field.Substring(PropertyFieldPrefix.Length);
+            return ProjectInterchangeElementPropertyPolicy.IsPortable(propertyKey);
+        }
+
         private static Dictionary<string, RevisionElementSnapshot> Index(RevisionSnapshot snapshot, string label)
         {
             var result = new Dictionary<string, RevisionElementSnapshot>(StringComparer.OrdinalIgnoreCase);
@@ -208,7 +218,7 @@ namespace QS3D.Core.Revisions
                 string.Equals(field, "FloorId", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(field, "ZoneId", StringComparison.OrdinalIgnoreCase))
                 return SemanticChangeFieldKind.Identity;
-            if (field.StartsWith("Property:", StringComparison.OrdinalIgnoreCase))
+            if (field.StartsWith(PropertyFieldPrefix, StringComparison.OrdinalIgnoreCase))
                 return SemanticChangeFieldKind.Property;
             if (field.StartsWith("Quantity:", StringComparison.OrdinalIgnoreCase))
                 return SemanticChangeFieldKind.Quantity;
