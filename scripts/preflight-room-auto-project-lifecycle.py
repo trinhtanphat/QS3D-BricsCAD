@@ -4,13 +4,21 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "RoomBoundaryCommands.cs"
+DOC = ROOT / "docs" / "ROOM-AUTO-PREVIEW-COMMIT-FRESHNESS.md"
+INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
 errors = []
 
-if not SOURCE.is_file():
-    errors.append("missing source: src/QS3D.BricsCAD.V25/RoomBoundaryCommands.cs")
-    text = ""
-else:
-    text = SOURCE.read_text(encoding="utf-8")
+
+def read(path):
+    if not path.is_file():
+        errors.append("missing " + str(path.relative_to(ROOT)))
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+text = read(SOURCE)
+doc = read(DOC)
+inbox = read(INBOX)
 
 start = text.find("public void DiscoverRooms()")
 end = text.find("private static void EnsureBoundaryCommitFreshness", start + 1) if start >= 0 else -1
@@ -73,10 +81,28 @@ else:
 if "new RoomBoundaryEngine().Discover(segments, tolerance, minimumArea)" in body:
     errors.append("Room Auto lifecycle gate regressed to the pre-diagnostics direct topology path")
 
+for token in (
+    "no-project preview",
+    "drawing-unit policy",
+    "before `ProjectStateSnapshot`",
+    "LOCAL-001",
+):
+    if token not in doc:
+        errors.append("Room Auto freshness documentation missing: " + token)
+
+for token in (
+    "Also qualify `QS3DROOMAUTO` preview-to-commit freshness.",
+    "project-appears refusal",
+    "effective-unit freshness rejection",
+    "docs/ROOM-AUTO-PREVIEW-COMMIT-FRESHNESS.md",
+):
+    if token not in inbox:
+        errors.append("LOCAL-001 Room Auto freshness handoff missing: " + token)
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DROOMAUTO exits diagnostics before project creation, rejects project appearance after a no-project preview, preserves same-ProjectId existing mutation, and revalidates drawing-unit plus Room boundary settings before snapshot/mutation.")
+print("PASS: QS3DROOMAUTO exits diagnostics before project creation, rejects project appearance after a no-project preview, preserves same-ProjectId existing mutation, revalidates drawing-unit plus Room settings before snapshot/mutation, and keeps the matching V25 scenario in LOCAL-001.")
