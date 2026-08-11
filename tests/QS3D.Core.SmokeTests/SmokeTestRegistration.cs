@@ -51,6 +51,7 @@ namespace QS3D.Core.SmokeTests
             CurtainFrameOpeningHealthSmoke.Run();
             BomReleaseGuardSmoke.Run();
             HealthSummaryReadinessSmoke.Run();
+            DependencyHealthMissingTargetSmoke.Run();
             LevelReferenceSmoke.Run();
             FloorGeneratedIdentitySmoke.Run();
             ModelHealthIdentityAmbiguitySmoke.Run();
