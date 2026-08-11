@@ -1,6 +1,6 @@
 # Work claim — Core schedule provenance
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-core-schedule-provenance`
 - Registered: `2026-08-11T20:40:00+07:00`
 - Baseline main SHA: `b0ebaa6043cc933cc4bf017ee9aa5ca50b1d4e07`
@@ -38,6 +38,20 @@ Add read-only provenance to Material Usage, Curtain Wall, Door/Opening and Room 
 
 This follows completed PR `#450` / merge `2b15723bc8670d9ce8e8ead967718ec1bd0eaea7` and preserves its fail-closed element-identity guard. Active BQ-detail/right-panel work is UI-only and explicitly excludes Core reporting builders. Room Auto and Core mutation-atomicity lanes are also excluded.
 
+## Completion
+
+- PR: `#452` — `feat(reporting): retain source provenance in schedule rows`
+- Reviewed feature head before squash: `2bcc545e2464038e82868df52898d74a10817dda`
+- Squash merge on `main`: `072b622e6c4dc26139de0448181a995004a557b6`
+- Added `ProjectId`, `DrawingFingerprint` and `SourceHandles` provenance to Material Usage, Curtain Wall, Door/Opening and Room Finish schedule rows.
+- Added `ReportingRowProvenance` for trimmed, case-insensitive, first-seen source Handle deduplication.
+- Extended the already-registered `ScheduleReportingIdentitySmoke` with deterministic provenance coverage for all four builders; no additional test registration file was touched.
+- Final reviewed feature diff was 6 files / 157 additions / 1 deletion; the one deletion was only the existing one-line Curtain row initializer expanded into a multiline initializer.
+- Compared concurrent `main` changes twice before integration; neither comparison touched the six reserved source/test surfaces.
+- Quantity formulas, grouping keys, geometry, persistence, mutation and BricsCAD/WPF UI were unchanged.
+- GitHub Actions/build/release were not dispatched for this lane.
+- No native BricsCAD V25/WPF runtime PASS is claimed.
+
 ## Completion condition
 
-All four Core schedules expose deterministic project/drawing/source-handle provenance with focused smoke coverage, existing quantity/grouping behavior remains unchanged, the change is integrated onto current `main` without overwriting concurrent work, and this claim is closed with exact SHAs and truthful validation scope.
+Satisfied by PR `#452` and merge `072b622e6c4dc26139de0448181a995004a557b6`: all four Core schedules now expose deterministic project/drawing/source-handle provenance with focused smoke coverage, existing quantity/grouping behavior is unchanged, and the change was integrated without overwriting concurrent work.
