@@ -80,13 +80,19 @@ if not row.is_file():
 else:
     text = row.read_text(encoding="utf-8")
     for token in (
+        "if (string.Equals(_value, requested, StringComparison.Ordinal)) return;",
+        "var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;",
         "bool.TryParse(text, out var parsed)",
         'text.Equals("yes", StringComparison.OrdinalIgnoreCase)',
         'text.Equals("on", StringComparison.OrdinalIgnoreCase)',
         'text.Equals("bật", StringComparison.CurrentCultureIgnoreCase)',
     ):
         if token not in text:
-            errors.append("Boolean property editor missing normalized truthy value: " + token)
+            errors.append("Property row no-op/boolean safety missing: " + token)
+    no_op = text.find("if (string.Equals(_value, requested, StringComparison.Ordinal)) return;")
+    apply = text.find("var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;")
+    if no_op < 0 or apply < 0 or no_op > apply:
+        errors.append("PropertyRowViewModel must reject exact display-value no-ops before invoking Apply")
 
 print("QS3D Workspace property safety preflight")
 if errors:
@@ -94,4 +100,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Workspace property rows stay bounded to one exclusive live semantic selection, Instance reset resolves the current Family value instead of an opening-time snapshot, multi-selection drops Instance scope, source-derived CAD measurements remain read-only, impossible geometry dimensions fail early, source-relative offsets are labeled accurately, and Vietnamese boolean values render consistently.")
+print("PASS: Workspace property rows stay bounded to one exclusive live semantic selection, exact editor no-ops do not re-enter mutation callbacks, Instance reset resolves the current Family value, multi-selection drops Instance scope, source-derived CAD measurements remain read-only, impossible geometry dimensions fail early, and Vietnamese boolean values render consistently.")
