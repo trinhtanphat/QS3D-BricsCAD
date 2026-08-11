@@ -2,18 +2,22 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: make `QS3DCUTSELECTEDOPENINGS` resolve its selected Door/WallOpening targets from read-only project state, no-op before mutation binding when there are no valid targets, and bind the canonical mutation project exactly once for a valid cut.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/OpeningBooleanCommands.cs`
   - `scripts/preflight-opening-selected-single-bind.py`
   - this claim file
-- Contract:
-  - acquire PICKFIRST/interactive snapshots before any mutation-project bind;
-  - resolve selected semantic Opening/Door ids against `TryGetReadOnly` preview state;
+- Implemented contract:
+  - PICKFIRST/interactive snapshots are acquired before any mutation-project bind;
+  - selected source handles resolve semantic Opening/Door ids against `TryGetReadOnly` preview state;
   - missing project or zero resolved targets returns without `ExistingProjectMutationContext.Require`;
-  - freeze preview `ProjectId` + `ChangeVersion`, then canonical bind exactly once for a valid target set;
-  - after bind, fail closed on project/version drift and re-resolve the selected source handles to ensure the target-id set is unchanged;
-  - pass the already-bound canonical project into the shared physical-cut path instead of binding again;
-  - `QS3DCUTOPENINGS` all-opening behavior, OpeningBoolean service/guard internals, audit ownership and native geometry semantics are unchanged;
-  - no GitHub Actions dispatch and no BricsCAD V25 runtime PASS from this web session.
+  - preview `ProjectId` + `ChangeVersion` are frozen, then canonical mutation context is bound exactly once for a valid target set;
+  - after bind, project/version drift fails closed and selected source handles are re-resolved to prove the target-id set is unchanged;
+  - the shared physical-cut path accepts/reuses the already-bound canonical project, while `QS3DCUTOPENINGS` still uses its existing fallback bind;
+  - OpeningBoolean service/guard internals, audit ownership and native geometry semantics are unchanged.
+- Source commit: `4ad3fe41a1b838640e42420aa90a270fb61e2583` — `fix(openings): bind selected cut project once`.
+- Regression guard: `ad141b56953d3e12bce89e3a9c402786190d9928` — `scripts/preflight-opening-selected-single-bind.py`.
+- Validation actually performed: connector-side exact source diff review and regression-guard source review. The preflight script was not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed; native selection/editor/physical boolean qualification remains LOCAL_ONLY.
+- Reservation released.
