@@ -102,7 +102,7 @@ namespace QS3D.Core.Geometry
             if (curves == null) throw new ArgumentNullException(nameof(curves));
             if (!IsFinite(tolerance) || tolerance <= 0.0) throw new ArgumentOutOfRangeException(nameof(tolerance));
 
-            var list = curves.ToList();
+            var list = curves.Take(MaxCurves + 1).ToList();
             if (list.Count > MaxCurves) throw new InvalidOperationException("Grid intersection planning supports at most " + MaxCurves + " curves.");
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
