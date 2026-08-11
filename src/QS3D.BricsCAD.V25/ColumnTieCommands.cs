@@ -15,6 +15,13 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var selectedIds = CadSelectionGuard.ReadImpliedSelection(document);
+                if (selectedIds.Length == 0)
+                {
+                    Report(document, "Tie 3D: chọn Column semantic có closed rectangle POLYLINE; khai báo RebarTieDiameterMm/RebarTieSpacingMm nếu cần override.");
+                    return;
+                }
+
                 var project = ExistingProjectMutationContext.Require(document, "Column Tie 3D");
                 var count = ColumnTieSolidBuilder.BuildSelected(document, project);
                 var message = count == 0
