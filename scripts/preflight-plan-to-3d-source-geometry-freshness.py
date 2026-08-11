@@ -10,6 +10,8 @@ if not SOURCE.is_file():
     errors.append("missing PlanTo3DCommands.cs")
 else:
     text = SOURCE.read_text(encoding="utf-8")
+    convert_start = text.find("private static void ConvertPlanWalls")
+    acquire_start = text.find("private static IReadOnlyList<ObjectId>? AcquireSelection", convert_start)
     candidate_start = text.find("private sealed class SourceCandidate")
     preflight_start = text.find("private static IReadOnlyList<SourceCandidate> PreflightSources")
     same_start = text.find("private static void RequireSameSources", preflight_start)
@@ -17,15 +19,32 @@ else:
     polyline_start = text.find("private static string BuildOpenPolylineGeometryFingerprint", line_start)
     append_start = text.find("private static void AppendPoint3d", polyline_start)
     normal_start = text.find("private static void RequireWorldPlanNormal", append_start)
-    if min(candidate_start, preflight_start, same_start, line_start, polyline_start, append_start, normal_start) < 0:
+    if min(convert_start, acquire_start, candidate_start, preflight_start, same_start, line_start, polyline_start, append_start, normal_start) < 0:
         errors.append("cannot isolate PlanTo3D source geometry freshness regions")
     else:
+        convert = text[convert_start:acquire_start]
         candidate = text[candidate_start:preflight_start]
         preflight = text[preflight_start:same_start]
         same = text[same_start:line_start]
         line = text[line_start:polyline_start]
         polyline = text[polyline_start:append_start]
         helpers = text[append_start:normal_start]
+
+        if convert.count("PreflightSources(document, selectedIds)") < 3:
+            errors.append("ConvertPlanWalls must preflight sources initially, after prompts, and again after project-context resolution")
+
+        resolve_at = convert.find("var project = projectPreview.ResolveForMutation(document, operation);")
+        commit_preflight_at = convert.find("var commitSources = PreflightSources(document, selectedIds);", resolve_at)
+        commit_compare_at = convert.find("RequireSameSources(sources, commitSources);", commit_preflight_at)
+        commit_assign_at = convert.find("sources = commitSources;", commit_compare_at)
+        semantic_fresh_at = convert.find("RequireFreshSources(project, sources);", commit_assign_at)
+        snapshot_at = convert.find("var rollback = ProjectStateSnapshot.Capture(project);", semantic_fresh_at)
+        if min(resolve_at, commit_preflight_at, commit_compare_at, commit_assign_at, semantic_fresh_at, snapshot_at) < 0 or not (
+            resolve_at < commit_preflight_at < commit_compare_at < commit_assign_at < semantic_fresh_at < snapshot_at
+        ):
+            errors.append(
+                "commit boundary must re-read and compare CAD geometry after ResolveForMutation and before semantic freshness/snapshot"
+            )
 
         if "public string GeometryFingerprint { get; set; } = string.Empty;" not in candidate:
             errors.append("SourceCandidate must carry a non-null geometry fingerprint")
@@ -95,4 +114,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: PlanTo3D captures deterministic finite SHA-256 snapshots of complete LINE/open-POLYLINE public geometry and rejects identity-stable source edits before project/native mutation.")
+print("PASS: PlanTo3D captures deterministic finite SHA-256 snapshots of complete LINE/open-POLYLINE public geometry and revalidates them after project-context resolution before semantic/native mutation.")
