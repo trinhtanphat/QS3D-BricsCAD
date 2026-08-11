@@ -1,20 +1,31 @@
 # Work claim — TemplateProfile name integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-template-profile-name-integrity-20260811-2319`
 - Registered: `2026-08-11T23:19:28+07:00`
+- Completed: `2026-08-11T23:22:03+07:00`
 - Baseline main SHA: `c607ee3b73ba6091d39c45ad5f69d8c05829c1bd`
+- Claim commit: `3ff3b88ee828dfa3ece0716c8619a347fbecc190`
+- Implementation commit: `6cf4c78fe55e1ec9b792a019adc2449dfef50ae8`
+- Regression-test commit: `5a85de7b43922eb250b35c84fd33d3159e3adf2c`
 - Priority: deterministic CAD-independent invariant defect found during owner-requested `continue all` review
 
 ## Reserved scope
 
-Keep `TemplateProfile.Name` canonical after construction. The constructor currently requires/trims a name, but the public setter is an unvalidated auto-property, so callers can later assign blank or padded text and create an in-memory template representation that cannot be reconstructed through the canonical constructor without changing/rejecting its identity-facing data.
+Keep `TemplateProfile.Name` canonical after construction. The constructor required/trims a name, but the former public auto-property setter allowed a valid profile to become blank or padded after construction.
 
-## Expected surfaces
+## Implemented
+
+- `TemplateProfile` now stores its name through a guarded backing field.
+- Constructor and later setter assignments use one `RequireName` invariant: blank values throw and valid values are trimmed.
+- Rejected mutation leaves the previous valid name intact.
+- Existing template save/load/apply behavior is preserved.
+
+## Changed surfaces
 
 - `src/QS3D.Core/Templates/TemplateProfile.cs`
 - `tests/QS3D.Core.SmokeTests/WorkflowPersistenceSmoke.cs`
-- this claim file for close-out metadata
+- this claim file
 
 ## Excluded scope
 
@@ -24,19 +35,17 @@ Keep `TemplateProfile.Name` canonical after construction. The constructor curren
 
 ## Defect evidence
 
-`TemplateProfile(string id, string name)` rejects blank values and trims both tokens, but `Name` is currently `public string Name { get; set; }`. Therefore a valid profile can be mutated to `"   "` or `"  Company Standard  "` after construction. `TemplateProfileStore.Save/Apply` validate structural members but do not re-establish the constructor's name canonicalization, and serialization emits `profile.Name` directly. This breaks the object's own required/canonical name invariant and can create state whose round trip either changes representation or is rejected on load.
+Before this fix, `TemplateProfile(string id, string name)` rejected blank values and trimmed the initial name while `Name` was `public string Name { get; set; }`. A caller could therefore mutate a valid profile to `"   "` or padded text after construction; serialization emitted that raw value directly even though load reconstructed through the stricter constructor.
 
-## Validation plan
+## Validation performed
 
-- Replace the auto-property with the same required/trimmed invariant used at construction.
-- Add deterministic smoke coverage showing padded assignment is canonicalized and blank assignment throws without changing the previous valid name.
-- Preserve the existing template save/load/apply round trip in the same smoke surface.
-- Re-fetch current `main` and both reserved blobs after this claim becomes visible; use SHA-guarded writes under concurrent movement.
+- Published claim `3ff3b88ee828dfa3ece0716c8619a347fbecc190` before product/test writes and verified it remained in current-main ancestry with `behind_by=0`.
+- Re-fetched both reserved blobs from current `main` after claim publication.
+- Source fix committed as `6cf4c78fe55e1ec9b792a019adc2449dfef50ae8`; focused regression committed as `5a85de7b43922eb250b35c84fd33d3159e3adf2c` using exact blob SHAs.
+- Regression source verifies padded assignment canonicalizes to `Company Standard`, blank mutation throws without changing the valid name, loaded name remains canonical, and the existing template save/load/apply path continues.
+- Compared the claim to then-current `main` `23dba63c5c5b0da5ad04750735cb2d03613687e3`: status `ahead`, `ahead_by=13`, `behind_by=0`; both source/test changes remained reachable despite concurrent disjoint commits.
+- No GitHub Actions workflow was dispatched or re-run. No hosted smoke execution or BricsCAD V25 runtime qualification is claimed.
 
-## Coordination
+## Outcome
 
-Recent active claims reserve browser/material/interchange/revision/updater/regeneration/native-table and other disjoint surfaces. No current recent claim reserves `TemplateProfile.cs` or this narrow template-name invariant.
-
-## Completion condition
-
-The Core fix and regression are reachable from current `main`, this claim is marked `COMPLETED` with exact SHAs and truthful validation scope, and no hosted/native runtime qualification is claimed.
+Template profile names now preserve the constructor's required/canonical invariant across later mutation and serialization round trips.
