@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
@@ -153,16 +152,13 @@ namespace QS3D.Core.Navigation
             if (project.Metadata.TryGetValue(MetadataKey, out var existing) && string.Equals(existing, serialized, StringComparison.Ordinal))
                 return false;
             project.Metadata[MetadataKey] = serialized;
-            project.Touch();
             return true;
         }
 
         public bool Clear(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (!project.Metadata.Remove(MetadataKey)) return false;
-            project.Touch();
-            return true;
+            return project.Metadata.Remove(MetadataKey);
         }
 
         public string Serialize(ProjectBrowserWorkspaceState state)
