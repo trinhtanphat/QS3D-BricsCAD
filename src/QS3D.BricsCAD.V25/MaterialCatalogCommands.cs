@@ -14,6 +14,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                ProjectContextCoordinator.GetOrCreate(document);
                 var window = new MaterialCatalogWindow(document);
                 DocumentBoundWindowLifetime.Attach(window, document);
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
