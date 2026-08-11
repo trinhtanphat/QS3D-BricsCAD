@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Reporting
@@ -154,7 +155,7 @@ namespace QS3D.Core.Reporting
             var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
             var familyName = family?.Name ?? familyId;
             var category = element.Category.ToString();
-            var key = floorId + "\u001f" + material + "\u001f" + component + "\u001f" + category + "\u001f" + familyId;
+            var key = GroupKey(floorId, material, component, category, familyId);
             if (!rows.TryGetValue(key, out var row))
             {
                 row = new MaterialUsageRow
@@ -178,6 +179,19 @@ namespace QS3D.Core.Reporting
             row.MassKg = QuantityReportMath.Add(row.MassKg, metrics.MassKg, element.Id + "/material mass");
             row.ElementIds.Add(element.Id);
             ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
+        }
+
+        private static string GroupKey(params string[] tokens)
+        {
+            var key = new StringBuilder();
+            foreach (var raw in tokens)
+            {
+                var token = raw ?? string.Empty;
+                key.Append(token.Length.ToString(CultureInfo.InvariantCulture))
+                    .Append(':')
+                    .Append(token);
+            }
+            return key.ToString();
         }
 
         private static string Effective(ProjectElement element, ProjectFamily? family, string key)
