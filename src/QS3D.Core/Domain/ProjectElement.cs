@@ -239,6 +239,11 @@ namespace QS3D.Core.Domain
             UpdatedUtc = updatedUtc.Kind == DateTimeKind.Utc ? updatedUtc : updatedUtc.ToUniversalTime();
         }
 
+        internal void TouchPersistenceState()
+        {
+            UpdatedUtc = DateTime.UtcNow;
+        }
+
         private void MarkDirtyCore(ElementDirtyFlags flags, bool markGeneratedGeometryStale)
         {
             if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
