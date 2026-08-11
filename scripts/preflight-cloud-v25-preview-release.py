@@ -20,10 +20,13 @@ else:
         "$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash",
         "[string]::Equals($actual, $env:BRICSCAD_V25_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)",
         "BricsCAD V25 MSI SHA-256 mismatch.",
+        "([string]$metadata.productVersion).Trim()",
+        "PACKAGE-METADATA productVersion must match source product version.",
+        "PACKAGE-METADATA assembly version is missing.",
     )
     for token in required:
         if token not in text:
-            errors.append("cloud V25 workflow missing pinning/manual-release token: " + token)
+            errors.append("cloud V25 workflow missing pinning/version/manual-release token: " + token)
 
     if "if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256))" in text:
         errors.append("cloud V25 workflow must not make MSI SHA-256 verification optional")
@@ -32,6 +35,13 @@ else:
     extract_index = text.find("$process = Start-Process -FilePath msiexec.exe")
     if hash_index < 0 or extract_index < 0 or hash_index > extract_index:
         errors.append("cloud V25 workflow must verify the pinned MSI digest before administrative extraction")
+
+    tag_check = text.find("Release tag must exactly match source product version.")
+    product_check = text.find("PACKAGE-METADATA productVersion must match source product version.")
+    checksum_step = text.find("- name: Create package checksum")
+    publish_step = text.find("- name: Publish GitHub prerelease")
+    if min(tag_check, product_check, checksum_step, publish_step) < 0 or not tag_check < product_check < checksum_step < publish_step:
+        errors.append("cloud V25 workflow must bind tag and package productVersion to source before checksum/publish")
 
 if not DOC.is_file():
     errors.append("missing docs/CLOUD-V25-PREVIEW-RELEASE.md")
@@ -52,4 +62,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cloud V25 preview release remains manual-only and requires SHA-256 pinning before using downloaded BricsCAD compile references.")
+print("PASS: cloud V25 preview release remains manual-only, pins the installer, and binds PACKAGE-METADATA productVersion to source before publication.")
