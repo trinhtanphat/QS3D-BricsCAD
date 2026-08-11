@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             BentPathSplitsFrameAtCorner();
             SmallFrameCrossingCornerSplitsDeterministically();
             ProjectionUsesNearestPathStation();
+            LargeFiniteProjectionAvoidsIntermediateOverflow();
+            LargeFiniteFrameMidpointAvoidsIntermediateOverflow();
             TessellatedBulgeMapsAcrossSegments();
             InvalidPathsAndIntervalsFailClosed();
         }
@@ -73,6 +75,41 @@ namespace QS3D.Core.SmokeTests
             Near(0.2d, projection.DistanceM);
             Near(3d, projection.Point.X);
             Near(2d, projection.Point.Y);
+        }
+
+        private static void LargeFiniteProjectionAvoidsIntermediateOverflow()
+        {
+            const double pathLength = 1e200d;
+            const double offset = 1e100d;
+            var path = new[] { new Point2(0d, 0d), new Point2(pathLength, 0d) };
+            var projection = CurtainPathFramePlanner.ProjectPoint(path, new Point2(pathLength / 2d, offset));
+
+            Equal(0, projection.PathSegmentIndex);
+            True(double.IsFinite(projection.StationM));
+            True(double.IsFinite(projection.DistanceM));
+            True(double.IsFinite(projection.Point.X));
+            Near(0.5d, projection.StationM / pathLength, 1e-12d);
+            Near(1d, projection.DistanceM / offset, 1e-12d);
+            Near(0.5d, projection.Point.X / pathLength, 1e-12d);
+            Near(0d, projection.Point.Y);
+        }
+
+        private static void LargeFiniteFrameMidpointAvoidsIntermediateOverflow()
+        {
+            const double pathLength = 1.6e308d;
+            const double frameStart = 1.2e308d;
+            const double frameWidth = 2e307d;
+            var path = new[] { new Point2(0d, 0d), new Point2(pathLength, 0d) };
+            var frame = new CurtainWallRect(frameStart, 0d, frameWidth, 1d);
+            var plan = CurtainPathFramePlanner.Plan(path, new[] { frame });
+
+            Equal(1, plan.Pieces.Count);
+            var piece = plan.Pieces[0];
+            True(double.IsFinite(piece.CenterX_M));
+            True(double.IsFinite(piece.StationStartM));
+            True(double.IsFinite(piece.StationEndM));
+            Near(0.8125d, piece.CenterX_M / pathLength, 1e-12d);
+            Near(0.125d, piece.WidthM / pathLength, 1e-12d);
         }
 
         private static void TessellatedBulgeMapsAcrossSegments()
