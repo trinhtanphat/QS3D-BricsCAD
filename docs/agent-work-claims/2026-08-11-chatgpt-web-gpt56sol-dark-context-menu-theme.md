@@ -45,7 +45,7 @@ The prior premium-theme-v2 and Workspace overlap claims are `COMPLETED`. The act
 ## Implementation readiness
 
 - Source commit: `3a555f2fe58c508d15aa68fbb91f33cf782ba31a`.
-- Current-main reconciliation merge on the feature branch: `2170cedcf8c8bc040d44ecbe794150948583e542`.
+- Latest current-main reconciliation commit prepared on the feature branch: `c4e1d3be39268b0f77bb776409a65e69f03f7a78`.
 - PR: `#499`.
 - The focused preflight is auto-discovered by `scripts/preflight-all.py`; no GitHub Actions were dispatched.
 
