@@ -275,8 +275,19 @@ namespace QS3D.BricsCAD.V25.Cad
                 return issues.AsReadOnly();
             }
 
-            foreach (var token in PersistedTokens(project))
+            foreach (var token in PersistedTokenCandidates(project))
+            {
+                if (!IsToken(token))
+                {
+                    issues.Add(Issue(
+                        "CUSTOM_SCHEDULE_TABLE_METADATA_INVALID",
+                        HealthSeverity.Error,
+                        "Persisted custom schedule Table metadata contains a malformed owner token.",
+                        string.Empty));
+                    continue;
+                }
                 InspectToken(document, project, definitions, token, issues);
+            }
             return issues.AsReadOnly();
         }
 
@@ -549,11 +560,22 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static IReadOnlyList<string> PersistedTokens(ProjectState project)
         {
+            return PersistedTokenCandidates(project)
+                .Where(IsToken)
+                .ToList()
+                .AsReadOnly();
+        }
+
+        private static IReadOnlyList<string> PersistedTokenCandidates(ProjectState project)
+        {
             return project.Metadata.Keys
                 .Where(x => x.StartsWith(MetadataPrefix, StringComparison.Ordinal))
                 .Select(x => x.Substring(MetadataPrefix.Length))
-                .Select(x => x.IndexOf('.') > 0 ? x.Substring(0, x.IndexOf('.')) : string.Empty)
-                .Where(IsToken)
+                .Select(x =>
+                {
+                    var separator = x.IndexOf('.');
+                    return separator > 0 ? x.Substring(0, separator) : string.Empty;
+                })
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(x => x, StringComparer.Ordinal)
                 .ToList()

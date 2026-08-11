@@ -39,10 +39,8 @@ if xaml_path.is_file():
 if code_path.is_file():
     text = code_path.read_text(encoding="utf-8")
     for token in (
-        "OnRightPanelPreviewKeyDown",
-        "ModifierKeys.Control && e.Key == Key.F",
+        "TryHandleRightPanelInteractionShortcut",
         "ModifierKeys.None && e.Key == Key.F5",
-        "LayerSearchBox.Focus();",
         "OnRefreshClick(this, new RoutedEventArgs());",
         "OnDrawingListPreviewMouseRightButtonDown",
         "OnLayerListPreviewMouseRightButtonDown",

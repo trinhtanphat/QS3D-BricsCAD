@@ -158,13 +158,34 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureBoundDrawingIsActive("gán tầng cho selection");
+                if (!(FloorList.SelectedItem is FloorDefinition selectedFloor))
+                    throw new InvalidOperationException("Chọn một tầng trước khi thực hiện thao tác.");
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject))
+                    throw new InvalidOperationException("Gán Floor/Level cho selection cần một QS3D project hiện hữu; thao tác này không tạo project mới.");
+                var previewFloor = previewProject.Floors.FirstOrDefault(x => string.Equals(x.Id, selectedFloor.Id, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException("Tầng đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại.");
+                var expectedProjectId = previewProject.ProjectId;
+                var previewIds = SemanticSelectionResolver.ResolveImplied(_document, previewProject)
+                    .Select(x => x.Id)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (previewIds.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+
                 var project = ExistingProjectMutationContext.Require(_document, "Gán Floor/Level cho selection");
-                var floor = RequireSelectedFloor(project);
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi sau khi đọc selection. Không có Floor/Level assignment nào được áp dụng; hãy Refresh và thử lại.");
+                var floor = project.Floors.FirstOrDefault(x => string.Equals(x.Id, previewFloor.Id, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException("Tầng đã thay đổi hoặc bị xóa khỏi project hiện tại. Hãy Refresh và chọn lại.");
                 var elements = SemanticSelectionResolver.ResolveImplied(_document, project)
                     .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                     .Select(x => x.First())
                     .ToList();
-                if (elements.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+                var currentIds = elements.Select(x => x.Id)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (!previewIds.SequenceEqual(currentIds, StringComparer.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Selection hoặc semantic ownership đã thay đổi trước khi gán Floor/Level. Không có mutation nào được áp dụng; hãy chọn lại và thử lại.");
 
                 var changedElements = elements
                     .Where(element => !string.Equals(element.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase))

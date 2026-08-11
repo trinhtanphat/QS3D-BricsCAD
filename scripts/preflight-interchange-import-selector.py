@@ -18,7 +18,7 @@ if not errors:
 
     required = [
         '[CommandMethod("QS3DINTERCHANGEIMPORT", CommandFlags.Modal)]',
-        "ProjectInterchangeJsonValidator.Validate(json)",
+        "ProjectInterchangeValidatedSnapshotReader.Read(json)",
         'EnsureActive(document, "Interchange Import / preview")',
         "ProjectInterchangeImportPreview.Plan(project, json)",
         "if (preview.CollisionCount == 0)",
@@ -60,12 +60,19 @@ if not errors:
         errors.append("import preview must run before append-vs-collision policy routing")
 
     guarded_read = c.find("var json = ReadGuardedSnapshotText(dialog.FileName);")
-    validation = c.find("ProjectInterchangeJsonValidator.Validate(json)", guarded_read)
+    validation_token = "ProjectInterchangeValidatedSnapshotReader.Read(json)"
+    validation = c.find(validation_token, guarded_read)
     active_check = c.find('EnsureActive(document, "Interchange Import / preview")', validation)
     bootstrap = c.find("var project = ProjectContextCoordinator.GetOrCreate(document);", active_check)
     preview = c.find("ProjectInterchangeImportPreview.Plan(project, json)", bootstrap)
     if min(guarded_read, validation, active_check, bootstrap, preview) < 0 or not guarded_read < validation < active_check < bootstrap < preview:
-        errors.append("generic import must guarded-read -> validate -> verify active DWG -> bootstrap -> preview")
+        errors.append("generic import must guarded-read -> strict validated-snapshot read -> verify active DWG -> bootstrap -> preview")
+    if c.count(validation_token) != 1:
+        errors.append("generic import must perform exactly one strict validated-snapshot read before target bootstrap")
+    if "ProjectInterchangeJsonValidator.Validate(json)" in c:
+        errors.append("generic import must not repeat the obsolete direct JSON validator after canonical validated-snapshot prevalidation")
+    if 0 <= bootstrap < validation:
+        errors.append("generic import must not bootstrap the target project before strict snapshot validation")
 
     for stale_call in (
         "RunUseSourceElement(document, json)",

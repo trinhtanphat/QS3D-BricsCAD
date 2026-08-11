@@ -25,6 +25,13 @@ CASES = (
         "ProjectZoneService.Assign(project, zone.Id, elements)",
         "Zone",
     ),
+    (
+        ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs",
+        "private void OnAssignClick",
+        "ExistingProjectMutationContext.Require(_document, \"Gán Floor/Level cho selection\")",
+        "ProjectFloorService.Assign(project, floor.Id, elements)",
+        "Floor/Level",
+    ),
 )
 errors = []
 
@@ -73,4 +80,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Family/Material/Zone modeless semantic assignment resolves selection before project bind and rechecks ProjectId/ownership freshness before mutation")
+print("[PASS] Family/Material/Zone/Floor modeless semantic assignment resolves selection before project bind and rechecks ProjectId/ownership freshness before mutation")

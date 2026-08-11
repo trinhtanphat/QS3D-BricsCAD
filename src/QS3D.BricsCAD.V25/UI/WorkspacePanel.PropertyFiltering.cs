@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -9,6 +10,8 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class WorkspacePanel
     {
+        private const int MaxPropertySearchTokens = 12;
+
         private void OnWorkspaceDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             PreviewKeyDown -= OnPropertyFilterShortcut;
@@ -61,17 +64,37 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
+            var tokens = text
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .Where(x => x.Length > 0)
+                .Take(MaxPropertySearchTokens)
+                .ToArray();
+            if (tokens.Length == 0)
+            {
+                view.Filter = null;
+                view.Refresh();
+                return;
+            }
+
             view.Filter = item =>
             {
                 if (!(item is PropertyRowViewModel row)) return false;
-                return Contains(row.Group, text) ||
-                       Contains(row.Name, text) ||
-                       Contains(row.Unit, text) ||
-                       Contains(row.Value, text) ||
-                       (row.IsReadOnly && Contains("CAD đọc khóa", text)) ||
-                       (row.CanReset && Contains("Instance override", text));
+                return tokens.All(token => MatchesPropertyToken(row, token));
             };
             view.Refresh();
+        }
+
+        private static bool MatchesPropertyToken(PropertyRowViewModel row, string token)
+        {
+            return Contains(row.Group, token) ||
+                   Contains(row.Name, token) ||
+                   Contains(row.Unit, token) ||
+                   Contains(row.Value, token) ||
+                   Contains(row.EditorKind, token) ||
+                   row.Choices.Any(choice => Contains(choice, token)) ||
+                   (row.IsReadOnly && Contains("CAD đọc khóa readonly source nguồn", token)) ||
+                   (row.CanReset && Contains("Instance override ghi đè", token));
         }
 
         private static bool Contains(string? value, string text)

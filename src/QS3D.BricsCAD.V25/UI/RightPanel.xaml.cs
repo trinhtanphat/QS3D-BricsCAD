@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Windows;
@@ -14,7 +15,9 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class RightPanel : UserControl
     {
+        private const int MaxLayerSearchTokens = 8;
         private readonly RightPanelViewModel _viewModel = new RightPanelViewModel();
+        private IReadOnlyList<LayerSnapshot> _layerSnapshots = Array.Empty<LayerSnapshot>();
         private bool _refreshingLayers;
         private bool _refreshingDrawings;
 
@@ -32,8 +35,8 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 RefreshDrawingsOnly();
-                RefreshLayers();
-                _viewModel.Status = _viewModel.Drawings.Count + " bản vẽ • " + _viewModel.Layers.Count + " layer";
+                ReloadLayers();
+                _viewModel.Status = _viewModel.Drawings.Count + " bản vẽ • " + _layerSnapshots.Count + " layer";
             }
             catch (Exception ex)
             {
@@ -41,18 +44,36 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private void RefreshLayers()
+        private void ReloadLayers()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
+            if (doc == null)
+            {
+                _layerSnapshots = Array.Empty<LayerSnapshot>();
+                ApplyLayerFilter();
+                return;
+            }
+            _layerSnapshots = DrawingCatalogReader.ReadLayers(doc);
+            ApplyLayerFilter();
+        }
+
+        private void ApplyLayerFilter()
+        {
             var selectedNames = LayerList?.SelectedItems.Cast<LayerItemViewModel>().Select(x => x.Name) ?? Enumerable.Empty<string>();
-            var selected = new System.Collections.Generic.HashSet<string>(selectedNames, StringComparer.OrdinalIgnoreCase);
+            var selected = new HashSet<string>(selectedNames, StringComparer.OrdinalIgnoreCase);
             var search = LayerSearchBox?.Text?.Trim() ?? string.Empty;
+            var tokens = search
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .Where(x => x.Length > 0)
+                .Take(MaxLayerSearchTokens)
+                .ToArray();
+
             _refreshingLayers = true;
             try
             {
                 _viewModel.Layers.Clear();
-                foreach (var item in DrawingCatalogReader.ReadLayers(doc).Where(x => search.Length == 0 || x.Name.IndexOf(search, StringComparison.CurrentCultureIgnoreCase) >= 0))
+                foreach (var item in _layerSnapshots.Where(x => tokens.Length == 0 || tokens.All(token => MatchesLayerToken(x, token))))
                 {
                     var brush = new SolidColorBrush(Color.FromRgb(item.Red, item.Green, item.Blue));
                     brush.Freeze();
@@ -73,6 +94,21 @@ namespace QS3D.BricsCAD.V25.UI
                 _refreshingLayers = false;
             }
         }
+
+        private static bool MatchesLayerToken(LayerSnapshot layer, string token)
+        {
+            if (layer.Name.IndexOf(token, StringComparison.CurrentCultureIgnoreCase) >= 0) return true;
+            if (layer.ColorIndex.ToString(CultureInfo.InvariantCulture).IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (layer.IsVisible && AliasContains("hiện visible on", token)) return true;
+            if (!layer.IsVisible && AliasContains("ẩn hidden off", token)) return true;
+            if (layer.IsLocked && AliasContains("khóa locked lock", token)) return true;
+            if (!layer.IsLocked && AliasContains("mở unlocked unlock", token)) return true;
+            return false;
+        }
+
+        private static bool AliasContains(string aliases, string token) =>
+            aliases.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .Any(alias => string.Equals(alias, token, StringComparison.CurrentCultureIgnoreCase));
 
         private void RefreshDrawingsOnly()
         {
@@ -112,7 +148,7 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         private void OnRefreshClick(object sender, RoutedEventArgs e) => Refresh();
-        private void OnLayerSearchChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) RefreshLayers(); }
+        private void OnLayerSearchChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) ApplyLayerFilter(); }
         private void OnShowLayersClick(object sender, RoutedEventArgs e) => SetSelectedLayers(true);
         private void OnHideLayersClick(object sender, RoutedEventArgs e) => SetSelectedLayers(false);
         private void OnLockLayersClick(object sender, RoutedEventArgs e) => SetSelectedLayerLocks(true);
@@ -177,11 +213,12 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 LayerVisibilityService.SetVisible(doc, new[] { item.Name }, visible);
                 _viewModel.Status = (visible ? "Hiện " : "Ẩn ") + item.Name;
+                ReloadLayers();
             }
             catch (Exception ex)
             {
                 _viewModel.Status = ex.Message;
-                RefreshLayers();
+                ReloadLayers();
             }
         }
 
@@ -199,12 +236,12 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var count = LayerVisibilityService.SetVisible(doc, names, visible);
                 _viewModel.Status = (visible ? "Đã hiện " : "Đã ẩn ") + count + " layer";
-                RefreshLayers();
+                ReloadLayers();
             }
             catch (Exception ex)
             {
                 _viewModel.Status = ex.Message;
-                RefreshLayers();
+                ReloadLayers();
             }
         }
 
@@ -222,13 +259,13 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var count = LayerVisibilityService.SetLocked(doc, names, locked);
                 _viewModel.Status = (locked ? "Đã khóa " : "Đã mở khóa ") + count + " layer";
-                RefreshLayers();
+                ReloadLayers();
                 RefreshDrawingsOnly();
             }
             catch (Exception ex)
             {
                 _viewModel.Status = ex.Message;
-                RefreshLayers();
+                ReloadLayers();
                 RefreshDrawingsOnly();
             }
         }
