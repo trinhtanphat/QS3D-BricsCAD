@@ -48,26 +48,27 @@ Trước mutation, toàn selection được kiểm tra:
 
 ### Preview-to-commit freshness
 
-Family defaults được đọc trước commit, vì vậy command giữ một **preview-to-commit** boundary rõ ràng thay vì tin rằng project/drawing/source vẫn giống lúc bắt đầu.
+Family defaults được đọc trước commit, vì vậy command giữ một **preview-to-commit** boundary rõ ràng thay vì tin rằng project/drawing/source vẫn giống lúc bắt đầu. Plan-to-3D dùng cùng `DirectDrawProjectPreviewContext` với Direct Draw để snapshot canonical project state và CAD context trước khi có prompt hoặc mutation.
 
 Trước `ProjectStateSnapshot` hoặc semantic/native mutation, command hiện:
 
 - xác nhận đúng DWG ban đầu vẫn active;
 - kiểm tra lại Model Space và planar UCS;
-- xác nhận drawing unit policy chưa đổi;
-- **re-preflight** đúng các `ObjectId` đã chọn và yêu cầu count/ObjectId/handle/source kind vẫn khớp selection ban đầu;
-- nếu preview đã có project, bind canonical existing project và yêu cầu **same `ProjectId`**;
-- nếu preview bắt đầu projectless nhưng một project appears trước commit, fail-closed và yêu cầu chạy lại thay vì áp projectless defaults vào project vừa xuất hiện;
+- **re-preflight** đúng các `ObjectId` đã chọn và yêu cầu count/ObjectId/handle/source kind/canonical geometry fingerprint vẫn khớp selection ban đầu;
+- resolve lại guarded preview và yêu cầu drawing unit policy + exact UCS vẫn đúng snapshot ban đầu;
+- nếu preview đã có project, bind canonical existing project và yêu cầu **same `ProjectId`** cùng **same `ProjectState.ChangeVersion`**;
+- nếu project đã bị chỉnh sửa trong lúc người dùng xác nhận Advanced prompts, fail-closed để tránh áp Family defaults/parameters đọc từ state cũ;
+- nếu preview bắt đầu projectless nhưng một project appears hoặc sidecar/backing store xuất hiện trước commit, fail-closed và yêu cầu chạy lại thay vì áp projectless defaults vào project vừa xuất hiện;
 - sau khi project được resolve mới kiểm lại semantic/generated ownership của source;
 - chỉ sau toàn bộ freshness checks mới capture snapshot và bắt đầu batch mutation.
 
-Quick path dùng Family/fallback values đã đọc trong preview. Advanced path dùng values người dùng xác nhận ở prompt. Command không stale toàn bộ thao tác chỉ vì `ProjectState.ChangeVersion` đổi bởi một thay đổi không liên quan; boundary bắt buộc ở đây là project identity + drawing/source eligibility.
+Quick path dùng Family/fallback values đã đọc trong preview. Advanced path dùng values người dùng xác nhận ở prompt. Cả hai đều dùng một mutation bridge chung, nên identity/version/unit/UCS/backing-store race không có đường bootstrap riêng trong `PlanTo3DCommands`.
 
 Mỗi wall mới chỉ được semantic-regenerate bằng `RegenerateDirtySubset(project, new[] { element.Id })`; conversion không được regenerate hoặc mark-clean các element cũ đang dirty ngoài selection. Điều này vừa giới hạn side effect vừa tránh chi phí whole-project regeneration trong batch lớn.
 
 Nếu batch mới bị lỗi giữa chừng, command tìm generated CAD bằng ownership metadata, xóa các Solid3d thuộc chính batch đó rồi restore `ProjectStateSnapshot`. Source 2D của người dùng không nằm trong rollback-delete set. Compensation này vẫn là whole-batch safety boundary hiện hữu; freshness hardening không tạo transaction engine thứ hai.
 
-Static lifecycle contract được khóa bởi `scripts/preflight-plan-to-3d-project-lifecycle.py`; same-ObjectId geometry freshness được khóa bởi `scripts/preflight-plan-to-3d-source-geometry-freshness.py`; scoped regeneration được khóa bởi `scripts/preflight-plan-to-3d-scoped-regeneration.py`; quick-vs-advanced interaction contract được khóa bởi `scripts/preflight-plan-to-3d-quick-authoring.py`.
+Static lifecycle contract được khóa bởi `scripts/preflight-plan-to-3d-project-lifecycle.py` và `scripts/preflight-plan-to-3d-preview-context.py`; same-ObjectId geometry freshness được khóa bởi `scripts/preflight-plan-to-3d-source-geometry-freshness.py`; scoped regeneration được khóa bởi `scripts/preflight-plan-to-3d-scoped-regeneration.py`; quick-vs-advanced interaction contract được khóa bởi `scripts/preflight-plan-to-3d-quick-authoring.py`.
 
 Exact BricsCAD V25 proof cho toàn bộ Plan-to-3D command contract — quick no-prompt defaults của `QS3DCONVERT2D` / `QS3DPLAN2WALLS`, advanced prompt cancellation của `QS3DCONVERT2DADV`, preview-to-commit freshness, scoped regeneration và ownership-scoped compensation — nằm trong **LOCAL-014** của `docs/LOCAL-AGENT-INBOX.md`. Runtime proof cho `QS3DDRAWWINDOW`, các quick-workflow Ribbon entry, Auto Host và explicit `QS3DCUTSELECTEDOPENINGS` handoff nằm trong **LOCAL-008**. Cả hai vẫn là `PENDING_LOCAL`; source review không được coi là `LOCAL_PASS` và không xác nhận các source gap chưa được sửa.
 
