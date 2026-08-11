@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.Core.Export;
+using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
 using Application = Bricscad.ApplicationServices.Application;
@@ -81,7 +82,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _rows = BuildCurrentRows(out var regenerated);
                 Title = "QS3D • HT_Phòng • " + DrawingLabel(_document);
                 ApplyFilter();
-                SetStatus("Đã nạp " + _rows.Count + " nhóm HT_Phòng • regen " + regenerated + " cấu kiện dirty.");
+                SetStatus("Đã nạp " + _rows.Count + " nhóm HT_Phòng • regen " + regenerated + " cấu kiện dirty trên snapshot đọc-only.");
             }
             catch (Exception ex)
             {
@@ -94,10 +95,11 @@ namespace QS3D.BricsCAD.V25.UI
         private IReadOnlyList<RoomFinishScheduleRow> BuildCurrentRows(out int regenerated)
         {
             EnsureActive("đọc HT_Phòng Schedule hiện hành");
-            if (!ExistingProjectMutationContext.TryGet(_document, out var project))
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng HT_Phòng Schedule và mở lại sau khi nạp project.");
-            regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-            return RoomFinishScheduleBuilder.Build(project);
+            var snapshot = ProjectStateSnapshot.CreateDetachedCopy(project);
+            regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(snapshot);
+            return RoomFinishScheduleBuilder.Build(snapshot);
         }
 
         private void ApplyFilter()
