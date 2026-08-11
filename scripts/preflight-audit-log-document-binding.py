@@ -17,13 +17,15 @@ if WINDOW.is_file():
         "private readonly Document _document;",
         "public AuditLogWindow(Document document)",
         "Activated += (_, __) => Reload();",
-        "ProjectContextCoordinator.GetOrCreate(_document)",
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
         "DrawingLabel(_document)",
     ):
         if token not in text:
-            errors.append("AuditLogWindow.xaml.cs missing source-document refresh token: " + token)
+            errors.append("AuditLogWindow.xaml.cs missing source-document read-only refresh token: " + token)
     if "private readonly ProjectState _project" in text:
         errors.append("Audit Log must not retain a stale ProjectState reference across modeless project reload/replacement")
+    if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
+        errors.append("Audit Log is read-only and must not create/cache project state while refreshing")
 
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
@@ -37,4 +39,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] modeless Audit Log is bound to its source DWG and re-resolves current project audit state on activation")
+print("[PASS] modeless Audit Log is bound to its source DWG and re-resolves existing audit state read-only on activation")
