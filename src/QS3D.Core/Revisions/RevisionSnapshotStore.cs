@@ -63,6 +63,7 @@ namespace QS3D.Core.Revisions
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Revision path is required.", nameof(path));
             var root = LoadDocument(path).Root ?? throw new InvalidDataException("Revision file has no root.");
+            RevisionSnapshotXmlSchemaValidator.Validate(root);
             if (!string.Equals(root.Name.LocalName, "qs3dRevision", StringComparison.Ordinal)) throw new InvalidDataException("Invalid QS3D revision root.");
             var snapshot = new RevisionSnapshot { Id = Required(root, "id"), CreatedUtc = Date(root.Attribute("createdUtc")?.Value) };
             foreach (var node in root.Element("elements")?.Elements("element") ?? Enumerable.Empty<XElement>())
