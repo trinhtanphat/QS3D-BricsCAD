@@ -61,8 +61,9 @@ namespace QS3D.Core.Diagnostics
 
                 foreach (var quantity in element.Quantities)
                 {
-                    if (string.IsNullOrWhiteSpace(quantity.Key))
-                        issues.Add(new ModelHealthIssue("BOM_QUANTITY_KEY_INVALID", HealthSeverity.Error, "Quantity key không được để trống.", element.Id));
+                    if (string.IsNullOrWhiteSpace(quantity.Key) ||
+                        !string.Equals(quantity.Key, quantity.Key.Trim(), StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("BOM_QUANTITY_KEY_INVALID", HealthSeverity.Error, "Quantity key phải là tên canonical, không rỗng và không có khoảng trắng bao quanh.", element.Id));
                     if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value))
                         issues.Add(new ModelHealthIssue("BOM_QUANTITY_NONFINITE", HealthSeverity.Error, "Quantity " + quantity.Key + " không phải số hữu hạn.", element.Id));
                 }
