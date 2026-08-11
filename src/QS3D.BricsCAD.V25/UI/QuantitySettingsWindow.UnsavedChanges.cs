@@ -20,8 +20,31 @@ namespace QS3D.BricsCAD.V25.UI
             _persistedSettingsBaseline = baseline.Clone();
             _persistedSettingsBaselineVerified = TryVerifyPersistedSettingsBaseline(baseline);
             Closing += QuantitySettingsWindow_Closing;
+            SaveSettingsButton.Click -= Save_Click;
+            SaveSettingsButton.Click += QuantitySettingsGuardedSave_Click;
             SaveSettingsButton.Click += QuantitySettingsSaveBaseline_Click;
             _unsavedChangesTrackingInitialized = true;
+        }
+
+        private void QuantitySettingsGuardedSave_Click(object sender, RoutedEventArgs e)
+        {
+            if (_persistentSettingsWriteBlocked)
+            {
+                Save_Click(sender, e);
+                return;
+            }
+
+            try
+            {
+                EnsurePersistedSettingsFreshBeforeSave();
+            }
+            catch (Exception ex)
+            {
+                ShowError("Không thể lưu cài đặt vì cấu hình theo máy đã thay đổi.", ex);
+                return;
+            }
+
+            Save_Click(sender, e);
         }
 
         private void QuantitySettingsSaveBaseline_Click(object sender, RoutedEventArgs e)
