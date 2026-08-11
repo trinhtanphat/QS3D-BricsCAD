@@ -1,6 +1,6 @@
 # Work claim — release preflight RightPanel label repair
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-11T23:54:00+07:00`
 - Baseline main SHA: `633191a5472dc16bd67c1f7790cf5de02ba5afe3`
@@ -13,7 +13,7 @@ Repair the current `scripts/preflight.py` failure caused by the misleading Xref 
 ## Expected surfaces
 
 - `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml`
-- `src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs` (read/verification only unless current main regresses before implementation)
+- `src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs` (read/verification only)
 - `scripts/preflight.py` (read/validation only)
 - this work claim
 
@@ -24,17 +24,20 @@ Repair the current `scripts/preflight.py` failure caused by the misleading Xref 
 - semantic-capture lifecycle/transaction changes beyond the exact stale source-derived metric/metadata preflight contract
 - workflow/release dispatch or publication
 
-## Validation plan
+## Validation executed
 
-- Re-read current `main` immediately before the implementation write.
-- Confirm `RightPanel.xaml` no longer contains the forbidden `Header="Tỉ lệ"` / `Content="Xóa"` labels.
-- Confirm `SemanticCaptureService.cs` still contains `ReplaceSourceMetric`, `element.Properties.Remove(key)`, and `StartsWith("CAD.")` required by `scripts/preflight.py`.
-- Confirm the implementation commit is on current `main` and report its SHA.
+- Implementation commit: `ecd6d87101216f7fcd05b4b6318877ff87dcf9c5` (`fix(ui): clarify Xref scale label for release preflight`).
+- Verified the implementation commit remains an ancestor of current `main` after concurrent pushes.
+- Verified current `RightPanel.xaml` uses `Header="Tỉ lệ Xref"`; the forbidden exact `Header="Tỉ lệ"` token is gone and no `Content="Xóa"` was introduced.
+- Verified current `SemanticCaptureService.cs` still clears stale `CAD.*` metadata via `StartsWith("CAD.")` + `element.Properties.Remove(key)` and replaces/removes stale source metrics through `ReplaceSourceMetric`.
+- Verified `scripts/preflight.py` still enforces both guards; the guard itself was not weakened.
+- Attempted a clean local clone to execute `python scripts/preflight.py`, but this session container could not resolve `github.com`; therefore no full local preflight PASS is claimed.
+- No GitHub Actions workflow was dispatched or re-run by this task.
 
 ## Coordination
 
-Owner explicitly requested immediate fix and push to `main` for release preparation. Recent-main inspection shows no neighboring claim/commit naming this exact RightPanel preflight lane; source-safe patch is intentionally limited to the failing label unless current main changes the evidence.
+Owner explicitly requested immediate fix and push to `main` for release preparation. The patch was intentionally limited to the failing RightPanel label because the second run-#23 failure was already fixed by current-main semantic-capture code.
 
 ## Completion condition
 
-A current-main commit replaces the misleading RightPanel scale header with an unambiguous Xref scale label, preserves the already-correct semantic rescan contract, and this claim is marked `COMPLETED` with the pushed implementation SHA.
+Completed: the source defect behind the remaining current-main RightPanel preflight failure is fixed on `main`, the already-correct semantic rescan contract is preserved, and the implementation SHA is recorded above.
