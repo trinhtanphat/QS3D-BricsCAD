@@ -9,7 +9,13 @@ namespace QS3D.Core.Diagnostics
         public HealthSummary(IEnumerable<ModelHealthIssue> issues)
         {
             if (issues == null) throw new ArgumentNullException(nameof(issues));
-            Issues = issues.Where(x => x != null).ToList().AsReadOnly();
+            var normalized = issues.Where(x => x != null).ToList();
+            foreach (var issue in normalized)
+            {
+                if (!Enum.IsDefined(typeof(HealthSeverity), issue.Severity))
+                    throw new InvalidOperationException("Health summary contains an undefined severity: " + (int)issue.Severity + ".");
+            }
+            Issues = normalized.AsReadOnly();
         }
 
         public IReadOnlyList<ModelHealthIssue> Issues { get; }
