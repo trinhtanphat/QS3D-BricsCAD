@@ -60,7 +60,8 @@ namespace QS3D.Core.Rebar
 
         private static int PositiveInt(string value, string label)
         {
-            var result = int.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+                throw new FormatException("Rebar " + label + " is too large.");
             if (result <= 0) throw new FormatException("Rebar " + label + " must be greater than zero.");
             return result;
         }
