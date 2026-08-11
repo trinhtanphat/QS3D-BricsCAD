@@ -31,6 +31,8 @@ def main():
         'private const string UnsupportedSchemaMarker = "QS3D.QuantitySettings.UnsupportedSchema";',
         'exception.Data[UnsupportedSchemaMarker] = true;',
         'if (value.SchemaVersion > QuantityCalculationSettings.CurrentSchemaVersion)',
+        'var backupPath = GetBackupPath(_settingsPath);',
+        'return path + ".bak";',
     ]
     required_code = [
         'private const string UnsupportedSchemaMarker = "QS3D.QuantitySettings.UnsupportedSchema";',
@@ -42,7 +44,10 @@ def main():
         'private static bool IsUnsupportedSettingsSchema(Exception exception)',
         'exception is System.IO.InvalidDataException',
         'Equals(exception.Data[UnsupportedSchemaMarker], true)',
-        'if (_persistentSettingsWriteBlocked && SamePath(dialog.FileName, _store.SettingsPath))',
+        'if (_persistentSettingsWriteBlocked && IsProtectedSettingsPath(dialog.FileName))',
+        'private bool IsProtectedSettingsPath(string path)',
+        'SamePath(path, _store.SettingsPath)',
+        'SamePath(path, _store.SettingsPath + ".bak")',
         'private static bool SamePath(string left, string right)',
         'System.IO.Path.GetFullPath(left)',
         'System.IO.Path.GetFullPath(right)',
@@ -95,11 +100,18 @@ def main():
         return 1
 
     export = method_body(code, "private void ExportTemplate_Click(object sender, RoutedEventArgs e)", "private void RestoreDefaults_Click")
-    path_guard_pos = export.find("if (_persistentSettingsWriteBlocked && SamePath(dialog.FileName, _store.SettingsPath))")
+    path_guard_pos = export.find("if (_persistentSettingsWriteBlocked && IsProtectedSettingsPath(dialog.FileName))")
     path_return_pos = export.find("return;", path_guard_pos)
     export_pos = export.find("_store.Export(dialog.FileName, current);")
     if min(path_guard_pos, path_return_pos, export_pos) < 0 or not path_guard_pos < path_return_pos < export_pos:
-        print("ERROR: Export must refuse the protected per-user settings path before writing a supported template.")
+        print("ERROR: Export must refuse protected primary/backup settings paths before writing a supported template.")
+        return 1
+
+    protected = method_body(code, "private bool IsProtectedSettingsPath(string path)", "private static bool SamePath(string left, string right)")
+    primary_pos = protected.find("SamePath(path, _store.SettingsPath)")
+    backup_pos = protected.find('SamePath(path, _store.SettingsPath + ".bak")', primary_pos)
+    if min(primary_pos, backup_pos) < 0 or not primary_pos < backup_pos:
+        print("ERROR: future-schema export protection must cover both the canonical primary settings file and its .bak companion.")
         return 1
 
     import_method = method_body(code, "private void ImportTemplate_Click(object sender, RoutedEventArgs e)", "private void ExportTemplate_Click")
@@ -108,7 +120,7 @@ def main():
         print("ERROR: Import/reset must not clear or rewrite the startup future-schema protection state.")
         return 1
 
-    print("PASS: future-schema quantity settings remain protected from Save and same-path Export while supported fallback/import/export UI contracts stay intact.")
+    print("PASS: future-schema quantity settings remain protected from Save and export overwrite of both primary and backup settings paths while supported fallback/import/export UI contracts stay intact.")
     return 0
 
 
