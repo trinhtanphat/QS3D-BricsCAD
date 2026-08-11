@@ -76,7 +76,6 @@ namespace QS3D.BricsCAD.V25.UI
                     foreach (var pair in values)
                         ApplyFamilyValue(project, family, pair.Key, pair.Value, ref inherited, ref overrides);
 
-                    project.Touch();
                     regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 }
                 catch (Exception operationError)
@@ -245,25 +244,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static void ApplyFamilyValue(ProjectState project, ProjectFamily family, string key, string next, ref int inherited, ref int overrides)
         {
-            var hadPrevious = family.Properties.TryGetValue(key, out var previousRaw);
-            var previous = previousRaw ?? string.Empty;
-            if (hadPrevious && string.Equals(previous, next, StringComparison.Ordinal)) return;
-            family.Properties[key] = next;
-            foreach (var element in project.Elements.Where(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)))
-            {
-                var hasInstance = element.Properties.TryGetValue(key, out var instanceRaw);
-                var instance = instanceRaw ?? string.Empty;
-                if (!hasInstance || (hadPrevious && string.Equals(instance, previous, StringComparison.Ordinal)))
-                {
-                    element.SetProperty(key, next);
-                    inherited++;
-                }
-                else
-                {
-                    element.MarkDirty(ElementDirtyFlags.All);
-                    overrides++;
-                }
-            }
+            var update = ProjectFamilyService.SetProperty(project, family.Id, key, next);
+            inherited += update.InheritedInstancesUpdated;
+            overrides += update.OverridesPreserved;
         }
 
         private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError, string operation)
