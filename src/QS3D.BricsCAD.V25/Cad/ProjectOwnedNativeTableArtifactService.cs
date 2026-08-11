@@ -83,6 +83,7 @@ namespace QS3D.BricsCAD.V25.Cad
     {
         private const string RegAppName = "QS3DDOC";
         private const string OwnershipVersion = "1";
+        private const string ProjectIdentityTokenPrefix = "p1:";
         private const int MaxRows = 5000;
         private const int MaxColumns = 32;
         private const int MaxCellLength = 4096;
@@ -454,7 +455,7 @@ namespace QS3D.BricsCAD.V25.Cad
             using (var marker = new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, OwnershipVersion),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, projectId.Trim()),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, ProjectIdentityToken(projectId)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, definition.DocumentId),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, definition.DocumentKind),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, fingerprint)))
@@ -470,7 +471,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 return values.Length >= 6 &&
                     string.Equals(Convert.ToString(values[0].Value, CultureInfo.InvariantCulture), RegAppName, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(Convert.ToString(values[1].Value, CultureInfo.InvariantCulture), OwnershipVersion, StringComparison.Ordinal) &&
-                    string.Equals(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId, StringComparison.Ordinal) &&
+                    MatchesProjectIdentity(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId) &&
                     string.Equals(Convert.ToString(values[3].Value, CultureInfo.InvariantCulture), definition.DocumentId, StringComparison.Ordinal) &&
                     string.Equals(Convert.ToString(values[4].Value, CultureInfo.InvariantCulture), definition.DocumentKind, StringComparison.Ordinal) &&
                     string.Equals(Convert.ToString(values[5].Value, CultureInfo.InvariantCulture), fingerprint, StringComparison.OrdinalIgnoreCase);
@@ -503,6 +504,26 @@ namespace QS3D.BricsCAD.V25.Cad
                 return !id.IsNull && id.IsValid;
             }
             catch { return false; }
+        }
+
+        private static string ProjectIdentityToken(string projectId)
+        {
+            var normalized = (projectId ?? string.Empty).Trim();
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(normalized));
+                var result = new StringBuilder(ProjectIdentityTokenPrefix.Length + hash.Length * 2);
+                result.Append(ProjectIdentityTokenPrefix);
+                foreach (var value in hash) result.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+                return result.ToString();
+            }
+        }
+
+        private static bool MatchesProjectIdentity(string storedIdentity, string projectId)
+        {
+            var normalized = (projectId ?? string.Empty).Trim();
+            return string.Equals(storedIdentity, ProjectIdentityToken(normalized), StringComparison.Ordinal) ||
+                string.Equals(storedIdentity, normalized, StringComparison.Ordinal);
         }
 
         private static string ComputeFingerprint(NativeDocumentationTableSnapshot snapshot)
