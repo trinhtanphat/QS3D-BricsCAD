@@ -9,6 +9,7 @@ xaml = UI / "WorkspacePanel.xaml"
 filter_code = UI / "WorkspacePanel.PropertyFiltering.cs"
 selection_code = UI / "WorkspacePanel.SelectionInspection.cs"
 multi_code = UI / "WorkspacePanel.MultiSelectionProperties.cs"
+row_model_code = UI / "ViewModels" / "PropertyRowViewModel.cs"
 view_model_code = UI / "ViewModels" / "WorkspaceViewModel.cs"
 bulk_code = ROOT / "src" / "QS3D.Core" / "Selection" / "SemanticSelectionBulkEditService.cs"
 policy_code = ROOT / "src" / "QS3D.Core" / "Services" / "SemanticPropertyEditPolicy.cs"
@@ -27,17 +28,71 @@ else:
         'x:Name="PropertySearch"',
         'TextChanged="OnPropertySearchChanged"',
         'Click="OnClearPropertySearchClick"',
-        'Text="Family kế thừa • Instance override • CAD khóa"',
+        'Text="Family • Kế thừa • Override • CAD/đo • Hệ thống • Selection"',
+        'ToolTip="Lọc theo nhóm, tên, đơn vị, giá trị hoặc trạng thái thuộc tính"',
         'Text="{Binding Properties.Count, StringFormat={}{0} dòng}"',
         'Text="{Binding Properties.Count, StringFormat={}{0} thuộc tính}"',
-        'Value="Override"',
-        'Value="CAD / đọc"',
+        'Text="{Binding StateLabel}"',
+        'Binding="{Binding StateKind}" Value="Cad"',
+        'Binding="{Binding StateKind}" Value="Override"',
+        'Binding="{Binding StateKind}" Value="Selection"',
+        'Binding="{Binding StateKind}" Value="Multi"',
         'x:Key="WorkspacePropertyRow"',
         'x:Key="WorkspaceSearchBand"',
         'MinWidth="220"',
     ):
         if token not in text:
             errors.append("Workspace upgraded property palette missing: " + token)
+    for legacy in (
+        '<DataTrigger Binding="{Binding IsReadOnly}" Value="True">\n                                                                        <Setter Property="Text" Value="CAD / đọc"/>',
+        '<Setter Property="Text" Value="Family"/>',
+    ):
+        if legacy in text:
+            errors.append("Workspace state badge still infers origin from legacy IsReadOnly/Family text setters")
+
+if not row_model_code.is_file():
+    errors.append("missing PropertyRowViewModel.cs")
+else:
+    text = row_model_code.read_text(encoding="utf-8")
+    for token in (
+        'public const string FamilyState = "Family";',
+        'public const string InstanceState = "Instance";',
+        'public const string OverrideState = "Override";',
+        'public const string CadState = "Cad";',
+        'public const string SystemState = "System";',
+        'public const string SelectionState = "Selection";',
+        'public const string MultiState = "Multi";',
+        "public string StateKind",
+        "public string StateLabel",
+        "public string StateSearchText",
+        'case CadState: return "CAD / đo";',
+        'case SystemState: return "Hệ thống";',
+        'case SelectionState: return "Selection";',
+        'case MultiState: return "Multi";',
+        'case InstanceState: return "Kế thừa";',
+        'if (_canReset) return OverrideState;',
+        'StartsWithGroup("NGUỒN CAD / ĐO ĐẠC")',
+        'StartsWithGroup("KHỐI LƯỢNG / ĐO ĐẠC")',
+        'StartsWithGroup("SELECTION")',
+        'StartsWithGroup("INSTANCE")',
+        "ContainsMultiSelectionMarker(_name)",
+        "OnChanged(nameof(StateKind));",
+        "OnChanged(nameof(StateLabel));",
+        "OnChanged(nameof(StateSearchText));",
+    ):
+        if token not in text:
+            errors.append("Property row explicit state/origin contract missing: " + token)
+
+    group_setter = text.find("public string Group")
+    group_state = text.find("OnStateChanged();", group_setter)
+    name_setter = text.find("public string Name")
+    name_state = text.find("OnStateChanged();", name_setter)
+    readonly_setter = text.find("public bool IsReadOnly")
+    readonly_state = text.find("OnStateChanged();", readonly_setter)
+    reset_setter = text.find("public bool CanReset")
+    reset_state = text.find("OnStateChanged();", reset_setter)
+    if min(group_setter, group_state, name_setter, name_state, readonly_setter, readonly_state, reset_setter, reset_state) < 0:
+        errors.append("Property row state label must notify after Group/Name/IsReadOnly/CanReset changes")
 
 if not filter_code.is_file():
     errors.append("missing WorkspacePanel.PropertyFiltering.cs")
@@ -78,13 +133,19 @@ else:
         "Contains(row.Unit, token)",
         "Contains(row.Value, token)",
         "Contains(row.EditorKind, token)",
+        "Contains(row.StateLabel, token)",
+        "Contains(row.StateSearchText, token)",
         "row.Choices.Any(choice => Contains(choice, token))",
-        'Contains("CAD đọc khóa readonly source nguồn", token)',
-        'Contains("Instance override ghi đè", token)',
         "StringComparison.CurrentCultureIgnoreCase",
     ):
         if token not in text:
             errors.append("Workspace property filter/editor keyboard UX missing: " + token)
+    for legacy in (
+        'row.IsReadOnly && Contains("CAD đọc khóa readonly source nguồn", token)',
+        'row.CanReset && Contains("Instance override ghi đè", token)',
+    ):
+        if legacy in text:
+            errors.append("property search must use explicit row state instead of legacy boolean-derived origin aliases")
 
     combo_guard = text.find("if (combo != null && combo.IsEditable)")
     dropdown_guard = text.find("if (combo.IsDropDownOpen) return;", combo_guard)
@@ -141,6 +202,9 @@ else:
         "var commonFamilyId = !inspection.Family.IsMixed",
         "(inspection.Family.Value ?? string.Empty).Trim()",
         "commonFamilyId.Length > 0 ? project.FindFamily(commonFamilyId) : null",
+        'Group = "INSTANCE • " + MultiGroupFor(key)',
+        'AddMultiReadOnlyRow("SELECTION"',
+        '"KHỐI LƯỢNG / ĐO ĐẠC"',
     ):
         if token not in text:
             errors.append("Workspace multi-selection inspector missing guard/presentation token: " + token)
@@ -261,4 +325,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace common/mixed selection rows and single-selection presentation share the canonical Core semantic edit policy; the UI no longer carries a parallel multi-selection denylist, while bulk writes retain stale-selection and rollback-protected mutation guards.")
+print("PASS: Workspace Property Inspector uses explicit presentation-state labels for Family/inherited/override/CAD-system-selection rows and state-aware search, while single/multi mutation safety remains on the canonical Core semantic edit policy and rollback-protected services.")
