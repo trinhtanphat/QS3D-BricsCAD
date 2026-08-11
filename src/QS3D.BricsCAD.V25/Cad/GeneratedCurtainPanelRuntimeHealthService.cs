@@ -24,11 +24,48 @@ namespace QS3D.BricsCAD.V25.Cad
                     foreach (var token in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0))
                     {
                         var canonical = CadHandleService.NormalizeHexHandle(token);
-                        if (canonical == null) continue;
+                        if (canonical == null)
+                        {
+                            issues.Add(new ModelHealthIssue(
+                                "CURTAIN_PANEL_NATIVE_HANDLE_INVALID",
+                                HealthSeverity.Error,
+                                "Generated curtain panel handle is not valid hexadecimal metadata: " + token + ".",
+                                element.Id));
+                            continue;
+                        }
+
                         var ids = CadHandleService.Resolve(document, new[] { canonical });
-                        if (ids.Count != 1) continue;
+                        if (ids.Count != 1)
+                        {
+                            issues.Add(new ModelHealthIssue(
+                                "CURTAIN_PANEL_NATIVE_HANDLE_UNRESOLVED",
+                                HealthSeverity.Error,
+                                "Generated curtain panel handle does not resolve to exactly one live CAD object: " + canonical + ".",
+                                element.Id));
+                            continue;
+                        }
+
                         var entity = transaction.GetObject(ids[0], OpenMode.ForRead, false) as Entity;
-                        if (!(entity is Solid3d solid) || solid.IsErased) continue;
+                        if (entity == null || entity.IsErased)
+                        {
+                            issues.Add(new ModelHealthIssue(
+                                "CURTAIN_PANEL_NATIVE_ENTITY_MISSING",
+                                HealthSeverity.Error,
+                                "Generated curtain panel handle does not reference a readable live CAD entity: " + canonical + ".",
+                                element.Id));
+                            continue;
+                        }
+
+                        if (!(entity is Solid3d solid))
+                        {
+                            issues.Add(new ModelHealthIssue(
+                                "CURTAIN_PANEL_NATIVE_ENTITY_TYPE_MISMATCH",
+                                HealthSeverity.Error,
+                                "Generated curtain panel handle resolves to " + entity.GetType().Name + " instead of Solid3d: " + canonical + ".",
+                                element.Id));
+                            continue;
+                        }
+
                         if (!GeneratedCurtainPanelNativeOwnershipService.HasMatchingOwnership(solid, project, element))
                             issues.Add(new ModelHealthIssue(
                                 "CURTAIN_PANEL_NATIVE_OWNERSHIP_MISMATCH",
