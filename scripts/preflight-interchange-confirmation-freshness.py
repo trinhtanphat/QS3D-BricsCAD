@@ -94,13 +94,15 @@ if GUARD.is_file():
     guard = GUARD.read_text(encoding="utf-8")
     for token in [
         "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
-        "ProjectContextCoordinator.GetOrCreate(document)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
         "ReferenceEquals(currentProject, reviewedProject)",
         "currentProject.ChangeVersion != reviewedChangeVersion",
         "changed after preview",
     ]:
         if token not in guard:
             errors.append("confirmation guard missing token: " + token)
+    if "ProjectContextCoordinator.GetOrCreate(document)" in guard:
+        errors.append("confirmation guard must not create/cache replacement project state after preview")
 
 if errors:
     for error in errors:
@@ -108,4 +110,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: interchange mutation paths reject stale confirmations; Import As New uses non-creating semantic snapshot stamps while shared append/use-source paths retain their reviewed-project guard.")
+print("PASS: interchange mutation paths reject stale confirmations; shared confirmation is non-creating, Import As New uses semantic snapshot stamps, and append/use-source paths retain their reviewed-project guard.")
