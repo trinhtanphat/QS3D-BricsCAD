@@ -94,7 +94,13 @@ namespace QS3D.Core.Services
             {
                 if (string.Equals(element.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
 
-                var previousFamily = string.IsNullOrWhiteSpace(element.FamilyId) ? null : project.FindFamily(element.FamilyId);
+                var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
+                ProjectFamily? previousFamily = null;
+                if (previousFamilyId.Length > 0)
+                {
+                    previousFamily = project.FindFamily(previousFamilyId) ??
+                        throw new InvalidOperationException("Element " + element.Id + " references missing family id: " + previousFamilyId + ". Repair the relation before bulk reassignment.");
+                }
                 var inheritedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 if (previousFamily != null)
                     foreach (var property in previousFamily.Properties)
