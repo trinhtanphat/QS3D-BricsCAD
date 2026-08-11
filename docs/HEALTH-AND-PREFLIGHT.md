@@ -42,6 +42,10 @@ Release package producers hash every regular package file except `SHA256SUMS.txt
 
 The secure updater keeps a separate outer boundary: it verifies the SHA-256 of the complete downloaded ZIP before extraction, validates archive safety, and only then delegates installation to the packaged installer. The package-integrity regression protects this producer → whole-ZIP hash → exact internal manifest coverage chain without duplicating the installer algorithm inside the updater.
 
+### Update ZIP/staging parity — `scripts/preflight-update-zip-staging-parity.py`
+
+Before `new-v25-update-manifest.ps1` publishes the whole-archive SHA-256, the candidate ZIP must match signed staging for **every regular file**. Staging and ZIP paths are case-insensitively unique, their file sets must be identical, and each ZIP entry is stream-hashed against the corresponding staged file. Extra, missing, case-colliding or changed ZIP payloads therefore fail before the update manifest can bless the archive. Authenticode verification of the executable payloads remains an additional check after full file parity.
+
 ## Command/UI wiring
 
 `scripts/preflight-command-wiring.py` collects QS3D `CommandMethod` registrations and checks command references from XAML buttons, Ribbon specs and simple UI dispatch paths. UI/Ribbon references must resolve to registered commands so multi-agent rename races do not become BricsCAD `Unknown command` failures.
