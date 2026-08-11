@@ -123,17 +123,17 @@ for workflow in release_workflows:
     text = workflow.read_text(encoding="utf-8")
     preflight_index = text.find("python scripts/preflight-all.py")
     package_index = text.find("package-v25.ps1")
-    publish_index = text.lower().find("publish github release")
+    publish_index = text.lower().find("publish github ")
     if preflight_index < 0:
         errors.append(workflow.name + " must run aggregate preflight before release packaging")
     if package_index < 0:
         errors.append(workflow.name + " must use package-v25.ps1 as the release package boundary")
     if publish_index < 0:
-        errors.append(workflow.name + " is missing the GitHub Release publish step")
+        errors.append(workflow.name + " is missing the GitHub release/prerelease publish step")
     if preflight_index >= 0 and package_index >= 0 and preflight_index >= package_index:
         errors.append(workflow.name + " must run aggregate preflight before package-v25.ps1")
     if package_index >= 0 and publish_index >= 0 and package_index >= publish_index:
-        errors.append(workflow.name + " must run package-v25.ps1 before publishing the GitHub Release")
+        errors.append(workflow.name + " must run package-v25.ps1 before publishing the GitHub release/prerelease")
 
 print("QS3D customer release preflight")
 if errors:
