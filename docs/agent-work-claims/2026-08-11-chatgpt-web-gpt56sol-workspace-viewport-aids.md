@@ -12,11 +12,10 @@ Add the two unambiguous screenshot-style drafting aids to the QS3D Workspace foo
 
 ## Reserved scope
 
-- `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml`
 - `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ViewAids.cs` (new isolated partial)
 - `scripts/preflight-workspace-viewport-aids.py`
 - this claim file
-- `WorkspacePanel.xaml.cs` and `WorkspacePanel.CompactShell.cs` remain audit-only/no-edit surfaces so recently completed compact/header work is preserved.
+- `WorkspacePanel.xaml`, `WorkspacePanel.xaml.cs` and `WorkspacePanel.CompactShell.cs` are audit-only/no-edit surfaces. The view-aid partial registers its own class-level Loaded hook through a static field initializer and appends controls to the existing footer at runtime, so recent XAML/compact/header winners remain untouched.
 
 ## Functional contract
 
@@ -26,12 +25,13 @@ Add the two unambiguous screenshot-style drafting aids to the QS3D Workspace foo
 - If no snap modes are configured (`OSMODE` lower bits = 0), the QS3D checkbox must not silently invent a snap preset; it remains off and reports that the user should configure native entity snaps first.
 - Load and pointer-enter refresh the indicators from current BricsCAD state so native F8/F3/status-bar changes are reflected when the user returns to the QS3D footer.
 - UI refresh/toggle is CAD-state-only: no QS3D project creation/mutation, no QSDB write, no command-string dispatch, no private drawing assumptions.
+- Runtime UI injection must be idempotent: repeated Loaded events do not duplicate controls or handlers.
 - Existing Workspace footer buttons (`Mô hình`, `BQ`, `Kiểm tra`) and compact-shell/header behavior remain intact.
 
 ## Validation plan
 
-- Re-fetch current `main` and `WorkspacePanel.xaml` immediately before source writes; preserve concurrent winners.
-- Add an auto-discovered static preflight requiring exact system-variable names, suppression-bit preserving logic, zero-base-mode fail-closed behavior, XAML wiring, refresh hooks and continued existing footer actions.
+- Re-fetch current `main` and audit the current `WorkspacePanel.xaml` footer immediately before source writes; preserve concurrent winners.
+- Add an auto-discovered static preflight requiring exact system-variable names, suppression-bit preserving logic, zero-base-mode fail-closed behavior, class-load/footer injection, idempotence, pointer-enter refresh and continued existing footer actions in XAML.
 - Re-fetch final source/ancestry and status. Do not dispatch GitHub Actions.
 
 ## Completion condition
