@@ -4,6 +4,7 @@ using System.Linq;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.Rules
 {
@@ -124,7 +125,14 @@ namespace QS3D.Core.Rules
             var current = PreviewElement(project, element);
             if (!Equivalent(preview, current))
                 throw new InvalidOperationException("Quantity-rule preview is stale for element " + element.Id + "; recompute preview before applying.");
-            return _engine.ApplyMatching(project, element);
+            if (!preview.HasChanges) return 0;
+
+            return ProjectSemanticMutationExecutor.Execute(project, "quantity-rule-preview.apply-element", () =>
+            {
+                var applied = _engine.ApplyMatching(project, element);
+                if (applied > 0) project.Touch();
+                return applied;
+            });
         }
 
         public int ApplyProject(ProjectState project, QuantityRuleProjectPreview preview)
@@ -187,6 +195,7 @@ namespace QS3D.Core.Rules
                     ?? throw new InvalidOperationException("Quantity-rule apply lost element " + item.ElementId + ".");
                 applied = checked(applied + _engine.ApplyMatching(project, element));
             }
+            if (applied > 0) project.Touch();
             return applied;
         }
 
