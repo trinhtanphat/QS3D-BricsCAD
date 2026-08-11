@@ -46,6 +46,14 @@ After the neighboring Project readiness, Quantity Settings, Zone/Family identity
 
 The active BQ/modeless, Quantity Insight, Wall Quantity, Updater and Ribbon augmenter claims continue to own their product surfaces. The Project readiness, Quantity Settings, Zone/Family identity and Model Health claims are `COMPLETED`, releasing their gate/theme/nullable fallout for this bounded integration repair. This lane does not reinterpret their product contract.
 
+## Progress — 2026-08-11
+
+- Implementation `d39c70d5f372458de497fd8e3021cd679d70992a` is reachable from `origin/main` through pushed integration SHA `17ac0fa0`.
+- PASS: BQ export freshness, modeless review, schedule arithmetic, premium layout, Project Tools maintenance, Zone/Family identity, Model Health review and shared WPF theme focused gates.
+- PASS: Core Release build with 0 warnings/errors and full Core smoke `ALL PASS`.
+- Local V25 adapter build proves the owned Zone/Family/Model Health nullable errors are gone. The remaining errors are confined to active Updater, Quantity Insight, Workspace compact-shell and Wall Quantity claims; those files were not touched here.
+- Aggregate remains externally red on README manual-only/product-boundary markers plus active Quantity Insight/Ribbon gate drift. No GitHub Actions were dispatched.
+
 ## Completion condition
 
 All owned focused gates and Core smoke pass; the adapter V25 build and aggregate preflight are re-run after separately active Updater/Quantity Insight/Wall Quantity/Ribbon work settles. The only owned product-source edits are the shared-theme merge and behavior-preserving nullable annotations/flow guards; the claim is marked `COMPLETED` once current-main integration is green.
