@@ -21,7 +21,10 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly Action<QuantityReportRow>? _locate;
         private readonly Func<IReadOnlyList<QuantityReportRow>>? _recalculate;
         private readonly Document _document;
-        private bool _loadingColumnPreferences;
+        // XAML Checked/Unchecked handlers may fire during InitializeComponent.
+        // Keep them read-only until LoadColumnPreferences has applied the
+        // persisted/default state deliberately.
+        private bool _loadingColumnPreferences = true;
 
         public QuantitySummaryWindow(Document document, IReadOnlyList<QuantityReportRow> rows, Action<QuantityReportRow>? locate = null, Func<IReadOnlyList<QuantityReportRow>>? recalculate = null)
         {
