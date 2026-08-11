@@ -40,6 +40,7 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
+                ProjectInterchangeValidatedSnapshotReader.Read(json);
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var previewChangeVersion = project.ChangeVersion;
                 var preview = ProjectInterchangeImportPreview.Plan(project, json);
@@ -243,7 +244,7 @@ namespace QS3D.BricsCAD.V25
                 " • Family: " + catalogPlan.FamiliesToReplace.ToString(CultureInfo.InvariantCulture) + "\n" +
                 "• Element collisions giữ target\n\n" +
                 "CANCEL — không import.\n\n" +
-                "Mỗi partial path có transaction riêng của chính nó; selector chỉ chạy đúng một path được chọn và không sequence hai partial importer.",
+                "Mỗi partial policy có transaction riêng của chính nó; selector chỉ chạy đúng một path được chọn và không sequence hai partial importer.",
                 "QS3D — Chọn partial UseSource scope",
                 System.Windows.MessageBoxButton.YesNoCancel,
                 System.Windows.MessageBoxImage.Warning);
