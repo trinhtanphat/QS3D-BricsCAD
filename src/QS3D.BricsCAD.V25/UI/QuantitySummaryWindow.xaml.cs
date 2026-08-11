@@ -180,10 +180,10 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureCurrentProject("xuất BQ XLSX");
                 var dialog = new SaveFileDialog { Title = "Xuất bảng khối lượng QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = "QS3D-Khoi-Luong.xlsx", AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
                 if (dialog.ShowDialog(this) != true) return;
 
+                EnsureCurrentProject("xuất BQ XLSX");
                 if (_recalculate != null)
                 {
                     var floor = FloorCombo.SelectedItem as string;
