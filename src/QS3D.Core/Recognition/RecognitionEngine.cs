@@ -133,6 +133,9 @@ namespace QS3D.Core.Recognition
 
     public sealed class RecognitionBatch
     {
+        private readonly double _autoAcceptConfidence;
+        private readonly double _minimumMargin;
+
         public RecognitionBatch(IEnumerable<RecognitionResult> results, double autoAcceptConfidence = 0.92d, double minimumMargin = 0.15d)
         {
             if (results == null) throw new ArgumentNullException(nameof(results));
@@ -141,13 +144,25 @@ namespace QS3D.Core.Recognition
             var materialized = RecognitionInputBounds.Materialize(results, RecognitionInputBounds.MaxBatchItems, "Recognition result batch");
             if (materialized.Any(x => x == null)) throw new ArgumentException("Recognition results cannot contain null.", nameof(results));
             foreach (var result in materialized) result.ValidateCurrentCandidates();
+            _autoAcceptConfidence = autoAcceptConfidence;
+            _minimumMargin = minimumMargin;
             Results = materialized.AsReadOnly();
-            AutoAccepted = Results.Where(x => x.TopCandidate is RecognitionCandidate candidate && candidate.Confidence >= autoAcceptConfidence && x.Margin >= minimumMargin && x.IsCaptureReady).ToList().AsReadOnly();
-            ReviewRequired = Results.Except(AutoAccepted).ToList().AsReadOnly();
         }
         public IReadOnlyList<RecognitionResult> Results { get; }
-        public IReadOnlyList<RecognitionResult> AutoAccepted { get; }
-        public IReadOnlyList<RecognitionResult> ReviewRequired { get; }
+        public IReadOnlyList<RecognitionResult> AutoAccepted => CurrentAutoAccepted();
+        public IReadOnlyList<RecognitionResult> ReviewRequired => Results.Except(CurrentAutoAccepted()).ToList().AsReadOnly();
+
+        private IReadOnlyList<RecognitionResult> CurrentAutoAccepted()
+        {
+            foreach (var result in Results) result.ValidateCurrentCandidates();
+            return Results
+                .Where(x => x.TopCandidate is RecognitionCandidate candidate &&
+                            candidate.Confidence >= _autoAcceptConfidence &&
+                            x.Margin >= _minimumMargin &&
+                            x.IsCaptureReady)
+                .ToList()
+                .AsReadOnly();
+        }
 
         private static void ValidateProbability(double value, string name)
         {
