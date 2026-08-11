@@ -14,6 +14,13 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
+                if (selectedIds.Length == 0)
+                {
+                    Report(document, "Cốt thép 3D Dầm: chọn LINE đã capture thành Beam và khai báo RebarNotation; top/bottom có thể đặt bằng RebarBeamTopCount/RebarBeamBottomCount.");
+                    return;
+                }
+
                 var project = ExistingProjectMutationContext.Require(document, "Beam Rebar 3D");
                 var count = BeamRebarSolidBuilder.BuildSelected(document, project);
                 var message = count == 0
