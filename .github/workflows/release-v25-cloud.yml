@@ -150,13 +150,19 @@ jobs:
           $metadataPath = 'dist\QS3D-BricsCAD-V25\PACKAGE-METADATA.json'
           if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Missing package metadata: $metadataPath" }
           $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-          $sourceVersion = ([xml](Get-Content -LiteralPath 'src\QS3D.BricsCAD.V25\QS3D.BricsCAD.V25.csproj' -Raw)).Project.PropertyGroup.Version
-          $expectedTag = 'v' + ([string]$sourceVersion).Trim()
+          $sourceVersion = ([string]([xml](Get-Content -LiteralPath 'src\QS3D.BricsCAD.V25\QS3D.BricsCAD.V25.csproj' -Raw)).Project.PropertyGroup.Version).Trim()
+          $expectedTag = 'v' + $sourceVersion
           if (-not [string]::Equals($env:RELEASE_TAG, $expectedTag, [StringComparison]::OrdinalIgnoreCase)) {
             throw "Release tag must exactly match source product version. Expected $expectedTag, got $env:RELEASE_TAG."
           }
+          if ([string]::IsNullOrWhiteSpace([string]$metadata.productVersion)) {
+            throw 'PACKAGE-METADATA productVersion is missing.'
+          }
+          if (-not [string]::Equals(([string]$metadata.productVersion).Trim(), $sourceVersion, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "PACKAGE-METADATA productVersion must match source product version. Expected $sourceVersion, got $($metadata.productVersion)."
+          }
           if ([string]::IsNullOrWhiteSpace([string]$metadata.version)) {
-            throw 'PACKAGE-METADATA version is missing.'
+            throw 'PACKAGE-METADATA assembly version is missing.'
           }
 
       - name: Create package checksum
