@@ -54,10 +54,9 @@ namespace QS3D.BricsCAD.V25
                     () => CreateLine(document, points[0], points[1]),
                     element =>
                     {
-                        element.Properties["ThicknessM"] = thicknessM.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -87,10 +86,9 @@ namespace QS3D.BricsCAD.V25
                     () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
                     element =>
                     {
-                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -123,10 +121,9 @@ namespace QS3D.BricsCAD.V25
                     () => CreateLine(document, points[0], points[1]),
                     element =>
                     {
-                        element.Properties["WidthM"] = widthM.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("WidthM", widthM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -156,10 +153,9 @@ namespace QS3D.BricsCAD.V25
                     () => CreateLine(document, points[0], points[1]),
                     element =>
                     {
-                        element.Properties["WidthM"] = widthM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("WidthM", widthM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -190,9 +186,8 @@ namespace QS3D.BricsCAD.V25
                     () => CreatePolyline(document, points, true),
                     element =>
                     {
-                        element.Properties["ThicknessM"] = thicknessM.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -220,9 +215,8 @@ namespace QS3D.BricsCAD.V25
                     () => CreatePolyline(document, points, true),
                     element =>
                     {
-                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -257,11 +251,10 @@ namespace QS3D.BricsCAD.V25
                     () => CreateColumnFootprint(document, centerResult.Value, widthM, depthM),
                     element =>
                     {
-                        element.Properties["WidthM"] = widthM.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["DepthM"] = depthM.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("WidthM", widthM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("DepthM", depthM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
@@ -293,11 +286,10 @@ namespace QS3D.BricsCAD.V25
                     () => CreateColumnFootprint(document, centerResult.Value, widthM.Value, depthM.Value),
                     element =>
                     {
-                        element.Properties["WidthM"] = widthM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["DepthM"] = depthM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                        element.SetProperty("WidthM", widthM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("DepthM", depthM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     });
             });
         }
