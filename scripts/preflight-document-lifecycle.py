@@ -17,14 +17,38 @@ else:
     required = (
         "docs.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
         "docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;",
-        "SelectionSyncCoordinator.Detach(document);",
-        "ProjectContextCoordinator.Forget(document);",
+        "docs.DocumentDestroyed += OnDocumentDestroyed;",
+        "docs.DocumentDestroyed -= OnDocumentDestroyed;",
     )
     for token in required:
         if token not in text:
-            errors.append("document lifecycle missing exact cleanup contract: " + token)
-    if "DocumentDestroyed +=" in text or "DetachByName(e.FileName)" in text or "ForgetByName(e.FileName)" in text:
-        errors.append("document destruction cleanup must not depend on filename identity")
+            errors.append("document lifecycle missing event contract: " + token)
+
+    destroy_start = text.find("private static void OnDocumentToBeDestroyed")
+    destroyed_start = text.find("private static void OnDocumentDestroyed", destroy_start + 1)
+    if destroy_start < 0 or destroyed_start <= destroy_start:
+        errors.append("document lifecycle cannot isolate exact-Document cleanup stage")
+    else:
+        cleanup = text[destroy_start:destroyed_start]
+        for token in (
+            "var document = e.Document;",
+            "DetachProjectPersistence(document);",
+            "SelectionSyncCoordinator.Detach(document);",
+            "ProjectContextCoordinator.Forget(document);",
+        ):
+            if token not in cleanup:
+                errors.append("DocumentToBeDestroyed missing exact Document cleanup contract: " + token)
+        for forbidden in ("e.FileName", "DetachByName", "ForgetByName"):
+            if forbidden in cleanup:
+                errors.append("document destruction cleanup must not depend on filename identity: " + forbidden)
+
+    # DocumentDestroyed is intentionally retained only for no-document UI reset / active-DWG rebind.
+    # Exact project/selection ownership cleanup must already have happened in DocumentToBeDestroyed.
+    destroyed_end = text.find("private static void AttachProjectPersistence", destroyed_start + 1)
+    destroyed = text[destroyed_start:destroyed_end] if destroyed_start >= 0 and destroyed_end > destroyed_start else ""
+    for forbidden in ("ProjectContextCoordinator.Forget(", "SelectionSyncCoordinator.Detach(", "e.FileName", "DetachByName", "ForgetByName"):
+        if forbidden in destroyed:
+            errors.append("DocumentDestroyed must be post-destroy UI/rebind only, not ownership cleanup: " + forbidden)
 
 if not selection.is_file():
     errors.append("missing SelectionSyncCoordinator.cs")
@@ -56,4 +80,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: document lifecycle cleanup is keyed by exact Document identity, including unsaved project keys and selection subscriptions.")
+print("PASS: ownership cleanup is keyed by exact Document identity in DocumentToBeDestroyed; DocumentDestroyed remains a separate post-destroy UI/active-DWG rebind stage.")
