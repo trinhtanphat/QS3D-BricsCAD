@@ -36,6 +36,9 @@ for token in (
     'HasMatchingOwnership(table, project.ProjectId, scheduleId, fingerprint)',
     'PersistedHandles(ProjectState project)',
     'new ModelHealthIssue(code, severity, prefix + message, string.Empty)',
+    'PersistedTokenCandidates(project)',
+    'if (!IsToken(token))',
+    '"Persisted custom schedule Table metadata contains a malformed owner token."',
 ):
     if token not in builder:
         errors.append("custom schedule builder missing contract token: " + token)
@@ -44,6 +47,23 @@ if "semanticTable.Rows.Count == 0" in builder:
     errors.append("valid zero-match custom schedules must remain renderable as header-only native Tables")
 if "table.Erase();" not in builder or builder.find("HasMatchingOwnership(table, project.ProjectId, scheduleId, fingerprint)") > builder.find("table.Erase();"):
     errors.append("native replacement/removal must verify exact project/schedule/fingerprint ownership before erase")
+
+inspect_start = builder.find("public static IReadOnlyList<ModelHealthIssue> Inspect")
+inspect_end = builder.find("private static void InspectToken", inspect_start + 1)
+inspect = builder[inspect_start:inspect_end] if inspect_start >= 0 and inspect_end > inspect_start else ""
+if "foreach (var token in PersistedTokenCandidates(project))" not in inspect:
+    errors.append("custom schedule Health must inspect every metadata owner-token candidate, including malformed tokens")
+if "foreach (var token in PersistedTokens(project))" in inspect:
+    errors.append("custom schedule Health must not silently filter malformed metadata owner tokens before diagnostics")
+if "CUSTOM_SCHEDULE_TABLE_METADATA_INVALID" not in inspect or "if (!IsToken(token))" not in inspect:
+    errors.append("custom schedule Health must report malformed owner tokens as metadata-invalid")
+
+persisted_start = builder.find("private static IReadOnlyList<string> PersistedTokens")
+persisted_end = builder.find("private static bool IsToken", persisted_start + 1)
+persisted = builder[persisted_start:persisted_end] if persisted_start >= 0 and persisted_end > persisted_start else ""
+for token in ("PersistedTokenCandidates(project)", ".Where(IsToken)"):
+    if token not in persisted:
+        errors.append("canonical persisted schedule/handle enumeration must retain valid-token filtering: " + token)
 
 for command in (
     "QS3DSCHEDULETABLE",
@@ -121,4 +141,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: native custom semantic schedules preserve header-only rendering, prompt-before-bind freshness, per-schedule ownership-safe Table lifecycle, Hub wiring, and Health/Release artifact diagnostics without becoming a BQ/BBS engine.")
+print("PASS: native custom semantic schedules preserve header-only rendering, prompt-before-bind freshness, fail closed on malformed/partial owner metadata, retain canonical-token selection safety, keep per-schedule ownership-safe Table lifecycle, Hub wiring, and Health/Release diagnostics without becoming a BQ/BBS engine.")
