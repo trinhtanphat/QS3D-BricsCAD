@@ -58,7 +58,12 @@ namespace QS3D.BricsCAD.V25
                     expectedCategory,
                     expectedWindowRouting,
                     operation);
-                Dispatch(document, dispatchFamily, advanced, operation);
+
+                // Dispatch calls the category-specific target synchronously. Arm one immutable preview
+                // before that target starts acquiring geometry so any modeless Family/project/unit/UCS
+                // change during point-picking is rejected by the target's ResolveForMutation boundary.
+                using (DirectDrawProjectPreviewContext.BeginDispatchScope(document))
+                    Dispatch(document, dispatchFamily, advanced, operation);
             }
             catch (Exception ex)
             {

@@ -11,6 +11,9 @@ namespace QS3D.BricsCAD.V25.Services
 {
     internal sealed class DirectDrawProjectPreviewContext
     {
+        [ThreadStatic]
+        private static DispatchPreviewScope? _dispatchScope;
+
         private DirectDrawProjectPreviewContext(
             ProjectState? defaultsProject,
             string expectedProjectId,
@@ -32,9 +35,25 @@ namespace QS3D.BricsCAD.V25.Services
         public LengthUnit ExpectedLengthUnit { get; }
         public Matrix3d ExpectedUcs { get; }
 
+        public static IDisposable BeginDispatchScope(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var scope = new DispatchPreviewScope(document, CaptureCurrent(document), _dispatchScope);
+            _dispatchScope = scope;
+            return scope;
+        }
+
         public static DirectDrawProjectPreviewContext Capture(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
+            var scope = _dispatchScope;
+            if (scope != null && ReferenceEquals(scope.Document, document))
+                return scope.Preview;
+            return CaptureCurrent(document);
+        }
+
+        private static DirectDrawProjectPreviewContext CaptureCurrent(Document document)
+        {
             var expectedLengthUnit = CadUnitService.GetLengthUnit(document);
             var expectedUcs = document.Editor.CurrentUserCoordinateSystem;
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
@@ -96,5 +115,32 @@ namespace QS3D.BricsCAD.V25.Services
         private static InvalidOperationException ProjectAppeared() =>
             new InvalidOperationException(
                 "QS3D project đã xuất hiện trong lúc xác nhận Direct Draw. Hãy chạy lại lệnh để dùng đúng project/Family defaults.");
+
+        private sealed class DispatchPreviewScope : IDisposable
+        {
+            private readonly DispatchPreviewScope? _previous;
+            private bool _disposed;
+
+            public DispatchPreviewScope(
+                Document document,
+                DirectDrawProjectPreviewContext preview,
+                DispatchPreviewScope? previous)
+            {
+                Document = document ?? throw new ArgumentNullException(nameof(document));
+                Preview = preview ?? throw new ArgumentNullException(nameof(preview));
+                _previous = previous;
+            }
+
+            public Document Document { get; }
+            public DirectDrawProjectPreviewContext Preview { get; }
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                if (ReferenceEquals(_dispatchScope, this))
+                    _dispatchScope = _previous;
+            }
+        }
     }
 }
