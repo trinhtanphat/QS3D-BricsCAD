@@ -319,12 +319,10 @@ namespace QS3D.Core.Export
                         family = target.FindFamily(familySnapshot.Id) ?? throw new InvalidOperationException("Target Family disappeared before UseSource semantic apply: " + familySnapshot.Id);
                         if (family.Category != familySnapshot.Category)
                             throw new InvalidOperationException("Target Family category changed after UseSource planning: " + familySnapshot.Id);
-                        family.Name = familySnapshot.Name;
+                        family = ProjectFamilyService.Rename(target, familySnapshot.Id, familySnapshot.Name);
                     }
 
-                    family.Properties.Clear();
-                    foreach (var property in familySnapshot.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-                        family.Properties[property.Key] = property.Value ?? string.Empty;
+                    ApplySourceFamilyProperties(target, family, familySnapshot);
                 }
 
                 foreach (var elementSnapshot in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
@@ -578,6 +576,23 @@ namespace QS3D.Core.Export
                 "UseSource semantic import requires native cleanup authorization bound to the exact generated-handle set for target element(s): " +
                 string.Join(", ", required) +
                 ". The Core importer re-plans before mutation and rejects stale or element-id-only cleanup authorization; native cleanup must be completed by a guarded adapter transaction/recovery workflow first.");
+        }
+
+        private static void ApplySourceFamilyProperties(
+            ProjectState target,
+            ProjectFamily family,
+            InterchangeFamilySnapshot source)
+        {
+            var sourceProperties = new Dictionary<string, string>(source.Properties, StringComparer.OrdinalIgnoreCase);
+            var removedKeys = family.Properties.Keys
+                .Where(x => !sourceProperties.ContainsKey(x))
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            foreach (var key in removedKeys)
+                ProjectFamilyService.RemoveProperty(target, family.Id, key);
+
+            foreach (var property in source.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+                ProjectFamilyService.SetProperty(target, family.Id, property.Key, property.Value ?? string.Empty);
         }
 
         private static void ApplySourceElementSemanticData(ProjectElement element, InterchangeElementSnapshot source)
