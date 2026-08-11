@@ -12,24 +12,27 @@ else:
     text = SOURCE.read_text(encoding="utf-8")
     dialog = text.find("var dialog = new SaveFileDialog")
     confirmed = text.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
-    project = text.find("ProjectContextCoordinator.GetOrCreate(document)")
+    project = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
     regen = text.find("RegenerateDirty(project)", project + 1)
     build = text.find("MaterialUsageScheduleBuilder.Build(project)", regen + 1)
     export = text.find("MaterialUsageXlsxExporter.Export(dialog.FileName, rows)", build + 1)
 
     if min(dialog, confirmed, project, regen, build, export) < 0:
-        errors.append("MaterialUsageScheduleCommands.cs missing save/current-project/regenerate/build/export contract token")
+        errors.append("MaterialUsageScheduleCommands.cs missing save/existing-project/regenerate/build/export contract token")
     elif not dialog < confirmed < project < regen < build < export:
-        errors.append("Material Usage XLSX must confirm Save before current-project lookup, regeneration, fresh schedule build, and export")
+        errors.append("Material Usage XLSX must confirm Save before existing-project lookup, regeneration, fresh schedule build, and export")
 
     pre_confirm = text[:confirmed if confirmed >= 0 else 0]
     for forbidden in (
-        "ProjectContextCoordinator.GetOrCreate(document)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "RegenerateDirty(project)",
         "MaterialUsageScheduleBuilder.Build(project)",
     ):
         if forbidden in pre_confirm:
             errors.append("Material Usage Cancel path must not execute before Save confirmation: " + forbidden)
+
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append("Material Usage export must not create replacement project state")
 
     for token in (
         "FinalizeUi(document, status, dialog.FileName);",
@@ -46,4 +49,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Material Usage XLSX confirms the destination before project/regeneration work, rebuilds from the current project, and isolates UI reporting.")
+print("PASS: Material Usage XLSX confirms the destination before existing-project lookup/regeneration, exports fresh rows without creating replacement project state, and isolates UI reporting.")
