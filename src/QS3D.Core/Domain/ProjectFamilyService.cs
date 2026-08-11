@@ -131,6 +131,18 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var target = FindRequired(project, familyId);
+            var targetProperties = new List<KeyValuePair<string, string>>();
+            var canonicalKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in target.Properties)
+            {
+                var normalizedKey = Required(pair.Key, "target property key", MaxPropertyKeyLength);
+                if (!string.Equals(normalizedKey, pair.Key, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Target Family contains a non-canonical property key: '" + pair.Key + "'. Repair the Family before assignment.");
+                if (!canonicalKeys.Add(normalizedKey))
+                    throw new InvalidOperationException("Target Family contains duplicate canonical property key: " + normalizedKey);
+                targetProperties.Add(new KeyValuePair<string, string>(normalizedKey, Value(pair.Value, "target property value", MaxPropertyValueLength)));
+            }
+
             var owned = ResolveOwnedElements(project, elements, target);
             var pending = new List<PendingFamilyAssignment>();
 
@@ -160,7 +172,7 @@ namespace QS3D.Core.Domain
                     }
                 }
                 element.FamilyId = target.Id;
-                foreach (var pair in target.Properties)
+                foreach (var pair in targetProperties)
                     if (!element.Properties.ContainsKey(pair.Key)) element.Properties[pair.Key] = pair.Value;
                 element.MarkDirty(ElementDirtyFlags.All);
             }
