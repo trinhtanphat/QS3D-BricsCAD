@@ -95,11 +95,9 @@ namespace QS3D.Core.Domain
 
         public void MarkDirty(ElementDirtyFlags flags)
         {
-            if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
-            if ((flags & (ElementDirtyFlags.Geometry | ElementDirtyFlags.Properties | ElementDirtyFlags.Relations)) != 0)
-                MarkGeneratedGeometryStale("Semantic/source state changed.");
-            Dirty |= flags;
-            UpdatedUtc = DateTime.UtcNow;
+            MarkDirtyCore(
+                flags,
+                (flags & (ElementDirtyFlags.Geometry | ElementDirtyFlags.Properties | ElementDirtyFlags.Relations)) != 0);
         }
 
         public void MarkClean(ElementDirtyFlags flags)
@@ -116,9 +114,10 @@ namespace QS3D.Core.Domain
             var normalized = value ?? string.Empty;
             if (Properties.TryGetValue(key, out var existing) && string.Equals(existing, normalized, StringComparison.Ordinal)) return;
             Properties[key] = normalized;
+            var affectsGeneratedGeometry = ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key);
             var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
-            if (ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key)) flags |= ElementDirtyFlags.Geometry;
-            MarkDirty(flags);
+            if (affectsGeneratedGeometry) flags |= ElementDirtyFlags.Geometry;
+            MarkDirtyCore(flags, affectsGeneratedGeometry);
         }
 
         public void SetQuantity(string name, double value)
@@ -220,6 +219,15 @@ namespace QS3D.Core.Domain
             if ((dirty & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(dirty));
             Dirty = dirty;
             UpdatedUtc = updatedUtc.Kind == DateTimeKind.Utc ? updatedUtc : updatedUtc.ToUniversalTime();
+        }
+
+        private void MarkDirtyCore(ElementDirtyFlags flags, bool markGeneratedGeometryStale)
+        {
+            if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
+            if (markGeneratedGeometryStale)
+                MarkGeneratedGeometryStale("Semantic/source state changed.");
+            Dirty |= flags;
+            UpdatedUtc = DateTime.UtcNow;
         }
 
         private static ElementCategory RequireCategory(ElementCategory value)
