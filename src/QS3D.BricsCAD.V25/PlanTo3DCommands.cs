@@ -64,15 +64,14 @@ namespace QS3D.BricsCAD.V25
                 if (selectedIds == null || selectedIds.Count == 0) return;
                 var sources = PreflightSources(document, selectedIds);
                 if (sources.Count == 0) return;
-                var selectionUnit = CadUnitService.GetLengthUnit(document);
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var expectedProjectId = hasDefaultsProject ? defaultsProject.ProjectId : null;
-                if (hasDefaultsProject) RequireFreshSources(defaultsProject, sources);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                if (defaultsProject != null) RequireFreshSources(defaultsProject, sources);
 
-                var defaultThicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject, "ThicknessM", 0.2d) : 0.2d;
-                var defaultHeightM = hasDefaultsProject ? FamilyNumber(defaultsProject, "HeightM", 3.0d) : 3.0d;
-                var defaultBottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, "BottomOffsetM", 0d) : 0d;
+                var defaultThicknessM = defaultsProject != null ? FamilyNumber(defaultsProject, "ThicknessM", 0.2d) : 0.2d;
+                var defaultHeightM = defaultsProject != null ? FamilyNumber(defaultsProject, "HeightM", 3.0d) : 3.0d;
+                var defaultBottomOffsetM = defaultsProject != null ? FamilyFiniteNumber(defaultsProject, "BottomOffsetM", 0d) : 0d;
 
                 double? thicknessM = promptStyle
                     ? PromptPositiveMeters(document.Editor, "Bề dày Tường cho toàn bộ selection (m)", defaultThicknessM)
@@ -91,27 +90,12 @@ namespace QS3D.BricsCAD.V25
 
                 EnsureActive(document, operation);
                 RequireModelSpace(document);
-                if (CadUnitService.GetLengthUnit(document) != selectionUnit)
-                    throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc xác nhận 2D -> 3D. Hãy chạy lại lệnh.");
 
                 var refreshedSources = PreflightSources(document, selectedIds);
                 RequireSameSources(sources, refreshedSources);
                 sources = refreshedSources;
 
-                ProjectState project;
-                if (expectedProjectId != null)
-                {
-                    project = ExistingProjectMutationContext.Require(document, operation);
-                    if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("QS3D project đã thay đổi trong lúc xác nhận 2D -> 3D. Hãy chạy lại lệnh.");
-                }
-                else
-                {
-                    if (ProjectContextCoordinator.TryGetReadOnly(document, out _))
-                        throw new InvalidOperationException("QS3D project đã xuất hiện trong lúc xác nhận 2D -> 3D. Hãy chạy lại lệnh để dùng đúng project defaults.");
-                    project = ProjectContextCoordinator.GetOrCreate(document);
-                }
-
+                var project = projectPreview.ResolveForMutation(document, operation);
                 RequireFreshSources(project, sources);
                 var rollback = ProjectStateSnapshot.Capture(project);
                 var createdElements = new List<ProjectElement>();
@@ -574,8 +558,10 @@ namespace QS3D.BricsCAD.V25
             try { action(); }
             catch (Exception ex)
             {
-                document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message);
-                PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message);
+                try { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); }
+                catch { }
+                try { PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); }
+                catch { }
             }
         }
     }
