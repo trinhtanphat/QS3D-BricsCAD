@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+PROJECT_FAMILY_SERVICE = ROOT / "src/QS3D.Core/Domain/ProjectFamilyService.cs"
+BULK_EDIT_SERVICE = ROOT / "src/QS3D.Core/Services/BulkEditService.cs"
+SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectFamilyAssignmentAtomicitySmoke.cs"
+
+errors = []
+
+
+def read(path):
+    if not path.is_file():
+        errors.append("missing family relation assignment integrity file: " + str(path.relative_to(ROOT)))
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+project_family_service = read(PROJECT_FAMILY_SERVICE)
+bulk_edit_service = read(BULK_EDIT_SERVICE)
+smoke = read(SMOKE)
+
+for token in (
+    "var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();",
+    "previous = project.FindFamily(previousFamilyId) ??",
+    "references missing family id:",
+    "Repair the relation before reassignment.",
+):
+    if token not in project_family_service:
+        errors.append("ProjectFamilyService dangling-relation guard missing token: " + token)
+
+for token in (
+    "var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();",
+    "previousFamily = project.FindFamily(previousFamilyId) ??",
+    "references missing family id:",
+    "Repair the relation before bulk reassignment.",
+):
+    if token not in bulk_edit_service:
+        errors.append("BulkEditService dangling-relation guard missing token: " + token)
+
+for token in (
+    "DanglingPreviousFamilyBlocksWholeAssignmentBatch",
+    "DanglingPreviousFamilyBlocksBulkEditBatch",
+    "CreateDanglingPreviousFamilyProject",
+    "overwrote a dangling family reference instead of failing closed.",
+    "touched project timestamp on a rejected dangling-family batch.",
+):
+    if token not in smoke:
+        errors.append("Family relation assignment smoke missing regression token: " + token)
+
+if errors:
+    for error in errors:
+        print("ERROR:", error)
+    print("FAILED with %d error(s)." % len(errors))
+    sys.exit(1)
+
+print("PASS: project-aware family reassignment fails closed on dangling source family references before mutating any batch target.")
