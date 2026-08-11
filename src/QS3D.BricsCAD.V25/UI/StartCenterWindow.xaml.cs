@@ -14,6 +14,10 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class StartCenterWindow : Window
     {
         private const string AllGroups = "Tất cả";
+        private const string AllRecentProjects = "Tất cả";
+        private const string PinnedRecentProjects = "Đã ghim";
+        private const string AvailableRecentProjects = "Sẵn sàng";
+        private const string MissingRecentProjects = "Thiếu file";
         private bool _initialized;
 
         private enum NativeDocumentAction
@@ -48,6 +52,16 @@ namespace QS3D.BricsCAD.V25.UI
             groups.AddRange(StartCenterCommandCatalog.Groups);
             GroupFilter.ItemsSource = groups;
             GroupFilter.SelectedIndex = 0;
+
+            RecentProjectFilter.ItemsSource = new[]
+            {
+                AllRecentProjects,
+                PinnedRecentProjects,
+                AvailableRecentProjects,
+                MissingRecentProjects
+            };
+            RecentProjectFilter.SelectedIndex = 0;
+
             _initialized = true;
             RefreshCommands();
             RefreshStateLists();
@@ -88,6 +102,16 @@ namespace QS3D.BricsCAD.V25.UI
             if (_initialized) RefreshCommands();
         }
 
+        private void OnRecentProjectSearchChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_initialized) RefreshRecentProjectsOnly();
+        }
+
+        private void OnRecentProjectFilterChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_initialized) RefreshRecentProjectsOnly();
+        }
+
         private void RefreshCommands()
         {
             var group = GroupFilter.SelectedItem as string ?? AllGroups;
@@ -102,7 +126,7 @@ namespace QS3D.BricsCAD.V25.UI
             var state = StartCenterUserStateStore.GetSnapshot();
             FavoriteList.ItemsSource = ResolveCommands(state.FavoriteCommands);
             RecentCommandList.ItemsSource = ResolveCommands(state.RecentCommands);
-            RecentProjectList.ItemsSource = state.RecentProjects;
+            RefreshRecentProjectsOnly(state);
         }
 
         private static IReadOnlyList<StartCenterCommandItem> ResolveCommands(IEnumerable<string> commands)
@@ -190,7 +214,31 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshRecentProjectsOnly()
         {
-            RecentProjectList.ItemsSource = StartCenterUserStateStore.GetSnapshot().RecentProjects;
+            RefreshRecentProjectsOnly(StartCenterUserStateStore.GetSnapshot());
+        }
+
+        private void RefreshRecentProjectsOnly(StartCenterUserStateSnapshot state)
+        {
+            IEnumerable<StartCenterRecentProject> projects = state.RecentProjects;
+            var query = (RecentProjectSearchBox.Text ?? string.Empty).Trim();
+            if (query.Length > 0)
+            {
+                projects = projects.Where(x =>
+                    x.DisplayName.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0 ||
+                    x.Path.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+
+            var filter = RecentProjectFilter.SelectedItem as string ?? AllRecentProjects;
+            if (string.Equals(filter, PinnedRecentProjects, StringComparison.CurrentCultureIgnoreCase))
+                projects = projects.Where(x => x.IsPinned);
+            else if (string.Equals(filter, AvailableRecentProjects, StringComparison.CurrentCultureIgnoreCase))
+                projects = projects.Where(x => x.Exists);
+            else if (string.Equals(filter, MissingRecentProjects, StringComparison.CurrentCultureIgnoreCase))
+                projects = projects.Where(x => !x.Exists);
+
+            var filtered = projects.ToList();
+            RecentProjectList.ItemsSource = filtered;
+            RecentProjectCountText.Text = filtered.Count + " / " + state.RecentProjects.Count;
         }
 
         private void OnRefreshClick(object sender, RoutedEventArgs e)

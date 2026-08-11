@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.Domain;
 
 namespace QS3D.Core.Revisions
 {
@@ -79,10 +80,31 @@ namespace QS3D.Core.Revisions
                 if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
                 if (!string.Equals(element.ElementId, element.ElementId.Trim(), StringComparison.Ordinal))
                     throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded element id: " + element.ElementId + ".");
+                ValidateCanonicalCategory(element.Category, label + " element " + element.ElementId + " category");
+                foreach (var quantity in element.Quantities)
+                {
+                    ValidateCanonicalRequired(quantity.Key, label + " element " + element.ElementId + " quantity key");
+                    RevisionMath.Finite(quantity.Value, element.ElementId + "/" + quantity.Key + "/" + label);
+                }
                 if (result.ContainsKey(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains duplicate element id: " + element.ElementId);
                 result.Add(element.ElementId, element);
             }
             return result;
+        }
+
+        private static void ValidateCanonicalCategory(string? value, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value) ||
+                !Enum.TryParse(value, true, out ElementCategory category) ||
+                !Enum.IsDefined(typeof(ElementCategory), category) ||
+                !string.Equals(value, category.ToString(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision " + label + " must use a canonical element category name.");
+        }
+
+        private static void ValidateCanonicalRequired(string? value, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision " + label + " must be non-empty and must not contain leading/trailing whitespace.");
         }
     }
 }
