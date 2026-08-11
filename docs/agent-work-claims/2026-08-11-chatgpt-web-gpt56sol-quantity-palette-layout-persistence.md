@@ -1,43 +1,35 @@
 # Work claim — Quantity Insight palette layout persistence
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-palette-layout-persistence`
 - Registered: `2026-08-11T21:11:00+07:00`
+- Completed: `2026-08-11T21:16:00+07:00`
 - Baseline main SHA: `3abc5637ad65b81ee489b1ae8cf3c0198a95dd5c`
 - Priority: P1
 
-## Reserved scope
+## Implemented
 
-- Give the third docked Quantity Insight palette its own persisted per-user width/height instead of borrowing the drawing/layer palette dimensions on every recreation.
-- Centralize Quantity Insight minimum dimensions in `UserUiLayoutStore` alongside the existing Workspace/Right palette policy, and make palette teardown/recreate preserve the independently resized quantity surface.
-- Preserve all existing visibility behavior, Workspace/Right persistence keys, model/family splitter persistence, and the BLT-style three-palette workspace.
+- `944f869611c424ce5a55877a70dfb15fc9871ef5` — extended `UserUiLayout` with independent `QuantityPaletteWidth=330` / `QuantityPaletteHeight=720`, dedicated 280x360 minimum policy, optional backward-compatible loading, serialization, normalization, equivalence and clone coverage.
+- Existing `ui-layout-v1.txt` files remain compatible: missing Quantity keys fall back to the new defaults through the same optional `Int(...)` reader rather than invalidating the file or touching QSDB state.
+- `aaac2e706d2e20d09ba6217eed62cba133dba27b` — `PaletteCoordinator` now creates the Quantity Insight palette from its own persisted dimensions/minimums and persists its actual `DeviceIndependentSize` independently during hide/dispose/recreate.
+- The old coupling to `Math.Max(310, layout.RightPaletteWidth)` / `layout.RightPaletteHeight` and hard-coded `new DrawingSize(280, 360)` is removed.
+- Workspace/Right dimensions, splitter preferences, visibility preservation and best-effort teardown persistence remain unchanged.
+- `91d4611ec97af50929d12b08bed285ea90f9bff9` — added `scripts/preflight-quantity-palette-layout.py`, guarding all Quantity store read/write/normalize/clone/equality paths, coordinator restore/persist wiring, backward-compatible optional keys, no direct QSDB/project storage, and removal of the old borrowed/hard-coded layout path.
 
-## Expected files
+## Source validation
 
-- `src/QS3D.BricsCAD.V25/Services/UserUiLayoutStore.cs`
-- `src/QS3D.BricsCAD.V25/PaletteCoordinator.cs`
-- `scripts/preflight-quantity-palette-layout.py`
-- this claim file for close-out
+- Re-fetched `UserUiLayoutStore.cs` and `PaletteCoordinator.cs` from current `main` after concurrent commits; the independent Quantity dimensions/minimums and three-palette persistence wiring remain intact.
+- The focused preflight is auto-discoverable under `scripts/preflight-*.py` and contains no runtime or private-DWG assumptions.
+- Existing Workspace and Right palette keys/minimum policy remain present, so older per-user layout state and the pre-existing layout preflight contract are preserved.
+- Implementation/test commits are ancestors of current `main`; concurrent reporting/ownership work was preserved and no force push was used.
+- No GitHub Actions were dispatched in this lane.
 
-## Excluded scope
+## LOCAL_ONLY disposition
 
-- `QuantityInsightPanel*` quantity calculations/interactions, Ribbon/Start Center/Workspace compact presentation, quantity settings/rules, Wall Takeoff, updater/release, Core persistence/domain.
-- No native BricsCAD V25 resize/docking PASS claim from the remote connector environment.
+- Physical BricsCAD V25 dock/resize/restart click-through remains part of the existing local WPF/palette qualification boundary. This source change does not create a distinct new private-DWG scenario, so no duplicate local inbox item was added.
+- No remote native runtime PASS is claimed.
 
-## Functional contract
+## Completion evidence
 
-- Add `QuantityPaletteWidth`/`QuantityPaletteHeight` defaults, load/serialize/clone/equivalence/normalization support, with compatibility for existing `ui-layout-v1.txt` files that do not yet contain the keys.
-- Add dedicated `QuantityPaletteMinWidth`/`QuantityPaletteMinHeight` constants and use them in `PaletteCoordinator` rather than hard-coded dimensions.
-- `EnsureCreated()` must initialize the Quantity Insight `PaletteSet` from its own persisted dimensions.
-- `PersistPaletteLayout()` must persist Workspace, drawing/layer, and Quantity Insight dimensions independently and remain best-effort/non-blocking.
-- Reset/recreate visibility semantics must remain unchanged.
-
-## Validation plan
-
-- Re-fetch current `main` immediately before writes and preserve concurrent winners.
-- Add an auto-discovered static preflight covering all store read/write/normalize/clone/equivalence paths plus coordinator create/persist wiring, while guarding that Workspace/Right keys remain present.
-- Re-fetch final source and ancestry; do not dispatch GitHub Actions.
-
-## Completion condition
-
-- A user resize of the far-right Quantity Insight palette survives hide/dispose/recreate independently from the drawing/layer palette at source-contract level, with deterministic regression coverage and this claim marked `COMPLETED`.
+- Source-contract behavior now allows the far-right Quantity Insight palette to keep its own user-selected size across hide/dispose/recreate instead of resetting from the drawing/layer palette dimensions.
+- Implementation: `944f869611c424ce5a55877a70dfb15fc9871ef5`, `aaac2e706d2e20d09ba6217eed62cba133dba27b`; regression guard: `91d4611ec97af50929d12b08bed285ea90f9bff9`.
