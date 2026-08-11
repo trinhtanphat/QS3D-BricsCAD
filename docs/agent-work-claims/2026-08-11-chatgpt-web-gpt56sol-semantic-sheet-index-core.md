@@ -1,6 +1,6 @@
 # Work claim — Semantic Sheet Index Core P0
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-semantic-sheet-index-core`
 - Registered: `2026-08-11T22:14:00+07:00`
 - Baseline main SHA: `841b462765c6fa4621f08d8cf587309e0a9ebf3b`
@@ -16,20 +16,22 @@ Add a pure-Core, handle-free and deterministic Sheet Index model/builder from al
 - `src/QS3D.Core/Documentation/SemanticSheetIndexBuilder.cs` (new)
 - `tests/QS3D.Core.SmokeTests/SemanticViewSheetPlannerSmoke.cs`
 - `scripts/preflight-semantic-sheet-index.py` (new)
-- `docs/DOCUMENTATION-LAYER.md` only if a minimal status note is needed after source lands
+- `docs/DOCUMENTATION-LAYER.md`
 - this claim file for close-out
 
-## Contract
+## Completion
 
-- consume validated `SemanticSheetPlan` objects and preserve stable semantic `SheetId` separately from display number/name;
-- produce deterministic rows ordered case-insensitively by sheet number then stable sheet ID;
-- reject null rows, case-insensitive duplicate sheet IDs and duplicate sheet numbers, and over-bounded catalogs;
-- defensively copy the returned rows so callers cannot mutate a previously built index;
-- keep the P0 row handle-free and derived only from semantic sheet data: sheet ID, number, name, optional title-block name, and placed-view count;
-- do not invent Layout/PaperSpace/Viewport/Table APIs or native IDs;
-- do not touch Revision, Floor/Level, Quantity, updater, installer, CI/release or any other active product lane;
-- no GitHub Actions dispatch/re-run and no licensed V25 runtime claim.
-
-## Completion condition
-
-Core builder + deterministic/fail-closed smoke coverage + focused static gate are merged/read back on `main`, documentation truth remains accurate, and this claim closes with exact pushed SHA(s).
+- Claim: `f80b839d96a275e1b3bfb9b067643ac74ae4f756`.
+- Core Sheet Index model/builder: `4a3ea37fb523c8a0de4822d07cb64c931ed1aafe`.
+- Smoke coverage: `94db296b632c3ff5f0e4e193467d016b9b4541f3`.
+- Focused static gate: `57a34a71dc03e18b762f6c71e398c607b58ce269`.
+- Canonical documentation status: `06f7a93111de31fc671a227333c5d2801ffda636`.
+- `SemanticSheetIndexBuilder` consumes validated `SemanticSheetPlan` data only and exposes stable `SheetId`, display number/name, optional title-block name and placed-view count without any CAD handle/native ID.
+- Output is bounded to 10,000 sheets, rejects null source rows and duplicate sheet IDs/numbers case-insensitively, orders by sheet number then stable ID, and returns a defensive read-only snapshot.
+- Smoke source covers deterministic ordering, source-list detachment, collection immutability, duplicate identity, bound and null failures.
+- GitHub source/gate/smoke readback after merge: PASS.
+- Python preflight: NOT RUN in this remote session; gate source was merged/read back only.
+- Core build/smoke executable: NOT RUN in this remote session.
+- BricsCAD V25 / Windows UI / native Layout/Table/Viewport runtime: NOT RUN.
+- GitHub Actions: NOT DISPATCHED / NOT RE-RUN.
+- Issue #77 remains OPEN for native MLeader and Layout/PaperSpace/Viewport/title-block/Sheet-Index-Table materialization.
