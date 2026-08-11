@@ -25,7 +25,7 @@ namespace QS3D.Core.SmokeTests
         private static void AcceptsCanonicalValidatorBoundaries()
         {
             var project = new ProjectState("P-VALID", new string('N', MaxNameLength));
-            var family = new ProjectFamily("F-VALID", "Family", ElementCategory.Wall);
+            var family = new ProjectFamily("F-VALID", "Family", ElementCategory.ArchitecturalWall);
             family.Properties["Description"] = new string('V', MaxPropertyValueLength);
             project.Families.Add(family);
 
@@ -44,7 +44,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsOversizedPortablePropertyValue()
         {
             var project = new ProjectState("P-PROPERTY-LIMIT", "Property limit");
-            var family = new ProjectFamily("F-PROPERTY-LIMIT", "Family", ElementCategory.Wall);
+            var family = new ProjectFamily("F-PROPERTY-LIMIT", "Family", ElementCategory.ArchitecturalWall);
             family.Properties["Description"] = new string('V', MaxPropertyValueLength + 1);
             project.Families.Add(family);
 
