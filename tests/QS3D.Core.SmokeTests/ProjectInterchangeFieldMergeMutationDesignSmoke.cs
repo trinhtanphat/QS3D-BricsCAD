@@ -157,11 +157,12 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 action();
-                throw new InvalidOperationException("Expected InvalidOperationException was not thrown.");
             }
             catch (InvalidOperationException)
             {
+                return;
             }
+            throw new Exception("Expected InvalidOperationException was not thrown.");
         }
 
         private static void Sequence(string[] expected, System.Collections.Generic.IEnumerable<string> actual)
