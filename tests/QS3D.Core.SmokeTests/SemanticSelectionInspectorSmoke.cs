@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CommonAndMixedValuesAreStable();
+            ReferencePresenceCountsActualAssignments();
             FamilyDefaultsParticipateInEffectiveValues();
             InternalOwnershipPropertiesStayHidden();
             MissingSelectionFailsClosed();
@@ -49,6 +50,22 @@ namespace QS3D.Core.SmokeTests
             var length = result.Quantities.Single(x => x.Name == "LengthM");
             Equal(true, length.IsMixed);
             Equal(2, length.PresentCount);
+        }
+
+        private static void ReferencePresenceCountsActualAssignments()
+        {
+            var project = BuildProject();
+            project.Elements[0].ZoneId = string.Empty;
+            var partial = SemanticSelectionInspector.Inspect(project, new[] { "B-001", "B-002" });
+            Equal(true, partial.Zone.IsMixed);
+            Equal(1, partial.Zone.PresentCount);
+            Equal(null, partial.Zone.Value);
+
+            project.Elements[1].ZoneId = "   ";
+            var unassigned = SemanticSelectionInspector.Inspect(project, new[] { "B-001", "B-002" });
+            Equal(false, unassigned.Zone.IsMixed);
+            Equal(0, unassigned.Zone.PresentCount);
+            Equal(string.Empty, unassigned.Zone.Value);
         }
 
         private static void FamilyDefaultsParticipateInEffectiveValues()
