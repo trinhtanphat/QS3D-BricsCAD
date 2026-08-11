@@ -37,7 +37,9 @@ checks = {
         "new ModelHealthWindow", "SourceHandleResolver.Resolve", "CadHandleService.Select", "ShowModelessWindow",
     ],
     required[4]: [
-        "combined.AddRange(new RoomFinishHealthService().Inspect(project));", "SourceHandleResolver.Resolve(project, new[] { element.Id })",
+        "combined.AddRange(new RoomFinishHealthService().Inspect(project));",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
+        "SourceHandleResolver.Resolve(currentProject, new[] { element.Id })",
     ],
     required[5]: ['Tag="QS3DROOMFINISHHEALTH"', "Kiểm tra HT_Phòng Semantic Health"],
     required[6]: [

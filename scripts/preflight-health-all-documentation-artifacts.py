@@ -27,7 +27,7 @@ else:
             errors.append("Health All missing documentation health source: " + token)
 
     required_locate = (
-        "LocateProjectArtifactHandles(project, issue.Code)",
+        "LocateProjectArtifactHandles(currentProject, issue.Code)",
         "MetadataHandle(project, SemanticElementTableBuilder.HandleKey)",
         "MetadataHandle(project, BbsNativeTableBuilder.Definition.HandleKey)",
         "MetadataHandle(project, BqNativeTableBuilder.Definition.HandleKey)",
@@ -42,7 +42,7 @@ else:
             errors.append("Health All missing documentation Locate contract: " + token)
 
     locate_call_pos = text.find("var handles = LocateHandles(element, issue.Code).ToArray();")
-    fallback_pos = text.find("SourceHandleResolver.Resolve(project, new[] { element.Id })")
+    fallback_pos = text.find("SourceHandleResolver.Resolve(currentProject, new[] { element.Id })")
     if min(locate_call_pos, fallback_pos) >= 0 and not locate_call_pos < fallback_pos:
         errors.append("Generated artifact Locate must run before source-handle fallback")
 

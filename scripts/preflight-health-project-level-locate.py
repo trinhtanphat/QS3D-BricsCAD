@@ -24,7 +24,8 @@ if HEALTH_ALL.is_file():
     text = HEALTH_ALL.read_text(encoding="utf-8")
     for token in (
         "if (string.IsNullOrWhiteSpace(issue.ElementId))",
-        "LocateProjectArtifactHandles(project, issue.Code)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
+        "LocateProjectArtifactHandles(currentProject, issue.Code)",
         "CadHandleService.Select(document, artifactHandles)",
     ):
         if token not in text:
