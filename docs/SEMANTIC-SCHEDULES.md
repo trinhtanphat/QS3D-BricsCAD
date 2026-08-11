@@ -47,6 +47,8 @@ Persistence is bounded:
 - no overlap between include and exclude ID lists;
 - DTD processing prohibited and external XML resolution disabled.
 
+Persisted v1 XML is also a strict canonical contract. Every schedule must carry the canonical `id`, `name`, `title`, `floorId` and `zoneId` attributes and **exactly one canonical** `categories`, `include`, `exclude` and `columns` container, including empty containers when a filter/list is unused. Category values must use the exact, case-sensitive **canonical ElementCategory names** emitted by the serializer; numeric enum values, case-shifted names and padded category text fail closed. The loader rejects a noncanonical v1 payload instead of silently normalizing it and rewriting different XML on the next Save.
+
 Saving identical normalized content does not touch the project change version again.
 
 ## Model Health
