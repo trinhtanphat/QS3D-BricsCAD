@@ -29,6 +29,7 @@ jobs:
     runs-on: windows-latest
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
+      BRICSCAD_V25_MIRROR_MSI_URL: http://103.9.157.20/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
       BRICSCAD_V25_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
       BRICSCAD_V25_MSI_URL: ${{ secrets.BRICSCAD_V25_MSI_URL }}
       BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}
@@ -57,6 +58,15 @@ jobs:
           git rev-parse --verify HEAD | Out-Null
           if (git tag --list $env:RELEASE_TAG) {
             throw "Tag already exists locally: $env:RELEASE_TAG"
+          }
+          $expectedMirror = 'http://103.9.157.20/BricsCAD-V25.2.10-1-en_US%28x64%29.msi'
+          if (-not [string]::Equals($env:BRICSCAD_V25_MIRROR_MSI_URL, $expectedMirror, [StringComparison]::Ordinal)) {
+            throw "Pinned BricsCAD V25 mirror URL must match the approved V25.2.10 x64 en_US object exactly."
+          }
+          $mirrorUri = $null
+          if (-not [Uri]::TryCreate($env:BRICSCAD_V25_MIRROR_MSI_URL, [UriKind]::Absolute, [ref]$mirrorUri) -or
+              $mirrorUri.Scheme -ne 'http' -or $mirrorUri.Host -ne '103.9.157.20') {
+            throw "Pinned BricsCAD V25 mirror URL is invalid."
           }
           if ([string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_PUBLIC_MSI_URL)) {
             throw "Pinned BricsCAD V25.2.10 public installer URL is missing from the workflow."
@@ -104,6 +114,7 @@ jobs:
           New-Item -ItemType Directory -Path $extract -Force | Out-Null
 
           $candidates = @(
+            [pscustomobject]@{ Name = 'pinned-user-mirror'; Url = $env:BRICSCAD_V25_MIRROR_MSI_URL },
             [pscustomobject]@{ Name = 'pinned-public'; Url = $env:BRICSCAD_V25_PUBLIC_MSI_URL }
           )
           if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_URL)) {
@@ -125,7 +136,7 @@ jobs:
             }
           }
           if ([string]::IsNullOrWhiteSpace($downloadedFrom)) {
-            throw 'Unable to download the pinned official BricsCAD V25.2.10 x64 installer. If Bricsys requires a signed URL, refresh it and store the exact URL in repository secret BRICSCAD_V25_MSI_URL.'
+            throw 'Unable to download the pinned BricsCAD V25.2.10 x64 installer from the approved mirror, pinned official source, or configured signed fallback.'
           }
 
           $actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
