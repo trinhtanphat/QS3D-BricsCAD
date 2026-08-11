@@ -199,15 +199,48 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ExistingProjectMutationContext.Require(doc, "Regenerate");
                 var count = RegenerateProject(project);
-                PaletteCoordinator.RefreshProject();
                 var message = count == 0 ? "QS3D: không có cấu kiện dirty cần regenerate." : "QS3D: đã regenerate " + count + " lượt cấu kiện.";
-                PaletteCoordinator.SetStatus(message); doc.Editor.WriteMessage("\n" + message);
+                FinalizeCommittedUi(doc, "QS3DREGEN", () =>
+                {
+                    PaletteCoordinator.RefreshProject();
+                    PaletteCoordinator.SetStatus(message);
+                    doc.Editor.WriteMessage("\n" + message);
+                });
             });
         }
 
-        [CommandMethod("QS3DSAVE", CommandFlags.Modal)] public void SaveProject() { var doc = Active(); if (doc == null) return; Guard(doc, "QS3DSAVE", () => { var path = ProjectContextCoordinator.Save(doc); PaletteCoordinator.SetStatus("Đã lưu " + path); doc.Editor.WriteMessage("\nQS3D saved: " + path); }); }
+        [CommandMethod("QS3DSAVE", CommandFlags.Modal)]
+        public void SaveProject()
+        {
+            var doc = Active(); if (doc == null) return;
+            Guard(doc, "QS3DSAVE", () =>
+            {
+                var path = ProjectContextCoordinator.Save(doc);
+                FinalizeCommittedUi(doc, "QS3DSAVE", () =>
+                {
+                    PaletteCoordinator.SetStatus("Đã lưu " + path);
+                    doc.Editor.WriteMessage("\nQS3D saved: " + path);
+                });
+            });
+        }
+
         [CommandMethod("QS3DUNITS", CommandFlags.Modal)] public void ConfigureDrawingUnits() { var doc = Active(); if (doc == null) return; Guard(doc, "QS3DUNITS", () => DrawingUnitWorkflow.Configure(doc)); }
-        [CommandMethod("QS3DRELOAD", CommandFlags.Modal)] public void ReloadProject() { var doc = Active(); if (doc == null) return; Guard(doc, "QS3DRELOAD", () => { ProjectContextCoordinator.Reload(doc); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Đã nạp lại project từ .qsdb"); }); }
+
+        [CommandMethod("QS3DRELOAD", CommandFlags.Modal)]
+        public void ReloadProject()
+        {
+            var doc = Active(); if (doc == null) return;
+            Guard(doc, "QS3DRELOAD", () =>
+            {
+                ProjectContextCoordinator.Reload(doc);
+                FinalizeCommittedUi(doc, "QS3DRELOAD", () =>
+                {
+                    PaletteCoordinator.RefreshProject();
+                    PaletteCoordinator.SetStatus("Đã nạp lại project từ .qsdb");
+                });
+            });
+        }
+
         [CommandMethod("QS3DREFRESH", CommandFlags.Modal)]
         public void Refresh()
         {
@@ -238,12 +271,15 @@ namespace QS3D.BricsCAD.V25
                 // then commit/rebuild native Solid3d explicitly with QS3DBUILD3D.
                 // Direct Draw remains the one-shot source -> semantic -> native 3D authoring path.
                 var captured = SemanticCaptureService.Capture(doc, ElementCategory.ArchitecturalWall);
-                PaletteCoordinator.RefreshProject();
                 var status = captured > 0
                     ? "Tường KT: đã capture " + captured + " semantic. Chỉnh Family/Instance (bề dày, chiều cao, offset) rồi chạy QS3DBUILD3D."
                     : "Tường KT: chưa capture được semantic nào; chọn LINE/open POLYLINE tham chiếu rồi chạy lại.";
-                PaletteCoordinator.SetStatus(status);
-                doc.Editor.WriteMessage("\nQS3D " + status);
+                FinalizeCommittedUi(doc, "QS3D Tường KT", () =>
+                {
+                    PaletteCoordinator.RefreshProject();
+                    PaletteCoordinator.SetStatus(status);
+                    doc.Editor.WriteMessage("\nQS3D " + status);
+                });
             });
         }
 
@@ -356,7 +392,16 @@ namespace QS3D.BricsCAD.V25
         public void GenerateFinishes()
         {
             var doc = Active(); if (doc == null) return;
-            Guard(doc, "QS3DFINISH", () => { var count = SemanticCaptureService.GenerateRoomFinishes(doc); PaletteCoordinator.RefreshProject(); PaletteCoordinator.SetStatus("Đã tạo/cập nhật " + count + " cấu kiện HT_Phòng mới."); doc.Editor.WriteMessage("\nQS3D: generated " + count + " new room finish element(s)."); });
+            Guard(doc, "QS3DFINISH", () =>
+            {
+                var count = SemanticCaptureService.GenerateRoomFinishes(doc);
+                FinalizeCommittedUi(doc, "QS3DFINISH", () =>
+                {
+                    PaletteCoordinator.RefreshProject();
+                    PaletteCoordinator.SetStatus("Đã tạo/cập nhật " + count + " cấu kiện HT_Phòng mới.");
+                    doc.Editor.WriteMessage("\nQS3D: generated " + count + " new room finish element(s).");
+                });
+            });
         }
 
         [CommandMethod("QS3DHEALTH", CommandFlags.Modal)]
@@ -552,15 +597,31 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static void FinalizeCommittedUi(Document document, string operation, Action ui)
+        {
+            try
+            {
+                ui();
+            }
+            catch (System.Exception uiError)
+            {
+                try { document.Editor.WriteMessage("\n[QS3D] " + operation + " đã hoàn tất; cảnh báo UI: " + uiError.Message); }
+                catch { }
+            }
+        }
+
         private static void Capture(ElementCategory category, string label)
         {
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3D " + label, () =>
             {
                 var count = SemanticCaptureService.Capture(doc, category);
-                PaletteCoordinator.RefreshProject();
-                PaletteCoordinator.SetStatus(label + ": đã ghi " + count + " cấu kiện.");
-                doc.Editor.WriteMessage("\nQS3D " + label + ": " + count + " element(s).");
+                FinalizeCommittedUi(doc, "QS3D " + label, () =>
+                {
+                    PaletteCoordinator.RefreshProject();
+                    PaletteCoordinator.SetStatus(label + ": đã ghi " + count + " cấu kiện.");
+                    doc.Editor.WriteMessage("\nQS3D " + label + ": " + count + " element(s).");
+                });
             });
         }
 
