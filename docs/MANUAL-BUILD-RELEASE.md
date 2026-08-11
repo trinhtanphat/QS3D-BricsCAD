@@ -76,6 +76,8 @@ The machine must have a licensed BricsCAD V25 installation and repository variab
 
 Runtime/screenshot validation requires an interactive Windows session.
 
+For provisioning a dedicated Windows runner from a local/cached MSI, `scripts/install-bricscad-v25.ps1` treats the filename only as an advisory. Before invoking `msiexec`, the helper verifies the optional requested SHA-256, enforces the configured Authenticode publisher policy, reads the MSI Property table, requires ProductName to identify BricsCAD, and requires ProductVersion major 25. A renamed Bricsys-signed MSI for another BricsCAD major version must therefore fail before installation. This source-side identity check does not replace licensed first-launch/runtime qualification.
+
 ## Project/DWG readiness before publication
 
 `QS3DRELEASECHECK` is a project-level release-readiness command. On representative release drawings it checks semantic/source/generated health, dependency-cycle health, policy-safe ownership, all current generated rebar families including Foundation mesh, generated-rebar mode semantics, Curtain live state/stale state and BOM/live-solid guards.
