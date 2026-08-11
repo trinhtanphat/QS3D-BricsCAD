@@ -50,6 +50,23 @@ else:
         if not (empty_boundaries < require_existing < appeared_project < create_new < freshness < snapshot < mutate):
             errors.append("QS3DROOMAUTO must bind/create only after accepted topology, reject an appeared project on the no-project preview path, then revalidate context before snapshot/mutation")
 
+    regeneration_tokens = (
+        "SemanticCaptureService.SyncExistingRoomFinishes(project, element)",
+        "var staleRooms = AutoRoomLifecycle.MarkStaleForSelection(",
+        "var regenerationTargets = new HashSet<string>(activeRoomIds, StringComparer.OrdinalIgnoreCase);",
+        "foreach (var stale in staleRooms)",
+        "regenerationTargets.Add(stale.Id);",
+        ".RegenerateDirtySubset(project, regenerationTargets);",
+    )
+    regeneration_positions = [body.find(token) for token in regeneration_tokens]
+    if any(position < 0 for position in regeneration_positions):
+        errors.append("QS3DROOMAUTO missing scoped active/stale Room regeneration contract")
+    elif not all(left < right for left, right in zip(regeneration_positions, regeneration_positions[1:])):
+        errors.append("QS3DROOMAUTO must sync active Room finishes, mark selected stale Rooms, build active+stale targets, then regenerate only that subset")
+
+    if ".RegenerateDirty(project)" in body or ".RegenerateProject(project)" in body:
+        errors.append("QS3DROOMAUTO must not consume unrelated project dirty state via full-project regeneration")
+
 for token in (
     "expectedProjectId = existingPreview.ProjectId",
     "string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase)",
@@ -105,4 +122,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DROOMAUTO exits diagnostics before project creation, rejects project appearance after a no-project preview, preserves same-ProjectId existing mutation, revalidates drawing-unit plus Room settings before snapshot/mutation, and keeps the matching V25 scenario in LOCAL-001.")
+print("PASS: QS3DROOMAUTO exits diagnostics before project creation, rejects project appearance after a no-project preview, preserves same-ProjectId existing mutation, revalidates drawing-unit plus Room settings before snapshot/mutation, scopes final regeneration to active plus selected-stale Rooms without consuming unrelated dirty project state, and keeps the matching V25 scenario in LOCAL-001.")
