@@ -220,8 +220,10 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex)
             {
                 var message = "QS3D project load error: " + ex.Message;
-                document.Editor.WriteMessage("\n" + message);
-                PaletteCoordinator.SetStatus(message);
+                try { document.Editor.WriteMessage("\n" + message); }
+                catch { }
+                try { PaletteCoordinator.ResetForUnavailableProject(message); }
+                catch { }
             }
         }
     }
