@@ -33,7 +33,7 @@ if not errors:
         "MapOptional(plan.Remap, InterchangeRemapIdentityKind.Zone",
         "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, dependency)",
         "string.Equals(property.Key, HostWallIdKey, StringComparison.OrdinalIgnoreCase)",
-        "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, property.Value.Trim())",
+        "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, sourceHost)",
         "LooksLikeUnregisteredSemanticReference(property.Key, property.Value)",
         "IsImportedOwnershipMetadata(property.Key)",
         'k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
@@ -50,6 +50,52 @@ if not errors:
         if needle not in i:
             errors.append("remap append importer missing atomic/ownership/rewrite contract: " + needle)
 
+    plan_method = re.search(
+        r"public static ProjectInterchangeRemapAppendPlan Plan\(ProjectState target, string json\)(.*?)public static ProjectInterchangeRemapAppendResult Import",
+        i,
+        re.S,
+    )
+    if not plan_method:
+        errors.append("unable to locate remap append Plan method")
+    else:
+        plan_body = plan_method.group(1)
+        if "ValidateExecutionSafety" in plan_body:
+            errors.append("remap append Plan must remain inspectable for blocked plans; execution safety belongs in Import")
+        if "return new ProjectInterchangeRemapAppendPlan(remap, ownershipProperties)" not in plan_body:
+            errors.append("remap append Plan must return blocked/ready plan metadata without mutation")
+
+    required_planner = [
+        "foreach (var family in source.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))",
+        "foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))",
+        'OwnerElementSourceId = "Family " + family.Id',
+        "Family property looks like a semantic identity/reference",
+        "if (IsImportedOwnershipMetadata(property.Key)) continue;",
+        "GeneratedHandleOwnershipPolicy.IsOwnerSlot(k)",
+        'k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
+        'k.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)',
+        'k.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0',
+        "source.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString()))",
+        "target.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString()))",
+        "NameKey(x.NameScope, x.Name)",
+        "NextName(sourceName, sourceItem.NameScope, occupiedNames, maxNameLength)",
+        "public string NameScope { get; }",
+        "private const int ZoneMaxIdLength = 64;",
+        "private const int ZoneMaxNameLength = 120;",
+        "private const int FloorMaxIdLength = 64;",
+        "private const int FloorMaxNameLength = 120;",
+        "private const int FamilyMaxIdLength = 80;",
+        "private const int FamilyMaxNameLength = 160;",
+        "private const int ElementMaxIdLength = 128;",
+        "sourceId.Length > maxIdLength",
+        "sourceName.Length > maxNameLength",
+        "assignedIds.Contains(sourceId)",
+        "assignedNames.Contains(sourceNameKey)",
+        "NextId(sourceId, occupiedIds, maxIdLength)",
+    ]
+    for needle in required_planner:
+        if needle not in p:
+            errors.append("remap planner missing family/ownership/name-scope/runtime-bound contract: " + needle)
+
     # Planner preview and executor must recognize the exact same conservative ID/ref suffix set.
     reference_suffixes = ["Id", "Ids", "Ref", "Refs", "RefId", "RefIds"]
     for suffix in reference_suffixes:
@@ -62,9 +108,11 @@ if not errors:
     if "sourceElementIds.Contains(value.Trim())" in p:
         errors.append("remap planner must not hide unknown ID/ref-like properties just because their value is outside the source Element set")
 
-    # Re-plan must happen before snapshot capture/mutation, not just rely on an old UI preview.
-    if i.index("var plan = Plan(target, json);") > i.index("ProjectStateSnapshot.Capture(target)"):
-        errors.append("Import As New must re-plan against current target before mutation snapshot")
+    # Re-plan and fail-closed validation must happen before snapshot capture/mutation.
+    if i.index("var plan = Plan(target, json);") > i.index("ValidateExecutionSafety(source, plan);"):
+        errors.append("Import As New must build plan before execution-safety validation")
+    if i.index("ValidateExecutionSafety(source, plan);") > i.index("ProjectStateSnapshot.Capture(target)"):
+        errors.append("Import As New must block unsafe remaps before mutation snapshot")
 
     forbidden_importer = [
         ".SourceHandles.Add(",
@@ -81,8 +129,16 @@ if not errors:
     required_command = [
         '[CommandMethod("QS3DINTERCHANGEREMAPAPPEND", CommandFlags.Modal)]',
         "ProjectInterchangeRemapAppendImporter.Plan(project, json)",
-        "ProjectInterchangeRemapAppendImporter.Import(project, json)",
+        "var previewChangeVersion = project.ChangeVersion;",
+        "var currentProject = ProjectContextCoordinator.GetOrCreate(document);",
+        "ReferenceEquals(currentProject, project)",
+        "currentProject.ChangeVersion != previewChangeVersion",
+        "ProjectInterchangeRemapAppendImporter.Import(currentProject, json)",
         "if (!plan.CanImport)",
+        "Interchange Import As New BLOCKED",
+        "plan.Remap.OpaqueReferenceWarnings.Count",
+        "QS3DINTERCHANGEREMAPPLAN",
+        "chưa mutate project/DWG",
         "if (plan.IdRemapCount == 0 && plan.NameRemapCount == 0)",
         "QS3DINTERCHANGEAPPEND",
         "ProjectInterchangeJsonValidator.MaxFileBytes",
@@ -98,6 +154,10 @@ if not errors:
     for needle in required_command:
         if needle not in c:
             errors.append("remap append command missing guarded UX contract: " + needle)
+    if "ProjectInterchangeRemapAppendImporter.Import(project, json)" in c:
+        errors.append("confirmed remap append must mutate the re-resolved current project, not the stale preview reference")
+    if "Import As New plan is not executable. Run QS3DINTERCHANGEREMAPPLAN" in c:
+        errors.append("blocked remap plans should surface as normal BLOCKED status, not generic command exceptions")
 
     all_cs = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in (root / "src").rglob("*.cs"))
     registrations = len(re.findall(r'\[CommandMethod\("QS3DINTERCHANGEREMAPAPPEND"', all_cs))
@@ -120,4 +180,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New re-plans immediately before semantic mutation, keeps planner/executor opaque-reference policy aligned, rewrites only registered relations, strips incoming native ownership, preserves all existing target identities, and rolls back semantic state on failure.")
+print("Import As New keeps blocked plans inspectable, binds confirmation to the exact reviewed project/version, fails closed before mutation, bounds target identities, aligns opaque-reference policy, and preserves existing target identities.")

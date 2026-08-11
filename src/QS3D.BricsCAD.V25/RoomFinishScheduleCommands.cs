@@ -19,6 +19,18 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
+                var dialog = new SaveFileDialog
+                {
+                    Title = "Xuất bảng hoàn thiện phòng",
+                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
+                    DefaultExt = ".xlsx",
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                    FileName = drawingName + "-HT-Phong.xlsx"
+                };
+                if (dialog.ShowDialog() != true) return;
+
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 var rows = RoomFinishScheduleBuilder.Build(project);
@@ -38,17 +50,6 @@ namespace QS3D.BricsCAD.V25
                     primary = QuantityReportMath.Add(primary, row.PrimaryQuantity, "HT_Phòng export primary quantity");
                 }
 
-                var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
-                var dialog = new SaveFileDialog
-                {
-                    Title = "Xuất bảng hoàn thiện phòng",
-                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-                    DefaultExt = ".xlsx",
-                    AddExtension = true,
-                    OverwritePrompt = true,
-                    FileName = drawingName + "-HT-Phong.xlsx"
-                };
-                if (dialog.ShowDialog() != true) return;
                 RoomFinishXlsxExporter.Export(dialog.FileName, rows);
 
                 var status = "HT_Phòng XLSX: " + rows.Count + " nhóm • " + count + " finish element • tổng KL chính " + primary.ToString("0.###") + ".";

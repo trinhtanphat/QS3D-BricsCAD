@@ -74,7 +74,9 @@ namespace QS3D.BricsCAD.V25
                 if (!validation.IsValid)
                     throw new InvalidDataException("Snapshot không hợp lệ: " + validation.ErrorCount.ToString(CultureInfo.InvariantCulture) + " error(s). Chạy QS3DINTERCHANGEVALIDATE để xem chi tiết.");
 
+                EnsureActive(document, "Interchange Append / preview");
                 var project = ProjectContextCoordinator.GetOrCreate(document);
+                var previewChangeVersion = project.ChangeVersion;
                 var preview = ProjectInterchangeImportPreview.Plan(project, json);
                 if (!preview.Validation.IsValid)
                     throw new InvalidDataException("Snapshot không còn vượt qua validation khi lập import preview.");
@@ -109,9 +111,13 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxButton.YesNo,
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
-                // Import repeats the plan immediately before mutation. If target state changed while the
-                // confirmation dialog was open, the second preflight fails closed instead of applying stale intent.
-                var result = ProjectInterchangeAppendOnlyImporter.Import(project, json);
+                EnsureActive(document, "Interchange Append / mutation");
+                var currentProject = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ReferenceEquals(currentProject, project) || currentProject.ChangeVersion != previewChangeVersion)
+                    throw new InvalidOperationException(
+                        "Interchange Append target semantic project changed after preview. Run the command again to review a fresh append plan.");
+
+                var result = ProjectInterchangeAppendOnlyImporter.Import(currentProject, json);
                 try { PaletteCoordinator.RefreshProject(); } catch { }
 
                 var status =
@@ -131,6 +137,12 @@ namespace QS3D.BricsCAD.V25
                 try { PaletteCoordinator.SetStatus("QS3DINTERCHANGEAPPEND lỗi: " + ex.Message); } catch { }
                 document.Editor.WriteMessage("\nQS3DINTERCHANGEAPPEND error: " + ex.Message + " Importer rollback semantic mutation nếu apply thất bại.");
             }
+        }
+
+        private static void EnsureActive(Document document, string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(operation + " requires the DWG that started the operation to remain active.");
         }
 
         private static string ReadGuardedSnapshotText(string path)

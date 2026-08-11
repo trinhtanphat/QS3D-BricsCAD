@@ -190,9 +190,19 @@ namespace QS3D.Core.Export
                 ValidateTarget(target);
                 return new ProjectInterchangeAppendOnlyImportResult(plan);
             }
-            catch
+            catch (Exception operationError)
             {
-                snapshot.Restore(target);
+                try
+                {
+                    snapshot.Restore(target);
+                }
+                catch (Exception restoreError)
+                {
+                    throw new InvalidOperationException(
+                        "Interchange append-only import failed and project rollback also failed.",
+                        new AggregateException(operationError, restoreError));
+                }
+
                 throw;
             }
         }

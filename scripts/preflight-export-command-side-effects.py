@@ -7,6 +7,7 @@ CASES = (
     (
         "Curtain",
         ROOT / "src/QS3D.BricsCAD.V25/CurtainWallScheduleCommands.cs",
+        "CurtainWallScheduleBuilder.Build(project)",
         "panels = QuantityReportMath.AddCount(panels, row.PanelCount);",
         "CurtainWallXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
@@ -14,6 +15,7 @@ CASES = (
     (
         "Door/Opening",
         ROOT / "src/QS3D.BricsCAD.V25/DoorOpeningScheduleCommands.cs",
+        "DoorOpeningScheduleBuilder.Build(project)",
         "count = QuantityReportMath.AddCount(count, row.Count);",
         "DoorOpeningXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
@@ -21,6 +23,7 @@ CASES = (
     (
         "Material",
         ROOT / "src/QS3D.BricsCAD.V25/MaterialUsageScheduleCommands.cs",
+        "MaterialUsageScheduleBuilder.Build(project)",
         "elements = QuantityReportMath.AddCount(elements, row.ElementCount);",
         "MaterialUsageXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
@@ -28,6 +31,7 @@ CASES = (
     (
         "Room finish",
         ROOT / "src/QS3D.BricsCAD.V25/RoomFinishScheduleCommands.cs",
+        "RoomFinishScheduleBuilder.Build(project)",
         "primary = QuantityReportMath.Add(primary, row.PrimaryQuantity, \"HT_Phòng export primary quantity\");",
         "RoomFinishXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
@@ -35,6 +39,7 @@ CASES = (
     (
         "BBS CSV",
         ROOT / "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs",
+        "ProjectRebarScheduleBuilder.Build(project)",
         "totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, \"BBS CSV total weight\");",
         "RebarCsvExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status);",
@@ -42,26 +47,47 @@ CASES = (
 )
 
 errors = []
-for label, path, aggregate, export, finalize in CASES:
+for label, path, build, aggregate, export, finalize in CASES:
     if not path.is_file():
         errors.append("missing " + str(path.relative_to(ROOT)))
         continue
 
     text = path.read_text(encoding="utf-8")
     dialog = "if (dialog.ShowDialog() != true) return;"
-    aggregate_pos = text.find(aggregate)
-    dialog_pos = text.find(dialog)
-    export_pos = text.find(export)
-    finalize_pos = text.find(finalize)
+    project = "ProjectContextCoordinator.GetOrCreate(document)"
+    regenerate = "RegenerateDirty(project)"
+    positions = {
+        dialog: text.find(dialog),
+        project: text.find(project),
+        regenerate: text.find(regenerate),
+        build: text.find(build),
+        aggregate: text.find(aggregate),
+        export: text.find(export),
+        finalize: text.find(finalize),
+    }
 
-    for token, pos in ((aggregate, aggregate_pos), (dialog, dialog_pos), (export, export_pos), (finalize, finalize_pos)):
+    for token, pos in positions.items():
         if pos < 0:
             errors.append(label + " missing export-boundary token: " + token)
 
-    if min(aggregate_pos, dialog_pos, export_pos, finalize_pos) >= 0:
-        if not aggregate_pos < dialog_pos < export_pos < finalize_pos:
-            errors.append(label + " must validate aggregates before dialog/export and finalize UI only after export")
-        between_export_and_finalize = text[export_pos + len(export):finalize_pos]
+    if min(positions.values()) >= 0:
+        if not (
+            positions[dialog]
+            < positions[project]
+            < positions[regenerate]
+            < positions[build]
+            < positions[aggregate]
+            < positions[export]
+            < positions[finalize]
+        ):
+            errors.append(label + " must confirm destination before current-project regeneration/build, then validate aggregates, export, and finalize UI")
+
+        before_dialog = text[:positions[dialog]]
+        for forbidden in (project, regenerate, build):
+            if forbidden in before_dialog:
+                errors.append(label + " Cancel path must not touch project/regeneration/schedule state before save confirmation: " + forbidden)
+
+        between_export_and_finalize = text[positions[export] + len(export):positions[finalize]]
         if "PaletteCoordinator." in between_export_and_finalize or "Editor.WriteMessage" in between_export_and_finalize:
             errors.append(label + " must not perform fallible UI work between persistent export and FinalizeUi")
 
@@ -75,4 +101,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: checked aggregates precede export side effects and post-export UI is best effort for Curtain, Door/Opening, Material, Room Finish, and BBS CSV commands.")
+print("PASS: schedule exporters confirm the destination before project/regeneration work, rebuild fresh rows, validate aggregates before writing, and isolate post-export UI.")

@@ -78,6 +78,7 @@ namespace QS3D.Core.Selection
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
             var projectIndex = BuildUniqueProjectIndex(project);
+            var familyIndex = BuildUniqueFamilyIndex(project);
             var requested = new List<string>();
             var requestedSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var rawId in elementIds)
@@ -95,7 +96,7 @@ namespace QS3D.Core.Selection
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.Ordinal)
                 .ToArray();
-            ValidateSemanticReferences(project, selected);
+            ValidateSemanticReferences(project, selected, familyIndex);
 
             var categories = selected
                 .Select(x => x.Category)
@@ -109,7 +110,7 @@ namespace QS3D.Core.Selection
                 InspectReference("FamilyId", selected.Select(x => x.FamilyId).ToArray()),
                 InspectReference("FloorId", selected.Select(x => x.FloorId).ToArray()),
                 InspectReference("ZoneId", selected.Select(x => x.ZoneId).ToArray()),
-                InspectProperties(selected),
+                InspectProperties(selected, familyIndex),
                 InspectQuantities(selected));
         }
 
@@ -128,12 +129,36 @@ namespace QS3D.Core.Selection
             return result;
         }
 
-        private static void ValidateSemanticReferences(ProjectState project, IEnumerable<ProjectElement> selected)
+        private static Dictionary<string, ProjectFamily> BuildUniqueFamilyIndex(ProjectState project)
+        {
+            var result = new Dictionary<string, ProjectFamily>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in project.Families)
+            {
+                if (family == null) throw new InvalidOperationException("Project contains a null semantic family.");
+                if (string.IsNullOrWhiteSpace(family.Id)) throw new InvalidOperationException("Project contains an empty semantic family id.");
+                if (!Enum.IsDefined(typeof(ElementCategory), family.Category)) throw new InvalidOperationException("Project contains an undefined semantic family category: " + family.Id + ".");
+                var id = family.Id.Trim();
+                if (result.ContainsKey(id)) throw new InvalidOperationException("Project contains duplicate semantic family id: " + id + ".");
+                result.Add(id, family);
+            }
+            return result;
+        }
+
+        private static void ValidateSemanticReferences(
+            ProjectState project,
+            IEnumerable<ProjectElement> selected,
+            IReadOnlyDictionary<string, ProjectFamily> familyIndex)
         {
             foreach (var element in selected)
             {
-                if (!string.IsNullOrWhiteSpace(element.FamilyId) && project.FindFamily(element.FamilyId) == null)
-                    throw new InvalidOperationException("Selected element references missing family id: " + element.Id + "/" + element.FamilyId + ".");
+                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                if (familyId.Length > 0)
+                {
+                    if (!familyIndex.TryGetValue(familyId, out var family))
+                        throw new InvalidOperationException("Selected element references missing family id: " + element.Id + "/" + familyId + ".");
+                    if (family.Category != element.Category)
+                        throw new InvalidOperationException("Selected element/family category mismatch: " + element.Id + "/" + family.Id + ".");
+                }
                 if (!string.IsNullOrWhiteSpace(element.FloorId) && project.FindFloor(element.FloorId) == null)
                     throw new InvalidOperationException("Selected element references missing floor id: " + element.Id + "/" + element.FloorId + ".");
                 if (!string.IsNullOrWhiteSpace(element.ZoneId) && project.FindZone(element.ZoneId) == null)
@@ -150,12 +175,14 @@ namespace QS3D.Core.Selection
             return new SemanticSelectionTextValue(name, values.Count, mixed, mixed ? null : first);
         }
 
-        private static IReadOnlyList<SemanticSelectionTextValue> InspectProperties(IReadOnlyList<ProjectElement> selected)
+        private static IReadOnlyList<SemanticSelectionTextValue> InspectProperties(
+            IReadOnlyList<ProjectElement> selected,
+            IReadOnlyDictionary<string, ProjectFamily> familyIndex)
         {
+            var effective = selected.Select(x => BuildEffectiveProperties(x, familyIndex)).ToArray();
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in selected)
-                foreach (var key in element.Properties.Keys)
-                    if (!IsInternalOwnershipProperty(key)) keys.Add(key);
+            foreach (var properties in effective)
+                foreach (var key in properties.Keys) keys.Add(key);
 
             var result = new List<SemanticSelectionTextValue>(keys.Count);
             foreach (var key in keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ThenBy(x => x, StringComparer.Ordinal))
@@ -164,9 +191,9 @@ namespace QS3D.Core.Selection
                 string? first = null;
                 var firstSet = false;
                 var mixed = false;
-                foreach (var element in selected)
+                foreach (var properties in effective)
                 {
-                    if (!element.Properties.TryGetValue(key, out var value))
+                    if (!properties.TryGetValue(key, out var value))
                     {
                         mixed = true;
                         continue;
@@ -174,10 +201,10 @@ namespace QS3D.Core.Selection
                     present++;
                     if (!firstSet)
                     {
-                        first = value ?? string.Empty;
+                        first = value;
                         firstSet = true;
                     }
-                    else if (!string.Equals(first, value ?? string.Empty, StringComparison.Ordinal))
+                    else if (!string.Equals(first, value, StringComparison.Ordinal))
                     {
                         mixed = true;
                     }
@@ -185,6 +212,23 @@ namespace QS3D.Core.Selection
                 if (present != selected.Count) mixed = true;
                 result.Add(new SemanticSelectionTextValue(key, present, mixed, mixed ? null : first));
             }
+            return result;
+        }
+
+        private static IReadOnlyDictionary<string, string> BuildEffectiveProperties(
+            ProjectElement element,
+            IReadOnlyDictionary<string, ProjectFamily> familyIndex)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var familyId = (element.FamilyId ?? string.Empty).Trim();
+            if (familyId.Length > 0 && familyIndex.TryGetValue(familyId, out var family))
+            {
+                foreach (var property in family.Properties)
+                    if (!IsInternalOwnershipProperty(property.Key)) result[property.Key] = property.Value ?? string.Empty;
+            }
+
+            foreach (var property in element.Properties)
+                if (!IsInternalOwnershipProperty(property.Key)) result[property.Key] = property.Value ?? string.Empty;
             return result;
         }
 
@@ -225,6 +269,7 @@ namespace QS3D.Core.Selection
             var normalized = key.Trim();
             if (normalized.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (normalized.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return true;
+            if (normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             return false;
         }
     }

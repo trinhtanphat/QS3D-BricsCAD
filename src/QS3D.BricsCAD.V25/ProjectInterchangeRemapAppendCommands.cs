@@ -33,9 +33,19 @@ namespace QS3D.BricsCAD.V25
                 var json = ReadGuardedSnapshotText(dialog.FileName);
                 EnsureActive(document, "Interchange Import As New / preview");
                 var project = ProjectContextCoordinator.GetOrCreate(document);
+                var previewChangeVersion = project.ChangeVersion;
                 var plan = ProjectInterchangeRemapAppendImporter.Plan(project, json);
                 if (!plan.CanImport)
-                    throw new InvalidOperationException("Import As New plan is not executable. Run QS3DINTERCHANGEREMAPPLAN and resolve every blocked reference first.");
+                {
+                    var blocked =
+                        "Interchange Import As New BLOCKED: " + plan.BlockerCount.ToString(CultureInfo.InvariantCulture) +
+                        " blocker(s) — opaque ID/ref " + plan.Remap.OpaqueReferenceWarnings.Count.ToString(CultureInfo.InvariantCulture) +
+                        ", runtime compatibility " + plan.CompatibilityBlockers.Count.ToString(CultureInfo.InvariantCulture) +
+                        ". Chạy QS3DINTERCHANGEREMAPPLAN để xem chi tiết; chưa mutate project/DWG.";
+                    try { PaletteCoordinator.SetStatus(blocked); } catch { }
+                    document.Editor.WriteMessage("\nQS3D " + blocked);
+                    return;
+                }
 
                 if (plan.IdRemapCount == 0 && plan.NameRemapCount == 0)
                 {
@@ -58,7 +68,7 @@ namespace QS3D.BricsCAD.V25
                     "QUAN TRỌNG:\n" +
                     "• Existing target Zone/Floor/Family/Element KHÔNG bị replace hoặc rename.\n" +
                     "• Incoming identities được append dưới candidate ID/name deterministic; typed FamilyId/FloorId/ZoneId/DependsOn/HostWallId được rewrite theo plan.\n" +
-                    "• Property ID/ref chưa có rewrite policy sẽ BLOCK; command không đoán relation.\n" +
+                    "• Property ID/ref chưa có rewrite policy hoặc dữ liệu vượt runtime capacity/property limits sẽ BLOCK; command không đoán relation và không truncate semantic data.\n" +
                     "• SourceHandles, drawing fingerprint và Generated*/PhysicalOpeningCut*/handle owner metadata không trở thành CAD ownership của DWG target.\n" +
                     "• Đây là semantic-only import: không tạo native geometry, không QS3DBUILD3D/cut/rebar/curtain/grid và không tự lưu .qsdb.\n" +
                     "• Importer re-plan ngay trước mutation và dùng ProjectStateSnapshot rollback nếu semantic apply/validation lỗi.\n\n" +
@@ -71,7 +81,12 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
                 EnsureActive(document, "Interchange Import As New / mutation");
-                var result = ProjectInterchangeRemapAppendImporter.Import(project, json);
+                var currentProject = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ReferenceEquals(currentProject, project) || currentProject.ChangeVersion != previewChangeVersion)
+                    throw new InvalidOperationException(
+                        "Interchange Import As New target semantic project changed after preview. Run the command again to review a fresh remap plan.");
+
+                var result = ProjectInterchangeRemapAppendImporter.Import(currentProject, json);
                 try { PaletteCoordinator.RefreshProject(); } catch { }
 
                 var status =

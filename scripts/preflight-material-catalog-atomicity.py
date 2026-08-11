@@ -19,6 +19,7 @@ if WINDOW.is_file():
         "RestoreOrThrow(project, rollback, operationError",
         "rollback.Restore(project);",
         "ProjectMaterialCatalog.GetAll(project)",
+        "ProjectMaterialCatalog.GetCustom(project)",
         "selectedMaterial.Id",
         "RefreshAfterCommit(",
         "đã commit; UI sync warning:",
@@ -31,7 +32,32 @@ if WINDOW.is_file():
     if text.count("RefreshAfterCommit(") < 4:
         errors.append("Material Catalog Save/Delete/Apply must route UI refresh through the post-commit boundary")
 
-    apply_pos = text.find("private void OnApplyClick")
+    save_pos = text.find("private void OnSaveClick")
+    delete_pos = text.find("private void OnDeleteClick", save_pos)
+    save_body = text[save_pos:delete_pos] if save_pos >= 0 and delete_pos > save_pos else ""
+    for token in (
+        "var editingExisting = !string.IsNullOrWhiteSpace(_editingId);",
+        "ProjectMaterialCatalog.GetCustom(project)",
+        "string.Equals(x.Id, _editingId, StringComparison.OrdinalIgnoreCase)",
+        "Save không tự tạo lại row stale.",
+        "var id = editingExisting ? _editingId :",
+    ):
+        if token not in save_body:
+            errors.append("Material Catalog Save missing stale-editor fail-closed token: " + token)
+
+    apply_pos = text.find("private void OnApplyClick", delete_pos)
+    delete_body = text[delete_pos:apply_pos] if delete_pos >= 0 and apply_pos > delete_pos else ""
+    for token in (
+        "ProjectMaterialCatalog.GetAll(project)",
+        "selectedMaterial.Id",
+        "Material đã thay đổi hoặc bị xóa khỏi project hiện tại",
+        "if (material.IsBuiltIn)",
+        "ProjectMaterialCatalog.DeleteCustom(project, material.Id)",
+        'AuditTrail.ForProject(project).Record("material.catalog.delete"',
+    ):
+        if token not in delete_body:
+            errors.append("Material Catalog Delete missing current-row re-resolution token: " + token)
+
     refresh_pos = text.find("private void RefreshAll", apply_pos)
     apply_body = text[apply_pos:refresh_pos] if apply_pos >= 0 and refresh_pos > apply_pos else ""
     for token in (
@@ -60,4 +86,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Material Catalog Save/Delete/Apply are guarded as project-atomic edits with stale-material re-resolution and post-commit UI isolation")
+print("[PASS] Material Catalog Save/Delete/Apply are project-atomic, stale editor rows fail closed against the current project, and post-commit UI failures stay isolated")
