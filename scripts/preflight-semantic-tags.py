@@ -33,6 +33,8 @@ release = read("src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs")
 tag_health_command = read("src/QS3D.BricsCAD.V25/SemanticTagHealthCommands.cs")
 health_smoke = read("tests/QS3D.Core.SmokeTests/GeneratedSemanticTagHealthSmoke.cs")
 registration = read("tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs")
+audit_trail = read("src/QS3D.Core/Audit/AuditTrail.cs")
+snapshot_state = read("src/QS3D.Core/Persistence/ProjectStateSnapshot.cs")
 doc = read("docs/SEMANTIC-TAGS.md")
 
 for token in [
@@ -99,7 +101,6 @@ for token in [
     "element.Properties[GeneratedSemanticTagHealthService.TextKey] = rendered;",
     "element.Properties[GeneratedSemanticTagHealthService.PositionScopeKey] = GeneratedSemanticTagHealthService.DrawingLocalWcs;",
     '"documentation.semantic-tag.replace"',
-    "project.Touch();",
     "transaction.Commit();",
     "cadCommitted = true;",
     "rollback.Restore(project)",
@@ -112,10 +113,14 @@ validate_previous = builder.find("var previous = ValidatePrevious(document.Datab
 erase = builder.find("ErasePrevious(transaction, project, element, previous)")
 metadata = builder.find("element.Properties[GeneratedSemanticTagHealthService.HandlesKey] = generatedHandle;")
 audit = builder.find('AuditTrail.ForProject(project).Record(')
-touch = builder.find("project.Touch();", audit)
-commit = builder.find("transaction.Commit();", touch)
-if min(render, validate_previous, erase, metadata, audit, touch, commit) < 0 or not render < validate_previous < erase < metadata < audit < touch < commit:
-    print("[FAIL] native semantic tag builder: render and complete previous-handle validation must precede erase; semantic ownership/audit/revision must precede CAD commit")
+commit = builder.find("transaction.Commit();", audit)
+committed = builder.find("cadCommitted = true;", commit)
+restore = builder.find("rollback.Restore(project)", committed)
+if min(render, validate_previous, erase, metadata, audit, commit, committed, restore) < 0 or not render < validate_previous < erase < metadata < audit < commit < committed < restore:
+    print("[FAIL] native semantic tag builder: render and complete previous-handle validation must precede erase; semantic ownership/audit revision must precede CAD commit and guarded rollback")
+    sys.exit(1)
+if "project.Touch();" in builder:
+    print("[FAIL] native semantic tag builder must rely on AuditTrail.Record as the single project revision owner")
     sys.exit(1)
 for forbidden in [
     "allowMissing: true",
@@ -154,6 +159,7 @@ for token in [
     "GeneratedGeometryService.RequireMatchingOwnership",
     "if (!(entity is MText))",
     "ProjectStateSnapshot.Capture(project)",
+    "var cadCommitted = false;",
     "ParseExpectedHandles",
     "CadHandleService.NormalizeHexHandle",
     "ValidateCompleteLiveTagSet",
@@ -163,6 +169,7 @@ for token in [
     "Refusing partial destructive remove.",
     '"documentation.semantic-tag.remove"',
     "transaction.Commit();",
+    "cadCommitted = true;",
     "rollback.Restore(project)",
 ]:
     require(remove_service, token, "semantic tag removal service")
@@ -170,9 +177,15 @@ for token in [
 remove_validate = remove_service.find("var ids = ValidateCompleteLiveTagSet(document.Database, project, element, ownership, handles);")
 remove_write = remove_service.find("OpenMode.ForWrite", remove_validate)
 remove_clear = remove_service.find("ClearGeneratedTagMetadata(element);", remove_write)
-remove_commit = remove_service.find("transaction.Commit();", remove_clear)
-if min(remove_validate, remove_write, remove_clear, remove_commit) < 0 or not remove_validate < remove_write < remove_clear < remove_commit:
-    print("[FAIL] semantic tag removal service: complete live-handle validation must precede the first write/erase and metadata clear must remain after all destructive work")
+remove_audit = remove_service.find('AuditTrail.ForProject(project).Record(', remove_clear)
+remove_commit = remove_service.find("transaction.Commit();", remove_audit)
+remove_committed = remove_service.find("cadCommitted = true;", remove_commit)
+remove_restore = remove_service.find("rollback.Restore(project)", remove_committed)
+if min(remove_validate, remove_write, remove_clear, remove_audit, remove_commit, remove_committed, remove_restore) < 0 or not remove_validate < remove_write < remove_clear < remove_audit < remove_commit < remove_committed < remove_restore:
+    print("[FAIL] semantic tag removal service: complete live-handle validation must precede writes; metadata/audit revision must precede CAD commit and guarded rollback")
+    sys.exit(1)
+if "project.Touch();" in remove_service:
+    print("[FAIL] semantic tag removal service must rely on AuditTrail.Record as the single project revision owner")
     sys.exit(1)
 
 for forbidden in [
@@ -183,6 +196,20 @@ for forbidden in [
     if forbidden in remove_service:
         print("[FAIL] semantic tag removal service must fail closed instead of skipping missing live handles: " + forbidden)
         sys.exit(1)
+
+record_start = audit_trail.find("public void Record(")
+clear_start = audit_trail.find("public void Clear()", record_start + 1) if record_start >= 0 else -1
+if record_start < 0 or clear_start <= record_start:
+    print("[FAIL] semantic tag lifecycle: could not isolate AuditTrail.Record")
+    sys.exit(1)
+record = audit_trail[record_start:clear_start]
+require(record, "_project?.Touch();", "semantic tag audit-owned revision")
+require(record, "_events.Add(item);", "semantic tag audit append")
+for token in [
+    "target.AuditEvents.Clear();",
+    "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);",
+]:
+    require(snapshot_state, token, "semantic tag rollback revision state")
 
 for token in [
     '[CommandMethod("QS3DTAGREMOVE", CommandFlags.Modal)]',
@@ -247,4 +274,4 @@ for token in [
 ]:
     require(doc, token, "semantic tag lifecycle docs")
 
-print("[PASS] semantic tag rendering remains bounded/model-linked and native create/refresh/remove/live-health paths preserve complete live-handle prevalidation, guarded ownership, rollback, read-only runtime diagnostics and release wiring; MLeader/sheet/exact-V25 runtime remain explicit gates")
+print("[PASS] semantic tag rendering remains bounded/model-linked and native create/refresh/remove/live-health paths preserve complete live-handle prevalidation, audit-owned single revision, guarded ownership, rollback, read-only runtime diagnostics and release wiring; MLeader/sheet/exact-V25 runtime remain explicit gates")
