@@ -431,7 +431,7 @@ namespace QS3D.BricsCAD.V25
                 if (dzM > PlanarityToleranceM)
                     throw new InvalidOperationException("LINE tham chiếu phải nằm trong plan-view, |ΔZ| <= 0.005 m.");
 
-                var planarLength = new Vector3d(dx, dy, 0d).Length;
+                var planarLength = CadGeometryGuard.Hypot(dx, dy, "Reference wall / planar length drawing units");
                 planarLength = CadGeometryGuard.Positive(planarLength, "Reference wall / planar length drawing units");
                 var lengthM = CadGeometryGuard.Positive(
                     CadGeometryGuard.ToMeters(document, planarLength, "Reference wall / length"),
