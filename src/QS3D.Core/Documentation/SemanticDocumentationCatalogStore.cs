@@ -38,7 +38,13 @@ namespace QS3D.Core.Documentation
             IEnumerable<SemanticViewDefinition> views,
             IEnumerable<SemanticSheetDefinition> sheets)
         {
-            Save(project, views, sheets, Array.Empty<SemanticScheduleDefinition>());
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (views == null) throw new ArgumentNullException(nameof(views));
+            if (sheets == null) throw new ArgumentNullException(nameof(sheets));
+            var schedules = project.Metadata.ContainsKey(MetadataKey)
+                ? Load(project).Schedules
+                : Array.Empty<SemanticScheduleDefinition>();
+            Save(project, views, sheets, schedules);
         }
 
         public void Save(
