@@ -1,39 +1,30 @@
 # Work claim — signed finalizer package identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-signed-finalizer-identity`
 - Registered: `2026-08-12T00:34:00+07:00`
+- Completed: `2026-08-12T00:39:00+07:00`
 - Baseline main SHA: `f5565546158d21391ded509d264fc86e3db3c486`
-- Priority: owner-requested continue-all review; close a release-integrity gap where the signed package finalizer validates executable signatures and only the plugin AssemblyVersion, but does not re-bind PACKAGE-METADATA product/target/productVersion and Core identity before regenerating hashes/ZIP.
+- Priority: owner-requested continue-all review; close a release-integrity gap where the signed package finalizer validated executable signatures and only the plugin AssemblyVersion, but did not re-bind PACKAGE-METADATA product/target/productVersion and Core identity before regenerating hashes/ZIP.
 
-## Reserved scope
+## Completed changes
 
-Harden `scripts/finalize-v25-signed-package.ps1` so the exact package being finalized must retain canonical QS3D / BricsCAD V25 metadata and exact metadata AssemblyVersion/productVersion identity across both signed managed DLLs before metadata mutation, hash regeneration or ZIP publication. Add an auto-discovered static/model regression and align release documentation.
+- `435513f353f6ee66d0d1c9c21b1b484cb5740aad` — `scripts/finalize-v25-signed-package.ps1` now requires `PACKAGE-METADATA` product=`QS3D`, target=`BricsCAD V25 x64`, version and productVersion; after existing Authenticode checks it reads AssemblyVersion and ProductVersion from both signed `QS3D.BricsCAD.V25.dll` and `QS3D.Core.dll` and requires exact metadata equality before `ShouldProcess` or any metadata/hash/ZIP mutation.
+- `ad84e2d2c49adf33a0d5fc1df4e0098f71c1b043` — added auto-discovered `scripts/preflight-signed-finalizer-identity.py` with product/target/version/productVersion substitution and plugin/Core mismatch models plus source ordering assertions through metadata write, hash regeneration and ZIP compression.
+- `e429d9d276682e19e75cdaa537140e80cae5111a` — documented signed-finalizer revalidation in `docs/MANUAL-BUILD-RELEASE.md`.
 
-## Expected surfaces
+## Validation evidence
 
-- `scripts/finalize-v25-signed-package.ps1`
-- `scripts/preflight-signed-finalizer-identity.py` (new)
-- `docs/MANUAL-BUILD-RELEASE.md`
-- this claim file for close-out
+- Inspected exact implementation diff for `435513f3...`; it only generalizes managed identity readers and adds canonical metadata + both-DLL identity binding. Existing signer checks, metadata enrichment fields, hash-generation logic and ZIP creation remain otherwise unchanged.
+- Re-fetched current `main` finalizer blob `885c2bf1e04dccf70f04329fcff311ba97c36615`; signer verification precedes metadata checks, both signed managed DLLs are bound, and `ShouldProcess` remains before all package mutations.
+- Re-fetched current preflight blob `e002d0ea6eede509a57a61bb99ecc63972435fff`; it pins signer -> identity -> ShouldProcess -> metadata/hash/ZIP ordering.
+- Executed the deterministic identity model: canonical package PASS; product substitution FAIL; target substitution FAIL; Core AssemblyVersion mismatch FAIL; Core ProductVersion case mismatch FAIL.
+- No Authenticode signing, package mutation, ZIP publication, GitHub Release publication or BricsCAD runtime was executed in this connector environment. No GitHub Actions were dispatched/re-run.
 
-## Excluded scope
+## Coordination / exclusions respected
 
-- signing certificate/timestamp policy, package creation, updater/coordinator, installer/uninstaller, release workflow dispatch/publication, `src/**`, `tests/**`, active product lanes and licensed BricsCAD runtime.
+No signing certificate/timestamp policy, package creation, updater/coordinator, installer/uninstaller, release workflow, product source under `src/**`, tests under `tests/**` or active product lane was modified. Concurrent `main` work was preserved with SHA-guarded writes and no force-push.
 
-## Validation plan
+## Result
 
-- Re-fetch exact finalizer blob and inspect implementation diff.
-- Require metadata product=`QS3D`, target=`BricsCAD V25 x64`, version + productVersion, and bind both `QS3D.BricsCAD.V25.dll` and `QS3D.Core.dll` AssemblyVersion/ProductVersion before `ShouldProcess`, metadata rewrite, hash manifest rewrite or ZIP compression.
-- Preserve existing Authenticode signer checks for all executable payloads.
-- Regression model must reject product/target/version/productVersion substitution and Core/plugin mismatch.
-- Execute deterministic Python model/source regression where practical; no signing/release operation is available in this connector environment.
-- No GitHub Actions dispatch/re-run.
-
-## Coordination
-
-Recent active product claims are in Grid/browser/generated ownership/updater and unrelated source lanes. No current claim was found for the signed finalizer helper. Historical installer/updater identity work remains preserved and is not edited here.
-
-## Completion condition
-
-The signed finalizer fails closed on metadata/DLL identity substitution before mutating package metadata or publishing a ZIP, regression/docs are on `main`, and this claim is marked `COMPLETED`.
+A metadata substitution between package creation/signing and finalization can no longer be turned into a finalized signed ZIP merely because executable signatures remain valid: canonical product/target and exact metadata identities must match both signed managed DLLs before finalization mutates or publishes package artifacts. This lane is complete.
