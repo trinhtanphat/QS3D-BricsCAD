@@ -42,6 +42,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (unsupportedSchema)
                 {
                     _persistentSettingsWriteBlocked = true;
+                    SaveSettingsButton.IsEnabled = false;
                     SettingsPathText.Text = _store.SettingsPath + "  •  CHỈ ĐỌC: schema mới hơn";
                 }
 
@@ -301,6 +302,16 @@ namespace QS3D.BricsCAD.V25.UI
                     FileName = "QS3D_quantity_settings.json"
                 };
                 if (dialog.ShowDialog(this) != true) return;
+                if (_persistentSettingsWriteBlocked && SamePath(dialog.FileName, _store.SettingsPath))
+                {
+                    MessageBox.Show(
+                        this,
+                        "Không thể xuất đè lên file cấu hình theo máy đang dùng schema mới hơn. Hãy chọn một file khác hoặc cập nhật QS3D trước.",
+                        "QS3D • File cấu hình đang được bảo vệ",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
                 _store.Export(dialog.FileName, current);
                 MessageBox.Show(this, "Đã xuất template:\n" + dialog.FileName, "QS3D • Xuất template", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -358,6 +369,21 @@ namespace QS3D.BricsCAD.V25.UI
         {
             return exception is System.IO.InvalidDataException
                 && Equals(exception.Data[UnsupportedSchemaMarker], true);
+        }
+
+        private static bool SamePath(string left, string right)
+        {
+            try
+            {
+                return string.Equals(
+                    System.IO.Path.GetFullPath(left),
+                    System.IO.Path.GetFullPath(right),
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private void Close_Click(object sender, RoutedEventArgs e)
