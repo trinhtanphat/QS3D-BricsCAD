@@ -2,19 +2,24 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11 (UTC+7)
-- Status: `ACTIVE`
+- Completed: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
 - Scope: source-safe transactional cleanup when semantic capture bootstraps a brand-new project and the later mutation/regeneration fails.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs`
   - `scripts/preflight-semantic-capture-context-rollback.py`
   - this claim file for close-out
-- Problem: validation-before-bootstrap is now enforced, but after valid preflight `GetOrCreate(document)` may still create/cache a brand-new project. If capture mutation or regeneration then throws, `ProjectStateSnapshot` restores project contents but does not remove the newly-created document context, so a failed authoring command can leave an empty QS3D project bound in-session.
-- Intended contract:
-  - detect whether a QS3D project already existed before authoring bootstrap using read-only project access;
-  - preserve existing-project rollback behavior unchanged;
-  - if no project existed and post-bootstrap capture fails, restore semantic state and forget the newly-created document project context;
-  - cleanup applies to both batch capture and single-snapshot capture;
+- Problem fixed: validation-before-bootstrap was enforced, but after valid preflight `GetOrCreate(document)` could still create/cache a brand-new project. If later capture mutation or regeneration threw, `ProjectStateSnapshot` restored project contents but did not remove the newly-created document context, so a failed authoring command could leave an empty QS3D project bound in-session.
+- Implemented contract:
+  - both batch and single-snapshot capture use `ProjectContextCoordinator.TryGetReadOnly(document, out _)` before authoring bootstrap to distinguish a pre-existing project from a new bootstrap;
+  - `TryGetReadOnly` remains before `GetOrCreate` and is read-only;
+  - existing-project capture failure still restores only semantic state and preserves the project context;
+  - failed capture that bootstrapped a project restores semantic state then calls `ProjectContextCoordinator.Forget(document)`;
+  - cleanup still runs if semantic snapshot restore itself fails, after which the original operation and restore errors are aggregated;
   - valid successful capture continues to intentionally bootstrap a project;
-  - no Ribbon/Quantity/WPF/native geometry/LOCAL_ONLY V25 changes.
-- Validation: exact source/diff review plus auto-discovered static preflight. No GitHub Actions under `continue all`.
-- Completion condition: failed new-project capture cannot leave cached project state, regression guard exists, claim is `COMPLETED` with exact SHAs.
+  - no Ribbon/Quantity/WPF/native geometry behavior changed.
+- Source commit: `8c9359d6c1d02b2896749533ac2d7b97c59db09a` (`fix(capture): roll back failed project bootstrap`).
+- Regression guard commit: `39256c2efdc5a0db0386654eb1590301d30e289c` (`test(capture): guard failed bootstrap cleanup`).
+- Validation: reviewed exact implementation diff and current `main` source after the commits. `scripts/preflight-semantic-capture-context-rollback.py` is auto-discovered by the existing `preflight-*.py` aggregate convention. No GitHub Actions were dispatched under `continue all`; no BricsCAD V25 runtime PASS is claimed from this remote batch.
+- LOCAL_ONLY: no new local-only scenario was introduced; exact native runtime behavior remains covered by the existing local V25 qualification boundary.
+- Handoff: reservation released; future agents may edit these files only after re-checking current `main` and active claims.
