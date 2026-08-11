@@ -170,6 +170,78 @@ function Compare-StrictSemVer {
     return $leftPre.Count.CompareTo($rightPre.Count)
 }
 
+function Get-OfficialGitHubReleaseSnapshot {
+    param([Uri]$ManifestAddress)
+
+    if (-not [string]::Equals($ManifestAddress.Host, 'github.com', [StringComparison]::OrdinalIgnoreCase)) { return $null }
+    $prefix = '/trinhtanphat/QS3D-BricsCAD/releases/download/'
+    $path = $ManifestAddress.AbsolutePath
+    if (-not $path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $null }
+    if ($ManifestAddress.UserInfo -or $ManifestAddress.Query -or $ManifestAddress.Fragment) {
+        throw 'Official QS3D GitHub manifest URI must not contain credentials, query, or fragment.'
+    }
+
+    $remainder = $path.Substring($prefix.Length)
+    $slash = $remainder.IndexOf('/')
+    if ($slash -le 0 -or $slash -eq ($remainder.Length - 1) -or $remainder.IndexOf('/', $slash + 1) -ge 0) {
+        throw 'Official QS3D GitHub manifest URI has an invalid release-download path.'
+    }
+
+    try {
+        $tag = [Uri]::UnescapeDataString($remainder.Substring(0, $slash))
+        $asset = [Uri]::UnescapeDataString($remainder.Substring($slash + 1))
+    }
+    catch [UriFormatException] {
+        throw 'Official QS3D GitHub manifest URI contains invalid escaping.'
+    }
+    if (-not [string]::Equals($asset, 'QS3D-BricsCAD-V25.update.json', [StringComparison]::Ordinal)) {
+        throw "Official QS3D GitHub manifest asset must be QS3D-BricsCAD-V25.update.json, got '$asset'."
+    }
+    if ($tag.Length -le 1 -or -not [string]::Equals($tag.Substring(0, 1), 'v', [StringComparison]::Ordinal)) {
+        throw "Official QS3D GitHub release tag must start with lowercase v: $tag"
+    }
+    $productVersion = Convert-ToStrictSemVer -Value $tag.Substring(1) -Label 'Official GitHub release tag'
+    return [pscustomobject]@{
+        Tag = $tag
+        ProductVersion = $productVersion.Text
+    }
+}
+
+function Assert-OfficialGitHubPackageSnapshot {
+    param([Uri]$PackageAddress, $Snapshot)
+
+    if ($PackageAddress.Scheme -ne [Uri]::UriSchemeHttps -or
+        -not [string]::Equals($PackageAddress.Host, 'github.com', [StringComparison]::OrdinalIgnoreCase) -or
+        $PackageAddress.UserInfo -or $PackageAddress.Query -or $PackageAddress.Fragment) {
+        throw 'Official QS3D package URI must be a credential-free HTTPS github.com URL without query or fragment.'
+    }
+
+    $prefix = '/trinhtanphat/QS3D-BricsCAD/releases/download/'
+    $path = $PackageAddress.AbsolutePath
+    if (-not $path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Official QS3D package URI does not belong to trinhtanphat/QS3D-BricsCAD release downloads.'
+    }
+    $remainder = $path.Substring($prefix.Length)
+    $slash = $remainder.IndexOf('/')
+    if ($slash -le 0 -or $slash -eq ($remainder.Length - 1) -or $remainder.IndexOf('/', $slash + 1) -ge 0) {
+        throw 'Official QS3D package URI has an invalid release-download path.'
+    }
+
+    try {
+        $tag = [Uri]::UnescapeDataString($remainder.Substring(0, $slash))
+        $asset = [Uri]::UnescapeDataString($remainder.Substring($slash + 1))
+    }
+    catch [UriFormatException] {
+        throw 'Official QS3D package URI contains invalid escaping.'
+    }
+    if (-not [string]::Equals($tag, [string]$Snapshot.Tag, [StringComparison]::Ordinal)) {
+        throw "Official QS3D package release tag '$tag' does not match scheduled release tag '$($Snapshot.Tag)'."
+    }
+    if (-not [string]::Equals($asset, 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal)) {
+        throw "Official QS3D package asset must be QS3D-BricsCAD-V25.zip, got '$asset'."
+    }
+}
+
 function Read-InstalledVersion {
     param([string]$Directory)
 
@@ -362,6 +434,7 @@ if (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {
 $updateMutex = Enter-Qs3dUpdateMutex
 try {
     $manifestAddress = Convert-ToSafeHttpsUri -Value $ManifestUri -Label 'ManifestUri'
+    $officialReleaseSnapshot = Get-OfficialGitHubReleaseSnapshot -ManifestAddress $manifestAddress
     $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
     $allowedHosts = @($manifestAddress.Host)
     if ($AllowedPackageHost) { $allowedHosts += $AllowedPackageHost }
@@ -385,11 +458,17 @@ try {
         if ([string](Require-ManifestProperty -Manifest $manifest -Name 'target') -ne 'BricsCAD V25 x64') { throw 'Update manifest target must be BricsCAD V25 x64.' }
 
         $targetProductVersion = Convert-ToStrictSemVer -Value ([string](Require-ManifestProperty -Manifest $manifest -Name 'productVersion')) -Label 'Update manifest productVersion'
+        if ($officialReleaseSnapshot -and -not [string]::Equals($targetProductVersion.Text, [string]$officialReleaseSnapshot.ProductVersion, [StringComparison]::Ordinal)) {
+            throw "Update manifest productVersion $($targetProductVersion.Text) does not match scheduled GitHub release $($officialReleaseSnapshot.Tag)."
+        }
         $versionText = [string](Require-ManifestProperty -Manifest $manifest -Name 'version')
         try { $targetVersion = [Version]::Parse($versionText) }
         catch { throw "Update manifest version is invalid: $versionText" }
 
         $packageAddress = Convert-ToSafeHttpsUri -Value ([string](Require-ManifestProperty -Manifest $manifest -Name 'packageUri')) -Label 'packageUri'
+        if ($officialReleaseSnapshot) {
+            Assert-OfficialGitHubPackageSnapshot -PackageAddress $packageAddress -Snapshot $officialReleaseSnapshot
+        }
         if ($allowedHosts -notcontains $packageAddress.Host.ToLowerInvariant()) {
             throw "Package host '$($packageAddress.Host)' is not approved. Allowed hosts: $($allowedHosts -join ', ')"
         }

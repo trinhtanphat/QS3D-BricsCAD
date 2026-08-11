@@ -63,6 +63,7 @@ namespace QS3D.Core.Export
         private const string ProjectRecordSuffix = ".Project";
         private const string ElementRecordSegment = ".Element.";
         private const string RecordVersion = "v1";
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static ProjectInterchangeSourceHandleProvenancePlan Plan(ProjectState target, string json)
         {
@@ -219,11 +220,11 @@ namespace QS3D.Core.Export
             {
                 try
                 {
-                    fields.Add(Encoding.UTF8.GetString(Convert.FromBase64String(parts[i])));
+                    fields.Add(StrictUtf8.GetString(Convert.FromBase64String(parts[i])));
                 }
-                catch (FormatException ex)
+                catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
                 {
-                    throw new InvalidOperationException("Interchange provenance record contains invalid base64 data.", ex);
+                    throw new InvalidOperationException("Interchange provenance record contains invalid base64 or UTF-8 data.", ex);
                 }
             }
             return fields.AsReadOnly();
