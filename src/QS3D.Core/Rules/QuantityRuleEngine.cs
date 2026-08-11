@@ -12,6 +12,8 @@ namespace QS3D.Core.Rules
         public QuantityRule(string id, ElementCategory category, string outputName, string expression, string version)
         {
             Id = Required(id, nameof(id));
+            if (!Enum.IsDefined(typeof(ElementCategory), category))
+                throw new ArgumentOutOfRangeException(nameof(category), category, "Quantity rule category must be a defined ElementCategory.");
             Category = category;
             OutputName = Required(outputName, nameof(outputName));
             Expression = Required(expression, nameof(expression));
