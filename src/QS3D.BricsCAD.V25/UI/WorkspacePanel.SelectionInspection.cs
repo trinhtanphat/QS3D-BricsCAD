@@ -16,27 +16,28 @@ namespace QS3D.BricsCAD.V25.UI
             InspectionList.ItemsSource = _inspection;
             SelectionCount.Text = _inspection.Count + " chọn";
 
-            if (project == null || _inspection.Count != 1)
+            if (project == null || _inspection.Count == 0)
             {
+                RestoreMultiSelectionPresentationState();
                 _viewModel.SetSelectedElement(null);
                 return;
             }
 
-            var handles = new HashSet<string>(
-                _inspection
-                    .Select(x => (x.Handle ?? string.Empty).Trim())
-                    .Where(x => x.Length > 0),
-                StringComparer.OrdinalIgnoreCase);
-            if (handles.Count == 0)
+            if (!TryResolveSemanticSelection(project, _inspection, out var selectedElements, out var selectionError))
             {
+                RestoreMultiSelectionPresentationState();
                 _viewModel.SetSelectedElement(null);
+                if (!string.IsNullOrWhiteSpace(selectionError)) SetStatus(selectionError);
                 return;
             }
 
-            var selectedElements = project.Elements
-                .Where(element => SemanticReferenceHandles.GetSelectionAliases(element).Any(handles.Contains))
-                .Take(2)
-                .ToList();
+            if (selectedElements.Count > 1)
+            {
+                PresentMultiSelection(project, selectedElements);
+                return;
+            }
+
+            RestoreMultiSelectionPresentationState();
             var singleElement = selectedElements.Count == 1 ? selectedElements[0] : null;
             if (singleElement == null)
             {
