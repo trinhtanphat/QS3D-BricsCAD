@@ -28,11 +28,8 @@ def main():
         "case ElementCategory.Skirting: return new[] { native, 204 };",
         "case ElementCategory.WallFinish: return new[] { native, 205 };",
         "case ElementCategory.Railing: return new[] { native, 207 };",
-        "case ElementCategory.Beam: return new[] { native, 301 };",
-        "case ElementCategory.Slab: return new[] { native, 401 };",
         "case ElementCategory.Column: return new[] { native, 601 };",
         "case ElementCategory.StructuralWall: return new[] { native, 701 };",
-        "case ElementCategory.ArchitecturalWall: return new[] { native, 704 };",
         "default: return new[] { native };",
         "PairKey(sourceCode, targetCode)",
     ], "rule-set")
@@ -42,10 +39,17 @@ def main():
             print(" -", item)
         return 1
 
+    # The supplied BLT payload contains additional codes, but the existing source
+    # does not establish exact native equivalence for these labels. Keep them
+    # addressable only through integer-code lookup until the owner/reference data
+    # supplies an explicit mapping contract.
     forbidden = [
-        "case ElementCategory.Beam: return new[] { native, 301, 302",
-        "case ElementCategory.Beam: return new[] { native, 301, 703",
+        "case ElementCategory.Beam: return new[] { native, 301",
+        "case ElementCategory.Beam: return new[] { native, 302",
+        "case ElementCategory.Beam: return new[] { native, 703",
+        "case ElementCategory.Slab: return new[] { native, 401",
         "case ElementCategory.Stair: return new[] { native, 501",
+        "case ElementCategory.ArchitecturalWall: return new[] { native, 704",
         "TryGetIntersectionRule(targetCode, sourceCode",
         "new QuantityIntersectionRuleSetting { Source =",
         "new QuantityCategoryRuleSetting { Category =",
@@ -70,7 +74,7 @@ def main():
         print("ERROR: directed intersection lookup must preserve source -> target order.")
         return 1
 
-    print("PASS: quantity calculation rule resolution is defensive, native-first, compatibility-limited, exact for unknown codes and directed without synthetic missing rules.")
+    print("PASS: quantity calculation rule resolution is defensive, native-first, exact-label compatibility-limited, exact for unknown codes and directed without synthetic missing rules.")
     return 0
 
 
