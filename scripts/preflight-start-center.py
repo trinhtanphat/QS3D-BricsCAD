@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
+ADAPTER = ROOT / "src" / "QS3D.BricsCAD.V25"
 COMMANDS = ROOT / "src" / "QS3D.BricsCAD.V25" / "StartCenterCommands.cs"
 WINDOW = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "StartCenterWindow.xaml.cs"
 XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "StartCenterWindow.xaml"
@@ -28,6 +29,19 @@ def require(text, token, label):
 def forbid(text, token, label):
     if token in text:
         raise AssertionError(label + " must not contain: " + token)
+
+
+def registered_adapter_commands():
+    registrations = {}
+    pattern = re.compile(r'CommandMethod\(\s*"([^"]+)"')
+    for path in sorted(ADAPTER.rglob("*.cs")):
+        if "bin" in path.parts or "obj" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for command in pattern.findall(text):
+            key = command.upper()
+            registrations.setdefault(key, []).append(str(path.relative_to(ROOT)))
+    return registrations
 
 
 def main():
@@ -110,12 +124,20 @@ def main():
         if command not in declared:
             raise AssertionError("Missing representative Start Center command: " + command)
 
+    registrations = registered_adapter_commands()
+    missing_registrations = sorted(command for command in declared if command.upper() not in registrations)
+    if missing_registrations:
+        raise AssertionError(
+            "Start Center allowlist contains commands without literal adapter CommandMethod registration: "
+            + ", ".join(missing_registrations)
+        )
+
     require(wall_quantity, '[CommandMethod("QS3DWALLQTY", CommandFlags.Modal)]', "Wall Quantity source registration")
     require(reference_search, '[CommandMethod("QS3DREFSEARCH", CommandFlags.Modal)]', "reference-search source registration")
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
