@@ -47,7 +47,6 @@ namespace QS3D.Core.Export
     public static class ProjectInterchangeRemapAppendImporter
     {
         private const string ImportMode = "RemapAppendAsNew";
-        private const string HostWallIdKey = "HostWallId";
         private const string LastModeKey = "Interchange.LastImport.Mode";
         private const string LastSourceProjectIdKey = "Interchange.LastImport.SourceProjectId";
         private const string LastImportedUtcKey = "Interchange.LastImport.ImportedUtc";
@@ -113,10 +112,10 @@ namespace QS3D.Core.Export
                             ownershipDiscarded = checked(ownershipDiscarded + 1);
                             continue;
                         }
-                        if (LooksLikeUnregisteredSemanticReference(property.Key, property.Value))
+                        if (!string.IsNullOrWhiteSpace(property.Value) && ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key))
                             throw new InvalidOperationException(
                                 "Import As New found unregistered ID/ref-like Family property " + property.Key +
-                                " on source Family " + snapshot.Id + ". Register an explicit rewrite policy before importing.");
+                                " on source Family " + snapshot.Id + ". Register an explicit Family-property rewrite policy before importing.");
                         ProjectFamilyService.SetProperty(target, family.Id, property.Key, property.Value ?? string.Empty);
                     }
                 }
@@ -149,21 +148,13 @@ namespace QS3D.Core.Export
                             continue;
                         }
 
-                        if (string.Equals(property.Key, HostWallIdKey, StringComparison.OrdinalIgnoreCase))
+                        if (ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference))
                         {
-                            if (string.IsNullOrWhiteSpace(property.Value))
-                            {
-                                added.Properties[property.Key] = string.Empty;
-                                continue;
-                            }
-                            var sourceHost = property.Value.Trim();
-                            var mappedHost = plan.Remap.MapId(InterchangeRemapIdentityKind.Element, sourceHost);
-                            if (!string.Equals(mappedHost, sourceHost, StringComparison.Ordinal)) rewrites = checked(rewrites + 1);
-                            added.Properties[property.Key] = mappedHost;
+                            added.Properties[property.Key] = MapPropertyReference(plan.Remap, reference, property.Value, ref rewrites);
                             continue;
                         }
 
-                        if (LooksLikeUnregisteredSemanticReference(property.Key, property.Value))
+                        if (!string.IsNullOrWhiteSpace(property.Value) && ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key))
                             throw new InvalidOperationException(
                                 "Import As New found unregistered ID/ref-like property " + property.Key +
                                 " on source Element " + snapshot.Id + ". Register an explicit rewrite policy before importing.");
@@ -256,10 +247,10 @@ namespace QS3D.Core.Export
                 foreach (var property in family.Properties)
                 {
                     if (IsImportedOwnershipMetadata(property.Key)) continue;
-                    if (!LooksLikeUnregisteredSemanticReference(property.Key, property.Value)) continue;
+                    if (string.IsNullOrWhiteSpace(property.Value) || !ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key)) continue;
                     throw new InvalidOperationException(
                         "Import As New is fail-closed because Family property " + property.Key + " on source Family " + family.Id +
-                        " looks like a semantic ID/reference but has no explicit rewrite policy.");
+                        " looks like a semantic ID/reference but has no explicit Family-property rewrite policy.");
                 }
             }
 
@@ -268,8 +259,8 @@ namespace QS3D.Core.Export
                 foreach (var property in element.Properties)
                 {
                     if (IsImportedOwnershipMetadata(property.Key)) continue;
-                    if (string.Equals(property.Key, HostWallIdKey, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!LooksLikeUnregisteredSemanticReference(property.Key, property.Value)) continue;
+                    if (ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out _)) continue;
+                    if (string.IsNullOrWhiteSpace(property.Value) || !ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key)) continue;
                     throw new InvalidOperationException(
                         "Import As New is fail-closed because property " + property.Key + " on source Element " + element.Id +
                         " looks like a semantic ID/reference but has no explicit rewrite policy.");
@@ -283,18 +274,6 @@ namespace QS3D.Core.Export
             foreach (var element in source.Elements)
                 count = checked(count + element.SourceHandles.Count);
             return count;
-        }
-
-        private static bool LooksLikeUnregisteredSemanticReference(string key, string value)
-        {
-            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) return false;
-            var k = key.Trim();
-            return k.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
-                   k.EndsWith("Ids", StringComparison.OrdinalIgnoreCase) ||
-                   k.EndsWith("Ref", StringComparison.OrdinalIgnoreCase) ||
-                   k.EndsWith("Refs", StringComparison.OrdinalIgnoreCase) ||
-                   k.EndsWith("RefId", StringComparison.OrdinalIgnoreCase) ||
-                   k.EndsWith("RefIds", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsImportedOwnershipMetadata(string key)
@@ -322,6 +301,19 @@ namespace QS3D.Core.Export
             return mapped;
         }
 
+        private static string MapPropertyReference(
+            ProjectInterchangeRemapPlan plan,
+            InterchangeSemanticPropertyReference reference,
+            string sourceId,
+            ref int rewrites)
+        {
+            if (string.IsNullOrWhiteSpace(sourceId)) return string.Empty;
+            var trimmed = sourceId.Trim();
+            var mapped = plan.MapId(reference.Kind, trimmed);
+            if (!string.Equals(mapped, trimmed, StringComparison.Ordinal)) rewrites = checked(rewrites + 1);
+            return mapped;
+        }
+
         private static ProjectInterchangeRemapItem Item(ProjectInterchangeRemapPlan plan, InterchangeRemapIdentityKind kind, string sourceId) =>
             plan.Items.Single(x => x.Kind == kind && string.Equals(x.SourceId, sourceId, StringComparison.OrdinalIgnoreCase));
 
@@ -341,11 +333,53 @@ namespace QS3D.Core.Export
                     if (family.Category != element.Category)
                         throw new InvalidOperationException("Combined target Element " + element.Id + " references incompatible Family category " + family.Category + ".");
                 }
+
+                ValidateRegisteredPropertyReferences(target, element);
             }
 
             var graph = new DependencyGraph();
             graph.Rebuild(target.Elements);
             graph.TopologicalDirtyOrder(target.Elements);
         }
+
+        private static void ValidateRegisteredPropertyReferences(ProjectState target, ProjectElement element)
+        {
+            foreach (var reference in ProjectInterchangeSemanticReferencePolicy.KnownPropertyReferences)
+            {
+                if (!element.Properties.TryGetValue(reference.PropertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                var id = raw.Trim();
+                var exists = false;
+                switch (reference.Kind)
+                {
+                    case InterchangeRemapIdentityKind.Zone:
+                        exists = target.FindZone(id) != null;
+                        break;
+                    case InterchangeRemapIdentityKind.Floor:
+                        exists = target.FindFloor(id) != null;
+                        break;
+                    case InterchangeRemapIdentityKind.Family:
+                        exists = target.FindFamily(id) != null;
+                        break;
+                    case InterchangeRemapIdentityKind.Element:
+                        exists = target.FindElement(id) != null;
+                        break;
+                    default:
+                        throw new InvalidOperationException("Unsupported registered semantic reference kind: " + reference.Kind + ".");
+                }
+
+                if (!exists)
+                    throw new InvalidOperationException(
+                        "Combined target Element " + element.Id + " property " + reference.PropertyKey +
+                        " references missing " + reference.Kind + " identity " + id + ".");
+            }
+
+            var bottom = Property(element, ProjectFloorService.BottomLevelIdKey);
+            var top = Property(element, ProjectFloorService.TopLevelIdKey);
+            if (top.Length > 0 && bottom.Length == 0)
+                throw new InvalidOperationException("Combined target Element " + element.Id + " has TopLevelId without BottomLevelId.");
+        }
+
+        private static string Property(ProjectElement element, string key) =>
+            element.Properties.TryGetValue(key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
     }
 }
