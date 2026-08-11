@@ -95,6 +95,12 @@ if not row.is_file():
 else:
     text = row.read_text(encoding="utf-8")
     for token in (
+        "private bool _isReadOnly;",
+        "if (_isReadOnly == value) return;",
+        "if (_isReadOnly && _canReset)",
+        "_canReset = false;",
+        "OnChanged(nameof(CanReset));",
+        "OnChanged(nameof(IsEditable));",
         "if (string.Equals(_value, requested, StringComparison.Ordinal)) return;",
         "var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;",
         "bool.TryParse(text, out var parsed)",
@@ -103,7 +109,7 @@ else:
         'text.Equals("bật", StringComparison.CurrentCultureIgnoreCase)',
     ):
         if token not in text:
-            errors.append("Property row no-op/boolean safety missing: " + token)
+            errors.append("Property row reactive/no-op/boolean safety missing: " + token)
     no_op = text.find("if (string.Equals(_value, requested, StringComparison.Ordinal)) return;")
     apply = text.find("var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;")
     if no_op < 0 or apply < 0 or no_op > apply:
@@ -115,4 +121,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Workspace property rows keep property-specific dirty/geometry invalidation, exact editor no-ops do not re-enter mutation callbacks, Instance reset resolves the current Family value, selection scope fails closed, source-derived CAD measurements remain read-only, and numeric/boolean editors stay validated.")
+print("PASS: Workspace property rows keep property-specific dirty/geometry invalidation, reactive read-only/editable/reset state, exact editor no-ops avoid mutation callbacks, Instance reset resolves live Family state, selection scope fails closed, and numeric/boolean editors stay validated.")
