@@ -81,8 +81,10 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static void PersistLegacyBindingIfNeeded(Document document, DrawingUnitResolution resolution)
         {
-            var project = ProjectContextCoordinator.GetOrCreate(document);
-            if (project.Elements.Count == 0) return;
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var observedProject)) return;
+            if (observedProject.Elements.Count == 0) return;
+
+            var project = ExistingProjectMutationContext.Require(document, "Legacy drawing-unit binding");
             var rollback = ProjectStateSnapshot.Capture(project);
             try
             {

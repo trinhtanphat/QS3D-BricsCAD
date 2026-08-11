@@ -164,7 +164,11 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             LoadCurrentProperties();
         }
 
-        public void SetSelectedElement(ProjectElement? element)
+        public void SetSelectedElement(ProjectElement? element) => SetSelectedElementCore(element, true);
+
+        public void SetInspectedElementReadOnly(ProjectElement? element) => SetSelectedElementCore(element, false);
+
+        private void SetSelectedElementCore(ProjectElement? element, bool activateFamily)
         {
             if (_project == null || element == null)
             {
@@ -205,7 +209,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             _selectedElement = ownedElement;
             _selectedFamily = family;
             SelectedFamilyName = family.Name;
-            ProjectFamilyActivationService.SetActive(_project, family.Id);
+            if (activateFamily) ProjectFamilyActivationService.SetActive(_project, family.Id);
             _selectedPropertyScope = InstanceScope;
             OnChanged(nameof(SelectedPropertyScope));
             LoadCurrentProperties();
