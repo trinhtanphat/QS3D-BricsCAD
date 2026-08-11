@@ -111,10 +111,8 @@ for name, (path, health_marker, commands) in TABLES.items():
     if not existing:
         errors.append(name + " native Table must expose an existing-project guard for Build/Refresh/Remove")
     else:
-        if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in existing:
-            errors.append(name + " native Table existing-project guard must use TryGetReadOnly")
-        if "không tạo project mới" not in existing:
-            errors.append(name + " native Table existing-project guard must explain no replacement-project behavior")
+        if "ExistingProjectMutationContext.Require(document, operation)" not in existing:
+            errors.append(name + " native Table existing-project guard must use the canonical mutation context")
     if text.count("RequireExistingProject(document,") < 3:
         errors.append(name + " native Table Build/Refresh/Remove must each require the existing project explicitly")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:

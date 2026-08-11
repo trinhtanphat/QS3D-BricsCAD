@@ -11,9 +11,9 @@ if not PATH.is_file():
 else:
     text = PATH.read_text(encoding="utf-8")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
-        errors.append("QS3DAUTOLINKHOSTS must not create/cache an empty QS3D project")
-    if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in text:
-        errors.append("QS3DAUTOLINKHOSTS must require an existing project with read-only lookup")
+        errors.append("QS3DAUTOLINKHOSTS must not create/cache an empty QS3D project directly")
+    if "ExistingProjectMutationContext.TryGet(document, out var project)" not in text:
+        errors.append("QS3DAUTOLINKHOSTS must bind the canonical existing project for mutation")
     if "Auto Host không tạo project mới" not in text:
         errors.append("missing fail-closed user-facing project lifecycle message")
     if "ProjectStateSnapshot.Capture(project)" not in text:
@@ -21,11 +21,11 @@ else:
 
     selected_index = text.find("var selected = ReadSelectedHandles(document);")
     empty_selection_index = text.find("if (selected.Count == 0)")
-    project_guard_index = text.find("if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))")
+    project_guard_index = text.find("if (!ExistingProjectMutationContext.TryGet(document, out var project))")
     if selected_index < 0 or empty_selection_index < 0 or project_guard_index < 0:
-        errors.append("missing expected selection/project lifecycle ordering tokens")
+        errors.append("missing expected selection/canonical-project lifecycle ordering tokens")
     elif not (selected_index < empty_selection_index < project_guard_index):
-        errors.append("Auto Host must reject empty selection before resolving existing project state")
+        errors.append("Auto Host must reject empty selection before binding existing project state for mutation")
 
 if errors:
     for error in errors:
@@ -33,4 +33,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Auto Host is side-effect free without selection/project state and preserves semantic rollback coverage.")
+print("PASS: Auto Host is side-effect free without selection/project state, binds canonical existing state for mutation, and preserves semantic rollback coverage.")

@@ -27,6 +27,7 @@ else:
             errors.append("Health All missing documentation health source: " + token)
 
     required_locate = (
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
         "LocateProjectArtifactHandles(currentProject, issue.Code)",
         "MetadataHandle(project, SemanticElementTableBuilder.HandleKey)",
         "MetadataHandle(project, BbsNativeTableBuilder.Definition.HandleKey)",
@@ -44,12 +45,15 @@ else:
     locate_call_pos = text.find("var handles = LocateHandles(element, issue.Code).ToArray();")
     fallback_pos = text.find("SourceHandleResolver.Resolve(currentProject, new[] { element.Id })")
     if min(locate_call_pos, fallback_pos) >= 0 and not locate_call_pos < fallback_pos:
-        errors.append("Generated artifact Locate must run before source-handle fallback")
+        errors.append("Generated artifact Locate must run before current-project source-handle fallback")
 
     read_only_pos = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
     health_pos = text.find("GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project)")
     if min(read_only_pos, health_pos) >= 0 and not read_only_pos < health_pos:
         errors.append("Documentation health must run only after read-only project resolution")
+
+    if "LocateProjectArtifactHandles(project, issue.Code)" in text:
+        errors.append("Modeless project-artifact Locate must not use the project snapshot captured when Health All opened")
 
 if errors:
     print("QS3D Health All documentation-artifact preflight")
@@ -58,4 +62,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DHEALTHALL covers generated Grid/Tag/Table documentation metadata/live CAD health and routes Locate to generated artifacts.")
+print("PASS: QS3DHEALTHALL covers generated Grid/Tag/Table documentation metadata/live CAD health and re-resolves current project state before locating generated artifacts.")

@@ -36,7 +36,7 @@ if REVIEW.is_file():
     apply_body = text[apply_pos:locate_pos] if apply_pos >= 0 and locate_pos > apply_pos else ""
     for token in (
         "EntitySnapshotReader.ReadHandles(doc, new[] { result.Handle })",
-        "var currentProject = ProjectContextCoordinator.GetOrCreate(doc);",
+        "if (!ExistingProjectMutationContext.TryGet(doc, out var currentProject))",
         "new ProjectRecognitionService().Suggest(currentProject, liveSnapshots[0])",
         "candidate.Category != expectedCandidate.Category",
         "!refreshed.IsCaptureReady",
@@ -51,9 +51,10 @@ if REVIEW.is_file():
         "SemanticCaptureService.CaptureSnapshot(doc, result.Snapshot",
         "SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, result.Handle)",
         "AuditTrail.ForProject(project).Record(\"recognition.apply\"",
+        "var currentProject = ProjectContextCoordinator.GetOrCreate(doc);",
     ):
         if forbidden in apply_body:
-            errors.append("Recognition modeless Apply still uses stale captured state: " + forbidden)
+            errors.append("Recognition modeless Apply still uses stale or replacement-creating state: " + forbidden)
 
 if READER.is_file():
     text = READER.read_text(encoding="utf-8")
@@ -75,4 +76,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] BBS/Revision Locate re-resolve current semantic state read-only and Recognition Apply re-reads live CAD before modeless commit")
+print("[PASS] BBS/Revision Locate re-resolve current semantic state read-only and Recognition Apply re-reads live CAD then binds canonical existing project state before modeless commit")
