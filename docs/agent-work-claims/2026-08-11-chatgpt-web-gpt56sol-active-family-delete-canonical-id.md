@@ -1,36 +1,36 @@
 # Work claim — Active Family deletion canonical-ID guard
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-active-family-delete-canonical-id`
 - Registered: `2026-08-11T22:29:00+07:00`
+- Completed: `2026-08-11T22:36:00+07:00`
 - Baseline main SHA observed: `f24e8ce4e936365126887b7856a53f034de24175`
-- Priority: P1 — `ProjectFamilyActivationService.GetActive()` canonicalizes a persisted `ActiveFamilyId` by trimming it, but `ProjectFamilyService.Delete()` compares the raw metadata value. A recoverable padded active-family id can therefore be treated as active by reads while deletion incorrectly permits removing that Family and leaves stale activation metadata.
+- Priority: P1 — `ProjectFamilyActivationService.GetActive()` canonicalizes a persisted `ActiveFamilyId` by trimming it, while the previous `ProjectFamilyService.Delete()` compared the raw metadata value and could therefore delete the Family that read paths still considered active.
 
-## Reserved scope
+## Implemented
 
-- Canonicalize the active Family metadata comparison in `ProjectFamilyService.Delete()` without changing activation semantics or creating a second metadata key.
-- Add deterministic Core smoke coverage proving padded/case-varied active ids cannot bypass the active-Family deletion guard while non-active deletion remains unchanged.
-- Add a focused static preflight for this exact invariant.
+- `dac52feddffdf186190dfb7a469e580accea0cb5` — `ProjectFamilyService.Delete()` now trims the persisted `ActiveFamilyId` before the existing case-insensitive comparison, and the guard still executes before `project.Touch()` or removal.
+- `5743574ff99791c7625e8e630b6fd0045f3cf79b` — added deterministic smoke coverage for padded active IDs, case-varied padded IDs, rejected-delete non-mutation, and successful deletion of a genuinely inactive Family.
+- `b81a19083852ca5379e3f828cf48da059833ef80` — module-registers the focused smoke without touching shared registration surfaces.
+- `caccb67982d751ad0c827199a7d8a6bab6ec79cf` — added `scripts/preflight-project-family-active-delete-canonical.py`, requiring trim + case-insensitive active identity before mutation and rejecting the previous raw comparison.
 
-## Expected surfaces
+## Preserved contracts
 
-- `src/QS3D.Core/Domain/ProjectFamilyService.cs`
-- `tests/QS3D.Core.SmokeTests/ProjectFamilyActiveDeleteCanonicalSmoke.cs` (new)
-- `tests/QS3D.Core.SmokeTests/ProjectFamilyActiveDeleteCanonicalSmokeRegistration.cs` (new)
-- `scripts/preflight-project-family-active-delete-canonical.py` (new)
-- this claim file for close-out
+- No Workspace/Family UI, Family usage badge, Right Panel, quantity settings/rules, persistence/session recovery, CAD/native source, Ribbon, updater or release behavior changed.
+- No second activation key or alternate Family model was introduced.
+- Rejected active deletion still preserves the Family, `ChangeVersion`, and original metadata text; successful inactive deletion retains the existing mutation behavior.
 
-## Excluded scope
+## Validation
 
-- No Workspace/Family UI, Family usage badge, Right Panel, quantity rules/settings, project persistence/session recovery, CAD/native source, Ribbon, updater, release or GitHub Actions.
-- No broad rewrite of Family activation or deletion behavior; only the inconsistent raw-vs-canonical active-id comparison.
+- Re-fetched current `main` after implementation and confirmed the canonical comparison is present in `ProjectFamilyService.Delete()` before `project.Touch()`.
+- Re-fetched the focused smoke and confirmed all three scenarios are present, including read parity through `ProjectFamilyActivationService.GetActive()`.
+- `caccb67982d751ad0c827199a7d8a6bab6ec79cf` is an ancestor of later concurrent `main`; subsequent commits did not touch this lane's source/test/preflight files in the final comparison.
+- No GitHub Actions workflow was dispatched and no BricsCAD V25 runtime claim is made; this is a CAD-independent Core invariant fix.
 
-## Validation plan
+## LOCAL_ONLY disposition
 
-- Deterministic smoke: padded active id blocks delete, case-insensitive padded id blocks delete, inactive Family deletion succeeds, active metadata remains unchanged on rejected delete.
-- Static preflight requires trim + case-insensitive comparison before deletion and forbids regression to raw metadata comparison.
-- Re-fetch current `main` before source write and preserve concurrent winners.
+- None added. The defect and its regression contract are deterministic Core behavior.
 
-## Completion condition
+## Completion evidence
 
-- Read and mutation paths agree on the same canonical ActiveFamilyId identity, the regression is covered, and this claim is marked `COMPLETED` with pushed evidence.
+Family read/delete paths now agree on canonical `ActiveFamilyId` identity, so padded recoverable metadata cannot bypass active-Family deletion protection. Final implementation/preflight tip for this lane: `caccb67982d751ad0c827199a7d8a6bab6ec79cf`.
