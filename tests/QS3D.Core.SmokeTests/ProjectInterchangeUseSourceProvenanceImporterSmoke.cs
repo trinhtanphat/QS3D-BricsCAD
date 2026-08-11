@@ -60,7 +60,7 @@ namespace QS3D.Core.SmokeTests
             var target = TargetProject();
             var json = ProjectInterchangeJsonExporter.Build(SourceProject(withFingerprint: true));
             var plan = ProjectInterchangeUseSourceProvenanceImporter.Plan(target, json);
-            var authorization = ProjectInterchangeNativeCleanupAuthorization.ForElementIds(plan.SemanticPlan.TargetElementIdsRequiringNativeCleanup);
+            var authorization = ProjectInterchangeNativeCleanupAuthorization.ForPlan(plan.SemanticPlan);
 
             var result = ProjectInterchangeUseSourceProvenanceImporter.Import(target, json, authorization);
 
