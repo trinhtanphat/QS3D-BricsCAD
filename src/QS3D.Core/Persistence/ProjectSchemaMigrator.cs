@@ -79,6 +79,13 @@ namespace QS3D.Core.Persistence
         {
             RequirePersistenceValue(root, "updatedUtc", "Project root");
 
+            var floors = root.Element("floors");
+            if (floors != null)
+            {
+                foreach (var floor in floors.Elements("floor"))
+                    RequirePersistenceValue(floor, "elevationM", "Project floor");
+            }
+
             var elements = root.Element("elements");
             if (elements != null)
             {
@@ -86,6 +93,13 @@ namespace QS3D.Core.Persistence
                 {
                     RequirePersistenceValue(element, "updatedUtc", "Project element");
                     RequirePersistenceValue(element, "dirty", "Project element");
+
+                    var quantities = element.Element("quantities");
+                    if (quantities != null)
+                    {
+                        foreach (var quantity in quantities.Elements("q"))
+                            RequirePersistenceValue(quantity, "value", "Project quantity");
+                    }
                 }
             }
 

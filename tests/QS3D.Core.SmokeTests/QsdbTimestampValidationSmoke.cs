@@ -10,16 +10,27 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RejectsMissingCurrentRootTimestamp();
+            RejectsMissingCurrentFloorElevation();
             RejectsMissingCurrentElementTimestamp();
             RejectsMissingCurrentElementDirtyState();
+            RejectsMissingCurrentQuantityValue();
             RejectsMissingCurrentAuditTimestamp();
             LegacyV1MissingTimestampsStillMigrates();
+            LegacyV1NumericStateStillLoads();
         }
 
         private static void RejectsMissingCurrentRootTimestamp()
         {
             WithProjectFile(
                 "<qs3d schema=\"3\" projectId=\"P1\" name=\"Missing root timestamp\" changeVersion=\"0\"><metadata/><zones/><floors/><families/><rules/><elements/><audit/></qs3d>",
+                path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
+        }
+
+        private static void RejectsMissingCurrentFloorElevation()
+        {
+            WithProjectFile(
+                "<qs3d schema=\"3\" projectId=\"P5\" name=\"Missing floor elevation\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"0\">" +
+                "<metadata/><zones/><floors><floor id=\"F1\" name=\"Ground\"/></floors><families/><rules/><elements/><audit/></qs3d>",
                 path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
         }
 
@@ -39,6 +50,16 @@ namespace QS3D.Core.SmokeTests
                 "<qs3d schema=\"3\" projectId=\"P4\" name=\"Missing dirty state\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"0\">" +
                 "<metadata/><zones/><floors/><families/><rules/><elements>" +
                 "<element id=\"E1\" category=\"ArchitecturalWall\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\"><handles/><dependencies/><properties/><quantities/></element>" +
+                "</elements><audit/></qs3d>",
+                path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
+        }
+
+        private static void RejectsMissingCurrentQuantityValue()
+        {
+            WithProjectFile(
+                "<qs3d schema=\"3\" projectId=\"P6\" name=\"Missing quantity value\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"0\">" +
+                "<metadata/><zones/><floors/><families/><rules/><elements>" +
+                "<element id=\"E1\" category=\"ArchitecturalWall\" dirty=\"15\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\"><handles/><dependencies/><properties/><quantities><q name=\"NetVolumeM3\"/></quantities></element>" +
                 "</elements><audit/></qs3d>",
                 path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
         }
@@ -66,6 +87,21 @@ namespace QS3D.Core.SmokeTests
                     Equal(DateTime.UnixEpoch, project.UpdatedUtc, "Legacy root timestamp was not synthesized during migration.");
                     Equal(DateTime.UnixEpoch, project.Elements[0].UpdatedUtc, "Legacy element timestamp was not synthesized during migration.");
                     Equal(ElementDirtyFlags.All, project.Elements[0].Dirty, "Legacy element dirty state was not synthesized during migration.");
+                });
+        }
+
+        private static void LegacyV1NumericStateStillLoads()
+        {
+            WithProjectFile(
+                "<qs3d schema=\"1\" projectId=\"legacy-numeric\" name=\"Legacy numeric state\">" +
+                "<metadata/><zones/><floors><floor id=\"F1\" name=\"Level 1\" elevationM=\"3.5\"/></floors><families/><elements>" +
+                "<element id=\"E1\" category=\"ArchitecturalWall\"><handles/><dependencies/><properties/><quantities><q name=\"NetVolumeM3\" value=\"2.25\"/></quantities></element>" +
+                "</elements></qs3d>",
+                path =>
+                {
+                    var project = new QsdbProjectStore().Load(path);
+                    Equal(3.5d, project.Floors[0].ElevationM, "Legacy floor elevation did not survive migration.");
+                    Equal(2.25d, project.Elements[0].Quantities["NetVolumeM3"], "Legacy quantity value did not survive migration.");
                 });
         }
 
