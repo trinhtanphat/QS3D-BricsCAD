@@ -19,9 +19,9 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("Zone id already exists: " + normalizedId);
             EnsureUniqueName(project, normalizedName, string.Empty);
             var zone = new ZoneDefinition(normalizedId, normalizedName);
+            project.Touch();
             project.Zones.Add(zone);
             if (string.IsNullOrWhiteSpace(project.ActiveZoneId)) project.ActiveZoneId = zone.Id;
-            project.Touch();
             return zone;
         }
 
@@ -37,10 +37,10 @@ namespace QS3D.Core.Domain
                 .Where(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
+            project.Touch();
             zone.Name = normalizedName;
             foreach (var element in referencedElements)
                 element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-            project.Touch();
             return zone;
         }
 
@@ -49,8 +49,8 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             var zone = FindRequired(project, zoneId);
             if (string.Equals(project.ActiveZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)) return;
-            project.ActiveZoneId = zone.Id;
             project.Touch();
+            project.ActiveZoneId = zone.Id;
         }
 
         public static int Assign(ProjectState project, string zoneId, IEnumerable<ProjectElement> elements)
@@ -71,16 +71,18 @@ namespace QS3D.Core.Domain
                 unique[element.Id] = owned;
             }
 
-            var changed = 0;
-            foreach (var element in unique.Values)
+            var changed = unique.Values
+                .Where(x => !string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (changed.Count == 0) return 0;
+
+            project.Touch();
+            foreach (var element in changed)
             {
-                if (string.Equals(element.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 element.ZoneId = zone.Id;
                 element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-                changed++;
             }
-            if (changed > 0) project.Touch();
-            return changed;
+            return changed.Count;
         }
 
         public static bool Delete(ProjectState project, string zoneId)
@@ -93,9 +95,8 @@ namespace QS3D.Core.Domain
                 .Count(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase));
             if (references > 0)
                 throw new InvalidOperationException("Zone '" + zone.Name + "' is referenced by " + references + " semantic element(s). Reassign them before deletion.");
-            var removed = project.Zones.Remove(zone);
-            if (removed) project.Touch();
-            return removed;
+            project.Touch();
+            return project.Zones.Remove(zone);
         }
 
         public static int ReferenceCount(ProjectState project, string zoneId)
