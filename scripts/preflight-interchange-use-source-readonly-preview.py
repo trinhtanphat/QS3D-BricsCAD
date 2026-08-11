@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMAND_ROOT = ROOT / "src" / "QS3D.BricsCAD.V25"
@@ -9,11 +8,6 @@ TARGETS = (
     "ProjectInterchangeUseSourceAllCommands.cs",
     "ProjectInterchangeUseSourceCatalogCommands.cs",
 )
-
-
-def fail(message):
-    print("ERROR:", message)
-    return 1
 
 
 def main():
