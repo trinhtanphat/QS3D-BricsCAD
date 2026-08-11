@@ -47,12 +47,12 @@ CASES = (
     (
         "BBS CSV",
         ROOT / "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs",
-        "ProjectContextCoordinator.GetOrCreate(document)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "ProjectRebarScheduleBuilder.Build(project)",
         "totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, \"BBS CSV total weight\");",
         "RebarCsvExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status);",
-        False,
+        True,
     ),
 )
 
