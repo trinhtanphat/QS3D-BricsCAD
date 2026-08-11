@@ -120,6 +120,7 @@ namespace QS3D.BricsCAD.V25.UI
                 ? null
                 : new Predicate<object>(item => item is LayerItemViewModel layer && tokens.All(token => MatchesLayerToken(layer, token)));
             view.Refresh();
+            _viewModel.SetLayerCounts(view.Cast<object>().Count(), _viewModel.Layers.Count);
         }
 
         private void RestoreLayerSelection(IEnumerable<string> names)
