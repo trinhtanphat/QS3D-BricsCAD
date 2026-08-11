@@ -42,21 +42,38 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\nQS3DAUTOLINKHOSTS: chọn Cửa/Lỗ Mở đã được QS3D capture.");
                     return;
                 }
-                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
                 {
                     document.Editor.WriteMessage("\nQS3DAUTOLINKHOSTS: cần một QS3D project hiện hữu; Auto Host không tạo project mới.");
                     return;
                 }
 
-                var openings = project.Elements
-                    .Where(x => (x.Category == ElementCategory.Door || x.Category == ElementCategory.WallOpening) && x.SourceHandles.Any(selected.Contains))
-                    .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                if (openings.Count == 0)
+                var previewOpenings = ResolveSelectedOpenings(previewProject, selected);
+                if (previewOpenings.Count == 0)
                 {
                     document.Editor.WriteMessage("\nQS3DAUTOLINKHOSTS: selection không chứa semantic Cửa/Lỗ Mở.");
                     return;
                 }
+
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
+                var expectedOpeningIds = new HashSet<string>(
+                    previewOpenings.Select(x => x.Id),
+                    StringComparer.OrdinalIgnoreCase);
+
+                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                {
+                    document.Editor.WriteMessage("\nQS3DAUTOLINKHOSTS: QS3D project không còn khả dụng cho mutation; hãy chạy lại trên project hiện hành.");
+                    return;
+                }
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Auto Host: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại Cửa/Lỗ Mở target.");
+
+                var openings = ResolveSelectedOpenings(project, selected);
+                if (!expectedOpeningIds.SetEquals(openings.Select(x => x.Id)))
+                    throw new InvalidOperationException("Auto Host: Door/WallOpening target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
 
                 var maxGapM = MetadataNumber(project, "AutoHostMaxGapM", 0.25d, allowZero: true);
                 var ambiguityM = MetadataNumber(project, "AutoHostAmbiguityM", 0.02d, allowZero: true);
@@ -227,6 +244,12 @@ namespace QS3D.BricsCAD.V25
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
             return new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
         }
+
+        private static List<ProjectElement> ResolveSelectedOpenings(ProjectState project, HashSet<string> selected) =>
+            project.Elements
+                .Where(x => (x.Category == ElementCategory.Door || x.Category == ElementCategory.WallOpening) && x.SourceHandles.Any(selected.Contains))
+                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
         private static OpeningLocation ReadOpeningLocation(
             Document document,
