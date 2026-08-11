@@ -7,23 +7,13 @@ using QS3D.BricsCAD.V25.UI.ViewModels;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
 using QS3D.Core.Selection;
+using QS3D.Core.Services;
 using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {
     public partial class WorkspacePanel
     {
-        private static readonly HashSet<string> MultiSelectionSourceDerivedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "LengthM",
-            "AreaM2",
-            "VolumeM3",
-            "PerimeterM",
-            "Layer",
-            "MeasuredSolidVolumeM3",
-            "MeasuredSolidSurfaceAreaM2"
-        };
-
         private bool TryResolveSemanticSelection(
             ProjectState project,
             IReadOnlyList<EntitySnapshot> snapshots,
@@ -359,26 +349,8 @@ namespace QS3D.BricsCAD.V25.UI
             return inspection.Count + " cấu kiện • " + category + " • " + family;
         }
 
-        private static bool IsMultiSelectionReadOnlyKey(string key)
-        {
-            if (string.IsNullOrWhiteSpace(key)) return true;
-            var normalized = key.Trim();
-            if (MultiSelectionSourceDerivedKeys.Contains(normalized) || normalized.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase)) return true;
-            if (normalized.Equals("Id", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Equals("ElementId", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Equals("Category", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Equals("FamilyId", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Equals("FloorId", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Equals("ZoneId", StringComparison.OrdinalIgnoreCase)) return true;
-            if (normalized.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
-                normalized.EndsWith("Ids", StringComparison.OrdinalIgnoreCase) ||
-                normalized.EndsWith("Ref", StringComparison.OrdinalIgnoreCase) ||
-                normalized.EndsWith("Refs", StringComparison.OrdinalIgnoreCase) ||
-                normalized.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            if (normalized.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase) ||
-                normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
-            return false;
-        }
+        private static bool IsMultiSelectionReadOnlyKey(string key) =>
+            !SemanticPropertyEditPolicy.IsEditablePropertyKey(key);
 
         private string NormalizeMultiPropertyValue(string key, string unit, string previousValue, string value, out bool valid)
         {
