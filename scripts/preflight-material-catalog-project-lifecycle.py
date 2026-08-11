@@ -23,6 +23,7 @@ if WINDOW.is_file():
     for token in (
         "DocumentBoundWindowLifetime.Attach(this, _document);",
         "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
+        "ExistingProjectMutationContext.TryGet(_document, out var project)",
         "ProjectStateSnapshot.Capture(project)",
         "rollback.Restore(project)",
     ):
@@ -30,10 +31,28 @@ if WINDOW.is_file():
             errors.append("MaterialCatalogWindow.xaml.cs missing lifecycle/rollback token: " + token)
     if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
         errors.append("modeless Material Catalog callbacks must not create/cache replacement project state after reload/unload")
+    if text.count("ExistingProjectMutationContext.TryGet(_document, out var project)") < 3:
+        errors.append("Material Catalog Save/Delete/Apply must bind canonical existing project state before mutation")
+
+    for method, mutation in (
+        ("private void OnSaveClick", "ProjectMaterialCatalog.UpsertCustom(project"),
+        ("private void OnDeleteClick", "ProjectMaterialCatalog.DeleteCustom(project"),
+        ("private void OnApplyClick", "element.SetProperty(target, material.Name)"),
+    ):
+        start = text.find(method)
+        bind = text.find("ExistingProjectMutationContext.TryGet(_document, out var project)", start)
+        mutate = text.find(mutation, bind)
+        if min(start, bind, mutate) < 0 or not start < bind < mutate:
+            errors.append(method + " must bind canonical existing project before mutation")
+
+    refresh = text.find("private void RefreshAll")
+    read_only = text.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", refresh)
+    if min(refresh, read_only) < 0 or not refresh < read_only:
+        errors.append("Material Catalog RefreshAll must resolve project read-only")
 
 if errors:
     for error in errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Material Catalog creates project only on explicit open; modeless callbacks re-resolve existing state and retain rollback")
+print("[PASS] Material Catalog creates project only on explicit open; read-only refresh stays observational; Save/Delete/Apply bind canonical existing state and retain rollback")
