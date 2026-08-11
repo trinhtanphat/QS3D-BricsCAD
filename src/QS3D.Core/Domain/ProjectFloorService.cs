@@ -26,9 +26,9 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("Floor id already exists: " + normalizedId);
             EnsureUniqueName(project, normalizedName, string.Empty);
             var floor = new FloorDefinition(normalizedId, normalizedName, elevationM);
+            project.Touch();
             project.Floors.Add(floor);
             if (string.IsNullOrWhiteSpace(project.ActiveFloorId)) project.ActiveFloorId = floor.Id;
-            project.Touch();
             return floor;
         }
 
@@ -48,6 +48,7 @@ namespace QS3D.Core.Domain
                 .Where(x => ReferencesFloor(x, floor.Id))
                 .ToList();
 
+            project.Touch();
             floor.Name = normalizedName;
             floor.ElevationM = elevationM;
             foreach (var element in referencedElements)
@@ -56,7 +57,6 @@ namespace QS3D.Core.Domain
                 if (elevationChanged) flags |= ElementDirtyFlags.Geometry;
                 element.MarkDirty(flags);
             }
-            project.Touch();
             return floor;
         }
 
@@ -65,8 +65,8 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             var floor = FindRequired(project, floorId);
             if (string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase)) return;
-            project.ActiveFloorId = floor.Id;
             project.Touch();
+            project.ActiveFloorId = floor.Id;
         }
 
         public static int Assign(ProjectState project, string floorId, IEnumerable<ProjectElement> elements)
@@ -75,16 +75,16 @@ namespace QS3D.Core.Domain
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var floor = FindRequired(project, floorId);
             var targets = ResolveOwnedElements(project, elements);
-            var changed = 0;
-            foreach (var element in targets)
+            var changed = targets.Where(x => !string.Equals(x.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (changed.Count == 0) return 0;
+
+            project.Touch();
+            foreach (var element in changed)
             {
-                if (string.Equals(element.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 element.FloorId = floor.Id;
                 element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-                changed++;
             }
-            if (changed > 0) project.Touch();
-            return changed;
+            return changed.Count;
         }
 
         public static int AssignBottomLevel(ProjectState project, string floorId, IEnumerable<ProjectElement> elements)
@@ -104,19 +104,22 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("Cannot assign bottom level '" + floor.Name + "' because top level is not above it for element " + element.Id + ".");
             }
 
-            var changed = 0;
-            foreach (var element in targets)
+            var changed = targets.Where(element =>
             {
                 var current = Property(element, BottomLevelIdKey);
                 var addedOffset = !element.Properties.ContainsKey(BottomLevelOffsetKey);
-                if (string.Equals(current, floor.Id, StringComparison.OrdinalIgnoreCase) && !addedOffset) continue;
+                return !string.Equals(current, floor.Id, StringComparison.OrdinalIgnoreCase) || addedOffset;
+            }).ToList();
+            if (changed.Count == 0) return 0;
+
+            project.Touch();
+            foreach (var element in changed)
+            {
                 element.Properties[BottomLevelIdKey] = floor.Id;
-                if (addedOffset) element.Properties[BottomLevelOffsetKey] = "0";
+                if (!element.Properties.ContainsKey(BottomLevelOffsetKey)) element.Properties[BottomLevelOffsetKey] = "0";
                 element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-                changed++;
             }
-            if (changed > 0) project.Touch();
-            return changed;
+            return changed.Count;
         }
 
         public static int AssignTopLevel(ProjectState project, string floorId, IEnumerable<ProjectElement> elements)
@@ -138,19 +141,22 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("Top level '" + top.Name + "' must be above bottom level for element " + element.Id + ".");
             }
 
-            var changed = 0;
-            foreach (var element in targets)
+            var changed = targets.Where(element =>
             {
                 var current = Property(element, TopLevelIdKey);
                 var addedOffset = !element.Properties.ContainsKey(TopLevelOffsetKey);
-                if (string.Equals(current, top.Id, StringComparison.OrdinalIgnoreCase) && !addedOffset) continue;
+                return !string.Equals(current, top.Id, StringComparison.OrdinalIgnoreCase) || addedOffset;
+            }).ToList();
+            if (changed.Count == 0) return 0;
+
+            project.Touch();
+            foreach (var element in changed)
+            {
                 element.Properties[TopLevelIdKey] = top.Id;
-                if (addedOffset) element.Properties[TopLevelOffsetKey] = "0";
+                if (!element.Properties.ContainsKey(TopLevelOffsetKey)) element.Properties[TopLevelOffsetKey] = "0";
                 element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-                changed++;
             }
-            if (changed > 0) project.Touch();
-            return changed;
+            return changed.Count;
         }
 
         public static int ClearVerticalLevels(ProjectState project, IEnumerable<ProjectElement> elements)
@@ -158,19 +164,23 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var targets = ResolveOwnedElements(project, elements);
-            var changed = 0;
-            foreach (var element in targets)
+            var changed = targets.Where(element =>
+                element.Properties.ContainsKey(BottomLevelIdKey) ||
+                element.Properties.ContainsKey(BottomLevelOffsetKey) ||
+                element.Properties.ContainsKey(TopLevelIdKey) ||
+                element.Properties.ContainsKey(TopLevelOffsetKey)).ToList();
+            if (changed.Count == 0) return 0;
+
+            project.Touch();
+            foreach (var element in changed)
             {
-                var removed = element.Properties.Remove(BottomLevelIdKey);
-                removed |= element.Properties.Remove(BottomLevelOffsetKey);
-                removed |= element.Properties.Remove(TopLevelIdKey);
-                removed |= element.Properties.Remove(TopLevelOffsetKey);
-                if (!removed) continue;
+                element.Properties.Remove(BottomLevelIdKey);
+                element.Properties.Remove(BottomLevelOffsetKey);
+                element.Properties.Remove(TopLevelIdKey);
+                element.Properties.Remove(TopLevelOffsetKey);
                 element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-                changed++;
             }
-            if (changed > 0) project.Touch();
-            return changed;
+            return changed.Count;
         }
 
         public static bool Delete(ProjectState project, string floorId)
@@ -182,9 +192,8 @@ namespace QS3D.Core.Domain
             var references = ResolveProjectElements(project).Count(x => ReferencesFloor(x, floor.Id));
             if (references > 0)
                 throw new InvalidOperationException("Floor '" + floor.Name + "' is referenced by " + references + " semantic element(s). Reassign or clear Floor/Level references before deletion.");
-            var removed = project.Floors.Remove(floor);
-            if (removed) project.Touch();
-            return removed;
+            project.Touch();
+            return project.Floors.Remove(floor);
         }
 
         public static int ReferenceCount(ProjectState project, string floorId)
