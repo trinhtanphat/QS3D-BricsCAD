@@ -86,7 +86,7 @@
 
                     <Border Background="{StaticResource Bg2Brush}" BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1" CornerRadius="4" Padding="4" Margin="0,7,0,6">
-                        <WrapPanel>
+                        <WrapPanel VerticalAlignment="Center">
                             <Button Content="Làm mới" Click="OnRefreshClick" Style="{StaticResource DenseButton}"
                                     ToolTip="Đọc lại tổng hợp khối lượng từ project QS3D hiện hành"/>
                             <Button Content="Tính lại" Click="OnRegenerateClick" Style="{StaticResource DenseButton}"
@@ -95,6 +95,9 @@
                                     ToolTip="Mở bảng khối lượng QS3DBQ đầy đủ"/>
                             <Button Content="Định vị" Click="OnLocateClick" Style="{StaticResource DenseButton}"
                                     ToolTip="Chọn và zoom các đối tượng CAD của dòng khối lượng đang chọn"/>
+                            <CheckBox x:Name="AutoRevealCheck" Content="Click = 3D" IsChecked="True"
+                                      VerticalAlignment="Center" Margin="7,0,2,0"
+                                      ToolTip="Bật: click một dòng cấu kiện sẽ chọn và zoom đối tượng tương ứng trong View 3D. Tắt: dùng nút Định vị hoặc double-click."/>
                         </WrapPanel>
                     </Border>
                 </StackPanel>
@@ -105,6 +108,7 @@
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Margin="18" Visibility="Collapsed"/>
                     <TreeView x:Name="QuantityTree" ItemsSource="{Binding Floors}"
+                              SelectedItemChanged="OnQuantityTreeSelectedItemChanged"
                               MouseDoubleClick="OnQuantityTreeDoubleClick"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               ScrollViewer.VerticalScrollBarVisibility="Auto"/>
@@ -155,7 +159,7 @@
                 </Grid>
 
                 <Border BorderThickness="0,1,0,0" BorderBrush="{StaticResource BorderBrush}" Margin="0,6,0,0" Padding="0,6,0,0">
-                    <TextBlock Text="Chọn cấu kiện trong CAD để highlight dòng liên quan; nhấp đúp dòng để định vị ngược trong bản vẽ."
+                    <TextBlock Text="Chọn cấu kiện trong CAD để highlight dòng liên quan; mặc định click dòng cấu kiện sẽ định vị và zoom ngược trong View 3D."
                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                 </Border>
             </StackPanel>

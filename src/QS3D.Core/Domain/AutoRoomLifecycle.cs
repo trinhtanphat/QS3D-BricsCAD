@@ -169,6 +169,11 @@ namespace QS3D.Core.Domain
 
             var familyProperties = ProjectFamilyService.SnapshotProperties(family, "Target", "auto-room synchronization");
             var previousFamily = project.FindFamily(room.FamilyId);
+            var familyChanged = !string.Equals(room.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase);
+            var previousFamilyProperties = previousFamily != null && familyChanged
+                ? ProjectFamilyService.SnapshotProperties(previousFamily, "Previous", "auto-room synchronization")
+                : Array.Empty<KeyValuePair<string, string>>();
+            var previousFamilyMap = previousFamilyProperties.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
             var prefix = FamilyDefaultSnapshotPrefix + room.Id + ":";
             var currentFamilyKeys = new HashSet<string>(familyProperties.Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
             var roomSets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -190,10 +195,8 @@ namespace QS3D.Core.Domain
                 {
                     inherited = true;
                 }
-                else if (hasCurrent && previousFamily != null &&
-                         !string.Equals(previousFamily.Id, family.Id, StringComparison.OrdinalIgnoreCase) &&
-                         previousFamily.Properties.TryGetValue(key, out var previousDefault) &&
-                         string.Equals(currentValue, previousDefault ?? string.Empty, StringComparison.Ordinal))
+                else if (hasCurrent && previousFamilyMap.TryGetValue(key, out var previousDefault) &&
+                         string.Equals(currentValue, previousDefault, StringComparison.Ordinal))
                 {
                     inherited = true;
                 }
@@ -208,17 +211,14 @@ namespace QS3D.Core.Domain
                     metadataSets[snapshotKey] = nextDefault;
             }
 
-            if (previousFamily != null && !string.Equals(previousFamily.Id, family.Id, StringComparison.OrdinalIgnoreCase))
+            foreach (var previousProperty in previousFamilyProperties)
             {
-                foreach (var previousProperty in previousFamily.Properties)
+                if (currentFamilyKeys.Contains(previousProperty.Key)) continue;
+                if (room.Properties.TryGetValue(previousProperty.Key, out var currentValue) &&
+                    string.Equals(currentValue, previousProperty.Value, StringComparison.Ordinal) &&
+                    roomRemoves.Add(previousProperty.Key))
                 {
-                    if (currentFamilyKeys.Contains(previousProperty.Key)) continue;
-                    if (room.Properties.TryGetValue(previousProperty.Key, out var currentValue) &&
-                        string.Equals(currentValue, previousProperty.Value ?? string.Empty, StringComparison.Ordinal) &&
-                        roomRemoves.Add(previousProperty.Key))
-                    {
-                        changed++;
-                    }
+                    changed++;
                 }
             }
 
@@ -239,7 +239,6 @@ namespace QS3D.Core.Domain
                 metadataRemoves.Add(snapshot.Key);
             }
 
-            var familyChanged = !string.Equals(room.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase);
             if (familyChanged) changed++;
             if (changed == 0 && metadataSets.Count == 0 && metadataRemoves.Count == 0) return 0;
 

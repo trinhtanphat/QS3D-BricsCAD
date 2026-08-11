@@ -22,6 +22,9 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+                if (rows[rowIndex] == null)
+                    throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
             ExportCore(path, rows, null);
         }
 

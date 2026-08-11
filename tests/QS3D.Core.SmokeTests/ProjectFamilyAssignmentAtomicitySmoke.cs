@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             DuplicatePreviousFamilyBlocksBulkEditBatch();
             DanglingPreviousFamilyBlocksWholeAssignmentBatch();
             DanglingPreviousFamilyBlocksBulkEditBatch();
+            MalformedPreviousFamilyBlocksWholeAssignmentBeforeMutation();
             CorruptProjectElementListBlocksPropertyPropagationBeforeMutation();
             CorruptProjectElementListBlocksFamilyDeleteBeforeMutation();
             UndefinedProjectFamilyCategoryFailsClosed();
@@ -52,6 +53,39 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => new BulkEditService().AssignFamily(setup.Project, new[] { setup.First.Id, setup.Second.Id }, setup.Target.Id));
             AssertDanglingUnchanged(setup, beforeUpdated, "BulkEditService.AssignFamily");
+        }
+
+        private static void MalformedPreviousFamilyBlocksWholeAssignmentBeforeMutation()
+        {
+            var project = new ProjectState("family-previous-malformed", "Malformed previous family atomicity");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            target.Properties["ThicknessM"] = "0.3";
+            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.ArchitecturalWall);
+            previous.Properties[" ThicknessM "] = "0.2";
+            project.Families.Add(target);
+            project.Families.Add(previous);
+
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
+            element.Properties[" ThicknessM "] = "0.2";
+            element.Properties["InstanceOverride"] = "keep";
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var beforeUpdated = project.UpdatedUtc;
+            var beforeVersion = project.ChangeVersion;
+            var beforeElementUpdated = element.UpdatedUtc;
+            var beforeDirty = element.Dirty;
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(project, target.Id, new[] { element }));
+
+            Equal(previous.Id, element.FamilyId, "Rejected previous-Family corruption changed FamilyId.");
+            Equal("0.2", element.Properties[" ThicknessM "], "Rejected previous-Family corruption changed inherited property data.");
+            Equal("keep", element.Properties["InstanceOverride"], "Rejected previous-Family corruption changed instance override data.");
+            if (element.Properties.Count != 2) throw new Exception("Rejected previous-Family corruption changed the element property set.");
+            if (element.Dirty != beforeDirty || element.UpdatedUtc != beforeElementUpdated)
+                throw new Exception("Rejected previous-Family corruption dirtied or timestamped the element.");
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Rejected previous-Family corruption touched project persistence state.");
         }
 
         private static void CorruptProjectElementListBlocksPropertyPropagationBeforeMutation()

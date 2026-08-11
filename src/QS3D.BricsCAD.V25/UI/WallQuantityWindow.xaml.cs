@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.Core.Domain;
@@ -98,6 +99,9 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 _suppressSelectionSync = false;
             }
+
+            if (e.AddedItems.Count > 0 && AutoRevealCheck?.IsChecked == true)
+                LocateSelected(selected, "danh sách Tường");
         }
 
         private void OnGridSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -116,6 +120,26 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 _suppressSelectionSync = false;
             }
+
+            if (e.AddedItems.Count > 0 && AutoRevealCheck?.IsChecked == true)
+                LocateSelected(selected, "bảng chi tiết Tường");
+        }
+
+        private void OnLocateClick(object sender, RoutedEventArgs e)
+        {
+            LocateSelected(CurrentSelectedView(), "nút Định vị 3D");
+        }
+
+        private void OnWallListDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (AutoRevealCheck?.IsChecked == true) return;
+            LocateSelected(WallList.SelectedItem as WallRowView, "double-click danh sách Tường");
+        }
+
+        private void OnGridDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (AutoRevealCheck?.IsChecked == true) return;
+            LocateSelected(TakeoffGrid.SelectedItem as WallRowView, "double-click bảng chi tiết Tường");
         }
 
         private void OnExportClick(object sender, RoutedEventArgs e)
@@ -301,7 +325,7 @@ namespace QS3D.BricsCAD.V25.UI
                 SelectedFormworkText.Text = "—";
                 SelectedGrossText.Text = "—";
                 SelectedNetBreakdownText.Text = "—";
-                SelectedNoteText.Text = "Khối lượng lấy từ cùng một pipeline ProjectQuantityReportBuilder.Detail; cửa sổ này không có công thức tính riêng.";
+                SelectedNoteText.Text = "Khối lượng lấy từ cùng một pipeline ProjectQuantityReportBuilder.Detail; bật Bám 3D để click dòng và đối chiếu trong View 3D.";
                 return;
             }
 
@@ -320,8 +344,8 @@ namespace QS3D.BricsCAD.V25.UI
             SelectedGrossText.Text = Format(view.GrossConcreteM3, " m³");
             SelectedNetBreakdownText.Text = Format(view.DeductionM3, " m³") + " / " + Format(view.NetConcreteM3, " m³");
             SelectedNoteText.Text = string.IsNullOrWhiteSpace(view.Source.Note)
-                ? "Read-only • snapshot tách rời • không ghi project/CAD. Trừ giao/mở dùng đúng DeductionM3 của pipeline QS3D."
-                : view.Source.Note;
+                ? "Read-only • snapshot tách rời • không ghi project/CAD. Bám 3D luôn revalidate ElementId + Handle hiện hành trước khi chọn/zoom."
+                : view.Source.Note + "\nBám 3D: revalidate semantic + Handle hiện hành trước khi chọn/zoom.";
         }
 
         private void UpdateTotals(IReadOnlyList<WallRowView> rows)
@@ -349,6 +373,59 @@ namespace QS3D.BricsCAD.V25.UI
             TotalFormworkText.Text = Format(formwork, " m²");
         }
 
+        private void LocateSelected(WallRowView? displayedView, string trigger)
+        {
+            if (displayedView == null)
+            {
+                SetStatus("Định vị Tường: chưa có dòng nào được chọn.");
+                return;
+            }
+
+            try
+            {
+                var currentProject = EnsureCurrentProject("định vị Tường trong View 3D");
+                var currentRow = ResolveCurrentRow(currentProject, displayedView);
+                var handles = SourceHandleResolver.Resolve(currentProject, currentRow.ElementIds);
+                if (handles.Count == 0)
+                    throw new InvalidOperationException("Tường hiện hành không còn CAD Handle nguồn để định vị an toàn.");
+
+                var count = QS3D.BricsCAD.V25.Cad.CadHandleService.Select(_document, handles);
+                if (count <= 0)
+                    throw new InvalidOperationException("Không resolve được CAD object hiện hành từ Handle của Tường.");
+
+                SetStatus("Bám 3D • " + trigger + ": đã chọn " + count + " đối tượng CAD cho " + displayedView.ElementId + ".");
+                _document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Định vị Tường lỗi: " + ex.Message);
+            }
+        }
+
+        private QuantityReportRow ResolveCurrentRow(ProjectState currentProject, WallRowView displayedView)
+        {
+            var elementId = (displayedView.ElementId ?? string.Empty).Trim();
+            if (elementId.Length == 0)
+                throw new InvalidOperationException("Dòng Tường không có semantic ElementId ổn định để định vị.");
+
+            var currentElement = currentProject.FindElement(elementId)
+                ?? throw new InvalidOperationException("Tường đã bị xóa hoặc dòng hiển thị đã stale. Tính lại trước khi định vị.");
+            if (!IsWallCategory(currentElement.Category))
+                throw new InvalidOperationException("Semantic hiện hành của dòng này không còn thuộc nhóm Tường được hỗ trợ.");
+
+            var currentSnapshot = ProjectStateSnapshot.CreateDetachedCopy(currentProject);
+            var currentRows = ProjectQuantityReportBuilder.Detail(currentSnapshot, new[] { elementId });
+            if (currentRows.Count != 1)
+                throw new InvalidOperationException("Không thể xác nhận duy nhất dòng Tường hiện hành cho ElementId " + elementId + ".");
+
+            var currentRow = currentRows[0];
+            if (!IsWallRow(currentRow) || currentRow.ElementIds.Count != 1 ||
+                !string.Equals(currentRow.ElementIds[0], elementId, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Dòng Tường hiện hành không còn khớp semantic identity đã hiển thị.");
+
+            return currentRow;
+        }
+
         private ProjectState EnsureCurrentProject(string operation)
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
@@ -366,6 +443,14 @@ namespace QS3D.BricsCAD.V25.UI
                    string.Equals(row.Category, ElementCategory.ArchitecturalWall.ToString(), StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(row.Category, ElementCategory.GlassWall.ToString(), StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(row.Category, ElementCategory.WallPier.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsWallCategory(ElementCategory category)
+        {
+            return category == ElementCategory.StructuralWall ||
+                   category == ElementCategory.ArchitecturalWall ||
+                   category == ElementCategory.GlassWall ||
+                   category == ElementCategory.WallPier;
         }
 
         private static string CategoryLabel(string? category)
@@ -421,11 +506,16 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static bool IsFiniteNonNegative(double value) => !double.IsNaN(value) && !double.IsInfinity(value) && value >= 0d;
 
+        private WallRowView? CurrentSelectedView()
+        {
+            if (WallList.SelectedItem is WallRowView selected) return selected;
+            if (TakeoffGrid.SelectedItem is WallRowView gridSelected) return gridSelected;
+            return null;
+        }
+
         private string CurrentSelectedElementId()
         {
-            if (WallList.SelectedItem is WallRowView selected) return selected.ElementId;
-            if (TakeoffGrid.SelectedItem is WallRowView gridSelected) return gridSelected.ElementId;
-            return string.Empty;
+            return CurrentSelectedView()?.ElementId ?? string.Empty;
         }
 
         private static string DrawingLabel(Document document)

@@ -52,7 +52,18 @@ def main() -> int:
     require(coordinator, "TryGetCurrentSignerThumbprint", "running publisher trust anchor gate")
     require(coordinator, "ScheduleLatestAsync", "fresh-check one-click scheduling")
 
-    require(launcher, "X509Certificate.CreateFromSignedFile", "running signed plugin publisher extraction")
+    require(launcher, 'new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE")', "WINTRUST_ACTION_GENERIC_VERIFY_V2 policy")
+    require(launcher, "TryVerifyAuthenticode(pluginPath, out reason)", "running plugin Authenticode verification gate")
+    require(launcher, "WinVerifyTrust(IntPtr.Zero, WinTrustActionGenericVerifyV2, ref trustData)", "Windows trust-provider verification")
+    require(launcher, "WtdStateActionVerify", "WinVerifyTrust state verification")
+    require(launcher, "WtdStateActionClose", "WinVerifyTrust state cleanup")
+    require(launcher, "if (status == 0) return true;", "verified Authenticode success requirement")
+    require(launcher, "X509Certificate.CreateFromSignedFile", "verified running plugin publisher extraction")
+    verify_pos = launcher.find("if (!TryVerifyAuthenticode(pluginPath, out reason)) return false;")
+    signer_pos = launcher.find("X509Certificate.CreateFromSignedFile(pluginPath)")
+    if verify_pos < 0 or signer_pos < 0 or verify_pos >= signer_pos:
+        raise AssertionError("running plugin Authenticode trust must be verified before its signer certificate can become the updater publisher anchor")
+
     require(launcher, "while (Get-Process -Name bricscad", "wait-for-BricsCAD-exit handoff")
     require(launcher, "Get-AuthenticodeSignature -LiteralPath $updater", "installed updater signature validation")
     require(launcher, "Installed updater signer mismatch", "updater signer pinning")
