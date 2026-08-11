@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
@@ -14,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             PreviewRunsOnDetachedState();
             SubsetPreviewAndApplyRespectScope();
             MalformedSubsetTargetsFailClosed();
+            MutationDuringSubsetTargetEnumerationFailsFreshness();
             StalePreviewFailsBeforeLiveMutation();
             ChangeVersionInvalidatesEquivalentPreview();
             FreshPreviewCanApplyWithoutNewHealthErrors();
@@ -74,6 +76,22 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { " " }));
             Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { " B1 " }));
             Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { "B1", "b1" }));
+        }
+
+        private static void MutationDuringSubsetTargetEnumerationFailsFreshness()
+        {
+            var project = Fixture();
+            var beforeVersion = project.ChangeVersion;
+
+            IEnumerable<string> Targets()
+            {
+                project.Touch();
+                yield return "B1";
+            }
+
+            Throws<InvalidOperationException>(() => new RegenerationPreviewService().PreviewSubset(project, Targets()));
+            Equal(beforeVersion + 1L, project.ChangeVersion);
+            True(!project.FindElement("B1")!.Quantities.ContainsKey("NetVolumeM3"));
         }
 
         private static void StalePreviewFailsBeforeLiveMutation()
