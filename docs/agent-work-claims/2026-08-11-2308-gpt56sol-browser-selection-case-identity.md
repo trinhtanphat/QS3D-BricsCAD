@@ -4,6 +4,7 @@
 - Agent: `chatgpt-web-gpt56sol-browser-selection-case-20260811-2308`
 - Registered: `2026-08-11T23:08:00+07:00`
 - Baseline main SHA: `d52b4bdd30ec2710708062ebeffcb1133fa3c053`
+- Claim commit: `df0df09f65cb9e1da1f20d749984dea4111a548c`
 - Priority: P2 source-proven regression hardening
 
 ## Reserved scope
@@ -21,6 +22,7 @@ Fix the Project Browser selection reveal identity mismatch where the tree member
 - No Project Browser WPF/native/runtime changes.
 - No workspace persistence/schema changes.
 - No changes to ProjectBrowserPlanner grouping, query, or virtualization semantics.
+- No caller-output casing redesign; selected/primary ID presentation remains on the existing contract.
 - No BricsCAD runtime/local gate changes.
 - No GitHub Actions dispatch or workflow edits.
 
@@ -28,8 +30,8 @@ Fix the Project Browser selection reveal identity mismatch where the tree member
 
 - Verify claim reachability from current `main`, then re-fetch exact source/test blobs before implementation.
 - Make the initial root membership check use the same case-insensitive identity semantics already used by the planner membership index and primary selection.
-- Preserve canonical output IDs from the tree rather than returning caller casing where the existing planner already resolves canonical membership.
-- Add focused smoke coverage selecting a canonical tree element with different casing and verifying reveal/primary/target paths succeed deterministically.
+- Preserve existing selected/primary output casing behavior and only correct semantic identity membership.
+- Add focused smoke coverage selecting a canonical tree element with different casing and verifying reveal/target paths succeed deterministically without a false missing-ID failure.
 - Source/static readback plus committed smoke coverage only; no local .NET/BricsCAD/Actions PASS claim.
 
 ## Coordination
