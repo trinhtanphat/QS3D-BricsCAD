@@ -10,6 +10,7 @@ SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 SEMVER_IDENTIFIER = re.compile(r"^[0-9A-Za-z-]+$")
 ALLOWED_STATUS = {"PASS", "FAIL", "SKIPPED", "NOT_RUN", "FAIL_OR_INCOMPLETE"}
 SAFE_PUBLIC_BRANCHES = frozenset({"main", "master", "HEAD"})
+SAFE_PRERELEASE_CHANNELS = frozenset({"preview", "alpha", "beta", "rc"})
 SAFE_QUALIFICATION_SCOPES = frozenset(
     {
         "incomplete",
@@ -55,39 +56,45 @@ def sanitized_branch(value):
     return text if text in SAFE_PUBLIC_BRANCHES else "(redacted non-main branch)"
 
 
-def strict_release_tag(value):
+def sanitized_release_tag(value):
     text = str(value or "").strip()
     if not text:
         return "(none)"
     if not text.startswith("v"):
-        return "(redacted invalid tag)"
+        return "(redacted release tag)"
 
     version = text[1:]
     if version.count("+") > 1:
-        return "(redacted invalid tag)"
+        return "(redacted release tag)"
     version_core, plus, build = version.partition("+")
     if version_core.count("-") > 1:
-        return "(redacted invalid tag)"
+        return "(redacted release tag)"
     core, dash, prerelease = version_core.partition("-")
 
     core_parts = core.split(".")
     if len(core_parts) != 3:
-        return "(redacted invalid tag)"
+        return "(redacted release tag)"
     for part in core_parts:
         if not part.isdigit() or (len(part) > 1 and part.startswith("0")):
-            return "(redacted invalid tag)"
+            return "(redacted release tag)"
 
     if dash:
         prerelease_parts = prerelease.split(".")
         if any(not part or not SEMVER_IDENTIFIER.fullmatch(part) for part in prerelease_parts):
-            return "(redacted invalid tag)"
+            return "(redacted release tag)"
         if any(part.isdigit() and len(part) > 1 and part.startswith("0") for part in prerelease_parts):
-            return "(redacted invalid tag)"
+            return "(redacted release tag)"
+        if prerelease_parts[0] not in SAFE_PRERELEASE_CHANNELS:
+            return "(redacted release tag)"
+        if any(not part.isdigit() for part in prerelease_parts[1:]):
+            return "(redacted release tag)"
 
     if plus:
         build_parts = build.split(".")
         if any(not part or not SEMVER_IDENTIFIER.fullmatch(part) for part in build_parts):
-            return "(redacted invalid tag)"
+            return "(redacted release tag)"
+        if any(not part.isdigit() for part in build_parts):
+            return "(redacted release tag)"
 
     return text
 
@@ -127,7 +134,7 @@ def build_summary(report):
         plugin_hash = "NOT AVAILABLE"
 
     branch = sanitized_branch(report.get("branch"))
-    release_tag = strict_release_tag(report.get("releaseTag"))
+    release_tag = sanitized_release_tag(report.get("releaseTag"))
     runtime_skipped = bool(report.get("runtimeSkipped"))
     package_requested = bool(report.get("packageRequested"))
     customer_release_qualified = yes_no_unknown(report, "customerReleaseQualified")
