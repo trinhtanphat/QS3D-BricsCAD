@@ -98,9 +98,10 @@ $argumentParts.Add('"' + $scriptPath + '"')
 $arguments = [string]::Join(' ', $argumentParts)
 
 $startedAt = Get-Date
-$process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -PassThru
+$process = $null
 
 try {
+    $process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -WorkingDirectory $ArtifactDir -PassThru
     $deadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $resultPath -PathType Leaf) { break }
@@ -148,14 +149,12 @@ public static class QS3DWin32Capture {
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
-    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
 }
 "@
 
         [QS3DWin32Capture]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
-        [QS3DWin32Capture]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
         Start-Sleep -Seconds 3
 
         $rect = New-Object QS3DWin32Capture+RECT
@@ -171,27 +170,20 @@ public static class QS3DWin32Capture {
         $bitmap = New-Object System.Drawing.Bitmap $width, $height
         $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
         try {
+            # Capture only the target BricsCAD HWND. A desktop-region capture can
+            # include unrelated windows that overlap the host and leak private UI.
+            $hdc = $graphics.GetHdc()
             try {
-                $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+                $captured = [QS3DWin32Capture]::PrintWindow($process.MainWindowHandle, $hdc, 2)
+                if (-not $captured) {
+                    $captured = [QS3DWin32Capture]::PrintWindow($process.MainWindowHandle, $hdc, 0)
+                }
+                if (-not $captured) {
+                    throw "PrintWindow could not capture the BricsCAD window without exposing the desktop."
+                }
             }
-            catch {
-                # CopyFromScreen can fail with ERROR_INVALID_HANDLE when the
-                # interactive desktop does not expose a screen DC to this host.
-                # PrintWindow still captures the exact BricsCAD HWND and keeps
-                # screenshot evidence mandatory instead of silently skipping it.
-                $hdc = $graphics.GetHdc()
-                try {
-                    $captured = [QS3DWin32Capture]::PrintWindow($process.MainWindowHandle, $hdc, 2)
-                    if (-not $captured) {
-                        $captured = [QS3DWin32Capture]::PrintWindow($process.MainWindowHandle, $hdc, 0)
-                    }
-                    if (-not $captured) {
-                        throw "CopyFromScreen failed and PrintWindow could not capture the BricsCAD window."
-                    }
-                }
-                finally {
-                    $graphics.ReleaseHdc($hdc)
-                }
+            finally {
+                $graphics.ReleaseHdc($hdc)
             }
             $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
         }
@@ -215,6 +207,7 @@ public static class QS3DWin32Capture {
         plugin_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $PluginDll).Hash
         runtime_marker = $resultPath
         screenshot = if ($SkipScreenshot) { $null } else { $screenshotPath }
+        screenshot_capture = if ($SkipScreenshot) { $null } else { "PrintWindow(hwnd)" }
         process_id = $process.Id
         profile = $Profile
         runner_user = [Environment]::UserName
