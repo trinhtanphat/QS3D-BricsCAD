@@ -53,7 +53,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
                     foreach (var element in elements) ReplaceOne(document, transaction, project, element);
-                    project.Touch();
                     transaction.Commit();
                 }
             }
@@ -311,7 +310,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     throw new InvalidOperationException(
                         "Generated Grid annotation có loại CAD object không hợp lệ. Refusing destructive replacement before any Grid annotation is erased: " + handle + "/" + entity.GetType().Name + ".");
                 GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "validate Grid annotation " + handle);
-                result.Add(new KeyValuePair<string, ObjectId>(handle, id));
+                result.Add(new KeyValuePair<string, ObjectId>>(handle, id));
             }
 
             if (result.Count != expected.Count)
