@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 
 namespace QS3D.Core.SmokeTests
@@ -10,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsMissingCurrentRootTimestamp();
             RejectsMissingCurrentElementTimestamp();
+            RejectsMissingCurrentElementDirtyState();
             RejectsMissingCurrentAuditTimestamp();
             LegacyV1MissingTimestampsStillMigrates();
         }
@@ -27,6 +29,16 @@ namespace QS3D.Core.SmokeTests
                 "<qs3d schema=\"3\" projectId=\"P2\" name=\"Missing element timestamp\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"0\">" +
                 "<metadata/><zones/><floors/><families/><rules/><elements>" +
                 "<element id=\"E1\" category=\"ArchitecturalWall\" dirty=\"15\"><handles/><dependencies/><properties/><quantities/></element>" +
+                "</elements><audit/></qs3d>",
+                path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
+        }
+
+        private static void RejectsMissingCurrentElementDirtyState()
+        {
+            WithProjectFile(
+                "<qs3d schema=\"3\" projectId=\"P4\" name=\"Missing dirty state\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"0\">" +
+                "<metadata/><zones/><floors/><families/><rules/><elements>" +
+                "<element id=\"E1\" category=\"ArchitecturalWall\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\"><handles/><dependencies/><properties/><quantities/></element>" +
                 "</elements><audit/></qs3d>",
                 path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
         }
@@ -53,6 +65,7 @@ namespace QS3D.Core.SmokeTests
                     var project = new QsdbProjectStore().Load(path);
                     Equal(DateTime.UnixEpoch, project.UpdatedUtc, "Legacy root timestamp was not synthesized during migration.");
                     Equal(DateTime.UnixEpoch, project.Elements[0].UpdatedUtc, "Legacy element timestamp was not synthesized during migration.");
+                    Equal(ElementDirtyFlags.All, project.Elements[0].Dirty, "Legacy element dirty state was not synthesized during migration.");
                 });
         }
 

@@ -39,7 +39,7 @@ namespace QS3D.Core.Persistence
                 root.SetAttributeValue("schema", schema.ToString(CultureInfo.InvariantCulture));
             }
 
-            ValidateCurrentPersistenceTimestamps(root);
+            ValidateCurrentPersistenceState(root);
             return document;
         }
 
@@ -75,26 +75,29 @@ namespace QS3D.Core.Persistence
             SetMigrationOrigin(root, "2");
         }
 
-        private static void ValidateCurrentPersistenceTimestamps(XElement root)
+        private static void ValidateCurrentPersistenceState(XElement root)
         {
-            RequireTimestamp(root, "updatedUtc", "Project root");
+            RequirePersistenceValue(root, "updatedUtc", "Project root");
 
             var elements = root.Element("elements");
             if (elements != null)
             {
                 foreach (var element in elements.Elements("element"))
-                    RequireTimestamp(element, "updatedUtc", "Project element");
+                {
+                    RequirePersistenceValue(element, "updatedUtc", "Project element");
+                    RequirePersistenceValue(element, "dirty", "Project element");
+                }
             }
 
             var audit = root.Element("audit");
             if (audit != null)
             {
                 foreach (var auditEvent in audit.Elements("event"))
-                    RequireTimestamp(auditEvent, "utc", "Audit event");
+                    RequirePersistenceValue(auditEvent, "utc", "Audit event");
             }
         }
 
-        private static void RequireTimestamp(XElement element, string attributeName, string owner)
+        private static void RequirePersistenceValue(XElement element, string attributeName, string owner)
         {
             if (string.IsNullOrWhiteSpace(element.Attribute(attributeName)?.Value))
                 throw new InvalidDataException(owner + " is missing required " + attributeName + ".");
