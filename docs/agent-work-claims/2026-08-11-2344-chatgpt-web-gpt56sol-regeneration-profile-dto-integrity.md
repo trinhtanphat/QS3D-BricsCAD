@@ -1,6 +1,6 @@
 # Work claim — Regeneration profile DTO integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-11T23:44:00+07:00`
 - Baseline main SHA: `7fc5c6fc00ae80178a753078cc869cf960218861`
@@ -8,7 +8,7 @@
 
 ## Reason
 
-The public regeneration profiling DTO constructors currently validate only part of their state. `RegenerationWorkItem` accepts undefined `ElementCategory`, dirty-flag bits outside `ElementDirtyFlags.All`, and negative dependency depth/counts; `RegenerationCategoryWork` accepts undefined categories; `RegenerationWorkProfile` accepts undefined `RegenerationWorkScope` values. These invalid DTOs can report misleading work/category/readiness metrics even though the profiler itself only produces valid values.
+The public regeneration profiling DTO constructors validated only part of their state. `RegenerationWorkItem` accepted undefined `ElementCategory`, dirty-flag bits outside `ElementDirtyFlags.All`, and negative dependency depth/counts; `RegenerationCategoryWork` accepted undefined categories; `RegenerationWorkProfile` accepted undefined `RegenerationWorkScope` values. These invalid DTOs could report misleading work/category/readiness metrics even though the profiler itself only produces valid values.
 
 ## Reserved scope
 
@@ -37,8 +37,22 @@ Fail closed at the public regeneration profile DTO construction boundary for und
 
 ## Coordination
 
-The active semantic-number regeneration claim is explicitly limited to `SemanticRegenerators.cs`; this lane is confined to `RegenerationWorkProfiler.cs` public DTO construction and a dedicated smoke. No current/recent work-profile DTO integrity claim was found.
+The active semantic-number regeneration claim is explicitly limited to `SemanticRegenerators.cs`; this lane was confined to `RegenerationWorkProfiler.cs` public DTO construction and a dedicated smoke. No current/recent work-profile DTO integrity claim was found.
+
+## Completion
+
+- Implementation commits:
+  - `902c0cf90592f59aa2aec6489b3ea86864442e84` — reject undefined category/scope values, unknown dirty bits, and negative dependency metrics at DTO construction.
+  - `65472488a08f60ea0662cd13e224e7d0f7d9547c` — add focused DTO invariant regression coverage while preserving valid combined dirty flags.
+- Final observed `main` before claim close: `7eb12faeb7b26aeb8472f36c7ac74ef1fb2e65c1`.
+- Validation actually performed:
+  - re-fetched current `RegenerationWorkProfiler.cs` and confirmed the new checks are constructor-only and profiler/topological algorithms remain unchanged;
+  - re-fetched the dedicated smoke and confirmed undefined category/scope, unknown dirty bit, and all three negative dependency metrics fail closed;
+  - confirmed a valid `Geometry | Properties | Quantity` combination remains accepted and reports semantic work;
+  - did not execute repository `dotnet` tests because this hosted session has no usable .NET SDK checkout;
+  - did not dispatch or rerun GitHub Actions.
+- BricsCAD V25 local gate impact: none; this is CAD-independent Core profile DTO integrity hardening.
 
 ## Completion condition
 
-Current `main` rejects invalid public regeneration profile DTO state without changing profiler-generated valid results, includes focused regression coverage, and this claim is marked `COMPLETED`.
+Satisfied: current `main` rejects invalid public regeneration profile DTO state without changing profiler-generated valid results, includes focused regression coverage, and this claim is released as `COMPLETED`.
