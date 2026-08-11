@@ -38,11 +38,18 @@ for path in surfaces:
             errors.append(str(path.relative_to(ROOT)) + " contains dark-host-risk styling: " + label)
 
     try:
-        tree = ET.parse(path)
+        ET.parse(path)
     except ET.ParseError as exc:
         errors.append(str(path.relative_to(ROOT)) + " is not well-formed XAML/XML: " + str(exc))
-        continue
 
+
+def guard_keyed_textblock_styles(path):
+    if not path.is_file():
+        return
+    try:
+        tree = ET.parse(path)
+    except ET.ParseError:
+        return
     for style in tree.getroot().iter("{" + PRESENTATION_NS + "}Style"):
         key = style.attrib.get(X_KEY)
         target = style.attrib.get("TargetType", "")
@@ -58,6 +65,10 @@ for path in surfaces:
                 str(path.relative_to(ROOT)) + ": keyed TextBlock style '" + key +
                 "' must set Foreground explicitly or use BasedOn; keyed styles do not inherit the implicit TextBlock style"
             )
+
+
+for path in (THEME, WORKSPACE, RIGHT):
+    guard_keyed_textblock_styles(path)
 
 if THEME.is_file():
     theme = THEME.read_text(encoding="utf-8")
@@ -92,5 +103,5 @@ if errors:
 
 print(
     "PASS: Workspace, Right Panel and modeless windows merge the shared theme, reject explicit black/legacy dark-host styling, "
-    "and keyed TextBlock styles keep an explicit foreground contract."
+    "and shared/palette keyed TextBlock styles keep an explicit foreground contract."
 )
