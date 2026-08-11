@@ -197,22 +197,66 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         public void SetStatus(string status) => _viewModel.Status = status ?? string.Empty;
-        public void SetInspection(IReadOnlyList<EntitySnapshot> snapshots) { _inspection = snapshots ?? Array.Empty<EntitySnapshot>(); InspectionList.ItemsSource = _inspection; SelectionCount.Text = _inspection.Count + " chọn"; SyncFamilyFromSelection(); }
+
+        public void SetInspection(IReadOnlyList<EntitySnapshot> snapshots)
+        {
+            _inspection = snapshots ?? Array.Empty<EntitySnapshot>();
+            InspectionList.ItemsSource = _inspection;
+            SelectionCount.Text = _inspection.Count + " chọn";
+            try
+            {
+                SyncFamilyFromSelection();
+            }
+            catch (Exception ex)
+            {
+                ClearProject("Selection sync semantic lỗi: " + ex.Message);
+            }
+        }
 
         private void SyncFamilyFromSelection()
         {
-            if (_inspection.Count == 0) return; var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null) return;
-            var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase); var project = ProjectContextCoordinator.GetOrCreate(doc);
+            if (_inspection.Count == 0)
+            {
+                _viewModel.SetSelectedElement(null);
+                return;
+            }
+
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+            {
+                _viewModel.SetSelectedElement(null);
+                return;
+            }
+
+            var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
+            var project = ProjectContextCoordinator.GetOrCreate(doc);
             var matches = project.Elements.Where(x => SemanticReferenceHandles.MatchesSelection(x, handles)).Take(2).ToList();
             if (matches.Count != 1 || string.IsNullOrWhiteSpace(matches[0].FamilyId))
             {
-                if (matches.Count > 1) SetStatus("Selection khớp nhiều cấu kiện semantic; inspector giữ scope Family để tránh sửa nhầm Instance.");
+                _viewModel.SetSelectedElement(null);
+                if (matches.Count > 1)
+                    SetStatus("Selection khớp nhiều cấu kiện semantic; inspector giữ scope Family để tránh sửa nhầm Instance.");
                 return;
             }
+
             var element = matches[0];
-            var family = project.FindFamily(element.FamilyId); if (family == null) return;
+            var family = project.FindFamily(element.FamilyId);
+            if (family == null)
+            {
+                _viewModel.SetSelectedElement(null);
+                SetStatus("Cấu kiện semantic đang chọn không còn Family hợp lệ; inspector đã về scope Family.");
+                return;
+            }
+
             _loadingContext = true;
-            try { _categoryFilter = family.Category; ApplyFamilyFilter(); FamilyList.SelectedItem = family; FamilyList.ScrollIntoView(family); _viewModel.SetSelectedElement(element); }
+            try
+            {
+                _categoryFilter = family.Category;
+                ApplyFamilyFilter();
+                FamilyList.SelectedItem = family;
+                FamilyList.ScrollIntoView(family);
+                _viewModel.SetSelectedElement(element);
+            }
             finally { _loadingContext = false; }
         }
 
