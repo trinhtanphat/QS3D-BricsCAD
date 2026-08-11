@@ -81,8 +81,13 @@ namespace QS3D.Core.SmokeTests
 
         private static void UndefinedCategoryFailsClosed()
         {
-            RejectCategory(() => new ProjectFamily("F1", "Family", (ElementCategory)999), "Undefined family category was accepted.");
-            RejectCategory(() => new ProjectElement("E1", (ElementCategory)999, string.Empty, string.Empty, string.Empty), "Undefined element category was accepted.");
+            ThrowsArgumentOutOfRange(
+                () => new ProjectFamily("F1", "Family", (ElementCategory)999),
+                "Undefined family category reached persistence instead of failing at the domain boundary.");
+
+            ThrowsArgumentOutOfRange(
+                () => new ProjectElement("E1", (ElementCategory)999, string.Empty, string.Empty, string.Empty),
+                "Undefined element category reached persistence instead of failing at the domain boundary.");
 
             var project = NewProject("rule-category");
             project.QuantityRules.Add(new QuantityRule("R1", (ElementCategory)999, "Area", "1", "v1"));
@@ -120,6 +125,13 @@ namespace QS3D.Core.SmokeTests
             return element;
         }
 
+        private static void ThrowsArgumentOutOfRange(Action action, string message)
+        {
+            try { action(); }
+            catch (ArgumentOutOfRangeException) { return; }
+            throw new Exception(message);
+        }
+
         private static void RejectSave(ProjectState project, string message)
         {
             var path = Path.Combine(Path.GetTempPath(), "qs3d-canonical-" + Guid.NewGuid().ToString("N") + ".qsdb");
@@ -138,11 +150,5 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
-        private static void RejectCategory(Action action, string message)
-        {
-            try { action(); }
-            catch (ArgumentOutOfRangeException) { return; }
-            throw new Exception(message);
-        }
     }
 }

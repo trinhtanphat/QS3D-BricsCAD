@@ -21,6 +21,13 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
+                if (selectedIds.Length == 0)
+                {
+                    Report(document, "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8).");
+                    return;
+                }
+
                 var project = ExistingProjectMutationContext.Require(document, "Beam Stirrup 3D");
                 var result = BeamStirrupSolidBuilder.BuildSelected(document, project);
                 var message = result.Stirrups == 0
