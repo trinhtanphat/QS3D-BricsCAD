@@ -100,7 +100,7 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             var normalized = NormalizeSourceHandles((signature ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries));
             if (normalized.Length == 0) return null;
-            var matches = project.Elements
+            var matches = ResolveProjectElements(project)
                 .Where(IsAutoRoom)
                 .Where(x => string.Equals(x.FloorId, floorId ?? string.Empty, StringComparison.OrdinalIgnoreCase))
                 .Where(x => string.Equals(x.ZoneId, zoneId ?? string.Empty, StringComparison.OrdinalIgnoreCase))
