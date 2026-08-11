@@ -298,12 +298,24 @@ namespace QS3D.BricsCAD.V25
 
                 var opening = openings[0];
                 var wall = hosts[0];
+                var previousHostId = opening.Properties.TryGetValue("HostWallId", out var existingHostId)
+                    ? (existingHostId ?? string.Empty).Trim()
+                    : string.Empty;
+                var regenerationTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    opening.Id,
+                    wall.Id
+                };
+                if (previousHostId.Length > 0 && project.FindElement(previousHostId) != null)
+                    regenerationTargets.Add(previousHostId);
+
                 var rollback = ProjectStateSnapshot.Capture(project);
                 var regenerated = 0;
                 try
                 {
                     new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
-                    regenerated = RegenerateProject(project);
+                    regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                        .RegenerateDirtySubset(project, regenerationTargets);
                     var currentOpening = project.FindElement(opening.Id)
                         ?? throw new InvalidOperationException("QS3DLINKHOST: opening " + opening.Id + " không còn tồn tại sau regeneration.");
                     if (!currentOpening.Properties.TryGetValue("HostWallId", out var persistedHostId) ||

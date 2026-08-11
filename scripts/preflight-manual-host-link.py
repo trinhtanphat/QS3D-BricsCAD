@@ -27,9 +27,13 @@ else:
         'ExistingProjectMutationContext.Require(doc, "Link opening host")',
         "SemanticReferenceHandles.MatchesSelection",
         "openings.Count != 1 || hosts.Count != 1",
+        'opening.Properties.TryGetValue("HostWallId", out var existingHostId)',
+        "var regenerationTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase)",
+        "if (previousHostId.Length > 0 && project.FindElement(previousHostId) != null)",
+        "regenerationTargets.Add(previousHostId)",
         "ProjectStateSnapshot.Capture(project)",
         "new HostLinkService().LinkOpening(project, opening.Id, wall.Id)",
-        "RegenerateProject(project)",
+        ".RegenerateDirtySubset(project, regenerationTargets)",
         "var currentOpening = project.FindElement(opening.Id)",
         'currentOpening.Properties.TryGetValue("HostWallId"',
         "string.Equals(persistedHostId, wall.Id, StringComparison.OrdinalIgnoreCase)",
@@ -51,7 +55,7 @@ else:
         "QS3DCUTOPENINGS",
         "SendStringToExecute",
         "ProjectContextCoordinator.GetOrCreate(doc)",
-        "opening.Properties.TryGetValue",
+        "RegenerateProject(project)",
     )
     for token in forbidden:
         if token in block:
@@ -60,16 +64,18 @@ else:
     selection = block.find("Cad.EntitySnapshotReader.ReadCurrentSelection(doc)")
     empty_guard = block.find("if (selectedHandles.Count == 0)")
     bind = block.find('ExistingProjectMutationContext.Require(doc, "Link opening host")')
+    previous = block.find('opening.Properties.TryGetValue("HostWallId", out var existingHostId)')
+    targets = block.find("var regenerationTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase)")
     capture = block.find("ProjectStateSnapshot.Capture(project)")
     link = block.find("new HostLinkService().LinkOpening")
-    regen = block.find("RegenerateProject(project)")
+    regen = block.find(".RegenerateDirtySubset(project, regenerationTargets)")
     resolve = block.find("var currentOpening = project.FindElement(opening.Id)")
     verify = block.find('currentOpening.Properties.TryGetValue("HostWallId"')
     restore = block.find("rollback.Restore(project)")
     refresh = block.find("PaletteCoordinator.RefreshProject()")
-    if min(selection, empty_guard, bind, capture, link, regen, resolve, verify, restore, refresh) >= 0:
-        if not (selection < empty_guard < bind < capture < link < regen < resolve < verify < restore < refresh):
-            errors.append("QS3DLINKHOST must read/guard selection before binding existing project state, then snapshot, link, regenerate, canonical re-resolve, verify, rollback path and post-commit UI refresh")
+    if min(selection, empty_guard, bind, previous, targets, capture, link, regen, resolve, verify, restore, refresh) >= 0:
+        if not (selection < empty_guard < bind < previous < targets < capture < link < regen < resolve < verify < restore < refresh):
+            errors.append("QS3DLINKHOST must read/guard selection before binding existing project state, snapshot old host scope before mutation, scoped-regenerate only opening/new/old host, canonical re-resolve, verify, rollback path and post-commit UI refresh")
 
 if errors:
     print("QS3D manual host-link preflight")
@@ -78,4 +84,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DLINKHOST guards empty selection before existing-project bind, requires exactly one opening and compatible host, snapshots before mutation, regenerates and re-resolves canonical HostWallId before post-commit UI, rolls back semantic failure, and never creates replacement project state or invokes physical cutting.")
+print("PASS: QS3DLINKHOST guards empty selection before existing-project bind, scopes regeneration to the opening plus new/previous live hosts, verifies canonical HostWallId, rolls back semantic failure, and leaves unrelated dirty project elements untouched.")
