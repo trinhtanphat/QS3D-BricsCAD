@@ -182,8 +182,6 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                project.Touch();
-
                 // At this point native CAD + semantic ownership already committed successfully.
                 // Palette/selection/regen/view dispatch are convenience UI and must never turn a
                 // completed rebuild into a false QS3DBUILD3D failure report.
