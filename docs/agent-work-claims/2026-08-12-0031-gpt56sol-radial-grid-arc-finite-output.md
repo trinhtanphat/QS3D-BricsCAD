@@ -1,6 +1,6 @@
 # Work claim — Radial Grid ARC finite output
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-radial-grid-arc-finite-output-20260812-0031`
 - Registered: `2026-08-12T00:31:00+07:00`
 - Baseline main SHA: `fe34c95c26bac556e649721618faceab400599c8`
@@ -18,20 +18,24 @@ Make `GridSystemPlanner.PlanRadial` fail closed before returning a ring `GridRef
 
 ## Concrete defect
 
-`PlanRadial` validates a finite center and finite positive ring radius, then delegates to `GridReferenceCurve.Arc`, whose endpoint construction performs `center + radius * cos/sin` without validating the computed points. Large same-sign finite center/radius values can therefore overflow an ARC endpoint to infinity, and `PlanRadial` returns an invalid curve object that only fails later in unrelated consumers.
+`PlanRadial` validated a finite center and finite positive ring radius, then delegated to `GridReferenceCurve.Arc`, whose endpoint construction performs `center + radius * cos/sin` without validating the computed points. Large same-sign finite center/radius values could therefore overflow an ARC endpoint to infinity, and `PlanRadial` returned an invalid curve object that only failed later in unrelated consumers.
 
-## Explicit exclusions
+## Implementation
+
+- `11fcc65b75f1daecf718502d463a8adf0af315f0` — validate generated ring ARC start/end coordinates immediately before adding the curve to radial Grid output and fail with `OverflowException` when generation exceeds the supported numeric range.
+- `92ed3c5c6ffb67c02f335bfc3154b73c76f46ffd` — add focused smoke coverage with finite center/radius values of `1e308` that make the ring endpoint overflow while the required ray remains representable.
+
+## Validation performed
+
+- Re-fetched target source after claim registration and confirmed ring curves were added without generated endpoint validation before editing.
+- Re-fetched committed source and confirmed start/end finite checks now happen before `curves.Add(curve)`.
+- Re-fetched the smoke fixture and confirmed it expects fail-closed overflow rather than a returned non-finite ring.
+- Source/static validation only; no GitHub Actions dispatched and no BricsCAD V25 runtime/build/NETLOAD PASS claimed.
+
+## Explicit exclusions retained
 
 - No Grid naming, station ordering, intersection, annotation, native V25, factory-wide `GridReferenceCurve` contract, UI, Actions, release, or LOCAL_PASS behavior changes.
 
-## Validation plan
+## Completion
 
-- Keep normal radial Grid generation unchanged.
-- Validate each generated ring ARC start/end immediately in `PlanRadial` before adding it to output.
-- Add focused smoke coverage with finite center/radius values that make the generated full-circle endpoint overflow; assert the planner rejects instead of returning a non-finite Grid curve.
-- Re-fetch target source before implementation and do not overwrite concurrent edits.
-- No GitHub Actions will be dispatched and no BricsCAD runtime PASS will be claimed from this web session.
-
-## Completion condition
-
-`PlanRadial` cannot return non-finite ring endpoints from finite but unrepresentable center/radius combinations, regression is integrated on current `main`, and this claim is marked `COMPLETED`.
+`PlanRadial` cannot return non-finite ring endpoints from finite but unrepresentable center/radius combinations, focused regression is integrated on `main`, and this claim is closed.
