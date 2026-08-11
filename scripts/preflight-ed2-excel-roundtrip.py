@@ -36,9 +36,11 @@ def require(name, tokens):
 require("commands", (
     '[CommandMethod("QS3DED2", CommandFlags.UsePickSet)]',
     '"Selection Floor Zone All"',
-    "ResolveEd2Selection(project, snapshots)",
-    "ProjectQuantityReportBuilder.Detail(project, elementIds)",
-    "ProjectQuantityReportBuilder.Group(project, elementIds)",
+    "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)",
+    "ResolveEd2Selection(project, selectionSnapshots ?? Array.Empty<EntitySnapshot>())",
+    "var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);",
+    "ProjectQuantityReportBuilder.Detail(previewProject, elementIds)",
+    "ProjectQuantityReportBuilder.Group(previewProject, elementIds)",
     "EnsureEd2HandlesAreLive(doc, details)",
     "ED2 export blocked:",
     "XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary)",
@@ -57,6 +59,8 @@ require("cad_handles", (
 ))
 if "ShowEd2Workflow() => ShowQuantitySummary()" in texts.get("commands", ""):
     errors.append("QS3DED2 is still an alias of QS3DBQ instead of a scoped ED2 export.")
+if "ProjectContextCoordinator.GetOrCreate(doc)" in texts.get("commands", "")[texts.get("commands", "").find('[CommandMethod("QS3DED2"'):texts.get("commands", "").find('[CommandMethod("QS3DBBS"')]:
+    errors.append("QS3DED2 read-only export must not create/cache replacement project state.")
 
 require("builder", (
     "public static IReadOnlyList<QuantityReportRow> Detail(ProjectState project, IEnumerable<string> elementIds)",
@@ -101,4 +105,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: ED2 scopes before aggregation, exports one-element CHI_TIET plus Zone-aware TONG_HOP, and Excel-to-CAD lookup fails closed on schema, provenance, fingerprint or live-Handle drift.")
+print("PASS: ED2 scopes before aggregation, regenerates a detached read-only snapshot, exports one-element CHI_TIET plus Zone-aware TONG_HOP, and Excel-to-CAD lookup fails closed on schema, provenance, fingerprint or live-Handle drift.")
