@@ -20,11 +20,11 @@ def main():
         "UnsavedProjectPaths.TryGetValue(document, out var existingPath)",
         "UnsavedProjectPaths[document] = path;",
         "CleanupObsoleteUnsavedProject(document, path);",
+        "if (SameDrawingName(obsoletePath, currentPath)) return;",
         "if (File.Exists(obsoletePath)) File.Delete(obsoletePath);",
         "if (File.Exists(obsoletePath + \".bak\")) File.Delete(obsoletePath + \".bak\");",
         "UnsavedProjectPaths.Remove(document);",
         "UnsavedProjectKeys.Remove(document);",
-        "catch (Exception)",
     ]
     missing = [needle for needle in required if needle not in text]
     if missing:
@@ -48,14 +48,16 @@ def main():
         return fail("obsolete recovery cleanup helper boundaries were not found")
 
     cleanup_body = text[cleanup_start:cleanup_end]
+    same_path_guard = cleanup_body.find("if (SameDrawingName(obsoletePath, currentPath)) return;")
     primary_delete = cleanup_body.find("File.Delete(obsoletePath);")
     backup_delete = cleanup_body.find("File.Delete(obsoletePath + \".bak\");")
     state_remove = cleanup_body.rfind("UnsavedProjectPaths.Remove(document);")
-    if min(primary_delete, backup_delete, state_remove) < 0 or not primary_delete < state_remove or not backup_delete < state_remove:
-        return fail("recovery tracking must not be discarded before both cleanup attempts")
-
-    if "SameDrawingName(obsoletePath, currentPath)" not in cleanup_body:
-        return fail("cleanup does not guard against deleting the current named sidecar")
+    if min(same_path_guard, primary_delete, backup_delete, state_remove) < 0:
+        return fail("cleanup helper is missing a required SAVEAS promotion guard")
+    if not same_path_guard < primary_delete < state_remove or not same_path_guard < backup_delete < state_remove:
+        return fail("same-path saves must preserve recovery tracking and cleanup must finish before tracking is discarded")
+    if "catch (Exception)" not in cleanup_body:
+        return fail("post-commit recovery cleanup is not best-effort")
 
     print("PASS: SAVEAS promotes the named sidecar before best-effort cleanup of the exact unsaved .qsdb/.bak pair.")
     return 0
