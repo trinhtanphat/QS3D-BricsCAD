@@ -31,8 +31,13 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var plan = ProjectInterchangeSourceHandleProvenance.Plan(project, json);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var reviewProject))
+                    throw new InvalidOperationException("Interchange provenance cần một QS3D project hiện hữu; bước review không tạo project mới.");
+                var reviewProjectId = reviewProject.ProjectId;
+                var reviewUpdatedUtc = reviewProject.UpdatedUtc;
+                var reviewChangeVersion = reviewProject.ChangeVersion;
+                var reviewDrawingFingerprint = reviewProject.DrawingFingerprint ?? string.Empty;
+                var plan = ProjectInterchangeSourceHandleProvenance.Plan(reviewProject, json);
                 var confirm =
                     "Lưu source CAD handles của snapshot dưới dạng PROVENANCE-ONLY?\n\n" +
                     "Source project: " + plan.SourceProjectId + "\n" +
@@ -49,21 +54,24 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxImage.Information) != System.Windows.MessageBoxResult.Yes) return;
 
                 EnsureActive(document, "Interchange provenance import");
-                var result = ProjectInterchangeSourceHandleProvenance.Store(project, json);
-                try { PaletteCoordinator.RefreshProject(); } catch { }
+                var project = ExistingProjectMutationContext.Require(document, "Interchange provenance import");
+                if (!string.Equals(project.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.UpdatedUtc != reviewUpdatedUtc ||
+                    project.ChangeVersion != reviewChangeVersion ||
+                    !string.Equals(project.DrawingFingerprint ?? string.Empty, reviewDrawingFingerprint, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Interchange provenance: project đã thay đổi sau bước review. Hãy mở lại snapshot và xác nhận lại trước khi lưu provenance.");
 
+                var result = ProjectInterchangeSourceHandleProvenance.Store(project, json);
                 var status =
                     "Interchange provenance-only: source " + result.SourceProjectId +
                     " • elements " + result.ElementsStored.ToString(CultureInfo.InvariantCulture) +
                     " • handles " + result.SourceHandlesStored.ToString(CultureInfo.InvariantCulture) +
                     ". Không thay semantic/native ownership; chưa tự lưu .qsdb.";
-                try { PaletteCoordinator.SetStatus(status); } catch { }
-                document.Editor.WriteMessage("\nQS3D " + status);
+                FinalizeUi(document, status);
             }
             catch (Exception ex)
             {
-                try { PaletteCoordinator.SetStatus("QS3DINTERCHANGEPROVENANCE lỗi: " + ex.Message); } catch { }
-                document.Editor.WriteMessage("\nQS3DINTERCHANGEPROVENANCE error: " + ex.Message + " Không claim provenance đã lưu nếu operation chưa hoàn tất.");
+                Report(document, "QS3DINTERCHANGEPROVENANCE lỗi: " + ex.Message + " Không claim provenance đã lưu nếu operation chưa hoàn tất.");
             }
         }
 
@@ -71,6 +79,26 @@ namespace QS3D.BricsCAD.V25
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                 throw new InvalidOperationException(operation + " requires the DWG that started the operation to remain active.");
+        }
+
+        private static void FinalizeUi(Document document, string status)
+        {
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\nQS3D " + status);
+            }
+            catch (Exception uiError)
+            {
+                try { document.Editor.WriteMessage("\nQS3D Interchange provenance đã commit; UI sync warning: " + uiError.Message); } catch { }
+            }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
 
         private static string ReadGuardedSnapshotText(string path)
