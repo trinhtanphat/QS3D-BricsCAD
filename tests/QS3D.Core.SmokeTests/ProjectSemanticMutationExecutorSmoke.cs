@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             SuccessfulMutationRecordsOrderedPhases();
             MutationExceptionRestoresCompleteProjectState();
+            MutableRelationWhitespaceRollsBackExactly();
             PreCommitFaultRollsBackCompletedInterchangeMutation();
             SaturatedJournalCannotChangeMutationOutcome();
             InvalidOperationNameFailsBeforeMutation();
@@ -72,6 +73,32 @@ namespace QS3D.Core.SmokeTests
             Equal(originalVersion, project.ChangeVersion);
             Equal(originalAuditCount, project.AuditEvents.Count);
             Equal("Planned|Running|RollingBack|RolledBack", string.Join("|", journal.Entries.Select(x => x.Phase.ToString())));
+        }
+
+        private static void MutableRelationWhitespaceRollsBackExactly()
+        {
+            var project = BaselineProject();
+            var element = project.FindElement("E1") ?? throw new Exception("Baseline element missing.");
+            element.FamilyId = "  FAM-1  ";
+            element.FloorId = "  FLOOR-1  ";
+            element.ZoneId = "  ZONE-1  ";
+
+            Throws<InvalidOperationException>(() => ProjectSemanticMutationExecutor.Execute<int>(
+                project,
+                "relation-fidelity-rollback",
+                () =>
+                {
+                    element.FamilyId = "MUTATED-FAMILY";
+                    element.FloorId = "MUTATED-FLOOR";
+                    element.ZoneId = "MUTATED-ZONE";
+                    project.Touch();
+                    throw new InvalidOperationException("injected relation mutation failure");
+                }));
+
+            var restored = project.FindElement("E1") ?? throw new Exception("Restored relation element missing.");
+            Equal("  FAM-1  ", restored.FamilyId);
+            Equal("  FLOOR-1  ", restored.FloorId);
+            Equal("  ZONE-1  ", restored.ZoneId);
         }
 
         private static void PreCommitFaultRollsBackCompletedInterchangeMutation()
