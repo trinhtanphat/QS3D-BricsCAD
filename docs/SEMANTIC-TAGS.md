@@ -1,6 +1,6 @@
 # QS3D Native Semantic Tags
 
-Updated: 2026-08-10 (UTC+7)
+Updated: 2026-08-11 (UTC+7)
 
 QS3D now has a guarded P0 native documentation slice that turns the existing Core `SemanticTagRenderer` output into owned BricsCAD `MText`.
 
@@ -58,6 +58,8 @@ The native tag uses the same bounded Core renderer already used by source-side d
 - `{Q:QuantityName}`
 
 Generated/native runtime properties are not documentable through `{P:...}`. Invalid, nested, unsupported or over-limit templates fail before the existing tag is erased.
+
+Raw `{` and `}` characters are reserved for semantic tokens. The current template language has **no literal-brace escape syntax**: stray/trailing closing braces, nested opening braces and unclosed tokens all **fail closed** during `ValidateTemplate(...)` and render validation. This keeps tag, generic-table and custom-schedule grammar identical even when a schedule currently has zero rows.
 
 Rendered text is encoded as plain MText content: line breaks become MText paragraph separators and backslash/braces are escaped so semantic values are not silently treated as MText formatting commands.
 
