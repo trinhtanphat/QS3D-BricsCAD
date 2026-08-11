@@ -103,7 +103,7 @@ namespace QS3D.Core.Export
         private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)
         {
             sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>")
-                .Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
+                .Append(XlsxXmlText.Escape(value)).Append("</t></is></c>");
         }
 
         private static void AppendNumberCell(StringBuilder sb, string cellRef, double value)
