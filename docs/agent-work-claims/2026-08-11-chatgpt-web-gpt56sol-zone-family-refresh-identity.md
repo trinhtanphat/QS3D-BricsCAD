@@ -1,55 +1,52 @@
 # Work claim — Zone/Family refresh identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-zone-family-refresh-identity`
 - Registered: `2026-08-11T20:36:00+07:00`
+- Completed: `2026-08-11T20:51:00+07:00`
 - Baseline main SHA: `af0fc42ea0ee94ea67e5a0bcc4bde42760568e0a`
 - Priority: fail closed modeless Zone/Family writes after project reload/replacement, even when semantic definition IDs are reused
 
 ## Confirmed defect
 
-`MaterialCatalogWindow` already binds the canonical `ProjectState` reference on successful Refresh and requires `ReferenceEquals(currentProject, _boundProject)` before mutations. `ZoneManagerWindow` and `FamilyManagerWindow` currently re-resolve stale UI selections by Zone/Family ID only. If a project is reload/replaced and the replacement reuses a ZoneId/FamilyId, a still-open modeless window can therefore mutate the replacement project before the user Refreshes.
+`MaterialCatalogWindow` already binds the canonical `ProjectState` reference on successful Refresh and requires `ReferenceEquals(currentProject, _boundProject)` before mutations. `ZoneManagerWindow` and `FamilyManagerWindow` previously re-resolved stale UI selections by Zone/Family ID only. If a project was reload/replaced and the replacement reused a ZoneId/FamilyId, a still-open modeless window could therefore mutate the replacement project before the user refreshed the manager.
 
-## Reserved scope
+## Implemented contract
 
-Harden Zone Manager and Family Manager mutation boundaries so a successful Refresh is the only operation that rebinds the window to a replacement canonical `ProjectState`; stale windows fail closed before Save/Delete/Activate/Assign/property mutations.
+- Zone Manager now stores the exact canonical `ProjectState` instance accepted by a successful Refresh.
+- Family Manager now stores the exact canonical `ProjectState` instance accepted by a successful Refresh.
+- A Refresh that can no longer resolve a project clears the binding.
+- `EnsureActive` now requires both the original active document and `ReferenceEquals(currentProject, _boundProject)` before mutation handlers proceed.
+- Existing mutation binding, semantic ID re-resolution, assignment ProjectId checks, selection equality checks, rollback snapshots and post-commit UI warning boundaries were retained.
+- `FamilyManagerWindow.Active.cs` already calls `EnsureActive` before its mutation binding, so the shared canonical-instance guard protects Family activation without a source edit to that partial file.
+- Added `scripts/preflight-zone-family-refresh-identity.py` to lock Refresh binding/reset, mutation guard ordering and Family Active guard coverage.
 
-## Expected surfaces
+## Merged commits
 
-- `src/QS3D.BricsCAD.V25/UI/ZoneManagerWindow.xaml.cs`
-- `src/QS3D.BricsCAD.V25/UI/FamilyManagerWindow.xaml.cs`
-- `src/QS3D.BricsCAD.V25/UI/FamilyManagerWindow.Active.cs`
-- focused source/static regression gate under `scripts/` if no existing suitable gate covers this contract
-- this claim file for close-out
+- `f0d2dfbb40885bca613d34ea2e6055b687302809` — `fix(zone): reject stale modeless project mutations`
+- `55409c3dab4e0ce7c6304b09901952bdc9841e2a` — `fix(family): reject stale modeless project mutations`
+- `90ae3e2a7df55758b215eeb38906746bf401dda1` — `test(ui): lock Zone Family refresh identity`
 
-## Intended contract
+## Validation performed
 
-- Bind the exact canonical `ProjectState` reference only after a successful Zone/Family Refresh.
-- Before every UI/editor-originated Zone/Family mutation, require the current existing project to be the exact bound instance.
-- Assignment preview and mutation phases must remain on the same canonical project instance in addition to existing selection/project-ID checks.
-- Re-resolve Zone/Family IDs inside the verified canonical project; never trust stale UI object references.
-- Project reload/replacement must require Refresh even when ZoneId, FamilyId, or ProjectId values are reused.
-- Preserve existing atomic rollback and post-commit UI-warning boundaries.
+- Refetched and inspected the committed Zone and Family source on live `main` after both source commits.
+- Refetched and inspected the committed focused regression gate on live `main`.
+- Confirmed the existing Family Active mutation path calls `EnsureActive` before `ExistingProjectMutationContext.Require`.
+- No force-push was used; stale Git ref attempts were rejected as non-fast-forward and abandoned, then source changes were committed through current-branch Contents API without overwriting concurrent lanes.
 
-## Excluded scope
+## Validation not claimed
+
+- Did not run BricsCAD V25 or Windows UI runtime in this remote session.
+- Did not dispatch or claim GitHub Actions.
+- Did not claim a local repository build or execution of the Python preflight because the session container could not resolve `github.com` for a checkout.
+
+## Excluded scope preserved
 
 - No Floor/Level/vertical-placement changes (`LOCAL-003` owns that lane).
-- No Material Catalog changes; it is the established reference pattern only.
+- No Material Catalog changes.
 - No schedule/revision/modeless viewer files reserved by the active viewer-identity claim.
 - No Core mutation/schedule-reporting changes, Ribbon/Start Center/Create Similar/Quick Workflow changes, Documentation #77 edits, XData changes, local inbox edits, release, CI or GitHub Actions.
-- No licensed BricsCAD V25 / Windows UI runtime PASS claim.
 
-## Validation plan
+## Completion
 
-- Re-fetch fresh `main` and all target files immediately before implementation.
-- Add/extend a focused static regression gate requiring canonical reference binding, Refresh-only rebind, mutation guards, and assignment preview/mutation same-instance checks for both managers.
-- Inspect the resulting diff and preserve all existing rollback/selection checks.
-- No GitHub Actions/build/release dispatch.
-
-## Coordination
-
-The current Ribbon reconciliation claim owns only Ribbon bootstrap surfaces. `LOCAL-003` owns Level/Floor vertical placement. Current Core, Create Similar, Room, Start Center and schedule/revision viewer claims do not reserve the three Zone/Family files above.
-
-## Completion condition
-
-Zone/Family stale modeless writes fail closed after project replacement until Refresh rebinds the window, focused static regression coverage is merged, and this claim is marked `COMPLETED` without claiming native V25 execution.
+Zone/Family stale modeless writes now fail closed after project replacement until Refresh rebinds the manager, and focused source/static regression coverage is merged. Native V25 runtime validation remains explicitly unclaimed.
