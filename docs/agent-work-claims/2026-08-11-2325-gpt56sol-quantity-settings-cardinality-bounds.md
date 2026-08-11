@@ -1,49 +1,62 @@
 # Work claim — Quantity Settings cardinality bounds
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-settings-cardinality-20260811-2325`
 - Registered: `2026-08-11T23:25:00+07:00`
+- Completed: `2026-08-11T23:36:00+07:00`
 - Baseline main SHA: `f3ab6727e8f5fbefc9596d312ae9193f31346875`
 - Priority: P1 — harden imported/edited Quantity Settings against unbounded category universes and quadratic matrix-diagnostic allocation while preserving exact unknown integer-code compatibility.
 
-## Reserved scope
-
-Bound the cardinality of `QuantityCalculationSettings` so validated payloads cannot drive unbounded `ObservedCategoryCodes × ObservedCategoryCodes` work in matrix diagnostics. Preserve all existing schema, exact unknown-code, directed-rule and validation semantics.
-
-## Expected surfaces
+## Delivered scope
 
 - `src/QS3D.Core/Reporting/QuantityCalculationSettings.cs`
-- `tests/QS3D.Core.SmokeTests/QuantityCalculationSettingsCardinalitySmoke.cs` (new)
-- `tests/QS3D.Core.SmokeTests/QuantityCalculationSettingsCardinalitySmokeRegistration.cs` (new)
-- `scripts/preflight-quantity-settings-cardinality.py` (new)
-- this claim file for close-out
+- `tests/QS3D.Core.SmokeTests/QuantityCalculationSettingsCardinalitySmoke.cs`
+- `tests/QS3D.Core.SmokeTests/QuantityCalculationSettingsCardinalitySmokeRegistration.cs`
+- `scripts/preflight-quantity-settings-cardinality.py`
+- this claim file
 
-## Contract
+## Implemented contract
 
-- Define one explicit maximum observed category-code universe large enough for current QS3D/native + imported BLT-compatible settings while keeping directed-matrix work bounded.
-- Reject `CategoryRules` beyond that category-universe bound before deeper processing.
-- Reject `IntersectionRules` beyond the corresponding maximum directed-pair count before deeper processing.
-- While validating directed rules, track the union of every source/target code together with `CategoryRules` and fail as soon as the observed universe exceeds the bound.
-- Unknown non-negative integer category codes remain supported inside the bound; no enum cast or alias inference is introduced.
-- Valid current/default payloads and existing 28-code imported-style matrices remain accepted.
+- `QuantityCalculationSettings.MaxObservedCategoryCodeCount` is explicitly bounded at 256 distinct observed category codes.
+- `MaxDirectedIntersectionRuleCount` is the corresponding 65,536 directed-pair ceiling.
+- `NormalizeAndValidate()` rejects oversized `CategoryRules` and `IntersectionRules` before traversing those collections.
+- Validation tracks the union of category-rule codes plus every intersection Source/Target and fails closed as soon as the distinct observed universe exceeds 256, so later matrix diagnostics cannot allocate an unbounded observed-code cross product.
+- Duplicate directed pairs now use an exact packed `(Source, Target)` `long` key instead of allocating composite strings; direction remains significant.
+- Unknown non-negative integer codes remain exact and supported inside the bound, including values outside the native `ElementCategory` enum. No enum cast or alias inference was introduced.
 
-## Excluded scope
+## Regression coverage
 
-- No edits to Quantity Settings WPF or `QuantitySettingsStore.cs`; the active create-missing-rule UI claim and local recovery/build lanes own those surfaces.
-- No changes to `QuantityCalculationMatrixDiagnostics`, deduction arithmetic, CAD/BREP geometry, reporting totals, Ribbon/Start Center, updater/release or GitHub Actions.
-- No lowering of existing finite/range/duplicate/schema validation.
+- Current/default settings remain valid.
+- A full 28-code imported-style directed matrix (784 rules) remains valid.
+- Exact unknown integer codes including `1301` and `int.MaxValue` remain valid and directional.
+- Exactly 256 observed category codes remain valid.
+- 257 category rules fail closed.
+- 65,537 intersection rules fail through the early collection-count guard.
+- A sparse intersection list with only 129 rules but 258 distinct observed codes fails through the distinct-universe guard.
+- Focused static preflight pins both early count guards, incremental observed-code guarding, exact pair-key semantics and the no-enum-inference/no-payload-mutation boundary.
 
-## Validation plan
+## Product integration
 
-- New deterministic Core smoke proves current default settings remain valid, a 28-code full directed matrix remains valid, exact unknown integer codes remain valid, category-rule overflow fails, directed-rule-count overflow fails, and sparse intersection rules with too many distinct observed codes fail before diagnostics can construct an unbounded cross product.
-- Focused static preflight pins explicit limits, early count guards, incremental observed-code guarding, and forbids enum casts or automatic rule/category synthesis.
-- Re-fetch current `main` immediately before each write and preserve concurrent winners without force push.
-- No GitHub Actions dispatch; no native-runtime PASS claim is needed for this Core-only boundary.
+- Claim registration: `83b4ef19c4e731329674cf5e7bee7c8d53ec0b47`.
+- PR: `#531` — `fix(quantity): bound settings matrix cardinality`.
+- Squash merge on `main`: `09e3749a856b8d246f46f42e121289df5f3ecb8f`.
+- The implementation branch was refreshed with current `main` through a merge commit before PR merge after direct fast-forward attempts correctly failed when concurrent agents advanced `main`; no force push was used and concurrent winners were preserved.
+
+## Validation actually performed
+
+- Re-fetched the final `QuantityCalculationSettings.cs` from post-merge `main`; its blob is `324a09ef6d5bba17d24e857884bf908ce368cc88` and contains the cardinality guards and exact pair key.
+- Re-fetched the final smoke source from post-merge `main`; its blob is `1a88e54697477994228fa30c8562565db08a918e` and contains all seven registered boundary scenarios.
+- Source/static review only in this remote session. The new smoke/preflight were not executed from a repository checkout here, so no execution PASS is claimed.
+- No GitHub Actions or release workflow was dispatched. No licensed BricsCAD V25 runtime PASS is claimed or required for this Core-only source boundary.
 
 ## Coordination
 
-The active Quantity Settings create-rule UI claim explicitly excludes Core quantity settings models/arithmetic, so this reservation is non-overlapping. Existing health/diagnostic, deduction-planner and clone-validation claims are completed. This lane does not touch other active ownership, material, grid, persistence or UI claims.
+The concurrent Quantity Settings create-rule UI lane owns WPF XAML/code-behind and explicitly excludes Core quantity models/arithmetic; no overlapping UI/store files were touched. Other concurrent ownership/material/grid/persistence/release work also remained untouched.
 
-## Completion condition
+## Remaining boundary
 
-Validated Quantity Settings have a documented finite cardinality boundary that prevents quadratic diagnostic/matrix memory amplification while retaining current/default and imported unknown-code behavior; deterministic smoke and source preflight are pushed to `main`, and this claim is marked `COMPLETED` with exact implementation SHAs.
+This hardening bounds imported/settings payload size only. Native CAD intersection measurement, face/contact classification, engulf behavior, overlap precedence and double-deduction prevention remain separate semantic/runtime work and must not be inferred from field names alone.
+
+## Completion
+
+Reservation released. Quantity Settings validation now prevents unbounded category-universe/matrix amplification while preserving current/default, 28-code imported-style and exact unknown integer-code behavior.
