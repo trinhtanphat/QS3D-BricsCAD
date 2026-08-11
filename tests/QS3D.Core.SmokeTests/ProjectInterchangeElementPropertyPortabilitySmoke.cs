@@ -15,7 +15,7 @@ namespace QS3D.Core.SmokeTests
             LegacyHandlePropertyIsAcceptedButNotMaterialized();
             AppendOnlyDoesNotRebindLegacyHandleProperty();
             KeepTargetDoesNotRebindLegacyHandleProperty();
-            FieldMergeReviewsDeletionButDoesNotAdoptLegacyHandleProperty();
+            FieldMergeDoesNotReviewOrAdoptLegacyHandleProperty();
         }
 
         private static void ExportOmitsElementHandleMetadataButKeepsFamilySemantics()
@@ -59,7 +59,7 @@ namespace QS3D.Core.SmokeTests
             AssertImportedElementIsPortable(target);
         }
 
-        private static void FieldMergeReviewsDeletionButDoesNotAdoptLegacyHandleProperty()
+        private static void FieldMergeDoesNotReviewOrAdoptLegacyHandleProperty()
         {
             var target = new ProjectState("FIELD-TARGET", "Target") { DrawingFingerprint = "field-target-fp" };
             var targetElement = new ProjectElement("E-1", ElementCategory.Beam);
@@ -79,21 +79,14 @@ namespace QS3D.Core.SmokeTests
                 x.Kind == InterchangeIdentityKind.Element &&
                 string.Equals(x.Id, "E-1", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(x.Field, "properties.SemanticMark", StringComparison.OrdinalIgnoreCase)));
-
-            var handleDecision = plan.FieldPlan.Decisions.Single(x =>
+            False(plan.FieldPlan.Decisions.Any(x =>
                 x.Kind == InterchangeIdentityKind.Element &&
-                string.Equals(x.Id, "E-1", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(x.Field, "properties.CadHandle", StringComparison.OrdinalIgnoreCase));
-            Equal(InterchangeFieldPrecedenceChoice.UseSource, handleDecision.Choice);
-            True(handleDecision.TargetHasValue);
-            Equal("TARGET-CAD", handleDecision.TargetValue);
-            False(handleDecision.SourceHasValue);
-            Equal(string.Empty, handleDecision.SourceValue);
+                string.Equals(x.Field, "properties.CadHandle", StringComparison.OrdinalIgnoreCase)));
 
             ProjectInterchangeFieldMergeImporter.Import(target, json, policy, plan.CreateAuthorization());
             var element = target.FindElement("E-1") ?? throw new InvalidOperationException("Field-merge target element disappeared.");
             Equal("SOURCE", element.Properties["SemanticMark"]);
-            False(element.Properties.ContainsKey("CadHandle"));
+            Equal("TARGET-CAD", element.Properties["CadHandle"]);
         }
 
         private static string LegacySourceJson()
