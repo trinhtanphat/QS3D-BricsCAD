@@ -16,6 +16,12 @@ def require(text: str, needle: str, label: str) -> None:
         raise AssertionError(f"missing {label}: {needle}")
 
 
+def file_removal_allowed(*, default_scope: bool, force: bool, identity_valid: bool) -> bool:
+    if not identity_valid:
+        return False
+    return default_scope or force
+
+
 def main() -> int:
     text = read(UNINSTALL)
 
@@ -52,8 +58,38 @@ def main() -> int:
     require(text, "QS3D uninstall committed, but cleanup of quarantine", "post-commit cleanup warning")
     require(text, "DemandLoad is removed and the canonical install path is no longer active", "logical commit semantics")
 
+    # File-removal ownership must remain fail closed even when -Force allows a custom path.
+    require(text, "Refusing to remove a custom install directory outside the QS3D LocalAppData scope", "custom-path guard")
+    require(text, "$metadataPath = Join-Path $installFull 'PACKAGE-METADATA.json'", "package metadata identity marker")
+    require(text, "$pluginPath = Join-Path $installFull 'QS3D.BricsCAD.V25.dll'", "plugin identity marker")
+    require(text, "$corePath = Join-Path $installFull 'QS3D.Core.dll'", "Core identity marker")
+    require(text, "canonical QS3D package identity files", "required identity files refusal")
+    require(text, "[Version]::Parse([string]$metadata.version)", "metadata AssemblyVersion parse")
+    require(text, "[Reflection.AssemblyName]::GetAssemblyName($identityPath).Version", "managed DLL AssemblyVersion read")
+    require(text, "[Diagnostics.FileVersionInfo]::GetVersionInfo($identityPath).ProductVersion", "managed DLL ProductVersion read")
+    require(text, "[StringComparison]::Ordinal", "exact ProductVersion identity")
+    require(text, "PACKAGE-METADATA/DLL identity is not a valid QS3D V25 installation", "strong identity refusal")
+    if "if (-not $ForceDelete) {\n        $metadataPath" in text:
+        raise AssertionError("-Force must never bypass uninstall package/DLL identity validation")
+
+    policy_cases = (
+        ({"default_scope": True, "force": False, "identity_valid": True}, True, "verified default install"),
+        ({"default_scope": True, "force": True, "identity_valid": True}, True, "verified default install with force"),
+        ({"default_scope": False, "force": False, "identity_valid": True}, False, "verified custom install without force"),
+        ({"default_scope": False, "force": True, "identity_valid": True}, True, "verified custom install with force"),
+        ({"default_scope": True, "force": False, "identity_valid": False}, False, "foreign default-scope directory"),
+        ({"default_scope": True, "force": True, "identity_valid": False}, False, "forced foreign default-scope directory"),
+        ({"default_scope": False, "force": True, "identity_valid": False}, False, "forced foreign custom directory"),
+    )
+    for kwargs, expected, label in policy_cases:
+        actual = file_removal_allowed(**kwargs)
+        if actual is not expected:
+            raise AssertionError(f"uninstall removal policy mismatch for {label}: expected {expected}, got {actual}")
+
     lock_pos = text.find("$updateMutex = Enter-Qs3dUpdateMutex")
     identity_pos = text.find("Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory")
+    identity_files_pos = text.find("$metadataPath = Join-Path $installFull 'PACKAGE-METADATA.json'")
+    identity_dll_pos = text.find("[Reflection.AssemblyName]::GetAssemblyName($identityPath).Version")
     plan_pos = text.find("$registryPlan = @()")
     snapshot_pos = text.find("$snapshot = Get-RegistryTreeSnapshot -Path $target.AppKey")
     stage_pos = text.find("Move-Item -LiteralPath $installFull -Destination $quarantine -ErrorAction Stop")
@@ -65,28 +101,25 @@ def main() -> int:
     cleanup_pos = text.find("Remove-Item -LiteralPath $quarantine -Recurse -Force -ErrorAction Stop")
     release_pos = text.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
     positions = (
-        lock_pos, identity_pos, plan_pos, snapshot_pos, stage_pos, tracked_pos,
+        lock_pos, identity_pos, identity_files_pos, identity_dll_pos, plan_pos, snapshot_pos, stage_pos, tracked_pos,
         remove_registry_pos, rollback_file_pos, rollback_registry_pos, rethrow_pos,
         cleanup_pos, release_pos,
     )
     if min(positions) < 0 or not (
-        lock_pos < identity_pos < plan_pos < snapshot_pos < stage_pos < tracked_pos < remove_registry_pos < cleanup_pos < release_pos
+        identity_files_pos < identity_dll_pos < lock_pos < identity_pos < plan_pos < snapshot_pos < stage_pos < tracked_pos < remove_registry_pos < cleanup_pos < release_pos
     ):
-        raise AssertionError("uninstall must lock/validate/plan+snapshot -> quarantine stage -> registry mutation -> post-commit cleanup -> release")
+        raise AssertionError("uninstall identity definition -> lock/validate -> plan+snapshot -> quarantine stage -> registry mutation -> post-commit cleanup -> release ordering is required")
     if not (remove_registry_pos < rollback_file_pos < rollback_registry_pos < rethrow_pos):
         raise AssertionError("failure path must restore canonical files before registry snapshots and then rethrow the original failure")
 
     require(text, "if (-not $KeepFiles)", "KeepFiles preservation")
-    require(text, "Refusing to remove a custom install directory outside the QS3D LocalAppData scope", "custom-path guard")
-    require(text, "PACKAGE-METADATA.json is not a valid QS3D V25 identity marker", "package identity guard")
     require(text, "if (Get-Process -Name bricscad -ErrorAction SilentlyContinue)", "all-BricsCAD closed precondition")
     require(text, "$UpdateMutexPrefix = 'Global\\QS3D-BricsCAD-V25-Update-'", "shared update mutex")
     if "Stop-Process" in text or "taskkill" in text or ".Kill(" in text:
         raise AssertionError("uninstaller must never force-terminate BricsCAD/processes")
 
     print(
-        "PASS: uninstall stages canonical files before registry mutation, snapshots full DemandLoad trees, "
-        "rolls back pre-commit failures, and treats post-commit quarantine deletion as residue cleanup."
+        "PASS: uninstall keeps package/DLL ownership fail closed even under -Force, uses force only for intentional custom-path scope, stages verified files before registry mutation, rolls back pre-commit failures, and treats post-commit quarantine deletion as residue cleanup."
     )
     return 0
 
