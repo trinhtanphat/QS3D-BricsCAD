@@ -116,7 +116,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     project.Metadata[RowCountKey] = semanticTable.Rows.Count.ToString(CultureInfo.InvariantCulture);
                     project.Metadata[ColumnCountKey] = semanticTable.Headers.Count.ToString(CultureInfo.InvariantCulture);
                     AuditTrail.ForProject(project).Record("BuildSemanticElementTable", string.Empty, "Generated native Table " + table.Handle + " from " + semanticTable.Rows.Count.ToString(CultureInfo.InvariantCulture) + " semantic elements.");
-                    project.Touch();
 
                     transaction.Commit();
                     committed = true;
@@ -158,7 +157,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     ErasePrevious(document, transaction, project);
                     foreach (var key in StateKeys) project.Metadata.Remove(key);
                     AuditTrail.ForProject(project).Record("RemoveSemanticElementTable", string.Empty, "Removed project-owned native semantic element Table metadata/entity.");
-                    project.Touch();
                     transaction.Commit();
                     committed = true;
                 }
