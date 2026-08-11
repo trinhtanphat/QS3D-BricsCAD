@@ -22,9 +22,11 @@ Create repository secret:
 
 - `BRICSCAD_V25_MSI_URL`: authorized HTTPS URL for the official BricsCAD V25 x64 MSI installer.
 
-Recommended repository variable:
+Create repository variable:
 
-- `BRICSCAD_V25_MSI_SHA256`: 64-hex SHA-256 of that exact MSI. When configured, the cloud workflow verifies the installer before extracting references.
+- `BRICSCAD_V25_MSI_SHA256`: **required** 64-hex SHA-256 of that exact MSI. The cloud workflow fails closed if the digest is missing/malformed and always verifies the downloaded installer before extracting compile references.
+
+When the authorized MSI changes, update the URL/digest pair together after independently obtaining the SHA-256 for that exact installer. Do not leave the digest blank to bypass pinning.
 
 Do not put a BricsCAD license key in the workflow. The cloud preview workflow does not launch BricsCAD and does not need runtime activation.
 
@@ -45,13 +47,14 @@ The workflow performs:
 3. Core Release build;
 4. deterministic Core smoke tests;
 5. download the authorized official V25 MSI;
-6. MSI administrative extraction on GitHub-hosted Windows;
-7. resolve `BrxMgd.dll` + `TD_Mgd.dll` only as compile references;
-8. build `QS3D.BricsCAD.V25.dll` x64/net48;
-9. package QS3D while excluding BricsCAD runtime assemblies;
-10. create SHA-256;
-11. upload Actions artifact;
-12. publish a GitHub prerelease.
+6. verify the downloaded MSI against the required pinned SHA-256;
+7. MSI administrative extraction on GitHub-hosted Windows;
+8. resolve `BrxMgd.dll` + `TD_Mgd.dll` only as compile references;
+9. build `QS3D.BricsCAD.V25.dll` x64/net48;
+10. package QS3D while excluding BricsCAD runtime assemblies;
+11. create SHA-256;
+12. upload Actions artifact;
+13. publish a GitHub prerelease.
 
 ## Runtime qualification
 
