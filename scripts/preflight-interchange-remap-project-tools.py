@@ -55,11 +55,13 @@ if not errors:
         "ownershipDiscarded != plan.OwnershipPropertiesToDiscard",
         "GeneratedHandleOwnershipPolicy.IsOwnerSlot(k)",
         "foreach (var family in source.Families)",
-        "LooksLikeUnregisteredSemanticReference(property.Key, property.Value)",
+        "ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key)",
+        "ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference)",
+        "EnsureFamilyPropertyRuntimeCompatible",
         "DrawingFingerprint = string.Empty",
     ]:
         if needle not in importer:
-            errors.append("Import As New executor missing Family/native-ownership safety contract: " + needle)
+            errors.append("Import As New executor missing Family/reference/native-ownership safety contract: " + needle)
 
 if errors:
     print("preflight-interchange-remap-project-tools: FAIL")
@@ -68,4 +70,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-project-tools: PASS")
-print("Project Tools exposes separate dry-run/apply Import As New actions and keeps runtime bounds, Family ref safety, and native-ownership stripping visible and source-guarded.")
+print("Project Tools exposes dry-run/apply Import As New; shared reference policy, runtime bounds, Family fail-closed checks and native-ownership stripping remain source-guarded.")
