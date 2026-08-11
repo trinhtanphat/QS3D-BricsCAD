@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -12,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             SetPropertyUsesCanonicalKeyAndGeometryDirtyPolicy();
             MultiplyNumericPropertyUsesCanonicalKey();
             CorruptProjectFailsBeforeBulkMutation();
+            IdBasedBulkEditsRejectIncompleteTargetSets();
+            FamilyAssignmentRejectsIncompatibleBatch();
         }
 
         private static void SetPropertyUsesCanonicalKeyAndGeometryDirtyPolicy()
@@ -65,6 +68,49 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => new BulkEditService().AssignFamily(project, new[] { wall.Id }, familyB.Id));
             if (wall.FamilyId != familyA.Id) throw new Exception("Rejected bulk family assignment must not partially mutate a target.");
+        }
+
+        private static void IdBasedBulkEditsRejectIncompleteTargetSets()
+        {
+            var project = new ProjectState("P-ID", "Bulk target identity");
+            var wall = new ProjectElement("W1", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            wall.Properties["WidthM"] = "0.2";
+            wall.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(wall);
+            var service = new BulkEditService();
+            var version = project.ChangeVersion;
+
+            Throws<KeyNotFoundException>(() => service.SetProperty(project, new[] { "W1", "W404" }, "WidthM", "0.25"));
+            if (wall.Properties["WidthM"] != "0.2" || project.ChangeVersion != version)
+                throw new Exception("Missing bulk target must reject the whole batch before mutation.");
+
+            Throws<ArgumentException>(() => service.SetProperty(project, new[] { "W1", "   " }, "WidthM", "0.25"));
+            if (wall.Properties["WidthM"] != "0.2" || project.ChangeVersion != version)
+                throw new Exception("Blank bulk target must reject the whole batch before mutation.");
+
+            Throws<InvalidOperationException>(() => service.SetProperty(project, new[] { "W1", "w1" }, "WidthM", "0.25"));
+            if (wall.Properties["WidthM"] != "0.2" || project.ChangeVersion != version)
+                throw new Exception("Duplicate bulk target must reject the whole batch before mutation.");
+        }
+
+        private static void FamilyAssignmentRejectsIncompatibleBatch()
+        {
+            var project = new ProjectState("P-CATEGORY", "Bulk family category atomicity");
+            var wallA = new ProjectFamily("FW-A", "Wall A", ElementCategory.ArchitecturalWall);
+            var wallB = new ProjectFamily("FW-B", "Wall B", ElementCategory.ArchitecturalWall);
+            var columnFamily = new ProjectFamily("FC", "Column", ElementCategory.Column);
+            project.Families.Add(wallA);
+            project.Families.Add(wallB);
+            project.Families.Add(columnFamily);
+            var wall = new ProjectElement("W1", ElementCategory.ArchitecturalWall, wallA.Id, string.Empty, string.Empty);
+            var column = new ProjectElement("C1", ElementCategory.Column, columnFamily.Id, string.Empty, string.Empty);
+            project.Elements.Add(wall);
+            project.Elements.Add(column);
+            var version = project.ChangeVersion;
+
+            Throws<InvalidOperationException>(() => new BulkEditService().AssignFamily(project, new[] { wall.Id, column.Id }, wallB.Id));
+            if (wall.FamilyId != wallA.Id || column.FamilyId != columnFamily.Id || project.ChangeVersion != version)
+                throw new Exception("Incompatible family assignment must reject the whole batch without silently skipping targets.");
         }
 
         private static void Throws<T>(Action action) where T : Exception
