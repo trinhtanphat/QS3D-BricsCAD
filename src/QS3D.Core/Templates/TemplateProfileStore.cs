@@ -173,6 +173,7 @@ namespace QS3D.Core.Templates
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Template path is required.", nameof(path));
             var document = LoadDocument(path);
             var root = document.Root ?? throw new InvalidDataException("Template has no root element.");
+            TemplateProfileXmlSchemaValidator.Validate(root);
             if (!string.Equals(root.Name.LocalName, "qs3dTemplate", StringComparison.Ordinal)) throw new InvalidDataException("Invalid QS3D template root.");
             var schema = Required(root, "schema");
             if (!string.Equals(schema, "1", StringComparison.Ordinal)) throw new InvalidDataException("Unsupported QS3D template schema: " + schema);
