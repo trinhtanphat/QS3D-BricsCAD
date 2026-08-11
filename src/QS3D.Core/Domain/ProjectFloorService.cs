@@ -49,6 +49,8 @@ namespace QS3D.Core.Domain
             var referencedElements = projectElements
                 .Where(x => ReferencesFloor(x, floor.Id))
                 .ToList();
+            if (elevationChanged)
+                ValidateVerticalReferencesForFloorElevation(project, referencedElements, floor.Id, elevationM);
             var referencedIds = new HashSet<string>(referencedElements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             var dependencyGraph = new DependencyGraph();
             dependencyGraph.Rebuild(projectElements);
@@ -234,6 +236,37 @@ namespace QS3D.Core.Domain
             var normalizedFloorId = floorId.Trim();
             return string.Equals(Property(element, BottomLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(Property(element, TopLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void ValidateVerticalReferencesForFloorElevation(ProjectState project, IEnumerable<ProjectElement> elements, string floorId, double elevationM)
+        {
+            foreach (var element in elements)
+            {
+                var bottomId = Property(element, BottomLevelIdKey);
+                var topId = Property(element, TopLevelIdKey);
+                var updatesBottom = string.Equals(bottomId, floorId, StringComparison.OrdinalIgnoreCase);
+                var updatesTop = string.Equals(topId, floorId, StringComparison.OrdinalIgnoreCase);
+                if (!updatesBottom && !updatesTop) continue;
+
+                double? bottomElevation = null;
+                if (bottomId.Length > 0)
+                {
+                    var bottom = FindRequired(project, bottomId);
+                    var baseElevation = updatesBottom ? elevationM : bottom.ElevationM;
+                    bottomElevation = AddFinite(baseElevation, LevelOffset(element, BottomLevelOffsetKey), element.Id + "/bottom level elevation");
+                }
+
+                double? topElevation = null;
+                if (topId.Length > 0)
+                {
+                    var top = FindRequired(project, topId);
+                    var baseElevation = updatesTop ? elevationM : top.ElevationM;
+                    topElevation = AddFinite(baseElevation, LevelOffset(element, TopLevelOffsetKey), element.Id + "/top level elevation");
+                }
+
+                if (bottomElevation.HasValue && topElevation.HasValue && topElevation.Value <= bottomElevation.Value)
+                    throw new InvalidOperationException("Floor elevation update would make Top Level not above Bottom Level for element " + element.Id + ".");
+            }
         }
 
         private static IReadOnlyList<ProjectElement> ResolveOwnedElements(ProjectState project, IEnumerable<ProjectElement> elements)
