@@ -25,6 +25,11 @@ namespace QS3D.BricsCAD.V25.Services
                 throw new InvalidOperationException(
                     operation + " target project is no longer the exact reviewed project. Run the command again.");
 
+            // Exact in-memory identity is not enough: an external process can replace/remove the
+            // authoritative .qsdb while the reviewed ProjectState remains cached. Every Interchange
+            // mutation using this helper must fail before mutation when that backing-store revision
+            // is no longer the one bound to the reviewed canonical project.
+            ProjectContextCoordinator.RequireBackingStoreUnchanged(document, currentProject, operation + " / exact target bind");
             return currentProject;
         }
     }
