@@ -78,37 +78,40 @@ namespace QS3D.Core.Persistence
         private static void ValidateCurrentPersistenceState(XElement root)
         {
             RequirePersistenceValue(root, "updatedUtc", "Project root");
+            RequireSingleContainer(root, "metadata");
+            RequireSingleContainer(root, "zones");
+            var floors = RequireSingleContainer(root, "floors");
+            RequireSingleContainer(root, "families");
+            RequireSingleContainer(root, "rules");
+            var elements = RequireSingleContainer(root, "elements");
+            var audit = RequireSingleContainer(root, "audit");
 
-            var floors = root.Element("floors");
-            if (floors != null)
-            {
-                foreach (var floor in floors.Elements("floor"))
-                    RequirePersistenceValue(floor, "elevationM", "Project floor");
-            }
+            foreach (var floor in floors.Elements("floor"))
+                RequirePersistenceValue(floor, "elevationM", "Project floor");
 
-            var elements = root.Element("elements");
-            if (elements != null)
+            foreach (var element in elements.Elements("element"))
             {
-                foreach (var element in elements.Elements("element"))
+                RequirePersistenceValue(element, "updatedUtc", "Project element");
+                RequirePersistenceValue(element, "dirty", "Project element");
+
+                var quantities = element.Element("quantities");
+                if (quantities != null)
                 {
-                    RequirePersistenceValue(element, "updatedUtc", "Project element");
-                    RequirePersistenceValue(element, "dirty", "Project element");
-
-                    var quantities = element.Element("quantities");
-                    if (quantities != null)
-                    {
-                        foreach (var quantity in quantities.Elements("q"))
-                            RequirePersistenceValue(quantity, "value", "Project quantity");
-                    }
+                    foreach (var quantity in quantities.Elements("q"))
+                        RequirePersistenceValue(quantity, "value", "Project quantity");
                 }
             }
 
-            var audit = root.Element("audit");
-            if (audit != null)
-            {
-                foreach (var auditEvent in audit.Elements("event"))
-                    RequirePersistenceValue(auditEvent, "utc", "Audit event");
-            }
+            foreach (var auditEvent in audit.Elements("event"))
+                RequirePersistenceValue(auditEvent, "utc", "Audit event");
+        }
+
+        private static XElement RequireSingleContainer(XElement root, string name)
+        {
+            var matches = root.Elements(name).Take(2).ToArray();
+            if (matches.Length != 1)
+                throw new InvalidDataException("QSDB requires exactly one " + name + " section.");
+            return matches[0];
         }
 
         private static void RequirePersistenceValue(XElement element, string attributeName, string owner)

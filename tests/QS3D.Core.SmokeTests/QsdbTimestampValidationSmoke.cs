@@ -10,6 +10,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RejectsMissingCurrentRootTimestamp();
+            RejectsMissingCurrentRootSection();
+            RejectsDuplicateCurrentRootSection();
             RejectsMissingCurrentFloorElevation();
             RejectsMissingCurrentElementTimestamp();
             RejectsMissingCurrentElementDirtyState();
@@ -23,6 +25,22 @@ namespace QS3D.Core.SmokeTests
         {
             WithProjectFile(
                 "<qs3d schema=\"3\" projectId=\"P1\" name=\"Missing root timestamp\" changeVersion=\"0\"><metadata/><zones/><floors/><families/><rules/><elements/><audit/></qs3d>",
+                path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
+        }
+
+        private static void RejectsMissingCurrentRootSection()
+        {
+            WithProjectFile(
+                "<qs3d schema=\"3\" projectId=\"P7\" name=\"Missing elements section\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"0\">" +
+                "<metadata/><zones/><floors/><families/><rules/><audit/></qs3d>",
+                path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
+        }
+
+        private static void RejectsDuplicateCurrentRootSection()
+        {
+            WithProjectFile(
+                "<qs3d schema=\"3\" projectId=\"P8\" name=\"Duplicate elements section\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"0\">" +
+                "<metadata/><zones/><floors/><families/><rules/><elements/><elements/><audit/></qs3d>",
                 path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
         }
 
