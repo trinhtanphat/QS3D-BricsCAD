@@ -25,10 +25,10 @@ else:
         "$signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid",
         "BricsCAD V25 MSI Authenticode signature is not valid",
         "New-Object -ComObject WindowsInstaller.Installer",
-        "WHERE `Property`='ProductVersion'",
+        "$database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')",
         "$productVersion -notmatch '^25\\.2\\.10(?:\\.|$)'",
         "Downloaded MSI is not the pinned BricsCAD V25.2.10 product.",
-        "WHERE `Property`='ProductName'",
+        "$database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')",
         "$productName -notmatch 'BricsCAD'",
         "([string]$metadata.productVersion).Trim()",
         "PACKAGE-METADATA productVersion must match source product version.",
@@ -40,7 +40,7 @@ else:
 
     hash_index = text.find("$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash")
     signature_index = text.find("$signature = Get-AuthenticodeSignature -FilePath $msi")
-    product_index = text.find("WHERE `Property`='ProductVersion'")
+    product_index = text.find("$database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')")
     extract_index = text.find("$process = Start-Process -FilePath msiexec.exe")
     if min(hash_index, signature_index, product_index, extract_index) < 0 or not hash_index < signature_index < product_index < extract_index:
         errors.append("cloud V25 workflow must calculate digest and verify valid Authenticode + V25.2.10 MSI identity before administrative extraction")
