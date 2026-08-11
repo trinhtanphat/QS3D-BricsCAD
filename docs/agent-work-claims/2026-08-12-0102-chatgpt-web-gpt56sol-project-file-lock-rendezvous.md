@@ -13,9 +13,10 @@ Harden `ProjectFileLock` release semantics so disposing one owner cannot unlink 
 ## Expected surfaces
 
 - `src/QS3D.Core/Persistence/ProjectFileLock.cs`
-- `tests/QS3D.Core.SmokeTests/Program.cs`
+- `tests/QS3D.Core.SmokeTests/ProjectFileLockSmoke.cs`
+- `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs`
 - `ProjectFileLock.Acquire(...)` / `ProjectFileLock.Dispose()`
-- Core smoke test `Project file lock`
+- Core smoke registration for project-file-lock rendezvous lifecycle
 
 ## Excluded scope
 
@@ -25,12 +26,12 @@ Harden `ProjectFileLock` release semantics so disposing one owner cannot unlink 
 ## Validation plan
 
 - Preserve exclusive contention behavior while one owner holds the lock.
-- Add a deterministic assertion that releasing an owner leaves the rendezvous `.lock` file in place, then reacquire through the same path.
+- Add a deterministic assertion that releasing an owner leaves the rendezvous `.lock` file in place, then reacquire through the same path and preserve contention.
 - Inspect the exact source/test diff on current `main`; use only source-level/Core evidence available remotely and do not claim BricsCAD runtime PASS.
 
 ## Coordination
 
-No indexed current claim or source search matched `ProjectFileLock` before registration. This lane is intentionally limited to the Core lock rendezvous lifecycle and excludes neighboring persistence/session lanes.
+No indexed current claim or source search matched `ProjectFileLock` before registration. This lane is intentionally limited to the Core lock rendezvous lifecycle and excludes neighboring persistence/session lanes. Smoke coverage is isolated in a dedicated registration module to avoid modifying the large legacy `Program.cs` surface.
 
 ## Completion condition
 
