@@ -13,8 +13,15 @@ namespace QS3D.BricsCAD.V25.Services
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             var readOnlyExportPreparation = string.Equals(operation, "QS3DED2", StringComparison.OrdinalIgnoreCase);
-            var readOnlyQuantityPreparation = readOnlyExportPreparation ||
-                string.Equals(operation, "QS3DBQ", StringComparison.OrdinalIgnoreCase);
+            var readOnlyBqPreparation = string.Equals(operation, "QS3DBQ", StringComparison.OrdinalIgnoreCase);
+            var readOnlyQuantityPreparation = readOnlyExportPreparation || readOnlyBqPreparation;
+
+            if (readOnlyBqPreparation && !ProjectContextCoordinator.TryGetReadOnly(document, out _))
+            {
+                document.Editor.WriteMessage("\nQS3DBQ: chưa có QS3D project hiện hữu; bảng tổng hợp chỉ đọc không tạo project mới.");
+                return false;
+            }
+
             if (CadUnitService.TryGetPolicy(document, out _, out var resolution))
             {
                 if (!readOnlyQuantityPreparation)
