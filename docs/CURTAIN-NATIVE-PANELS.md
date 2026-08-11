@@ -6,7 +6,7 @@ Updated: 2026-08-11 (UTC+7)
 
 This document defines the clean-room QS3D contract for panel-by-panel native glass inside the BricsCAD-hosted Curtain workflow.
 
-The repository source/static gate may prove that the ownership, planning, rollback, health and command wiring are present. It cannot prove BricsCAD `Solid3d` geometry, nested-transaction behavior, opening clearance, selection/Locate, Undo, or save/reopen behavior. Those rows remain `LOCAL-002 / PENDING_LOCAL` until a licensed BricsCAD V25 run records sanitized evidence against one clean exact SHA.
+The repository source/static gate may prove that the ownership, planning, rollback, health and command wiring are present. It cannot prove BricsCAD `Solid3d` geometry, nested-transaction behavior, opening clearance, selection/Locate, Undo, or save/reopen behavior. Each row remains `LOCAL-002 / PENDING_LOCAL` until a licensed BricsCAD V25 run records sanitized evidence against one clean exact SHA. P01 now has such a bounded runtime result; it does not promote the remaining matrix or overall LOCAL-002 status.
 
 Do not report `LOCAL_PASS`, production qualification, or BLT parity from a Core smoke test or Python preflight.
 
@@ -85,7 +85,7 @@ Run on one clean, final merged SHA and one DLL built from that exact SHA. Record
 
 | Case | Minimum scenario | Required result/evidence | Status before local run |
 |---|---|---|---|
-| P01 | LINE GlassWall, multiple grid cells, no opening | backing host + frame + panel layers are distinct; panel count/geometry/ownership agree | PENDING_LOCAL |
+| P01 | LINE GlassWall, multiple grid cells, no opening | backing host + frame + panel layers are distinct; panel count/geometry/ownership agree | LOCAL_PASS at `3da7b20013233a71eb174c77e87d4618b370ebd4` (bounded basic case only) |
 | P02 | LINE with Door/WallOpening fully and partially intersecting cells | no panel crosses the opening; positive fragments only; full-cover either records an explicit healthy complete-empty state or refuses before replacement according to the final source contract | PENDING_LOCAL |
 | P03 | open straight-segment POLYLINE | station-mapped panel fragments follow every path segment; owner resolves to one GlassWall | PENDING_LOCAL |
 | P04 | open bulged WCS-XY POLYLINE | bounded tessellated fragments follow the configured sagitta contract; no unbounded growth | PENDING_LOCAL |
@@ -99,6 +99,10 @@ Run on one clean, final merged SHA and one DLL built from that exact SHA. Record
 | P12 | two open DWGs with modeless Curtain Hub | command and refresh remain bound to the intended active DWG/project | PENDING_LOCAL |
 
 For every case record before/after aggregate native counts, semantic `ChangeVersion`/stale state, result code and relevant health-code set. Screenshots may remain local; if a sanitized summary is committed, it must be tied to the exact SHA and must not contain customer content.
+
+### P01 sanitized local evidence
+
+At exact clean SHA `3da7b20013233a71eb174c77e87d4618b370ebd4`, the exact x64 Release adapter (`C2A0E60131B6A2E348728937C0EF47E549AB26D028F3B69CE48CBA686B6FE2A6`) ran on BricsCAD `25.2.10` against an ordinary disposable copy of the repository-generated sample. `QS3DDRAWGLASSWALL` plus `QS3DCURTAIN3D` produced one backing host, ten frame solids and fifteen panel solids. The panel metadata count was also fifteen; source/host/frame/panel ownership sets were disjoint; Core, live-fingerprint and native-marker panel health had zero blocking issues; and selecting one generated panel resolved to exactly one canonical GlassWall owner. The disposable DWG hash remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E` before and after, no QSDB sidecar remained, and the launched BricsCAD process was cleaned up. This result covers only the P01 positive LINE/no-opening cell. It does not cover panel bounds by independent measurement, opening clipping, path/bulge geometry, failure injection, Undo, save/reopen or multi-DWG behavior; P02-P12 and overall LOCAL-002 therefore remain pending.
 
 ## Non-goals
 
