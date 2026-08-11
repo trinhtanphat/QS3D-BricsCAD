@@ -24,7 +24,7 @@ This is the Core contract intended for later dependency-impact visualization/fil
 
 `QS3D.Core.Review.PreviewReviewSnapshotService` and `PreviewReviewSnapshotStore` provide a portable review artifact for the existing Quantity Rule Preview and Regeneration Preview pipelines.
 
-- format: `QS3D.PreviewReviewSnapshot` v1;
+- format remains `QS3D.PreviewReviewSnapshot` v1;
 - named snapshot with project ID, source `ChangeVersion`, operation kind, scope, targets, review rows, and summary counts;
 - supports both `QuantityRuleProjectPreview` and `RegenerationPreview`;
 - subset regeneration targets remain explicit and canonical;
@@ -32,7 +32,10 @@ This is the Core contract intended for later dependency-impact visualization/fil
 - load verifies fingerprint and semantic invariants and fails closed on tampering;
 - XML loading prohibits DTD resolution and caps input at 16 MiB;
 - save uses the existing `AtomicFileCommit` replacement path with backup;
-- CAD-handle fields are filtered from regeneration review content and forbidden on load, so the team-review artifact does not become a raw CAD-handle export;
+- explicit handle-bearing fields are filtered from regeneration review content;
+- `Property:*` rows reuse `ProjectInterchangeElementPropertyPolicy.IsPortable(...)`, so Interchange and Preview Review share one authority for generated owner slots, `Generated*` / `QS3D.Generated*` metadata, `PhysicalOpeningCut*` drawing-local state, Room boundary-source handles, and other handle-bearing properties;
+- the same portability boundary is enforced by `ValidateSnapshot(...)` and `PreviewReviewSnapshotStore.Load(...)`, so an older/tampered v1 artifact containing a now-forbidden drawing-local/native field is rejected rather than silently accepted;
+- the persisted/API field name `OmittedHandleFieldCount` remains unchanged for v1 compatibility; its count now covers all drawing-local/native fields omitted by the shared portability policy, not only fields whose names literally contain `Handle`;
 - creating/saving a review snapshot does not apply the preview or mutate the project.
 
 ## Source regression contracts
@@ -45,7 +48,8 @@ Added source smoke coverage for:
 - quantity review snapshot round-trip;
 - regeneration subset-scope preservation;
 - fingerprint tamper rejection;
-- CAD-handle field injection rejection.
+- explicit handle-field injection rejection;
+- nonportable generated stale-snapshot property injection rejection at the XML load boundary.
 
 Added Core-only preflight gates:
 
@@ -65,5 +69,7 @@ The new contracts are review/read-only infrastructure. They do not automatically
 ## Still LOCAL_ONLY / not qualified by this batch
 
 This batch does not claim or replace local qualification for BricsCAD V25 compile/NETLOAD, private DWG behavior, native geometry/boolean ownership, multi-document runtime behavior, HiDPI/runtime performance, engineering-standard rebar approval, Authenticode signing, installer, or clean-machine release qualification.
+
+The portability hardening itself is a Core artifact-validation change and does not introduce a new native execution scenario, so it does not create a duplicate LOCAL_ONLY queue item.
 
 No GitHub Actions run is required to land this source-only contract; runtime truth remains governed by the existing local qualification handoff.

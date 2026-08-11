@@ -646,7 +646,7 @@ namespace QS3D.Core.Export
         private static void ApplySourcePortableProperties(ProjectElement element, IReadOnlyDictionary<string, string> sourceProperties)
         {
             var desired = element.Properties
-                .Where(x => IsGeneratedOwnershipMetadata(x.Key))
+                .Where(x => !ProjectInterchangeElementPropertyPolicy.IsPortable(x.Key))
                 .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
             foreach (var property in sourceProperties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
                 desired[property.Key] = property.Value ?? string.Empty;
