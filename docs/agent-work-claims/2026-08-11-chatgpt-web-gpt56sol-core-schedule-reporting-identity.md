@@ -1,6 +1,6 @@
 # Work claim — Core schedule reporting identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-core-schedule-reporting-identity`
 - Registered: `2026-08-11T20:20:00+07:00`
 - Baseline main SHA: `6d02aa12d792c16597dc4ac7c7f749e333c10a9f`
@@ -35,6 +35,18 @@ Unify the project-element identity boundary used by Core schedule reporting. Mat
 
 The active Core mutation-atomicity claim owns persistence/mutation hardening and is explicitly excluded here. The active Room Auto regeneration lane is also excluded. The previous repository-audit reporting-identity claim is `COMPLETED`; this claim is narrower and limited to Core schedule builders. UI/modeless schedule surfaces are not reserved by this lane.
 
+## Completion
+
+- PR: `#450` — `fix(reporting): fail closed on duplicate schedule element identities`
+- Reviewed feature head before squash: `7c1387c3fcbfc0bbb244bf858c9f56d094b08ee3`
+- Squash merge on `main`: `2b15723bc8670d9ce8e8ead967718ec1bd0eaea7`
+- Added `ReportingProjectIdentityGuard` and applied it before aggregation in Material Usage, Curtain Wall, Door/Opening and Room Finish schedule builders.
+- Added and registered `ScheduleReportingIdentitySmoke` covering exact duplicate IDs, case-variant duplicates and a valid unique-ID semantic project.
+- Final reviewed feature diff was 7 files / 96 additions / 0 deletions; the four existing schedule builders each changed by one guard call only.
+- Concurrent `main` changes were compared before merge and did not overlap the reserved source/test surfaces.
+- GitHub Actions/build/release were not dispatched for this lane.
+- No native BricsCAD V25/WPF runtime PASS is claimed.
+
 ## Completion condition
 
-A single intentional Core reporting identity contract is applied to the targeted schedule builders, focused smoke coverage guards the behavior, the change is merged onto current `main` without overwriting concurrent work, and this claim is marked `COMPLETED` with exact implementation commits and no false runtime/CI claim.
+Satisfied by PR `#450` and merge `2b15723bc8670d9ce8e8ead967718ec1bd0eaea7`: a single intentional Core reporting identity contract is applied to the targeted schedule builders, focused smoke coverage guards the behavior, the change is merged onto `main` without overwriting concurrent work, and this claim is closed without a false runtime/CI claim.
