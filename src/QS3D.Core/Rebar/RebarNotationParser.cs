@@ -14,8 +14,7 @@ namespace QS3D.Core.Rebar
         public static IReadOnlyList<RebarGroup> Parse(string notation)
         {
             if (string.IsNullOrWhiteSpace(notation)) throw new ArgumentException("Rebar notation is required.", nameof(notation));
-            var normalized = notation.Replace(" ", string.Empty);
-            var parts = normalized.Split(new[] { '+' }, StringSplitOptions.None);
+            var parts = notation.Split(new[] { '+' }, StringSplitOptions.None);
             var result = new List<RebarGroup>(parts.Length);
             foreach (var raw in parts)
             {
