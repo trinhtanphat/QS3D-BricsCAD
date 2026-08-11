@@ -37,17 +37,14 @@ namespace QS3D.BricsCAD.V25
                 var arcSagitta = previewProject == null ? 0.002d : MetadataNumber(previewProject, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d);
                 var splineChord = previewProject == null ? 0.02d : MetadataNumber(previewProject, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d);
                 var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance, splineChord);
-                if (segments.Count == 0)
-                {
-                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chọn LINE, POLYLINE, ARC hoặc SPLINE plan-view tạo biên phòng.");
-                    return;
-                }
-
                 var minimumArea = previewProject == null ? 0.5d : MetadataNonNegative(previewProject, "RoomBoundaryMinimumAreaM2", 0.5d);
-                var boundaries = new RoomBoundaryEngine().Discover(segments, tolerance, minimumArea);
+                var diagnostic = new RoomBoundaryDiagnosticService().Analyze(segments, tolerance, minimumArea);
+                var boundaries = diagnostic.AcceptedBoundaries;
                 if (boundaries.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chưa phát hiện face kín hợp lệ trong selection.");
+                    var detail = FormatRoomBoundaryDiagnostic(diagnostic);
+                    document.Editor.WriteMessage("\nQS3DROOMAUTO: " + detail);
+                    PaletteCoordinator.SetStatus("Room Auto: " + detail);
                     return;
                 }
 
@@ -183,6 +180,23 @@ namespace QS3D.BricsCAD.V25
             {
                 document.Editor.WriteMessage("\nQS3DROOMAUTO error: " + ex.Message);
                 PaletteCoordinator.SetStatus("QS3DROOMAUTO lỗi: " + ex.Message);
+            }
+        }
+
+        private static string FormatRoomBoundaryDiagnostic(RoomBoundaryDiagnosticReport diagnostic)
+        {
+            switch (diagnostic.Reason)
+            {
+                case RoomBoundaryDiagnosticReason.NoInput:
+                    return "không có boundary segment hợp lệ; chọn LINE, POLYLINE, ARC hoặc SPLINE plan-view tạo biên phòng.";
+                case RoomBoundaryDiagnosticReason.InsufficientSegments:
+                    return "chỉ đọc được " + diagnostic.InputSegmentCount + " boundary segment hợp lệ; cần ít nhất 3 segment để tạo face kín.";
+                case RoomBoundaryDiagnosticReason.NoClosedFace:
+                    return "đã đọc " + diagnostic.InputSegmentCount + " segment từ " + diagnostic.UniqueSourceCount + " nguồn nhưng không hình thành face kín; kiểm tra gap, giao cắt, đường hở và tính đồng phẳng của boundary.";
+                case RoomBoundaryDiagnosticReason.BelowMinimumArea:
+                    return "phát hiện " + diagnostic.CandidateBoundaryCount + " face topology nhưng tất cả đều không vượt ngưỡng RoomBoundaryMinimumAreaM2=" + diagnostic.MinimumArea.ToString("0.###", CultureInfo.InvariantCulture) + " m²; face lớn nhất=" + diagnostic.MaxCandidateArea.ToString("0.###", CultureInfo.InvariantCulture) + " m².";
+                default:
+                    return "không phát hiện Room boundary được chấp nhận.";
             }
         }
 
