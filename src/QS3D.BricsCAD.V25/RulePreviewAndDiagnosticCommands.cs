@@ -23,7 +23,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!TryGetReadOnlyProject(document, "Rule Preview", out var project)) return;
                 var preview = new QuantityRulePreviewService().PreviewProject(project);
                 var status = "Rule Preview: " + preview.ChangedElementCount + " cấu kiện • " +
                     preview.ChangeCount + " thay đổi • chỉ xem trước, chưa áp dụng.";
@@ -42,7 +42,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!TryGetReadOnlyProject(document, "Regen Preview", out var project)) return;
                 var preview = new RegenerationPreviewService().Preview(project);
                 ReportRegenerationPreview(document, preview, "Project");
             }
@@ -59,7 +59,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!TryGetReadOnlyProject(document, "Regen Preview Selection", out var project)) return;
                 var elementIds = ResolveSelectedSemanticIds(document, project);
                 if (elementIds.Count == 0)
                 {
@@ -83,7 +83,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!TryGetReadOnlyProject(document, "Dependency Impact", out var project)) return;
                 var elementIds = ResolveSelectedSemanticIds(document, project);
                 if (elementIds.Count == 0)
                 {
@@ -126,7 +126,7 @@ namespace QS3D.BricsCAD.V25
                 var dialog = CreateReviewDialog(document, "rule-review");
                 if (dialog.ShowDialog() != true) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!TryGetReadOnlyProject(document, "Rule Preview Export", out var project)) return;
                 var preview = new QuantityRulePreviewService().PreviewProject(project);
                 var snapshot = new PreviewReviewSnapshotService().Create(SnapshotName(dialog.FileName, "Rule Review"), preview);
                 new PreviewReviewSnapshotStore().Save(snapshot, dialog.FileName);
@@ -148,7 +148,7 @@ namespace QS3D.BricsCAD.V25
                 var dialog = CreateReviewDialog(document, "regen-review");
                 if (dialog.ShowDialog() != true) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!TryGetReadOnlyProject(document, "Regen Preview Export", out var project)) return;
                 var preview = new RegenerationPreviewService().Preview(project);
                 var snapshot = new PreviewReviewSnapshotService().Create(SnapshotName(dialog.FileName, "Regen Review"), preview);
                 new PreviewReviewSnapshotStore().Save(snapshot, dialog.FileName);
@@ -170,7 +170,7 @@ namespace QS3D.BricsCAD.V25
                 var dialog = CreateReviewDialog(document, "regen-selection-review");
                 if (dialog.ShowDialog() != true) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!TryGetReadOnlyProject(document, "Regen Selection Review Export", out var project)) return;
                 var elementIds = ResolveSelectedSemanticIds(document, project);
                 if (elementIds.Count == 0)
                 {
@@ -196,10 +196,8 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var issues = new ComprehensiveModelHealthService().Inspect(project);
                 var drawingName = string.IsNullOrWhiteSpace(document.Name)
-                    ? project.Name
+                    ? "QS3D"
                     : Path.GetFileNameWithoutExtension(document.Name);
                 var dialog = new SaveFileDialog
                 {
@@ -212,14 +210,24 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
+                if (!TryGetReadOnlyProject(document, "Diagnostic Summary", out var project)) return;
+                var issues = new ComprehensiveModelHealthService().Inspect(project);
                 ProjectDiagnosticSummaryExporter.Export(dialog.FileName, project, issues);
-                Report(document, "Diagnostic Summary: " + issues.Count + " health issue • " + Path.GetFileName(dialog.FileName));
+                FinalizeExportUi(document, "Diagnostic Summary: " + issues.Count + " health issue • " + Path.GetFileName(dialog.FileName));
                 try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true }); } catch { }
             }
             catch (System.Exception ex)
             {
                 Report(document, "QS3DDIAGSUMMARY lỗi: " + ex.Message);
             }
+        }
+
+        private static bool TryGetReadOnlyProject(Document document, string operation, out ProjectState project)
+        {
+            if (ProjectContextCoordinator.TryGetReadOnly(document, out project)) return true;
+            project = null!;
+            Report(document, operation + ": chưa có QS3D project hiện hữu; chưa tạo project mới.");
+            return false;
         }
 
         private static IReadOnlyList<string> ResolveSelectedSemanticIds(Document document, ProjectState project)
@@ -263,9 +271,15 @@ namespace QS3D.BricsCAD.V25
 
         private static void ReportReviewExport(Document document, PreviewReviewSnapshot snapshot, string path)
         {
-            Report(document,
+            FinalizeExportUi(document,
                 "Preview Review: " + snapshot.Kind + " • " + snapshot.Scope + " • " + snapshot.ChangedElementCount +
                 " cấu kiện • fingerprint " + snapshot.Fingerprint.Substring(0, 12) + " • " + Path.GetFileName(path));
+        }
+
+        private static void FinalizeExportUi(Document document, string status)
+        {
+            try { PaletteCoordinator.SetStatus(status); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + status); } catch { }
         }
 
         private static void Report(Document document, string status)
