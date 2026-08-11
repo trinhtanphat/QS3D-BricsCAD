@@ -8,12 +8,13 @@
 
 ## Reserved scope
 
-Qualify the existing LOCAL-013 eligible-CAD B4D → newly generated ED2 workbook → Excel Locate lane on an exact clean candidate SHA. The runtime matrix covers one positive locate plus wrong drawing fingerprint, unknown semantic Element ID, zero-live stale Handle and partial-live Handle refusal, with exact PICKFIRST preservation and authoritative semantic-project non-mutation for every refusal.
+Qualify the existing LOCAL-013 eligible-CAD B4D → newly generated ED2 workbook → Excel Locate lane on an exact clean candidate SHA. The runtime matrix covers one positive locate plus wrong drawing fingerprint, unknown semantic Element ID, zero-live stale Handle and partial-live Handle refusal, with exact PICKFIRST preservation and authoritative semantic-project non-mutation for every refusal. Keep the umbrella source gate aligned with the shared resolver boundary so exact qualification cannot fail on a stale file-local token check.
 
 ## Expected surfaces
 
 - `scripts/test-bricscad-v25-brc-quantity-roundtrip.ps1` execution against a new ordinary `*.reference-copy.dwg` only.
 - `QS3DB4D`, `QS3DBRCROUNDTRIPPROBE` and the shared modern ED2 Excel Locate resolver already present on the candidate SHA.
+- `scripts/preflight.py` only for the minimal shared-resolver drawing-identity assertion required by the exact qualification runner.
 - Gitignored private runtime artifacts under a new temporary run root; only sanitized aggregate marker/metadata may inform documentation.
 - `docs/LOCAL-AGENT-INBOX.md` LOCAL-013 exact-SHA evidence/status and this claim file for close-out.
 

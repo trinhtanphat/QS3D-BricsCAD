@@ -13,6 +13,7 @@ Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane:
 ## Expected surfaces
 
 - `src/QS3D.BricsCAD.V25/CreateSimilarCommands.cs` (new command surface, exact name may be adjusted only if an existing canonical command file is discovered during source orientation)
+- `src/QS3D.BricsCAD.V25/ActiveFamilyQuickDrawCommands.cs` only for one shared read-only support predicate so Create Similar can reject unsupported categories before changing Active Family instead of duplicating the dispatcher category list
 - existing semantic ownership / Family activation services only if a small reusable helper is required; no new parallel ownership model
 - `scripts/preflight-create-similar.py`
 - `docs/DIRECT-DRAW-CREATE-SIMILAR-2026-08-11.md`
@@ -36,7 +37,7 @@ Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane:
 
 ## Coordination
 
-The repository-wide registration-protocol bootstrap explicitly excludes QS3D product source changes, and the Workspace multi-selection policy lane has separate reserved files. This lane does not overlap either. If a new overlapping Direct Draw or selection-ownership claim appears after this reservation is pushed, stop and re-scope before implementation.
+The repository-wide registration-protocol bootstrap explicitly excludes QS3D product source changes, the generated-native source-recognition lane explicitly excludes Create Similar command-side ownership, and the Workspace multi-selection policy lane is complete. This lane does not overlap those scopes. If a new overlapping Direct Draw or selection-ownership claim appears after this reservation is pushed, stop and re-scope before implementation.
 
 ## Completion condition
 
