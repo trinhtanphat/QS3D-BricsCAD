@@ -56,8 +56,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void LoadColumnPreferences()
         {
-            var project = ProjectContextCoordinator.GetOrCreate(_document);
-            var hasSaved = project.Metadata.TryGetValue(TemplateProfileStore.VisibleBqColumnsKey, out var raw) && !string.IsNullOrWhiteSpace(raw);
+            var hasSaved = ProjectContextCoordinator.TryGetReadOnly(_document, out var project) &&
+                           project.Metadata.TryGetValue(TemplateProfileStore.VisibleBqColumnsKey, out var raw) &&
+                           !string.IsNullOrWhiteSpace(raw);
             var visible = hasSaved
                 ? new HashSet<string>(raw!.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(ColumnKeys, StringComparer.OrdinalIgnoreCase);
@@ -84,7 +85,8 @@ namespace QS3D.BricsCAD.V25.UI
             for (var index = 0; index < QuantityGrid.Columns.Count && index < ColumnKeys.Length; index++)
                 if (QuantityGrid.Columns[index].Visibility == Visibility.Visible) visible.Add(ColumnKeys[index]);
 
-            var project = ProjectContextCoordinator.GetOrCreate(_document);
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng bảng BQ và mở lại trước khi đổi cấu hình cột.");
             var rollback = ProjectStateSnapshot.Capture(project);
             try
             {
