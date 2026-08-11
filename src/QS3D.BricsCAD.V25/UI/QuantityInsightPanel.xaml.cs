@@ -73,7 +73,7 @@ namespace QS3D.BricsCAD.V25.UI
                 QuantityTree.Visibility = rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
                 _viewModel.Status = rows.Count == 0
                     ? "Project hiện chưa có dòng khối lượng. Preview-regenerate " + regenerated.ToString("N0") + " lượt trên snapshot tách rời."
-                    : "Read-only • preview-regenerate " + regenerated.ToString("N0") + " lượt trên snapshot tách rời • nhấp đúp để định vị.";
+                    : "Read-only • preview-regenerate " + regenerated.ToString("N0") + " lượt • click dòng cấu kiện để reveal trong View 3D.";
                 ApplySelectionHighlights(project, false);
             }
             catch (Exception ex)
@@ -215,8 +215,16 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnLocateClick(object sender, RoutedEventArgs e) => LocateSelected();
 
+        private void OnQuantityTreeSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (AutoRevealCheck?.IsChecked != true) return;
+            if (!(e.NewValue is QuantityInsightItemViewModel)) return;
+            LocateSelected();
+        }
+
         private void OnQuantityTreeDoubleClick(object sender, MouseButtonEventArgs e)
         {
+            if (AutoRevealCheck?.IsChecked == true) return;
             if (QuantityTree.SelectedItem is QuantityInsightItemViewModel) LocateSelected();
         }
 
