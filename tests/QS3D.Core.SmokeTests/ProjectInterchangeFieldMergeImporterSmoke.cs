@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             TargetRevisionChangeRejectsReviewedAuthorization();
             SourceSnapshotChangeRejectsReviewedAuthorization();
             GeneratedHandleChangeRejectsReviewedAuthorization();
+            CleanupReportingUsesRequiredSemantics();
             SourceOnlyIdentityBlocksExecution();
             FamilyReassignmentPreservesTargetPropertiesWhenRequested();
         }
@@ -92,6 +93,30 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectInterchangeFieldMergeImporter.Import(target, json, policy, authorization));
             Equal("TARGET", target.FindElement("E-1")!.Properties["Mark"]);
             Equal("BB22", target.FindElement("E-1")!.Properties["GeneratedSolidHandle"]);
+        }
+
+        private static void CleanupReportingUsesRequiredSemantics()
+        {
+            var target = BuildTarget();
+            var element = target.FindElement("E-1")!;
+            element.Properties["GeneratedSolidHandle"] = "AA11";
+            target.Metadata[ProjectInterchangeFieldMergeImporter.LastTargetGeneratedHandlesCleanedKey] = "legacy-stale";
+            var source = BuildSource("SOURCE");
+            var policy = MixedPolicy();
+            var json = ProjectInterchangeJsonExporter.Build(source);
+            var plan = ProjectInterchangeFieldMergeImporter.Plan(target, json, policy);
+            True(plan.RequiresNativeCleanup);
+            Equal(1, plan.TargetGeneratedHandlesToClean);
+
+            var result = ProjectInterchangeFieldMergeImporter.Import(target, json, policy, plan.CreateAuthorization());
+
+            Equal(1, result.NativeCleanupHandlesRequired);
+#pragma warning disable CS0618
+            Equal(1, result.TargetGeneratedHandlesCleaned);
+#pragma warning restore CS0618
+            Equal("1", target.Metadata[ProjectInterchangeFieldMergeImporter.LastNativeCleanupHandlesRequiredKey]);
+            True(!target.Metadata.ContainsKey(ProjectInterchangeFieldMergeImporter.LastTargetGeneratedHandlesCleanedKey));
+            True(!element.Properties.ContainsKey("GeneratedSolidHandle"));
         }
 
         private static void SourceOnlyIdentityBlocksExecution()
