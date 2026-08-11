@@ -48,9 +48,9 @@ Before `new-v25-update-manifest.ps1` publishes the whole-archive SHA-256, the ca
 
 ### Customer release / strict SemVer — `scripts/preflight-customer-release.py`
 
-The product `<Version>` values in the V25 plugin and Core projects are release identities, not arbitrary strings. `package-v25.ps1` validates both as strict SemVer before creating distribution output, then requires them to match and preserves the existing exact `RELEASE_TAG == v<productVersion>` binding. Core numeric components therefore cannot contain leading zeroes, prerelease/build dot identifiers cannot be empty, and numeric prerelease identifiers cannot contain leading zeroes.
+The product `<Version>` values in the V25 plugin and Core projects are release identities, not arbitrary strings. `package-v25.ps1` validates both as strict SemVer before creating distribution output, then requires exact **ordinal/case-sensitive** equality and preserves an exact ordinal `RELEASE_TAG == v<productVersion>` binding. Core numeric components therefore cannot contain leading zeroes, prerelease/build dot identifiers cannot be empty, numeric prerelease identifiers cannot contain leading zeroes, and case-only changes such as `preview` versus `PREVIEW` are not silently treated as the same release identity.
 
-The customer-release preflight carries deterministic valid/invalid SemVer cases, validates the current project versions independently, checks that the strict parser remains wired into both project-version reads, and verifies that both manual release workflows execute aggregate preflight and `package-v25.ps1` before their GitHub release/prerelease publication step. The workflow regexes remain an early shape check; the package/preflight boundary is the semantic authority.
+The customer-release preflight carries deterministic valid/invalid SemVer and exact-case identity cases, validates the current project versions independently, checks that the strict parser and ordinal comparisons remain wired into both project-version reads/tag binding, and verifies that both manual release workflows execute aggregate preflight and `package-v25.ps1` before their GitHub release/prerelease publication step. The workflow regexes remain an early shape check; the package/preflight boundary is the semantic authority.
 
 ## Command/UI wiring
 
