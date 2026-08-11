@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             BulgeDirectionMirrors();
             CurvedRoomBoundary();
             LargeRadiusTinySagittaHonorsLimit();
+            ExtremeFiniteBulgeAvoidsIntermediateOverflow();
             InvalidCoordinatesRejected();
             InvalidBulgeToleranceRejected();
         }
@@ -154,6 +155,17 @@ namespace QS3D.Core.SmokeTests
         {
             Throws<InvalidOperationException>(() => BulgeArcTessellator.Tessellate(
                 new Point2(-1e12, 0), new Point2(1e12, 0), 1d, 1e-6d));
+        }
+
+        private static void ExtremeFiniteBulgeAvoidsIntermediateOverflow()
+        {
+            var start = new Point2(-1d, 0d);
+            var end = new Point2(1d, 0d);
+            var points = BulgeArcTessellator.Tessellate(start, end, 1e200d, 1e200d);
+            True(points.Count > 2 && points.Count <= 4097);
+            Equal(start, points[0]);
+            Equal(end, points[points.Count - 1]);
+            True(points.All(point => !double.IsNaN(point.X) && !double.IsInfinity(point.X) && !double.IsNaN(point.Y) && !double.IsInfinity(point.Y)));
         }
 
         private static void InvalidCoordinatesRejected()
