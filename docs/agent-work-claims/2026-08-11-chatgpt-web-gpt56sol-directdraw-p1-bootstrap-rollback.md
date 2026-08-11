@@ -1,0 +1,21 @@
+# Agent work claim — Direct Draw P1 bootstrap rollback
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `ACTIVE`
+- Scope: source-safe transactional cleanup of projectless Direct Draw P1 attempts when capture or nested QS3DBUILD3D/native validation fails.
+- Files reserved:
+  - `src/QS3D.BricsCAD.V25/DirectDrawP1Commands.cs`
+  - `scripts/preflight-directdraw-p1-bootstrap-rollback.py`
+  - this claim file for close-out
+- Problem: P1 `Execute` has the same outer transaction ownership gap proven in P0: it may bootstrap project context before CAD source/capture/nested Build3D, but failure rollback only erases CAD and restores `ProjectState`, leaving a newly-created project cached.
+- Intended contract:
+  - determine project ownership before `ResolveForMutation` / `GetOrCreate`;
+  - preserve existing-project context on failure;
+  - after existing CAD + semantic rollback, forget only a project context bootstrapped by this P1 attempt;
+  - cleanup still occurs before rollback-error aggregation;
+  - success keeps intentional bootstrap;
+  - nested Build3D, prompt freshness, generated-ownership and UI behavior remain unchanged.
+- Non-overlap: excludes P0, Opening/Window/ReferenceWall, Ribbon, Quantity, WPF, XData-tokenization and LOCAL_ONLY V25 execution.
+- Validation: exact diff/source review plus auto-discovered static preflight; no GitHub Actions under `continue all`.
+- Completion condition: failed projectless P1 cannot leave a cached QS3D project and claim closes with exact source/test SHAs.

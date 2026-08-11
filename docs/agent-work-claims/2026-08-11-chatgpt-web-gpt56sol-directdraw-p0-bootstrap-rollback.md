@@ -2,20 +2,24 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11 (UTC+7)
-- Status: `ACTIVE`
+- Completed: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
 - Scope: source-safe transactional cleanup of a projectless Direct Draw P0 authoring attempt when later CAD/semantic/native build work fails.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/DirectDrawCommands.cs`
   - `scripts/preflight-directdraw-p0-bootstrap-rollback.py`
   - this claim file for close-out
-- Problem: `ExecuteDirect` resolves/bootstraps the QS3D project before source creation. On a projectless DWG, later capture/regeneration/native-build failure erases CAD and restores `ProjectState`, but the outer Direct Draw transaction currently leaves the newly-created project cached. Semantic capture cannot clean it because by then Direct Draw has already created the context.
-- Intended contract:
-  - detect whether the preview/mutation starts from an existing project before `ResolveForMutation` / `GetOrCreate`;
-  - preserve existing-project rollback and context;
-  - on failed projectless Direct Draw, perform existing CAD + semantic rollback then forget only the project context bootstrapped by this authoring attempt;
-  - cleanup must still happen when CAD/semantic rollback reports secondary errors;
+- Problem fixed: `ExecuteDirect` resolved/bootstrapped the QS3D project before source creation. On a projectless DWG, later capture/regeneration/native-build failure erased CAD and restored `ProjectState`, but the outer Direct Draw transaction left the newly-created project cached. Semantic capture could not clean it because Direct Draw had already created the context.
+- Implemented contract:
+  - Direct Draw records whether project context existed before mutation, using preview identity when present and read-only lookup for the fallback path;
+  - project ownership is determined before `ResolveForMutation` / `GetOrCreate`;
+  - existing-project failures preserve the project context and existing CAD/semantic rollback behavior;
+  - failed projectless P0 authoring performs CAD cleanup and semantic snapshot restore, then `ProjectContextCoordinator.Forget(document)`;
+  - project cleanup runs before rollback-error aggregation, so a newly bootstrapped context is released even when CAD/semantic rollback reports a secondary error;
   - successful Direct Draw keeps its intentionally bootstrapped project;
-  - no Direct Draw prompt/default/routing/native geometry behavior changes.
-- Non-overlap: excludes Ribbon, Quantity, WPF, generated-XData tokenization, P1/opening/window/reference-wall files, and LOCAL_ONLY V25 execution.
-- Validation: exact source/diff review plus auto-discovered static preflight. No GitHub Actions under `continue all`.
-- Completion condition: failed P0 projectless Direct Draw cannot leave a cached QS3D project; regression guard exists; claim is `COMPLETED` with exact SHAs.
+  - no prompt/default/routing/native builder/UI-finalization semantics changed.
+- Source commit: `d89a5fec2f1d7191e12e261c8e5f0fe17d3304ce` (`fix(authoring): roll back failed P0 bootstrap`).
+- Regression guard commit: `42f2a4a3c10342bc95be2cb2a92d55855cb32486` (`test(authoring): guard P0 bootstrap rollback`).
+- Validation: exact source commit diff contains only the ownership detection and conditional failure cleanup; current `main` source was re-read after the commits and retains the contract. `scripts/preflight-directdraw-p0-bootstrap-rollback.py` follows the existing auto-discovered `preflight-*.py` convention. No GitHub Actions were dispatched and no BricsCAD V25 runtime PASS is claimed.
+- LOCAL_ONLY: no new local-only scenario was introduced; exact native rollback proof remains inside the existing V25 qualification boundary.
+- Handoff: reservation released; future agents may edit these files after re-checking current `main` and active claims.
