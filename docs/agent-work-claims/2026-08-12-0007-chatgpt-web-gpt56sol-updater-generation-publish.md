@@ -16,6 +16,7 @@ The dispatcher callback created by `Publish(...)` also has no generation guard. 
 
 - `src/QS3D.BricsCAD.V25/Updates/UpdateCoordinator.cs`
 - `scripts/preflight-update-generation-publish.py` (new)
+- `scripts/preflight-update-coordinator-lifecycle.py` (reconcile existing lifecycle gate with the new atomic publication contract; preserve all existing stopped/schedule assertions)
 - `docs/UPDATER-GENERATION-PUBLISH-PLAN-2026-08-12.md` (new)
 - this claim file
 
@@ -23,6 +24,7 @@ The dispatcher callback created by `Publish(...)` also has no generation guard. 
 
 - Preserve current release selection, strict SemVer, signed-manifest pre-close validation, stopped-refresh behavior, in-flight single-flight semantics, cross-process update reservation, graceful host close and updater worker contracts.
 - Do not edit `SecureUpdateLauncher.cs`, `GitHubReleaseClient.cs`, installer/uninstaller scripts, manifest generation, release workflow, or unrelated product surfaces.
+- The lifecycle gate edit is compatibility reconciliation only: retain its existing Stop/restart, stopped manual refresh and lock-linearized schedule authorization checks while replacing assertions that require the now-removed split `IsGenerationCurrent(...)` + `Publish(...)` pattern.
 - No GitHub Actions dispatch and no release publication.
 
 ## Intended contract
@@ -37,6 +39,7 @@ The dispatcher callback created by `Publish(...)` also has no generation guard. 
 
 - Commit a planning MD before implementation.
 - Add an auto-discovered static regression pinning atomic generation publication and dispatcher revalidation, while rejecting the old split `IsGenerationCurrent(...)` + `Publish(...)` pattern in lifecycle-owned call sites.
-- Re-fetch exact source/gate and verify ancestry with `behind_by: 0` before closing.
+- Reconcile `preflight-update-coordinator-lifecycle.py` so the existing lifecycle regression keeps checking stopped-refresh and scheduling authorization but recognizes the atomic generation publisher.
+- Re-fetch exact source/gates and verify ancestry with `behind_by: 0` before closing.
 - BricsCAD V25 runtime behavior remains `LOCAL-009 / PENDING_LOCAL`; do not claim remote runtime PASS.
-- Mark this claim `COMPLETED` only after source + regression gate are committed on `main`.
+- Mark this claim `COMPLETED` only after source + regression gates are committed on `main`.
