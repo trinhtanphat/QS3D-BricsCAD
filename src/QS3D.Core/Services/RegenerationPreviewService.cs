@@ -56,16 +56,20 @@ namespace QS3D.Core.Services
     {
         public RegenerationPreview Preview(ProjectState project)
         {
-            return PreviewInternal(project, Array.Empty<string>());
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var sourceChangeVersion = project.ChangeVersion;
+            return PreviewInternal(project, Array.Empty<string>(), sourceChangeVersion);
         }
 
         public RegenerationPreview PreviewSubset(ProjectState project, IEnumerable<string> elementIds)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            var targets = CanonicalPreviewTargets(elementIds, project.Elements.Count);
+            var sourceChangeVersion = project.ChangeVersion;
+            var sourceElementCount = project.Elements.Count;
+            var targets = CanonicalPreviewTargets(elementIds, sourceElementCount);
             if (targets.Count == 0) throw new ArgumentException("Subset regeneration preview requires at least one target element id.", nameof(elementIds));
-            return PreviewInternal(project, targets);
+            return PreviewInternal(project, targets, sourceChangeVersion);
         }
 
         public RegenerationGuardedApplyResult Apply(ProjectState project, RegenerationPreview preview)
@@ -112,10 +116,11 @@ namespace QS3D.Core.Services
             }
         }
 
-        private RegenerationPreview PreviewInternal(ProjectState project, IReadOnlyList<string> targets)
+        private RegenerationPreview PreviewInternal(ProjectState project, IReadOnlyList<string> targets, long sourceChangeVersion)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var sourceChangeVersion = project.ChangeVersion;
+            if (project.ChangeVersion != sourceChangeVersion)
+                throw new InvalidOperationException("Project changed while regeneration preview scope was being established; recompute preview.");
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var revisions = new RevisionService();
             var health = new ModelHealthBaselineService();
