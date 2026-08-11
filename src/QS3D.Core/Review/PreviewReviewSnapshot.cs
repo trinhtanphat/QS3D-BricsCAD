@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using QS3D.Core.Export;
 using QS3D.Core.Persistence;
 using QS3D.Core.Rules;
 using QS3D.Core.Services;
@@ -96,6 +97,8 @@ namespace QS3D.Core.Review
 
     public sealed class PreviewReviewSnapshotService
     {
+        private const string PropertyFieldPrefix = "Property:";
+
         public const string FormatName = "QS3D.PreviewReviewSnapshot";
         public const int FormatVersion = 1;
 
@@ -165,7 +168,7 @@ namespace QS3D.Core.Review
                 {
                     if (field == null) throw new InvalidOperationException("Regeneration preview contains a null field delta.");
                     var fieldName = CanonicalRequired(field.Field, "regeneration preview field");
-                    if (IsHandleField(fieldName))
+                    if (!IsPortableReviewField(fieldName))
                     {
                         omittedHandles++;
                         continue;
@@ -210,6 +213,14 @@ namespace QS3D.Core.Review
         internal static bool IsHandleField(string field)
         {
             return !string.IsNullOrWhiteSpace(field) && field.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        internal static bool IsPortableReviewField(string field)
+        {
+            if (string.IsNullOrWhiteSpace(field)) return true;
+            if (IsHandleField(field)) return false;
+            if (!field.StartsWith(PropertyFieldPrefix, StringComparison.OrdinalIgnoreCase)) return true;
+            return ProjectInterchangeElementPropertyPolicy.IsPortable(field.Substring(PropertyFieldPrefix.Length));
         }
 
         internal static string ComputeFingerprint(PreviewReviewSnapshot snapshot)
@@ -275,7 +286,7 @@ namespace QS3D.Core.Review
                 if (entry == null) throw new InvalidOperationException("Preview review contains a null entry.");
                 CanonicalRequired(entry.ElementId, "preview review entry element id");
                 CanonicalRequired(entry.Change, "preview review entry change");
-                if (IsHandleField(entry.Field)) throw new InvalidOperationException("Preview review artifacts cannot contain CAD handle fields: " + entry.Field + ".");
+                if (!IsPortableReviewField(entry.Field)) throw new InvalidOperationException("Preview review artifacts cannot contain drawing-local/native fields: " + entry.Field + ".");
                 var rowKey = entry.ElementId + "\u001f" + entry.Field;
                 if (!seenRows.Add(rowKey)) throw new InvalidOperationException("Preview review contains a duplicate element/field row: " + entry.ElementId + "/" + entry.Field + ".");
                 changedElements.Add(entry.ElementId);
@@ -428,7 +439,7 @@ namespace QS3D.Core.Review
                 var category = Value(node, "category");
                 var change = CanonicalRequired(node, "change");
                 var field = Value(node, "field");
-                if (PreviewReviewSnapshotService.IsHandleField(field)) throw new InvalidDataException("Preview review file contains a forbidden CAD handle field: " + field + ".");
+                if (!PreviewReviewSnapshotService.IsPortableReviewField(field)) throw new InvalidDataException("Preview review file contains a forbidden drawing-local/native field: " + field + ".");
                 var key = elementId + "\u001f" + field;
                 if (!seenRows.Add(key)) throw new InvalidDataException("Duplicate preview review element/field row: " + elementId + "/" + field + ".");
                 entries.Add(new PreviewReviewEntry(elementId, category, change, field, Value(node, "before"), Value(node, "after"), Value(node, "beforeProvenance"), Value(node, "afterProvenance")));
