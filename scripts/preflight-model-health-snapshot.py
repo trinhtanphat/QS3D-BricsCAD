@@ -11,20 +11,30 @@ if not WINDOW.is_file():
 else:
     text = WINDOW.read_text(encoding="utf-8")
     required = (
-        "private readonly ProjectState _projectAtOpen;",
+        "private readonly string _projectIdAtOpen;",
+        "private readonly DateTime _updatedUtcAtOpen;",
+        "private readonly long _changeVersionAtOpen;",
+        "private readonly string _drawingFingerprintAtOpen;",
         "private bool _staleSnapshot;",
-        "_projectAtOpen = ProjectContextCoordinator.GetOrCreate(_document);",
+        "_projectIdAtOpen = projectAtOpen.ProjectId;",
+        "_changeVersionAtOpen = projectAtOpen.ChangeVersion;",
         "Activated += (_, __) => RefreshSnapshotFreshness();",
         "EnsureActiveAndCurrent();",
-        "var current = ProjectContextCoordinator.GetOrCreate(_document);",
-        "ReferenceEquals(current, _projectAtOpen)",
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var current)",
+        "MatchesSnapshot(current)",
+        "current.ChangeVersion == _changeVersionAtOpen",
         "IssueGrid.IsEnabled = false;",
         "SNAPSHOT ĐÃ CŨ",
         "QS3DHEALTH hoặc QS3DHEALTHALL",
     )
     for token in required:
         if token not in text:
-            errors.append("ModelHealthWindow missing stale-snapshot token: " + token)
+            errors.append("ModelHealthWindow missing stale-snapshot stamp token: " + token)
+
+    if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
+        errors.append("Model Health freshness checks are read-only and must not create/cache project state")
+    if "private readonly ProjectState _projectAtOpen;" in text:
+        errors.append("Model Health must store immutable snapshot stamps instead of retaining a stale ProjectState instance")
 
     ensure_pos = text.find("private void EnsureActiveAndCurrent()")
     refresh_pos = text.find("RefreshSnapshotFreshness();", ensure_pos)
@@ -41,4 +51,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Model Health snapshots fail closed after project reload/replacement and cannot execute stale Locate callbacks")
+print("[PASS] Model Health stores immutable semantic snapshot stamps, rechecks current state read-only, and blocks stale Locate callbacks")
