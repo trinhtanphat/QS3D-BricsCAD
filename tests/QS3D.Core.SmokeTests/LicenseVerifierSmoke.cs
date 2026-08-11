@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             TamperedLicenseFailsSignature();
             ProductAndTimeWindowsAreEnforced();
             FeatureDelimiterIsRejected();
+            CanonicalTokenWhitespaceIsRejected();
             DtdLicenseIsRejected();
         }
 
@@ -60,6 +61,21 @@ namespace QS3D.Core.SmokeTests
             var license = License();
             license.Features.Add("admin,review");
             Throws<InvalidDataException>(() => license.CanonicalPayload());
+        }
+
+        private static void CanonicalTokenWhitespaceIsRejected()
+        {
+            var leadingScalar = License();
+            leadingScalar.LicenseId = " LIC-001";
+            Throws<InvalidDataException>(() => leadingScalar.CanonicalPayload());
+
+            var trailingScalar = License();
+            trailingScalar.Nonce = "nonce-001 ";
+            Throws<InvalidDataException>(() => trailingScalar.CanonicalPayload());
+
+            var paddedFeature = License();
+            paddedFeature.Features.Add(" admin ");
+            Throws<InvalidDataException>(() => paddedFeature.CanonicalPayload());
         }
 
         private static void DtdLicenseIsRejected()
