@@ -135,8 +135,8 @@ namespace QS3D.Core.Documentation
             var categorySet = new HashSet<ElementCategory>(normalized.Categories);
             var ids = candidates
                 .Where(x => categorySet.Count == 0 || categorySet.Contains(x.Category))
-                .Where(x => normalized.FloorId.Length == 0 || string.Equals(x.FloorId, normalized.FloorId, StringComparison.OrdinalIgnoreCase))
-                .Where(x => normalized.ZoneId.Length == 0 || string.Equals(x.ZoneId, normalized.ZoneId, StringComparison.OrdinalIgnoreCase))
+                .Where(x => normalized.FloorId.Length == 0 || string.Equals((x.FloorId ?? string.Empty).Trim(), normalized.FloorId, StringComparison.OrdinalIgnoreCase))
+                .Where(x => normalized.ZoneId.Length == 0 || string.Equals((x.ZoneId ?? string.Empty).Trim(), normalized.ZoneId, StringComparison.OrdinalIgnoreCase))
                 .Where(x => include.Count == 0 || include.Contains(x.Id))
                 .Where(x => !exclude.Contains(x.Id))
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
