@@ -239,31 +239,93 @@
 
                 <TabItem Header="🛠  Cài đặt nhà phát triển">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <Grid Margin="18">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="240" />
-                                <ColumnDefinition Width="150" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
+                        <StackPanel Margin="18">
+                            <Border Background="#17150E" BorderBrush="#5A4821" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+                                <TextBlock Text="⚠ Các ngưỡng nội bộ của engine tính khối lượng — chỉ chỉnh khi hiểu rõ tác động."
+                                           Foreground="#F1BD55" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            </Border>
 
-                            <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Dung sai cốp pha (mm)" /><TextBox x:Name="FormworkToleranceBox" Grid.Row="0" Grid.Column="1" /><TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Dung sai hình học khi nhận diện/so khớp bề mặt." />
-                            <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Offset bê tông lót (mm)" /><TextBox x:Name="BlindingConcreteOffsetBox" Grid.Row="1" Grid.Column="1" /><TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Khoảng bù phục vụ lớp bê tông lót." />
-                            <TextBlock Grid.Row="2" Style="{StaticResource FieldLabel}" Text="Diện tích trừ tối thiểu (mm²)" /><TextBox x:Name="MinSubtractAreaBox" Grid.Row="2" Grid.Column="1" /><TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Bỏ qua giao cắt có diện tích nhỏ hơn ngưỡng." />
-                            <TextBlock Grid.Row="3" Style="{StaticResource FieldLabel}" Text="Diện tích cốp pha tối thiểu (mm²)" /><TextBox x:Name="MinFormworkAreaBox" Grid.Row="3" Grid.Column="1" /><TextBlock Grid.Row="3" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Bỏ qua mặt cốp pha quá nhỏ." />
-                            <TextBlock Grid.Row="4" Style="{StaticResource FieldLabel}" Text="Thể tích bê tông tối thiểu (m³)" /><TextBox x:Name="MinConcreteVolumeBox" Grid.Row="4" Grid.Column="1" /><TextBlock Grid.Row="4" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng nhiễu cho thể tích bê tông." />
-                            <TextBlock Grid.Row="5" Style="{StaticResource FieldLabel}" Text="Tỷ lệ bao phủ tương đối (%)" /><TextBox x:Name="EngulfRelPercentBox" Grid.Row="5" Grid.Column="1" /><TextBlock Grid.Row="5" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng tương đối khi xét bao phủ/giao nhau." />
-                            <TextBlock Grid.Row="6" Style="{StaticResource FieldLabel}" Text="Diện tích bao phủ tối thiểu (mm²)" /><TextBox x:Name="EngulfMinAreaBox" Grid.Row="6" Grid.Column="1" /><TextBlock Grid.Row="6" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng tuyệt đối cho kiểm tra bao phủ." />
-                            <TextBlock Grid.Row="7" Style="{StaticResource FieldLabel}" Text="Lấp khe Phòng (mm)" /><TextBox x:Name="RoomGapFillBox" Grid.Row="7" Grid.Column="1" /><TextBlock Grid.Row="7" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Khoảng hở nhỏ được phép nối khi dò biên phòng." />
-                            <TextBlock Grid.Row="8" Style="{StaticResource FieldLabel}" Text="Bán kính tìm Phòng (mm)" /><TextBox x:Name="RoomSearchRadiusBox" Grid.Row="8" Grid.Column="1" /><TextBlock Grid.Row="8" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Giới hạn tìm kiếm hình học phòng." />
-                            <TextBlock Grid.Row="9" Style="{StaticResource FieldLabel}" Text="Màu kích thước (#RRGGBB)" /><TextBox x:Name="DimColorBox" Grid.Row="9" Grid.Column="1" /><TextBlock Grid.Row="9" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Màu annotation/kích thước do engine sinh." />
-                            <TextBlock Grid.Row="10" Style="{StaticResource FieldLabel}" Text="Chiều cao chữ kích thước" /><TextBox x:Name="DimTextHeightBox" Grid.Row="10" Grid.Column="1" /><TextBlock Grid.Row="10" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Chiều cao chữ theo đơn vị bản vẽ." />
-                        </Grid>
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="📎 Thông số engine chung" Foreground="#8DB8F0" FontWeight="SemiBold" Margin="0,0,0,5" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Khoảng văng Cốp pha / Tolerance (mm)" />
+                                    <TextBox x:Name="FormworkToleranceBox" Grid.Row="0" Grid.Column="1" />
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Dung sai hình học khi nhận diện/so khớp bề mặt." />
+                                    <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Offset bê tông lót ra ngoài mép móng (mm)" />
+                                    <TextBox x:Name="BlindingConcreteOffsetBox" Grid.Row="1" Grid.Column="1" />
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Khoảng bù phục vụ lớp bê tông lót." />
+                                </Grid>
+                            </StackPanel>
+
+                            <Separator Background="#263247" Margin="0,1,0,10" />
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="♟ Ngưỡng lọc khối lượng (bỏ qua mảnh nhỏ hơn ngưỡng)" Foreground="#8DB8F0" FontWeight="SemiBold" Margin="0,0,0,5" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Diện tích tấm TRỪ (giao) tối thiểu (mm²)" />
+                                    <TextBox x:Name="MinSubtractAreaBox" Grid.Row="0" Grid.Column="1" />
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Bỏ qua giao cắt có diện tích nhỏ hơn ngưỡng." />
+                                    <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Diện tích tấm cốp pha CÒN LẠI tối thiểu (mm²)" />
+                                    <TextBox x:Name="MinFormworkAreaBox" Grid.Row="1" Grid.Column="1" />
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Bỏ qua mặt cốp pha quá nhỏ." />
+                                    <TextBlock Grid.Row="2" Style="{StaticResource FieldLabel}" Text="Thể tích bê tông tối thiểu (m³)" />
+                                    <TextBox x:Name="MinConcreteVolumeBox" Grid.Row="2" Grid.Column="1" />
+                                    <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng nhiễu cho thể tích bê tông." />
+                                </Grid>
+                            </StackPanel>
+
+                            <Separator Background="#263247" Margin="0,1,0,10" />
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="◖ Ngưỡng ‘nuốt’ tấm trừ (tránh trừ lặp khi một tấm nằm trong tấm khác)" Foreground="#8DB8F0" FontWeight="SemiBold" Margin="0,0,0,5" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Tỷ lệ lệch tối đa so với diện tích tấm (%)" />
+                                    <TextBox x:Name="EngulfRelPercentBox" Grid.Row="0" Grid.Column="1" />
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng tương đối khi xét bao phủ/giao nhau." />
+                                    <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Sàn tuyệt đối tối thiểu (mm²)" />
+                                    <TextBox x:Name="EngulfMinAreaBox" Grid.Row="1" Grid.Column="1" />
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Ngưỡng tuyệt đối cho kiểm tra bao phủ." />
+                                </Grid>
+                            </StackPanel>
+
+                            <Separator Background="#263247" Margin="0,1,0,10" />
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="⌂ Pick Room (pick biên phòng trong View 3D)" Foreground="#8DB8F0" FontWeight="SemiBold" Margin="0,0,0,5" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Tự động vá (fill) khe hở ≤ (mm)" />
+                                    <TextBox x:Name="RoomGapFillBox" Grid.Row="0" Grid.Column="1" />
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Khoảng hở nhỏ được phép nối khi dò biên phòng." />
+                                    <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Bán kính quét quanh điểm pick (mm)" />
+                                    <TextBox x:Name="RoomSearchRadiusBox" Grid.Row="1" Grid.Column="1" />
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Giới hạn tìm kiếm hình học phòng." />
+                                </Grid>
+                            </StackPanel>
+
+                            <Separator Background="#263247" Margin="0,1,0,10" />
+                            <StackPanel>
+                                <TextBlock Text="◇ Nhãn kích thước (Dim) khi Diễn giải khối lượng" Foreground="#8DB8F0" FontWeight="SemiBold" Margin="0,0,0,5" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Màu dim (nét + chữ) #RRGGBB" />
+                                    <TextBox x:Name="DimColorBox" Grid.Row="0" Grid.Column="1" />
+                                    <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Margin="14,4,0,4" VerticalAlignment="Center">
+                                        <Border Width="28" Height="24" CornerRadius="3" BorderBrush="#7188A7" BorderThickness="1"
+                                                Background="{Binding Text, ElementName=DimColorBox}" />
+                                        <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Text="Xem trước màu hiện tại; giá trị chỉ được lưu khi #RRGGBB hợp lệ." />
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Cỡ chữ dim (px)" />
+                                    <TextBox x:Name="DimTextHeightBox" Grid.Row="1" Grid.Column="1" />
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource FieldHint}" Text="Chiều cao chữ theo đơn vị bản vẽ/annotation hiện hành." />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
                     </ScrollViewer>
                 </TabItem>
             </TabControl>
