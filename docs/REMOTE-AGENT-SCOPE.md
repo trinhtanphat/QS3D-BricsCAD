@@ -12,6 +12,10 @@ Tasks that require a real BricsCAD V25 / Windows workstation are **LOCAL_ONLY**.
 
 Remote agents must not repeatedly re-audit, re-run, re-open or re-report these gates during normal `continue all`, broad source review, planning or implementation passes. Park them in the inbox and continue with source-safe work.
 
+If a remote/non-local agent cannot execute or prove a task because it lacks a required local machine, licensed BricsCAD V25 runtime, private DWG/fixture, Windows UI, signing credential, hardware, installed dependency, or another non-repository prerequisite, that inability is itself a **mandatory Markdown handoff condition**. The agent must record or update the exact actionable scenario in `docs/LOCAL-AGENT-INBOX.md` before ending the batch, including prerequisites, expected result and minimum evidence. It must not leave the blocker only in chat.
+
+Once such a task is parked in `docs/LOCAL-AGENT-INBOX.md`, later remote/non-local agents must read and skip that execution gate instead of rediscovering, re-auditing, re-running or repeatedly reporting the same inability. They may update it only when current source materially changes the required local scenario or when they add a concrete source-side prerequisite/probe that reduces the local work. Local-capability gaps belong to compatible local agents, not a chain of equivalent remote retries.
+
 The purpose of this rule is to stop remote reviews from spending time rediscovering the same environment boundary and to keep runtime truth tied to the machine that can actually prove it.
 
 ## Current remote completion snapshot
