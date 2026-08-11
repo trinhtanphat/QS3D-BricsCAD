@@ -280,8 +280,10 @@ if commands.exists():
     if "CadUnitService.GetDrawingUnit(doc)" not in text: errors.append("BQ snapshot fallback still assumes millimeters")
     if "GetLiveSolidHandles" not in text or "liveGeneratedSolids" not in text: errors.append("QS3DHEALTH must verify generated Solid3d liveness")
     if "QS3DED2" not in text or "QS3DEXCELLOCATE" not in text or "XlsxHandleReader.ReadHandleLookup" not in text: errors.append("ED2 Excel/Handle round-trip workflow missing")
+    locate_service = ROOT / "src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs"
+    identity_text = text + (locate_service.read_text(encoding="utf-8") if locate_service.exists() else "")
     for needle in ("DrawingFingerprint", "Excel drawing fingerprint does not match", "Type YES"):
-        if needle not in text: errors.append("ED2 drawing-identity guard missing: " + needle)
+        if needle not in identity_text: errors.append("ED2 drawing-identity guard missing: " + needle)
 
 review_commands = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
 snapshot_reader = ROOT / "src/QS3D.BricsCAD.V25/Cad/EntitySnapshotReader.cs"
