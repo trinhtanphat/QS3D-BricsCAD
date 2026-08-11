@@ -142,6 +142,9 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             lock (_sync)
             {
+                if (!_started)
+                    return Task.FromResult(_last);
+
                 var generation = _generation;
                 if (_inFlight != null && !_inFlight.IsCompleted && _inFlightGeneration == generation)
                     return _inFlight;
