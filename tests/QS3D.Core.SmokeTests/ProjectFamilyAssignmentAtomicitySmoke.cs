@@ -10,6 +10,8 @@ namespace QS3D.Core.SmokeTests
         {
             DuplicatePreviousFamilyBlocksWholeAssignmentBatch();
             DuplicatePreviousFamilyBlocksBulkEditBatch();
+            DanglingPreviousFamilyBlocksWholeAssignmentBatch();
+            DanglingPreviousFamilyBlocksBulkEditBatch();
             CorruptProjectElementListBlocksPropertyPropagationBeforeMutation();
             CorruptProjectElementListBlocksFamilyDeleteBeforeMutation();
             UndefinedProjectFamilyCategoryFailsClosed();
@@ -32,6 +34,24 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => new BulkEditService().AssignFamily(setup.Project, new[] { setup.First.Id, setup.Second.Id }, setup.Target.Id));
             AssertUnchanged(setup, beforeUpdated, "BulkEditService.AssignFamily");
+        }
+
+        private static void DanglingPreviousFamilyBlocksWholeAssignmentBatch()
+        {
+            var setup = CreateDanglingPreviousFamilyProject("family-dangling-atomic");
+            var beforeUpdated = setup.Project.UpdatedUtc;
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(setup.Project, setup.Target.Id, new[] { setup.First, setup.Second }));
+            AssertDanglingUnchanged(setup, beforeUpdated, "ProjectFamilyService.Assign");
+        }
+
+        private static void DanglingPreviousFamilyBlocksBulkEditBatch()
+        {
+            var setup = CreateDanglingPreviousFamilyProject("bulk-family-dangling-atomic");
+            var beforeUpdated = setup.Project.UpdatedUtc;
+
+            Throws<InvalidOperationException>(() => new BulkEditService().AssignFamily(setup.Project, new[] { setup.First.Id, setup.Second.Id }, setup.Target.Id));
+            AssertDanglingUnchanged(setup, beforeUpdated, "BulkEditService.AssignFamily");
         }
 
         private static void CorruptProjectElementListBlocksPropertyPropagationBeforeMutation()
@@ -106,12 +126,40 @@ namespace QS3D.Core.SmokeTests
             return new Setup(project, target, previous, first, second);
         }
 
+        private static Setup CreateDanglingPreviousFamilyProject(string id)
+        {
+            var project = new ProjectState(id, "Dangling family atomicity");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            target.Properties["ThicknessM"] = "0.3";
+            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.ArchitecturalWall);
+            previous.Properties["ThicknessM"] = "0.2";
+            project.Families.Add(target);
+            project.Families.Add(previous);
+
+            var first = new ProjectElement("E1", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
+            first.Properties["ThicknessM"] = "0.2";
+            var second = new ProjectElement("E2", ElementCategory.ArchitecturalWall, "MISSING", string.Empty, string.Empty);
+            second.Properties["ThicknessM"] = "legacy";
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+            return new Setup(project, target, previous, first, second);
+        }
+
         private static void AssertUnchanged(Setup setup, DateTime beforeUpdated, string operation)
         {
             Equal(setup.Previous.Id, setup.First.FamilyId, operation + " changed the first element before later duplicate-family validation failed.");
             Equal("0.2", setup.First.Properties["ThicknessM"], operation + " changed inherited properties before whole-batch validation completed.");
             Equal("DUP", setup.Second.FamilyId, operation + " changed the second element despite failed batch.");
             if (setup.Project.UpdatedUtc != beforeUpdated) throw new Exception(operation + " touched project timestamp on a rejected batch.");
+        }
+
+        private static void AssertDanglingUnchanged(Setup setup, DateTime beforeUpdated, string operation)
+        {
+            Equal(setup.Previous.Id, setup.First.FamilyId, operation + " changed the first element before dangling-family validation completed.");
+            Equal("0.2", setup.First.Properties["ThicknessM"], operation + " changed inherited properties before dangling-family validation completed.");
+            Equal("MISSING", setup.Second.FamilyId, operation + " overwrote a dangling family reference instead of failing closed.");
+            Equal("legacy", setup.Second.Properties["ThicknessM"], operation + " changed ambiguous properties on a dangling family reference.");
+            if (setup.Project.UpdatedUtc != beforeUpdated) throw new Exception(operation + " touched project timestamp on a rejected dangling-family batch.");
         }
 
         private static void Equal(string expected, string actual, string message)
