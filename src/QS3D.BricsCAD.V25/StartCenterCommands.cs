@@ -55,7 +55,22 @@ namespace QS3D.BricsCAD.V25
         {
             var window = _window;
             if (window == null || !window.IsLoaded) return;
-            window.RefreshFromActiveDocument();
+
+            try
+            {
+                window.RefreshFromActiveDocument();
+            }
+            catch (System.Exception ex)
+            {
+                try
+                {
+                    e.Document?.Editor.WriteMessage("\nQS3DSTART refresh warning: " + ex.Message);
+                }
+                catch (System.Exception)
+                {
+                    // Never let optional Start Center diagnostics escape into BricsCAD document activation.
+                }
+            }
         }
 
         private static void OnStartCenterClosed(object sender, EventArgs e)
