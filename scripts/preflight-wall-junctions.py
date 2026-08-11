@@ -60,11 +60,18 @@ if command.is_file():
     text = command.read_text(encoding="utf-8")
     for needle in (
         'CommandMethod("QS3DWALLJUNCTIONS"',
+        "CadSelectionGuard.AcquireCurrentSelection(document)",
+        "if (selectedIds.Length == 0)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)",
+        "ExistingProjectMutationContext.TryGet(document, out var canonicalProject)",
+        "string.Equals(canonicalProject.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase)",
+        "project == null ? 0.005d",
+        "project == null ? 0.002d",
+        "ReadSelection(document, selectedIds, sagitta, planarityTolerance)",
         "new WallJunctionAdjustmentPlanner().Plan",
         'MetadataNumber(project, "WallJunctionToleranceM", 0.005d',
         'MetadataNumber(project, "WallArcSagittaM", 0.002d',
         'MetadataNumber(project, "WallJunctionPlanarityToleranceM", tolerance',
-        "ReadSelection(document, sagitta, planarityTolerance)",
         "referenceElevationM",
         "line.StartPoint.Z",
         "line.EndPoint.Z",
@@ -73,10 +80,31 @@ if command.is_file():
         "plan-view đồng phẳng",
         "BulgeArcTessellator.Tessellate",
         "SnapPlan=",
+        "if (project != null)",
         'AuditTrail.ForProject(project).Record("wall.junction.analyze"',
     ):
         if needle not in text:
             errors.append("wall junction command guard missing: " + needle)
+
+    if "ProjectContextCoordinator.GetOrCreate" in text:
+        errors.append("QS3DWALLJUNCTIONS analysis must not create a replacement project")
+
+    method_start = text.find("public void AnalyzeWallJunctions()")
+    helper_start = text.find("private static IReadOnlyList<WallAxisSegment> ReadSelection", method_start + 1)
+    method = text[method_start:helper_start] if method_start >= 0 and helper_start > method_start else ""
+    lifecycle = (
+        method.find("CadSelectionGuard.AcquireCurrentSelection(document)"),
+        method.find("if (selectedIds.Length == 0)"),
+        method.find("ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)"),
+        method.find("ExistingProjectMutationContext.TryGet(document, out var canonicalProject)"),
+        method.find("var tolerance = project == null ? 0.005d"),
+        method.find("ReadSelection(document, selectedIds, sagitta, planarityTolerance)"),
+        method.find("new WallJunctionAdjustmentPlanner().Plan"),
+    )
+    if min(lifecycle) < 0:
+        errors.append("cannot isolate QS3DWALLJUNCTIONS selection/project/analysis lifecycle")
+    elif tuple(sorted(lifecycle)) != lifecycle:
+        errors.append("QS3DWALLJUNCTIONS must acquire/nonempty-check selection before existing-project lookup/bind, then read geometry and plan")
 
 if snap_command.is_file():
     text = snap_command.read_text(encoding="utf-8")
@@ -143,4 +171,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: deterministic wall-junction topology, review-gated endpoint snap apply, spatial indexing, finite-safe/coplanar CAD analysis, command/UI wiring and regression coverage are present.")
+print("PASS: deterministic wall-junction topology, non-creating selection-first analysis, review-gated endpoint snap apply, spatial indexing, finite-safe/coplanar CAD analysis, command/UI wiring and regression coverage are present.")
