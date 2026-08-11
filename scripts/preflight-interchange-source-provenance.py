@@ -59,7 +59,7 @@ if not errors:
 
     required_command = [
         '[CommandMethod("QS3DINTERCHANGEPROVENANCE", CommandFlags.Modal)]',
-        "ProjectInterchangeSourceHandleProvenance.Plan(project, json)",
+        "ProjectInterchangeSourceHandleProvenance.Plan(reviewProject, json)",
         "ProjectInterchangeSourceHandleProvenance.Store(project, json)",
         "ProjectInterchangeJsonValidator.MaxFileBytes",
         "new UTF8Encoding(false, true)",
