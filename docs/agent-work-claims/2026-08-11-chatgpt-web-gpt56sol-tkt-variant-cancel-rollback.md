@@ -2,20 +2,21 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: make `QS3DGLASSWALL` / `QS3DWALLPIER` selection-cancel safe and batch-atomic without changing their Family defaults.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/TktVariantCommands.cs`
   - `scripts/preflight-tkt-variant-cancel-rollback.py`
   - this claim file for close-out
-- Evidence: current TKT commands call `ProjectContextCoordinator.GetOrCreate`, create/backfill a Family and change ActiveFamily before calling `SemanticCaptureService.Capture`. `SemanticCaptureService.Capture` itself intentionally reads selection before project bootstrap, but the TKT wrapper defeats that lifecycle: an empty/cancel selection can leave a new project, Family/default and ActiveFamily mutation despite capturing zero elements.
-- Intended contract:
-  - acquire PICKFIRST/interactive snapshots before any project/Family mutation;
-  - if selection is empty/cancelled, return without project bootstrap or Family/ActiveFamily changes;
-  - after selection, preserve existing TKT Family discovery/backfill/defaults and activation;
-  - capture exactly the acquired snapshots through `SemanticCaptureService.CaptureSnapshot` without a second selection prompt;
-  - wrap Family setup + whole capture batch in one ProjectState snapshot; on any failure restore the pre-command project and forget only a project bootstrapped by this command;
-  - post-success palette/editor UI remains best effort and must not turn a successful capture into a reported business failure.
-- Non-overlap: no changes to `SemanticCaptureService`, generic family defaults, Direct Draw, Ribbon, active quantity/persistence/licensing lanes or LOCAL_ONLY V25 execution.
-- Validation: exact diff/current-source review plus focused static preflight. No GitHub Actions; no V25 runtime PASS claimed.
-- Completion condition: cancel/empty selection has zero project mutation and failed variant batch is atomic, with exact SHAs recorded and reservation released.
+- Implemented contract:
+  - PICKFIRST/interactive snapshots are acquired before any project/Family mutation;
+  - empty/cancel selection returns without `GetOrCreate`, Family/default or ActiveFamily mutation;
+  - existing TKT Family discovery/backfill/defaults and activation are preserved after selection succeeds;
+  - the already-acquired snapshots are captured through `SemanticCaptureService.CaptureSnapshot`, avoiding a second selection prompt;
+  - Family setup + entire snapshot capture batch are protected by one outer `ProjectStateSnapshot`; failure restores pre-command state and conditionally forgets only a project bootstrapped by this command;
+  - successful capture is outside the UI failure boundary: palette/editor finalization is best effort and cannot turn committed semantic state into a reported business failure.
+- Source commit: `f3dc5be32f3bd86d1e8e617c788f50a59af24896` — `fix(tkt): defer variant mutation until selection`.
+- Regression guard: `7061d70083240f9546f6dca79f0d69436caf7ff3` — `scripts/preflight-tkt-variant-cancel-rollback.py`.
+- Validation actually performed: connector-side exact source diff review plus current generic capture/default source review. Guard source was reviewed but not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed; native PICKFIRST/interactive editor qualification remains LOCAL_ONLY.
+- Reservation released.
