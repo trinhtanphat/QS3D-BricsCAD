@@ -2,39 +2,42 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11T22:11:00+07:00
-- Status: `ACTIVE`
+- Completed: 2026-08-11T22:14:00+07:00
+- Status: `COMPLETED`
 - Baseline main SHA: `2617eb4d66bc4db73be605dbcc35879ac341b8c8`
 - Priority: source-safe Core/Rebar geometry hardening; prevent adjacent column tie solids from occupying overlapping axial ranges.
 
 ## Confirmed defect
 
-`ColumnTieLayoutPlanner.Plan(...)` validates positive diameter/spacing and ensures computed spacing does not exceed the requested maximum, but it does not require center-to-center spacing to be at least one tie diameter. A notation/property combination such as D8 at 4 mm can therefore produce multiple horizontal tie centers only 4 mm apart even though each tie has an 8 mm physical diameter.
+`ColumnTieLayoutPlanner.Plan(...)` validated positive diameter/spacing and ensured computed spacing did not exceed the requested maximum, but did not require center-to-center spacing to be at least one tie diameter. A D8 at 4 mm configuration could therefore return multiple horizontal tie centers only 4 mm apart even though each tie has an 8 mm physical diameter.
 
-The defect is product-reachable because `ColumnTieSolidBuilder` creates one horizontal tie `Solid3d` at every elevation returned by this planner. The generic linear/spacing policy is not expected to infer physical collision rules, while beam longitudinal reinforcement already applies an explicit one-diameter collision invariant at its specialized planner boundary.
+The defect is product-reachable because `ColumnTieSolidBuilder` creates one horizontal tie `Solid3d` at every elevation returned by this planner. The generic spacing primitive does not infer physical collision rules, while specialized reinforcement planners must enforce their own solid-envelope invariant.
 
-## Reserved scope
+## Implemented
 
-- `src/QS3D.Core/Rebar/ColumnTieLayoutPlanner.cs`
-- `tests/QS3D.Core.SmokeTests/ColumnTieAxialOverlapRegressionSmoke.cs`
-- this claim file for close-out
+- `8e043ea7989b6b0246bd6f2a5800a72b9e2c26e2` — `fix(rebar): reject overlapping column ties`
+  - derives the physical tie diameter in meters alongside the existing radius;
+  - for multi-tie layouts, rejects computed actual center spacing below one tie diameter;
+  - preserves the existing requested-maximum spacing rule, cover/range/count guards, exact tangent equality and the single-tie collapsed-range case.
+- `d8891c5d9b2406b7b4f5f1325e29272590a5f5a0` — `test(core): guard column tie axial overlap`
+  - rejects D8 at 4 mm overlap;
+  - retains normal spacing;
+  - retains an exact D8-at-8-mm tangent boundary with 11 ties;
+  - retains a collapsed vertical range that legitimately produces one tie with zero spacing.
 
-## Functional contract
+## Validation evidence
 
-- preserve all existing section cover, vertical range, maximum spacing and tie-count guards;
-- when more than one tie is generated, require actual center-to-center spacing to be at least one physical tie diameter;
-- allow exact one-diameter tangent spacing;
-- preserve the valid single-tie collapsed-range case where `ActualSpacingM == 0`;
-- do not modify CAD/native builder, quantities, persistence, UI or unrelated planners.
+- Re-fetched `src/QS3D.Core/Rebar/ColumnTieLayoutPlanner.cs` from newer `main` (`841b462765c6fa4621f08d8cf587309e0a9ebf3b`); the committed one-diameter axial guard remains intact.
+- Re-fetched `tests/QS3D.Core.SmokeTests/ColumnTieAxialOverlapRegressionSmoke.cs` from the same newer tree; the focused public-planner behavioral smoke remains intact.
+- Concurrent main updates were on Quantity/Floor-Level UI lanes and did not overwrite the reserved Core/Rebar surfaces.
+- No GitHub Actions workflow was dispatched and no smoke executable run is claimed from this connector-only lane.
+- No BricsCAD V25 runtime PASS is claimed; product reachability is established from the existing CAD builder call path.
 
-## Validation target
+## Reserved scope honored
 
-- behavioral Core smoke rejects D8 ties whose actual spacing is below 8 mm;
-- behavioral Core smoke retains normal valid spacing;
-- behavioral Core smoke retains exact one-diameter tangent spacing;
-- behavioral Core smoke retains the single-tie collapsed vertical range;
-- use the established net8 Core smoke `[ModuleInitializer]` pattern;
-- no GitHub Actions dispatch and no BricsCAD V25 runtime PASS claim.
+- Changed only `ColumnTieLayoutPlanner.cs`, the focused Core smoke file, and this claim close-out.
+- Did not modify `ColumnTieSolidBuilder`, quantities, persistence, UI, updater, Floor/Level, or other concurrent lanes.
 
-## Completion condition
+## Completion
 
-Column tie planner fails closed on physical axial overlap, focused behavioral regression is merged on current `main`, source/test are re-fetched after concurrent updates, and this claim is marked `COMPLETED` with exact implementation/test SHAs.
+Completed. Multi-tie layouts can no longer return axial center spacing below the physical tie diameter; implementation and regression are present on `main` with exact SHAs recorded above.
