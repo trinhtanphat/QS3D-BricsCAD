@@ -48,9 +48,11 @@ namespace QS3D.Core.Revisions
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var snapshot = new RevisionSnapshot { Id = revisionId ?? string.Empty, CreatedUtc = DateTime.UtcNow };
+            var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
                 if (element == null || string.IsNullOrWhiteSpace(element.Id)) throw new InvalidOperationException("Revision capture encountered an element without id.");
+                if (!elementIds.Add(element.Id)) throw new InvalidOperationException("Revision capture encountered duplicate element id: " + element.Id + ".");
                 var item = new RevisionElementSnapshot
                 {
                     ElementId = element.Id,
