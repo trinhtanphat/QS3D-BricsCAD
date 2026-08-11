@@ -41,6 +41,8 @@ for token in (
     '"explicit_unit_override_persisted=true"',
     "DrawingUnitResolutionPolicy.BoundMetadataKey",
     "Teigha.DatabaseServices.UnitsValue.Undefined",
+    "TryWriteCommandFailure(resultPath, probeFailure.ErrorCode)",
+    'base("A sanitized lifecycle probe invariant failed.")',
 ):
     if token not in source:
         errors.append("command lifecycle probe missing token: " + token)
