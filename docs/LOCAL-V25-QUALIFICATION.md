@@ -78,6 +78,7 @@ The automated probe proves load/runtime wiring, not every CAD operation. After i
 ### A. Plugin shell / UI
 
 - DemandLoad from a clean user registration: run `QS3D` without manual `NETLOAD`.
+- After installing the exact locally built package in `OnCommand` mode, run `scripts/test-bricscad-v25-runtime.ps1` with `-DemandLoadOnly -SkipScreenshot` and `-PluginDll` set to the registered installed loader. The marker assembly path must equal that loader; a stale or already-loaded build must fail the check.
 - `QS3DRUNTIMECHECK` reports V25 + x64 + matching package/assembly state.
 - Ribbon tabs/actions exist once, not duplicated after reopen/reset.
 - Workspace/RightPanel/Family Manager/Hubs are modeless where designed.
