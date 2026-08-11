@@ -103,24 +103,32 @@ for label, path, build, aggregate, export, finalize in CASES:
     if "Cảnh báo UI sau export" not in text:
         errors.append(label + " missing best-effort post-export UI warning boundary")
 
-# Template export has no semantic regeneration. Cancel remains side-effect free, and after Save
-# confirmation the exporter resolves only an existing project read-only before writing the template.
+# Template export has no semantic regeneration. Scope checks to the export command only because
+# TemplateCommands.cs also contains an intentionally create-capable import/bootstrap command.
 template_path = ROOT / "src/QS3D.BricsCAD.V25/TemplateCommands.cs"
 if not template_path.is_file():
     errors.append("missing src/QS3D.BricsCAD.V25/TemplateCommands.cs")
 else:
     text = template_path.read_text(encoding="utf-8")
+    export_start = text.find('[CommandMethod("QS3DTEMPLATEEXPORT"')
+    import_start = text.find('[CommandMethod("QS3DTEMPLATEIMPORT"', export_start + 1) if export_start >= 0 else -1
+    if export_start < 0 or import_start <= export_start:
+        errors.append("Template cannot isolate QS3DTEMPLATEEXPORT from QS3DTEMPLATEIMPORT")
+        export_text = ""
+    else:
+        export_text = text[export_start:import_start]
+
     dialog = "if (dialog.ShowDialog() != true) return;"
     project = "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)"
     build = "store.ExportProject(project,"
     export = "store.Save(profile, dialog.FileName);"
     finalize = "FinalizeExportUi(doc,"
     positions = {
-        dialog: text.find(dialog),
-        project: text.find(project),
-        build: text.find(build),
-        export: text.find(export),
-        finalize: text.find(finalize),
+        dialog: export_text.find(dialog),
+        project: export_text.find(project),
+        build: export_text.find(build),
+        export: export_text.find(export),
+        finalize: export_text.find(finalize),
     }
     for token, pos in positions.items():
         if pos < 0:
@@ -128,15 +136,17 @@ else:
     if min(positions.values()) >= 0:
         if not (positions[dialog] < positions[project] < positions[build] < positions[export] < positions[finalize]):
             errors.append("Template must confirm destination before existing-project lookup/profile build, commit the file, then finalize UI")
-        before_dialog = text[:positions[dialog]]
+        before_dialog = export_text[:positions[dialog]]
         for forbidden in (project, build):
             if forbidden in before_dialog:
                 errors.append("Template Cancel path must not read project export state before save confirmation: " + forbidden)
-        between_export_and_finalize = text[positions[export] + len(export):positions[finalize]]
+        between_export_and_finalize = export_text[positions[export] + len(export):positions[finalize]]
         if "PaletteCoordinator." in between_export_and_finalize or "Editor.WriteMessage" in between_export_and_finalize:
             errors.append("Template must not perform fallible UI work between persistent export and FinalizeExportUi")
-    if "ProjectContextCoordinator.GetOrCreate(doc)" in text:
+    if "ProjectContextCoordinator.GetOrCreate(doc)" in export_text:
         errors.append("Template read-only export must not create/cache replacement project state")
+    if "ExistingProjectMutationContext" in export_text:
+        errors.append("Template read-only export must not bind a mutation context")
     if "Cảnh báo UI sau export template" not in text:
         errors.append("Template missing best-effort post-export UI warning boundary")
 
@@ -147,4 +157,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: schedule exporters regenerate detached read-only state after destination confirmation; template export resolves only existing project state; all isolate post-export UI.")
+print("PASS: schedule exporters regenerate detached read-only state after destination confirmation; template export resolves only existing project state while import may bootstrap explicitly; all isolate post-export UI.")
