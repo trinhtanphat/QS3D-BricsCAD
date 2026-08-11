@@ -47,6 +47,10 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                throw new InvalidOperationException("Semantic element Table yêu cầu DWG đích vẫn là MdiActiveDocument.");
+            if (!document.Database.TileMode)
+                throw new InvalidOperationException("Semantic element Table P0 chỉ hỗ trợ ModelSpace.");
             RequireFinite(position);
 
             var semanticTable = BuildSnapshot(project);
@@ -118,9 +122,18 @@ namespace QS3D.BricsCAD.V25.Cad
                     return table.Handle.ToString();
                 }
             }
-            catch
+            catch (Exception operationError)
             {
-                if (!committed) snapshot.Restore(project);
+                if (!committed)
+                {
+                    try { snapshot.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Semantic element Table build failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                }
                 throw;
             }
         }
@@ -129,6 +142,8 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                throw new InvalidOperationException("Semantic element Table remove yêu cầu DWG đích vẫn là MdiActiveDocument.");
             ValidatePersistedState(project);
             if (!project.Metadata.ContainsKey(HandleKey)) return;
 
@@ -147,9 +162,18 @@ namespace QS3D.BricsCAD.V25.Cad
                     committed = true;
                 }
             }
-            catch
+            catch (Exception operationError)
             {
-                if (!committed) snapshot.Restore(project);
+                if (!committed)
+                {
+                    try { snapshot.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Semantic element Table removal failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                }
                 throw;
             }
         }

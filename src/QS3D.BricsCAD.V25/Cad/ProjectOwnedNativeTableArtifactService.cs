@@ -192,6 +192,8 @@ namespace QS3D.BricsCAD.V25.Cad
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definition == null) throw new ArgumentNullException(nameof(definition));
+            if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                throw new InvalidOperationException("Native documentation Table remove yêu cầu DWG đích vẫn là MdiActiveDocument.");
             ValidatePersistedState(project, definition);
             if (!project.Metadata.ContainsKey(definition.HandleKey)) return;
 
