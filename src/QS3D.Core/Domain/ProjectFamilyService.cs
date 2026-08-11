@@ -126,7 +126,13 @@ namespace QS3D.Core.Domain
             foreach (var element in owned)
             {
                 if (string.Equals(element.FamilyId, target.Id, StringComparison.OrdinalIgnoreCase)) continue;
-                var previous = string.IsNullOrWhiteSpace(element.FamilyId) ? null : project.FindFamily(element.FamilyId);
+                var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
+                ProjectFamily? previous = null;
+                if (previousFamilyId.Length > 0)
+                {
+                    previous = project.FindFamily(previousFamilyId) ??
+                        throw new InvalidOperationException("Element " + element.Id + " references missing family id: " + previousFamilyId + ". Repair the relation before reassignment.");
+                }
                 pending.Add(new PendingFamilyAssignment { Element = element, PreviousFamily = previous });
             }
 
