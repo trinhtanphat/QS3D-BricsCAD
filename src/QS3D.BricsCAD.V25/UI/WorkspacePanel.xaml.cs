@@ -19,7 +19,7 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class WorkspacePanel : UserControl
     {
-        private readonly WorkspaceViewModel _viewModel = new WorkspaceViewModel();
+        private WorkspaceViewModel _viewModel = new WorkspaceViewModel();
         private IReadOnlyList<EntitySnapshot> _inspection = Array.Empty<EntitySnapshot>();
         private bool _loadingContext;
         private ElementCategory? _categoryFilter;
@@ -27,11 +27,36 @@ namespace QS3D.BricsCAD.V25.UI
         public WorkspacePanel()
         {
             InitializeComponent();
-            DataContext = _viewModel;
-            var propertyView = CollectionViewSource.GetDefaultView(_viewModel.Properties);
-            if (propertyView != null && propertyView.CanGroup) propertyView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(PropertyRowViewModel.Group)));
+            BindViewModel();
             ConfigureWorkspaceInteractions();
             Loaded += (_, __) => RefreshProject();
+        }
+
+        private void BindViewModel()
+        {
+            DataContext = _viewModel;
+            var propertyView = CollectionViewSource.GetDefaultView(_viewModel.Properties);
+            if (propertyView != null && propertyView.CanGroup)
+                propertyView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(PropertyRowViewModel.Group)));
+        }
+
+        public void ClearProject(string status)
+        {
+            _loadingContext = true;
+            try
+            {
+                _inspection = Array.Empty<EntitySnapshot>();
+                InspectionList.ItemsSource = _inspection;
+                SelectionCount.Text = "0 chọn";
+                _categoryFilter = null;
+                _viewModel = new WorkspaceViewModel();
+                BindViewModel();
+                ZoneCombo.SelectedIndex = -1;
+                FloorCombo.SelectedIndex = -1;
+                FamilyList.SelectedItem = null;
+                _viewModel.Status = status ?? string.Empty;
+            }
+            finally { _loadingContext = false; }
         }
 
         private void ConfigureWorkspaceInteractions()
@@ -166,7 +191,7 @@ namespace QS3D.BricsCAD.V25.UI
             }
             catch (Exception ex)
             {
-                SetStatus("Đọc Workspace lỗi: " + ex.Message);
+                ClearProject("Đọc Workspace lỗi: " + ex.Message);
             }
             finally { _loadingContext = false; }
         }
