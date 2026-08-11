@@ -6,9 +6,11 @@ ROOT = Path(__file__).resolve().parents[1]
 COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
 WINDOW = ROOT / "src/QS3D.BricsCAD.V25/UI/RebarScheduleWindow.xaml.cs"
 EXPORTER = ROOT / "src/QS3D.Core/Export/XlsxRebarScheduleExporter.cs"
+SCHEDULE = ROOT / "src/QS3D.Core/Rebar/RebarSchedule.cs"
+REGRESSION = ROOT / "tests/QS3D.Core.SmokeTests/BbsRegressionSmoke.cs"
 errors = []
 
-for path in (COMMANDS, WINDOW, EXPORTER):
+for path in (COMMANDS, WINDOW, EXPORTER, SCHEDULE, REGRESSION):
     if not path.is_file():
         errors.append("missing " + str(path.relative_to(ROOT)))
 
@@ -42,9 +44,34 @@ if EXPORTER.is_file():
     if "AtomicFileCommit.ReplaceWithoutBackup" not in text:
         errors.append("BBS XLSX exporter must retain atomic final-file replacement")
 
+if SCHEDULE.is_file():
+    text = SCHEDULE.read_text(encoding="utf-8")
+    required = (
+        "IntegerSnapTolerance(intervals)",
+        "BitConverter.DoubleToInt64Bits(magnitude)",
+        "BitConverter.Int64BitsToDouble(bits + 1L)",
+        "return (next - magnitude) * 8d;",
+    )
+    for token in required:
+        if token not in text:
+            errors.append("BBS spacing count missing bounded ULP snap token: " + token)
+    if "Math.Max(1d, Math.Abs(intervals)) * 1e-12d" in text:
+        errors.append("BBS spacing count must not use scale-growing relative tolerance")
+
+if REGRESSION.is_file():
+    text = REGRESSION.read_text(encoding="utf-8")
+    required = (
+        "SpacingRealOverrunIsNotSnappedAtLargeScale();",
+        "DistributionLengthM = 2000000.000001d",
+        "Equal(2000000002, actualOverrun.Quantity);",
+    )
+    for token in required:
+        if token not in text:
+            errors.append("BBS spacing count missing large-scale overrun regression token: " + token)
+
 if errors:
     for error in errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] QS3DBBS confirms destination before project work, validates finite aggregate weight before file write, and matches modeless BBS arithmetic")
+print("[PASS] QS3DBBS confirms destination before project work, validates finite aggregate weight, uses bounded-ULP spacing counts, and matches modeless BBS arithmetic")

@@ -183,7 +183,8 @@ namespace QS3D.Core.Export
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
             sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
             sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
-            sb.Append("<sheetData><row r=\"1\">");
+            sb.Append(Ed2ColumnWidthsXml);
+            sb.Append("<sheetData><row r=\"1\" ht=\"30\" customHeight=\"1\">");
             for (var c = 0; c < headers.Length; c++) AppendInlineStringCell(sb, CellRef(c, 1), headers[c], 1);
             sb.Append("</row>");
 
@@ -193,7 +194,9 @@ namespace QS3D.Core.Export
                 if (row == null) throw new InvalidDataException("ED2 worksheet contains a null quantity row.");
                 var r = i + 2;
                 var displayName = string.IsNullOrWhiteSpace(row.ElementName) ? row.FamilyName : row.ElementName;
-                sb.Append("<row r=\"").Append(r).Append("\">");
+                sb.Append("<row r=\"").Append(r).Append("\"");
+                if (row.Count > 1) sb.Append(" ht=\"96\" customHeight=\"1\"");
+                sb.Append(">");
                 AppendNumberCell(sb, CellRef(0, r), i + 1);
                 AppendInlineStringCell(sb, CellRef(1, r), displayName, 0);
                 AppendInlineStringCell(sb, CellRef(2, r), row.Category, 0);
@@ -215,10 +218,10 @@ namespace QS3D.Core.Export
                 AppendNumberCell(sb, CellRef(18, r), row.OtherAreaM2);
                 AppendNullableNumberCell(sb, CellRef(19, r), row.DensityKgM3);
                 AppendNullableNumberCell(sb, CellRef(20, r), row.MassKg);
-                AppendInlineStringCell(sb, CellRef(21, r), row.Note, 0);
-                AppendInlineStringCell(sb, CellRef(22, r), row.ElementIdText, 0);
-                AppendInlineStringCell(sb, CellRef(23, r), row.SourceHandleText, 0);
-                AppendInlineStringCell(sb, CellRef(24, r), row.DrawingFingerprint, 0);
+                AppendInlineStringCell(sb, CellRef(21, r), row.Note, 3);
+                AppendInlineStringCell(sb, CellRef(22, r), row.ElementIdText, 3);
+                AppendInlineStringCell(sb, CellRef(23, r), row.SourceHandleText, 3);
+                AppendInlineStringCell(sb, CellRef(24, r), row.DrawingFingerprint, 3);
                 sb.Append("</row>");
             }
 
@@ -279,6 +282,22 @@ namespace QS3D.Core.Export
         private const string Ed2WorkbookXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"CHI_TIET\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"TONG_HOP\" sheetId=\"2\" r:id=\"rId2\"/></sheets></workbook>";
         private const string WorkbookRelationshipsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
         private const string Ed2WorkbookRelationshipsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
-        private const string StylesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Segoe UI\"/></font><font><b/><sz val=\"11\"/><name val=\"Segoe UI\"/></font></fonts><fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills><borders count=\"1\"><border/></borders><cellStyleXfs count=\"1\"><xf/></cellStyleXfs><cellXfs count=\"3\"><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" numFmtId=\"4\" applyNumberFormat=\"1\"/></cellXfs></styleSheet>";
+        private const string Ed2ColumnWidthsXml =
+            "<cols>" +
+            "<col min=\"1\" max=\"1\" width=\"7\" customWidth=\"1\"/>" +
+            "<col min=\"2\" max=\"2\" width=\"22\" customWidth=\"1\"/>" +
+            "<col min=\"3\" max=\"4\" width=\"18\" customWidth=\"1\"/>" +
+            "<col min=\"5\" max=\"5\" width=\"20\" customWidth=\"1\"/>" +
+            "<col min=\"6\" max=\"6\" width=\"22\" customWidth=\"1\"/>" +
+            "<col min=\"7\" max=\"7\" width=\"7\" customWidth=\"1\"/>" +
+            "<col min=\"8\" max=\"19\" width=\"14\" customWidth=\"1\"/>" +
+            "<col min=\"20\" max=\"21\" width=\"18\" customWidth=\"1\"/>" +
+            "<col min=\"22\" max=\"22\" width=\"28\" customWidth=\"1\"/>" +
+            "<col min=\"23\" max=\"23\" width=\"26\" customWidth=\"1\"/>" +
+            "<col min=\"24\" max=\"24\" width=\"28\" customWidth=\"1\"/>" +
+            "<col min=\"25\" max=\"25\" width=\"42\" customWidth=\"1\"/>" +
+            "</cols>";
+
+        private const string StylesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Segoe UI\"/></font><font><b/><sz val=\"11\"/><name val=\"Segoe UI\"/></font></fonts><fills count=\"3\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFC000\"/><bgColor indexed=\"64\"/></patternFill></fill></fills><borders count=\"2\"><border/><border><left style=\"thin\"><color rgb=\"FFD9D9D9\"/></left><right style=\"thin\"><color rgb=\"FFD9D9D9\"/></right><top style=\"thin\"><color rgb=\"FFD9D9D9\"/></top><bottom style=\"thin\"><color rgb=\"FFD9D9D9\"/></bottom></border></borders><cellStyleXfs count=\"1\"><xf/></cellStyleXfs><cellXfs count=\"4\"><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf fontId=\"1\" fillId=\"2\" borderId=\"1\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" numFmtId=\"4\" applyNumberFormat=\"1\"/><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf></cellXfs></styleSheet>";
     }
 }

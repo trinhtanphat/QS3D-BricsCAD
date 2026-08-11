@@ -113,6 +113,11 @@ require("exporter", (
     "row.ElementIdText",
     "row.SourceHandleText",
     "row.DrawingFingerprint",
+    "Ed2ColumnWidthsXml",
+    'fgColor rgb=\\\"FFFFC000\\\"',
+    'wrapText=\\\"1\\\"',
+    'ht=\\\"30\\\" customHeight=\\\"1\\\"',
+    'if (row.Count > 1) sb.Append(" ht=\\"96\\" customHeight=\\"1\\"")',
 ))
 require("reader", (
     "public IReadOnlyList<string> ElementIds { get; }",

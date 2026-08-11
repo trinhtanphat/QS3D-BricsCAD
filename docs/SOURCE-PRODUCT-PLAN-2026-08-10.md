@@ -195,11 +195,10 @@ Remaining work:
 
 ### Workstream D — BQ / schedules / commercial reporting
 
-Current source already covers BQ, Room Finish, Material, Curtain, Door/Opening, BBS CSV/XLSX/native table paths and finite/overflow guards.
+Current source already covers BQ, Room Finish, Material, Curtain, Door/Opening, BBS CSV/XLSX/native table paths and finite/overflow guards. It also provides a CAD-independent quantity-report revision review that snapshots the authoritative `ProjectQuantityReportBuilder.Detail` projection, reuses `RevisionService`, and classifies stable Element-keyed Added/Removed/Changed report rows without live mutation.
 
 Next source-safe candidates:
 
-- report baseline/diff for quantity-change review between revisions;
 - shared export provenance block/version manifest where file-format compatibility permits;
 - saved BQ filter/view definitions in semantic project metadata;
 - report-level health/readiness banner driven by release/qualification state.

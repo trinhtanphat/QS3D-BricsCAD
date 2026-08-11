@@ -5,6 +5,7 @@ namespace QS3D.Core.SmokeTests
         internal static void RunAll()
         {
             ProjectQuantitySmoke.Run();
+            QuantityReportRevisionReviewSmoke.Run();
             PersistenceHardeningSmoke.Run();
             AdvancedDomainSmoke.Run();
             HardeningRegressionSmoke.Run();
@@ -12,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ContinuationRegressionSmoke.Run();
             LogicRegressionSmoke.Run();
             RevisionRegressionSmoke.Run();
+            RevisionSnapshotStoreIntegritySmoke.Run();
             WorkflowPersistenceSmoke.Run();
             BbsRegressionSmoke.Run();
             WorkflowSafetySmoke.Run();
