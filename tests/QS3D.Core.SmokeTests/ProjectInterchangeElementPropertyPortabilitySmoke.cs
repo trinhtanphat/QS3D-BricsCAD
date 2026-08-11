@@ -15,7 +15,7 @@ namespace QS3D.Core.SmokeTests
             LegacyHandlePropertyIsAcceptedButNotMaterialized();
             AppendOnlyDoesNotRebindLegacyHandleProperty();
             KeepTargetDoesNotRebindLegacyHandleProperty();
-            FieldMergeDoesNotReviewOrAdoptLegacyHandleProperty();
+            FieldMergeReviewsDeletionButDoesNotAdoptLegacyHandleProperty();
         }
 
         private static void ExportOmitsElementHandleMetadataButKeepsFamilySemantics()
@@ -59,7 +59,7 @@ namespace QS3D.Core.SmokeTests
             AssertImportedElementIsPortable(target);
         }
 
-        private static void FieldMergeDoesNotReviewOrAdoptLegacyHandleProperty()
+        private static void FieldMergeReviewsDeletionButDoesNotAdoptLegacyHandleProperty()
         {
             var target = new ProjectState("FIELD-TARGET", "Target") { DrawingFingerprint = "field-target-fp" };
             var targetElement = new ProjectElement("E-1", ElementCategory.Beam);
@@ -79,9 +79,16 @@ namespace QS3D.Core.SmokeTests
                 x.Kind == InterchangeIdentityKind.Element &&
                 string.Equals(x.Id, "E-1", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(x.Field, "properties.SemanticMark", StringComparison.OrdinalIgnoreCase)));
-            False(plan.FieldPlan.Decisions.Any(x =>
+
+            var handleDecision = plan.FieldPlan.Decisions.Single(x =>
                 x.Kind == InterchangeIdentityKind.Element &&
-                string.Equals(x.Field, "properties.CadHandle", StringComparison.OrdinalIgnoreCase)));
+                string.Equals(x.Id, "E-1", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(x.Field, "properties.CadHandle", StringComparison.OrdinalIgnoreCase));
+            Equal(InterchangeFieldPrecedenceChoice.UseSource, handleDecision.Choice);
+            True(handleDecision.TargetHasValue);
+            Equal("TARGET-CAD", handleDecision.TargetValue);
+            False(handleDecision.SourceHasValue);
+            Equal(string.Empty, handleDecision.SourceValue);
 
             ProjectInterchangeFieldMergeImporter.Import(target, json, policy, plan.CreateAuthorization());
             var element = target.FindElement("E-1") ?? throw new InvalidOperationException("Field-merge target element disappeared.");
