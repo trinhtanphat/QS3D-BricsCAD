@@ -126,7 +126,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (batchBars > MaxBarsPerBatch - layout.Count) throw new InvalidOperationException("StructuralWall mesh batch vượt giới hạn " + MaxBarsPerBatch + " bar.");
                         batchBars = checked(batchBars + layout.Count);
 
-                        ErasePrevious(document, transaction, element, ownership);
+                        ErasePrevious(document, transaction, project, element, ownership);
                         var ux = dx / lengthDrawing;
                         var uy = dy / lengthDrawing;
                         var axis = new Vector3d(ux, uy, 0d);
@@ -188,6 +188,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                 bar.Layer = line.Layer;
                                 modelSpace.AppendEntity(bar);
                                 transaction.AddNewlyCreatedDBObject(bar, true);
+                                GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, bar, project, element, HandlesKey);
                                 update.Handles.Add(bar.Handle.ToString());
                                 bar = null;
                             }
@@ -245,7 +246,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return group;
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -257,6 +258,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
                 if (entity == null || entity.IsErased) continue;
                 if (!(entity is Solid3d solid)) throw new InvalidOperationException("Generated StructuralWall mesh handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
+                GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(solid, project, element, HandlesKey, "erase generated StructuralWall mesh " + handle);
                 solid.Erase();
             }
         }

@@ -127,9 +127,10 @@ namespace QS3D.BricsCAD.V25.Cad
                                 XClosestToFace = xClosest
                             });
                             ReserveBatchBars(ref batchBars, layout.Count);
-                            ErasePrevious(document, transaction, element, ownership);
+                            ErasePrevious(document, transaction, project, element, ownership);
                             var update = CreateUpdate(element, xGroup, yGroup, coverM, layout.XActualSpacingM, layout.YActualSpacingM, includeBottom, includeTop, RectangleFootprintMode);
                             AppendRectangleBars(document, transaction, modelSpace, polyline, element, rectangle, centerZ, layout, update);
+                            GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey, update.Handles);
                             pending.Add(update);
                             continue;
                         }
@@ -151,9 +152,10 @@ namespace QS3D.BricsCAD.V25.Cad
                             XClosestToFace = xClosest
                         });
                         ReserveBatchBars(ref batchBars, polygonLayout.Count);
-                        ErasePrevious(document, transaction, element, ownership);
+                        ErasePrevious(document, transaction, project, element, ownership);
                         var polygonUpdate = CreateUpdate(element, xGroup, yGroup, coverM, polygonLayout.XActualSpacingM, polygonLayout.YActualSpacingM, includeBottom, includeTop, PolygonFootprintMode);
                         AppendPolygonBars(document, transaction, modelSpace, polyline, element, centerZ, polygonLayout, polygonUpdate);
+                        GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey, polygonUpdate.Handles);
                         pending.Add(polygonUpdate);
                     }
 
@@ -419,7 +421,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return group;
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -431,6 +433,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
                 if (entity == null || entity.IsErased) continue;
                 if (!(entity is Solid3d solid)) throw new InvalidOperationException("Generated foundation mesh handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
+                GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(solid, project, element, HandlesKey, "erase generated foundation mesh " + handle);
                 solid.Erase();
             }
         }
