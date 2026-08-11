@@ -85,9 +85,20 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
-            if (e.Key == Key.Enter && CommandList.IsKeyboardFocusWithin)
+            if (e.Key == Key.Enter && (CommandList.IsKeyboardFocusWithin || SearchBox.IsKeyboardFocusWithin))
             {
                 RunSelectedCommand();
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.Down && SearchBox.IsKeyboardFocusWithin && CommandList.Items.Count > 0)
+            {
+                if (CommandList.SelectedItem == null) CommandList.SelectedIndex = 0;
+                CommandList.Focus();
+                CommandList.ScrollIntoView(CommandList.SelectedItem);
+                if (CommandList.ItemContainerGenerator.ContainerFromItem(CommandList.SelectedItem) is ListBoxItem item)
+                    item.Focus();
                 e.Handled = true;
             }
         }
