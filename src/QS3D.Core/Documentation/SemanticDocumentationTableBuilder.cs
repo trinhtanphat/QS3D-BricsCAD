@@ -98,6 +98,7 @@ namespace QS3D.Core.Documentation
                 var header = Required(column.Header, "columns[" + i + "].Header", MaxHeaderLength);
                 var template = Required(column.Template, "columns[" + i + "].Template", 512);
                 if (!headers.Add(header)) throw new InvalidOperationException("Documentation table contains duplicate column header: " + header + ".");
+                SemanticTagRenderer.ValidateTemplate(template);
                 normalizedColumns.Add(new SemanticDocumentationColumn(header, template));
             }
 
