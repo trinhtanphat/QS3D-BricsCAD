@@ -9,7 +9,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             GeneratedOutputsBecomeStaleAfterSemanticEdit();
-            ReplacedHandleAutoResolvesOnlyItsOwnStaleKind();
+            ReplacedHandlesRemainAsObsoleteMetadataUntilExplicitClear();
+            CurtainPanelObsoleteMarkerIsQueryPure();
             ExplicitClearPreservesOtherStaleKinds();
             StaleHealthReportsAllGeneratedKinds();
             ElementsWithoutGeneratedOutputsRemainFresh();
@@ -34,14 +35,20 @@ namespace QS3D.Core.SmokeTests
             Equal("Thickness changed", element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey]);
         }
 
-        private static void ReplacedHandleAutoResolvesOnlyItsOwnStaleKind()
+        private static void ReplacedHandlesRemainAsObsoleteMetadataUntilExplicitClear()
         {
             var element = Element();
             SeedAllGeneratedOutputs(element);
             element.MarkGeneratedGeometryStale("Family changed");
 
+            var rebarSnapshot = element.Properties[ProjectElement.GeneratedRebarStaleSnapshotKey];
+            var aggregateReason = element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey];
             element.Properties["GeneratedRebarHandles"] = "BD";
             False(element.IsGeneratedRebarStale());
+            False(element.IsGeneratedRebarStale());
+            Equal("stale", element.Properties[ProjectElement.GeneratedRebarStateKey]);
+            Equal(rebarSnapshot, element.Properties[ProjectElement.GeneratedRebarStaleSnapshotKey]);
+            Equal(aggregateReason, element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey]);
             True(element.IsGeneratedSolidStale());
             True(element.IsGeneratedShapeRebarStale());
             True(element.IsGeneratedTieRebarStale());
@@ -59,10 +66,57 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedSlabMeshHandles"] = "FG";
             element.Properties["GeneratedWallMeshHandles"] = "GH";
             element.Properties["GeneratedFoundationMeshHandles"] = "HI";
-            True(element.IsGeneratedCurtainFrameStale());
             element.Properties["GeneratedCurtainFrameHandles"] = "IJ";
+
+            False(element.IsGeneratedSolidStale());
+            False(element.IsGeneratedRebarStale());
+            False(element.IsGeneratedShapeRebarStale());
+            False(element.IsGeneratedTieRebarStale());
+            False(element.IsGeneratedBeamStirrupStale());
+            False(element.IsGeneratedSlabMeshStale());
+            False(element.IsGeneratedWallMeshStale());
+            False(element.IsGeneratedFoundationMeshStale());
+            False(element.IsGeneratedCurtainFrameStale());
+            False(element.IsGeneratedGeometryStale());
+            False(element.IsGeneratedGeometryStale());
+            True(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStateKey));
+            True(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStaleReasonKey));
+            True(element.Properties.ContainsKey(ProjectElement.GeneratedSolidStateKey));
+            True(element.Properties.ContainsKey(ProjectElement.GeneratedRebarStateKey));
+            True(element.Properties.ContainsKey(ProjectElement.GeneratedCurtainFrameStateKey));
+
+            element.ClearGeneratedGeometryStale();
             False(element.IsGeneratedGeometryStale());
             False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStateKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStaleReasonKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedSolidStateKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedRebarStateKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedCurtainFrameStateKey));
+        }
+
+        private static void CurtainPanelObsoleteMarkerIsQueryPure()
+        {
+            var element = Element();
+            element.Properties["GeneratedCurtainPanelHandles"] = "PA";
+            element.MarkGeneratedCurtainPanelStale("Panel source changed");
+            var snapshot = element.Properties[ProjectElement.GeneratedCurtainPanelStaleSnapshotKey];
+            var reason = element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey];
+
+            True(element.IsGeneratedCurtainPanelStale());
+            element.Properties["GeneratedCurtainPanelHandles"] = "PB";
+            False(element.IsGeneratedCurtainPanelStale());
+            False(element.IsGeneratedCurtainPanelStale());
+            False(element.IsGeneratedGeometryStale());
+            Equal("stale", element.Properties[ProjectElement.GeneratedCurtainPanelStateKey]);
+            Equal(snapshot, element.Properties[ProjectElement.GeneratedCurtainPanelStaleSnapshotKey]);
+            Equal(reason, element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey]);
+
+            element.ClearGeneratedCurtainPanelStale();
+            False(element.IsGeneratedCurtainPanelStale());
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedCurtainPanelStateKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedCurtainPanelStaleSnapshotKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStateKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStaleReasonKey));
         }
 
         private static void ExplicitClearPreservesOtherStaleKinds()

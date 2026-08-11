@@ -165,7 +165,7 @@ namespace QS3D.Core.Domain
 
         public bool IsGeneratedGeometryStale()
         {
-            var stale =
+            return
                 IsGeneratedSolidStale() ||
                 IsGeneratedRebarStale() ||
                 IsGeneratedShapeRebarStale() ||
@@ -176,12 +176,6 @@ namespace QS3D.Core.Domain
                 IsGeneratedFoundationMeshStale() ||
                 IsGeneratedCurtainFrameStale() ||
                 IsGeneratedCurtainPanelStale();
-            if (!stale)
-            {
-                Remove(GeneratedGeometryStateKey);
-                Remove(GeneratedGeometryStaleReasonKey);
-            }
-            return stale;
         }
 
         public bool IsGeneratedSolidStale() => IsGeneratedOutputStale(GeneratedSolidHandleKey, GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
@@ -277,14 +271,10 @@ namespace QS3D.Core.Domain
         {
             if (!Properties.TryGetValue(GeneratedCurtainPanelStateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.OrdinalIgnoreCase)) return false;
             var current = CurtainPanelOutputSignature();
-            if (!Properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) || string.IsNullOrWhiteSpace(snapshot) ||
-                current.Length == 0 || !string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase))
-            {
-                Remove(GeneratedCurtainPanelStateKey);
-                Remove(GeneratedCurtainPanelStaleSnapshotKey);
-                return false;
-            }
-            return true;
+            return Properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) &&
+                   !string.IsNullOrWhiteSpace(snapshot) &&
+                   current.Length > 0 &&
+                   string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase);
         }
 
         private string CurtainPanelOutputSignature()
@@ -301,14 +291,10 @@ namespace QS3D.Core.Domain
         {
             if (!Properties.TryGetValue(stateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.OrdinalIgnoreCase)) return false;
             var current = OutputSignature(outputKey);
-            if (!Properties.TryGetValue(snapshotKey, out var snapshot) || string.IsNullOrWhiteSpace(snapshot) ||
-                current.Length == 0 || !string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase))
-            {
-                Remove(stateKey);
-                Remove(snapshotKey);
-                return false;
-            }
-            return true;
+            return Properties.TryGetValue(snapshotKey, out var snapshot) &&
+                   !string.IsNullOrWhiteSpace(snapshot) &&
+                   current.Length > 0 &&
+                   string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase);
         }
 
         private string OutputSignature(string outputKey)
