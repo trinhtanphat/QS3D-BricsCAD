@@ -1,37 +1,46 @@
 # Work claim — EntitySnapshot handle canonicalization
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-entity-snapshot-handle-canonicalization`
 - Registered: `2026-08-11T22:34:00+07:00`
+- Completed: `2026-08-11T22:36:00+07:00`
 - Baseline main SHA: `6c1eb17c4dc87a571a6e6afb9627d356a64ecfc4`
+- Reservation commit: `26f1015647da6a6ae8003564c94a147a58683ae0`
 - Priority: keep CAD handle identity canonical across snapshot/recognition boundaries.
 
-## Confirmed defect
+## Defect fixed
 
-`EntitySnapshot` rejects blank `handle` values but stores a nonblank handle unchanged, while the same constructor already canonicalizes `EntityType`. `RecognitionResult.Handle` exposes `Snapshot.Handle` directly. A snapshot constructed with a padded CAD handle such as `" 1A2B "` therefore survives recognition with a different textual identity from canonical `"1A2B"` even though generated-handle ownership lookups defensively trim handles before matching.
+`EntitySnapshot` previously rejected blank `handle` values but stored nonblank handles unchanged, while `RecognitionResult.Handle` exposes `Snapshot.Handle` directly. A padded CAD handle could therefore survive the public model/recognition boundary as a whitespace-distinct identity even though generated-handle ownership lookup code has to trim handles defensively.
 
-This leaves the public model boundary able to represent one CAD handle with multiple whitespace-distinct values and pushes normalization burden onto downstream consumers.
+`EntitySnapshot` now trims the nonblank handle once at construction so downstream consumers receive one canonical representation.
 
 ## Reserved scope
 
 - `src/QS3D.Core/Model/EntitySnapshot.cs`
-- focused existing Core smoke coverage for `EntitySnapshot` / recognition handle identity
+- `tests/QS3D.Core.SmokeTests/ProxyCaptureEligibilitySmoke.cs`
 - this claim file
 
-## Intended contract
+## Delivered contract
 
 - `EntitySnapshot.Handle` stores the trimmed nonblank CAD handle supplied at construction.
-- `RecognitionResult.Handle` therefore exposes the canonical handle without changing recognition scoring or category behavior.
-- Existing canonical handles remain byte-for-byte unchanged.
-- Do not modify `RecognitionEngine.cs`, generated ownership diagnostics, adapter extraction, or currently active recognition workstreams.
+- `RecognitionResult.Handle` therefore exposes the canonical handle without recognition-engine changes.
+- Existing canonical handles remain unchanged.
+- Existing entity-type/proxy safety behavior is preserved.
+- `RecognitionEngine.cs`, generated ownership diagnostics and adapter extraction were not modified.
 
-## Validation plan
+## Published commits
 
-- Re-fetch `main`, reserved blobs and recent claims immediately after reservation.
-- Add focused Core smoke/assertion proving padded input becomes canonical and remains the same through `RecognitionResult.Handle`.
-- Preserve existing entity-type/proxy safety coverage.
-- No GitHub Actions dispatch and no BricsCAD V25 runtime claim.
+- `7599285623eb509aaf1fea96af765ae08f3baf33` — trim `EntitySnapshot.Handle` at the model boundary.
+- `be1befd7ee8e4026bedf497c1bb13abfc26240df` — add focused canonical-handle and `RecognitionResult.Handle` smoke assertions.
+
+## Validation notes
+
+- Re-fetched both reserved source blobs after publication; `main` still contains `Handle = handle.Trim()` and the focused padded-handle regression.
+- The existing `ProxyCaptureEligibilitySmoke` remains the regression host, so no smoke-registry edit was required.
+- Exact executable Core smoke was not run in this web session; no executable PASS is claimed.
+- GitHub Actions were not dispatched; repository CI remains manual-only.
+- No BricsCAD V25 runtime/build PASS is claimed and no force-push was used.
 
 ## Completion condition
 
-Padded CAD handles can no longer escape the `EntitySnapshot` model boundary, focused regression source is merged, and this claim is closed with exact implementation SHAs and truthful validation scope.
+Satisfied for the source/static contract. Exact executable/Core and BricsCAD V25 qualification remain separate environment gates.
