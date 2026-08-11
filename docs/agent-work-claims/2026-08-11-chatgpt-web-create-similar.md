@@ -8,12 +8,13 @@
 
 ## Reserved scope
 
-Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane: select one existing QS3D semantic source or generated object, resolve its canonical semantic owner and Family/Type without creating a second model, activate that existing Family through the repository's current project/family mutation contract, then delegate to the existing `QS3DDRAWACTIVE` or `QS3DDRAWACTIVEADV` workflow. Add static contract coverage and a focused handoff documenting exact LOCAL_ONLY BricsCAD V25 qualification.
+Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane: select one existing QS3D semantic source or generated object, resolve its canonical semantic owner and Family/Type without creating a second model, activate that existing Family through the repository's current project/family mutation contract, then delegate to the existing `QS3DDRAWACTIVE` or `QS3DDRAWACTIVEADV` workflow. Add static contract coverage, one idempotent Quick Workflow Ribbon entry for the primary command, and a focused handoff documenting exact LOCAL_ONLY BricsCAD V25 qualification.
 
 ## Expected surfaces
 
 - `src/QS3D.BricsCAD.V25/CreateSimilarCommands.cs` (new command surface, exact name may be adjusted only if an existing canonical command file is discovered during source orientation)
 - `src/QS3D.BricsCAD.V25/ActiveFamilyQuickDrawCommands.cs` only for one shared read-only support predicate so Create Similar can reject unsupported categories before changing Active Family instead of duplicating the dispatcher category list
+- `src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs` only for one stable/idempotent **Vẽ Tương Tự** primary action; Advanced remains command-driven to avoid Ribbon duplication
 - existing semantic ownership / Family activation services only if a small reusable helper is required; no new parallel ownership model
 - `scripts/preflight-create-similar.py`
 - `docs/DIRECT-DRAW-CREATE-SIMILAR-2026-08-11.md`
@@ -30,15 +31,15 @@ Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane:
 
 ## Validation plan
 
-- Static source review against current `main` for semantic-source and generated-output ownership resolution, stale-project handling, Family existence/category checks, and command dispatch.
-- Add an auto-discovered preflight that fails if Create Similar bypasses canonical ownership/Family activation or directly invokes geometry builders instead of delegating to Active Family Quick Draw.
+- Static source review against current `main` for semantic-source and generated-output ownership resolution, stale-project handling, Family existence/category checks, command dispatch and Ribbon idempotence.
+- Add an auto-discovered preflight that fails if Create Similar bypasses canonical ownership/Family activation, directly invokes geometry builders instead of delegating to Active Family Quick Draw, or loses the stable Ribbon action.
 - Re-fetch latest `main` before implementation merge and preserve concurrent commits.
-- Extend `LOCAL-008` with exact Create Similar selection/cancel/stale-project/generated-owner/document-switch qualification; do not claim those interactive checks remotely.
+- Extend `LOCAL-008` with exact Create Similar selection/cancel/stale-project/generated-owner/document-switch/Ribbon qualification; do not claim those interactive checks remotely.
 
 ## Coordination
 
-The repository-wide registration-protocol bootstrap explicitly excludes QS3D product source changes, the generated-native source-recognition lane explicitly excludes Create Similar command-side ownership, and the Workspace multi-selection policy lane is complete. This lane does not overlap those scopes. If a new overlapping Direct Draw or selection-ownership claim appears after this reservation is pushed, stop and re-scope before implementation.
+The repository-wide registration-protocol bootstrap explicitly excludes QS3D product source changes, the generated-native source-recognition lane explicitly excludes Create Similar command-side ownership, and the Workspace multi-selection policy lane is complete. This lane does not overlap those scopes. If a new overlapping Direct Draw, Ribbon, or selection-ownership claim appears after this reservation is pushed, stop and re-scope before implementation.
 
 ## Completion condition
 
-Create Similar Quick/Advanced commands are merged to current `main` with static contract coverage and handoff documentation, `LOCAL-008` carries the exact interactive qualification delta, this claim is marked `COMPLETED` with the implementation SHA(s), and all live BricsCAD V25-only evidence remains explicitly unclaimed/LOCAL_ONLY.
+Create Similar Quick/Advanced commands plus the primary Ribbon entry are merged to current `main` with static contract coverage and handoff documentation, `LOCAL-008` carries the exact interactive qualification delta, this claim is marked `COMPLETED` with the implementation SHA(s), and all live BricsCAD V25-only evidence remains explicitly unclaimed/LOCAL_ONLY.
