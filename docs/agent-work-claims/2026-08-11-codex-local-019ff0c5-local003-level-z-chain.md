@@ -58,9 +58,10 @@ The exact-V25/Core gate is blocked before any Level-owned source compiles by two
 
 - `src/QS3D.Core/Persistence/QsdbProjectXmlSchemaValidator.cs`: make the already-required `name` attribute non-null to nullable flow analysis after the existing empty/whitespace rejection; do not change QSDB validation semantics.
 - `src/QS3D.Core/Geometry/CurtainFrameOpeningPlanner.cs`: replace `double.IsFinite(...)`, which is unavailable to the repository's `netstandard2.0` target, with equivalent NaN/Infinity checks; do not change Curtain geometry, bounds or exception policy.
+- After those two blockers were removed, the same strict Core gate exposed released Revision-payload nullable-flow errors at `origin/main@9c263d0c5454c5e0f4de06f6a7c7d57d6e1ca658`. Reserve `src/QS3D.Core/Revisions/RevisionService.cs` and `src/QS3D.Core/Revisions/QuantityRevisionReport.cs` only to make the already-required non-blank identity explicit before `Trim()`; preserve the exact canonical-identity validation and exception behavior.
 - validate with the existing focused smokes/preflights plus Core Release/smoke and V25 x64 Release build. Add only a narrowly necessary regression token if the current gates do not protect target-framework compatibility.
 
-The earlier claims for these exact surfaces are `COMPLETED` and released; current ACTIVE/BLOCKED claim audit found no owner for either file. This expansion excludes any broader persistence, Curtain topology, geometry-planning or refactor work. The prerequisite fixes will be committed with the coherent LOCAL-003 implementation batch, not as an unrelated feature stream.
+The earlier claims for these exact surfaces are `COMPLETED` and released; current ACTIVE/BLOCKED claim audit found no owner for any of the four files. This expansion excludes any broader persistence, Revision semantics, Curtain topology, geometry-planning or refactor work. The prerequisite fixes will be committed with the coherent LOCAL-003 implementation batch, not as an unrelated feature stream.
 
 ## Completion condition
 
