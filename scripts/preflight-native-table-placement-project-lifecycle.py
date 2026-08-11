@@ -10,6 +10,7 @@ CASES = (
         'CommandMethod("QS3DBQTABLEREFRESH"',
         "BqNativeTableBuilder.Build(document, project, world)",
         "BQ Table",
+        True,
     ),
     (
         ROOT / "src" / "QS3D.BricsCAD.V25" / "BbsNativeTableCommands.cs",
@@ -17,11 +18,44 @@ CASES = (
         'CommandMethod("QS3DBBSTABLEREFRESH"',
         "BbsNativeTableBuilder.Build(document, project, world)",
         "BBS Table",
+        True,
+    ),
+    (
+        ROOT / "src" / "QS3D.BricsCAD.V25" / "DoorOpeningNativeTableCommands.cs",
+        'CommandMethod("QS3DDOOROPENINGTABLE"',
+        'CommandMethod("QS3DDOOROPENINGTABLEREFRESH"',
+        "DoorOpeningNativeTableBuilder.Build(document, project, world)",
+        "Door/Opening Table",
+        False,
+    ),
+    (
+        ROOT / "src" / "QS3D.BricsCAD.V25" / "MaterialUsageNativeTableCommands.cs",
+        'CommandMethod("QS3DMATERIALTABLE"',
+        'CommandMethod("QS3DMATERIALTABLEREFRESH"',
+        "MaterialUsageNativeTableBuilder.Build(document, project, world)",
+        "Material Usage Table",
+        False,
+    ),
+    (
+        ROOT / "src" / "QS3D.BricsCAD.V25" / "RoomFinishNativeTableCommands.cs",
+        'CommandMethod("QS3DFINISHTABLE"',
+        'CommandMethod("QS3DFINISHTABLEREFRESH"',
+        "RoomFinishNativeTableBuilder.Build(document, project, world)",
+        "Room Finish Table",
+        False,
+    ),
+    (
+        ROOT / "src" / "QS3D.BricsCAD.V25" / "SemanticElementTableCommands.cs",
+        'CommandMethod("QS3DELEMENTTABLE"',
+        'CommandMethod("QS3DELEMENTTABLEREFRESH"',
+        "SemanticElementTableBuilder.Build(document, project, world)",
+        "Semantic Element Table",
+        False,
     ),
 )
 
 errors = []
-for path, start_token, end_token, build_token, label in CASES:
+for path, start_token, end_token, build_token, label, requires_regeneration in CASES:
     if not path.is_file():
         errors.append("missing source: " + str(path.relative_to(ROOT)))
         continue
@@ -33,16 +67,18 @@ for path, start_token, end_token, build_token, label in CASES:
         errors.append(label + ": cannot isolate Build command")
         continue
 
-    required = (
+    required = [
         "ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)",
         "var expectedProjectId = previewProject.ProjectId",
         "document.Editor.GetPoint(",
         "if (point.Status != PromptStatus.OK) return;",
         'RequireExistingProject(document, "' + label + '")',
         "string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase)",
-        "RegenerateSemantic(project)",
-        build_token,
-    )
+    ]
+    if requires_regeneration:
+        required.append("RegenerateSemantic(project)")
+    required.append(build_token)
+
     positions = {}
     for token in required:
         pos = body.find(token)
@@ -53,12 +89,15 @@ for path, start_token, end_token, build_token, label in CASES:
     if all(pos >= 0 for pos in positions.values()):
         ordered = [positions[token] for token in required]
         if ordered != sorted(ordered):
-            errors.append(label + ": expected read-only probe -> ProjectId snapshot -> point prompt -> cancel guard -> canonical bind -> freshness check -> regeneration -> native build ordering")
+            errors.append(label + ": expected read-only probe -> ProjectId snapshot -> point prompt -> cancel guard -> canonical bind -> freshness check -> optional regeneration -> native build ordering")
 
     prompt = body.find("document.Editor.GetPoint(")
+    cancel = body.find("if (point.Status != PromptStatus.OK) return;")
     bind = body.find('RequireExistingProject(document, "' + label + '")')
     if prompt >= 0 and bind >= 0 and bind < prompt:
         errors.append(label + ": canonical project bind occurs before placement prompt/cancel boundary")
+    if cancel >= 0 and bind >= 0 and bind < cancel:
+        errors.append(label + ": cancelled placement reaches canonical project binding")
 
     if "ProjectContextCoordinator.GetOrCreate" in body:
         errors.append(label + ": Build must not create a replacement project")
@@ -69,4 +108,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BQ/BBS native Table placement probes existing state read-only, returns on cancelled placement before canonical binding, verifies same ProjectId after binding, then regenerates/builds.")
+print("PASS: all six native Table placement commands probe existing state read-only, return on cancelled placement before canonical binding, verify the same ProjectId after binding, then build from canonical state.")
