@@ -8,6 +8,8 @@ namespace QS3D.Core.Reporting
 {
     public sealed class CurtainWallScheduleRow
     {
+        public string ProjectId { get; set; } = string.Empty;
+        public string DrawingFingerprint { get; set; } = string.Empty;
         public string Floor { get; set; } = string.Empty;
         public string FamilyName { get; set; } = string.Empty;
         public int WallCount { get; set; }
@@ -25,6 +27,7 @@ namespace QS3D.Core.Reporting
         public double MinimumClearPanelHeightM { get; set; } = double.MaxValue;
         public double MaximumClearPanelHeightM { get; set; }
         public IList<string> ElementIds { get; } = new List<string>();
+        public IList<string> SourceHandles { get; } = new List<string>();
     }
 
     public static class CurtainWallScheduleBuilder
@@ -45,7 +48,13 @@ namespace QS3D.Core.Reporting
                 var key = element.FloorId + "\u001f" + element.FamilyId;
                 if (!rows.TryGetValue(key, out var row))
                 {
-                    row = new CurtainWallScheduleRow { Floor = floor, FamilyName = family };
+                    row = new CurtainWallScheduleRow
+                    {
+                        ProjectId = project.ProjectId,
+                        DrawingFingerprint = project.DrawingFingerprint,
+                        Floor = floor,
+                        FamilyName = family
+                    };
                     rows[key] = row;
                     order.Add(key);
                 }
@@ -65,6 +74,7 @@ namespace QS3D.Core.Reporting
                 row.MinimumClearPanelHeightM = Math.Min(row.MinimumClearPanelHeightM, Q(element, "CurtainMinClearPanelHeightM"));
                 row.MaximumClearPanelHeightM = Math.Max(row.MaximumClearPanelHeightM, Q(element, "CurtainMaxClearPanelHeightM"));
                 row.ElementIds.Add(element.Id);
+                ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
             }
 
             foreach (var row in rows.Values)
