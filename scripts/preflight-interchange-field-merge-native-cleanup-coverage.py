@@ -46,23 +46,40 @@ def main():
     require(guard, "EnsurePhysicalOpeningAliasMatchesHostSolid", "native cleanup coverage guard", failures)
     require(guard, "does not match", "physical-opening alias guard", failures)
 
-    guard_token = "GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);"
-    first_guard = service.find(guard_token)
-    second_guard = service.find(guard_token, first_guard + len(guard_token)) if first_guard >= 0 else -1
-    snapshot = service.find("ProjectStateSnapshot.Capture(project)")
+    early_guard = service.find("GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);")
+    document_lock = service.find("using (document.LockDocument())")
+    locked_require = service.find("var lockedProject = ExistingProjectMutationContext.Require(")
+    same_project = service.find("ReferenceEquals(lockedProject, project)")
+    locked_targets = service.find("var lockedInvalidationTargets = ResolveAffectedTargets(")
     transaction = service.find("StartTransaction()")
+    snapshot = service.find("ProjectStateSnapshot.Capture(lockedProject)")
+    locked_guard = service.find("GeneratedNativeCleanupCoverageGuard.EnsureSupported(lockedInvalidationTargets);")
     invalidation = service.find("GeneratedDependentGeometryInvalidator.Prepare(")
-    if min(first_guard, second_guard, snapshot, transaction, invalidation) < 0:
+
+    ordered = [
+        early_guard,
+        document_lock,
+        locked_require,
+        same_project,
+        locked_targets,
+        transaction,
+        snapshot,
+        locked_guard,
+        invalidation,
+    ]
+    if min(ordered) < 0:
         failures.append(
-            "field merge service must contain both cleanup coverage checks, rollback snapshot, transaction, and invalidator preparation"
+            "field merge service is missing early coverage, document lock, canonical rebind, locked target re-resolution, rollback snapshot, locked coverage, or invalidator preparation"
         )
-    else:
-        if not (first_guard < snapshot < transaction):
-            failures.append("field merge must perform an early cleanup-coverage precheck before rollback capture/native transaction")
-        if not (transaction < second_guard < invalidation):
-            failures.append("field merge must recheck cleanup coverage under the document lock immediately before destructive invalidator preparation")
-        if service.count(guard_token) != 2:
-            failures.append("field merge cleanup coverage must have exactly the early precheck and locked pre-invalidation recheck")
+    elif ordered != sorted(ordered):
+        failures.append(
+            "field merge native ordering must be early coverage -> document lock -> canonical rebind/identity check -> target re-resolve -> transaction/snapshot -> locked coverage -> invalidator"
+        )
+
+    require(service, "GeneratedDependentGeometryInvalidator.Prepare(\n                            document,\n                            transaction,\n                            lockedProject,\n                            lockedInvalidationTargets)", "locked invalidator inputs", failures)
+    require(service, "ProjectInterchangeFieldMergeImporter.Import(\n                            lockedProject,", "locked Core mutation target", failures)
+    require(service, "if (!cadCommitted && rollback != null)", "conditional semantic rollback", failures)
+    require(service, "rollback.Restore(project)", "semantic rollback target", failures)
 
     # Keep the explicit native handlers visible in the invalidator. If a handler is removed,
     # the coverage whitelist must not continue advertising that slot as safely erasable.
@@ -79,6 +96,7 @@ def main():
         return 1
 
     print("PASS: FieldMerge rejects unsupported generated ownership slots before native mutation.")
+    print("PASS: the exact canonical project and affected targets are rebound/re-resolved under the document lock.")
     print("PASS: cleanup coverage is rechecked under the document lock immediately before native invalidation.")
     print("PASS: physical-opening owner aliases must identify the same generated host Solid3d handle.")
     print("PASS: known native cleanup handlers remain present for solid/rebar/curtain/grid ownership slots.")
