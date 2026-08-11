@@ -50,9 +50,9 @@ namespace QS3D.BricsCAD.V25
                         WriteLine(document, "    … còn " + (diagnostics.MissingDirectedPairs.Count - DetailLimit) + " cặp thiếu.");
                 }
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                WriteLine(document, "QS3DQSETTINGSHEALTH lỗi: " + ex.Message);
+                WriteLine(document, "QS3DQSETTINGSHEALTH lỗi: không thể đọc hoặc phân tích Quantity Settings. Kiểm tra cấu hình hoặc cập nhật QS3D.");
             }
         }
 

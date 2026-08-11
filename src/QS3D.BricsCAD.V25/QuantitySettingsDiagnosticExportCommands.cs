@@ -39,9 +39,9 @@ namespace QS3D.BricsCAD.V25
                     " luật có hướng • " + snapshot.MissingDirectedPairs.Count +
                     " cặp thiếu • " + Path.GetFileName(dialog.FileName));
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                WriteLine(document, "QS3DQSETTINGSHEALTHEXPORT lỗi: " + ex.Message);
+                WriteLine(document, "QS3DQSETTINGSHEALTHEXPORT lỗi: không thể tạo hoặc ghi báo cáo Quantity Settings Health. Kiểm tra cấu hình và vị trí lưu.");
             }
         }
 
