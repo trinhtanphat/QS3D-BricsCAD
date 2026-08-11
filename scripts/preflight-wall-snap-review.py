@@ -74,7 +74,11 @@ if wall_snap.is_file():
             "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
             "private static ProjectState RequireFreshMutationProject",
             "project.ChangeVersion != expectedChangeVersion",
-            "private static long NextChangeVersion(long current)",
+            'RequireTouchHeadroom(project, 2, "Wall Snap Preview");',
+            'RequireTouchHeadroom(project, plan.Edits.Count == 0 ? 1 : 2, "Wall Snap Apply");',
+            "private static void RequireTouchHeadroom(ProjectState project, int requiredTouches, string operation)",
+            "project.ChangeVersion > long.MaxValue - requiredTouches",
+            "private static long NextChangeVersion(long current) => checked(current + 1L);",
             "private static bool ClearPreview(ProjectState project)",
             "changed |= project.Metadata.Remove(PreviewProjectIdKey);",
             "changed |= project.Metadata.Remove(PreviewChangeVersionKey);",
@@ -82,12 +86,24 @@ if wall_snap.is_file():
             if token not in text:
                 errors.append("Wall Snap lifecycle/freshness contract missing: " + token)
 
+        if "current == long.MaxValue ? 1L" in text:
+            errors.append("Wall Snap ChangeVersion freshness must not wrap from long.MaxValue to 1")
+
+        bind_preview = preview.find('RequireFreshMutationProject(document, "Wall Snap Preview"')
+        headroom_preview = preview.find('RequireTouchHeadroom(project, 2, "Wall Snap Preview");')
+        first_metadata = preview.find("project.Metadata[PreviewPlanHashKey]")
         audit = preview.find('AuditTrail.ForProject(project).Record("wall.junction.snap.preview"')
         approved = preview.find("var approvedVersion = NextChangeVersion(project.ChangeVersion);")
         stored = preview.find("project.Metadata[PreviewChangeVersionKey] = approvedVersion.ToString(CultureInfo.InvariantCulture);")
         touch = preview.find("project.Touch();", stored)
-        if min(audit, approved, stored, touch) < 0 or not (audit < approved < stored < touch):
-            errors.append("Wall Snap Preview must stamp its exact final ChangeVersion after preview audit mutation")
+        if min(bind_preview, headroom_preview, first_metadata, audit, approved, stored, touch) < 0 or not (bind_preview < headroom_preview < first_metadata < audit < approved < stored < touch):
+            errors.append("Wall Snap Preview must reserve two version increments before any preview metadata/audit mutation and stamp exact final ChangeVersion")
+
+        preview_count_check = apply.find("previewCount != plan.Edits.Count")
+        headroom_apply = apply.find('RequireTouchHeadroom(project, plan.Edits.Count == 0 ? 1 : 2, "Wall Snap Apply");')
+        zero_branch = apply.find("if (plan.Edits.Count == 0)")
+        if min(preview_count_check, headroom_apply, zero_branch) < 0 or not (preview_count_check < headroom_apply < zero_branch):
+            errors.append("Wall Snap Apply must reserve cleanup/apply version increments after freshness validation and before any metadata/native mutation")
 
 hub = ROOT / "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml"
 if hub.is_file():
@@ -108,4 +124,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: wall snap Preview/Apply preserve cancel-safe read-only selection, exact project/version preview freshness, source/plan fingerprints, metadata cleanup versioning, CAD transaction safety and UI wiring.")
+print("PASS: wall snap Preview/Apply preserve cancel-safe read-only selection, exact project/version preview freshness, pre-mutation ChangeVersion headroom, source/plan fingerprints, metadata cleanup versioning, CAD transaction safety and UI wiring.")
