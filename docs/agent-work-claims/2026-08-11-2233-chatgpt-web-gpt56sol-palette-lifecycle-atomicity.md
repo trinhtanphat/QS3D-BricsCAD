@@ -1,41 +1,34 @@
 # Work claim — palette lifecycle atomicity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-palette-lifecycle-atomicity`
 - Registered: `2026-08-11T22:33:00+07:00`
+- Completed: `2026-08-11T22:36:00+07:00`
 - Baseline main SHA: `129a091e7a6ea4fbf4cd3e39acf3fe922e2ffca8`
 - Priority: P1 deterministic lifecycle/resource ownership hardening found during owner-requested `continue all` audit.
 
-## Confirmed defects
+## Result
 
-`PaletteCoordinator.EnsureCreated()` publishes `_workspace`, `_right`, `_quantityInsight` and their panel references incrementally. If a later `PaletteSet` construction, size assignment, or `AddVisual(...)` call throws, the already-created palette resources remain published until some later retry or plugin teardown happens.
+Two source-level palette ownership defects are closed on `main`.
 
-`PaletteCoordinator.Dispose()` also disposes the three palette sets sequentially without per-resource isolation. If one native `PaletteSet.Dispose()` throws, later palette sets are not disposed and the panel references are not cleared. A teardown/reset path can therefore leave partially owned native UI state behind.
+- `f74d5c33ae9463e03b67b78386010db9d4776328` — `fix(ui): make palette lifecycle teardown atomic`
+  - `EnsureCreated()` now wraps all three panel/PaletteSet creation sequences in one failure boundary;
+  - partial state from either a prior failed creation or the current attempt is torn down through `DisposeCore(false)`, deliberately avoiding persistence of incomplete palette dimensions;
+  - creation failure rethrows after cleanup rather than leaving a partially published palette graph;
+  - public `Dispose()` routes through `DisposeCore(true)` so normal teardown still persists user layout first;
+  - each `PaletteSet` is released independently through `DisposePalette(ref ...)`, and ownership is cleared before native `Dispose()` runs, so one throwing native teardown cannot retain a published static reference or prevent cleanup of the remaining palettes;
+  - all three panel references are cleared after palette teardown.
+- `dd8aba64aed4a1962e08dc7db86cecce4eb6b0eb` — `test(ui): guard palette lifecycle atomicity`
+  - focused auto-discovered source gate requires rollback of partial creation, no incomplete-layout persistence, isolated per-palette disposal, ownership clearing before native dispose, and preservation of existing visibility/layout behavior.
 
-Both defects are visible from source ownership/order alone; this lane does not depend on a claim that BricsCAD normally throws.
+## Integration verification
 
-## Reserved scope
+The implementation diff was inspected directly and contains only the intended `PaletteCoordinator.cs` lifecycle changes. A compare from `dd8aba64...` to the then-current `main` reported `behind_by: 0` with `dd8aba64...` as merge base; subsequent commits were unrelated updater/Core claim work. No reset, rebase or force-push was used.
 
-- `src/QS3D.BricsCAD.V25/PaletteCoordinator.cs`
-- `scripts/preflight-palette-lifecycle-atomicity.py` (new)
-- this claim file for close-out
+## Validation boundary
 
-## Intended contract
+The source/static guard is committed but was not executed from a full repository checkout in this connector-only lane. No GitHub Actions, BricsCAD V25 palette failure injection, build/NETLOAD, installer, signing or release was run. Native palette disposal/creation failure behavior therefore remains local qualification; no `LOCAL_PASS` is claimed.
 
-- `EnsureCreated()` either finishes all three palette/panel creations or immediately tears down every partially published palette before rethrowing.
-- Palette teardown is best-effort per palette: one native dispose failure cannot prevent the other palette resources from being released.
-- All palette and panel static references are cleared deterministically after teardown.
-- Existing visibility, layout persistence, panel refresh and user-facing behavior remain unchanged.
+## Coordination
 
-## Excluded scope
-
-- No Workspace/RightPanel/QuantityInsight presentation edits, Theme/Ribbon/updater/Core/project semantics, installer/signing/release or LOCAL inbox changes.
-- No GitHub Actions dispatch and no BricsCAD V25 runtime PASS claim.
-
-## Validation plan
-
-Re-fetch current `main` and `PaletteCoordinator.cs` immediately before source write. Add a focused auto-discovered static preflight that requires creation rollback, isolated palette disposal and final reference clearing while preserving existing layout persistence/visibility contracts. Inspect exact commit diffs and verify ancestry after concurrent integration without force-push.
-
-## Completion condition
-
-Palette creation/teardown ownership is fail-atomic at source level, focused regression source is merged on `main`, this claim is closed with exact SHAs, and native failure-injection qualification remains local-only.
+No Workspace/RightPanel/QuantityInsight presentation code, Theme, Ribbon, updater, Core/project semantics or LOCAL inbox files were edited. Concurrent work was preserved through latest-blob SHA writes.
