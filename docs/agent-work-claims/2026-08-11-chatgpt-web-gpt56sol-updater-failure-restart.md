@@ -2,45 +2,41 @@
 
 - Claim ID: `UPDATER-FAILURE-RESTART-20260811`
 - Owner: `ChatGPT Web / GPT-5.6 Sol`
-- Status: `ACTIVE`
+- Status: `RELEASED`
 - Registered: `2026-08-11T22:39:30+07:00`
+- Released: `2026-08-11T22:43:00+07:00`
 - Baseline main SHA: `807ad1a2405b6dac7b91a57e73fdf16d295e6acc`
 - Parent updater lane: `GITHUB-RELEASE-AUTO-UPDATE-20260811`
 
 ## Verified defect
 
-The detached updater worker restarts the captured `bricscad.exe` only on the success path. After the worker has acquired the update reservation and observed that all BricsCAD processes are closed, any later failure—installed updater signature rejection, network/package verification failure, transactional installer failure or even the success-path restart itself throwing—falls into `catch`, logs the error and exits 1 without restoring the host application.
+The detached updater worker previously restarted the captured `bricscad.exe` only on the success path. After all BricsCAD processes were closed, any later signature/network/package/installer/restart failure entered `catch` and exited without restoring host availability.
 
-One-click update can therefore leave the user with BricsCAD closed after a recoverable update failure. Pre-close manifest probing reduces this risk but cannot eliminate post-close TOCTOU/network/package/installer failures.
+## Completed changes
 
-## Reserved scope
+- `fbb7fae24e2fb2086715aba071aa8946e88e47ad` — registered this lane before source changes.
+- `cb0446777272894c2eb26eee8b9f3272d1e6385f` — committed the post-failure restart plan before implementation.
+- `f6fb76c3bacb3432abb4d4ea137609704631f2d0` — worker now tracks `$hostClosed`, sets it only after the cancellation-aware all-BricsCAD wait completes, preserves normal success restart, and performs one best-effort recovery restart only after a post-close failure when the captured BricsCAD executable still exists and no BricsCAD process is already running.
+  - Pre-close readiness/cancellation failures cannot create a duplicate host because `$hostClosed` remains false.
+  - Catch now captures `$updateFailure` and logs it with `Write-Error ... -ErrorAction Continue`; this avoids `$ErrorActionPreference='Stop'` turning the logging statement itself into a new terminating error before recovery/transcript cleanup.
+  - Recovery restart failures are warning-only and do not mask the original worker failure; the worker still exits 1.
+- `d6a9d21bf0da5dae32a3debfdb28dc4dc196364d` — added the auto-discovered `preflight-update-worker-restart.py` gate locking host-close/restart ordering, duplicate-instance avoidance, original-error preservation and no-host-kill policy.
 
-- `src/QS3D.BricsCAD.V25/Updates/SecureUpdateLauncher.cs`
-- `scripts/preflight-update-worker-restart.py` (new)
-- `scripts/preflight-update-worker-readiness.py` / `scripts/preflight-update-worker-cancellation.py` only if narrow compatibility is required
-- `docs/UPDATER-FAILURE-RESTART-PLAN-2026-08-11.md` (new)
-- this claim file
+## Preserved contracts
 
-## Non-overlap / preservation
+- Windows-SID cross-process update mutex.
+- Readiness + cancellation handoff and cancellation barriers.
+- Graceful `CloseMainWindow()` host-close request; no BricsCAD kill.
+- WinVerifyTrust/current signer anchor and installed updater Authenticode signer pinning.
+- GitHub package-host allowlist, product-version updater checks and external transcript logs.
+- Success path still restarts the exact captured `bricscad.exe`.
 
-- Preserve current readiness+cancellation handoff, Windows-SID cross-process mutex, all-BricsCAD wait, WinVerifyTrust/current signer pinning, installed updater signer verification, package host allowlist, product-version checks, graceful host close and external logs.
-- Do not edit UpdateCoordinator/UI, GitHubReleaseClient, UpdateManifestProbe, installer/update PowerShell, release workflow or unrelated feature lanes.
-- Never launch an extra BricsCAD instance for cancellation/readiness failures that occur while a host is still running.
-- No GitHub Actions dispatch and no release publication.
+## Integration verification
 
-## Intended contract
+- Compare from `d6a9d21bf0da5dae32a3debfdb28dc4dc196364d` to current `main` reported `behind_by: 0`; concurrent commits after the gate touched unrelated claim/Core/test files, not updater source.
+- `preflight-all.py` discovers `scripts/preflight-*.py`, so the new restart gate is part of aggregate source validation.
+- No GitHub Actions workflow was dispatched and no release was published.
 
-1. Worker tracks an explicit `hostClosed` state that becomes true only after the all-BricsCAD wait completes.
-2. Success path restarts the exact captured `bricscad.exe` as today.
-3. Catch path preserves the original failure, and if `hostClosed` is true and no BricsCAD process has already appeared, performs one best-effort recovery restart of the exact captured executable.
-4. Cancellation/readiness failures before host closure must not trigger a restart or create a duplicate BricsCAD instance.
-5. Failure recovery restart errors are logged but never mask the original updater failure/exit code.
-6. No BricsCAD process is killed.
+## Validation boundary
 
-## Validation / release conditions
-
-- Commit a planning MD before implementation.
-- Add an auto-discovered gate proving hostClosed is set only after the CAD wait, success/failure restart ordering, duplicate-instance avoidance and preservation of original error exit.
-- Re-fetch launcher/gate and verify ancestry with `behind_by: 0`.
-- Native restart behavior remains part of `LOCAL-009`; no remote runtime PASS claim.
-- Mark `RELEASED` only after source + regression gate are on `main`.
+Source/static control flow is hardened. Actual Windows restart behavior after package/network/transaction failures remains `LOCAL-009 / PENDING_LOCAL`; this lane does not claim native/runtime PASS.
