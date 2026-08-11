@@ -225,7 +225,8 @@ namespace QS3D.BricsCAD.V25
 
                 configureElement?.Invoke(createdElement);
 
-                regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                    .RegenerateDirtySubset(project, new[] { createdElement.Id });
 
                 solids = BuildSelected(document, project, category);
                 if (solids <= 0) throw new InvalidOperationException("Native 3D builder không tạo được solid cho " + category + ".");
