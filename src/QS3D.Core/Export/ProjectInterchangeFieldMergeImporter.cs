@@ -149,7 +149,7 @@ namespace QS3D.Core.Export
             TargetFieldsKept = plan.FieldPlan.TargetChoiceCount;
             AffectedTargetElementsMarkedDirty = plan.AffectedTargetElementIds.Count;
             NativeCleanupElementsAuthorized = plan.NativeCleanupRequirements.Count;
-            TargetGeneratedHandlesCleaned = plan.TargetGeneratedHandlesToClean;
+            NativeCleanupHandlesRequired = plan.TargetGeneratedHandlesToClean;
         }
 
         public string SourceProjectId { get; }
@@ -157,7 +157,10 @@ namespace QS3D.Core.Export
         public int TargetFieldsKept { get; }
         public int AffectedTargetElementsMarkedDirty { get; }
         public int NativeCleanupElementsAuthorized { get; }
-        public int TargetGeneratedHandlesCleaned { get; }
+        public int NativeCleanupHandlesRequired { get; }
+
+        [Obsolete("Use NativeCleanupHandlesRequired. Core authorizes/requires native cleanup but does not erase BricsCAD entities.")]
+        public int TargetGeneratedHandlesCleaned => NativeCleanupHandlesRequired;
     }
 
     public static class ProjectInterchangeFieldMergeImporter
@@ -181,6 +184,9 @@ namespace QS3D.Core.Export
         public const string LastTargetFieldsKeptKey = "Interchange.LastImport.TargetFieldsKept";
         public const string LastAffectedTargetElementsKey = "Interchange.LastImport.AffectedTargetElements";
         public const string LastNativeCleanupElementsKey = "Interchange.LastImport.NativeCleanupElements";
+        public const string LastNativeCleanupHandlesRequiredKey = "Interchange.LastImport.NativeCleanupHandlesRequired";
+
+        [Obsolete("Use LastNativeCleanupHandlesRequiredKey. Core does not prove native CAD cleanup.")]
         public const string LastTargetGeneratedHandlesCleanedKey = "Interchange.LastImport.TargetGeneratedHandlesCleaned";
 
         public static ProjectInterchangeFieldMergeExecutionPlan Plan(
@@ -241,7 +247,8 @@ namespace QS3D.Core.Export
                 target.Metadata[LastTargetFieldsKeptKey] = plan.FieldPlan.TargetChoiceCount.ToString(CultureInfo.InvariantCulture);
                 target.Metadata[LastAffectedTargetElementsKey] = plan.AffectedTargetElementIds.Count.ToString(CultureInfo.InvariantCulture);
                 target.Metadata[LastNativeCleanupElementsKey] = plan.NativeCleanupRequirements.Count.ToString(CultureInfo.InvariantCulture);
-                target.Metadata[LastTargetGeneratedHandlesCleanedKey] = plan.TargetGeneratedHandlesToClean.ToString(CultureInfo.InvariantCulture);
+                target.Metadata[LastNativeCleanupHandlesRequiredKey] = plan.TargetGeneratedHandlesToClean.ToString(CultureInfo.InvariantCulture);
+                target.Metadata.Remove("Interchange.LastImport.TargetGeneratedHandlesCleaned");
 
                 ValidateCombinedTarget(target);
                 AuditTrail.ForProject(target).Record(
@@ -251,7 +258,8 @@ namespace QS3D.Core.Export
                     ": sourceFields=" + plan.FieldPlan.SourceChoiceCount.ToString(CultureInfo.InvariantCulture) +
                     ", targetFields=" + plan.FieldPlan.TargetChoiceCount.ToString(CultureInfo.InvariantCulture) +
                     ", affectedTargetElements=" + plan.AffectedTargetElementIds.Count.ToString(CultureInfo.InvariantCulture) +
-                    ", nativeCleanupElements=" + plan.NativeCleanupRequirements.Count.ToString(CultureInfo.InvariantCulture) + ".");
+                    ", nativeCleanupElements=" + plan.NativeCleanupRequirements.Count.ToString(CultureInfo.InvariantCulture) +
+                    ", nativeCleanupHandlesRequired=" + plan.TargetGeneratedHandlesToClean.ToString(CultureInfo.InvariantCulture) + ".");
 
                 return new ProjectInterchangeFieldMergeResult(plan);
             }
