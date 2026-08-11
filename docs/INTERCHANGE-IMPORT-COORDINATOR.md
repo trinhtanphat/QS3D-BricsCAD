@@ -40,9 +40,13 @@ The coordinator plan summarizes additions, target identities kept, semantic repl
 
 Only `UseSourceSemanticData` may consume `ProjectInterchangeNativeCleanupAuthorization`.
 
-The coordinator propagates the exact canonical cleanup set through `NativeCleanupElementIds`. Execution forwards the caller's cleanup authorization to the canonical UseSource implementation unchanged.
+For UseSource, `ProjectInterchangeImportCoordinatorPlan.NativeCleanupRequirements` preserves the canonical **exact generated-handle requirements**: each requirement contains the target Element ID and the exact generated owner handles observed by the canonical UseSource plan. `NativeCleanupElementIds` remains a convenience/reporting view for UI and is not sufficient cleanup authority by itself.
 
-Passing non-empty cleanup authorization to AppendOnly, KeepTarget or ImportAsNew fails closed. Cleanup authority must not be silently consumed by a different mutation policy.
+After a guarded native adapter has completed or transactionally staged cleanup for the reviewed requirements, it can call `CreateNativeCleanupAuthorization()` on that same coordinator plan. The returned authorization is created from the retained canonical UseSource plan, so callers do not need to run a second canonical planning pass merely to recover handle-bound authority.
+
+Calling `CreateNativeCleanupAuthorization()` on AppendOnly, KeepTarget or ImportAsNew fails closed. Passing non-empty cleanup authorization to those modes also fails closed. Cleanup authority must not be silently created or consumed by a different mutation policy.
+
+`Execute(...)` still re-plans against current target state in the canonical importer and rejects stale handle-bound authority if the generated handle set changed after review.
 
 The Core coordinator never performs native cleanup itself.
 
@@ -66,9 +70,10 @@ The provenance flag is part of the reviewed request; the coordinator does not si
 - remap counts where applicable;
 - source-handle count;
 - blocker count;
-- required native-cleanup Element IDs.
+- exact native-cleanup Element/handle requirements for UseSource;
+- convenience native-cleanup Element IDs.
 
-`Execute(...)` re-plans against the current target immediately before dispatching the canonical importer. A previously displayed plan is informational and is not stale authorization.
+`Execute(...)` re-plans against the current target immediately before dispatching the canonical importer. A previously displayed plan is informational until the guarded native cleanup workflow explicitly converts its exact UseSource requirements into authorization.
 
 ## Adapter/runtime boundary
 
