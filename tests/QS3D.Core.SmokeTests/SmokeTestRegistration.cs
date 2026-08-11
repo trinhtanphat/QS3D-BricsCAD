@@ -72,6 +72,7 @@ namespace QS3D.Core.SmokeTests
             SemanticDocumentationTableSmoke.Run();
             SemanticViewSheetPlannerSmoke.Run();
             SemanticSheetAutoLayoutSmoke.Run();
+            SemanticSchedulePlacementSmoke.Run();
             SemanticDocumentationCatalogStoreSmoke.Run();
             SemanticDocumentationCatalogEditorSmoke.Run();
             SemanticDocumentationCanonicalIdSmoke.Run();
