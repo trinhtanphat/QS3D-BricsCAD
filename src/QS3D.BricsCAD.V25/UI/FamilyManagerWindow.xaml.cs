@@ -90,7 +90,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("duplicate Family");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Duplicate Family");
                 var source = RequireSelectedFamily(project);
                 var name = NextCopyName(project, source);
                 var clone = ExecuteAtomic(project, () =>
@@ -113,7 +113,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("lưu Family");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Lưu Family");
                 var creatingNew = _creatingNew;
                 var family = ExecuteAtomic(project, () =>
                 {
@@ -148,7 +148,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("xóa Family");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Xóa Family");
                 var family = RequireSelectedFamily(project);
                 var deleted = ExecuteAtomic(project, () =>
                 {
@@ -172,7 +172,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("lưu Family property");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Lưu Family property");
                 var family = RequireSelectedFamily(project);
                 var key = PropertyKeyBox.Text;
                 var value = PropertyValueBox.Text;
@@ -196,7 +196,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("xóa Family property");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Xóa Family property");
                 var family = RequireSelectedFamily(project);
                 var key = PropertyKeyBox.Text;
                 var result = ExecuteAtomic(project, () =>
@@ -219,7 +219,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("gán Family cho selection");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Gán Family cho selection");
                 var family = RequireSelectedFamily(project);
                 var elements = SemanticSelectionResolver.ResolveImplied(_document, project)
                     .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
@@ -248,8 +248,20 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var previous = string.IsNullOrWhiteSpace(preferredId) ? (FamilyList.SelectedItem as ProjectFamily)?.Id : preferredId;
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                {
+                    _loading = true;
+                    try { FamilyList.ItemsSource = null; FamilyList.SelectedItem = null; }
+                    finally { _loading = false; }
+                    _creatingNew = false;
+                    ClearFamilyEditor();
+                    ActiveFamilyText.Text = "—";
+                    Title = "QS3D • Family Manager • " + DrawingLabel(_document);
+                    SetStatus("Chưa có QS3D project hiện hữu cho bản vẽ này. Family Manager không tạo replacement project khi chỉ đọc.");
+                    return;
+                }
+
                 var filter = (CategoryFilter.SelectedItem as CategoryChoice)?.Category;
                 var families = project.Families.Where(x => !filter.HasValue || x.Category == filter.Value).OrderBy(x => x.Category).ThenBy(x => x.Name).ToList();
                 _loading = true;
@@ -264,15 +276,44 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void LoadFamily()
         {
-            var project = ProjectContextCoordinator.GetOrCreate(_document);
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+            {
+                ActiveFamilyText.Text = "—";
+                ClearFamilyEditor();
+                return;
+            }
+
             var active = ProjectFamilyActivationService.GetActive(project);
             ActiveFamilyText.Text = active == null ? "—" : active.Name + " • " + active.Category;
-            if (!(FamilyList.SelectedItem is ProjectFamily family)) { FamilyNameBox.Text = string.Empty; PropertyList.ItemsSource = null; ReferenceCountText.Text = "0"; return; }
+            if (!(FamilyList.SelectedItem is ProjectFamily selected))
+            {
+                ClearFamilyEditor();
+                return;
+            }
+
+            var family = project.FindFamily(selected.Id);
+            if (family == null)
+            {
+                ClearFamilyEditor();
+                SetStatus("Family đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại.");
+                return;
+            }
+
             FamilyNameBox.Text = family.Name;
             NewCategoryCombo.SelectedItem = (NewCategoryCombo.ItemsSource as IEnumerable<CategoryChoice>)?.FirstOrDefault(x => x.Category == family.Category);
             PropertyList.ItemsSource = family.Properties.OrderBy(x => x.Key).Select(x => new PropertyRow { Key = x.Key, Value = x.Value }).ToList();
             ReferenceCountText.Text = ProjectFamilyService.ReferenceCount(project, family.Id).ToString(CultureInfo.InvariantCulture);
-            PropertyKeyBox.Text = string.Empty; PropertyValueBox.Text = string.Empty;
+            PropertyKeyBox.Text = string.Empty;
+            PropertyValueBox.Text = string.Empty;
+        }
+
+        private void ClearFamilyEditor()
+        {
+            FamilyNameBox.Text = string.Empty;
+            PropertyList.ItemsSource = null;
+            PropertyKeyBox.Text = string.Empty;
+            PropertyValueBox.Text = string.Empty;
+            ReferenceCountText.Text = "0";
         }
 
         private ProjectFamily RequireSelectedFamily(ProjectState project)

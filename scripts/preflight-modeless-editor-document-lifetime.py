@@ -4,7 +4,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "src/QS3D.BricsCAD.V25/UI"
-AUDIT_COMMAND = ROOT / "src/QS3D.BricsCAD.V25/AuditCommands.cs"
+SRC = ROOT / "src/QS3D.BricsCAD.V25"
+AUDIT_COMMAND = SRC / "AuditCommands.cs"
 FILES = [
     "AuditLogWindow.xaml.cs",
     "CurtainWallWindow.xaml.cs",
@@ -105,10 +106,38 @@ if health.is_file():
     if "ReferenceEquals(current, _projectAtOpen)" in text:
         errors.append("ModelHealthWindow must compare semantic snapshot stamps, not ProjectState object identity; read-only sidecar loads may produce equivalent detached instances.")
 
+manager_contracts = [
+    ("FamilyManagerWindow.xaml.cs", "FamilyManagerCommands.cs", "new FamilyManagerWindow(document)"),
+    ("FloorLevelWindow.xaml.cs", "FloorLevelCommands.cs", "new FloorLevelWindow(document)"),
+    ("ZoneManagerWindow.xaml.cs", "ZoneManagerCommands.cs", "new ZoneManagerWindow(document)"),
+]
+for window_name, command_name, constructor_token in manager_contracts:
+    window_path = UI / window_name
+    command_path = SRC / command_name
+    if window_path.is_file():
+        text = window_path.read_text(encoding="utf-8")
+        for token in (
+            "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
+            "ExistingProjectMutationContext.Require(_document",
+            "DocumentBoundWindowLifetime.Attach(this, _document);",
+        ):
+            if token not in text:
+                errors.append(window_name + " missing existing-project lifecycle token: " + token)
+        if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
+            errors.append(window_name + " must not create or replace project state from modeless read/refresh/write callbacks.")
+    if not command_path.is_file():
+        errors.append("missing manager command source: " + command_name)
+    else:
+        text = command_path.read_text(encoding="utf-8")
+        if constructor_token not in text or "Application.ShowModelessWindow" not in text:
+            errors.append(command_name + " must open its document-bound modeless window.")
+        if "DocumentBoundWindowLifetime.Attach(window, document);" in text:
+            errors.append(command_name + " must not attach source-DWG lifetime twice; the window constructor owns the attachment.")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: document-bound modeless windows close with their DWG; Audit command/viewer and Model Health remain read-only, Model Health uses semantic snapshot stamps, Curtain re-resolves selected Family, and Rebar Mesh rejects replaced project state.")
+print("PASS: document-bound modeless windows close with their DWG; Audit/Health and manager refreshes remain read-only, manager writes bind existing canonical projects, manager commands avoid duplicate lifetime attachment, Model Health uses semantic snapshot stamps, Curtain re-resolves selected Family, and Rebar Mesh rejects replaced project state.")
