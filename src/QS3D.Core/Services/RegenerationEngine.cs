@@ -56,10 +56,14 @@ namespace QS3D.Core.Services
                 dependents.Add(dependent);
             }
 
-            source.MarkDirty(flags);
-            foreach (var dependent in dependents)
-                dependent.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-            project.Touch();
+            ProjectSemanticMutationExecutor.Execute(project, "regeneration.mark-changed", () =>
+            {
+                source.MarkDirty(flags);
+                foreach (var dependent in dependents)
+                    dependent.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+                project.Touch();
+                return true;
+            });
         }
 
         public int RegenerateDirty(ProjectState project)
