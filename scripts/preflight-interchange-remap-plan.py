@@ -20,9 +20,13 @@ if not errors:
 
     required_planner = [
         "ProjectInterchangeValidatedSnapshotReader.Read(json)",
-        'private const int MaxIdLength = 128;',
-        'private const int MaxNameLength = 512;',
-        'private const string HostWallIdKey = "HostWallId";',
+        'private const int ZoneMaxIdLength = 64;',
+        'private const int ZoneMaxNameLength = 120;',
+        'private const int FloorMaxIdLength = 64;',
+        'private const int FloorMaxNameLength = 120;',
+        'private const int FamilyMaxIdLength = 80;',
+        'private const int FamilyMaxNameLength = 160;',
+        'private const int ElementMaxIdLength = 128;',
         'suffix == 1 ? "-import" : "-import-" + suffix',
         'suffix == 1 ? " (Imported)" : " (Imported " + suffix + ")"',
         "StringComparer.OrdinalIgnoreCase",
@@ -30,9 +34,11 @@ if not errors:
         'AddTypedRewrite(rewrites, element.Id, "FloorId"',
         'AddTypedRewrite(rewrites, element.Id, "ZoneId"',
         'AddTypedRewrite(rewrites, element.Id, "DependsOn"',
-        'AddTypedRewrite(rewrites, element.Id, "PropertyElementId", property.Key, hostId, elementMap)',
-        "HostWallId is drawing/project-local but does not resolve to an Element inside the source snapshot",
-        "Property looks like an Element identity/reference but no explicit rewrite policy is registered for this key",
+        "ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference)",
+        '"Property" + reference.Kind + "Id"',
+        "ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key)",
+        "Property looks like a semantic identity/reference but no explicit rewrite policy is registered for this key",
+        "Family property looks like a semantic identity/reference but no explicit Family-property rewrite policy is registered for this key",
         "public bool CanAppendAsNew => OpaqueReferenceWarnings.Count == 0;",
     ]
     for needle in required_planner:
@@ -53,10 +59,12 @@ if not errors:
 
     required_command = [
         '[CommandMethod("QS3DINTERCHANGEREMAPPLAN", CommandFlags.Modal)]',
-        "ProjectInterchangeRemapPlanner.Plan(project, json)",
+        "ProjectInterchangeRemapAppendImporter.Plan(project, json)",
+        "var plan = appendPlan.Remap;",
         "ProjectInterchangeJsonValidator.MaxFileBytes",
         "new UTF8Encoding(false, true)",
-        '" • append-as-new=" + (plan.CanAppendAsNew ? "READY" : "BLOCKED")',
+        '" • append-as-new=" + (appendPlan.CanImport ? "READY" : "BLOCKED")',
+        "runtime compatibility blockers",
         "Chưa mutate project; chưa import",
         "EnsureActive(document",
     ]
@@ -64,7 +72,7 @@ if not errors:
         if needle not in c:
             errors.append("remap dry-run command missing UX/validation contract: " + needle)
 
-    if "ProjectInterchangeAppendOnlyImporter.Import" in c or "ProjectInterchangeRemapAppend" in c:
+    if "ProjectInterchangeAppendOnlyImporter.Import" in c or "ProjectInterchangeRemapAppendImporter.Import" in c:
         errors.append("QS3DINTERCHANGEREMAPPLAN must remain plan-only and never import")
 
     all_cs = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in (root / "src").rglob("*.cs"))
@@ -85,4 +93,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-plan: PASS")
-print("Import-as-new remap planning is deterministic and plan-only; typed references are explicit and opaque property-carried Element IDs block execution instead of being guessed.")
+print("Import-as-new remap planning is deterministic and plan-only; shared semantic-reference policy and runtime compatibility blockers fail closed before execution.")
