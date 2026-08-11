@@ -19,6 +19,7 @@ namespace QS3D.Core.Export
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             ValidateProjectIdentity(project);
+            ProjectInterchangeSemanticReferenceValidator.Validate(project);
 
             var json = new StringBuilder(32768);
             json.Append("{\n");
