@@ -26,31 +26,10 @@ namespace QS3D.Core.Selection
 
     public sealed class SemanticSelectionBulkEditService
     {
-        private static readonly HashSet<string> SourceDerivedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "LengthM",
-            "AreaM2",
-            "VolumeM3",
-            "PerimeterM",
-            "Layer",
-            MeasuredSolidQuantityPolicy.VolumeProperty,
-            MeasuredSolidQuantityPolicy.SurfaceAreaProperty
-        };
-
-        private static readonly HashSet<string> ReservedIdentityKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "Id",
-            "ElementId",
-            "Category",
-            "FamilyId",
-            "FloorId",
-            "ZoneId"
-        };
-
         public SemanticSelectionBulkEditResult SetProperty(ProjectState project, IEnumerable<string> elementIds, string propertyName, string value)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var key = EditablePropertyKey(propertyName);
+            var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
             var selection = ResolveSelection(project, elementIds);
             var next = value ?? string.Empty;
             var updates = new List<ProjectElement>();
@@ -72,7 +51,7 @@ namespace QS3D.Core.Selection
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (double.IsNaN(factor) || double.IsInfinity(factor)) throw new ArgumentOutOfRangeException(nameof(factor));
-            var key = EditablePropertyKey(propertyName);
+            var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
             var selection = ResolveSelection(project, elementIds);
             var updates = new List<PendingValue>();
 
@@ -132,31 +111,6 @@ namespace QS3D.Core.Selection
             var inspection = SemanticSelectionInspector.Inspect(project, elementIds);
             var elements = inspection.ElementIds.Select(id => project.FindElement(id) ?? throw new InvalidOperationException("Selected element disappeared during bulk edit preflight: " + id + ".")).ToArray();
             return new Selection(inspection.ElementIds, elements);
-        }
-
-        private static string EditablePropertyKey(string propertyName)
-        {
-            if (string.IsNullOrWhiteSpace(propertyName)) throw new ArgumentException("Property name is required.", nameof(propertyName));
-            var key = propertyName.Trim();
-            if (SourceDerivedKeys.Contains(key) || key.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Property is derived from CAD/source geometry and is read-only in multi-selection: " + key + ".");
-            if (ReservedIdentityKeys.Contains(key) || LooksLikeIdentityReferenceKey(key))
-                throw new InvalidOperationException("Semantic identity/reference field cannot be edited as a generic property: " + key + ".");
-            if (key.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                key.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase) ||
-                key.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Native/generated ownership state is read-only in multi-selection: " + key + ".");
-            return key;
-        }
-
-        private static bool LooksLikeIdentityReferenceKey(string key)
-        {
-            return key.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
-                   key.EndsWith("Ids", StringComparison.OrdinalIgnoreCase) ||
-                   key.EndsWith("Ref", StringComparison.OrdinalIgnoreCase) ||
-                   key.EndsWith("Refs", StringComparison.OrdinalIgnoreCase) ||
-                   key.EndsWith("RefId", StringComparison.OrdinalIgnoreCase) ||
-                   key.EndsWith("RefIds", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string EffectivePropertyValue(ProjectState project, ProjectElement element, string key, out bool present)
