@@ -32,6 +32,9 @@ if not errors:
         "ProjectFamilyService.RemoveProperty",
         "ProjectFamilyService.Assign",
         "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles",
+        "GeneratedHandleOwnershipPolicy.TryFindOwner(target, handle",
+        "Field merge native cleanup ownership is ambiguous",
+        "requires a non-empty target drawing fingerprint",
         "ClearGeneratedOwnershipMetadata",
         "ValidateCombinedTarget",
         "snapshot.Restore(target)",
@@ -56,6 +59,8 @@ if not errors:
         "TargetRevisionChangeRejectsReviewedAuthorization",
         "SourceSnapshotChangeRejectsReviewedAuthorization",
         "GeneratedHandleChangeRejectsReviewedAuthorization",
+        "AmbiguousGeneratedOwnershipBlocksAuthorization",
+        "DestructiveCleanupRequiresTargetDrawingFingerprint",
         "SourceOnlyIdentityBlocksExecution",
         "FamilyReassignmentPreservesTargetPropertiesWhenRequested",
     )
@@ -70,4 +75,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: reviewed Core field merge is target/source/decision fresh, exact-handle cleanup-bound, rollback-safe and canonical-service based; generic BricsCAD orchestration remains separate.")
+print("PASS: reviewed Core field merge is target/source/decision fresh, exact-handle cleanup-bound, rejects ambiguous generated ownership and anonymous target drawings before cleanup authorization, remains rollback-safe and canonical-service based, and keeps generic BricsCAD orchestration separate.")
