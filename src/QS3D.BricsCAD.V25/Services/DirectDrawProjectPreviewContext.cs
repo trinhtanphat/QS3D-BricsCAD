@@ -138,8 +138,12 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 if (_disposed) return;
                 _disposed = true;
-                if (ReferenceEquals(_dispatchScope, this))
-                    _dispatchScope = _previous;
+                if (!ReferenceEquals(_dispatchScope, this)) return;
+
+                var previous = _previous;
+                while (previous != null && previous._disposed)
+                    previous = previous._previous;
+                _dispatchScope = previous;
             }
         }
     }
