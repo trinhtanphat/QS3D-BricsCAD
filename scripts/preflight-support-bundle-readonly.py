@@ -25,7 +25,7 @@ else:
         '"dirty_element_count=" + project.Elements.Count(x => x.Dirty != ElementDirtyFlags.None).ToString(CultureInfo.InvariantCulture)',
         '"has_drawing_fingerprint=" + Bool(!string.IsNullOrWhiteSpace(project.DrawingFingerprint))',
         'lines.Add("category." + SafeToken(group.Key.ToString()) + "=" + group.Count().ToString(CultureInfo.InvariantCulture))',
-        "File.WriteAllLines(dialog.FileName, lines, new System.Text.UTF8Encoding(false));",
+        "PublishSupportBundle(dialog.FileName, lines);",
         "FinalizeSupportBundleUi(document, dialog.FileName);",
         "Cảnh báo UI sau export Support Bundle",
     ]
@@ -38,9 +38,9 @@ else:
 
     dialog = text.find("if (dialog.ShowDialog() != true) return;")
     readonly = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
-    write = text.find("File.WriteAllLines(dialog.FileName, lines, new System.Text.UTF8Encoding(false));")
+    publish = text.find("PublishSupportBundle(dialog.FileName, lines);")
     finalize = text.find("FinalizeSupportBundleUi(document, dialog.FileName);")
-    if min(dialog, readonly, write, finalize) >= 0 and not (dialog < readonly < write < finalize):
+    if min(dialog, readonly, publish, finalize) >= 0 and not (dialog < readonly < publish < finalize):
         errors.append("Support Bundle must confirm destination, read existing project without caching, persist report, then finalize UI")
 
     if dialog >= 0:
@@ -55,11 +55,14 @@ else:
             if forbidden in before_dialog:
                 errors.append("Support Bundle Cancel path must not inspect/create project state before save confirmation: " + forbidden)
 
-    if write >= 0 and finalize >= 0:
-        between = text[write:finalize]
+    if publish >= 0 and finalize >= 0:
+        between = text[publish:finalize]
         for forbidden in ("PaletteCoordinator.", "Editor.WriteMessage"):
             if forbidden in between:
-                errors.append("Support Bundle must not perform fallible UI work after file write and before FinalizeSupportBundleUi: " + forbidden)
+                errors.append("Support Bundle must not perform fallible UI work after file publish and before FinalizeSupportBundleUi: " + forbidden)
+
+    if "File.WriteAllLines(dialog.FileName" in text or "File.WriteAllText(dialog.FileName" in text:
+        errors.append("Support Bundle must not write/truncate the selected destination directly; use PublishSupportBundle")
 
     # Bundle content is deliberately aggregate-only. These output labels would cross the privacy boundary.
     forbidden_output_labels = (
@@ -87,4 +90,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Support Bundle confirms the destination before project access, uses read-only project lookup, emits aggregate/privacy-safe fields only, and isolates post-write UI from persistent export success.")
+print("PASS: Support Bundle confirms the destination before project access, uses read-only project lookup, emits aggregate/privacy-safe fields only, publishes through its atomic writer, and isolates post-write UI from persistent export success.")
