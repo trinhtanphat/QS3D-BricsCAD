@@ -71,6 +71,10 @@ function Assert-PackageIntegrity {
 
     $manifest = Join-Path $Directory 'SHA256SUMS.txt'
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Missing hash manifest: $manifest" }
+
+    $packageRootPath = [IO.Path]::GetFullPath($Directory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $packageRoot = $packageRootPath + [IO.Path]::DirectorySeparatorChar
+    $manifestEntries = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $verified = 0
     foreach ($line in Get-Content -LiteralPath $manifest) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -85,7 +89,8 @@ function Assert-PackageIntegrity {
         if ($segments.Count -eq 0 -or @($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
             throw "Unsafe SHA256SUMS entry: $name"
         }
-        $packageRoot = [IO.Path]::GetFullPath($Directory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        if (-not $manifestEntries.Add($name)) { throw "Duplicate SHA256SUMS payload entry: $name" }
+
         $file = [IO.Path]::GetFullPath((Join-Path $Directory ($name.Replace('/', [IO.Path]::DirectorySeparatorChar))))
         if (-not $file.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe SHA256SUMS entry: $name" }
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing package payload: $name" }
@@ -94,6 +99,24 @@ function Assert-PackageIntegrity {
         $verified++
     }
     if ($verified -eq 0) { throw 'SHA256SUMS.txt contains no payload entries.' }
+
+    $actualEntries = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($packageFile in Get-ChildItem -LiteralPath $Directory -File -Recurse) {
+        $fullPath = [IO.Path]::GetFullPath($packageFile.FullName)
+        if ([string]::Equals($fullPath, [IO.Path]::GetFullPath($manifest), [StringComparison]::OrdinalIgnoreCase)) { continue }
+        if (-not $fullPath.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Package payload escaped package root: $($packageFile.FullName)"
+        }
+        $relative = $fullPath.Substring($packageRoot.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
+        if (-not $actualEntries.Add($relative)) { throw "Duplicate/case-colliding package payload path: $relative" }
+        if (-not $manifestEntries.Contains($relative)) { throw "Unhashed package payload: $relative" }
+    }
+    foreach ($name in $manifestEntries) {
+        if (-not $actualEntries.Contains($name)) { throw "SHA256SUMS entry does not map to a regular package file: $name" }
+    }
+    if ($actualEntries.Count -ne $manifestEntries.Count) {
+        throw "SHA256SUMS coverage mismatch. Manifest entries=$($manifestEntries.Count), package files=$($actualEntries.Count)."
+    }
 
     $expectedSigner = Normalize-Thumbprint $SignerThumbprint
     $signedPayloadNames = @(
