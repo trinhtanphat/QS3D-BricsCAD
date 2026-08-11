@@ -67,12 +67,18 @@ namespace QS3D.Core.Services
         private static void AddDirectHandles(ProjectElement element, ISet<string> knownHandles, ICollection<string> handles, out bool hasDirectReference)
         {
             hasDirectReference = false;
-            foreach (var raw in element.SourceHandles)
+            for (var index = 0; index < element.SourceHandles.Count; index++)
             {
-                var handle = (raw ?? string.Empty).Trim();
-                if (handle.Length == 0) continue;
+                var raw = element.SourceHandles[index] ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " contains an empty SourceHandles entry at index " + index + ". Repair source ownership before Locate.");
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " contains a non-canonical SourceHandles entry at index " + index + ". Repair source ownership before Locate.");
+
                 hasDirectReference = true;
-                if (knownHandles.Add(handle)) handles.Add(handle);
+                if (knownHandles.Add(raw)) handles.Add(raw);
             }
         }
 
