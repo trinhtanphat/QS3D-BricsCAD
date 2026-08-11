@@ -10,6 +10,7 @@ filter_code = UI / "WorkspacePanel.PropertyFiltering.cs"
 selection_code = UI / "WorkspacePanel.SelectionInspection.cs"
 multi_code = UI / "WorkspacePanel.MultiSelectionProperties.cs"
 bulk_code = ROOT / "src" / "QS3D.Core" / "Selection" / "SemanticSelectionBulkEditService.cs"
+atomicity_smoke = ROOT / "tests" / "QS3D.Core.SmokeTests" / "SemanticMutationAtomicitySmoke.cs"
 errors = []
 
 if not xaml.is_file():
@@ -160,10 +161,27 @@ else:
     for token in (
         "SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName)",
         "SemanticSelectionInspector.Inspect(project, elementIds)",
-        "if (updates.Count > 0) project.Touch();",
+        'ProjectSemanticMutationExecutor.Execute(project, "selection.bulk.set-property"',
+        'ProjectSemanticMutationExecutor.Execute(project, "selection.bulk.multiply-numeric-property"',
+        "project.Touch();",
     ):
         if token not in text:
             errors.append("Semantic bulk-edit contract missing: " + token)
+
+if not atomicity_smoke.is_file():
+    errors.append("missing SemanticMutationAtomicitySmoke.cs")
+else:
+    text = atomicity_smoke.read_text(encoding="utf-8")
+    for token in (
+        "SelectionBulkSetPropertyOverflowRollsBack();",
+        "SelectionBulkMultiplyOverflowRollsBack();",
+        "new SemanticSelectionBulkEditService().SetProperty",
+        "new SemanticSelectionBulkEditService().MultiplyNumericProperty",
+        "Failed semantic-selection set partially changed the property.",
+        "Failed semantic-selection multiply partially changed the property.",
+    ):
+        if token not in text:
+            errors.append("Semantic selection atomicity smoke missing: " + token)
 
 print("QS3D Workspace property palette preflight")
 if errors:
@@ -172,4 +190,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace keeps bounded BLT-style search/keyboard UX and now routes exact semantic multi-selection into guarded common/mixed property rows; presentation stays mutation-free and bulk writes revalidate active project plus current CAD selection before the Core bulk-edit service commits.")
+print("PASS: Workspace routes exact semantic multi-selection into guarded common/mixed rows; Core multi-selection writes revalidate selection and execute inside rollback-protected semantic mutation boundaries.")
