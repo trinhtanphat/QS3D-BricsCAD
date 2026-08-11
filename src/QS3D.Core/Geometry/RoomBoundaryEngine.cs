@@ -400,15 +400,52 @@ namespace QS3D.Core.Geometry
 
         private static string CanonicalRotation(IReadOnlyList<string> tokens)
         {
-            string? best = null;
-            for (var start = 0; start < tokens.Count; start++)
+            if (tokens.Count == 0) return string.Empty;
+
+            var first = 0;
+            var second = 1;
+            var offset = 0;
+            while (first < tokens.Count && second < tokens.Count && offset < tokens.Count)
             {
-                var ordered = new string[tokens.Count];
-                for (var i = 0; i < tokens.Count; i++) ordered[i] = tokens[(start + i) % tokens.Count];
-                var candidate = string.Join("|", ordered);
-                if (best == null || string.CompareOrdinal(candidate, best) < 0) best = candidate;
+                var compare = CompareRotationToken(tokens[(first + offset) % tokens.Count], tokens[(second + offset) % tokens.Count]);
+                if (compare == 0)
+                {
+                    offset++;
+                    continue;
+                }
+
+                if (compare > 0)
+                {
+                    first += offset + 1;
+                    if (first <= second) first = second + 1;
+                }
+                else
+                {
+                    second += offset + 1;
+                    if (second <= first) second = first + 1;
+                }
+                offset = 0;
             }
-            return best ?? string.Empty;
+
+            var start = Math.Min(first, second);
+            var ordered = new string[tokens.Count];
+            for (var index = 0; index < tokens.Count; index++) ordered[index] = tokens[(start + index) % tokens.Count];
+            return string.Join("|", ordered);
+        }
+
+        private static int CompareRotationToken(string left, string right)
+        {
+            var leftLength = left.Length + 1;
+            var rightLength = right.Length + 1;
+            var commonLength = Math.Min(leftLength, rightLength);
+            for (var index = 0; index < commonLength; index++)
+            {
+                var leftChar = index < left.Length ? left[index] : '|';
+                var rightChar = index < right.Length ? right[index] : '|';
+                var compare = leftChar.CompareTo(rightChar);
+                if (compare != 0) return compare;
+            }
+            return leftLength.CompareTo(rightLength);
         }
 
         private static string QuantizedToken(Point2 point, double tolerance)
