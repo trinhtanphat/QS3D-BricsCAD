@@ -150,7 +150,8 @@ namespace QS3D.BricsCAD.V25
             if (string.IsNullOrWhiteSpace(elementId))
                 throw new InvalidOperationException(operation + ": dòng review không có ElementId hợp lệ.");
 
-            var currentProject = ProjectContextCoordinator.GetOrCreate(document);
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject))
+                throw new InvalidOperationException(operation + ": QS3D project hiện hành không còn khả dụng. Hãy làm mới bảng review.");
             var element = currentProject.FindElement(elementId)
                 ?? throw new InvalidOperationException(operation + ": cấu kiện " + elementId + " không còn tồn tại trong project hiện tại. Hãy làm mới bảng review.");
             var handles = SourceHandleResolver.Resolve(currentProject, new[] { element.Id });
