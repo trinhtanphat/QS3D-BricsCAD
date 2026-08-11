@@ -11,6 +11,54 @@ if not SOURCE.is_file():
     errors.append("missing RightPanel.xaml.cs")
 else:
     text = SOURCE.read_text(encoding="utf-8")
+
+    refresh = re.search(
+        r"public void Refresh\(\)\s*\{(?P<body>.*?)\n        \}\n\n        private void ReloadLayers",
+        text,
+        re.DOTALL,
+    )
+    if not refresh:
+        errors.append("missing bounded RightPanel.Refresh")
+    else:
+        body = refresh.group("body")
+        for token in (
+            "var doc = Application.DocumentManager.MdiActiveDocument;",
+            "if (doc == null)",
+            "_refreshingDrawings = true;",
+            "_viewModel.Drawings.Clear();",
+            "DrawingList?.UnselectAll();",
+            "_layerSnapshots = Array.Empty<LayerSnapshot>();",
+            "ApplyLayerFilter();",
+            '"Không có bản vẽ BricsCAD đang active."',
+        ):
+            if token not in body:
+                errors.append("RightPanel no-document refresh contract missing: " + token)
+        stale_return = "var doc = Application.DocumentManager.MdiActiveDocument;\n            if (doc == null) return;"
+        if stale_return in body:
+            errors.append("RightPanel.Refresh must clear stale drawings/layers instead of returning with prior-document UI")
+
+    clear_click = re.search(
+        r"private void OnClearDrawingSelectionClick\(object sender, RoutedEventArgs e\)\s*\{(?P<body>.*?)\n        \}\n\n        private void OnDrawingSelectionChanged",
+        text,
+        re.DOTALL,
+    )
+    if not clear_click:
+        errors.append("missing bounded OnClearDrawingSelectionClick handler")
+    else:
+        body = clear_click.group("body")
+        for token in (
+            "_refreshingDrawings = true;",
+            "DrawingList.UnselectAll();",
+            "_refreshingDrawings = false;",
+            "doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());",
+        ):
+            if token not in body:
+                errors.append("RightPanel explicit clear-selection contract missing: " + token)
+        unselect = body.find("DrawingList.UnselectAll();")
+        cad_clear = body.find("doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());")
+        if unselect < 0 or cad_clear < unselect:
+            errors.append("RightPanel clear button must suppress list selection callbacks before one explicit CAD implied-selection clear")
+
     match = re.search(
         r"private void OnDrawingSelectionChanged\(object sender, SelectionChangedEventArgs e\)\s*\{(?P<body>.*?)\n        \}\n\n        private void OnLayerChecked",
         text,
@@ -51,4 +99,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: selecting an Xref maps to its live CAD instances, while selecting MODEL or clearing the row removes stale implied Xref selection instead of leaving old CAD state active.")
+print("PASS: RightPanel clears stale prior-document state when no DWG is active, explicit clear avoids duplicate selection callbacks, Xrefs map to live CAD instances, and MODEL/null selection removes stale implied Xref selection.")
