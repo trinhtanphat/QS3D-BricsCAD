@@ -55,6 +55,7 @@ namespace QS3D.Core.Export
     {
         private const long MaxWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
+        private const int MaxColumns = 16384;
         private static readonly Regex DecimalHandlePattern = new Regex(@"\$(\d+)", RegexOptions.CultureInvariant);
         private static readonly Regex LegacyDecimalCellPattern = new Regex(@"^\s*(?:\$\d+\s*)+$", RegexOptions.CultureInvariant);
 
@@ -201,11 +202,13 @@ namespace QS3D.Core.Export
 
         private static Dictionary<int, string> ReadCells(XElement row, XNamespace ns, IReadOnlyList<string> sharedStrings)
         {
+            var rowNumber = ParsePositiveInt((string?)row.Attribute("r"));
+            if (rowNumber == int.MaxValue) throw new InvalidDataException("Excel worksheet row number is missing or invalid.");
             var result = new Dictionary<int, string>();
             foreach (var cell in row.Elements(ns + "c"))
             {
-                var column = ColumnIndex((string?)cell.Attribute("r"));
-                if (column < 0) continue;
+                var column = ColumnIndex((string?)cell.Attribute("r"), rowNumber);
+                if (column >= MaxColumns) throw new InvalidDataException("Excel cell column exceeds the XLSX column limit.");
                 var type = (string?)cell.Attribute("t") ?? string.Empty;
                 string value;
                 if (string.Equals(type, "inlineStr", StringComparison.OrdinalIgnoreCase)) value = string.Concat(cell.Descendants(ns + "t").Select(x => x.Value));
@@ -262,18 +265,39 @@ namespace QS3D.Core.Export
 
         private static int ParsePositiveInt(string? value) => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number > 0 ? number : int.MaxValue;
 
-        private static int ColumnIndex(string? cellReference)
+        private static int ColumnIndex(string? cellReference, int expectedRow)
         {
-            if (string.IsNullOrWhiteSpace(cellReference)) return -1;
+            if (string.IsNullOrWhiteSpace(cellReference)) throw new InvalidDataException("Excel cell reference is missing.");
+            var reference = cellReference!;
             var value = 0;
-            var letters = 0;
-            foreach (var ch in cellReference!)
+            var index = 0;
+            try
             {
-                if (!char.IsLetter(ch)) break;
-                value = checked(value * 26 + (char.ToUpperInvariant(ch) - 'A' + 1));
-                letters++;
+                while (index < reference.Length)
+                {
+                    var ch = reference[index];
+                    int letter;
+                    if (ch >= 'A' && ch <= 'Z') letter = ch - 'A' + 1;
+                    else if (ch >= 'a' && ch <= 'z') letter = ch - 'a' + 1;
+                    else break;
+                    value = checked(value * 26 + letter);
+                    index++;
+                }
             }
-            return letters == 0 ? -1 : value - 1;
+            catch (OverflowException ex)
+            {
+                throw new InvalidDataException("Excel cell reference column is invalid.", ex);
+            }
+
+            if (index == 0 || index >= reference.Length)
+                throw new InvalidDataException("Excel cell reference is invalid: " + reference + ".");
+
+            var rowToken = reference.Substring(index);
+            if (!int.TryParse(rowToken, NumberStyles.None, CultureInfo.InvariantCulture, out var referencedRow) || referencedRow <= 0)
+                throw new InvalidDataException("Excel cell reference is invalid: " + reference + ".");
+            if (referencedRow != expectedRow)
+                throw new InvalidDataException("Excel cell reference " + reference + " does not match containing row " + expectedRow + ".");
+            return value - 1;
         }
 
         private sealed class WorksheetReference
