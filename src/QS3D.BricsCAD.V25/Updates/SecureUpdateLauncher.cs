@@ -334,6 +334,7 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("$readyEvent = $null");
             script.AppendLine("$cancelEvent = $null");
             script.AppendLine("$ownsUpdateMutex = $false");
+            script.AppendLine("$hostClosed = $false");
             script.AppendLine("try {");
             script.AppendLine("  $updateMutex = [System.Threading.Mutex]::new($false, $mutexName)");
             script.AppendLine("  $readyEvent = [System.Threading.EventWaitHandle]::OpenExisting($readyEventName)");
@@ -350,6 +351,7 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("    if ($cancelEvent.WaitOne(0)) { throw 'QS3D updater was cancelled while waiting for BricsCAD to close.' }");
             script.AppendLine("    Start-Sleep -Seconds 2");
             script.AppendLine("  }");
+            script.AppendLine("  $hostClosed = $true");
             script.AppendLine("  if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) { throw 'Installed QS3D updater script is missing.' }");
             script.AppendLine("  $signature = Get-AuthenticodeSignature -LiteralPath $updater");
             script.AppendLine("  if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $signature.SignerCertificate) { throw ('Installed updater signature is not valid: ' + $signature.Status) }");
@@ -363,7 +365,12 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("  exit 0");
             script.AppendLine("}");
             script.AppendLine("catch {");
-            script.AppendLine("  Write-Error $_");
+            script.AppendLine("  $updateFailure = $_");
+            script.AppendLine("  Write-Error $updateFailure -ErrorAction Continue");
+            script.AppendLine("  if ($hostClosed -and (Test-Path -LiteralPath $bricscad -PathType Leaf) -and -not (Get-Process -Name bricscad -ErrorAction SilentlyContinue)) {");
+            script.AppendLine("    try { Start-Process -FilePath $bricscad | Out-Null }");
+            script.AppendLine("    catch { Write-Warning ('QS3D update failed and BricsCAD recovery restart also failed: ' + $_.Exception.Message) }");
+            script.AppendLine("  }");
             script.AppendLine("  try { Stop-Transcript | Out-Null } catch { }");
             script.AppendLine("  exit 1");
             script.AppendLine("}");

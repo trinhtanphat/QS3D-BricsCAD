@@ -324,6 +324,7 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
+                Cad.CadHandleService.Select(_document, liveHandles);
                 if (_locate != null)
                 {
                     _locate(currentRow);

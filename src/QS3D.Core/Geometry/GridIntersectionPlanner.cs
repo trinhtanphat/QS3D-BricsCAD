@@ -104,7 +104,6 @@ namespace QS3D.Core.Geometry
 
             var list = curves.ToList();
             if (list.Count > MaxCurves) throw new InvalidOperationException("Grid intersection planning supports at most " + MaxCurves + " curves.");
-            if (list.Count < 2) return Array.Empty<GridIntersection>();
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < list.Count; i++)
@@ -113,6 +112,7 @@ namespace QS3D.Core.Geometry
                 if (!ids.Add(list[i].ElementId))
                     throw new InvalidOperationException("Grid intersection input contains duplicate element id: " + list[i].ElementId + ".");
             }
+            if (list.Count < 2) return Array.Empty<GridIntersection>();
 
             var result = new List<GridIntersection>();
             for (var i = 0; i < list.Count - 1; i++)

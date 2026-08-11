@@ -101,8 +101,9 @@ namespace QS3D.Core.Services
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in openingIds ?? Array.Empty<string>())
             {
-                var id = (raw ?? string.Empty).Trim();
-                if (id.Length == 0) continue;
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new InvalidOperationException("Physical opening target-state contains an empty opening id.");
+                var id = raw.Trim();
                 if (id.Length > MaxElementIdLength)
                     throw new InvalidOperationException("Physical opening target id exceeds " + MaxElementIdLength + " characters.");
                 if (!result.Add(id))
