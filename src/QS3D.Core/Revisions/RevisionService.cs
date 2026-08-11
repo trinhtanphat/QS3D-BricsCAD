@@ -64,9 +64,16 @@ namespace QS3D.Core.Revisions
                     FloorId = element.FloorId,
                     ZoneId = element.ZoneId
                 };
-                foreach (var property in element.Properties) item.Properties[property.Key] = property.Value ?? string.Empty;
+                foreach (var property in element.Properties)
+                {
+                    ValidateCanonicalRequired(property.Key, "element " + element.Id + " property key");
+                    item.Properties[property.Key] = property.Value ?? string.Empty;
+                }
                 foreach (var quantity in element.Quantities)
+                {
+                    ValidateCanonicalRequired(quantity.Key, "element " + element.Id + " quantity key");
                     item.Quantities[quantity.Key] = RevisionMath.Finite(quantity.Value, element.Id + "/" + quantity.Key);
+                }
                 foreach (var handle in CanonicalSourceHandles(element)) item.SourceHandles.Add(handle);
                 foreach (var dependency in CanonicalDependencies(element.DependsOn)) item.Dependencies.Add(dependency);
                 snapshot.Elements.Add(item);
@@ -177,20 +184,58 @@ namespace QS3D.Core.Revisions
                 if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
                 if (!string.Equals(element.ElementId, element.ElementId.Trim(), StringComparison.Ordinal))
                     throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded element id: " + element.ElementId + ".");
+                ValidateCanonicalCategory(element.Category, label + " element " + element.ElementId + " category");
                 ValidateOptionalCanonicalIdentity(element.FamilyId, label + " element " + element.ElementId + " family id");
                 ValidateOptionalCanonicalIdentity(element.FloorId, label + " element " + element.ElementId + " floor id");
                 ValidateOptionalCanonicalIdentity(element.ZoneId, label + " element " + element.ElementId + " zone id");
+                ValidateCanonicalMapKeys(element.Properties, label + " element " + element.ElementId + " property");
+                ValidateCanonicalMapKeys(element.Quantities, label + " element " + element.ElementId + " quantity");
+                foreach (var quantity in element.Quantities)
+                    RevisionMath.Finite(quantity.Value, element.ElementId + "/" + quantity.Key + "/" + label);
+                CanonicalSourceHandles(element.SourceHandles, label + " element " + element.ElementId);
+                ValidateCanonicalStringList(element.Dependencies, label + " element " + element.ElementId + " dependencies");
                 if (result.ContainsKey(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains duplicate element id: " + element.ElementId);
                 result.Add(element.ElementId, element);
             }
             return result;
         }
 
+        private static void ValidateCanonicalCategory(string? value, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value) ||
+                !Enum.TryParse(value, true, out ElementCategory category) ||
+                !Enum.IsDefined(typeof(ElementCategory), category) ||
+                !string.Equals(value, category.ToString(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision " + label + " must use a canonical element category name.");
+        }
+
         private static void ValidateOptionalCanonicalIdentity(string? value, string label)
         {
             if (value == null || value.Length == 0) return;
+            ValidateCanonicalRequired(value, label);
+        }
+
+        private static void ValidateCanonicalRequired(string? value, string label)
+        {
             if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
-                throw new InvalidOperationException("Revision " + label + " must not contain leading/trailing whitespace.");
+                throw new InvalidOperationException("Revision " + label + " must be non-empty and must not contain leading/trailing whitespace.");
+        }
+
+        private static void ValidateCanonicalMapKeys<T>(IDictionary<string, T> values, string label)
+        {
+            foreach (var key in values.Keys) ValidateCanonicalRequired(key, label + " key");
+        }
+
+        private static void ValidateCanonicalStringList(IEnumerable<string> values, string label)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var index = 0;
+            foreach (var value in values)
+            {
+                ValidateCanonicalRequired(value, label + " value at index " + index.ToString(CultureInfo.InvariantCulture));
+                if (!seen.Add(value)) throw new InvalidOperationException("Revision " + label + " contains duplicate value: " + value + ".");
+                index++;
+            }
         }
 
         private static void CompareProperties(RevisionDelta delta, IDictionary<string, string> before, IDictionary<string, string> after)
