@@ -32,8 +32,12 @@ namespace QS3D.BricsCAD.V25
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
                 EnsureActive(document, "Interchange Import As New / preview");
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                    throw new InvalidOperationException("Interchange Import As New cần một QS3D project hiện hữu; preview không tạo project mới.");
+                var previewProjectId = project.ProjectId;
+                var previewUpdatedUtc = project.UpdatedUtc;
                 var previewChangeVersion = project.ChangeVersion;
+                var previewDrawingFingerprint = project.DrawingFingerprint ?? string.Empty;
                 var plan = ProjectInterchangeRemapAppendImporter.Plan(project, json);
                 if (!plan.CanImport)
                 {
@@ -42,8 +46,7 @@ namespace QS3D.BricsCAD.V25
                         " blocker(s) — opaque ID/ref " + plan.Remap.OpaqueReferenceWarnings.Count.ToString(CultureInfo.InvariantCulture) +
                         ", runtime compatibility " + plan.CompatibilityBlockers.Count.ToString(CultureInfo.InvariantCulture) +
                         ". Chạy QS3DINTERCHANGEREMAPPLAN để xem chi tiết; chưa mutate project/DWG.";
-                    try { PaletteCoordinator.SetStatus(blocked); } catch { }
-                    document.Editor.WriteMessage("\nQS3D " + blocked);
+                    Report(document, blocked);
                     return;
                 }
 
@@ -51,8 +54,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     var appendInstead =
                         "Snapshot không cần ID/name remap. Dùng QS3DINTERCHANGEAPPEND cho append-only chuẩn; QS3DINTERCHANGEREMAPAPPEND không mutate trong trường hợp này.";
-                    try { PaletteCoordinator.SetStatus(appendInstead); } catch { }
-                    document.Editor.WriteMessage("\nQS3D " + appendInstead);
+                    Report(document, appendInstead);
                     return;
                 }
 
@@ -81,14 +83,15 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
                 EnsureActive(document, "Interchange Import As New / mutation");
-                var currentProject = ProjectContextCoordinator.GetOrCreate(document);
-                if (!ReferenceEquals(currentProject, project) || currentProject.ChangeVersion != previewChangeVersion)
+                var currentProject = ExistingProjectMutationContext.Require(document, "Interchange Import As New");
+                if (!string.Equals(currentProject.ProjectId, previewProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    currentProject.UpdatedUtc != previewUpdatedUtc ||
+                    currentProject.ChangeVersion != previewChangeVersion ||
+                    !string.Equals(currentProject.DrawingFingerprint ?? string.Empty, previewDrawingFingerprint, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(
                         "Interchange Import As New target semantic project changed after preview. Run the command again to review a fresh remap plan.");
 
                 var result = ProjectInterchangeRemapAppendImporter.Import(currentProject, json);
-                try { PaletteCoordinator.RefreshProject(); } catch { }
-
                 var status =
                     "Interchange Import As New: Zone +" + result.ZonesAdded.ToString(CultureInfo.InvariantCulture) +
                     " • Floor +" + result.FloorsAdded.ToString(CultureInfo.InvariantCulture) +
@@ -99,13 +102,11 @@ namespace QS3D.BricsCAD.V25
                     " • refs rewritten " + result.ReferencesRewritten.ToString(CultureInfo.InvariantCulture) +
                     " • source handles discarded " + result.SourceHandlesDiscarded.ToString(CultureInfo.InvariantCulture) +
                     ". Semantic-only; rebuild/save explicit.";
-                try { PaletteCoordinator.SetStatus(status); } catch { }
-                document.Editor.WriteMessage("\nQS3D " + status);
+                FinalizeUi(document, status);
             }
             catch (Exception ex)
             {
-                try { PaletteCoordinator.SetStatus("QS3DINTERCHANGEREMAPAPPEND lỗi: " + ex.Message); } catch { }
-                document.Editor.WriteMessage("\nQS3DINTERCHANGEREMAPAPPEND error: " + ex.Message + " Không claim Import As New thành công nếu semantic apply chưa hoàn tất.");
+                Report(document, "QS3DINTERCHANGEREMAPAPPEND lỗi: " + ex.Message + " Không claim Import As New thành công nếu semantic apply chưa hoàn tất.");
             }
         }
 
@@ -113,6 +114,26 @@ namespace QS3D.BricsCAD.V25
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                 throw new InvalidOperationException(operation + " requires the DWG that started the operation to remain active.");
+        }
+
+        private static void FinalizeUi(Document document, string status)
+        {
+            try
+            {
+                PaletteCoordinator.RefreshProject();
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\nQS3D " + status);
+            }
+            catch (Exception uiError)
+            {
+                try { document.Editor.WriteMessage("\nQS3D Interchange Import As New đã commit; UI sync warning: " + uiError.Message); } catch { }
+            }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
 
         private static string ReadGuardedSnapshotText(string path)
