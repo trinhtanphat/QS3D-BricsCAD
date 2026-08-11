@@ -116,8 +116,7 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                document.Editor.SetImpliedSelection(sourceIds.ToArray());
-                var sourceSnapshots = EntitySnapshotReader.ReadImpliedSelection(document);
+                var sourceSnapshots = EntitySnapshotReader.ReadHandles(document, sourceHandles);
                 if (sourceSnapshots.Count != sourceHandles.Count)
                 {
                     Write(document, "QS3DBUILD3D: không đọc đủ source CAD sau khi resolve semantic selection. Đã dừng trước khi thay solid.");
