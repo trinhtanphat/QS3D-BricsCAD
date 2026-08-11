@@ -34,7 +34,9 @@ namespace QS3D.BricsCAD.V25
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var reviewProject))
                     throw new InvalidOperationException("Interchange provenance cần một QS3D project hiện hữu; bước review không tạo project mới.");
                 var reviewProjectId = reviewProject.ProjectId;
+                var reviewUpdatedUtc = reviewProject.UpdatedUtc;
                 var reviewChangeVersion = reviewProject.ChangeVersion;
+                var reviewDrawingFingerprint = reviewProject.DrawingFingerprint ?? string.Empty;
                 var plan = ProjectInterchangeSourceHandleProvenance.Plan(reviewProject, json);
                 var confirm =
                     "Lưu source CAD handles của snapshot dưới dạng PROVENANCE-ONLY?\n\n" +
@@ -54,7 +56,9 @@ namespace QS3D.BricsCAD.V25
                 EnsureActive(document, "Interchange provenance import");
                 var project = ExistingProjectMutationContext.Require(document, "Interchange provenance import");
                 if (!string.Equals(project.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase) ||
-                    project.ChangeVersion != reviewChangeVersion)
+                    project.UpdatedUtc != reviewUpdatedUtc ||
+                    project.ChangeVersion != reviewChangeVersion ||
+                    !string.Equals(project.DrawingFingerprint ?? string.Empty, reviewDrawingFingerprint, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Interchange provenance: project đã thay đổi sau bước review. Hãy mở lại snapshot và xác nhận lại trước khi lưu provenance.");
 
                 var result = ProjectInterchangeSourceHandleProvenance.Store(project, json);
