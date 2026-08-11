@@ -4,7 +4,7 @@ Status: `SOURCE_IMPLEMENTED` for the Core/project-state composition. Native clea
 
 `ProjectInterchangeUseSourceProvenanceImporter` composes the canonical `UseSourceSemanticData` executor with the canonical source-handle provenance store and semantic target-lineage map.
 
-The key rule is unchanged: provenance retention does **not** perform native cleanup and does not weaken cleanup authorization.
+The key rule is unchanged: provenance retention does not perform native cleanup and does not weaken cleanup authorization.
 
 ## Authorization boundary
 
