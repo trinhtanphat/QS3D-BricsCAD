@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             ExportRejectsMissingRegisteredReference();
+            ValidatorRejectsNullSemanticElementBeforeOrdering();
             ValidatorAndTypedReaderRejectMissingRegisteredReference();
             ValidatorAndTypedReaderRejectInvalidLevelChain();
             MixedFieldMergeRollsBackInvalidLevelComposition();
@@ -26,6 +27,14 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(opening);
 
             Throws<InvalidOperationException>(() => ProjectInterchangeJsonExporter.Build(project));
+        }
+
+        private static void ValidatorRejectsNullSemanticElementBeforeOrdering()
+        {
+            var project = BaseProject("P-NULL-ELEMENT");
+            project.Elements.Add(null!);
+
+            Throws<InvalidOperationException>(() => ProjectInterchangeSemanticReferenceValidator.Validate(project));
         }
 
         private static void ValidatorAndTypedReaderRejectMissingRegisteredReference()
