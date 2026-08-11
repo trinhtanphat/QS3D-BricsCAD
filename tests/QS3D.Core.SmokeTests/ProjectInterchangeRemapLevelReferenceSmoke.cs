@@ -18,14 +18,14 @@ namespace QS3D.Core.SmokeTests
         {
             var target = BuildProject("target");
             var source = BuildProject("source");
+            source.DrawingFingerprint = "SOURCE-DWG-FP";
             var sourceElement = source.Elements.Single();
             sourceElement.Properties[ProjectFloorService.BottomLevelIdKey] = "L0";
             sourceElement.Properties[ProjectFloorService.TopLevelIdKey] = "L1";
             sourceElement.Properties[ProjectFloorService.BottomLevelOffsetKey] = "0.15";
             sourceElement.Properties[ProjectFloorService.TopLevelOffsetKey] = "-0.05";
             sourceElement.SourceHandles.Add("AB12");
-            sourceElement.DrawingFingerprint = "SOURCE-ELEMENT-FP";
-            source.DrawingFingerprint = "SOURCE-DWG-FP";
+            sourceElement.DrawingFingerprint = source.DrawingFingerprint;
 
             var json = ProjectInterchangeJsonExporter.Build(source);
             var plan = ProjectInterchangeRemapAppendImporter.Plan(target, json);
