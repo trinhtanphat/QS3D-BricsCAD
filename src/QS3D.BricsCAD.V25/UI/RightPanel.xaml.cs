@@ -319,8 +319,8 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 XrefService.Reload(doc, item.Name);
-                _viewModel.Status = "Đã nạp lại Xref " + item.Name;
                 Refresh();
+                _viewModel.Status = "Đã nạp lại Xref " + item.Name;
             }
             catch (Exception ex)
             {
@@ -359,8 +359,8 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 XrefService.Detach(doc, item.Name);
-                _viewModel.Status = "Đã gỡ Xref " + item.Name;
                 Refresh();
+                _viewModel.Status = "Đã gỡ Xref " + item.Name;
             }
             catch (Exception ex)
             {
