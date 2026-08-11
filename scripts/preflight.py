@@ -305,8 +305,10 @@ if review_commands.exists() and snapshot_reader.exists():
 semantic_capture = ROOT / "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs"
 if semantic_capture.exists():
     text = semantic_capture.read_text(encoding="utf-8")
-    for needle in ("ReplaceSourceMetric", "element.Properties.Remove(key)", 'StartsWith("CAD.")'):
+    for needle in ("ReplaceSourceMetric", "element.Properties.Remove(key)"):
         if needle not in text: errors.append("CAD rescan must replace stale source-derived metrics/metadata: " + needle)
+    cad_prefix = 'StartsWith("CAD.", StringComparison.OrdinalIgnoreCase)'
+    if cad_prefix not in text: errors.append("CAD rescan must remove stale CAD metadata with ordinal-ignore-case prefix matching: " + cad_prefix)
 
 ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 if ribbon.exists():
