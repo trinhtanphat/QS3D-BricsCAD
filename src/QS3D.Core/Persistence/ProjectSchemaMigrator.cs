@@ -78,6 +78,7 @@ namespace QS3D.Core.Persistence
         private static void ValidateCurrentPersistenceState(XElement root)
         {
             RequirePersistenceValue(root, "updatedUtc", "Project root");
+            RequirePersistenceValue(root, "changeVersion", "Project root");
             RequireSingleContainer(root, "metadata");
             RequireSingleContainer(root, "zones");
             var floors = RequireSingleContainer(root, "floors");
