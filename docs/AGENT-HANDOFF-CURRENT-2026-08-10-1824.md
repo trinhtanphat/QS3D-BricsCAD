@@ -95,7 +95,7 @@ Generated replacement families must preserve:
 - ownership verification before erasing a live generated entity;
 - post-commit Palette/Editor refresh as non-fatal UI work.
 
-`QS3DCURTAIN3D` remains a multi-phase **PARTIAL COMMIT** orchestration until a shared native transaction or persisted compensation/recovery journal is implemented and proven locally.
+`QS3DCURTAIN3D` now has source-level whole-command atomicity through one outer native transaction around the canonical nested host/frame builders plus a command-level semantic snapshot. Exact-SHA V25 failure injection is still required; panel-by-panel glass remains separate work.
 
 Standard-specific fabrication-grade rebar remains blocked on an explicitly selected engineering standard/revision and approval evidence.
 
@@ -118,7 +118,7 @@ Already parked for local/policy-capable agents:
 - real WPF/Ribbon/Unicode/HiDPI/editor behavior;
 - DrawJig/repeat/OSNAP/ORTHO/ESC/UNDO;
 - coherent native Level placement;
-- Curtain whole-command recovery/panel glass;
+- Curtain whole-command failure-injection proof and panel-by-panel glass;
 - physical L/T/X/Multi wall-solid reconciliation;
 - production Authenticode/timestamp installer/updater;
 - commercial license enforcement until owner supplies actual SKU/seat/trial/binding/offline/key-rotation policy;

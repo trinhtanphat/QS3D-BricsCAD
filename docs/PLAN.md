@@ -39,8 +39,8 @@ Any future standalone direction requires an explicit owner requirement and a new
 - manual Door/Opening host linking plus `QS3DAUTOLINKHOSTS` using compatible semantic walls, surface gap, Floor/Zone scope, ambiguity rejection and independent elevation gating;
 - guarded straight physical Door/Opening subtraction plus `QS3DCUTOPENINGSCURVED` for supported bulged open-POLYLINE hosts; curved cutter planning/fingerprint validation runs before mutation and identical reruns are idempotent;
 - Room Auto from planar LINE/POLYLINE/ARC/SPLINE with sagitta/chord controls, planarity checks, bounded sampling, topology split/merge lifecycle and stale-room handling;
-- **Curtain Wall** panel-grid quantities/schedule/XLSX plus native GlassWall LINE frame overlays. `QS3DCURTAIN3D` keeps one backing host for opening booleans and adds dedicated perimeter/mullion/transom solids;
-- supported **LINE Curtain frames are opening-aware**: linked Door/Opening rectangles interrupt frame runs deterministically; opening property/re-host/unlink changes stale the dependent frame overlay;
+- **Curtain Wall** panel-grid quantities/schedule/XLSX plus native GlassWall LINE and guarded open/bulged WCS-XY path frame overlays. `QS3DCURTAIN3D` keeps one backing host for opening booleans and adds dedicated perimeter/mullion/transom solids;
+- supported LINE/path Curtain frames are opening-aware: linked Door/Opening rectangles interrupt frame runs deterministically; opening property/re-host/unlink changes stale the dependent frame overlay; one outer native transaction now makes the command-level host/frame source path atomic;
 - Quick Takeoff, bounded Current-Space B4D scan, BQ stable-ID grouping/filtering/Locate/XLSX, ED2/Excel Locate and deterministic recognition/review/auto-apply;
 - B4D excludes generated geometry through canonical `CollectOwnerHandles(project)`, so owner classification, parsing and dedupe do not drift when generated families are added;
 - rebar notation/BBS/XLSX/CSV, column/beam longitudinal bars, BBS-shape bars, beam stirrups and column ties;
@@ -63,7 +63,7 @@ Any future standalone direction requires an explicit owner requirement and a new
 2. Core Release build + deterministic smoke suite on that same SHA; older green runs do not validate later commits.
 3. Compile the V25 adapter on `[self-hosted, windows, x64, bricscad-v25]` against the exact installed BricsCAD V25 managed assemblies.
 4. NETLOAD/DemandLoad regression for Workspace/Ribbon/hubs, project editors, Focus/Isolate/Section, wall snap, Auto Host, Room Auto, opening cuts, recognition/template/revision/BQ/BBS, generated-source rejection, `QS3DRULEPREVIEW`, `QS3DREGENPREVIEW`, `QS3DDIAGSUMMARY` and all generated-rebar families.
-5. Representative private-DWG regression: wall/WallPier; L/T/X cleanup; ambiguous/elevation host cases; straight/curved cuts; Curtain backing host + opening-aware LINE frames; Room Auto mixed curves; structure/BQ/BBS; slab/wall/foundation mesh; shape/stirrup/tie/longitudinal rebar; failed capture/finish rollback; dependency-cycle reporting; rule/regeneration preview read-only behavior; save/reopen/multi-DWG lifecycle.
+5. Representative private-DWG regression: wall/WallPier; L/T/X cleanup; ambiguous/elevation host cases; straight/curved cuts; Curtain backing host + opening-aware LINE/path frames with phase-failure injection; Room Auto mixed curves; structure/BQ/BBS; slab/wall/foundation mesh; shape/stirrup/tie/longitudinal rebar; failed capture/finish rollback; dependency-cycle reporting; rule/regeneration preview read-only behavior; save/reopen/multi-DWG lifecycle.
 6. Qualify confirmation/Undo/session behavior before exposing guarded Rule/Regeneration Apply as a production V25 mutation command; preview commands remain read-only source features until this is proven.
 7. Qualify transactional installer rollback and signed-manifest updater version binding using an actual signed release package and prior installed version.
 8. Visual regression at 100/125/150/200% DPI with Vietnamese Unicode, narrow/wide palettes, Family/Instance/Floor-Level controls, typed editors and error/disabled states.
@@ -73,7 +73,7 @@ Any future standalone direction requires an explicit owner requirement and a new
 ## Runtime/product completion still remaining
 
 - **physical wall-solid reconciliation/union** at L/T/X/Multi junctions. Guarded source-centerline endpoint cleanup is implemented, but generated wall bodies are not yet automatically unioned/reshaped under a safe multi-owner contract;
-- Curtain **curved/open-POLYLINE native frame overlays** and panel-by-panel backing glass solids. Opening-aware interruption for supported LINE frames is already implemented;
+- Curtain panel-by-panel backing glass solids, broader freeform/non-planar path parity and exact V25 failure-injection/runtime proof for the implemented LINE/open-bulged path frame orchestration;
 - WallPier specialized profile generation for open POLYLINE/freeform paths beyond the current LINE specialization;
 - richer closed/freeform wall profiles and multi-level/elevation constraints;
 - complex corner-spanning curved opening booleans beyond the current guarded tessellated footprint planner;

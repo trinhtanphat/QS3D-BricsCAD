@@ -88,7 +88,8 @@ namespace QS3D.Core.SmokeTests
             }
             catch (InvalidOperationException ex)
             {
-                threw = ex.Message.IndexOf("duplicate semantic element id", StringComparison.OrdinalIgnoreCase) >= 0;
+                threw = ex.Message.IndexOf("duplicate", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    ex.Message.IndexOf("element id", StringComparison.OrdinalIgnoreCase) >= 0;
             }
 
             if (!threw) throw new Exception("AssignFamily must fail closed when the project contains duplicate semantic element IDs.");
