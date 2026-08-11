@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
 
@@ -15,6 +17,9 @@ namespace QS3D.Core.SmokeTests
             SheetOverlapFailsClosed();
             SheetBoundsFailClosed();
             DuplicateViewIdentityFailsClosed();
+            SheetIndexIsDeterministicAndImmutable();
+            SheetIndexIdentityFailsClosed();
+            SheetIndexBoundsAndNullsFailClosed();
         }
 
         private static void ViewFilteringIsDeterministic()
@@ -125,6 +130,86 @@ namespace QS3D.Core.SmokeTests
                 "Duplicate view IDs must fail closed case-insensitively.");
         }
 
+        private static void SheetIndexIsDeterministicAndImmutable()
+        {
+            var project = BuildProject();
+            var views = SemanticViewPlanner.BuildCatalog(project, new[]
+            {
+                new SemanticViewDefinition("V1", "Plan"),
+                new SemanticViewDefinition("V2", "Section")
+            });
+            var source = new List<SemanticSheetPlan>
+            {
+                SemanticSheetPlanner.Build(
+                    new SemanticSheetDefinition(
+                        "SHEET-200", "A-200", "Sections", 841d, 594d,
+                        new[] { new SemanticSheetPlacementDefinition("V2", 20d, 20d, 300d, 200d) }),
+                    views),
+                SemanticSheetPlanner.Build(
+                    new SemanticSheetDefinition(
+                        "SHEET-100", "A-100", "Plans", 841d, 594d,
+                        new[] { new SemanticSheetPlacementDefinition("V1", 20d, 20d, 300d, 200d) },
+                        "A1 Standard"),
+                    views)
+            };
+
+            var index = SemanticSheetIndexBuilder.Build(source);
+            source.Clear();
+
+            Equal(2, index.Rows.Count);
+            Equal("A-100", index.Rows[0].Number);
+            Equal("SHEET-100", index.Rows[0].SheetId);
+            Equal("Plans", index.Rows[0].Name);
+            Equal("A1 Standard", index.Rows[0].TitleBlockName);
+            Equal(1, index.Rows[0].PlacedViewCount);
+            Equal("A-200", index.Rows[1].Number);
+
+            var mutable = index.Rows as IList<SemanticSheetIndexRow>;
+            if (mutable == null) throw new Exception("Semantic sheet index rows must expose a read-only list implementation.");
+            var blocked = false;
+            try { mutable.Add(index.Rows[0]); }
+            catch (NotSupportedException) { blocked = true; }
+            if (!blocked) throw new Exception("Semantic sheet index rows must not be externally mutable.");
+        }
+
+        private static void SheetIndexIdentityFailsClosed()
+        {
+            var project = BuildProject();
+            var views = SemanticViewPlanner.BuildCatalog(project, new[] { new SemanticViewDefinition("V1", "Plan") });
+            var first = SemanticSheetPlanner.Build(
+                new SemanticSheetDefinition("SHEET-1", "A-101", "First", 420d, 297d, Array.Empty<SemanticSheetPlacementDefinition>()),
+                views);
+            var duplicateId = SemanticSheetPlanner.Build(
+                new SemanticSheetDefinition("sheet-1", "A-102", "Duplicate ID", 420d, 297d, Array.Empty<SemanticSheetPlacementDefinition>()),
+                views);
+            var duplicateNumber = SemanticSheetPlanner.Build(
+                new SemanticSheetDefinition("SHEET-2", "a-101", "Duplicate number", 420d, 297d, Array.Empty<SemanticSheetPlacementDefinition>()),
+                views);
+
+            MustFail(
+                () => SemanticSheetIndexBuilder.Build(new[] { first, duplicateId }),
+                "Sheet Index duplicate sheet IDs must fail closed case-insensitively.");
+            MustFail(
+                () => SemanticSheetIndexBuilder.Build(new[] { first, duplicateNumber }),
+                "Sheet Index duplicate sheet numbers must fail closed case-insensitively.");
+        }
+
+        private static void SheetIndexBoundsAndNullsFailClosed()
+        {
+            var project = BuildProject();
+            var views = SemanticViewPlanner.BuildCatalog(project, new[] { new SemanticViewDefinition("V1", "Plan") });
+            var sheet = SemanticSheetPlanner.Build(
+                new SemanticSheetDefinition("SHEET-1", "A-101", "Plan", 420d, 297d, Array.Empty<SemanticSheetPlacementDefinition>()),
+                views);
+
+            MustFail(
+                () => SemanticSheetIndexBuilder.Build(Enumerable.Repeat(sheet, 10001)),
+                "Sheet Index must reject catalogs beyond its source bound before processing duplicate identities.");
+            MustFailArgument(
+                () => SemanticSheetIndexBuilder.Build(new SemanticSheetPlan[] { null! }),
+                "Sheet Index null source rows must fail closed.");
+        }
+
         private static ProjectState BuildProject()
         {
             var project = new ProjectState("P-DOC", "Documentation Planning");
@@ -143,6 +228,14 @@ namespace QS3D.Core.SmokeTests
             var failed = false;
             try { action(); }
             catch (InvalidOperationException) { failed = true; }
+            if (!failed) throw new Exception(message);
+        }
+
+        private static void MustFailArgument(Action action, string message)
+        {
+            var failed = false;
+            try { action(); }
+            catch (ArgumentException) { failed = true; }
             if (!failed) throw new Exception(message);
         }
 
