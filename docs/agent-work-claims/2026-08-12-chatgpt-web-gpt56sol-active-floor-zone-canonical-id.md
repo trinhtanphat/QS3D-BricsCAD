@@ -1,0 +1,25 @@
+# Agent work claim — Active Floor/Zone canonical identity repair
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `ACTIVE`
+- Baseline main SHA: `cad2ea8b733dbfc9037b2846e7e91fbb4dda732d`
+- Scope: make Core Floor/Zone activation persist the exact canonical project-owned ID even when the current active value differs only by whitespace or casing, instead of treating a non-canonical alias as an unchanged no-op.
+- Files reserved:
+  - `src/QS3D.Core/Domain/ProjectFloorService.cs`
+  - `src/QS3D.Core/Domain/ProjectZoneService.cs`
+  - `tests/QS3D.Core.SmokeTests/ProjectFloorServiceSmoke.cs`
+  - `tests/QS3D.Core.SmokeTests/ProjectZoneServiceSmoke.cs`
+  - this claim file
+- Excluded scope:
+  - no Family/ActiveFamily changes; that lane has separate completed hardening history;
+  - no BricsCAD adapter/UI/runtime changes;
+  - no persistence schema changes;
+  - no GitHub Actions dispatch or release work.
+- Contract:
+  - `SetActive` must resolve the requested Floor/Zone through the existing canonical project lookup first;
+  - a truly exact active ID remains a zero-change no-op;
+  - whitespace/case aliases that resolve to the same project-owned ID are repaired to the exact canonical ID and advance `ChangeVersion` once;
+  - invalid/missing IDs still fail before mutation;
+  - regression smoke coverage must pin both canonical repair and exact-value no-op behavior.
+- Validation plan: source-review the two focused Core services and extend their deterministic smoke tests. No BricsCAD V25 runtime PASS or GitHub Actions result will be claimed unless actually executed.
