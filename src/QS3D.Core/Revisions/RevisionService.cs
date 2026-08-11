@@ -170,6 +170,8 @@ namespace QS3D.Core.Revisions
             foreach (var element in snapshot.Elements)
             {
                 if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
+                if (!string.Equals(element.ElementId, element.ElementId.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded element id: " + element.ElementId + ".");
                 if (result.ContainsKey(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains duplicate element id: " + element.ElementId);
                 result.Add(element.ElementId, element);
             }
