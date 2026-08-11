@@ -19,21 +19,51 @@ text = RIBBON.read_text(encoding="utf-8")
 structural_contracts = (
     "private sealed class RibbonPanelSpec",
     "public IReadOnlyList<RibbonPanelSpec> Panels { get; }",
+    "foreach (var tabSpec in CreateSpecs())",
+    "ReconcileTab(tabs, tabSpec);",
+    "private static void ReconcileTab(object tabs, RibbonTabSpec tabSpec)",
+    "var tab = FindById(tabs, tabSpec.Id);",
+    "var created = tab == null;",
+    'SetProperty(tab!, "Title", tabSpec.Title);',
+    'RemoveLegacyFlatPanel(panels, tabSpec.Id + "_PANEL_SOURCE");',
     "foreach (var panelSpec in tabSpec.Panels)",
-    "AddPanel(tabSpec, panelSpec, panels);",
+    "EnsurePanel(tabSpec, panelSpec, panels);",
+    "private static void EnsurePanel(RibbonTabSpec tabSpec, RibbonPanelSpec panelSpec, object panels)",
+    "var source = FindPanelSource(panels, sourceId);",
     'SetProperty(source, "Title", panelSpec.Title);',
+    "EnsurePanelButtons(tabSpec, panelSpec, source);",
+    "private static void EnsurePanelButtons(RibbonTabSpec tabSpec, RibbonPanelSpec panelSpec, object source)",
+    "var button = FindById(items, buttonId);",
+    'SetProperty(button, "CommandParameter", buttonSpec.Command);',
+    'SetProperty(button, "CommandHandler", new RibbonCommandHandler());',
+    "private static object? FindPanelSource(object panels, string sourceId)",
+    "private static void RemoveLegacyFlatPanel(object panels, string legacySourceId)",
+    "if (legacyPanel != null)",
+    "Remove(panels, legacyPanel);",
+    "private static object? FindById(object collection, string id)",
     'tabSpec.Id + "_" + panelSpec.Id + "_PANEL_SOURCE"',
     'tabSpec.Id + "_" + panelSpec.Id + "_" + Normalize(buttonSpec.Text)',
 )
 
 for needle in structural_contracts:
     if needle not in text:
-        errors.append("missing grouped-panel contract: " + needle)
+        errors.append("missing grouped/reconciliation contract: " + needle)
 
-if "foreach (var buttonSpec in spec.Buttons)" in text:
-    errors.append("legacy single-panel-per-tab construction returned")
-if 'SetProperty(source, "Title", spec.Title);' in text:
-    errors.append("panel title regressed to tab title")
+for legacy in (
+    "if (CollectionContainsId(tabs, tabSpec.Id))",
+    "continue;\n\n                    var tab = Create(\"Bricscad.Windows.RibbonTab\")",
+    "foreach (var buttonSpec in spec.Buttons)",
+    'SetProperty(source, "Title", spec.Title);',
+):
+    if legacy in text:
+        errors.append("legacy create-only Ribbon bootstrap contract returned: " + legacy)
+
+if ".Clear()" in text:
+    errors.append("Ribbon reconciliation must not clear whole tab/panel collections because augmenter/user panels must survive")
+
+remove_calls = text.count("Remove(panels, legacyPanel);")
+if remove_calls != 1:
+    errors.append("RibbonBootstrapper may remove only the one exact legacy flat QS3D panel path")
 
 required_tabs = {
     "QS3D_HOME": {"Dự án", "Điều phối", "Chất lượng"},
@@ -57,7 +87,7 @@ for tab_id, panel_titles in required_tabs.items():
             errors.append(f"{tab_id} missing panel title: {title}")
 
 required_commands = {
-    "QS3D", "QS3DSAVE", "QS3DREGEN", "QS3DBQ", "QS3DBBSVIEW",
+    "QS3D", "QS3DSTART", "QS3DSAVE", "QS3DREGEN", "QS3DBQ", "QS3DBBSVIEW",
     "QS3DHEALTHALL", "QS3DRELEASECHECK", "QS3DREFRESH", "QS3DRELOAD",
     "QS3DTEMPLATEEXPORT", "QS3DTEMPLATEIMPORT", "QS3DFAMILIES",
     "QS3DDRAWWALL", "QS3DDRAWGLASSWALL", "QS3DDRAWWALLPIER",
@@ -92,6 +122,9 @@ missing_commands = sorted(required_commands - bound_commands)
 if missing_commands:
     errors.append("existing ribbon command binding(s) disappeared: " + ", ".join(missing_commands))
 
+if text.count('Button("Start Center", "QS3DSTART")') != 1:
+    errors.append("Start Center binding must remain exactly once while existing tabs are reconciled")
+
 panel_count = len(re.findall(r"\bPanel\(", text)) - 1
 if panel_count < 35:
     errors.append(f"expected at least 35 functional panels, found {panel_count}")
@@ -104,6 +137,6 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: ribbon tabs use named functional panels, all 103 pre-existing command bindings remain present, "
-    "and native command dispatch stays routed through RibbonCommandHandler."
+    "PASS: fresh and already-loaded QS3D Ribbon states reconcile to the current named functional panels/buttons, "
+    "legacy flat QS3D panels are removed narrowly, unknown augmenter panels are preserved, and native command dispatch stays click-time active-document routed."
 )
