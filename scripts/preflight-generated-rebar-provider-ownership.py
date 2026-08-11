@@ -12,10 +12,11 @@ FILES = [
 POLICY = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
 INDEX = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipIndex.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedRebarProviderOwnershipSmoke.cs"
+SAFETY_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedHandleOwnershipSafetySmoke.cs"
 WALL_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedWallMeshHealthSmoke.cs"
 errors = []
 
-for path in FILES + [POLICY, INDEX, SMOKE, WALL_SMOKE]:
+for path in FILES + [POLICY, INDEX, SMOKE, SAFETY_SMOKE, WALL_SMOKE]:
     if not path.is_file():
         errors.append("missing generated ownership contract file: " + str(path.relative_to(ROOT)))
 
@@ -31,23 +32,27 @@ for path in FILES:
         "index.Conflicts.Add(normalized);",
     ):
         if token not in text:
-            errors.append(path.name + " missing order-independent ownership token: " + token)
+            errors.append(path.name + " missing order-independent diagnostic ownership token: " + token)
     if "normalized.Length == 0 || owners.ContainsKey(normalized)" in text:
         errors.append(path.name + " still uses first-owner-wins reservation logic.")
 
 if POLICY.is_file():
     text = POLICY.read_text(encoding="utf-8")
-    if ".Where(x => x != null)" not in text:
-        errors.append("GeneratedHandleOwnershipPolicy.CollectOwnerHandles is not null-safe.")
-    if "if (element == null) continue;" not in text:
-        errors.append("GeneratedHandleOwnershipPolicy.TryFindOwner is not null-safe.")
-    if "is ambiguously claimed by" not in text:
-        errors.append("GeneratedHandleOwnershipPolicy must remain fail-closed on ambiguous generated owners.")
+    for token in (
+        "EnsureValidElementSet(project);",
+        "Project contains a null semantic element entry; generated CAD ownership cannot be resolved safely.",
+        "is ambiguously claimed by",
+    ):
+        if token not in text:
+            errors.append("GeneratedHandleOwnershipPolicy missing fail-closed ownership token: " + token)
+    for forbidden in (".Where(x => x != null)", "if (element == null) continue;"):
+        if forbidden in text:
+            errors.append("GeneratedHandleOwnershipPolicy must not silently skip corrupt semantic entries: " + forbidden)
 
 if INDEX.is_file():
     text = INDEX.read_text(encoding="utf-8")
     if "if (element == null) continue;" not in text:
-        errors.append("GeneratedHandleOwnershipIndex.Build is not null-safe.")
+        errors.append("GeneratedHandleOwnershipIndex diagnostic cache no longer tolerates isolated null entries.")
     if "if (entry.Ambiguity != null) throw new InvalidOperationException" not in text:
         errors.append("GeneratedHandleOwnershipIndex must remain fail-closed on ambiguous generated owners.")
 
@@ -57,13 +62,20 @@ if SMOKE.is_file():
         "BeamStirrupLaterOwnerIsConflict();",
         "TieLaterOwnerIsConflict();",
         "LongitudinalRebarLaterOwnerIsConflict();",
-        "OwnershipPolicyAndIndexIgnoreNullEntries();",
+        "OwnershipPolicyFailsClosedWhileDiagnosticIndexToleratesNullEntries();",
+        "RequireThrows<InvalidOperationException>",
         '"BEAM_STIRRUP_GENERATED_OWNERSHIP_CONFLICT"',
         '"TIE_REBAR_GENERATED_OWNERSHIP_CONFLICT"',
         '"REBAR_GENERATED_OWNERSHIP_CONFLICT"',
     ):
         if token not in text:
             errors.append("GeneratedRebarProviderOwnershipSmoke.cs missing regression token: " + token)
+
+if SAFETY_SMOKE.is_file():
+    text = SAFETY_SMOKE.read_text(encoding="utf-8")
+    for token in ("NullElementFailsClosed();", "DuplicateElementIdsFailClosed();", "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)"):
+        if token not in text:
+            errors.append("GeneratedHandleOwnershipSafetySmoke.cs missing canonical fail-closed regression: " + token)
 
 if WALL_SMOKE.is_file() and "WALL_MESH_GENERATED_OWNERSHIP_CONFLICT" not in WALL_SMOKE.read_text(encoding="utf-8"):
     errors.append("GeneratedWallMeshHealthSmoke.cs does not cover wall ownership conflict.")
@@ -74,4 +86,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: generated rebar/wall/tie/stirrup Core diagnostics are null-safe and ownership conflicts are independent of project iteration order.")
+print("PASS: generated rebar/wall/tie/stirrup diagnostics remain null-tolerant and order-independent, while canonical generated ownership policy fails closed on corrupt semantic element sets and ambiguity.")
