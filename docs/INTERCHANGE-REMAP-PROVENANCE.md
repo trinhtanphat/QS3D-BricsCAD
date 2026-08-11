@@ -63,7 +63,7 @@ After Import As New with provenance:
 - source-to-target semantic lineage remains metadata only;
 - neither record can be treated as target CAD ownership.
 
-Portable semantic re-export excludes project metadata, so neither raw provenance records nor the target mapping are promoted to portable Element ownership.
+The portable semantic re-export boundary excludes project metadata, so neither raw provenance records nor the target mapping are promoted to portable Element ownership.
 
 ## Why the mapping is separate
 
