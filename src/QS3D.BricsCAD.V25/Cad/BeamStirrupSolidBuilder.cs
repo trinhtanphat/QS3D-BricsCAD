@@ -144,7 +144,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (batchCount > MaxStirrupsPerBatch - layout.Count) throw new InvalidOperationException("Beam stirrup 3D vượt giới hạn " + MaxStirrupsPerBatch + " stirrup/batch.");
                         batchCount = checked(batchCount + layout.Count);
 
-                        ErasePrevious(document, transaction, element, ownership);
+                        ErasePrevious(document, transaction, project, element, ownership);
                         var update = new PendingUpdate
                         {
                             Element = element,
@@ -183,6 +183,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                 stirrup.Layer = source.Layer;
                                 modelSpace.AppendEntity(stirrup);
                                 transaction.AddNewlyCreatedDBObject(stirrup, true);
+                                GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, stirrup, project, element, HandlesKey);
                                 update.Handles.Add(stirrup.Handle.ToString());
                                 stirrup = null!;
                             }
@@ -314,7 +315,7 @@ namespace QS3D.BricsCAD.V25.Cad
             finally { solid?.Dispose(); }
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -329,6 +330,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
                 if (entity == null || entity.IsErased) continue;
                 if (!(entity is Solid3d solid)) throw new InvalidOperationException("Generated beam stirrup handle " + handle + " không trỏ tới Solid3d. Refusing destructive erase.");
+                GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(solid, project, element, HandlesKey, "erase generated beam stirrup " + handle);
                 solid.Erase();
             }
         }
