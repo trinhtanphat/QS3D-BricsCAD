@@ -25,6 +25,9 @@ namespace QS3D.Core.Services
         private static void AddIf(bool enabled, ElementCategory category, string familyName, ElementInstance room, IList<ElementInstance> output, double lengthM = 0d, double areaM2 = 0d)
         {
             if (!enabled) return;
+            RequireFiniteNonNegative(lengthM, nameof(lengthM));
+            RequireFiniteNonNegative(areaM2, nameof(areaM2));
+
             var family = new FamilyDefinition(familyName, category, room.Family.Material);
             var element = new ElementInstance(room.Id + ":" + category, family, room.Floor)
             {
@@ -33,6 +36,12 @@ namespace QS3D.Core.Services
             };
             foreach (var handle in room.SourceHandles) element.SourceHandles.Add(handle);
             output.Add(element);
+        }
+
+        private static void RequireFiniteNonNegative(double value, string parameterName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new InvalidOperationException("Room finish source metric '" + parameterName + "' must be finite and non-negative.");
         }
     }
 }
