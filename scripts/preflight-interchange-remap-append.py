@@ -205,11 +205,16 @@ if not errors:
 
     required_command = [
         '[CommandMethod("QS3DINTERCHANGEREMAPAPPEND", CommandFlags.Modal)]',
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "ProjectInterchangeRemapAppendImporter.Plan(project, json)",
+        "var previewProjectId = project.ProjectId;",
+        "var previewUpdatedUtc = project.UpdatedUtc;",
         "var previewChangeVersion = project.ChangeVersion;",
-        "var currentProject = ProjectContextCoordinator.GetOrCreate(document);",
-        "ReferenceEquals(currentProject, project)",
+        "var previewDrawingFingerprint = project.DrawingFingerprint ?? string.Empty;",
+        'ExistingProjectMutationContext.Require(document, "Interchange Import As New")',
+        "currentProject.UpdatedUtc != previewUpdatedUtc",
         "currentProject.ChangeVersion != previewChangeVersion",
+        "previewDrawingFingerprint",
         "ProjectInterchangeRemapAppendImporter.Import(currentProject, json)",
         "if (!plan.CanImport)",
         "Interchange Import As New BLOCKED",
@@ -234,6 +239,10 @@ if not errors:
     for needle in required_command:
         if needle not in c:
             errors.append("remap append command missing guarded UX/freshness contract: " + needle)
+    if "ProjectContextCoordinator.GetOrCreate(document)" in c:
+        errors.append("remap append preview/confirmation must not create/cache project state implicitly")
+    if "ReferenceEquals(currentProject, project)" in c:
+        errors.append("remap append freshness must use semantic snapshot stamps, not ProjectState object identity")
     if "ProjectInterchangeRemapAppendImporter.Import(project, json)" in c:
         errors.append("confirmed remap append must mutate the re-resolved current project, not the stale preview reference")
     if "Import As New plan is not executable. Run QS3DINTERCHANGEREMAPPLAN" in c:
@@ -241,6 +250,7 @@ if not errors:
 
     required_dry_run = [
         '[CommandMethod("QS3DINTERCHANGEREMAPPLAN", CommandFlags.Modal)]',
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "ProjectInterchangeRemapAppendImporter.Plan(project, json)",
         "var plan = appendPlan.Remap;",
         "appendPlan.CompatibilityBlockers.Count",
@@ -251,6 +261,8 @@ if not errors:
     for needle in required_dry_run:
         if needle not in d:
             errors.append("remap dry-run missing execution-compatibility preview contract: " + needle)
+    if "ProjectContextCoordinator.GetOrCreate(document)" in d:
+        errors.append("remap dry-run must not create/cache project state merely to preview a plan")
 
     all_cs = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in (root / "src").rglob("*.cs"))
     registrations = len(re.findall(r'\[CommandMethod\("QS3DINTERCHANGEREMAPAPPEND"', all_cs))
@@ -272,4 +284,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New keeps blocked plans inspectable, previews runtime compatibility, binds confirmation to the reviewed project/version, uses one typed HostWall/BottomLevel/TopLevel reference registry, rejects invalid level relations before success, strips native ownership, and preserves rollback diagnostics.")
+print("Import As New keeps blocked plans inspectable, previews runtime compatibility, binds confirmation to the reviewed semantic snapshot stamp, uses one typed HostWall/BottomLevel/TopLevel reference registry, rejects invalid level relations before success, strips native ownership, and preserves rollback diagnostics.")
