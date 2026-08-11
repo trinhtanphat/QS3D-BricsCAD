@@ -37,6 +37,26 @@ else:
         if stale_return in body:
             errors.append("RightPanel.Refresh must clear stale drawings/layers instead of returning with prior-document UI")
 
+    refresh_after_mutation = re.search(
+        r"private void RefreshAfterXrefMutation\(string successStatus\)\s*\{(?P<body>.*?)\n        \}\n\n        private void OnRefreshClick",
+        text,
+        re.DOTALL,
+    )
+    if not refresh_after_mutation:
+        errors.append("missing bounded RefreshAfterXrefMutation helper")
+    else:
+        body = refresh_after_mutation.group("body")
+        for token in (
+            "RefreshDrawingsOnly();",
+            "ReloadLayers();",
+            "_viewModel.Status = successStatus;",
+            '_viewModel.Status = successStatus + " • cảnh báo làm mới panel: " + ex.Message;',
+        ):
+            if token not in body:
+                errors.append("Xref post-mutation refresh feedback missing: " + token)
+        if "Refresh();" in body:
+            errors.append("Xref post-mutation helper must use throwing refresh primitives so refresh failures cannot be silently masked as success")
+
     clear_click = re.search(
         r"private void OnClearDrawingSelectionClick\(object sender, RoutedEventArgs e\)\s*\{(?P<body>.*?)\n        \}\n\n        private void OnDrawingSelectionChanged",
         text,
@@ -93,8 +113,8 @@ else:
             errors.append("RightPanel must not leave stale implied Xref selection when MODEL/null is selected")
 
     for method, action, status in (
-        ("OnReloadXrefClick", "XrefService.Reload(doc, item.Name);", '_viewModel.Status = "Đã nạp lại Xref " + item.Name;'),
-        ("OnDeleteDrawingClick", "XrefService.Detach(doc, item.Name);", '_viewModel.Status = "Đã gỡ Xref " + item.Name;'),
+        ("OnReloadXrefClick", "XrefService.Reload(doc, item.Name);", 'RefreshAfterXrefMutation("Đã nạp lại Xref " + item.Name);'),
+        ("OnDeleteDrawingClick", "XrefService.Detach(doc, item.Name);", 'RefreshAfterXrefMutation("Đã gỡ Xref " + item.Name);'),
     ):
         method_match = re.search(
             r"private void " + re.escape(method) + r"\(object sender, RoutedEventArgs e\)\s*\{(?P<body>.*?)\n        \}",
@@ -106,10 +126,11 @@ else:
             continue
         body = method_match.group("body")
         action_at = body.find(action)
-        refresh_at = body.find("Refresh();", action_at)
-        status_at = body.find(status, refresh_at)
-        if action_at < 0 or refresh_at < action_at or status_at < refresh_at:
-            errors.append(method + " must mutate, refresh live drawing/layer state, then restore the user-facing success status")
+        feedback_at = body.find(status, action_at)
+        if action_at < 0 or feedback_at < action_at:
+            errors.append(method + " must mutate first, then use the warning-aware live refresh helper")
+        if "Refresh();" in body:
+            errors.append(method + " must not use swallow-and-overwrite Refresh for mutation feedback")
 
 print("QS3D RightPanel drawing-selection preflight")
 if errors:
@@ -118,4 +139,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: RightPanel clears stale prior-document state, drawing selection maps cleanly to CAD state, explicit clear avoids duplicate callbacks, and Xref reload/detach keep their success feedback after live refresh.")
+print("PASS: RightPanel clears stale prior-document state, drawing selection maps cleanly to CAD state, explicit clear avoids duplicate callbacks, and Xref reload/detach distinguish successful mutation from post-mutation panel refresh warnings.")
