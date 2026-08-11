@@ -180,7 +180,24 @@ if (-not [Uri]::TryCreate($PackageUri, [UriKind]::Absolute, [ref]$uri) -or $uri.
 if ($uri.UserInfo) { throw 'PackageUri must not contain embedded credentials.' }
 
 $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
+$packagePath = [IO.Path]::GetFullPath($package).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+$packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar
 $zip = (Resolve-Path -LiteralPath $PackageZip).Path
+$zipPath = [IO.Path]::GetFullPath($zip)
+$outputFull = [IO.Path]::GetFullPath($OutputPath)
+if (-not [string]::Equals([IO.Path]::GetExtension($outputFull), '.json', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "OutputPath must use the .json extension: $outputFull"
+}
+if ([string]::Equals($outputFull, $packagePath, [StringComparison]::OrdinalIgnoreCase) -or
+    $outputFull.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'OutputPath must be outside PackageDirectory so manifest generation cannot overwrite signed staging.'
+}
+if ([string]::Equals($outputFull, $zipPath, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'OutputPath must not alias PackageZip.'
+}
+$outputParent = Split-Path -Parent $outputFull
+if ([string]::IsNullOrWhiteSpace($outputParent)) { throw 'OutputPath must have a parent directory.' }
+
 $metadataPath = Join-Path $package 'PACKAGE-METADATA.json'
 if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Missing package artifact: $metadataPath" }
 foreach ($name in $SignedPayloadNames) {
@@ -225,9 +242,6 @@ $manifest = [ordered]@{
     generatedUtc = [DateTime]::UtcNow.ToString('o')
 }
 
-$outputFull = [IO.Path]::GetFullPath($OutputPath)
-$outputParent = Split-Path -Parent $outputFull
-if ([string]::IsNullOrWhiteSpace($outputParent)) { throw 'OutputPath must have a parent directory.' }
 if ($PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
     New-Item -ItemType Directory -Path $outputParent -Force | Out-Null
     $manifest | ConvertTo-Json | Set-Content -LiteralPath $outputFull -Encoding UTF8
