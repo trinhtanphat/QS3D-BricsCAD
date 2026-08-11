@@ -130,6 +130,13 @@ def main():
     require(state, "Convert.FromBase64String", "encoded user-state loader")
     require(state, "if (!TryDecode(line.Substring(2), out var command)) continue;", "favorite/recent corrupt-line isolation")
     require(state, "if (!TryDecode(parts[2], out var decoded)) continue;", "recent-project corrupt-line isolation")
+    require(state, "private static bool TrySettingsPath(out string path)", "optional local-state path resolver")
+    require(state, "if (!TrySettingsPath(out var path)) return state;", "load fail-soft local-state path")
+    require(state, "if (!TrySettingsPath(out var path)) return;", "save fail-soft local-state path")
+    require(state, "Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)", "local state root")
+    require(state, "ex is System.Security.SecurityException", "DWG/path security fail-soft guard")
+    require(state, "catch (System.Security.SecurityException) { }", "local-state security fail-soft handling")
+    forbid(state, 'throw new InvalidOperationException("LocalApplicationData is unavailable.")', "optional local-state path resolution")
     forbid(state, "Process.Start", "Start Center state store")
 
     require(catalog, "StringSplitOptions.RemoveEmptyEntries", "multi-token launcher search")
@@ -163,7 +170,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, optional-state-fail-soft, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
