@@ -66,9 +66,18 @@ def main() -> int:
     require(launcher, "CloseMainWindow()", "graceful host close")
     reject(launcher, "Stop-Process", "forced BricsCAD termination")
     reject(launcher, "taskkill", "forced BricsCAD termination")
-    reject(launcher, ".Kill(", "forced process termination")
 
-    print("PASS: one-click updater scheduling is serialized across BricsCAD processes for the same Windows user, and the detached worker holds the same reservation through install without force-killing CAD.")
+    # Readiness timeout may terminate only the detached PowerShell updater child while the
+    # parent still owns the update mutex. No generic/current-host kill is permitted.
+    require(launcher, "private static void TryTerminateUnreadyWorker(Process updater)", "narrow updater-child termination helper")
+    require(launcher, "updater.Kill();", "readiness-timeout updater-child termination")
+    kill_lines = [line.strip() for line in launcher.splitlines() if ".Kill(" in line]
+    if kill_lines != ["updater.Kill();"]:
+        raise AssertionError("only detached updater.Kill() is permitted; found: " + repr(kill_lines))
+    if "process.Kill(" in launcher or "Process.GetCurrentProcess().Kill(" in launcher:
+        raise AssertionError("BricsCAD/current process kill is forbidden")
+
+    print("PASS: one-click updater scheduling is serialized across BricsCAD processes for the same Windows user; readiness timeout may terminate only the detached updater child, never BricsCAD.")
     return 0
 
 
