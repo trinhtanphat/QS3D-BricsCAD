@@ -15,6 +15,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class ZoneManagerWindow : Window
     {
         private readonly Document _document;
+        private ProjectState _boundProject;
         private bool _loading;
         private string _editingId = string.Empty;
 
@@ -216,6 +217,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var previous = string.IsNullOrWhiteSpace(preferredId) ? (ZoneList.SelectedItem as ZoneDefinition)?.Id : preferredId;
                 if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 {
+                    _boundProject = null;
                     _loading = true;
                     try { ZoneList.ItemsSource = null; ZoneList.SelectedItem = null; }
                     finally { _loading = false; }
@@ -242,6 +244,7 @@ namespace QS3D.BricsCAD.V25.UI
                 finally { _loading = false; }
                 LoadEditor();
                 RefreshLabels();
+                _boundProject = project;
                 Title = "QS3D • Zone • " + DrawingLabel(_document);
                 if (zones.Count == 0)
                 {
@@ -334,6 +337,10 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
                 throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Zone Manager trước khi " + operation + ".");
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject) ||
+                _boundProject == null ||
+                !ReferenceEquals(currentProject, _boundProject))
+                throw new InvalidOperationException("QS3D project đã thay đổi từ lần Refresh gần nhất. Hãy Refresh Zone Manager trước khi " + operation + ".");
         }
 
         private static string DrawingLabel(Document document)
