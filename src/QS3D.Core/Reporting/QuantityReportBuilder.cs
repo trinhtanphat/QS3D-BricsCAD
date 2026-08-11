@@ -12,9 +12,12 @@ namespace QS3D.Core.Reporting
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var order = new List<string>();
             var grouped = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
+            var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
                 if (element == null) continue;
+                if (!seenElementIds.Add(element.Id))
+                    throw new InvalidOperationException("Quantity report contains duplicate element id: " + element.Id + ".");
                 var key = element.Floor + "\u001f" + element.Family.Category + "\u001f" + element.Family.Name;
                 if (!grouped.TryGetValue(key, out var row))
                 {
