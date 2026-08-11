@@ -69,7 +69,14 @@ namespace QS3D.Core.Recognition
                 return reason;
             }
         }
-        public bool RequiresReview => TopCandidate == null || TopCandidate.Confidence < 0.82d || Margin < 0.15d || !IsCaptureReady;
+        public bool RequiresReview
+        {
+            get
+            {
+                ValidateCurrentCandidates();
+                return TopCandidate == null || TopCandidate.Confidence < 0.82d || Margin < 0.15d || !IsCaptureReady;
+            }
+        }
         public string Handle => Snapshot.Handle;
         public string SuggestedCategory => TopCandidate?.Category.ToString() ?? string.Empty;
         public double Confidence => TopCandidate?.Confidence ?? 0d;
