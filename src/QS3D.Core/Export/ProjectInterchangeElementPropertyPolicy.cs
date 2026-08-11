@@ -1,5 +1,5 @@
 using System;
-using QS3D.Core.Domain;
+using QS3D.Core.Diagnostics;
 
 namespace QS3D.Core.Export
 {
