@@ -12,6 +12,7 @@ using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
 using QS3D.Core.Persistence;
 using QS3D.Core.Services;
+using QS3D.Core.Units;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -37,6 +38,7 @@ namespace QS3D.BricsCAD.V25
                 var arcSagitta = previewProject == null ? 0.002d : MetadataNumber(previewProject, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d);
                 var splineChord = previewProject == null ? 0.02d : MetadataNumber(previewProject, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d);
                 var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance, splineChord);
+                LengthUnit? selectionUnit = segments.Count == 0 ? (LengthUnit?)null : CadUnitService.GetLengthUnit(document);
                 var minimumArea = previewProject == null ? 0.5d : MetadataNonNegative(previewProject, "RoomBoundaryMinimumAreaM2", 0.5d);
                 var diagnostic = new RoomBoundaryDiagnosticService().Analyze(segments, tolerance, minimumArea);
                 var boundaries = diagnostic.AcceptedBoundaries;
@@ -47,6 +49,8 @@ namespace QS3D.BricsCAD.V25
                     PaletteCoordinator.SetStatus("Room Auto: " + detail);
                     return;
                 }
+                if (!selectionUnit.HasValue)
+                    throw new InvalidOperationException("Room boundary unit context không còn hợp lệ. Hãy chạy lại lệnh.");
 
                 ProjectState project;
                 if (expectedProjectId != null)
@@ -54,18 +58,21 @@ namespace QS3D.BricsCAD.V25
                     project = ExistingProjectMutationContext.Require(document, "Room Auto");
                     if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException("QS3D project đã thay đổi trong lúc đọc Room boundary. Hãy chạy lại lệnh.");
-                    if (MetadataNumber(project, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d) != tolerance ||
-                        MetadataNumber(project, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d) != arcSagitta ||
-                        MetadataNumber(project, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d) != splineChord ||
-                        MetadataNonNegative(project, "RoomBoundaryMinimumAreaM2", 0.5d) != minimumArea)
-                        throw new InvalidOperationException("Room boundary settings đã thay đổi trong lúc đọc selection. Hãy chạy lại lệnh.");
                 }
                 else
                 {
+                    // The preview was computed without a QS3D project. If one becomes
+                    // visible before commit, fail closed rather than applying default
+                    // preview settings to a newly appeared canonical project.
+                    if (ProjectContextCoordinator.TryGetReadOnly(document, out _))
+                        throw new InvalidOperationException("QS3D project đã xuất hiện trong lúc đọc Room boundary. Hãy chạy lại lệnh để dùng đúng project settings.");
+
                     // Creation-capable only after usable CAD input produced at least one closed face.
                     // Cancel/empty/no-face paths above must never bootstrap a blank project.
                     project = ProjectContextCoordinator.GetOrCreate(document);
                 }
+
+                EnsureBoundaryCommitFreshness(document, project, selectionUnit.Value, tolerance, arcSagitta, splineChord, minimumArea);
 
                 var signatureCounts = boundaries
                     .Select(x => AutoRoomLifecycle.NormalizeSourceHandles(x.SourceIds))
@@ -181,6 +188,25 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.WriteMessage("\nQS3DROOMAUTO error: " + ex.Message);
                 PaletteCoordinator.SetStatus("QS3DROOMAUTO lỗi: " + ex.Message);
             }
+        }
+
+        private static void EnsureBoundaryCommitFreshness(
+            Document document,
+            ProjectState project,
+            LengthUnit selectionUnit,
+            double tolerance,
+            double arcSagitta,
+            double splineChord,
+            double minimumArea)
+        {
+            if (CadUnitService.GetLengthUnit(document) != selectionUnit)
+                throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc đọc Room boundary. Hãy chạy lại lệnh.");
+
+            if (MetadataNumber(project, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d) != tolerance ||
+                MetadataNumber(project, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d) != arcSagitta ||
+                MetadataNumber(project, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d) != splineChord ||
+                MetadataNonNegative(project, "RoomBoundaryMinimumAreaM2", 0.5d) != minimumArea)
+                throw new InvalidOperationException("Room boundary settings đã thay đổi trong lúc đọc selection. Hãy chạy lại lệnh.");
         }
 
         private static string FormatRoomBoundaryDiagnostic(RoomBoundaryDiagnosticReport diagnostic)
