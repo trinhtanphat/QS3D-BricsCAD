@@ -1,30 +1,33 @@
 # Work claim — Wall Quantity Schedule Hub launcher
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-wall-quantity-schedule-hub-launcher`
 - Registered: `2026-08-11T21:36:00+07:00`
+- Completed: `2026-08-11T21:41:00+07:00`
 - Baseline main SHA: `7f63f7939aea0e9b13dbb5de217b61612d84fc3f`
+- Implementation SHA on `main`: `85ec9aec52a22b036a127b4d246ecba848299f0e`
+- Integration: PR `#480` squash-merged to `main`
 - Priority: P2
 
-## Reserved scope
+## Delivered scope
 
-Expose the already-merged `QS3DWALLQTY` Wall Quantity workspace from the drawing-bound Schedule Hub so the owner-requested wall takeoff workflow is discoverable alongside BQ/ED2/schedule tools.
+Exposed the already-merged `QS3DWALLQTY` Wall Quantity workspace from the drawing-bound Schedule Hub so the owner-requested wall takeoff workflow is discoverable alongside BQ/ED2/schedule tools.
 
-## Reserved files
+## Delivered files
 
 - `src/QS3D.BricsCAD.V25/UI/ScheduleHubWindow.xaml`
-- one new focused source-safe preflight if no existing Schedule Hub launcher guard is present
-- this claim file for close-out
+- `scripts/preflight-wall-quantity-schedule-hub.py`
 
-## Contract
+## Delivered contract
 
-- add a visible `Khối lượng Tường` launcher under `BẢNG TỔNG HỢP`, tagged `QS3DWALLQTY` and routed through the existing `OnCommandClick` document-affinity path;
-- update the Schedule Hub subtitle to include Tường without redesigning unrelated cards;
-- do not modify `ScheduleHubWindow.xaml.cs` unless the existing generic command dispatcher proves insufficient;
-- do not edit quantity formulas, persistence, `Commands.cs`, Ribbon, Start Center, RightPanel, Wall Quantity implementation, Core or the shared local inbox;
-- add a narrow static guard for the launcher and XML validity without duplicating unrelated Schedule Hub policy;
-- do not dispatch/re-run GitHub Actions and do not claim licensed BricsCAD V25 runtime PASS remotely.
+- added visible `Khối lượng Tường` under `BẢNG TỔNG HỢP`, tagged `QS3DWALLQTY` and routed through the existing `OnCommandClick` document-affinity dispatcher;
+- updated the Schedule Hub subtitle to include Tường;
+- preserved `ScheduleHubWindow.xaml.cs` unchanged because the existing generic dispatcher already validates the active source Document before queueing a command;
+- added a narrow static guard for launcher uniqueness, XML validity, generic dispatcher wiring, document affinity and the existing read-only detached Schedule snapshot boundary;
+- no quantity formulas, persistence, `Commands.cs`, Ribbon, Start Center, RightPanel, Wall Quantity implementation, Core or shared local inbox were modified;
+- PR #480 changed exactly two reserved files and the branch-head lookup exposed no GitHub Actions workflow runs;
+- no workflow was dispatched/re-run and no licensed V25 runtime PASS is claimed remotely.
 
-## Completion condition
+## Completion
 
-The Wall Quantity launcher and focused static guard are merged onto current `main`, the PR touches only the reserved surface, and this claim is marked `COMPLETED` with the exact implementation SHA.
+The Schedule Hub launcher is merged on `main` at `85ec9aec52a22b036a127b4d246ecba848299f0e`. Licensed BricsCAD V25 click/modeless qualification remains local-only.
