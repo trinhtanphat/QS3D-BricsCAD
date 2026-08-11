@@ -50,9 +50,9 @@ namespace QS3D.BricsCAD.V25
             }
 
             var handles = snapshots.Select(x => x.Handle).ToArray();
-            var project = ProjectContextCoordinator.GetOrCreate(doc);
             try
             {
+                var project = ExistingProjectMutationContext.Require(doc, "Untrack semantic elements");
                 var result = SemanticUntrackService.Untrack(project, handles, predicate);
                 PaletteCoordinator.RefreshProject();
                 PaletteCoordinator.SetStatus("Đã bỏ theo dõi " + result.Count + " " + label + "; hình học CAD được giữ nguyên.");
