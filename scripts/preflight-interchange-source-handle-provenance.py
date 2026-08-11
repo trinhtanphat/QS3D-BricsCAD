@@ -29,9 +29,16 @@ for token in (
     "ProjectStateSnapshot.Capture",
     "ReadSourceHandles",
     "No imported handle was assigned to target DWG ownership",
+    "catch (Exception operationError)",
+    "catch (Exception rollbackError)",
+    'new AggregateException(operationError, rollbackError)',
+    "Interchange source-handle provenance storage failed and project rollback also failed.",
 ):
     if token not in provenance:
         errors.append("canonical provenance implementation missing contract token: " + token)
+
+if "catch\n            {\n                rollback.Restore(target);\n                throw;\n            }" in provenance:
+    errors.append("canonical provenance store still allows rollback failure to mask the original storage error")
 
 for token in (
     'ImportMode = "AppendOnlyPreserveSourceHandleProvenance"',
@@ -80,4 +87,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: append-only semantic import can preserve source handles through the canonical provenance store without assigning them to target CAD ownership.")
+print("PASS: append-only semantic import preserves source handles only as provenance, and provenance rollback failures cannot mask the original storage failure.")
