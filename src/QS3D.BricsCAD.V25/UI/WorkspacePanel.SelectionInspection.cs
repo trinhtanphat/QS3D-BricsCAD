@@ -12,6 +12,7 @@ namespace QS3D.BricsCAD.V25.UI
         internal void SetInspectionReadOnly(IReadOnlyList<EntitySnapshot> snapshots, ProjectState? project)
         {
             _inspection = snapshots ?? Array.Empty<EntitySnapshot>();
+            InspectionList.ItemsSource = null;
             InspectionList.ItemsSource = _inspection;
             SelectionCount.Text = _inspection.Count + " chọn";
 
@@ -46,25 +47,22 @@ namespace QS3D.BricsCAD.V25.UI
             var family = string.IsNullOrWhiteSpace(singleElement.FamilyId)
                 ? null
                 : project.FindFamily(singleElement.FamilyId);
-            if (family == null)
-            {
-                _viewModel.SetSelectedElement(null);
-                return;
-            }
-
             _loadingContext = true;
             try
             {
-                _categoryFilter = family.Category;
+                _categoryFilter = family?.Category ?? singleElement.Category;
                 ApplyFamilyFilter();
-                var visibleFamily = FamilyList.Items
-                    .Cast<object>()
-                    .OfType<ProjectFamily>()
-                    .FirstOrDefault(item => string.Equals(item.Id, family.Id, StringComparison.OrdinalIgnoreCase));
-                if (visibleFamily != null)
+                if (family != null)
                 {
-                    FamilyList.SelectedItem = visibleFamily;
-                    FamilyList.ScrollIntoView(visibleFamily);
+                    var visibleFamily = FamilyList.Items
+                        .Cast<object>()
+                        .OfType<ProjectFamily>()
+                        .FirstOrDefault(item => string.Equals(item.Id, family.Id, StringComparison.OrdinalIgnoreCase));
+                    if (visibleFamily != null)
+                    {
+                        FamilyList.SelectedItem = visibleFamily;
+                        FamilyList.ScrollIntoView(visibleFamily);
+                    }
                 }
                 _viewModel.SetSelectedElement(singleElement);
             }
