@@ -95,9 +95,7 @@ namespace QS3D.Core.Documentation
             ValidateOptions(options);
 
             var scheduleIndex = BuildScheduleIndex(availableSchedules);
-            var materialized = items.ToList();
-            if (materialized.Count > MaxItems)
-                throw new InvalidOperationException("Semantic schedule placement supports at most " + MaxItems + " schedules per sheet.");
+            var materialized = MaterializeItems(items);
 
             var sheetId = Required(sheet.Id, nameof(sheet.Id));
             PositiveFinite(sheet.WidthMm, nameof(sheet.WidthMm));
@@ -156,12 +154,28 @@ namespace QS3D.Core.Documentation
         private static Dictionary<string, SemanticScheduleDefinition> BuildScheduleIndex(IEnumerable<SemanticScheduleDefinition> schedules)
         {
             var result = new Dictionary<string, SemanticScheduleDefinition>(StringComparer.OrdinalIgnoreCase);
+            var count = 0;
             foreach (var schedule in schedules)
             {
+                count++;
+                if (count > MaxItems)
+                    throw new InvalidOperationException("Semantic schedule placement supports at most " + MaxItems + " available schedules.");
                 if (schedule == null) throw new ArgumentException("Available semantic schedule cannot be null.", nameof(schedules));
                 var id = Required(schedule.Id, "availableSchedules.Id");
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Available semantic schedules contain duplicate id: " + id + ".");
                 result.Add(id, schedule);
+            }
+            return result;
+        }
+
+        private static List<SemanticSchedulePlacementItem> MaterializeItems(IEnumerable<SemanticSchedulePlacementItem> items)
+        {
+            var result = new List<SemanticSchedulePlacementItem>();
+            foreach (var item in items)
+            {
+                if (result.Count >= MaxItems)
+                    throw new InvalidOperationException("Semantic schedule placement supports at most " + MaxItems + " schedules per sheet.");
+                result.Add(item);
             }
             return result;
         }
