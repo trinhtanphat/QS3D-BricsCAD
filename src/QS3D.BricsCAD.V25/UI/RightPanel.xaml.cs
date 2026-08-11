@@ -163,6 +163,20 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
+        private void RefreshAfterXrefMutation(string successStatus)
+        {
+            try
+            {
+                RefreshDrawingsOnly();
+                ReloadLayers();
+                _viewModel.Status = successStatus;
+            }
+            catch (Exception ex)
+            {
+                _viewModel.Status = successStatus + " • cảnh báo làm mới panel: " + ex.Message;
+            }
+        }
+
         private void OnRefreshClick(object sender, RoutedEventArgs e) => Refresh();
         private void OnLayerSearchChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) ApplyLayerFilter(); }
         private void OnShowLayersClick(object sender, RoutedEventArgs e) => SetSelectedLayers(true);
@@ -319,8 +333,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 XrefService.Reload(doc, item.Name);
-                Refresh();
-                _viewModel.Status = "Đã nạp lại Xref " + item.Name;
+                RefreshAfterXrefMutation("Đã nạp lại Xref " + item.Name);
             }
             catch (Exception ex)
             {
@@ -359,8 +372,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 XrefService.Detach(doc, item.Name);
-                Refresh();
-                _viewModel.Status = "Đã gỡ Xref " + item.Name;
+                RefreshAfterXrefMutation("Đã gỡ Xref " + item.Name);
             }
             catch (Exception ex)
             {
