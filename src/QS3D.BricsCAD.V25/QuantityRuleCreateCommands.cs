@@ -25,10 +25,7 @@ namespace QS3D.BricsCAD.V25
                 var settings = store.Load().Clone();
                 settings.NormalizeAndValidate();
 
-                var observedCodes = new HashSet<int>(
-                    settings.CategoryRules.Select(x => x.Category)
-                        .Concat(settings.IntersectionRules.Select(x => x.Source))
-                        .Concat(settings.IntersectionRules.Select(x => x.Target)));
+                var observedCodes = CollectObservedCodes(settings);
                 if (observedCodes.Count == 0)
                 {
                     Write(document, "QS3DRULECREATE: cấu hình hiện tại chưa có mã cấu kiện để tạo luật. Mở QS3DSETUP hoặc nạp template trước.");
@@ -73,13 +70,27 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                settings.IntersectionRules.Add(new QuantityIntersectionRuleSetting
+                var latestSettings = store.Load().Clone();
+                latestSettings.NormalizeAndValidate();
+                var latestObservedCodes = CollectObservedCodes(latestSettings);
+                if (!latestObservedCodes.Contains(source.Value) || !latestObservedCodes.Contains(target.Value))
+                {
+                    Write(document, "QS3DRULECREATE: cấu hình đã thay đổi trong lúc nhập; một mã cấu kiện đã không còn tồn tại. Không ghi dữ liệu stale, hãy chạy lại.");
+                    return;
+                }
+                if (latestSettings.FindIntersectionRule(source.Value, target.Value) != null)
+                {
+                    Write(document, "QS3DRULECREATE: cấu hình đã thay đổi trong lúc nhập và luật " + source.Value + " -> " + target.Value + " hiện đã tồn tại. Không ghi đè thay đổi mới.");
+                    return;
+                }
+
+                latestSettings.IntersectionRules.Add(new QuantityIntersectionRuleSetting
                 {
                     Source = source.Value,
                     Target = target.Value
                 });
-                settings.NormalizeAndValidate();
-                store.Save(settings);
+                latestSettings.NormalizeAndValidate();
+                store.Save(latestSettings);
 
                 Write(document,
                     "QS3DRULECREATE: đã tạo luật " + sourceName + " -> " + targetName +
@@ -96,6 +107,12 @@ namespace QS3D.BricsCAD.V25
         {
             CreateIntersectionRule();
         }
+
+        private static HashSet<int> CollectObservedCodes(QuantityCalculationSettings settings) =>
+            new HashSet<int>(
+                settings.CategoryRules.Select(x => x.Category)
+                    .Concat(settings.IntersectionRules.Select(x => x.Source))
+                    .Concat(settings.IntersectionRules.Select(x => x.Target)));
 
         private static int? PromptCategoryCode(Document document, string message)
         {
