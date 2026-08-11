@@ -23,16 +23,19 @@ if WINDOW.is_file():
 if HEALTH_ALL.is_file():
     text = HEALTH_ALL.read_text(encoding="utf-8")
     for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
         "if (string.IsNullOrWhiteSpace(issue.ElementId))",
-        "LocateProjectArtifactHandles(project, issue.Code)",
+        "LocateProjectArtifactHandles(currentProject, issue.Code)",
         "CadHandleService.Select(document, artifactHandles)",
     ):
         if token not in text:
-            errors.append("HealthAllCommands.cs missing project-level artifact locate token: " + token)
+            errors.append("HealthAllCommands.cs missing current project-level artifact locate token: " + token)
+    if "LocateProjectArtifactHandles(project, issue.Code)" in text:
+        errors.append("HealthAll project-level Locate must not use the project snapshot captured when the window opened")
 
 if errors:
     for error in errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Model Health forwards project-level issues so QS3DHEALTHALL can locate owned native artifacts")
+print("[PASS] Model Health forwards project-level issues and QS3DHEALTHALL re-resolves current project state before locating owned native artifacts")
