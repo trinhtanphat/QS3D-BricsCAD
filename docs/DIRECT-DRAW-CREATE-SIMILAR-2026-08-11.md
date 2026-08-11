@@ -17,6 +17,8 @@ The existing **TẠO MỚI** Quick Workflow Ribbon also exposes one stable prima
 
 After the main Ribbon was regrouped into Setup / Architecture / Structure / Output panels, Quick Workflow no longer falls back to whichever authoring panel happens to be enumerated first. The augmenter now creates or reuses exactly one dedicated **Tác vụ nhanh** panel with stable source ID `QS3D_AUTHOR_QUICK_PANEL_SOURCE`. `Vẽ Nhanh`, `Vẽ Tương Tự`, `2D → Tường 3D`, `Vẽ Cửa Sổ` and `Vật liệu` remain isolated there, while `RibbonBootstrapper.cs` keeps ownership of the grouped information architecture.
 
+Quick Workflow also reconciles those stable button IDs on every initialization. If an older in-memory Ribbon already contains one of the IDs, the augmenter updates its current text, visibility flags, command parameter and handler instead of treating existence alone as proof that the button is current. New buttons are added only when the stable ID is absent; unrelated buttons are left untouched.
+
 ## Accepted sample ownership
 
 One selected CAD object is accepted only when it resolves to exactly one semantic owner through an existing ownership path:
@@ -96,7 +98,7 @@ Local proof must include at least:
 7. active-DWG switch is rejected without cross-document Family mutation;
 8. Quick and Advanced cancellation preserve the existing target-command no-residue contract; intentional Active Family selection may remain;
 9. Window-vs-WallOpening routing remains determined by the existing Active Family dispatcher;
-10. the Ribbon contains exactly one **Vẽ Tương Tự** action with stable ID `QS3D_AUTHOR_CREATE_SIMILAR`, one exact `QS3D_AUTHOR_QUICK_PANEL_SOURCE` / **Tác vụ nhanh** panel, repeated Ribbon initialization does not duplicate that panel or its buttons, and the button always targets the active DWG;
+10. the Ribbon contains exactly one **Vẽ Tương Tự** action with stable ID `QS3D_AUTHOR_CREATE_SIMILAR`, one exact `QS3D_AUTHOR_QUICK_PANEL_SOURCE` / **Tác vụ nhanh** panel, repeated Ribbon initialization does not duplicate that panel or its buttons, and reinitialization repairs stale stable-button text/command/handler state before the button targets the active DWG;
 11. the grouped Setup / Architecture / Structure / Output authoring panels remain unchanged and Quick Workflow never falls back into one of them when its dedicated panel is absent;
 12. save/reopen and document switching do not cause the sampled Family from one DWG to drive authoring in another DWG.
 
