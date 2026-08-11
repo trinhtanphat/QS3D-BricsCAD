@@ -1,4 +1,5 @@
 using QS3D.BricsCAD.V25.Ribbon;
+using QS3D.BricsCAD.V25.Updates;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -13,9 +14,11 @@ namespace QS3D.BricsCAD.V25
             ReferenceWallRibbonAugmenter.TryInitialize();
             ProjectRibbonAugmenter.TryInitialize();
             QuickWorkflowRibbonAugmenter.TryInitialize();
+            UpdateBootstrapper.Start();
         }
         public void Terminate()
         {
+            UpdateBootstrapper.Stop();
             DocumentLifecycleCoordinator.Stop();
             PaletteCoordinator.Dispose();
             QuickWorkflowRibbonAugmenter.Reset();
