@@ -23,6 +23,25 @@ namespace QS3D.Core.Domain
         public double HeightM => TopElevationM - BottomElevationM;
     }
 
+    public sealed class HostedOpeningVerticalPlacement
+    {
+        public HostedOpeningVerticalPlacement(
+            ElementVerticalPlacement host,
+            ElementVerticalPlacement opening,
+            double relativeSillM)
+        {
+            Host = host ?? throw new ArgumentNullException(nameof(host));
+            Opening = opening ?? throw new ArgumentNullException(nameof(opening));
+            if (double.IsNaN(relativeSillM) || double.IsInfinity(relativeSillM) || relativeSillM < 0d)
+                throw new ArgumentOutOfRangeException(nameof(relativeSillM));
+            RelativeSillM = relativeSillM;
+        }
+
+        public ElementVerticalPlacement Host { get; }
+        public ElementVerticalPlacement Opening { get; }
+        public double RelativeSillM { get; }
+    }
+
     public static class ElementVerticalPlacementService
     {
         public static double ResolveEffectiveHeight(
@@ -38,6 +57,43 @@ namespace QS3D.Core.Domain
                 !HasConfiguredProperty(element, ProjectFloorService.TopLevelOffsetKey))
                 return legacyHeightM;
             return Resolve(project, element, 0d, legacyHeightM, 0d).HeightM;
+        }
+
+        public static HostedOpeningVerticalPlacement ResolveHostedOpening(
+            ProjectState project,
+            ProjectElement host,
+            ProjectElement opening,
+            double hostSourceBaseElevationM,
+            double hostLegacyHeightM,
+            double hostLegacyBottomOffsetM,
+            double openingLegacyHeightM,
+            double openingLegacySillM)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (host == null) throw new ArgumentNullException(nameof(host));
+            if (opening == null) throw new ArgumentNullException(nameof(opening));
+
+            var hostPlacement = Resolve(
+                project,
+                host,
+                hostSourceBaseElevationM,
+                hostLegacyHeightM,
+                hostLegacyBottomOffsetM);
+            var openingPlacement = Resolve(
+                project,
+                opening,
+                hostPlacement.BottomElevationM,
+                openingLegacyHeightM,
+                openingLegacySillM);
+            var relativeSillM = Add(
+                openingPlacement.BottomElevationM,
+                -hostPlacement.BottomElevationM,
+                opening.Id + "/relative sill elevation");
+            if (relativeSillM < 0d)
+                throw new InvalidOperationException("Opening " + opening.Id + " is below host " + host.Id + ".");
+            if (openingPlacement.TopElevationM > hostPlacement.TopElevationM)
+                throw new InvalidOperationException("Opening " + opening.Id + " exceeds the top of host " + host.Id + ".");
+            return new HostedOpeningVerticalPlacement(hostPlacement, openingPlacement, relativeSillM);
         }
 
         public static ElementVerticalPlacement Resolve(

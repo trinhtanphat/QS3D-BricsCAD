@@ -30,6 +30,9 @@ namespace QS3D.BricsCAD.V25.Cad
             var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, hostFamily, "ThicknessM", 0.2d), host.Id + "/ThicknessM");
             var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, hostFamily, "HeightM", 3.6d), host.Id + "/HeightM");
             var bottomOffsetM = CadGeometryGuard.Finite(CadGeometryGuard.Number(host, hostFamily, "BottomOffsetM", 0d), host.Id + "/BottomOffsetM");
+            var hostSourceBaseDrawing = HostSourceBase(hostSource);
+            var hostPlacement = CadVerticalPlacementResolver.Resolve(
+                document, project, host, hostSourceBaseDrawing, heightM, bottomOffsetM);
 
             var linked = (openings ?? project.Elements.Where(x => IsLinkedOpening(x, host.Id)))
                 .Where(x => IsLinkedOpening(x, host.Id))
@@ -47,6 +50,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 .Append("|bottom=").Append(Number(bottomOffsetM))
                 .Append('|');
             AppendHostGeometry(text, hostSource);
+            if (HasLevelPlacement(hostPlacement.Semantic))
+                text.Append("|level=").Append(PlacementToken(hostPlacement.Semantic));
 
             if (hostSource is Polyline curved && HasBulge(curved))
             {
@@ -58,7 +63,16 @@ namespace QS3D.BricsCAD.V25.Cad
             }
 
             foreach (var opening in linked)
-                AppendOpening(document, transaction, project, text, opening);
+                AppendOpening(
+                    document,
+                    transaction,
+                    project,
+                    text,
+                    host,
+                    opening,
+                    hostSourceBaseDrawing,
+                    heightM,
+                    bottomOffsetM);
 
             using (var sha = SHA256.Create())
             {
@@ -69,7 +83,16 @@ namespace QS3D.BricsCAD.V25.Cad
             }
         }
 
-        private static void AppendOpening(Document document, Transaction transaction, ProjectState project, StringBuilder text, ProjectElement opening)
+        private static void AppendOpening(
+            Document document,
+            Transaction transaction,
+            ProjectState project,
+            StringBuilder text,
+            ProjectElement host,
+            ProjectElement opening,
+            double hostSourceBaseDrawing,
+            double hostHeightM,
+            double hostBottomOffsetM)
         {
             var family = project.FindFamily(opening.FamilyId);
             var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, family, "WidthM", 0.9d), opening.Id + "/WidthM");
@@ -80,6 +103,17 @@ namespace QS3D.BricsCAD.V25.Cad
             if (sillM < 0d) throw new InvalidOperationException(opening.Id + "/SillHeightM phải >= 0.");
             var clearanceM = CadGeometryGuard.Finite(CadGeometryGuard.Number(opening, family, "BooleanClearanceM", 0.01d), opening.Id + "/BooleanClearanceM");
             if (clearanceM < 0d) throw new InvalidOperationException(opening.Id + "/BooleanClearanceM phải >= 0.");
+
+            var placement = CadVerticalPlacementResolver.ResolveHostedOpening(
+                document,
+                project,
+                host,
+                opening,
+                hostSourceBaseDrawing,
+                hostHeightM,
+                hostBottomOffsetM,
+                heightM,
+                sillM);
 
             var ids = CadHandleService.Resolve(document, opening.SourceHandles);
             if (ids.Count != 1)
@@ -103,7 +137,24 @@ namespace QS3D.BricsCAD.V25.Cad
             Point(text, extents.MinPoint);
             text.Append('>');
             Point(text, extents.MaxPoint);
+            if (HasLevelPlacement(placement.Host.Semantic) || HasLevelPlacement(placement.Opening.Semantic))
+                text.Append(":level:").Append(PlacementToken(placement.Opening.Semantic));
         }
+
+        private static double HostSourceBase(Entity hostSource)
+        {
+            if (hostSource is Line line)
+                return CadGeometryGuard.Finite(line.StartPoint.Z, "host line source base");
+            if (hostSource is Polyline polyline)
+                return CadGeometryGuard.Finite(polyline.Elevation, "host polyline source base");
+            throw new InvalidOperationException("Physical opening cut live fingerprint supports only LINE/POLYLINE hosts.");
+        }
+
+        private static bool HasLevelPlacement(ElementVerticalPlacement placement) =>
+            placement.UsesBottomLevel || placement.UsesTopLevel;
+
+        private static string PlacementToken(ElementVerticalPlacement placement) =>
+            Number(placement.BottomElevationM) + ":" + Number(placement.TopElevationM) + ":" + Number(placement.HeightM);
 
         private static void AppendHostGeometry(StringBuilder text, Entity hostSource)
         {

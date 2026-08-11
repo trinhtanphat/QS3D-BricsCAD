@@ -63,3 +63,14 @@ The complete shared Level Z-chain is integrated on current `main`, deterministic
 - Qualification boundary: `FULL INTERACTIVE/PRIVATE-DWG PRODUCT MATRIX = NOT_RUN`; customer release qualification remains false. This automated baseline does not qualify Level Z geometry.
 - Remaining: straight/curved opening cutters, AutoHost, Curtain LINE/path frame/panel/live fingerprints, generated rebar/mesh/shape families, UI, and the complete mm/m V25 runtime matrix.
 - Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL`.
+
+## 2026-08-11 hosted-opening source wave heartbeat
+
+- Synced implementation baseline: `origin/main@b45f416909bf246eebbc064b3ab75384778719e6`.
+- Implemented a shared hosted-opening placement result in `ElementVerticalPlacementService`, then consumed it in straight LINE/open-POLYLINE cuts, curved/bulged cuts, the physical-cut live fingerprint, and Auto Host elevation matching.
+- Legacy boundary: when neither host nor opening has a configured Level reference, the existing source-relative Z arithmetic and serialized cut fingerprints remain byte-for-byte on their prior path. Level-derived fingerprint tokens are emitted only for configured Level placement.
+- Safety boundary: `LevelReferenceNativeIntegrationPolicy.IsQualified(...)` still returns `false` for every category. Configured Level references therefore fail before Boolean subtraction, physical-cut metadata writes, or Auto Host link mutation; this wave does not expose partial Level authoring in the UI.
+- Focused evidence on the synchronized working tree: dedicated Level smoke PASS; new `scripts/preflight-level-opening-placement.py` PASS; existing straight/curved/incremental/targeted/live-health/rehost/AutoHost gates PASS; Core Release and SmokeTests projects compile with zero warnings/errors.
+- Whole-tree qualification is not claimed: aggregate preflight and adapter V25 build still have failures in concurrently owned Plan-to-3D, Right Panel, updater, Workspace and quantity-reporting surfaces. No Level/opening compiler or focused-gate failure was observed.
+- Remaining: Curtain host/frame/panel/live-state placement, generated rebar/mesh/shape placement, final policy/UI enablement, and the complete exact-SHA mm/m BricsCAD V25 runtime matrix.
+- Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL`.
