@@ -250,7 +250,6 @@ try {
             "FILEDIA", "0", "CMDECHO", "1", "NETLOAD", ('"' + $PluginDll + '"'),
             "QS3DLIFECYCLECOMMANDPREP", $command
         )
-        if ($phase -eq "UNITS_OVERRIDE_ABSENT") { $phaseLines += "Meter" }
         $phaseLines += "QS3DLIFECYCLECOMMANDVERIFY"
         $phaseMarker = Invoke-Qs3dScript -Drawing $phaseDrawing -ScriptPath (Join-Path $ArtifactDir ($phaseFile + ".scr")) -ResultPath $phaseResult -Lines $phaseLines
         Require-Qs3dValue -Marker $phaseMarker -Key "nonce" -Expected $nonce
@@ -266,7 +265,7 @@ try {
             }
         }
         elseif ($phase -eq "UNITS_OVERRIDE_ABSENT") {
-            foreach ($key in @("explicit_unit_override_persisted", "intentional_project_bootstrap", "no_pending_project_state", "semantic_elements_not_created")) {
+            foreach ($key in @("explicit_unit_override_persisted", "automation_confirmation_consumed", "intentional_project_bootstrap", "no_pending_project_state", "semantic_elements_not_created")) {
                 Require-Qs3dValue -Marker $phaseMarker -Key $key -Expected "true"
             }
         }

@@ -15,6 +15,7 @@ def read(rel):
 policy = read("src/QS3D.Core/Units/DrawingUnitResolutionPolicy.cs")
 cad_units = read("src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs")
 workflow = read("src/QS3D.BricsCAD.V25/Services/DrawingUnitWorkflow.cs")
+automation = read("src/QS3D.BricsCAD.V25/Services/DrawingUnitAutomationConfirmation.cs")
 commands = read("src/QS3D.BricsCAD.V25/Commands.cs")
 review = read("src/QS3D.BricsCAD.V25/ReviewCommands.cs")
 capture = read("src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs")
@@ -51,7 +52,15 @@ require("unit workflow", workflow, (
     "ProjectStateSnapshot.Capture", "rollback.Restore(project)",
     "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
     "ProjectContextCoordinator.Save(document)", "USSurveyMile",
+    "DrawingUnitAutomationConfirmation.TryConsume(document, out unit)",
+    "document.Editor.GetKeywords",
 ))
+require("unit lifecycle automation confirmation", automation, (
+    "private static Document? _document", "ReferenceEquals(_document, document)",
+    "_document = null", "public static void Arm", "public static bool TryConsume",
+))
+if "Environment.GetEnvironmentVariable" in automation:
+    errors.append("Drawing-unit automation confirmation must not trust ambient environment values directly.")
 require("commands", commands, (
     'CommandMethod("QS3DUNITS"',
     'DrawingUnitWorkflow.EnsureResolved(doc, "QS3DBQ")',

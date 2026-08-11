@@ -374,6 +374,7 @@ namespace QS3D.BricsCAD.V25
                 document.Database.Insunits = Teigha.DatabaseServices.UnitsValue.Undefined;
                 if (Cad.CadUnitService.TryGetNativeLengthUnit(document, out _))
                     throw new InvalidOperationException("The explicit unit phase could not make INSUNITS unresolved.");
+                Services.DrawingUnitAutomationConfirmation.Arm(document, LengthUnit.Meter);
                 return;
             }
 
@@ -500,6 +501,8 @@ namespace QS3D.BricsCAD.V25
             {
                 if (Cad.CadUnitService.TryGetNativeLengthUnit(document, out _))
                     throw new LifecycleProbeFailure("OVERRIDE_NATIVE_UNIT_PRESENT");
+                if (Services.DrawingUnitAutomationConfirmation.IsArmed(document))
+                    throw new LifecycleProbeFailure("OVERRIDE_CONFIRMATION_NOT_CONSUMED");
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                     throw new LifecycleProbeFailure("OVERRIDE_PROJECT_MISSING");
                 if (project.Elements.Count != 0)
@@ -519,6 +522,7 @@ namespace QS3D.BricsCAD.V25
                     "nonce=" + nonce,
                     "phase=" + phase,
                     "explicit_unit_override_persisted=true",
+                    "automation_confirmation_consumed=true",
                     "intentional_project_bootstrap=true",
                     "no_pending_project_state=true",
                     "semantic_elements_not_created=true"

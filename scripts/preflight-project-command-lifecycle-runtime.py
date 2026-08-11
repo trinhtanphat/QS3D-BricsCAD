@@ -39,8 +39,11 @@ for token in (
     '"legacy_unit_binding_persisted=true"',
     '"native_unit_resolution_noncreating=true"',
     '"explicit_unit_override_persisted=true"',
+    '"automation_confirmation_consumed=true"',
     "DrawingUnitResolutionPolicy.BoundMetadataKey",
     "Teigha.DatabaseServices.UnitsValue.Undefined",
+    "DrawingUnitAutomationConfirmation.Arm(document, LengthUnit.Meter)",
+    "DrawingUnitAutomationConfirmation.IsArmed(document)",
     "TryWriteCommandFailure(resultPath, probeFailure.ErrorCode)",
     'base("A sanitized lifecycle probe invariant failed.")',
 ):
@@ -65,7 +68,6 @@ for phase, command in (
 for token in (
     '"QS3DLIFECYCLECOMMANDPREP", $command',
     '$phaseLines += "QS3DLIFECYCLECOMMANDVERIFY"',
-    'if ($phase -eq "UNITS_OVERRIDE_ABSENT") { $phaseLines += "Meter" }',
     'legacyBqUnitBindingPersisted = $true',
     'nativeBqAbsentNoncreating = $true',
     'explicitUnitOverrideBootstrap = $true',
