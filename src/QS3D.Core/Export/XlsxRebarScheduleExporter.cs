@@ -19,7 +19,7 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var rowCount = ValidateRowCount(rows);
+            var rowCount = ValidateRows(rows);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -45,7 +45,7 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static int ValidateRowCount(IReadOnlyList<RebarScheduleRow> rows)
+        private static int ValidateRows(IReadOnlyList<RebarScheduleRow> rows)
         {
             var count = rows.Count;
             if (count < 0 || count > MaxDataRows)
@@ -53,6 +53,14 @@ namespace QS3D.Core.Export
                     nameof(rows),
                     count,
                     "BBS XLSX data rows must be between 0 and " + MaxDataRows.ToString(CultureInfo.InvariantCulture) + " so the worksheet stays within its row limit.");
+
+            for (var index = 0; index < count; index++)
+            {
+                if (rows[index] == null)
+                    throw new ArgumentException(
+                        "BBS row cannot be null. Invalid row index: " + index.ToString(CultureInfo.InvariantCulture) + ".",
+                        nameof(rows));
+            }
             return count;
         }
 
