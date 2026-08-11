@@ -22,6 +22,7 @@ namespace QS3D.BricsCAD.V25
             docs.DocumentCreated += OnDocumentCreated;
             docs.DocumentActivated += OnDocumentActivated;
             docs.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+            docs.DocumentDestroyed += OnDocumentDestroyed;
             AttachProjectPersistence(docs.MdiActiveDocument);
             SelectionSyncCoordinator.Attach(docs.MdiActiveDocument);
             _started = true;
@@ -34,6 +35,7 @@ namespace QS3D.BricsCAD.V25
             docs.DocumentCreated -= OnDocumentCreated;
             docs.DocumentActivated -= OnDocumentActivated;
             docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;
+            docs.DocumentDestroyed -= OnDocumentDestroyed;
             foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
             SelectionSyncCoordinator.Stop();
             _started = false;
@@ -60,6 +62,24 @@ namespace QS3D.BricsCAD.V25
             DetachProjectPersistence(document);
             SelectionSyncCoordinator.Detach(document);
             ProjectContextCoordinator.Forget(document);
+        }
+
+        private static void OnDocumentDestroyed(object sender, DocumentDestroyedEventArgs e)
+        {
+            var docs = Application.DocumentManager;
+            if (docs.Count == 0)
+            {
+                SelectionSyncCoordinator.Refresh(null);
+                PaletteCoordinator.ResetForNoDocument();
+                return;
+            }
+
+            var active = docs.MdiActiveDocument;
+            if (active == null) return;
+            AttachProjectPersistence(active);
+            SelectionSyncCoordinator.Attach(active);
+            EnsureProject(active, true);
+            SelectionSyncCoordinator.Refresh(active);
         }
 
         private static void AttachProjectPersistence(Document? document)

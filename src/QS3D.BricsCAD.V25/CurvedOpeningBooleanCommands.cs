@@ -15,7 +15,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Curved physical opening cut");
                 var count = CurvedOpeningBooleanService.CutLinkedOpenings(document, project);
                 var liveNote = string.Empty;
                 try

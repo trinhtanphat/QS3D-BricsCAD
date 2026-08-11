@@ -39,7 +39,19 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                Title = "QS3D • Thiết lập dự án • " + DrawingLabel(_document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                {
+                    ProjectNameText.Text = "—";
+                    FloorText.Text = "—";
+                    FamilyCountText.Text = "0";
+                    ElementCountText.Text = "0";
+                    try { UnitText.Text = CadUnitService.Describe(_document); UnitText.ToolTip = null; }
+                    catch (Exception unitError) { UnitText.Text = "BLOCKED"; UnitText.ToolTip = unitError.Message; }
+                    SetStatus("Chưa có QS3D project hiện hữu cho bản vẽ này. Project Tools chỉ hiển thị snapshot và không tạo replacement project khi mở/refresh.");
+                    return;
+                }
+
                 ProjectNameText.Text = string.IsNullOrWhiteSpace(project.Name) ? project.ProjectId : project.Name;
                 var activeFloor = project.Floors.FirstOrDefault(x => string.Equals(x.Id, project.ActiveFloorId, StringComparison.OrdinalIgnoreCase));
                 FloorText.Text = activeFloor == null
@@ -49,7 +61,6 @@ namespace QS3D.BricsCAD.V25.UI
                 ElementCountText.Text = project.Elements.Count.ToString(CultureInfo.InvariantCulture);
                 try { UnitText.Text = CadUnitService.Describe(_document); UnitText.ToolTip = null; }
                 catch (Exception unitError) { UnitText.Text = "BLOCKED"; UnitText.ToolTip = unitError.Message; }
-                Title = "QS3D • Thiết lập dự án • " + DrawingLabel(_document);
                 if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
                     SetStatus("Project snapshot đã đồng bộ.");
                 else

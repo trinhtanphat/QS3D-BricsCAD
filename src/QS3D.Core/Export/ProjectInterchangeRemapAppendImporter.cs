@@ -396,11 +396,11 @@ namespace QS3D.Core.Export
         private static string MapOptional(
             ProjectInterchangeRemapPlan plan,
             InterchangeRemapIdentityKind kind,
-            string sourceId,
+            string? sourceId,
             ref int rewrites)
         {
             if (string.IsNullOrWhiteSpace(sourceId)) return string.Empty;
-            var trimmed = sourceId.Trim();
+            var trimmed = sourceId!.Trim();
             var mapped = plan.MapId(kind, trimmed);
             if (!string.Equals(mapped, trimmed, StringComparison.Ordinal)) rewrites = checked(rewrites + 1);
             return mapped;

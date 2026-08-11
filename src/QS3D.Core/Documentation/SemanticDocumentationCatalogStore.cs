@@ -69,10 +69,11 @@ namespace QS3D.Core.Documentation
                 throw new InvalidDataException("Semantic documentation catalog exceeds the 1 MiB metadata limit.");
 
             var root = ParseRoot(payload);
-            if (!string.Equals(root.Name.LocalName, "documentation", StringComparison.Ordinal))
+            if (root.Name.NamespaceName.Length != 0 || !string.Equals(root.Name.LocalName, "documentation", StringComparison.Ordinal))
                 throw new InvalidDataException("Semantic documentation catalog root is invalid.");
             if (Integer(root.Attribute("version")?.Value, "documentation version") != FormatVersion)
                 throw new InvalidDataException("Unsupported semantic documentation catalog version.");
+            ValidateSchema(root);
 
             var views = ReadViews(root.Element("views"));
             var sheets = ReadSheets(root.Element("sheets"));
@@ -190,6 +191,94 @@ namespace QS3D.Core.Documentation
             {
                 throw new InvalidDataException("Semantic documentation catalog XML is invalid.", ex);
             }
+        }
+
+        private static void ValidateSchema(XElement root)
+        {
+            ValidateElement(root, "documentation", new[] { "version" }, new[] { "views", "sheets" });
+            EnsureAtMostOneChild(root, "views");
+            EnsureAtMostOneChild(root, "sheets");
+
+            var views = root.Element("views");
+            if (views != null)
+            {
+                ValidateElement(views, "views", Array.Empty<string>(), new[] { "view" });
+                foreach (var view in views.Elements("view"))
+                {
+                    ValidateElement(view, "view", new[] { "id", "name", "kind", "floorId", "zoneId" }, new[] { "categories", "include", "exclude" });
+                    EnsureAtMostOneChild(view, "categories");
+                    EnsureAtMostOneChild(view, "include");
+                    EnsureAtMostOneChild(view, "exclude");
+
+                    var categories = view.Element("categories");
+                    if (categories != null)
+                    {
+                        ValidateElement(categories, "categories", Array.Empty<string>(), new[] { "category" });
+                        foreach (var category in categories.Elements("category"))
+                            ValidateElement(category, "category", new[] { "value" }, Array.Empty<string>());
+                    }
+
+                    ValidateIdContainer(view.Element("include"), "include");
+                    ValidateIdContainer(view.Element("exclude"), "exclude");
+                }
+            }
+
+            var sheets = root.Element("sheets");
+            if (sheets != null)
+            {
+                ValidateElement(sheets, "sheets", Array.Empty<string>(), new[] { "sheet" });
+                foreach (var sheet in sheets.Elements("sheet"))
+                {
+                    ValidateElement(sheet, "sheet", new[] { "id", "number", "name", "widthMm", "heightMm", "titleBlockName" }, new[] { "placements" });
+                    EnsureAtMostOneChild(sheet, "placements");
+                    var placements = sheet.Element("placements");
+                    if (placements == null) continue;
+                    ValidateElement(placements, "placements", Array.Empty<string>(), new[] { "placement" });
+                    foreach (var placement in placements.Elements("placement"))
+                        ValidateElement(placement, "placement", new[] { "viewId", "xMm", "yMm", "widthMm", "heightMm" }, Array.Empty<string>());
+                }
+            }
+        }
+
+        private static void ValidateIdContainer(XElement? container, string expectedName)
+        {
+            if (container == null) return;
+            ValidateElement(container, expectedName, Array.Empty<string>(), new[] { "id" });
+            foreach (var id in container.Elements("id"))
+                ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+        }
+
+        private static void ValidateElement(XElement element, string expectedName, IReadOnlyCollection<string> allowedAttributes, IReadOnlyCollection<string> allowedChildren)
+        {
+            if (element.Name.NamespaceName.Length != 0 || !string.Equals(element.Name.LocalName, expectedName, StringComparison.Ordinal))
+                throw new InvalidDataException("Semantic documentation catalog contains an unsupported XML element: " + element.Name + ".");
+
+            foreach (var attribute in element.Attributes())
+            {
+                if (attribute.Name.NamespaceName.Length != 0 || !allowedAttributes.Contains(attribute.Name.LocalName))
+                    throw new InvalidDataException("Semantic documentation catalog contains an unsupported attribute on " + expectedName + ": " + attribute.Name + ".");
+            }
+
+            foreach (var node in element.Nodes())
+            {
+                var child = node as XElement;
+                if (child != null)
+                {
+                    if (child.Name.NamespaceName.Length != 0 || !allowedChildren.Contains(child.Name.LocalName))
+                        throw new InvalidDataException("Semantic documentation catalog contains an unsupported child of " + expectedName + ": " + child.Name + ".");
+                    continue;
+                }
+
+                var text = node as XText;
+                if (text != null && string.IsNullOrWhiteSpace(text.Value)) continue;
+                throw new InvalidDataException("Semantic documentation catalog contains unsupported XML content in " + expectedName + ".");
+            }
+        }
+
+        private static void EnsureAtMostOneChild(XElement parent, string childName)
+        {
+            if (parent.Elements(childName).Skip(1).Any())
+                throw new InvalidDataException("Semantic documentation catalog contains duplicate " + childName + " containers.");
         }
 
         private static IReadOnlyList<SemanticViewDefinition> ReadViews(XElement? container)

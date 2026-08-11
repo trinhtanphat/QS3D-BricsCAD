@@ -134,10 +134,48 @@ for window_name, command_name, constructor_token in manager_contracts:
         if "DocumentBoundWindowLifetime.Attach(window, document);" in text:
             errors.append(command_name + " must not attach source-DWG lifetime twice; the window constructor owns the attachment.")
 
+project_tools = UI / "ProjectToolsWindow.xaml.cs"
+project_tools_command = SRC / "ProjectToolsCommands.cs"
+if project_tools.is_file():
+    text = project_tools.read_text(encoding="utf-8")
+    for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
+        "Project Tools chỉ hiển thị snapshot và không tạo replacement project",
+        "DocumentBoundWindowLifetime.Attach(this, _document);",
+    ):
+        if token not in text:
+            errors.append("ProjectToolsWindow missing read-only snapshot token: " + token)
+    if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
+        errors.append("ProjectToolsWindow must not create/cache project state merely to display its snapshot.")
+if not project_tools_command.is_file():
+    errors.append("missing ProjectToolsCommands.cs modeless entrypoint")
+else:
+    text = project_tools_command.read_text(encoding="utf-8")
+    if "new ProjectToolsWindow(document)" not in text or "Application.ShowModelessWindow" not in text:
+        errors.append("ProjectToolsCommands must open ProjectToolsWindow modelessly.")
+    if "DocumentBoundWindowLifetime.Attach(window, document);" in text:
+        errors.append("ProjectToolsCommands must not attach source-DWG lifetime twice; ProjectToolsWindow owns the attachment.")
+
+single_attach_commands = [
+    ("CurtainWallHubCommands.cs", "new CurtainWallWindow(document)"),
+    ("MaterialCatalogCommands.cs", "new MaterialCatalogWindow(document)"),
+    ("ScheduleHubCommands.cs", "new ScheduleHubWindow(document)"),
+]
+for command_name, constructor_token in single_attach_commands:
+    command_path = SRC / command_name
+    if not command_path.is_file():
+        errors.append("missing modeless command source: " + command_name)
+        continue
+    text = command_path.read_text(encoding="utf-8")
+    if constructor_token not in text or "Application.ShowModelessWindow" not in text:
+        errors.append(command_name + " must open the expected modeless window.")
+    if "DocumentBoundWindowLifetime.Attach(window, document);" in text:
+        errors.append(command_name + " must not attach source-DWG lifetime twice; the window constructor owns the attachment.")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: document-bound modeless windows close with their DWG; Audit/Health and manager refreshes remain read-only, manager writes bind existing canonical projects, manager commands avoid duplicate lifetime attachment, Model Health uses semantic snapshot stamps, Curtain re-resolves selected Family, and Rebar Mesh rejects replaced project state.")
+print("PASS: document-bound modeless windows close with their DWG; Audit/Health/Project Tools and manager refreshes remain read-only, manager writes bind existing canonical projects, modeless command callers avoid duplicate lifetime attachment, Model Health uses semantic snapshot stamps, Curtain re-resolves selected Family, and Rebar Mesh rejects replaced project state.")
