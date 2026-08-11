@@ -1,4 +1,4 @@
-# Agent Work Claim — Semantic Schedule Placement Catalog Bound
+# Agent Work Claim — Semantic Schedule Placement Input Bounds
 
 - Status: `ACTIVE`
 - Owner: ChatGPT remote agent
@@ -8,7 +8,7 @@
 
 ## Purpose
 
-Harden the existing source-safe semantic schedule placement planner so its `availableSchedules` input preserves the same bounded 128-definition contract as the persisted `SemanticScheduleCatalog` instead of enumerating an arbitrarily large or non-terminating sequence.
+Harden the existing source-safe semantic schedule placement planner so both public enumerable inputs are cardinality-bounded at the existing 128-schedule contract instead of being fully materialized/enumerated before the guard can fire.
 
 ## Allowed scope
 
@@ -25,16 +25,18 @@ Harden the existing source-safe semantic schedule placement planner so its `avai
 - UI/ribbon/updater/licensing
 - local V25 qualification
 
-## Proven defect
+## Proven defects
 
-`SemanticScheduleCatalog` caps persisted schedules at 128, while `SemanticSchedulePlacementPlanner.BuildScheduleIndex(...)` currently enumerates the public `IEnumerable<SemanticScheduleDefinition>` with no cardinality guard. A caller can therefore force unbounded enumeration and unbounded dictionary growth before the planner reaches its already-bounded placement-item validation.
+`SemanticScheduleCatalog` caps persisted schedules at 128, while `SemanticSchedulePlacementPlanner.BuildScheduleIndex(...)` currently enumerates the public `IEnumerable<SemanticScheduleDefinition>` with no cardinality guard. A caller can therefore force unbounded enumeration and dictionary growth.
+
+The planner also calls `items.ToList()` before checking `materialized.Count > MaxItems`, so the nominal 128 placement-item guard does not bound enumeration or memory use for an oversized/non-terminating `items` sequence.
 
 ## Contract
 
 - Enumerate at most `MaxItems + 1` available schedule entries and fail closed once the 129th entry is observed.
+- Enumerate at most `MaxItems + 1` placement items and fail closed once the 129th entry is observed; do not call unbounded `ToList()` first.
 - Preserve case-insensitive duplicate-id rejection and existing 128-item placement semantics.
-- Do not materialize the entire available schedule sequence just to enforce the bound.
-- Add a focused regression proving 129 available schedules fail closed.
+- Add focused regressions proving 129 available schedules and 129 requested placement items fail closed.
 
 ## Overlap note
 
