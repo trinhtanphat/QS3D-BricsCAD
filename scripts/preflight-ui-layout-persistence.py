@@ -30,12 +30,14 @@ if store.is_file():
         "layout.FamilyTopHeight = Clamp(layout.FamilyTopHeight, 160d, 900d, 250d);",
         "layout.RoomTopHeight = Clamp(layout.RoomTopHeight, 135d, 900d, 218d);",
         "Normalize(next);",
+        "if (Equivalent(_current, next)) return;",
+        "private static bool Equivalent(UserUiLayout left, UserUiLayout right)",
         "File.Replace(temp, path, backup, true);",
         "catch (IOException)",
         "catch (UnauthorizedAccessException)",
         "TryDelete(temp!)",
     ):
-        if needle not in text: errors.append("UserUiLayoutStore missing fail-safe/atomic/upgraded-layout contract: " + needle)
+        if needle not in text: errors.append("UserUiLayoutStore missing fail-safe/atomic/upgraded-layout/no-op contract: " + needle)
     for forbidden in (".qsdb", "ProjectContextCoordinator", "ProjectState", "project.Metadata"):
         if forbidden in text: errors.append("per-user UI layout must not mutate project/QSDB state: " + forbidden)
 
@@ -90,4 +92,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: upgraded Workspace palette/splitter defaults and clamps match the XAML minimums, persist per user outside QSDB, write atomically/best-effort, restore with device-independent palette size, and save splitters only on DragCompleted.")
+print("PASS: upgraded Workspace palette/splitter defaults and clamps match the XAML minimums, persist per user outside QSDB, skip identical no-op writes, write atomically/best-effort, restore with device-independent palette size, and save splitters only on DragCompleted.")
