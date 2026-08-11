@@ -7,6 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI"
 xaml = UI / "WorkspacePanel.xaml"
 filter_code = UI / "WorkspacePanel.PropertyFiltering.cs"
+selection_code = UI / "WorkspacePanel.SelectionInspection.cs"
+multi_code = UI / "WorkspacePanel.MultiSelectionProperties.cs"
+bulk_code = ROOT / "src" / "QS3D.Core" / "Selection" / "SemanticSelectionBulkEditService.cs"
 errors = []
 
 if not xaml.is_file():
@@ -97,6 +100,71 @@ else:
         if forbidden in text:
             errors.append("Workspace property filter/keyboard routing must not directly mutate project/CAD: " + forbidden)
 
+if not selection_code.is_file():
+    errors.append("missing WorkspacePanel.SelectionInspection.cs")
+else:
+    text = selection_code.read_text(encoding="utf-8")
+    for token in (
+        "TryResolveSemanticSelection(project, _inspection",
+        "selectedElements.Count > 1",
+        "PresentMultiSelection(project, selectedElements)",
+        "RestoreMultiSelectionPresentationState()",
+        "selectedElements.Count == 1 ? selectedElements[0] : null",
+    ):
+        if token not in text:
+            errors.append("Workspace semantic selection routing missing: " + token)
+    if "project == null || _inspection.Count != 1" in text:
+        errors.append("legacy exclusive single-selection gate still blocks semantic multi-selection presentation")
+
+if not multi_code.is_file():
+    errors.append("missing WorkspacePanel.MultiSelectionProperties.cs")
+else:
+    text = multi_code.read_text(encoding="utf-8")
+    for token in (
+        "using QS3D.Core.Model;",
+        "SemanticSelectionInspector.Inspect(project, ids)",
+        "summary.PresentCount",
+        "inspection.Count",
+        "ExistingProjectMutationContext.TryGet",
+        "ReferenceEquals(currentProject, presentedProject)",
+        "TryResolveSemanticSelection(currentProject, _inspection",
+        "SameSemanticSelection(presentedIds, currentIds)",
+        "ExecuteAtomic(",
+        "new SemanticSelectionBulkEditService().SetProperty",
+        "MultiSelectionSourceDerivedKeys",
+        "FamilyList.IsEnabled = false",
+        "_viewModel.PropertyScopes.Clear()",
+    ):
+        if token not in text:
+            errors.append("Workspace multi-selection inspector missing guard/presentation token: " + token)
+
+    value_assignment = text.find("row.Value = summary.IsMixed")
+    apply_assignment = text.find("row.Apply = value => ApplyMultiSelectionProperty")
+    if value_assignment < 0 or apply_assignment < 0 or value_assignment > apply_assignment:
+        errors.append("multi-selection row must assign presentation Value before wiring Apply")
+
+    if ".Touch(" in text:
+        errors.append("Workspace multi-selection adapter must not touch ProjectState directly")
+    for forbidden in (
+        "using Bricscad.DatabaseServices;",
+        "using Teigha.DatabaseServices;",
+        "SendStringToExecute",
+    ):
+        if forbidden in text:
+            errors.append("Workspace multi-selection adapter crossed the semantic/CAD mutation boundary: " + forbidden)
+
+if not bulk_code.is_file():
+    errors.append("missing SemanticSelectionBulkEditService.cs")
+else:
+    text = bulk_code.read_text(encoding="utf-8")
+    for token in (
+        "SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName)",
+        "SemanticSelectionInspector.Inspect(project, elementIds)",
+        "if (updates.Count > 0) project.Touch();",
+    ):
+        if token not in text:
+            errors.append("Semantic bulk-edit contract missing: " + token)
+
 print("QS3D Workspace property palette preflight")
 if errors:
     for error in errors:
@@ -104,4 +172,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace keeps bounded BLT-style property search and keyboard commits, while Enter defers to an open editable ComboBox dropdown so normal choice selection remains intact; routing itself stays mutation-free.")
+print("PASS: Workspace keeps bounded BLT-style search/keyboard UX and now routes exact semantic multi-selection into guarded common/mixed property rows; presentation stays mutation-free and bulk writes revalidate active project plus current CAD selection before the Core bulk-edit service commits.")
