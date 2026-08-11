@@ -77,22 +77,31 @@ else:
 
 for token in (
     'const string separator = "\\u001f";',
-    'new ProjectFamily("family" + separator + "material", "Finish A", ElementCategory.WallFinish)',
-    'firstFamily.Properties["Material"] = "paint";',
-    'new ProjectFamily("family", "Finish B", ElementCategory.WallFinish)',
-    'secondFamily.Properties["Material"] = "material" + separator + "paint";',
-    'var collidingUnderOldKey = Finish("finish-3", secondFamily.Id, 7d, "B1");',
-    'Equal(2, rows.Count, "distinct room-finish grouping tuples remain distinct")',
-    'Equal(2, firstGroup.Count, "identical tuple still groups")',
-    'Equal(5d, firstGroup.PrimaryQuantity, "identical tuple primary quantity accumulates")',
+    'new FloorDefinition("A" + separator + "B", "Floor AB", 0d)',
+    'new FloorDefinition("A", "Floor A", 3d)',
+    'var firstRoom = Room("C", roomFamily.Id, "A" + separator + "B", "Room C");',
+    'var secondRoom = Room("B" + separator + "C", roomFamily.Id, "A", "Room BC");',
+    'var first = LinkedFinish("finish-1", finishFamily.Id, "A" + separator + "B", firstRoom.Id, 2d, "A1");',
+    'var collidingUnderOldKey = LinkedFinish("finish-2", finishFamily.Id, "A", secondRoom.Id, 7d, "B1");',
+    'var identicalUnlinked = UnlinkedFinish("finish-3", finishFamily.Id, "D", 3d, "C1");',
+    'var identicalUnlinkedAgain = UnlinkedFinish("finish-4", finishFamily.Id, "D", 4d, "C2");',
+    'Equal(3, rows.Count, "old delimiter collision remains split while identical tuples still group")',
+    'Equal(1, firstGroup.Count, "first linked finish remains independent")',
+    'Equal(2d, firstGroup.PrimaryQuantity, "first linked quantity remains independent")',
+    'Equal("C", firstGroup.RoomIds.Single(), "first room provenance remains independent")',
     'Equal(1, secondGroup.Count, "old delimiter collision no longer merges")',
-    'Equal(7d, secondGroup.PrimaryQuantity, "second group primary quantity remains independent")',
-    'Equal("finish-3", secondGroup.ElementIds.Single(), "second group element provenance remains independent")',
-    'Equal("B1", secondGroup.SourceHandles.Single(), "second group source provenance remains independent")',
-    'Equal("room-1", secondGroup.RoomIds.Single(), "second group room provenance remains independent")',
+    'Equal(7d, secondGroup.PrimaryQuantity, "second linked quantity remains independent")',
+    'Equal("B" + separator + "C", secondGroup.RoomIds.Single(), "separator-bearing room id is preserved")',
+    'Equal(2, identicalGroup.Count, "identical unlinked tuple still groups")',
+    'Equal(7d, identicalGroup.PrimaryQuantity, "identical tuple quantities still accumulate")',
+    'Equal(2, identicalGroup.SourceHandles.Count, "identical tuple source provenance accumulates")',
+    'Equal(0, identicalGroup.RoomIds.Count, "unlinked tuple does not invent room provenance")',
 ):
     if token not in smoke:
         errors.append("RoomFinishSchedule collision smoke missing token: " + token)
+
+if smoke.count('element.Properties["ParentRoomId"] = roomId;') != 1:
+    errors.append("collision fixture must link only through the dedicated LinkedFinish path so identical unlinked rows remain valid under RoomFinishIdentityService")
 
 for token in (
     "using System.Runtime.CompilerServices;",
@@ -109,4 +118,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Room Finish grouping uses collision-free length-prefixed identity, preserves case-insensitive grouping, and regression coverage separates accepted U+001F-bearing tuples with independent quantities/provenance.")
+print("PASS: Room Finish grouping uses collision-free length-prefixed identity, preserves case-insensitive grouping, and regression coverage separates accepted U+001F-bearing floor/room tuples while retaining valid Room finish identity and normal grouping/provenance.")
