@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             SheetIndexIsDeterministicAndImmutable();
             SheetIndexIdentityFailsClosed();
             SheetIndexBoundsAndNullsFailClosed();
+            SheetIndexDoesNotOverEnumeratePastBound();
             TitleBlockParameterMapIsDeterministicAndImmutable();
             TitleBlockParameterMapFailsClosed();
         }
@@ -210,6 +211,25 @@ namespace QS3D.Core.SmokeTests
             MustFailArgument(
                 () => SemanticSheetIndexBuilder.Build(new SemanticSheetPlan[] { null! }),
                 "Sheet Index null source rows must fail closed.");
+        }
+
+        private static void SheetIndexDoesNotOverEnumeratePastBound()
+        {
+            var project = BuildProject();
+            var views = SemanticViewPlanner.BuildCatalog(project, new[] { new SemanticViewDefinition("V1", "Plan") });
+            var sheet = SemanticSheetPlanner.Build(
+                new SemanticSheetDefinition("SHEET-1", "A-101", "Plan", 420d, 297d, Array.Empty<SemanticSheetPlacementDefinition>()),
+                views);
+
+            MustFail(
+                () => SemanticSheetIndexBuilder.Build(OverBoundedSheets(sheet)),
+                "Sheet Index must stop enumeration as soon as the configured sheet bound is exceeded.");
+        }
+
+        private static IEnumerable<SemanticSheetPlan> OverBoundedSheets(SemanticSheetPlan sheet)
+        {
+            for (var i = 0; i <= 10000; i++) yield return sheet;
+            throw new ApplicationException("Semantic sheet index enumerated beyond the first over-bound item.");
         }
 
         private static void TitleBlockParameterMapIsDeterministicAndImmutable()
