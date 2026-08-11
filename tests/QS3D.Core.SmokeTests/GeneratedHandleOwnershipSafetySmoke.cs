@@ -37,7 +37,7 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("E1", ElementCategory.Beam);
             element.Properties["GeneratedSolidHandle"] = "AA11";
             project.Elements.Add(element);
-            project.Elements.Add(null);
+            project.Elements.Add(null!);
 
             Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project));
             Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "UNOWNED", out _, out _));
