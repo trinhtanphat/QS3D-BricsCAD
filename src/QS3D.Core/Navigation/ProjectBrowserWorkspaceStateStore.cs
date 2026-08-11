@@ -48,8 +48,8 @@ namespace QS3D.Core.Navigation
 
         private static string NormalizeQuery(string? value)
         {
-            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-            var normalized = value!.Trim();
+            if (value == null || string.IsNullOrWhiteSpace(value)) return string.Empty;
+            var normalized = value.Trim();
             if (normalized.Length > 160) throw new ArgumentException("Project browser workspace query exceeds 160 characters.", nameof(value));
             return normalized;
         }
@@ -98,8 +98,8 @@ namespace QS3D.Core.Navigation
 
         private static string NormalizePrimary(string? value, IReadOnlyList<string> selected)
         {
-            if (string.IsNullOrWhiteSpace(value)) return selected.Count == 0 ? string.Empty : selected[0];
-            var primary = RequiredCanonical(value!, "project browser workspace primary element id");
+            if (value == null || string.IsNullOrWhiteSpace(value)) return selected.Count == 0 ? string.Empty : selected[0];
+            var primary = RequiredCanonical(value, "project browser workspace primary element id");
             var match = selected.FirstOrDefault(x => string.Equals(x, primary, StringComparison.OrdinalIgnoreCase));
             if (match == null) throw new InvalidOperationException("Project browser workspace primary element must belong to the selected element set: " + primary + ".");
             return match;

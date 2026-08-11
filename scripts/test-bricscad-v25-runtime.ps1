@@ -4,6 +4,7 @@ param(
     [string]$Profile = "",
     [string]$ArtifactDir = "",
     [ValidateRange(10, 900)][int]$StartupTimeoutSeconds = 120,
+    [switch]$DemandLoadOnly,
     [switch]$SkipScreenshot
 )
 
@@ -80,11 +81,12 @@ $script = @(
     "FILEDIA",
     "0",
     "CMDECHO",
-    "1",
-    "NETLOAD",
-    ('"' + $PluginDll + '"'),
-    "QS3DRUNTIMEPROBE"
+    "1"
 )
+if (-not $DemandLoadOnly) {
+    $script += @("NETLOAD", ('"' + $PluginDll + '"'))
+}
+$script += "QS3DRUNTIMEPROBE"
 Set-Content -LiteralPath $scriptPath -Value $script -Encoding ASCII
 
 $argumentParts = New-Object System.Collections.Generic.List[string]
@@ -98,9 +100,10 @@ $argumentParts.Add('"' + $scriptPath + '"')
 $arguments = [string]::Join(' ', $argumentParts)
 
 $startedAt = Get-Date
-$process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -PassThru
+$process = $null
 
 try {
+    $process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -WorkingDirectory $ArtifactDir -PassThru
     $deadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $resultPath -PathType Leaf) { break }
@@ -129,6 +132,8 @@ try {
         throw "Runtime marker came from a different plugin DLL. Expected '$PluginDll', loaded '$loadedAssembly'."
     }
 
+    $loadMode = if ($DemandLoadOnly) { "DemandLoad" } else { "NETLOAD" }
+
     if (-not $SkipScreenshot) {
         $windowDeadline = (Get-Date).AddSeconds(30)
         while ((Get-Date) -lt $windowDeadline) {
@@ -148,13 +153,12 @@ public static class QS3DWin32Capture {
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
-    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
 }
 "@
 
         [QS3DWin32Capture]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
-        [QS3DWin32Capture]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
         Start-Sleep -Seconds 3
 
         $rect = New-Object QS3DWin32Capture+RECT
@@ -170,7 +174,21 @@ public static class QS3DWin32Capture {
         $bitmap = New-Object System.Drawing.Bitmap $width, $height
         $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
         try {
-            $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+            # Capture only the target BricsCAD HWND. A desktop-region capture can
+            # include unrelated windows that overlap the host and leak private UI.
+            $hdc = $graphics.GetHdc()
+            try {
+                $captured = [QS3DWin32Capture]::PrintWindow($process.MainWindowHandle, $hdc, 2)
+                if (-not $captured) {
+                    $captured = [QS3DWin32Capture]::PrintWindow($process.MainWindowHandle, $hdc, 0)
+                }
+                if (-not $captured) {
+                    throw "PrintWindow could not capture the BricsCAD window without exposing the desktop."
+                }
+            }
+            finally {
+                $graphics.ReleaseHdc($hdc)
+            }
             $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
         }
         finally {
@@ -193,6 +211,8 @@ public static class QS3DWin32Capture {
         plugin_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $PluginDll).Hash
         runtime_marker = $resultPath
         screenshot = if ($SkipScreenshot) { $null } else { $screenshotPath }
+        screenshot_capture = if ($SkipScreenshot) { $null } else { "PrintWindow(hwnd)" }
+        load_mode = $loadMode
         process_id = $process.Id
         profile = $Profile
         runner_user = [Environment]::UserName
@@ -202,7 +222,7 @@ public static class QS3DWin32Capture {
     }
     $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
-    Write-Host "QS3D BricsCAD V25 NETLOAD/runtime gate PASS"
+    Write-Host "QS3D BricsCAD V25 $loadMode/runtime gate PASS"
     Write-Host "Marker: $resultPath"
     if (-not $SkipScreenshot) { Write-Host "Screenshot: $screenshotPath" }
 }

@@ -38,9 +38,12 @@ for path in FILES:
 
 if POLICY.is_file():
     text = POLICY.read_text(encoding="utf-8")
+    if text.count("EnsureValidElementSet(project);") < 2:
+        errors.append("GeneratedHandleOwnershipPolicy scans must validate the complete semantic element set.")
     for token in (
-        "EnsureValidElementSet(project);",
         "Project contains a null semantic element entry; generated CAD ownership cannot be resolved safely.",
+        "Project contains a blank semantic element id; generated CAD ownership cannot be resolved safely.",
+        "Project contains duplicate element id:",
         "is ambiguously claimed by",
     ):
         if token not in text:

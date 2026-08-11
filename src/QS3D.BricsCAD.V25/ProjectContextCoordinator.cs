@@ -22,6 +22,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (Projects.TryGetValue(document, out var existing))
             {
+                EnsureUsable(existing);
                 SyncDrawingIdentity(existing, document);
                 return existing;
             }
@@ -30,14 +31,7 @@ namespace QS3D.BricsCAD.V25
             ProjectState project;
             if (File.Exists(path) || File.Exists(path + ".bak"))
             {
-                try { project = LoadProject(path); }
-                catch (Exception ex)
-                {
-                    project = CreateDefault(document);
-                    project.Metadata[RecoveryRequiredKey] = "true";
-                    project.Metadata["QS3D.LoadWarning"] = ex.GetType().Name + ": " + ex.Message;
-                    project.Metadata["QS3D.FailedProjectPath"] = path;
-                }
+                project = LoadExistingProjectOrThrow(path);
             }
             else project = CreateDefault(document);
 
@@ -53,6 +47,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (Projects.TryGetValue(document, out var existing))
             {
+                EnsureUsable(existing);
                 ValidateDrawingIdentityReadOnly(existing, document);
                 project = existing;
                 return true;
@@ -64,7 +59,7 @@ namespace QS3D.BricsCAD.V25
             if (!TryGetExistingProjectPath(document, out var path)) return false;
             if (!File.Exists(path) && !File.Exists(path + ".bak")) return false;
 
-            project = LoadProject(path);
+            project = LoadExistingProjectOrThrow(path);
             ValidateDrawingIdentityReadOnly(project, document);
             return true;
         }
@@ -99,7 +94,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) throw new ArgumentNullException(nameof(document));
             var path = GetProjectPath(document);
             if (!File.Exists(path) && !File.Exists(path + ".bak")) throw new FileNotFoundException("QS3D project file was not found.", path);
-            var project = LoadProject(path);
+            var project = LoadExistingProjectOrThrow(path);
             var persistenceStamp = new ProjectPersistenceStamp(project);
             SyncDrawingIdentity(project, document);
             Projects[document] = project;
@@ -238,6 +233,29 @@ namespace QS3D.BricsCAD.V25
                 project.Metadata["QS3D.PrimaryLoadFailure"] = loaded.PrimaryFailureMessage;
             }
             return project;
+        }
+
+        private static ProjectState LoadExistingProjectOrThrow(string path)
+        {
+            try
+            {
+                var project = LoadProject(path);
+                EnsureUsable(project);
+                return project;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidDataException(
+                    "The existing QS3D sidecar could not be loaded. No replacement project was created and the sidecar was left unchanged.",
+                    ex);
+            }
+        }
+
+        private static void EnsureUsable(ProjectState project)
+        {
+            if (project.Metadata.TryGetValue(RecoveryRequiredKey, out var blocked) &&
+                string.Equals(blocked, "true", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("QS3D project is in read-only recovery mode.");
         }
 
         private static void SyncDrawingIdentity(ProjectState project, Document document)

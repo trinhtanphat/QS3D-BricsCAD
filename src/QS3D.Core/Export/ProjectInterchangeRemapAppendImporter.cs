@@ -385,8 +385,8 @@ namespace QS3D.Core.Export
 
         private static bool IsImportedOwnershipMetadata(string? key)
         {
-            if (string.IsNullOrWhiteSpace(key)) return false;
-            var k = key!.Trim();
+            if (key == null || key.Trim().Length == 0) return false;
+            var k = key.Trim();
             if (GeneratedHandleOwnershipPolicy.IsOwnerSlot(k)) return true;
             if (k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return true;
             if (k.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
@@ -412,8 +412,9 @@ namespace QS3D.Core.Export
             string? sourceId,
             ref int rewrites)
         {
-            if (string.IsNullOrWhiteSpace(sourceId)) return string.Empty;
-            var trimmed = sourceId!.Trim();
+            if (sourceId == null) return string.Empty;
+            var trimmed = sourceId.Trim();
+            if (trimmed.Length == 0) return string.Empty;
             var mapped = plan.MapId(reference.Kind, trimmed);
             if (!string.Equals(mapped, trimmed, StringComparison.Ordinal)) rewrites = checked(rewrites + 1);
             return mapped;

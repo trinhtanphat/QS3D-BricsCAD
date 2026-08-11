@@ -97,7 +97,7 @@ if not errors:
             errors.append(key + " launcher must show the same registered window instance")
         if "DocumentBoundWindowLifetime.Attach(window, document);" in source:
             errors.append(key + " launcher must not duplicate lifetime attachment owned by the window constructor")
-        if "DocumentBoundWindowLifetime.Attach(this" not in window_source:
+        if "DocumentBoundWindowLifetime.Attach(this, _document);" not in window_source:
             errors.append(window_key + " must own its source-DWG lifetime attachment in the window constructor")
 
     # These command hubs are intentionally active-document dynamic. Binding either hub to the

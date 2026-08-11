@@ -181,7 +181,11 @@ namespace QS3D.BricsCAD.V25.UI
             _loadingContext = true;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                if (!ExistingProjectMutationContext.TryGet(doc, out var project))
+                {
+                    ClearProject("No QS3D project is available; Workspace remains read-only and non-creating.");
+                    return;
+                }
                 _viewModel.Load(project);
                 ZoneCombo.SelectedIndex = _viewModel.ActiveZoneIndex();
                 FloorCombo.SelectedIndex = _viewModel.ActiveFloorIndex();

@@ -19,7 +19,11 @@ namespace QS3D.Core.Review
         public string Change { get; }
         public string FieldPrefix { get; }
 
-        private static string CanonicalOptional(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value!.Trim();
+        private static string CanonicalOptional(string? value)
+        {
+            if (value == null || string.IsNullOrWhiteSpace(value)) return string.Empty;
+            return value.Trim();
+        }
     }
 
     public sealed class PreviewReviewFacet
@@ -200,7 +204,9 @@ namespace QS3D.Core.Review
             {
                 left.TryGetValue(key, out var before);
                 right.TryGetValue(key, out var after);
-                var sample = before ?? after ?? throw new InvalidOperationException("Preview review comparison row has no source entry.");
+                var sample = before ?? after;
+                if (sample == null)
+                    throw new InvalidOperationException("Preview review comparison index contains a key without a baseline or candidate row: " + key + ".");
                 var kind = before == null
                     ? PreviewReviewDeltaKind.Added
                     : after == null

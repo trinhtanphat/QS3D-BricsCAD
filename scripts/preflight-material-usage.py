@@ -74,6 +74,12 @@ for relative, needles in checks.items():
     for needle in needles:
         if needle not in text: errors.append(relative + " missing material usage guard/token: " + needle)
 
+commands_source = ROOT / required[2]
+if commands_source.is_file():
+    text = commands_source.read_text(encoding="utf-8")
+    for forbidden in ("ProjectContextCoordinator.GetOrCreate(document)", "RegenerateDirty(project)", "MaterialUsageScheduleBuilder.Build(project)"):
+        if forbidden in text: errors.append(required[2] + " must not mutate or build from the live project: " + forbidden)
+
 schedule = ROOT / required[0]
 if schedule.is_file():
     text = schedule.read_text(encoding="utf-8")

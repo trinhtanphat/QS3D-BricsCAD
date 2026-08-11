@@ -47,12 +47,16 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static bool PromptAndPersist(Document document)
         {
-            var prompt = document.Editor.GetKeywords(
-                "\nDrawing unit [Inch/Foot/Mile/Millimeter/Centimeter/Meter/Kilometer/Microinch/Mil/Yard/Angstrom/Nanometer/Micrometer/Decimeter/Decameter/Hectometer/Gigameter/AstronomicalUnit/LightYear/Parsec/USSurveyFoot/USSurveyInch/USSurveyYard/USSurveyMile]: ",
-                "Inch Foot Mile Millimeter Centimeter Meter Kilometer Microinch Mil Yard Angstrom Nanometer Micrometer Decimeter Decameter Hectometer Gigameter AstronomicalUnit LightYear Parsec USSurveyFoot USSurveyInch USSurveyYard USSurveyMile");
-            if (prompt.Status != PromptStatus.OK) return false;
-            if (!Enum.TryParse(prompt.StringResult, true, out LengthUnit unit))
-                throw new InvalidOperationException("Unsupported drawing unit: " + prompt.StringResult + ".");
+            LengthUnit unit;
+            if (!DrawingUnitAutomationConfirmation.TryConsume(document, out unit))
+            {
+                var prompt = document.Editor.GetKeywords(
+                    "\nDrawing unit [Inch/Foot/Mile/Millimeter/Centimeter/Meter/Kilometer/Microinch/Mil/Yard/Angstrom/Nanometer/Micrometer/Decimeter/Decameter/Hectometer/Gigameter/AstronomicalUnit/LightYear/Parsec/USSurveyFoot/USSurveyInch/USSurveyYard/USSurveyMile]: ",
+                    "Inch Foot Mile Millimeter Centimeter Meter Kilometer Microinch Mil Yard Angstrom Nanometer Micrometer Decimeter Decameter Hectometer Gigameter AstronomicalUnit LightYear Parsec USSurveyFoot USSurveyInch USSurveyYard USSurveyMile");
+                if (prompt.Status != PromptStatus.OK) return false;
+                if (!Enum.TryParse(prompt.StringResult, true, out unit))
+                    throw new InvalidOperationException("Unsupported drawing unit: " + prompt.StringResult + ".");
+            }
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                 throw new InvalidOperationException("QS3DUNITS requires the DWG that started the prompt to remain active.");
 

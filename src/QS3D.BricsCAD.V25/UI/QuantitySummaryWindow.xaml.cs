@@ -21,7 +21,10 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly Action<QuantityReportRow>? _locate;
         private readonly Func<IReadOnlyList<QuantityReportRow>>? _recalculate;
         private readonly Document _document;
-        private bool _loadingColumnPreferences;
+        // XAML Checked/Unchecked handlers may fire during InitializeComponent.
+        // Keep them read-only until LoadColumnPreferences has applied the
+        // persisted/default state deliberately.
+        private bool _loadingColumnPreferences = true;
 
         public QuantitySummaryWindow(Document document, IReadOnlyList<QuantityReportRow> rows, Action<QuantityReportRow>? locate = null, Func<IReadOnlyList<QuantityReportRow>>? recalculate = null)
         {
@@ -180,10 +183,10 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureCurrentProject("xuất BQ XLSX");
                 var dialog = new SaveFileDialog { Title = "Xuất bảng khối lượng QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = "QS3D-Khoi-Luong.xlsx", AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
                 if (dialog.ShowDialog(this) != true) return;
 
+                EnsureCurrentProject("xuất BQ XLSX");
                 if (_recalculate != null)
                 {
                     var floor = FloorCombo.SelectedItem as string;

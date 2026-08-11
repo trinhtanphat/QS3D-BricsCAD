@@ -94,12 +94,17 @@ if CSV_COMMANDS.is_file():
     for token in (
         'ProjectContextCoordinator.TryGetReadOnly(document, out var project)',
         'ProjectStateSnapshot.CreateDetachedCopy(project)',
+        'RegenerateDirty(snapshot)',
         'ProjectRebarScheduleBuilder.Build(snapshot)',
     ):
-        if token not in text:
-            errors.append("BBS CSV command no longer shares detached ProjectRebarScheduleBuilder authority: " + token)
-    if 'ProjectRebarScheduleBuilder.Build(project)' in text:
-        errors.append("BBS CSV command must not build from live read-only project state")
+        if token not in text: errors.append("BBS CSV command lost read-only detached schedule token: " + token)
+    for forbidden in (
+        'ProjectContextCoordinator.GetOrCreate(document)',
+        'ExistingProjectMutationContext',
+        'RegenerateDirty(project)',
+        'ProjectRebarScheduleBuilder.Build(project)',
+    ):
+        if forbidden in text: errors.append("BBS CSV command must not mutate/build from the live project: " + forbidden)
 
 if SHARED.is_file():
     text = SHARED.read_text(encoding="utf-8")

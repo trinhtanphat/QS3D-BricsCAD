@@ -32,6 +32,8 @@ if APPEND.is_file():
     ]:
         if token not in text:
             errors.append(str(APPEND.relative_to(ROOT)) + " missing append freshness guard token: " + token)
+    if text.count("ProjectContextCoordinator.GetOrCreate(document)") != 1:
+        errors.append(str(APPEND.relative_to(ROOT)) + " may bootstrap only the reviewed target before preview; post-confirmation freshness must be non-creating")
 
     preview = text.find("previewChangeVersion = project.ChangeVersion")
     confirmation = text.find("System.Windows.MessageBoxButton.YesNo", preview)

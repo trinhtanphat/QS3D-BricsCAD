@@ -78,7 +78,7 @@ for name, (start_marker, end_marker) in MIXED_HEALTH_COMMANDS.items():
         errors.append(name + " Health method must explain that blocked inspection does not create a project.")
 
     authoring = text[:start]
-    if "ExistingProjectMutationContext.Require(document" not in authoring:
+    if "ExistingProjectMutationContext.Require(document," not in authoring:
         errors.append(name + " explicit authoring path must bind canonical existing project state before native mutation.")
     if "ProjectContextCoordinator.GetOrCreate(document)" in authoring:
         errors.append(name + " explicit authoring path must not directly create/cache replacement project state.")

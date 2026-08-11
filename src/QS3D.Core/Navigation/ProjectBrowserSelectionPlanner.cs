@@ -149,7 +149,7 @@ namespace QS3D.Core.Navigation
 
         private static string NormalizePrimary(string? raw, IReadOnlyList<string> selected)
         {
-            if (string.IsNullOrWhiteSpace(raw)) return selected.Count == 0 ? string.Empty : selected[0];
+            if (raw == null || string.IsNullOrWhiteSpace(raw)) return selected.Count == 0 ? string.Empty : selected[0];
             var primary = CanonicalRequired(raw, "project browser primary selected element id");
             if (!selected.Contains(primary, StringComparer.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Project browser primary selection must belong to the selected semantic element set: " + primary + ".");

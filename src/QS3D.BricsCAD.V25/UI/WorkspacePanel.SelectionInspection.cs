@@ -11,10 +11,10 @@ namespace QS3D.BricsCAD.V25.UI
     {
         internal void SetInspectionReadOnly(IReadOnlyList<EntitySnapshot> snapshots, ProjectState? project)
         {
-            _inspection = snapshots ?? System.Array.Empty<EntitySnapshot>();
+            _inspection = snapshots ?? Array.Empty<EntitySnapshot>();
             InspectionList.ItemsSource = null;
             InspectionList.ItemsSource = _inspection;
-            SelectionCount.Text = _inspection.Count + " selected";
+            SelectionCount.Text = _inspection.Count + " chọn";
 
             if (project == null || _inspection.Count == 0)
             {
@@ -44,20 +44,29 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
-            _viewModel.SetSelectedElement(singleElement);
-            if (!string.IsNullOrWhiteSpace(singleElement.FamilyId))
+            var family = string.IsNullOrWhiteSpace(singleElement.FamilyId)
+                ? null
+                : project.FindFamily(singleElement.FamilyId);
+            _loadingContext = true;
+            try
             {
-                var family = project.FindFamily(singleElement.FamilyId);
+                _categoryFilter = family?.Category ?? singleElement.Category;
+                ApplyFamilyFilter();
                 if (family != null)
                 {
-                    _categoryFilter = family.Category;
-                    ApplyFamilyFilter();
-                    return;
+                    var visibleFamily = FamilyList.Items
+                        .Cast<object>()
+                        .OfType<ProjectFamily>()
+                        .FirstOrDefault(item => string.Equals(item.Id, family.Id, StringComparison.OrdinalIgnoreCase));
+                    if (visibleFamily != null)
+                    {
+                        FamilyList.SelectedItem = visibleFamily;
+                        FamilyList.ScrollIntoView(visibleFamily);
+                    }
                 }
+                _viewModel.SetSelectedElement(singleElement);
             }
-
-            _categoryFilter = singleElement.Category;
-            ApplyFamilyFilter();
+            finally { _loadingContext = false; }
         }
     }
 }

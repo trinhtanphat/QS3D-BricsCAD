@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             ScheduleRejectsArithmeticOverflow();
             SpacingRejectsArithmeticOverflow();
             SpacingNearIntegerDoesNotAddPhantomBar();
+            SpacingRealOverrunIsNotSnappedAtLargeScale();
             DecimalNotationIsInvariantAndRoundTrips();
             AggregateRejectsOverflow();
             ProjectScheduleRejectsNullSemanticEntry();
@@ -77,6 +78,22 @@ namespace QS3D.Core.SmokeTests
                 new RebarScheduleInput { ElementId = "OVER", Notation = "D8@150", CuttingLengthM = 1d, DistributionLengthM = 16.350001d }
             }).Single();
             Equal(111, actualOverrun.Quantity);
+        }
+
+        private static void SpacingRealOverrunIsNotSnappedAtLargeScale()
+        {
+            var actualOverrun = RebarScheduleBuilder.Build(new[]
+            {
+                new RebarScheduleInput
+                {
+                    ElementId = "LARGE-OVER",
+                    Notation = "D8@1",
+                    CuttingLengthM = 1d,
+                    DistributionLengthM = 2000000.000001d
+                }
+            }).Single();
+
+            Equal(2000000002, actualOverrun.Quantity);
         }
 
         private static void DecimalNotationIsInvariantAndRoundTrips()

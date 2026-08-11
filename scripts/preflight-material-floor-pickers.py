@@ -133,6 +133,12 @@ if material_window.is_file():
     if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
         errors.append("Material Catalog modeless callbacks must not create/cache replacement project state")
 
+material_command = ROOT / "src/QS3D.BricsCAD.V25/MaterialCatalogCommands.cs"
+if material_command.is_file():
+    text = material_command.read_text(encoding="utf-8")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text or "ExistingProjectMutationContext" in text:
+        errors.append("opening Material Catalog must not create/cache or bind mutable project state")
+
 floor_window = ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs"
 if floor_window.is_file():
     text = floor_window.read_text(encoding="utf-8")

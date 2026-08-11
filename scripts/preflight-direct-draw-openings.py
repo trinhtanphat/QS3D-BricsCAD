@@ -30,6 +30,7 @@ else:
         "CadHandleService.GetLiveHandles(document, new[] { handle })",
         "PlanarityToleranceM = 0.005d",
         "CadGeometryGuard.ToMeters(document, widthDrawing",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject)",
         "FamilyPositiveNumber(defaultsProject, category, \"HeightM\"",
         "FamilyNonNegativeNumber(defaultsProject, category, \"BottomOffsetM\"",
         "FamilyNonNegativeNumber(defaultsProject, category, \"SillHeightM\"",

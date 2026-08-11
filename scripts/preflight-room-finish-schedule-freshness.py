@@ -31,6 +31,9 @@ else:
         if forbidden in text:
             errors.append("HT_PHÒNG modeless schedule must not create/bind/regenerate live project state: " + forbidden)
 
+    if "RegenerateDirty(project)" in text or "RoomFinishScheduleBuilder.Build(project)" in text:
+        errors.append("Room Finish modeless schedule must not mutate or build from the live project")
+
     export_pos = text.find("private void OnExportClick")
     refresh_pos = text.find("private void RefreshRows", export_pos)
     body = text[export_pos:refresh_pos] if export_pos >= 0 and refresh_pos > export_pos else ""

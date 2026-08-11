@@ -351,14 +351,16 @@ namespace QS3D.Core.Documentation
         private static string Required(XElement element, string attribute)
         {
             var value = element.Attribute(attribute)?.Value;
-            if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("Semantic documentation catalog is missing attribute: " + attribute + ".");
-            return value!.Trim();
+            if (value == null || string.IsNullOrWhiteSpace(value))
+                throw new InvalidDataException("Semantic documentation catalog is missing attribute: " + attribute + ".");
+            return value.Trim();
         }
 
         private static string? Optional(XElement element, string attribute)
         {
             var value = element.Attribute(attribute)?.Value;
-            return string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+            if (value == null || string.IsNullOrWhiteSpace(value)) return null;
+            return value.Trim();
         }
 
         private static int Integer(string? value, string label)
