@@ -2,19 +2,23 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: source-safe project-context rollback for failed projectless `QS3DDRAWWALLREF` / `QS3DDRAWWALLREFADV` authoring.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/DirectDrawReferenceWallCommands.cs`
   - `scripts/preflight-reference-wall-bootstrap-rollback.py`
-  - this claim file for close-out
-- Problem: after reference acquisition/prompts, `projectPreview.ResolveForMutation` may bootstrap a project and pass only `ProjectState` into `Execute`. Later source/capture/regeneration/native-build failure erases owned CAD and restores `ProjectState` but leaves that newly-created project context cached.
-- Intended contract:
-  - preserve `projectPreview.HasProject` as the pre-authoring ownership signal through `Execute`;
-  - existing-project failure keeps canonical context;
-  - failed projectless authoring performs existing CAD/semantic rollback, then forgets only the project bootstrapped by this command;
-  - success keeps intentional bootstrap;
-  - PICKFIRST/fallback reference acquisition, Family defaults, prompt behavior, scoped regeneration, generated ownership and UI finalization remain unchanged.
-- Non-overlap: the earlier Reference Wall PICKFIRST claim is completed/released; excludes other Direct Draw files, Ribbon, Quantity, updater and LOCAL_ONLY V25 execution.
-- Validation: exact diff/current-source review plus focused static preflight; no GitHub Actions under `continue all`.
-- Completion condition: failed projectless Reference Wall cannot leave a cached QS3D project and claim closes with exact SHAs.
+  - this claim file
+- Completed commits:
+  - `3c7931f396cf63deacd34e774aa1c99fa328afef` — carry pre-authoring project ownership into `Execute` and forget only failed projectless bootstraps after existing CAD/semantic rollback.
+  - `a996c69ae0070b43570af534dafed21945e65f95` — focused static guard for reference-before-project, PICKFIRST fallback, scoped regeneration, ownership and failed-bootstrap cleanup.
+- Verified source contract:
+  - reference acquisition and PICKFIRST fallback still happen before project preview/mutation;
+  - `projectPreview.HasProject` is captured before `ResolveForMutation` and passed into `Execute`;
+  - existing-project failures preserve the project context;
+  - failed projectless authoring erases owned CAD, restores `ProjectState`, then calls `ProjectContextCoordinator.Forget(document)` before final error aggregation;
+  - successful authoring never calls `Forget` and keeps its intentional project bootstrap;
+  - `RegenerateDirtySubset`, `WallSolidBuilder.BuildSelectedLineWalls`, generated ownership checks and UI finalization are unchanged.
+- Concurrency: two Contents API attempts were rejected with HTTP 409 while unrelated `main` commits moved the branch; re-fetch confirmed the reserved source blob itself was unchanged before the successful non-force update. No source was overwritten by failed attempts.
+- Validation performed: exact commit diff + current-source/preflight source review. The preflight was not executed in this web session and no GitHub Actions were dispatched.
+- Runtime boundary: no BricsCAD V25 PICKFIRST/native runtime PASS claimed; existing local qualification remains authoritative.
+- Reservation: released.

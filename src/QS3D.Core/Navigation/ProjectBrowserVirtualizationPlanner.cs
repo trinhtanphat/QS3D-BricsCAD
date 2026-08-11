@@ -98,16 +98,17 @@ namespace QS3D.Core.Navigation
             ValidatePaging(offset, pageSize);
             var index = BuildIndex(root);
             var expanded = NormalizeExpanded(expandedPaths, index);
-            var visible = new List<ProjectBrowserVisibleRow>();
-            AppendVisible(root, Segment(root.Key), 0, expanded, visible);
-            if (offset > visible.Count)
+            var rows = new List<ProjectBrowserVisibleRow>(pageSize);
+            var totalVisibleRows = 0;
+            AppendVisibleWindow(root, Segment(root.Key), 0, expanded, offset, pageSize, rows, ref totalVisibleRows);
+            if (offset > totalVisibleRows)
                 throw new ArgumentOutOfRangeException(nameof(offset), "Project browser viewport offset exceeds visible row count.");
 
             return new ProjectBrowserViewport(
                 offset,
                 pageSize,
-                visible.Count,
-                visible.Skip(offset).Take(pageSize));
+                totalVisibleRows,
+                rows);
         }
 
         public static ProjectBrowserElementPage GetElementPage(
@@ -193,20 +194,27 @@ namespace QS3D.Core.Navigation
             return result;
         }
 
-        private static void AppendVisible(
+        private static void AppendVisibleWindow(
             ProjectBrowserNode node,
             string path,
             int depth,
             ISet<string> expanded,
-            ICollection<ProjectBrowserVisibleRow> rows)
+            int offset,
+            int pageSize,
+            ICollection<ProjectBrowserVisibleRow> rows,
+            ref int totalVisibleRows)
         {
             var isExpanded = expanded.Contains(path);
-            rows.Add(new ProjectBrowserVisibleRow(path, depth, node, isExpanded));
+            var rowIndex = totalVisibleRows;
+            totalVisibleRows++;
+            if (rowIndex >= offset && rows.Count < pageSize)
+                rows.Add(new ProjectBrowserVisibleRow(path, depth, node, isExpanded));
+
             if (!isExpanded) return;
             foreach (var child in node.Children)
             {
                 var childPath = path + "/" + Segment(child.Key);
-                AppendVisible(child, childPath, depth + 1, expanded, rows);
+                AppendVisibleWindow(child, childPath, depth + 1, expanded, offset, pageSize, rows, ref totalVisibleRows);
             }
         }
 
