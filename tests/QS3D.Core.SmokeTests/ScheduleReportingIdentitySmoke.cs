@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             ExactDuplicateIdsFailClosed();
             CaseVariantDuplicateIdsFailClosed();
+            NullProjectElementsFailClosed();
             UniqueIdsRemainAccepted();
             ProvenanceIsRetainedAcrossSchedules();
         }
@@ -24,6 +25,20 @@ namespace QS3D.Core.SmokeTests
         private static void CaseVariantDuplicateIdsFailClosed()
         {
             AssertAllScheduleBuildersReject(DuplicateProject("e1"));
+        }
+
+        private static void NullProjectElementsFailClosed()
+        {
+            var project = new ProjectState("schedule-null-element", "Schedule null element");
+            project.Elements.Add(new ProjectElement("E1", ElementCategory.Slab, "family", "floor", "zone"));
+            project.Elements.Add(null!);
+
+            ExpectThrowsContaining<InvalidOperationException>(() => MaterialUsageScheduleBuilder.Build(project), "index 1");
+            ExpectThrows<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project));
+            ExpectThrows<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
+            ExpectThrows<InvalidOperationException>(() => RoomFinishScheduleBuilder.Build(project));
+            ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project));
+            ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Detail(project));
         }
 
         private static void UniqueIdsRemainAccepted()
@@ -153,6 +168,18 @@ namespace QS3D.Core.SmokeTests
             ExpectThrows<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project));
             ExpectThrows<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
             ExpectThrows<InvalidOperationException>(() => RoomFinishScheduleBuilder.Build(project));
+        }
+
+        private static void ExpectThrowsContaining<T>(Action action, string messagePart) where T : Exception
+        {
+            try { action(); }
+            catch (T ex)
+            {
+                if (ex.Message.IndexOf(messagePart, StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Expected " + typeof(T).Name + " containing '" + messagePart + "', got: " + ex.Message);
+                return;
+            }
+            throw new Exception("Expected " + typeof(T).Name + ".");
         }
 
         private static void ExpectThrows<T>(Action action) where T : Exception
