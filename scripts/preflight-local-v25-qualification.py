@@ -97,11 +97,15 @@ if runtime_helper.is_file():
     text = runtime_helper.read_text(encoding="utf-8")
     required = (
         "$process = $null",
+        "[switch]$DemandLoadOnly",
         "try {",
         "$process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -WorkingDirectory $ArtifactDir -PassThru",
+        "if (-not $DemandLoadOnly)",
+        '$loadMode = if ($DemandLoadOnly) { "DemandLoad" } else { "NETLOAD" }',
         "QS3DWin32Capture]::PrintWindow($process.MainWindowHandle, $hdc, 2)",
         "QS3DWin32Capture]::PrintWindow($process.MainWindowHandle, $hdc, 0)",
         'screenshot_capture = if ($SkipScreenshot) { $null } else { "PrintWindow(hwnd)" }',
+        "load_mode = $loadMode",
         "Remove-Item Env:QS3D_RUNTIME_RESULT -ErrorAction SilentlyContinue",
     )
     for needle in required:
