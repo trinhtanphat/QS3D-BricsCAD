@@ -50,9 +50,11 @@ else:
         errors.append("Delete shortcut must remain scoped to keyboard focus within FamilyList")
 
     shortcut_start = text.find("private void OnWorkspacePreviewKeyDown")
-    send_start = text.find("private static void Send(")
-    if shortcut_start < 0 or send_start < 0 or shortcut_start > send_start:
-        errors.append("Workspace keyboard routing must remain inside WorkspacePanel and reuse existing handler/Send paths")
+    shortcut_end = text.find("private void OnFamilyListPreviewMouseRightButtonDown", shortcut_start)
+    shortcut = text[shortcut_start:shortcut_end] if shortcut_start >= 0 and shortcut_end > shortcut_start else ""
+    for handler in ("OnSaveClick", "OnQuantityClick", "OnRefreshClick", "OnDeleteClick"):
+        if handler not in shortcut:
+            errors.append("Workspace keyboard routing must remain inside WorkspacePanel and reuse existing guarded handler: " + handler)
 
     forbidden = (
         'SendStringToExecute("QS3DSAVE',

@@ -134,7 +134,7 @@ if commands.exists():
 review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
 if review.exists():
     text = review.read_text(encoding="utf-8")
-    if text.count("SemanticReferenceHandles.Get(element)") + text.count("SourceHandleResolver.Resolve") < 2:
+    if text.count("LocateCurrentElement(") < 3 or "SourceHandleResolver.Resolve(currentProject, new[] { element.Id })" not in text:
         errors.append("BBS/revision locate must resolve semantic/dependency reference handles")
 
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/AutoRoomLifecycleSmoke.cs"

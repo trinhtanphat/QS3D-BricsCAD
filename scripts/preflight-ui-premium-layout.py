@@ -161,7 +161,8 @@ checks = {
         'Click="OnApplyConfidentClick"', 'Text="LOW CONFIDENCE = REVIEW"',
     ),
     "revision": (
-        'Text="QUANTITY DIFF"', 'x:Name="Header"', 'x:Name="Grid"', 'x:Name="Totals"',
+        'Text="SO SÁNH BẢN SỬA ĐỔI"', 'Text="SEMANTIC + QUANTITY"',
+        'x:Name="Header"', 'x:Name="Grid"', 'x:Name="Totals"',
         'MouseDoubleClick="OnGridDoubleClick"', 'Text="DOUBLE-CLICK ROW TO LOCATE"',
     ),
     "health": (

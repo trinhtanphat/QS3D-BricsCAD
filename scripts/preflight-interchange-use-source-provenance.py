@@ -53,7 +53,7 @@ for token in (
 
 for token in (
     "cleanup authorization",
-    "does not perform native cleanup",
+    "does **not** perform native cleanup",
     "raw source-handle provenance",
     "source-to-target semantic lineage",
     "never target CAD ownership",

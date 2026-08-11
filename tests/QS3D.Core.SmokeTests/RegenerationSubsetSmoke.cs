@@ -10,7 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RegeneratesOnlyRequestedElements();
-            DeduplicatesRequestedIdsCaseInsensitively();
+            RejectsNonCanonicalOrDuplicateRequestedIds();
             RejectsUnknownTarget();
             RejectsDuplicateProjectIds();
         }
@@ -40,20 +40,18 @@ namespace QS3D.Core.SmokeTests
             Near(1d, selected.Quantities["Count"]);
         }
 
-        private static void DeduplicatesRequestedIdsCaseInsensitively()
+        private static void RejectsNonCanonicalOrDuplicateRequestedIds()
         {
-            var project = new ProjectState("regen-dedupe", "Deduplicated targets");
+            var project = new ProjectState("regen-canonical-targets", "Canonical targets");
             var selected = new ProjectElement("Selected", ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
             selected.SetProperty("LengthM", "4");
             project.Elements.Add(selected);
 
             var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
-            var count = engine.RegenerateDirtySubset(project, new[] { " Selected ", "selected", "SELECTED" });
-
-            Equal(1, count);
-            Equal(ElementDirtyFlags.None, selected.Dirty);
-            Near(4d, selected.Quantities["LengthM"]);
-            Near(1d, selected.Quantities["Count"]);
+            Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { " Selected " }));
+            Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { "selected", "SELECTED" }));
+            True(selected.Dirty != ElementDirtyFlags.None);
+            True(selected.Quantities.Count == 0);
         }
 
         private static void RejectsUnknownTarget()

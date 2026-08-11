@@ -163,7 +163,12 @@ if RULES.is_file() and "ProjectStateSnapshot.CreateDetachedCopy(project)" not in
 
 if REGEN.is_file():
     regen = REGEN.read_text(encoding="utf-8")
-    for token in ("ProjectStateSnapshot.CreateDetachedCopy(project)", "NewEngine().RegenerateDirty(detached)"):
+    for token in (
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "var engine = NewEngine();",
+        "engine.RegenerateDirty(detached)",
+        "engine.RegenerateDirtySubset(detached, targets)",
+    ):
         if token not in regen:
             errors.append("Regeneration preview lost detached-state execution: " + token)
 
