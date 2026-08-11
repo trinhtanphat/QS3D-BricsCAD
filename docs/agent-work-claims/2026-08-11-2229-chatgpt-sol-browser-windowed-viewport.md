@@ -1,0 +1,26 @@
+# Agent Work Claim
+
+- Status: ACTIVE
+- Agent: chatgpt-gpt56sol-browser-windowing-20260811-2229
+- Timestamp: 2026-08-11T22:29:00+07:00
+- Baseline `main` SHA: `c33038f685a5d27e107e3ba5659e6b8fe67781d3`
+- Priority: P1 Project Browser scalability / feature hardening
+- Exact scope: Make `ProjectBrowserVirtualizationPlanner.BuildViewport` materialize only the requested visible-row window while still traversing/counting expanded rows to preserve `TotalVisibleRows`, ordering, expansion, offset validation, and paging semantics. Remove the full visible-row list allocation.
+- Expected surfaces:
+  - `src/QS3D.Core/Navigation/ProjectBrowserVirtualizationPlanner.cs`
+  - `tests/QS3D.Core.SmokeTests/ProjectBrowserVirtualizationSmoke.cs`
+- Excluded scope:
+  - node-index cap semantics beyond the just-completed fail-fast guard
+  - Project Browser workspace/query/selection/coordinator behavior
+  - BricsCAD/native/WPF/runtime behavior
+  - GitHub Actions
+- Validation plan:
+  - preserve existing Project Browser virtualization smoke semantics
+  - add focused coverage for `offset == TotalVisibleRows` returning an empty final page with the correct total
+  - source re-read proving only at most `pageSize` row DTOs are materialized by the viewport traversal
+  - no local `dotnet`/BricsCAD runtime is available in this environment
+- Coordination:
+  - checked current claim registry immediately before registration; no active virtualization/windowing claim was present
+  - prior node-cap hardening claim is COMPLETED
+  - no GitHub Actions will be dispatched
+- Completion condition: viewport row DTO materialization is bounded by requested page size while externally observable ordering/count/paging behavior remains unchanged; focused regression is present; claim is marked COMPLETED.
