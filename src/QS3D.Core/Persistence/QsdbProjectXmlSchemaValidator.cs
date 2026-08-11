@@ -29,6 +29,9 @@ namespace QS3D.Core.Persistence
                 false,
                 true);
 
+            ValidateOptionalCanonicalAttribute(root, "activeZoneId", "active zone id");
+            ValidateOptionalCanonicalAttribute(root, "activeFloorId", "active floor id");
+
             foreach (var section in RootSections) RequireExactlyOne(root, section);
 
             ValidateMap(root.Element("metadata"), "project metadata");
@@ -106,6 +109,10 @@ namespace QS3D.Core.Persistence
                     },
                     new[] { "handles", "dependencies", "properties", "quantities" });
 
+                ValidateOptionalCanonicalAttribute(element, "familyId", "element family id");
+                ValidateOptionalCanonicalAttribute(element, "floorId", "element floor id");
+                ValidateOptionalCanonicalAttribute(element, "zoneId", "element zone id");
+
                 RequireAtMostOne(element, "handles");
                 RequireAtMostOne(element, "dependencies");
                 RequireAtMostOne(element, "properties");
@@ -115,14 +122,20 @@ namespace QS3D.Core.Persistence
                 {
                     ValidateElement(handles, "handles", Array.Empty<string>(), new[] { "h" });
                     foreach (var handle in handles.Elements("h"))
+                    {
                         ValidateElement(handle, "h", Array.Empty<string>(), Array.Empty<string>(), true);
+                        ValidateCanonicalText(handle, "source handle");
+                    }
                 }
 
                 foreach (var dependencies in element.Elements("dependencies"))
                 {
                     ValidateElement(dependencies, "dependencies", Array.Empty<string>(), new[] { "d" });
                     foreach (var dependency in dependencies.Elements("d"))
+                    {
                         ValidateElement(dependency, "d", Array.Empty<string>(), Array.Empty<string>(), true);
+                        ValidateCanonicalText(dependency, "dependency id");
+                    }
                 }
 
                 foreach (var properties in element.Elements("properties")) ValidateMap(properties, "element properties");
@@ -147,6 +160,23 @@ namespace QS3D.Core.Persistence
                     new[] { "utc", "action", "elementId", "detail", "actor", "correlationId" },
                     Array.Empty<string>());
             }
+        }
+
+        private static void ValidateOptionalCanonicalAttribute(XElement element, string attributeName, string owner)
+        {
+            var value = element.Attribute(attributeName)?.Value;
+            if (value == null || value.Length == 0) return;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
+        }
+
+        private static void ValidateCanonicalText(XElement element, string owner)
+        {
+            var value = element.Value;
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidDataException("QSDB " + owner + " must not be empty.");
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
         }
 
         private static void ValidateElement(
