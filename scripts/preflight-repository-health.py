@@ -4,8 +4,8 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-GENERIC = ROOT / "scripts/preflight.py"
-AGGREGATE = ROOT / "scripts/preflight-all.py"
+SCRIPTS = ROOT / "scripts"
+GENERIC = SCRIPTS / "preflight.py"
 errors = []
 
 
@@ -14,7 +14,10 @@ def require(condition, message):
         errors.append(message)
 
 
-for path in (GENERIC, AGGREGATE):
+python_scripts = sorted(path for path in SCRIPTS.rglob("*.py") if path.is_file())
+require(bool(python_scripts), "no Python scripts discovered under scripts/")
+
+for path in python_scripts:
     try:
         source = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -49,4 +52,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("Repository-health preflight regression passed.")
+print(f"Repository-health preflight regression passed ({len(python_scripts)} Python scripts parsed).")
