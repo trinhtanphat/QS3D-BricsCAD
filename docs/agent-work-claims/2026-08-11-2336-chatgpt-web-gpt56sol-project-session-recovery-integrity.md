@@ -1,26 +1,27 @@
 # Work claim — ProjectSession recovery integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-11T23:36:00+07:00`
+- Completed: `2026-08-12`
 - Baseline main SHA: `09e3749a856b8d246f46f42e121289df5f3ecb8f`
 - Priority: production-stabilization / Core persistence recovery correctness
 
 ## Confirmed defect
 
-`QsdbProjectStore` already exposes the recovery-safe pair `LoadWithBackupFallback(...)` and `SavePreservingValidatedBackup(...)`, but `ProjectSession.Reload()` still calls plain `Load(...)` and `ProjectSession.Save()` still calls plain `Save(...)`.
+`QsdbProjectStore` already exposed the recovery-safe pair `LoadWithBackupFallback(...)` and `SavePreservingValidatedBackup(...)`, while the claimed baseline still had `ProjectSession.Reload()` on plain `Load(...)` and `ProjectSession.Save()` on plain `Save(...)`.
 
-That disconnect means the session abstraction does not participate in the store's backup-recovery contract. In particular, a session that should recover from a valid `.bak` cannot carry recovery provenance forward to the next save, and a plain `Save(...)` is allowed to rotate the current primary into `.bak`, which is unsafe when that primary is the corrupt file that caused recovery.
+That disconnect meant the session abstraction did not participate in the store's backup-recovery contract. In particular, a session that should recover from a valid `.bak` could not carry recovery provenance forward to the next save, and a plain `Save(...)` was allowed to rotate the current primary into `.bak`, which is unsafe when that primary is the corrupt file that caused recovery.
 
 ## Reserved scope
 
 - `src/QS3D.Core/Services/ProjectSession.cs`
 - focused Core smoke/regression files for ProjectSession recovery semantics
-- one focused auto-discovered source preflight if needed to lock the session/store recovery contract
-- `docs/PROJECT-SESSION-RECOVERY-INTEGRITY-PLAN-2026-08-11.md`
+- one focused auto-discovered source preflight to lock the session/store recovery contract
+- `docs/plans/2026-08-11-project-session-recovery-integrity.md`
 - this claim file
 
-`src/QS3D.Core/Persistence/QsdbProjectStore.cs` is read-only context for this lane unless a newly-proven defect in its existing recovery API makes a minimal change unavoidable. No speculative store redesign is reserved.
+`src/QS3D.Core/Persistence/QsdbProjectStore.cs` remained read-only context for this lane. No speculative store redesign was performed.
 
 ## Intended contract
 
@@ -45,22 +46,23 @@ That disconnect means the session abstraction does not participate in the store'
 - corrupt primary + corrupt backup fails closed and leaves the existing session object graph unchanged;
 - smoke registration cannot silently disappear.
 
+## Completion evidence
+
+- Source implementation landed concurrently on `main`: `0ad2b89d9f9e7ae9665912182fd040409e00ad37` (`fix(persistence): preserve ProjectSession backup recovery`). It introduces session recovery provenance, `LoadWithBackupFallback(...)`, recovery-safe save publication, post-success provenance clearing, and keeps staged reload binding / save rollback semantics.
+- Focused smoke expansion: `8969906068553899c75f440cf759465133ff7fa3` (`test(persistence): cover ProjectSession recovery lifecycle`). It covers both-invalid reload atomicity, corrupt-primary recovery, validated-backup preservation, recovery-mode clearing after successful save, primary-reload clearing, and failed recovered-save rollback/retry semantics.
+- Focused source gate: `94a54181a75c470a818ab83653cc760ea964a6bb` (`test(persistence): guard ProjectSession recovery contract`). It removes the stale plain-`Load(Path)` requirement and statically guards fallback reload, staged binding, recovery-safe publication, post-success provenance clearing, smoke registration, and the recovery regression cases.
+- `scripts/preflight-all.py` auto-discovers `scripts/preflight-*.py`, so the updated ProjectSession gate remains part of aggregate preflight discovery.
+- Final source/test/gate contents were re-read from moving `main` after the above commits and remained present after concurrent commits.
+- The updated Python gate was syntax-compiled successfully during remote review. The full repository smoke executable and aggregate preflight were not executed in this connector session because no repository checkout/runner was available, and no GitHub Actions workflow was dispatched.
+
 ## Coordination / exclusions
 
-- No overlap with active Bulk Edit, Build3D Touch/selection, native Table freshness/Touch, Quantity Rule/Settings, Grid annotation, Level runtime qualification, uninstall/release SemVer, UI, Direct Draw, rebar, Curtain, or documentation-sheet lanes.
+- No concurrent source implementation was overwritten; the existing `0ad2b89d...` implementation was reviewed and retained.
+- No overlap was introduced with active adapter/UI/release/geometry lanes.
 - No BricsCAD adapter/native geometry/UI changes.
-- No GitHub Actions dispatch.
 - No release publication.
-- No claim of licensed BricsCAD V25 runtime qualification; this is CAD-independent Core persistence work.
-
-## Validation plan
-
-- Re-fetch current `main` and exact target blobs immediately before implementation.
-- Add deterministic Core smoke coverage using repository-owned temporary files only.
-- Add/extend an auto-discovered preflight only when it protects the architectural recovery contract without duplicating smoke semantics.
-- Review the final diff against all concurrent commits since this claim baseline before updating `main`.
-- Close this claim only after the implementation commit is on `main`; record exact SHA and what was/was not executed.
+- No claim of licensed BricsCAD V25 runtime qualification; this lane is CAD-independent Core persistence work.
 
 ## Completion condition
 
-The session abstraction consumes the existing recovery-safe store contract end-to-end, regression coverage prevents a good `.bak` from being replaced by a corrupt primary after fallback, source changes are merged to `main`, and all remaining host/runtime-only evidence stays explicitly LOCAL_ONLY.
+Completed for source/regression ownership: the session abstraction consumes the existing recovery-safe store contract end-to-end, the known-good `.bak` lifecycle is guarded by focused smoke cases and source preflight, and the claim is released. Exact BricsCAD V25 runtime qualification remains outside this Core-only lane and is not claimed here.
