@@ -88,7 +88,11 @@ else:
     text = selection_panel.read_text(encoding="utf-8")
     for token in (
         "internal void SetInspectionReadOnly(IReadOnlyList<EntitySnapshot> snapshots, ProjectState? project)",
-        "if (project == null || _inspection.Count != 1)",
+        "if (project == null || _inspection.Count == 0)",
+        "TryResolveSemanticSelection(project, _inspection, out var selectedElements, out var selectionError)",
+        "if (selectedElements.Count > 1)",
+        "PresentMultiSelection(project, selectedElements)",
+        "var singleElement = selectedElements.Count == 1 ? selectedElements[0] : null",
         "_viewModel.SetSelectedElement(null);",
     ):
         if token not in text:

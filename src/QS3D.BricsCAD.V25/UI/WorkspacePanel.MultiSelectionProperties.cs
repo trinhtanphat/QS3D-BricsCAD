@@ -142,9 +142,10 @@ namespace QS3D.BricsCAD.V25.UI
                 FamilyList.IsEnabled = false;
                 _categoryFilter = inspection.HasMixedCategories ? (ElementCategory?)null : inspection.Categories.Single();
                 ApplyFamilyFilter();
-                var commonFamily = !inspection.Family.IsMixed && !string.IsNullOrWhiteSpace(inspection.Family.Value)
-                    ? project.FindFamily(inspection.Family.Value)
-                    : null;
+                var commonFamilyId = !inspection.Family.IsMixed
+                    ? (inspection.Family.Value ?? string.Empty).Trim()
+                    : string.Empty;
+                var commonFamily = commonFamilyId.Length > 0 ? project.FindFamily(commonFamilyId) : null;
                 FamilyList.SelectedItem = commonFamily;
                 if (commonFamily != null) FamilyList.ScrollIntoView(commonFamily);
             }

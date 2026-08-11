@@ -134,6 +134,9 @@ else:
         "MultiSelectionSourceDerivedKeys",
         "FamilyList.IsEnabled = false",
         "_viewModel.PropertyScopes.Clear()",
+        "var commonFamilyId = !inspection.Family.IsMixed",
+        "(inspection.Family.Value ?? string.Empty).Trim()",
+        "commonFamilyId.Length > 0 ? project.FindFamily(commonFamilyId) : null",
     ):
         if token not in text:
             errors.append("Workspace multi-selection inspector missing guard/presentation token: " + token)

@@ -18,11 +18,11 @@ if SERVICE.is_file():
         errors.append("BulkEditService must canonicalize and validate propertyName through the shared edit policy in both set and multiply paths")
     for token in (
         "element.Properties.TryGetValue(key, out var before)",
-        "element.Properties[key] = next;",
-        "element.MarkDirty(DirtyFlags(element, key));",
         "element.Properties.TryGetValue(key, out var text)",
         "update.Element.Properties[key] = update.Value;",
         "update.Element.MarkDirty(DirtyFlags(update.Element, key));",
+        'ProjectSemanticMutationExecutor.Execute(project, "bulk.set-property"',
+        'ProjectSemanticMutationExecutor.Execute(project, "bulk.multiply-numeric-property"',
     ):
         if token not in text:
             errors.append("BulkEditService.cs missing canonical key token: " + token)

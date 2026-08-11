@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ADAPTER = ROOT / "src" / "QS3D.BricsCAD.V25"
 PALETTE = ADAPTER / "PaletteCoordinator.cs"
 SELECTION = ADAPTER / "UI" / "WorkspacePanel.SelectionInspection.cs"
+RESOLVER = ADAPTER / "UI" / "WorkspacePanel.MultiSelectionProperties.cs"
 LEGACY = ADAPTER / "UI" / "WorkspacePanel.xaml.cs"
 INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
 errors = []
@@ -29,6 +30,7 @@ def region(text, start_token, end_token, label):
 
 palette = read(PALETTE)
 selection = read(SELECTION)
+resolver = read(RESOLVER)
 legacy = read(LEGACY)
 inbox = read(INBOX)
 
@@ -47,13 +49,19 @@ if ".SetInspection(snapshots)" in set_region:
 
 for token in (
     "internal void SetInspectionReadOnly(",
-    "if (project == null || _inspection.Count != 1)",
-    "SemanticReferenceHandles.GetSelectionAliases(element)",
+    "if (project == null || _inspection.Count == 0)",
+    "TryResolveSemanticSelection(project, _inspection, out var selectedElements, out var selectionError)",
+    "PresentMultiSelection(project, selectedElements)",
     "project.FindFamily(singleElement.FamilyId)",
     "_viewModel.SetSelectedElement(singleElement)",
 ):
     if token not in selection:
         errors.append("Workspace read-only selection partial missing token: " + token)
+if "SemanticReferenceHandles.GetSelectionAliases(element)" not in resolver:
+    errors.append("Workspace semantic selection resolver missing source/generated alias coverage")
+read_only_resolver = resolver[:resolver.find("private string ApplyMultiSelectionProperty")]
+if "ProjectContextCoordinator.GetOrCreate" in read_only_resolver or "ExistingProjectMutationContext" in read_only_resolver:
+    errors.append("Workspace read-only semantic selection resolution must not create/bind mutable project state")
 if "ProjectContextCoordinator.GetOrCreate" in selection or "ExistingProjectMutationContext" in selection:
     errors.append("Workspace read-only selection partial must not bind/create mutable project state")
 

@@ -35,7 +35,8 @@ def main():
     require(policy, 'EndsWith("Handle", StringComparison.OrdinalIgnoreCase)', "core ownership policy", failures)
     require(policy, 'EndsWith("Handles", StringComparison.OrdinalIgnoreCase)', "core ownership policy", failures)
 
-    require(guard, "CoreOwnershipPolicy.IsOwnerSlot(property.Key)", "native cleanup coverage guard", failures)
+    require(guard, "var ownerSlot = (property.Key ?? string.Empty).Trim();", "native cleanup coverage guard", failures)
+    require(guard, "CoreOwnershipPolicy.IsOwnerSlot(ownerSlot)", "native cleanup coverage guard", failures)
     require(guard, "CoreOwnershipPolicy.IsRebarOwnerSlot(ownerSlot)", "native cleanup coverage guard", failures)
     require(guard, '"GeneratedSolidHandle"', "native cleanup coverage guard", failures)
     require(guard, '"PhysicalOpeningCutSolidHandle"', "native cleanup coverage guard", failures)

@@ -11,20 +11,6 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private bool _quickDrawInteractionsAttached;
 
-        static WorkspacePanel()
-        {
-            EventManager.RegisterClassHandler(
-                typeof(WorkspacePanel),
-                FrameworkElement.LoadedEvent,
-                new RoutedEventHandler(OnWorkspaceQuickDrawLoaded));
-        }
-
-        private static void OnWorkspaceQuickDrawLoaded(object sender, RoutedEventArgs e)
-        {
-            if (sender is WorkspacePanel panel)
-                panel.AttachQuickDrawInteractions();
-        }
-
         private void AttachQuickDrawInteractions()
         {
             if (_quickDrawInteractionsAttached) return;

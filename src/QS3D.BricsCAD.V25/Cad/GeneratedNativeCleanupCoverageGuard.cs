@@ -27,8 +27,8 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 foreach (var property in element.Properties)
                 {
-                    if (!CoreOwnershipPolicy.IsOwnerSlot(property.Key) || string.IsNullOrWhiteSpace(property.Value)) continue;
                     var ownerSlot = (property.Key ?? string.Empty).Trim();
+                    if (ownerSlot.Length == 0 || !CoreOwnershipPolicy.IsOwnerSlot(ownerSlot) || string.IsNullOrWhiteSpace(property.Value)) continue;
                     if (IsSupportedOwnerSlot(ownerSlot)) continue;
 
                     throw new InvalidOperationException(

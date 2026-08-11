@@ -15,9 +15,6 @@ for path in (SOURCE, BASE, DOC):
 if SOURCE.is_file():
     text = SOURCE.read_text(encoding="utf-8")
     for token in (
-        "static WorkspacePanel()",
-        "EventManager.RegisterClassHandler(",
-        "FrameworkElement.LoadedEvent",
         "if (_quickDrawInteractionsAttached) return;",
         "PreviewKeyDown += OnQuickDrawPreviewKeyDown;",
         "FamilyList.MouseDoubleClick += OnFamilyQuickDrawDoubleClick;",
@@ -59,12 +56,18 @@ if SOURCE.is_file():
 if BASE.is_file():
     text = BASE.read_text(encoding="utf-8")
     for token in (
+        "AttachQuickDrawInteractions();",
         "private static T? FindContainer<T>(ItemsControl owner, DependencyObject? source)",
         "private MenuItem CreateMenuItem(string header, RoutedEventHandler handler)",
         "private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e)",
     ):
         if token not in text:
             errors.append("Workspace active-family partial relies on missing canonical helper: " + token)
+
+    partials = list((ROOT / "src/QS3D.BricsCAD.V25/UI").glob("WorkspacePanel*.cs"))
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in partials)
+    if combined.count("public WorkspacePanel()") != 1 or "static WorkspacePanel()" in combined:
+        errors.append("Workspace partials must keep exactly one instance constructor and no competing static constructors")
 
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")

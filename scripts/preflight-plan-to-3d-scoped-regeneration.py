@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/PlanTo3DCommands.cs"
+PREVIEW = ROOT / "src/QS3D.BricsCAD.V25/Services/DirectDrawProjectPreviewContext.cs"
 ENGINE = ROOT / "src/QS3D.Core/Services/RegenerationEngine.cs"
 errors = []
 
@@ -11,9 +12,12 @@ if not SOURCE.is_file():
     errors.append("missing PlanTo3DCommands.cs")
 if not ENGINE.is_file():
     errors.append("missing RegenerationEngine.cs")
+if not PREVIEW.is_file():
+    errors.append("missing DirectDrawProjectPreviewContext.cs")
 
 if not errors:
     source = SOURCE.read_text(encoding="utf-8")
+    preview = PREVIEW.read_text(encoding="utf-8")
     engine = ENGINE.read_text(encoding="utf-8")
     convert_start = source.find("private static void ConvertPlanWalls")
     acquire_start = source.find("private static IReadOnlyList<ObjectId>? AcquireSelection", convert_start + 1)
@@ -27,13 +31,21 @@ if not errors:
             "WallSolidBuilder.BuildSelectedLineWalls",
             "PolylineWallSolidBuilder.BuildSelected",
             "RequireSameSources(sources, refreshedSources)",
-            "CadUnitService.GetLengthUnit(document) != selectionUnit",
+            "projectPreview.ResolveForMutation(document, operation)",
         )
         for token in required:
             if token not in convert:
                 errors.append("PlanTo3D scoped regeneration/freshness contract missing: " + token)
         if "regenerator.RegenerateDirty(project)" in convert:
             errors.append("QS3DCONVERT2D must not regenerate unrelated dirty project elements")
+
+        for token in (
+            "CadUnitService.GetLengthUnit(document) != ExpectedLengthUnit",
+            "document.Editor.CurrentUserCoordinateSystem.Equals(ExpectedUcs)",
+            "project.ChangeVersion != ExpectedChangeVersion.Value",
+        ):
+            if token not in preview:
+                errors.append("shared PlanTo3D preview context missing unit/UCS/project freshness token: " + token)
 
         mark_at = convert.find("element.MarkDirty(ElementDirtyFlags.Properties)")
         regen_at = convert.find("regenerator.RegenerateDirtySubset(project, new[] { element.Id })")

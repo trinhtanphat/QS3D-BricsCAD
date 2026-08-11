@@ -29,6 +29,8 @@ namespace QS3D.BricsCAD.V25.UI
             InitializeComponent();
             BindViewModel();
             ConfigureWorkspaceInteractions();
+            AttachQuickDrawInteractions();
+            AttachLayoutPersistence();
             Loaded += (_, __) => RefreshProject();
         }
 

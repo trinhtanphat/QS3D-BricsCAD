@@ -20,7 +20,7 @@ else:
     resolve = body.find("var selected = project.Elements")
     snapshot = body.find("ProjectStateSnapshot.Capture(project)")
     mutate = body.find("new HostLinkService().LinkOpening(project, opening.Id, wall.Id)")
-    regenerate = body.find("RegenerateProject(project)")
+    regenerate = body.find("RegenerateDirtySubset(project, regenerationTargets)")
     restore = body.find("rollback.Restore(project)")
 
     if "ProjectContextCoordinator.GetOrCreate" in body:
@@ -29,6 +29,8 @@ else:
         errors.append("QS3DLINKHOST must read/validate selection before canonical project binding and semantic resolution")
     if min(snapshot, mutate, regenerate, restore) < 0 or not snapshot < mutate < regenerate:
         errors.append("QS3DLINKHOST must retain snapshot -> host mutation -> regeneration ordering")
+    if "RegenerateProject(project)" in body:
+        errors.append("QS3DLINKHOST must not regenerate unrelated dirty semantic elements")
     if restore < 0:
         errors.append("QS3DLINKHOST must retain semantic rollback on failure")
 

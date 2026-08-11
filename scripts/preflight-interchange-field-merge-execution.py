@@ -59,7 +59,8 @@ if not errors:
 
     adapter_required = (
         "ExistingProjectMutationContext.Require",
-        "ProjectStateSnapshot.Capture(project)",
+        "ProjectStateSnapshot.Capture(lockedProject)",
+        "ReferenceEquals(lockedProject, project)",
         "reviewedPlan.CorePlan.AffectedTargetElementIds",
         "GeneratedDependentGeometryInvalidator.Prepare",
         "ProjectInterchangeFieldMergeImporter.Import",

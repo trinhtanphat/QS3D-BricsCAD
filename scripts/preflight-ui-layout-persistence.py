@@ -130,9 +130,6 @@ if palette.is_file():
 if splitter.is_file():
     text = splitter.read_text(encoding="utf-8")
     for needle in (
-        "static WorkspacePanel()",
-        "EventManager.RegisterClassHandler",
-        "FrameworkElement.LoadedEvent",
         "AttachLayoutPersistence",
         "Grid.GetRow(x) == 1",
         "Grid.GetColumn(x) == 2",
@@ -147,6 +144,11 @@ if splitter.is_file():
         if needle not in text: errors.append("Workspace splitter persistence missing contract: " + needle)
     if "SizeChanged" in text or "LayoutUpdated" in text:
         errors.append("Workspace splitter persistence must save on DragCompleted, not high-frequency layout/size events")
+
+    base = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
+    base_text = base.read_text(encoding="utf-8") if base.is_file() else ""
+    if "AttachLayoutPersistence();" not in base_text:
+        errors.append("Workspace canonical constructor must attach splitter persistence exactly once after InitializeComponent")
 
 if runtime.is_file():
     text = runtime.read_text(encoding="utf-8")

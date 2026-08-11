@@ -13,7 +13,7 @@ else:
     required = (
         "public long? ExpectedChangeVersion { get; }",
         "ExpectedChangeVersion = expectedChangeVersion;",
-        "project.ChangeVersion);",
+        "project.ProjectId.Trim(), project.ChangeVersion, expectedLengthUnit, expectedUcs)",
         "project.ChangeVersion != ExpectedChangeVersion.Value",
         "QS3D project đã được chỉnh sửa trong lúc xác nhận Direct Draw.",
     )
