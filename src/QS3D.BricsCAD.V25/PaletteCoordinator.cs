@@ -82,6 +82,17 @@ namespace QS3D.BricsCAD.V25
         public static void RefreshCad() { EnsureCreated(); _rightPanel?.Refresh(); }
         public static void RefreshAll() { RefreshProject(); RefreshCad(); }
 
+        public static void ResetForNoDocument()
+        {
+            if (_workspace == null && _right == null) return;
+            var workspaceVisible = IsWorkspaceVisible;
+            var rightVisible = IsRightPanelVisible;
+            Dispose();
+            EnsureCreated();
+            if (_workspace != null) _workspace.Visible = workspaceVisible;
+            if (_right != null) _right.Visible = rightVisible;
+        }
+
         public static void Dispose()
         {
             PersistPaletteLayout();
