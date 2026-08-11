@@ -1,6 +1,6 @@
 # QS3D Premium UI/UX Progress
 
-**Updated:** 2026-08-10 (UTC+7)  
+**Updated:** 2026-08-11 (UTC+7)  
 **Scope:** BricsCAD V25 hosted WPF palettes and modeless windows.
 
 ## Current direction
@@ -31,6 +31,8 @@ The root contrast regression from the reference screenshot is guarded in `Theme.
 - Selected-object inspector keeps `Focus`, isolate/unisolate, locate and top-view workflows while adding a clear `CAD + SEMANTIC` marker.
 - Persistent bottom navigation remains tied to the native BricsCAD viewport.
 - Layout structure remains compatible with `WorkspacePanel.LayoutPersistence.cs`: root row 1 still exposes the 5-column main grid; Family remains column 2 and selected/room remains column 4 with split rows.
+- Property editing now commits on Enter as well as the existing focus-loss path, with a static regression guard (`27639b3bed1c46eb705d5bf0c222d74faf554335`, `ded166bdf77d0cf5d8033d927dbc08f697e30c0a`).
+- Palette minimum sizes are centralized and enforced from layout policy, avoiding drift between persisted layout and host palette constraints (`560f17d84b8b8120b9fb45a90b95e4b98cae6eed`, `03b263e0f1f6c30cd9e1cc5a1d0cd31decf1dd5d`, `3f49426e44a82feb220e4245811760d0cddf22df`).
 
 ### P2 — Drawing / Xref / Layer palette
 
@@ -41,6 +43,9 @@ The root contrast regression from the reference screenshot is guarded in `Theme.
 - Native layer color and lock state remain live (`ColorBrush`, `IsLocked`); no fake accent swatch was reintroduced.
 - Long layer names remain ellipsized with tooltip.
 - Status footer has a compact persistent state indicator.
+- Layer filtering now operates on the cached view instead of rebuilding layer rows for every search update, with regression coverage preventing allocation-heavy refresh behavior (`676a01716ba7b02cd86bc63eacee6e1f707ff7f7`, `d4e66554f140cbc3749b26a8304404fdbb14a713`).
+- Search feedback reports filtered and total layer counts so the result scope is visible without additional dialogs (`a3d60693f211f7f469e35ba0769316190e81e70e`, `e423bdc48c53cfc3cc2fa64b0a8724862d018d92`, `edc5767397b5aa4ed086e270c2b2ce277d6710d1`).
+- Empty-document and vanished-Xref refresh paths clear stale visual selection/state rather than leaving a misleading prior-DWG context.
 
 ### P3 — Modeless-window consistency, source pass complete
 
@@ -79,6 +84,14 @@ Legacy hardcoded `#17191C` modeless-window backgrounds are removed from the prem
 - Long engineering tables stay DataGrid-based and virtualization remains owned by the shared theme.
 - No blur, acrylic, animated gradients, large shadow effects or continuous animation were introduced.
 
+## 2026-08-11 continuation audit
+
+The original screenshot defect and the broad source-side premium pass are no longer open remote work. The exact heading from the report is still rendered through `Style="{StaticResource PanelTitle}"` in `WorkspacePanel.xaml`, while `Theme.xaml` explicitly sets `PanelTitle.Foreground` to `TextBrush`; the source contract therefore remains fail-safe against the host/system black foreground leak.
+
+Recent UI work on `main` is primarily productivity, correctness and performance polish rather than a visual redesign: Enter-to-commit property editing, centralized palette minimums, cached layer filtering, filtered/total result counts, refresh shortcuts and stale selection cleanup. These changes are consistent with the original premium/professional/luxury design direction because they improve density, predictability and responsiveness without adding decorative effects.
+
+No additional remote-only cosmetic rewrite is required merely to satisfy the original contrast request. Remaining confidence work is real-host qualification and must not be represented as complete from source review alone.
+
 ## Regression guard
 
 `scripts/preflight-ui-premium-layout.py` is auto-discovered by `scripts/preflight-all.py` and now validates the full V25 modeless-window premium source contract:
@@ -105,6 +118,8 @@ The design-system source pass is broad, but production visual qualification is n
 6. Disabled/read-only/selected/hover/warning/error states.
 7. Representative private DWG flows for Family/Instance editing, Direct Draw, selection/focus/isolate, Xref/layer, BQ/Schedule and native geometry review.
 8. Before/after screenshots from the exact release SHA.
+
+These runtime items are already represented by the canonical local queue, primarily `LOCAL-010`, with related modeless/state coverage in `LOCAL-011` and `LOCAL-012`. They are `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until a local agent has licensed BricsCAD V25 and the required real-host environment.
 
 Do not change CAD transaction semantics merely to make a screen look more polished. UI synchronization must remain isolated from valid post-commit CAD work.
 
