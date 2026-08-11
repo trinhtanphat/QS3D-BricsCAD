@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             GeneratedHandleChangeRejectsReviewedAuthorization();
             AmbiguousGeneratedOwnershipBlocksAuthorization();
             DestructiveCleanupRequiresTargetDrawingFingerprint();
+            CleanupReportingUsesRequiredSemantics();
             SourceOnlyIdentityBlocksExecution();
             FamilyReassignmentPreservesTargetPropertiesWhenRequested();
         }
@@ -137,6 +138,31 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => plan.CreateAuthorization());
             Equal("TARGET", target.FindElement("E-1")!.Properties["Mark"]);
             Equal("AA11", target.FindElement("E-1")!.Properties["GeneratedSolidHandle"]);
+        }
+
+        private static void CleanupReportingUsesRequiredSemantics()
+        {
+            const string legacyCleanedKey = "Interchange.LastImport.TargetGeneratedHandlesCleaned";
+            var target = BuildTarget();
+            var element = target.FindElement("E-1")!;
+            element.Properties["GeneratedSolidHandle"] = "AA11";
+            target.Metadata[legacyCleanedKey] = "legacy-stale";
+            var source = BuildSource("SOURCE");
+            var policy = MixedPolicy();
+            var json = ProjectInterchangeJsonExporter.Build(source);
+            var plan = ProjectInterchangeFieldMergeImporter.Plan(target, json, policy);
+            True(plan.RequiresNativeCleanup);
+            Equal(1, plan.TargetGeneratedHandlesToClean);
+
+            var result = ProjectInterchangeFieldMergeImporter.Import(target, json, policy, plan.CreateAuthorization());
+
+            Equal(1, result.NativeCleanupHandlesRequired);
+#pragma warning disable CS0618
+            Equal(1, result.TargetGeneratedHandlesCleaned);
+#pragma warning restore CS0618
+            Equal("1", target.Metadata[ProjectInterchangeFieldMergeImporter.LastNativeCleanupHandlesRequiredKey]);
+            True(!target.Metadata.ContainsKey(legacyCleanedKey));
+            True(!element.Properties.ContainsKey("GeneratedSolidHandle"));
         }
 
         private static void SourceOnlyIdentityBlocksExecution()
