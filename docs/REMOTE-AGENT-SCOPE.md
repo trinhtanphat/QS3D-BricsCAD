@@ -14,6 +14,12 @@ Remote agents must not repeatedly re-audit, re-run, re-open or re-report these g
 
 The purpose of this rule is to stop remote reviews from spending time rediscovering the same environment boundary and to keep runtime truth tied to the machine that can actually prove it.
 
+## Current remote completion snapshot
+
+Before creating another broad remote backlog, read `docs/REMOTE-IMPLEMENTATION-COMPLETION-2026-08-11.md`. It is the newest repository-level classification of the current source-safe implementation wave and explains which remaining gaps are `LOCAL_ONLY`, `POLICY_REQUIRED`, `ENGINEERING_REQUIRED` or `FORMAT_SCOPE_REQUIRED`.
+
+That snapshot is not a frozen source of truth: always fetch current `main` first, reuse newer implementations that landed after its baseline, and update issue/local handoff status when newer source closes or narrows a documented gap. Do not use the completion snapshot as permission to stop fixing a concrete reproducible source defect; use it to avoid inventing work where the remaining correctness boundary genuinely depends on local runtime, owner policy, engineering approval or external format scope.
+
 ## LOCAL_ONLY — remote agents must skip
 
 Unless the repository owner explicitly asks a remote agent to inspect the source contract around one of these areas, remote agents must skip execution/qualification of:
@@ -62,12 +68,12 @@ Remote source review may move work to `REMOTE_DONE`; it must never manufacture `
 For every future remote broad audit / `continue all` pass:
 
 1. fetch latest `main`;
-2. read this file and `docs/LOCAL-AGENT-INBOX.md` before building a backlog;
+2. read this file, `docs/REMOTE-IMPLEMENTATION-COMPLETION-2026-08-11.md` and `docs/LOCAL-AGENT-INBOX.md` before building a backlog;
 3. filter LOCAL_ONLY items out of the remote backlog;
 4. do not search the repository merely to determine whether a previously parked V25/private-DWG/signing runtime test has now passed;
 5. do not repeat LOCAL_ONLY gaps in every remote completion report;
 6. update the inbox only when a new source change materially changes or introduces the required local scenario;
-7. continue implementing all remaining source-safe gaps.
+7. continue implementing all remaining source-safe gaps demonstrated by current source/issues rather than generating speculative parallel architecture.
 
 A remote agent may mention once that local-only gates are parked, but should not spend the next audit rechecking them.
 
