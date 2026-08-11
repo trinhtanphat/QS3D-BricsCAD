@@ -146,7 +146,9 @@ namespace QS3D.Core.Licensing
                 throw new InvalidDataException("Invalid QS3D license root.");
             if (!string.Equals(Required(root, "schema"), "1", StringComparison.Ordinal)) throw new InvalidDataException("Unsupported QS3D license schema.");
 
-            var valid = root.Element("valid") ?? throw new InvalidDataException("License is missing validity data.");
+            var valid = RequiredSingleElement(root, "valid");
+            var features = OptionalSingleElement(root, "features");
+            var signatureElement = RequiredSingleElement(root, "signature");
             var license = new LicenseDocument
             {
                 LicenseId = Required(root, "id"),
@@ -156,9 +158,8 @@ namespace QS3D.Core.Licensing
                 ExpiresUtc = ParseUtc(Required(valid, "expiresUtc"), "expiresUtc"),
                 Nonce = Required(root, "nonce")
             };
-            foreach (var feature in root.Element("features")?.Elements("feature") ?? Enumerable.Empty<XElement>())
+            foreach (var feature in features?.Elements("feature") ?? Enumerable.Empty<XElement>())
                 license.Features.Add(Required(feature, "name"));
-            var signatureElement = root.Element("signature") ?? throw new InvalidDataException("License is missing signature.");
             if (!string.Equals(Required(signatureElement, "algorithm"), "RSA-SHA256", StringComparison.Ordinal))
                 throw new InvalidDataException("Unsupported license signature algorithm.");
             try { license.Signature = Convert.FromBase64String((signatureElement.Value ?? string.Empty).Trim()); }
@@ -166,6 +167,22 @@ namespace QS3D.Core.Licensing
             if (license.Signature.Length > 1024) throw new InvalidDataException("License signature is too large.");
             license.Validate();
             return license;
+        }
+
+        private static XElement RequiredSingleElement(XElement parent, string name)
+        {
+            var matches = parent.Elements(name).Take(2).ToArray();
+            if (matches.Length != 1)
+                throw new InvalidDataException("License must contain exactly one <" + name + "> element.");
+            return matches[0];
+        }
+
+        private static XElement? OptionalSingleElement(XElement parent, string name)
+        {
+            var matches = parent.Elements(name).Take(2).ToArray();
+            if (matches.Length > 1)
+                throw new InvalidDataException("License must contain at most one <" + name + "> element.");
+            return matches.Length == 0 ? null : matches[0];
         }
 
         private static string Required(XElement element, string attribute)
