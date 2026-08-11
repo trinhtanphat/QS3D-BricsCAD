@@ -2,6 +2,16 @@
 
 This is the newest short canonical source delta for agents continuing from `main`. Always fetch current `main` first; current source wins over this text if concurrent commits move ahead.
 
+## Continue-all delta — 2026-08-11 06:48 UTC+7
+
+Interchange Import As New moved substantially after the earlier handoff. Current `main` now keeps BLOCKED remap plans inspectable, reports blocked plans as normal non-mutating UX, aligns Family/Element opaque-reference suffix policy, scopes Family display-name remaps by category, adds behavioral regression coverage, and preserves both the original import failure and a rollback failure if both occur. Reuse these current implementations; do not re-land stale PR/branch variants.
+
+During integration review, stale branch work was deliberately not merged: PR #165 (drawing-unit/Proxy safety) was closed because its capability already landed through PR #178 / `27bb30b...`; PR #187 was closed because concurrent `main` independently landed its blocked-remap Plan/UX fixes and regression coverage.
+
+One source-gate drift remained after the HostWall rewrite refactor: `ProjectInterchangeRemapAppendImporter` now maps the normalized local `sourceHost`, while `scripts/preflight-interchange-remap-append.py` still searched for the older `property.Value.Trim()` call. The gate was aligned to `plan.Remap.MapId(InterchangeRemapIdentityKind.Element, sourceHost)` so aggregate preflight does not report a false failure against the current implementation.
+
+No GitHub Actions were dispatched. Exact BricsCAD V25 runtime/NETLOAD/private-DWG behavior remains under the existing LOCAL_ONLY qualification boundary.
+
 ## Product/source wave added in this continue-all batch
 
 The owner requested a detailed product-logic review plus implementation of meaningful remote-safe features. The source wave deliberately focused on BLT-style review-before-mutation, semantic transaction safety and supportability rather than adding cosmetic features or pretending LOCAL_ONLY native gaps are complete.
