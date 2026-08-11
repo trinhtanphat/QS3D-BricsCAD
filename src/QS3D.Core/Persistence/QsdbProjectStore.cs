@@ -153,7 +153,16 @@ namespace QS3D.Core.Persistence
                     ReadStringMap(item.Element("properties"), "p", element.Properties);
                     var quantities = item.Element("quantities");
                     if (quantities != null)
-                        foreach (var q in quantities.Elements("q")) element.SetQuantity(Required(q, "name"), Double(q.Attribute("value")?.Value));
+                    {
+                        foreach (var q in quantities.Elements("q"))
+                        {
+                            var quantityName = Required(q, "name");
+                            var quantityValue = Double(q.Attribute("value")?.Value);
+                            if (element.Quantities.ContainsKey(quantityName))
+                                throw new InvalidDataException("Duplicate QSDB element quantity name: " + element.Id + "/" + quantityName);
+                            element.SetQuantity(quantityName, quantityValue);
+                        }
+                    }
                     element.RestorePersistenceState(Dirty(item.Attribute("dirty")?.Value), Date(item.Attribute("updatedUtc")?.Value));
                     project.Elements.Add(element);
                 }
