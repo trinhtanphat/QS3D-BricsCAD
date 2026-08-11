@@ -185,8 +185,23 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (_refreshingDrawings) return;
             var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
             var item = DrawingList.SelectedItem as DrawingItemViewModel;
-            if (doc == null || item == null || !item.IsXref) return;
+            if (item == null || !item.IsXref)
+            {
+                try
+                {
+                    doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
+                    _viewModel.Status = item == null
+                        ? "Đã bỏ chọn bản vẽ/Xref."
+                        : "Bản vẽ chính " + item.Name + " • đã bỏ chọn Xref trong CAD.";
+                }
+                catch (Exception ex)
+                {
+                    _viewModel.Status = "Không thể bỏ chọn Xref trong CAD: " + ex.Message;
+                }
+                return;
+            }
             try
             {
                 var count = XrefService.SelectInstances(doc, item.Name);
