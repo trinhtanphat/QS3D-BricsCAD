@@ -53,7 +53,7 @@ The workflow deliberately has no automatic/event-driven trigger. Its release job
 11. when both `run_runtime=true` and `sign_package=true`, runs the real V25 NETLOAD/runtime gate against **`dist/QS3D-BricsCAD-V25/QS3D.BricsCAD.V25.dll`**, the exact signed plugin payload staged into the published package;
 12. for signed releases, creates the schema-v2 `QS3D-BricsCAD-V25.update.json` manifest after the signed-runtime gate succeeds;
 13. creates the release ZIP checksum and uploads package/runtime evidence artifacts;
-14. creates a draft GitHub Release, uploads/verifies expected assets, then publishes the draft only after all required preceding gates succeed.
+14. creates a draft GitHub Release, uploads each expected release asset, requires exactly one exact-name draft asset with the same byte length as the local artifact, re-downloads it through the GitHub asset API and requires matching SHA-256, then publishes the draft only after every required asset passes those byte-integrity checks and all earlier gates succeed.
 
 A stable release is forced to `run_runtime=true` and `sign_package=true`. Therefore stable runtime evidence must refer to the finalized signed plugin payload, not only the pre-sign build output. Authenticode signing changes PE bytes even when managed code is unchanged, so the signed staged DLL is the release binary that matters for publication evidence.
 
@@ -110,6 +110,7 @@ Production certificate/key custody, timestamping and publication infrastructure 
 - Never dispatch a release merely because source landed; owner approval is a separate action.
 - Never mark a signed release runtime-verified unless the V25 runtime step actually completed successfully against the signed staged plugin payload that is packaged for publication.
 - Never silently skip a failed preflight/build/runtime step to force a release.
+- Never publish a draft whose expected GitHub assets have only been name-checked; require exact-name uniqueness, remote/local size equality and SHA-256 equality after re-downloading each asset from GitHub.
 - Never replace an existing release tag from this workflow.
 - Keep `confirm_release=RELEASE` as an explicit publication gate.
 - Keep `scripts/preflight-ci-manual-only.py` in the aggregate gate.
