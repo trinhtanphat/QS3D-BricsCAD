@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             PresentationStateDoesNotInvalidateSemanticVersion();
             RepeatedSaveIsIdempotent();
             CorruptStateFailsClosed();
+            UnsupportedSchemaShapeFailsClosed();
             StaleSelectionFailsClosed();
             ClearRemovesPersistedState();
         }
@@ -93,6 +94,21 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidDataException>(() => store.Load(project));
         }
 
+        private static void UnsupportedSchemaShapeFailsClosed()
+        {
+            var project = BuildProject();
+            var store = new ProjectBrowserWorkspaceStateStore();
+            var valid = store.Serialize(SchemaState());
+
+            Throws<InvalidDataException>(() => store.Deserialize(valid.Replace(" version=\"1\"", " version=\"1\" future=\"x\"")));
+            Throws<InvalidDataException>(() => store.Deserialize(valid.Replace(" query=\"beam\"", string.Empty)));
+            Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<FloorIds>", "<FloorIds future=\"x\">")));
+            Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<ZoneIds>", "<ZoneIds>future")));
+            Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<Id>F-02</Id>", "<Id future=\"x\">F-02</Id>")));
+            Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<Id>Z-A</Id>", "<Id><Future>Z-A</Future></Id>")));
+            Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<SelectedElementIds>", "<SelectedElementIds><!--future-->")));
+        }
+
         private static void StaleSelectionFailsClosed()
         {
             var project = BuildProject();
@@ -127,6 +143,20 @@ namespace QS3D.Core.SmokeTests
                 expandedPaths: new[] { rootPath, floorPath },
                 selectedElementIds: new[] { "B-001" },
                 primaryElementId: "B-001");
+        }
+
+        private static ProjectBrowserWorkspaceState SchemaState()
+        {
+            return new ProjectBrowserWorkspaceState(
+                ProjectBrowserGrouping.FloorThenCategory,
+                "beam",
+                false,
+                new[] { ElementCategory.Beam },
+                new[] { "F-02" },
+                new[] { "Z-A" },
+                Array.Empty<string>(),
+                new[] { "B-001" },
+                "B-001");
         }
 
         private static ProjectState BuildProject()
