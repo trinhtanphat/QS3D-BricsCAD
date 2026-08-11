@@ -111,14 +111,14 @@
                     </ListView.ContextMenu>
                     <ListView.View>
                         <GridView>
-                            <GridViewColumn Header="Tên" Width="112"
+                            <GridViewColumn Header="Tên" Width="105"
                                             DisplayMemberBinding="{Binding Name}"/>
-                            <GridViewColumn Header="Khóa" Width="58"
+                            <GridViewColumn Header="Khóa" Width="52"
                                             DisplayMemberBinding="{Binding LockState}"/>
-                            <GridViewColumn Header="SL" Width="30"
+                            <GridViewColumn Header="SL" Width="28"
                                             DisplayMemberBinding="{Binding InstanceText}"/>
-                            <GridViewColumn Header="Loại" Width="48"
-                                            DisplayMemberBinding="{Binding Kind}"/>
+                            <GridViewColumn Header="Tỉ lệ" Width="66"
+                                            DisplayMemberBinding="{Binding ScaleText}"/>
                         </GridView>
                     </ListView.View>
                 </ListView>
