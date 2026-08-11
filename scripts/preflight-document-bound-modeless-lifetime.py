@@ -22,6 +22,9 @@ files = {
     "families": ADAPTER / "FamilyManagerCommands.cs",
     "levels": ADAPTER / "FloorLevelCommands.cs",
     "zones": ADAPTER / "ZoneManagerCommands.cs",
+    "family_window": UI / "FamilyManagerWindow.xaml.cs",
+    "level_window": UI / "FloorLevelWindow.xaml.cs",
+    "zone_window": UI / "ZoneManagerWindow.xaml.cs",
     "materials": ADAPTER / "MaterialCatalogCommands.cs",
     "project_tools": ADAPTER / "ProjectToolsCommands.cs",
     "schedule_hub": ADAPTER / "ScheduleHubCommands.cs",
@@ -81,11 +84,22 @@ if not errors:
         "schedule_hub": "new ScheduleHubWindow(document)",
         "curtain_hub": "new CurtainWallWindow(document)",
     }
+    self_attaching_managers = {
+        "families": "family_window",
+        "levels": "level_window",
+        "zones": "zone_window",
+    }
     for key, constructor in manager_contracts.items():
         source = text[key]
         if constructor not in source:
             errors.append(key + " launcher lost its explicit source Document constructor")
-        if "DocumentBoundWindowLifetime.Attach(window, document);" not in source:
+        if key in self_attaching_managers:
+            window_source = text[self_attaching_managers[key]]
+            if "DocumentBoundWindowLifetime.Attach(this, _document);" not in window_source:
+                errors.append(key + " modeless window must attach its own document-bound lifetime")
+            if "DocumentBoundWindowLifetime.Attach(window, document);" in source:
+                errors.append(key + " launcher must not duplicate the lifetime already owned by its window")
+        elif "DocumentBoundWindowLifetime.Attach(window, document);" not in source:
             errors.append(key + " launcher must attach its document-bound modeless window lifetime")
         if "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
             errors.append(key + " launcher must show the same registered window instance")
