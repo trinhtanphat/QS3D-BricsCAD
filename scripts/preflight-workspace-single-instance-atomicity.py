@@ -18,10 +18,13 @@ else:
         errors.append("ApplyInstanceProperty body was not found")
     else:
         executor = body.find("ProjectSemanticMutationExecutor.Execute(")
-        operation = body.find('"Workspace single-instance property edit"')
-        set_property = body.find("element.SetProperty(key, next);")
-        touch = body.find("project.Touch();")
-        overflow = body.find("ex is OverflowException")
+        operation = body.find('"Workspace single-instance property edit"', executor)
+        set_token = "element.SetProperty(key, next);"
+        touch_token = "project.Touch();"
+        set_property = body.find(set_token, executor)
+        touch = body.find(touch_token, set_property)
+        executor_close = body.find("});", touch)
+        overflow = body.find("ex is OverflowException", executor_close)
         return_current_after_catch = body.find("return current;", overflow)
 
         for position, label in (
@@ -29,19 +32,22 @@ else:
             (operation, "stable Workspace single-instance operation name"),
             (set_property, "instance SetProperty mutation"),
             (touch, "project Touch mutation"),
+            (executor_close, "executor closure after Touch"),
             (overflow, "OverflowException handling"),
         ):
             if position < 0:
                 errors.append("ApplyInstanceProperty missing " + label)
 
-        if min(executor, operation, set_property, touch) >= 0 and not (executor < operation < set_property < touch):
-            errors.append("ApplyInstanceProperty must enter ProjectSemanticMutationExecutor before SetProperty and Touch")
-        if overflow >= 0 and return_current_after_catch < overflow:
-            errors.append("ApplyInstanceProperty must return the previous value after a rollback-triggering overflow")
-
-        direct_sequence = "element.SetProperty(key, next);\n            project.Touch();"
-        if direct_sequence in body:
-            errors.append("ApplyInstanceProperty regressed to direct SetProperty -> Touch outside an explicit rollback boundary")
+        if body.count(set_token) != 1:
+            errors.append("ApplyInstanceProperty must contain exactly one instance SetProperty mutation")
+        if body.count(touch_token) != 1:
+            errors.append("ApplyInstanceProperty must contain exactly one project Touch mutation")
+        if min(executor, operation, set_property, touch, executor_close) >= 0 and not (
+            executor < operation < set_property < touch < executor_close
+        ):
+            errors.append("ApplyInstanceProperty must keep SetProperty and Touch inside the ProjectSemanticMutationExecutor closure")
+        if overflow >= 0 and not (executor_close < overflow < return_current_after_catch):
+            errors.append("ApplyInstanceProperty must catch Touch overflow after the executor and return the previous value")
 
     reset_start = text.find("private void ResetInstanceProperty(")
     reset_end = text.find("private bool TryGetCurrentProjectForMutation(", reset_start)
@@ -56,4 +62,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace single-instance edits and resets share the rollback-protected semantic mutation boundary; Touch overflow cannot leave partial instance state.")
+print("PASS: Workspace single-instance edits and resets keep SetProperty + Touch inside the rollback-protected semantic mutation boundary; Touch overflow cannot leave partial instance state.")
