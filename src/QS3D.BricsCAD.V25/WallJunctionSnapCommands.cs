@@ -135,7 +135,7 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Preview không còn khớp selection/geometry hiện tại. Chạy QS3DWALLSNAPPREVIEW lại trước khi apply.");
                 if (project.Metadata.TryGetValue(PreviewCountKey, out var countText) && int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var previewCount) && previewCount != plan.Edits.Count)
                     throw new InvalidOperationException("Số endpoint cần chỉnh đã thay đổi từ preview. Chạy preview lại.");
-                RequireTouchHeadroom(project, plan.Edits.Count == 0 ? 1 : 2, "Wall Snap Apply");
+                RequireTouchHeadroom(project, 1, "Wall Snap Apply");
                 if (plan.Edits.Count == 0)
                 {
                     if (ClearPreview(project)) project.Touch();
@@ -191,7 +191,6 @@ namespace QS3D.BricsCAD.V25
                         }
                         var owners = touchedOwners.Count;
                         ClearPreview(project);
-                        project.Touch();
                         AuditTrail.ForProject(project).Record("wall.junction.snap.apply", string.Empty,
                             plan.Edits.Count.ToString(CultureInfo.InvariantCulture) + " endpoint edit(s) • owners=" + owners.ToString(CultureInfo.InvariantCulture) + " • invalidated3d=" + invalidatedElements.ToString(CultureInfo.InvariantCulture) + " • sourceLengthSynced=true");
 
