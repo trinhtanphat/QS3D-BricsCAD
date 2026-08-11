@@ -125,6 +125,7 @@ else:
     text = multi_code.read_text(encoding="utf-8")
     for token in (
         "using QS3D.Core.Model;",
+        "using QS3D.Core.Services;",
         "SemanticSelectionInspector.Inspect(project, ids)",
         "summary.PresentCount",
         "inspection.Count",
@@ -134,7 +135,8 @@ else:
         "SameSemanticSelection(presentedIds, currentIds)",
         "ExecuteAtomic(",
         "new SemanticSelectionBulkEditService().SetProperty",
-        "MultiSelectionSourceDerivedKeys",
+        "private static bool IsMultiSelectionReadOnlyKey(string key) =>",
+        "!SemanticPropertyEditPolicy.IsEditablePropertyKey(key);",
         "FamilyList.IsEnabled = false",
         "_viewModel.PropertyScopes.Clear()",
         "var commonFamilyId = !inspection.Family.IsMixed",
@@ -143,6 +145,24 @@ else:
     ):
         if token not in text:
             errors.append("Workspace multi-selection inspector missing guard/presentation token: " + token)
+
+    if "MultiSelectionSourceDerivedKeys" in text:
+        errors.append("Workspace multi-selection must not maintain a parallel source-derived/editability denylist; use SemanticPropertyEditPolicy")
+
+    readonly_start = text.find("private static bool IsMultiSelectionReadOnlyKey(string key)")
+    readonly_end = text.find("private string NormalizeMultiPropertyValue(", readonly_start)
+    readonly_body = text[readonly_start:readonly_end] if readonly_start >= 0 and readonly_end > readonly_start else ""
+    if "!SemanticPropertyEditPolicy.IsEditablePropertyKey(key)" not in readonly_body:
+        errors.append("multi-selection read-only classification must delegate to the canonical Core SemanticPropertyEditPolicy")
+    for stale_policy_fragment in (
+        'normalized.Equals("ElementId"',
+        'normalized.EndsWith("Ref"',
+        'normalized.IndexOf("Handle"',
+        'normalized.StartsWith("QS3D.Generated"',
+        'normalized.StartsWith("PhysicalOpeningCut"',
+    ):
+        if stale_policy_fragment in readonly_body:
+            errors.append("multi-selection read-only helper still duplicates Core edit policy: " + stale_policy_fragment)
 
     value_assignment = text.find("row.Value = summary.IsMixed")
     apply_assignment = text.find("row.Apply = value => ApplyMultiSelectionProperty")
@@ -246,4 +266,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace keeps guarded common/mixed selection rows and Core-aligned single-selection read-only policy; single and bulk mutation paths reject source/identity/ownership keys while bulk writes retain rollback-protected semantic mutation boundaries.")
+print("PASS: Workspace single- and multi-selection presentation now share the canonical Core semantic edit policy; stale/project guards and rollback-protected semantic mutation boundaries remain enforced without a parallel multi-selection denylist.")
