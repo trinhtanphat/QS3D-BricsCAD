@@ -81,7 +81,11 @@ checks = {
     ],
     engine: [
         "RegenerateDirtySubset(ProjectState project, IEnumerable<string> elementIds)",
-        "var unresolved = new HashSet<string>(",
+        "var unresolved = CanonicalTargetIds(elementIds);",
+        "private static HashSet<string> CanonicalTargetIds",
+        "Regeneration target id cannot be blank",
+        "Regeneration target id must be canonical without surrounding whitespace",
+        "Duplicate regeneration target id",
         "var targets = new List<ProjectElement>(unresolved.Count);",
         "var seenProjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);",
         "if (!seenProjectIds.Add(element.Id))",
@@ -109,11 +113,15 @@ checks = {
     ],
     regen_smoke: [
         "RegeneratesOnlyRequestedElements",
-        "DeduplicatesRequestedIdsCaseInsensitively",
+        "RejectsMalformedRequestedIds",
         "RejectsUnknownTarget",
         "RejectsDuplicateProjectIds",
         "engine.RegenerateDirtySubset(project, new[] { selected.Id })",
-        "new[] { \" Selected \", \"selected\", \"SELECTED\" }",
+        'Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { " Selected " }));',
+        'Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { "Selected", "selected" }));',
+        'Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { string.Empty }));',
+        "var dirtyBefore = selected.Dirty;",
+        "Equal(dirtyBefore, selected.Dirty);",
         "True(unrelated.Dirty != ElementDirtyFlags.None)",
         'True(!unrelated.Quantities.ContainsKey("Count"))',
         "Throws<KeyNotFoundException>",
@@ -249,4 +257,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE builds generated/source ownership plus reverse-dependency/element indexes once per operation, reuses the committed graph index for dependents/linked hosts, scans only the affected closure for convergence accounting, preserves ambiguous/untracked fail-closed behavior, removes generated dependents ownership-safely, refreshes authoritative source-derived semantic state, regenerates only the affected closure to stability, avoids redundant full-model scans/reverse-graph rebuilds, rolls project state back on pre-commit failure, keeps native rebuild explicit, and remains discoverable on the Project Ribbon.")
+print("PASS: QS3DSYNCSOURCE builds generated/source ownership plus reverse-dependency/element indexes once per operation, uses canonical fail-closed subset targets, scans only the affected closure, preserves rollback, and keeps native rebuild explicit.")
