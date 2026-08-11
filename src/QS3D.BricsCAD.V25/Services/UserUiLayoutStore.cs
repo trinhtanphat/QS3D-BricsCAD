@@ -20,6 +20,11 @@ namespace QS3D.BricsCAD.V25.Services
 
     internal static class UserUiLayoutStore
     {
+        internal const int WorkspacePaletteMinWidth = 560;
+        internal const int WorkspacePaletteMinHeight = 540;
+        internal const int RightPaletteMinWidth = 255;
+        internal const int RightPaletteMinHeight = 480;
+
         private const int MaxFileBytes = 16 * 1024;
         private static readonly object Gate = new object();
         private static UserUiLayout _current = LoadCore();
@@ -151,10 +156,10 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static void Normalize(UserUiLayout layout)
         {
-            layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, 560, 1600);
-            layout.WorkspacePaletteHeight = Clamp(layout.WorkspacePaletteHeight, 540, 2000);
-            layout.RightPaletteWidth = Clamp(layout.RightPaletteWidth, 255, 1200);
-            layout.RightPaletteHeight = Clamp(layout.RightPaletteHeight, 480, 2000);
+            layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, WorkspacePaletteMinWidth, 1600);
+            layout.WorkspacePaletteHeight = Clamp(layout.WorkspacePaletteHeight, WorkspacePaletteMinHeight, 2000);
+            layout.RightPaletteWidth = Clamp(layout.RightPaletteWidth, RightPaletteMinWidth, 1200);
+            layout.RightPaletteHeight = Clamp(layout.RightPaletteHeight, RightPaletteMinHeight, 2000);
             layout.ModelColumnWidth = Clamp(layout.ModelColumnWidth, 135d, 500d, 160d);
             layout.FamilyColumnWidth = Clamp(layout.FamilyColumnWidth, 220d, 700d, 245d);
             layout.FamilyTopHeight = Clamp(layout.FamilyTopHeight, 160d, 900d, 250d);
