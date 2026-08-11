@@ -421,7 +421,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw new InvalidOperationException(definition.DocumentId + " metadata is partial. Refusing destructive Table replacement/removal.");
             foreach (var key in keys)
                 if (string.IsNullOrWhiteSpace(project.Metadata[key])) throw new InvalidOperationException(key + " is empty.");
-            if (!string.Equals(project.Metadata[definition.OwnerProjectKey].Trim(), project.ProjectId, StringComparison.Ordinal))
+            if (!string.Equals(project.Metadata[definition.OwnerProjectKey].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException(definition.DocumentId + " owner project does not match active project.");
             if (!string.Equals(project.Metadata[definition.OwnershipVersionKey].Trim(), OwnershipVersion, StringComparison.Ordinal))
                 throw new InvalidOperationException("Unsupported " + definition.DocumentId + " ownership version.");
