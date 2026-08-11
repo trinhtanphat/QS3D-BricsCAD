@@ -3,7 +3,7 @@
 - Status: `BLOCKED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-11T19:31:00+07:00`
-- Updated: `2026-08-11T20:45:00+07:00`
+- Updated: `2026-08-11T21:18:00+07:00`
 - Baseline main SHA: `0296f6f31e28a598474875805b934edc26c98e60`
 - Priority: reduce owner-reported authoring interactions by reusing an existing QS3D element's Family/Type for the next Direct Draw operation
 
@@ -15,7 +15,7 @@ Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane:
 
 - `src/QS3D.BricsCAD.V25/CreateSimilarCommands.cs`
 - `src/QS3D.BricsCAD.V25/ActiveFamilyQuickDrawCommands.cs` only for one shared read-only support predicate
-- `src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs` for the stable/idempotent **Vẽ Tương Tự** primary action and grouped-Ribbon compatibility
+- `src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs` for the stable/idempotent **Vẽ Tương Tự** primary action, grouped-Ribbon compatibility and stable-button hot-reload reconciliation
 - existing semantic ownership / Family activation services only as canonical dependencies; no parallel ownership model
 - `scripts/preflight-create-similar.py`
 - `docs/DIRECT-DRAW-CREATE-SIMILAR-2026-08-11.md`
@@ -52,11 +52,17 @@ The previously confirmed flat-panel compatibility defect is **REMOTE_DONE**. Cur
 
 The later `RibbonBootstrapper` reconciliation work also preserves unknown/dedicated augmenter panels while reconciling grouped QS3D-owned panels, so hot reconciliation does not intentionally delete the Quick Workflow panel.
 
-This source integration is therefore no longer a blocker for Create Similar.
+## Additional source hardening — stable button reconciliation
+
+A later audit of the completed legacy Ribbon augmenters confirmed one remaining hot-reload drift pattern in Quick Workflow itself: the loop currently skips any existing stable button ID with `if (CollectionContainsId(items, spec.Id)) continue;`. That prevents `Reset()` + reinitialize from repairing stale Text/CommandParameter/CommandHandler state created by an older loaded plugin version.
+
+Because `QuickWorkflowRibbonAugmenter.cs` is already reserved by this Create Similar claim, this claim now explicitly owns the narrow compatibility follow-up: find-or-create each stable Quick Workflow button by ID, then reconcile its current presentation/command/handler state on every initialization without touching unrelated buttons. `scripts/preflight-create-similar.py` will be strengthened to guard this behavior for the `Vẽ Tương Tự` entry and to reject the old create-only `continue` pattern.
+
+This follow-up does not change Create Similar authoring semantics, command IDs, panel placement or the LOCAL_ONLY qualification boundary.
 
 ## Remaining blocker
 
-The **only remaining claim close-out blocker** is the canonical `docs/LOCAL-AGENT-INBOX.md` update under existing `LOCAL-008`.
+After the stable-button source hardening above is merged, the **only remaining claim close-out blocker** remains the canonical `docs/LOCAL-AGENT-INBOX.md` update under existing `LOCAL-008`.
 
 In this connector session that inbox is large and actively changing, while the available GitHub content write replaces the entire file rather than applying a bounded line patch. Replacing the whole inbox from partial/truncated remote reads would risk deleting concurrent local evidence and violates the repository no-overwrite rule.
 
@@ -71,15 +77,15 @@ A patch-capable writer or local agent should update only `LOCAL-008` on the newe
 - ambiguity/non-semantic/missing-Family/category-mismatch/unsupported-Family refusal before Active Family changes;
 - project reload/replacement, owner remap, source/generated ownership drift and active-DWG switch refusal;
 - Quick/Advanced delegated cancel/no-residue behavior while intentional sampled Family activation may remain;
-- exact one-button Ribbon idempotence/active-document routing and deterministic dedicated Quick Workflow panel placement;
+- exact one-button Ribbon idempotence/active-document routing, deterministic dedicated Quick Workflow panel placement and stable-button state reconciliation after reinitialize;
 - sanitized evidence only, with no private path/raw Handle list.
 
 After that bounded inbox change is pushed, this same claim can be marked `COMPLETED`; exact V25 execution remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until real evidence exists.
 
 ## Coordination
 
-The generated-native source-recognition lane explicitly excludes Create Similar command-side ownership. Workspace multi-selection/property-origin, grouped Ribbon IA, legacy augmenter compatibility and RibbonBootstrapper reconciliation lanes are completed. Other concurrent claims should not modify the Create Similar command/route/QuickWorkflowRibbonAugmenter surfaces while this blocker remains reserved unless the split is coordinated in both claims.
+The generated-native source-recognition lane explicitly excludes Create Similar command-side ownership. Workspace multi-selection/property-origin, grouped Ribbon IA, legacy augmenter compatibility, RibbonBootstrapper reconciliation and Reference/Project augmenter reconciliation lanes are completed. Other concurrent claims should not modify the Create Similar command/route/QuickWorkflowRibbonAugmenter surfaces while this blocker remains reserved unless the split is coordinated in both claims.
 
 ## Completion condition
 
-`LOCAL-008` carries the exact Create Similar interactive qualification delta on current `main`, this claim is marked `COMPLETED`, and all live BricsCAD V25-only evidence remains explicitly unclaimed/LOCAL_ONLY.
+Quick Workflow source reconciliation is merged, `LOCAL-008` carries the exact Create Similar interactive qualification delta on current `main`, this claim is marked `COMPLETED`, and all live BricsCAD V25-only evidence remains explicitly unclaimed/LOCAL_ONLY.
