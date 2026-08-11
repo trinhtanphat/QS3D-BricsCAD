@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Reporting
@@ -67,7 +68,13 @@ namespace QS3D.Core.Reporting
                 var primary = Primary(unitHint, metrics.LengthM, metrics.AreaM2);
 
                 var roomKey = roomId.Length > 0 ? roomId : "(unlinked)";
-                var key = string.Join("\u001f", floorId, roomKey, element.Category.ToString(), familyId, material, unitHint);
+                var key = GroupKey(
+                    floorId,
+                    roomKey,
+                    element.Category.ToString(),
+                    familyId,
+                    material,
+                    unitHint);
                 if (!rows.TryGetValue(key, out var row))
                 {
                     row = new RoomFinishScheduleRow
@@ -93,6 +100,19 @@ namespace QS3D.Core.Reporting
                 if (roomId.Length > 0 && !row.RoomIds.Contains(roomId, StringComparer.OrdinalIgnoreCase)) row.RoomIds.Add(roomId);
             }
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static string GroupKey(params string[] tokens)
+        {
+            var key = new StringBuilder();
+            foreach (var raw in tokens)
+            {
+                var token = raw ?? string.Empty;
+                key.Append(token.Length.ToString(CultureInfo.InvariantCulture))
+                    .Append(':')
+                    .Append(token);
+            }
+            return key.ToString();
         }
 
         private sealed class FinishMetrics
