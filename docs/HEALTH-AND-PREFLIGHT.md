@@ -1,61 +1,62 @@
 # QS3D health and preflight contracts
 
-## Full model health
+## Model health
 
-`QS3DHEALTHALL` is the broad review entry point. The exact service list evolves with source, but the current full-health direction covers semantic/project/source integrity, dependency health, generated-host/stale state, generated ownership, Room-finish identity, Curtain output and the current generated rebar families.
+`QS3DHEALTHALL` is the broad model-review entry point. Its exact service set evolves with source, but the contract is stable: inspect semantic/project/source integrity, dependency health, generated ownership/freshness and supported generated families without hiding invalid state.
 
-Specialized health commands remain useful for diagnosis, but product UI should prefer `QS3DHEALTHALL` when the user asks for a complete model check. `QS3DRELEASECHECK` adds stricter release-readiness/liveness/BOM/runtime-facing guards and must not be weakened merely to make incomplete project data appear green.
+`QS3DRELEASECHECK` is stricter. It adds release-readiness/liveness/BOM/runtime-facing guards and must not be weakened simply to make incomplete project data appear green.
 
-The command resolves live CAD handles before health inspection and opens the existing `ModelHealthWindow`. Locate actions prefer the generated handle family associated with the issue code, then fall back to semantic source handles.
+Generated freshness is **not** equivalent to `element.Dirty != None`. Geometry/Properties/Relations edits can stale generated output; quantity-only changes do not necessarily do so. Health code should use the canonical `ProjectElement.IsGenerated...Stale()` and generated-owner APIs instead of feature-local handle lists.
 
-## Generated freshness is not the same as Dirty
+## Repository preflight layers
 
-Do not infer stale CAD geometry from `element.Dirty != None`.
+### Generic guard — `scripts/preflight.py`
 
-- Geometry/Properties/Relations edits mark generated output snapshots stale.
-- Quantity-only dirty state does not.
-- Replacing/removing the snapshotted handle set resolves stale state for that output family.
+The generic guard owns repository-wide source policy and cross-cutting invariants. Among other checks it:
 
-Health code must call the `ProjectElement.IsGenerated...Stale()` APIs and use the shared generated-owner contract rather than maintaining feature-local owner lists.
+- validates required source/project files and XML/XAML parseability;
+- protects the clean-room boundary and approved synthetic CAD fixtures;
+- rejects committable `.dwg`, `.dxf` and `.docx` private/reference artifacts **case-insensitively**, so the result is consistent on Windows and POSIX runners;
+- enforces manual-only GitHub Actions policy for both `.yml` and `.yaml` workflow files;
+- checks representative persistence, ownership, lifecycle, UI wiring and release-health invariants.
 
-## UI command wiring
+The guard itself must remain valid Python. A syntax failure in repository tooling is a repository-health failure, not a feature-specific failure.
 
-`scripts/preflight-command-wiring.py` collects QS3D `CommandMethod` registrations and checks command references from:
+### Repository-health regression — `scripts/preflight-repository-health.py`
 
-- XAML `Tag="QS3D..."` buttons;
-- `RibbonButtonSpec` definitions;
-- simple UI command-dispatch calls.
+This gate parses every Python file under `scripts/` with `ast.parse` and protects the generic cross-platform artifact/workflow checks. Its purpose is to catch broken repository tooling before a feature gate can be trusted.
 
-Every UI/Ribbon command reference must resolve to exactly one registered command. This prevents multi-agent rename races from creating buttons that only fail at BricsCAD runtime with `Unknown command`.
+Because its filename matches `preflight-*.py`, it is automatically discovered by the aggregate runner.
 
-## Product boundary and Direct Draw guards
+### Aggregate runner — `scripts/preflight-all.py`
 
-Two cross-cutting guards are especially important after the current product/authoring decisions:
+The aggregate runner discovers every `scripts/preflight-*.py` gate except itself, executes gates in deterministic filename order, applies a per-gate timeout and reports all failed gates before returning non-zero.
 
-- `scripts/preflight-product-boundary.py` keeps QS3D explicitly scoped as a **BricsCAD V25 plugin**, verifies the adapter remains `OutputType=Library` with a BricsCAD extension entry point, and prevents BLT/Direct-Draw wording from silently redefining the product as a standalone EXE.
-- `scripts/preflight-direct-draw.py` protects P0/P1 command uniqueness, BricsCAD Ribbon/Domain Hub discoverability, Model-Space/unit-aware authoring, semantic/build ordering, generated ownership and rollback markers. P1 must reuse canonical `QS3DBUILD3D` behavior rather than forking another native builder path.
+`scripts/preflight.py` is intentionally run separately as the generic source guard; CI then runs the aggregate feature/repository-health gates.
 
-Direct Draw source/static guards still do **not** prove actual interactive editor behavior, cancellation, jigs, native Solid3d robustness or rollback on a licensed V25 workstation.
+## Command/UI wiring
 
-## Aggregate feature preflight
+`scripts/preflight-command-wiring.py` collects QS3D `CommandMethod` registrations and checks command references from XAML buttons, Ribbon specs and simple UI dispatch paths. UI/Ribbon references must resolve to registered commands so multi-agent rename races do not become BricsCAD `Unknown command` failures.
 
-`scripts/preflight.py` remains the generic repository/source policy guard.
+Other feature preflights protect product-boundary, Direct Draw and additional source contracts. Adding a new `preflight-<feature>.py` automatically places it under the aggregate runner; it does not authorize any workflow dispatch.
 
-`scripts/preflight-all.py` discovers every `scripts/preflight-*.py` feature gate except itself and runs each in deterministic filename order. It has a per-gate timeout and reports every failed gate before exiting nonzero.
+## CI policy
 
-All GitHub Actions workflows remain `workflow_dispatch` only. A manually approved validation workflow should run the generic/source guards before the relevant Core/V25 build, smoke or runtime stages. Adding a new `preflight-<feature>.py` automatically includes that gate through `scripts/preflight-all.py` without requiring a new automatic trigger.
+GitHub Actions workflows remain `workflow_dispatch` only unless [`../CI_POLICY.md`](../CI_POLICY.md) is explicitly changed. A commit, push, documentation update, review, handoff or `continue all` request does **not** authorize running a manual workflow.
 
-A commit, push, documentation update, `continue all`, review or handoff does **not** authorize a workflow dispatch. Follow `CI_POLICY.md`.
+A manually approved validation should run the generic/source guards before relevant Core/V25 build, smoke or runtime stages.
 
-## What these gates do not prove
+## What static gates do not prove
 
-Static preflight can prove source wiring, guard presence and regression registration. Core smoke tests can prove deterministic code that does not require BricsCAD. Neither proves:
+Static preflight can prove source wiring, repository policy and regression registration. Core smoke tests can prove deterministic code that does not require BricsCAD. Neither proves, by itself:
 
-- V25 `BrxMgd.dll` / `TD_Mgd.dll` compile compatibility for the newest head unless that exact SHA was actually built;
-- licensed `NETLOAD`/DemandLoad behavior;
-- BIM command availability under a specific BricsCAD edition/license;
-- native `Solid3d` boolean/authoring robustness on representative private DWGs;
-- Direct Draw cancellation/rollback/editor interaction on the real host;
-- visual/DPI/Ribbon parity on a real workstation.
+- exact V25 `BrxMgd.dll` / `TD_Mgd.dll` compatibility for the newest SHA;
+- licensed `NETLOAD` / DemandLoad behavior;
+- native `Solid3d` authoring/boolean robustness on representative private DWGs;
+- modeless multi-DWG lifecycle under the real BricsCAD host;
+- Direct Draw editor interaction/cancellation/rollback on the real host;
+- Ribbon/WPF/HiDPI visual behavior;
+- signed package/update rollback behavior;
+- large-project performance.
 
-Those remain runtime gates and must not be reported as passed without actual evidence.
+Those remain local BricsCAD V25 qualification gates and must not be reported as passed without evidence for the exact candidate SHA.
