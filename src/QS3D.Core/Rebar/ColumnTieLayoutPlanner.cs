@@ -20,8 +20,10 @@ namespace QS3D.Core.Rebar
     {
         public ColumnTieLayout(IReadOnlyList<Point2> closedPath, IReadOnlyList<double> elevationsM, double actualSpacingM, double pathPerimeterM)
         {
-            ClosedPath = closedPath ?? throw new ArgumentNullException(nameof(closedPath));
-            ElevationsM = elevationsM ?? throw new ArgumentNullException(nameof(elevationsM));
+            if (closedPath == null) throw new ArgumentNullException(nameof(closedPath));
+            if (elevationsM == null) throw new ArgumentNullException(nameof(elevationsM));
+            ClosedPath = new List<Point2>(closedPath).AsReadOnly();
+            ElevationsM = new List<double>(elevationsM).AsReadOnly();
             ActualSpacingM = actualSpacingM;
             PathPerimeterM = pathPerimeterM;
         }
