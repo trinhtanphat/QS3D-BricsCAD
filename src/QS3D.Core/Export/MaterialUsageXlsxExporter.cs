@@ -13,6 +13,7 @@ namespace QS3D.Core.Export
     public static class MaterialUsageXlsxExporter
     {
         private const int MaxDataRows = 1048575;
+        private const int MaxCellTextCharacters = 32767;
 
         public static void Export(string path, IReadOnlyList<MaterialUsageRow> rows)
         {
@@ -20,8 +21,17 @@ namespace QS3D.Core.Export
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             if (rows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Material XLSX export supports at most " + MaxDataRows + " data rows.");
             for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-                if (rows[rowIndex] == null)
+            {
+                var row = rows[rowIndex];
+                if (row == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                ValidateCellText(row.Floor, rowIndex, "Floor");
+                ValidateCellText(row.MaterialName, rowIndex, "MaterialName");
+                ValidateCellText(row.UnitHint, rowIndex, "UnitHint");
+                ValidateCellText(row.Component, rowIndex, "Component");
+                ValidateCellText(row.Category, rowIndex, "Category");
+                ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
+            }
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -95,6 +105,15 @@ namespace QS3D.Core.Export
                 "xl/_rels/workbook.xml.rels",
                 "xl/styles.xml",
                 "xl/worksheets/sheet1.xml");
+        }
+
+        private static void ValidateCellText(string value, int rowIndex, string fieldName)
+        {
+            var text = value ?? string.Empty;
+            if (text.Length > MaxCellTextCharacters)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Material XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
         }
 
         private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
