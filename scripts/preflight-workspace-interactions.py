@@ -39,6 +39,9 @@ else:
         'TryFindResource("Bg2Brush") as Brush',
         'TryFindResource("TextBrush") as Brush',
         'TryFindResource("BorderStrongBrush") as Brush',
+        "private void Send(string command)",
+        "var normalized = (command ?? string.Empty).Trim();",
+        'document.SendStringToExecute(normalized + " ", true, false, false)',
     )
     for needle in required:
         if needle not in text:
@@ -50,9 +53,9 @@ else:
         errors.append("Delete shortcut must remain scoped to keyboard focus within FamilyList")
 
     shortcut_start = text.find("private void OnWorkspacePreviewKeyDown")
-    send_start = text.find("private static void Send(")
+    send_start = text.find("private void Send(string command)")
     if shortcut_start < 0 or send_start < 0 or shortcut_start > send_start:
-        errors.append("Workspace keyboard routing must remain inside WorkspacePanel and reuse existing handler/Send paths")
+        errors.append("Workspace keyboard routing must remain inside WorkspacePanel and reuse the guarded instance Send path")
 
     forbidden = (
         'SendStringToExecute("QS3DSAVE',
@@ -69,4 +72,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Workspace keyboard shortcuts and right-click actions reuse existing guarded handlers, select the clicked Family/inspection row, and keep Delete scoped to FamilyList focus.")
+print("PASS: Workspace keyboard shortcuts/right-click actions reuse guarded handlers and the normalized instance Send path; Delete stays scoped to FamilyList focus.")
