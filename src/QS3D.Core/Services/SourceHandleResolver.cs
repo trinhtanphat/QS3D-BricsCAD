@@ -31,6 +31,7 @@ namespace QS3D.Core.Services
                     if (!visited.Add(elementId)) continue;
                     if (!elementIndex.TryGetValue(elementId, out var element)) continue;
 
+                    ValidateDependencies(element);
                     AddDirectHandles(element, knownHandles, handles, out var hasDirectReference);
                     var hasBoundaryReference = false;
                     if (!hasDirectReference)
@@ -46,8 +47,8 @@ namespace QS3D.Core.Services
 
                     for (var index = element.DependsOn.Count - 1; index >= 0; index--)
                     {
-                        var dependency = (element.DependsOn[index] ?? string.Empty).Trim();
-                        if (dependency.Length > 0 && !visited.Contains(dependency)) stack.Push(dependency);
+                        var dependency = element.DependsOn[index];
+                        if (!visited.Contains(dependency)) stack.Push(dependency);
                     }
                 }
             }
@@ -85,6 +86,24 @@ namespace QS3D.Core.Services
                 result[element.Id] = element;
             }
             return result;
+        }
+
+        private static void ValidateDependencies(ProjectElement element)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var index = 0; index < element.DependsOn.Count; index++)
+            {
+                var dependency = element.DependsOn[index] ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(dependency))
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " contains a blank dependency at index " + index + ". Repair semantic relations before Locate.");
+                if (!string.Equals(dependency, dependency.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " contains a non-canonical dependency at index " + index + ". Repair semantic relations before Locate.");
+                if (!seen.Add(dependency))
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " contains duplicate dependency id: " + dependency + ". Repair semantic relations before Locate.");
+            }
         }
 
         private static void AddDirectHandles(ProjectElement element, ISet<string> knownHandles, ICollection<string> handles, out bool hasDirectReference)
