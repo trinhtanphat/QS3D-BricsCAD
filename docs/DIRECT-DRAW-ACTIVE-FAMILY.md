@@ -78,11 +78,13 @@ Unsupported categories fail closed with guidance to use their specialized workfl
 
 The dispatcher is intentionally read-only, but a cold-cache `TryGetReadOnly(...)` can return a detached snapshot. The `.qsdb` may then be reloaded/replaced, another Workspace action may change the active Family, or the active DWG may change before category routing occurs. Delegating from that stale snapshot could choose the wrong Quick/Advanced category even though the target command itself remains guarded.
 
-Immediately before delegation, `QS3DDRAWACTIVE` and `QS3DDRAWACTIVEADV` now re-read the project through the non-creating path and fail closed unless all routing inputs are still authoritative:
+Immediately after the first read, the dispatcher freezes the routing inputs as **immutable scalar values**: `ProjectId`, `ChangeVersion`, active Family ID, category, and the WallOpening-vs-Window routing bit. This is important even when the first read returns the canonical cached `ProjectState`: later semantic edits mutate that same object in place, so keeping a `ProjectState`/`ProjectFamily` reference as the supposed “before” snapshot would let both sides observe the new value and could hide a real change.
+
+Immediately before delegation, `QS3DDRAWACTIVE` and `QS3DDRAWACTIVEADV` re-read the project through the non-creating path and fail closed unless all frozen routing inputs are still authoritative:
 
 - the same DWG remains active;
 - the same `ProjectId` is visible;
-- `ProjectState.ChangeVersion` is unchanged;
+- `ProjectState.ChangeVersion` is unchanged from the immutable snapshot;
 - the same active Family ID still exists;
 - the Family category is unchanged;
 - for canonical `WallOpening`, the Window-vs-opening routing signal is unchanged.
@@ -138,7 +140,7 @@ Local proof should include:
 9. Workspace Family double-click / `Ctrl+D` / context-menu Quick each activate exactly the selected live Family and launch one Quick command only;
 10. `Ctrl+Shift+D` / context-menu **Vẽ tùy chỉnh** each activate exactly the selected live Family and launch one Advanced command only;
 11. stale/reloaded Workspace Family rows still fail closed through the existing canonical `SetActiveFamily` boundary instead of dispatching against a stale Family;
-12. hold the dispatcher between its first read and delegation, then reload/replace the project, change active Family, switch Window/opening routing metadata, or change active DWG: it must refuse before invoking a target command;
+12. hold the dispatcher between its first read and delegation, then reload/replace the project, mutate the same cached project/Family in place, change active Family, switch Window/opening routing metadata, or change active DWG: it must refuse before invoking a target command;
 13. repeated load/unload of the modeless Workspace does not accumulate duplicate key, double-click, or context-menu handlers.
 
 Transient DrawJig preview, true continuous/repeated authoring and native editor lifecycle remain LOCAL_ONLY under `LOCAL-008`; these dispatchers/gestures do not claim those runtime behaviors are complete.
