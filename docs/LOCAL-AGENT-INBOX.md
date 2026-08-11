@@ -7,6 +7,9 @@ This file is the **single live queue for LOCAL_ONLY work**. Detailed runbooks re
 ## Mandatory handoff contract
 
 - A remote/hybrid agent that discovers a new LOCAL_ONLY requirement must add or update the matching item in this file **in the same source/docs batch that introduced or exposed the requirement**.
+- If a non-local agent cannot complete, execute, validate or prove a task because the required machine/runtime/license/private fixture/GUI/hardware/credential is unavailable, the agent **must leave the durable handoff in this file before ending the batch**. A chat-only note or `NOT TESTED` sentence is not sufficient.
+- Before adding an item, search this inbox by task ID, area, command, source file and scenario. **Update an existing matching item instead of creating a duplicate.** An unchanged parked item must not be re-audited by later non-local agents.
+- Do deterministic source-safe work first. Record only the irreducible local residue; this inbox must never be used to avoid work a remote agent can actually perform.
 - Do not create a second live queue. Historical `docs/LOCAL-AGENT-*.md` files are supporting detail/evidence; this inbox is the current priority index.
 - Local agents work `P0` before `P1` before `P2`, always from a clean checkout of the newest intended SHA.
 - `LOCAL_PASS` requires real evidence tied to the exact tested SHA. Source review, static preflight, mock tests, `-SkipRuntime`, or a remote build cannot manufacture `LOCAL_PASS`.
@@ -16,6 +19,28 @@ This file is the **single live queue for LOCAL_ONLY work**. Detailed runbooks re
 
 Valid priorities: `P0`, `P1`, `P2`.  
 Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
+
+### Required format for new or materially changed handoffs
+
+Every new item, and every material update that changes what the local agent must prove, must preserve these fields:
+
+```text
+## LOCAL-NNN — concise title
+- Priority: P0 | P1 | P2
+- Status: OPEN | IN_PROGRESS | PASS | BLOCKED
+- Source-side status: COMPLETE | PARTIAL | NOT_STARTED
+- Area: subsystem / command / workflow
+- Why local: exact unavailable capability or resource
+- Blocker: exact reason the non-local agent cannot complete/prove it
+- Scenario: minimum local steps/probe to execute
+- Evidence required: objective pass/fail evidence and exit criteria
+- Evidence: PENDING_LOCAL | sanitized exact-SHA evidence
+- Related source: files / commands / issue / PR / commit / SHA
+- Related docs: canonical runbook(s)
+- Updated: YYYY-MM-DD
+```
+
+Existing legacy inbox items do not need mechanical rewriting merely to add `Source-side status`, `Blocker`, or `Related source`; add those fields when that item is next materially updated. Do not create a duplicate item just to adopt the newer template.
 
 ## LOCAL-001 — exact V25 build/load baseline
 
