@@ -1,47 +1,56 @@
 # Work claim — Safe generated ownership malformed-project visibility
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETE`
+- State: `COMPLETE`
 - Agent: `chatgpt-gpt56sol-20260812-safe-generated-ownership-null-health`
 - Registered: `2026-08-12T00:53:00+07:00`
-- Last Updated: `2026-08-12T00:53:00+07:00`
+- Completed: `2026-08-12` (source-side)
+- Last Updated: `2026-08-12`
 - Baseline main SHA: `57b032b615de4d8a92c1ffbe3380dd66457269ea`
 - Priority: P1 — health must not report false-clean for a malformed ProjectState that the canonical ownership index rejects.
 - Task Key: `CORE-SAFE-GENERATED-OWNERSHIP-MALFORMED-PROJECT`
 
 ## Confirmed defect
 
-`GeneratedHandleOwnershipIndex.Build(project)` already fails closed when `project.Elements` contains a null element, a blank semantic element id, or a duplicate canonical element id. `SafeGeneratedHandleOwnershipHealthService.Inspect(project)` independently scans the same collection, but currently executes `if (element == null) continue;`. A malformed project containing a null element can therefore produce no ownership issue from the safe health surface even though the canonical raw ownership index rejects that project.
+`GeneratedHandleOwnershipIndex.Build(project)` already fails closed when `project.Elements` contains a null element, a blank semantic element id, or a duplicate canonical element id. `SafeGeneratedHandleOwnershipHealthService.Inspect(project)` independently scanned the same collection and executed `if (element == null) continue;`. A malformed project containing a null element could therefore produce no ownership issue from the safe health surface even though the canonical raw ownership index rejected that project.
 
-That is a false-clean health result: the safe wrapper is intended to make ownership diagnostics consumable, not silently weaken the underlying project-integrity contract.
+That was a false-clean health result: the safe wrapper is intended to make ownership diagnostics consumable, not silently weaken the underlying project-integrity contract.
 
 ## Reserved scope
 
 - `src/QS3D.Core/Diagnostics/SafeGeneratedHandleOwnershipHealthService.cs`
-- one focused auto-registered Core smoke for malformed-project visibility plus a valid-project non-regression
+- `tests/QS3D.Core.SmokeTests/SafeGeneratedHandleOwnershipMalformedProjectSmoke.cs`
 - this claim file
 
-## Intended contract
+## Implemented contract
 
-- Keep `GeneratedHandleOwnershipIndex.Build(project)` fail-closed behavior unchanged.
-- `SafeGeneratedHandleOwnershipHealthService.Inspect(project)` must convert canonical ownership-index validation failure into a visible `HealthSeverity.Error` issue instead of silently skipping malformed elements.
-- Preserve existing conflict detection for valid projects, including same-logical-slot de-duplication.
-- Do not mutate `ProjectState` during inspection.
-- Do not touch DependencyHealth, generated native builders, BricsCAD adapter/runtime code, or currently ACTIVE claim surfaces.
-- No GitHub Actions/build/release dispatch and no BricsCAD runtime PASS claim.
+- `SafeGeneratedHandleOwnershipHealthService.Inspect(project)` now invokes `GeneratedHandleOwnershipIndex.Build(project)` before its existing conflict scan so the same canonical element-set validation is authoritative for both surfaces.
+- Only canonical `InvalidOperationException` validation failures are converted into a project-level `HealthSeverity.Error` with code `GENERATED_HANDLE_OWNERSHIP_INVALID_PROJECT`; unrelated exception classes are not swallowed.
+- The previous `if (element == null) continue;` false-clean path is removed after successful canonical validation.
+- Existing valid ownership conflict scanning and same-logical-slot de-duplication remain unchanged.
+- `GeneratedHandleOwnershipIndex`, DependencyHealth, native builders and BricsCAD adapter/runtime code are untouched.
+- Inspection remains read-only.
 
-## Coordination
+## Regression source
 
-The historical generated-ownership hardening already made the raw index reject null/blank/duplicate semantic element identities. This lane is a focused follow-up only for the safe health wrapper’s false-clean behavior; it does not reopen or weaken the completed raw-index lane.
+Added auto-registered `SafeGeneratedHandleOwnershipMalformedProjectSmoke` covering:
 
-## Validation plan
+- null semantic element -> one visible invalid-project Error;
+- duplicate semantic element id -> one visible invalid-project Error;
+- valid non-conflicting ownership -> clean result;
+- valid cross-owner conflict -> existing conflict reporting preserved;
+- `ProjectState.ChangeVersion` unchanged across every inspection case.
 
-- A project with one null `Elements` entry yields at least one Error issue from safe ownership health rather than an empty result.
-- A duplicate/invalid semantic identity rejected by the raw index is likewise visible through safe health without mutating the project.
-- A valid project with no ownership conflicts remains clean.
-- Existing valid ownership-conflict reporting remains unchanged.
-- Re-fetch current source after claim publication, patch from a fresh branch, inspect exact PR diff/changed-file set, and read back merged `main` source.
+The source fix commit on the implementation branch is `38da4e4cca66a91188a550210c0419b97a7dd437`; focused smoke source commit is `3a808f945bd77bb1b1b5dc6e9ccab5c56ac3ce00`.
 
-## Completion condition
+## Validation / coordination
 
-Safe generated-handle ownership diagnostics can no longer turn canonical malformed-project rejection into a false-clean result, focused deterministic regression source is on `main`, and this claim is closed with exact merge evidence.
+- Claim was committed to `main` first as `baa8c639c1ec29bb0f33f582af367401558b22eb` before any source edit.
+- Re-read current `main` after concurrent activity: at `8b81c0041f07789c4eb044bcfe44be470fc589b7`, the claimed source still had original blob `6c192da2d29dabf1f4bdc276f7af34163b480387`, so no concurrent source overlap was overwritten.
+- Historical raw-index null/blank/duplicate hardening remains unchanged and authoritative.
+- No GitHub Actions/build/release workflow was dispatched. The new smoke source was reviewed but no executable Core smoke/build PASS is claimed from this remote session.
+- No BricsCAD V25 runtime qualification is required for this pure-Core diagnostic change, and no BricsCAD runtime PASS is claimed.
+
+## Result
+
+Source-side malformed-project visibility is complete on the implementation branch. The claim is released when the focused PR is merged to `main`; final merge SHA/readback will be recorded or reported after merge.
