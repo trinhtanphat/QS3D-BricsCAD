@@ -150,28 +150,24 @@ namespace QS3D.BricsCAD.V25
                 regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
                     .RegenerateDirtySubset(project, new[] { createdElementId });
 
-                // QS3DAUTOLINKHOSTS resolves the active document internally. Re-check immediately
-                // before delegating and keep only the newly-created source selected so no unrelated
-                // Door/Opening can be re-hosted by this Direct Draw operation.
+                // Direct Draw owns exactly one canonical opening. Link only that opening against
+                // the exact project already authorized by this authoring operation; do not re-enter
+                // the broad pick-set command surface or let unrelated selection participate.
                 EnsureActive(document, "Direct Draw " + label + " / Auto Host");
-                document.Editor.SetImpliedSelection(new[] { sourceId });
-                new AutoHostLinkCommands().AutoLinkHosts();
+                hostId = AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId);
                 EnsureActive(document, "Direct Draw " + label + " / post Auto Host");
 
-                // AutoHost may rollback its ProjectState snapshot and command-surface errors are
-                // intentionally swallowed there. Never trust the pre-AutoHost element reference:
-                // resolve the canonical element again from the current project by stable Id.
                 createdElement = project.Elements.SingleOrDefault(x =>
                     string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase));
                 if (createdElement == null)
                     throw new InvalidOperationException(label + " vừa tạo không còn tồn tại sau Auto Host; operation được rollback.");
 
-                if (!createdElement.Properties.TryGetValue("HostWallId", out hostId) || string.IsNullOrWhiteSpace(hostId))
+                if (!createdElement.Properties.TryGetValue("HostWallId", out var recordedHostId) ||
+                    string.IsNullOrWhiteSpace(recordedHostId) ||
+                    !string.Equals(recordedHostId.Trim(), hostId, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(label + " chưa tìm được host duy nhất trong phạm vi Auto Host; operation được rollback để không tạo opening mồ côi.");
-
-                // AutoHostLinkCommands catches its command-surface failures. Keep the deterministic
-                // second pass inside the created opening + resolved host scope so unrelated dirty
-                // project elements remain untouched by one Direct Draw operation.
+                // Keep the deterministic second pass inside the created opening + resolved host scope
+                // so unrelated dirty project elements remain untouched by one Direct Draw operation.
                 regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
                     .RegenerateDirtySubset(project, new[] { createdElementId, hostId });
                 project.Touch();

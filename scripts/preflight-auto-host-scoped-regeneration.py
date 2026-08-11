@@ -29,6 +29,8 @@ for token, label in (
     ("RegenerateDirtySubset(project, elementIds)", "targeted Auto Host regeneration"),
     ("ProjectStateSnapshot.Capture(project)", "Auto Host semantic snapshot"),
     ("rollback.Restore(project)", "Auto Host semantic rollback"),
+    ("ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "single-opening canonical project lookup"),
+    ("ReferenceEquals(currentProject, project)", "single-opening exact project identity guard"),
 ):
     if token not in auto_host:
         errors.append(label + " missing token: " + token)
@@ -42,23 +44,22 @@ subset = auto_host.find("RegenerateDirtySubset(project, elementIds)")
 if min(canonical, link, subset) < 0 or not (canonical < link < subset):
     errors.append("Auto Host must canonical-check -> link -> scoped-regenerate")
 
-for source, label in ((opening, "Door/Opening"),):
-    for token in (
-        ".RegenerateDirtySubset(project, new[] { createdElementId })",
-        ".RegenerateDirtySubset(project, new[] { createdElementId, hostId })",
-        "new AutoHostLinkCommands().AutoLinkHosts()",
-        "rollback.Restore(project)",
-    ):
-        if token not in source:
-            errors.append(label + " scoped-authoring token missing: " + token)
-    if ".RegenerateDirty(project)" in source:
-        errors.append(label + " Direct Draw must not regenerate unrelated dirty project elements")
+for token in (
+    ".RegenerateDirtySubset(project, new[] { createdElementId })",
+    "AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)",
+    ".RegenerateDirtySubset(project, new[] { createdElementId, hostId })",
+    "rollback.Restore(project)",
+):
+    if token not in opening:
+        errors.append("Door/Opening exact-project scoped-authoring token missing: " + token)
+if ".RegenerateDirty(project)" in opening or "new AutoHostLinkCommands().AutoLinkHosts()" in opening:
+    errors.append("Door/Opening Direct Draw must use exact-project Auto Host and must not regenerate unrelated dirty project elements")
 
-    before = source.find(".RegenerateDirtySubset(project, new[] { createdElementId })")
-    auto = source.find("new AutoHostLinkCommands().AutoLinkHosts()")
-    after = source.find(".RegenerateDirtySubset(project, new[] { createdElementId, hostId })")
-    if min(before, auto, after) < 0 or not (before < auto < after):
-        errors.append(label + " must scoped-regenerate created element -> Auto Host -> scoped-regenerate opening+host")
+opening_before = opening.find(".RegenerateDirtySubset(project, new[] { createdElementId })")
+opening_auto = opening.find("AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)")
+opening_after = opening.find(".RegenerateDirtySubset(project, new[] { createdElementId, hostId })")
+if min(opening_before, opening_auto, opening_after) < 0 or not (opening_before < opening_auto < opening_after):
+    errors.append("Door/Opening must scoped-regenerate created element -> exact-project Auto Host -> scoped-regenerate opening+host")
 
 for token in (
     "regenerator.RegenerateDirtySubset(project, new[] { createdElement.Id })",
@@ -82,4 +83,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Auto Host repairs non-canonical same-host links and scopes regeneration to changed openings/affected hosts; Door/Opening/Window Direct Draw keeps both regeneration passes inside the authored opening+host scope, leaving unrelated dirty elements untouched.")
+print("PASS: Door/Opening and Window Direct Draw use exact-project single-opening Auto Host and keep regeneration inside the authored opening+host scope, leaving unrelated dirty elements untouched.")
