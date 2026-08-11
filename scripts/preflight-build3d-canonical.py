@@ -47,6 +47,7 @@ else:
         "EntitySnapshotReader.ReadHandles(document, sourceHandles)",
         "ValidateWallSourceBatch(selectedElements, sourceSnapshots, category",
         ".RegenerateDirtySubset(project, regenerationScope)",
+        "document.Editor.SetImpliedSelection(sourceIds.ToArray())",
         "BuildCategory(document, project, category, sourceType)",
         "if (sourceTypes.Count == 0)",
         "FinalizeUi(document, elementIds, sourceHandles, built, regenerated, category, project)",
@@ -63,8 +64,18 @@ else:
         if token not in text:
             errors.append("canonical Build3D missing contract: " + token)
 
-    if "document.Editor.SetImpliedSelection(sourceIds.ToArray())" in text:
-        errors.append("Build3D preflight must not replace PICKFIRST/implied selection merely to inspect semantic source CAD")
+    resolve_sources = text.find("var sourceIds = CadHandleService.Resolve(document, sourceHandles)")
+    direct_snapshots = text.find("var sourceSnapshots = EntitySnapshotReader.ReadHandles(document, sourceHandles)")
+    validate_call = text.find("if (!ValidateWallSourceBatch(selectedElements, sourceSnapshots, category")
+    regenerate = text.find(".RegenerateDirtySubset(project, regenerationScope)")
+    select_sources = text.find("document.Editor.SetImpliedSelection(sourceIds.ToArray())")
+    build_dispatch = text.find("built = BuildCategory(document, project, category, sourceType)")
+    if min(resolve_sources, direct_snapshots, validate_call, regenerate, select_sources, build_dispatch) < 0 or not (
+        resolve_sources < direct_snapshots < validate_call < regenerate < select_sources < build_dispatch
+    ):
+        errors.append("Build3D must keep source validation read-only, then hand resolved source IDs to implied-selection builders only after regeneration and immediately before native dispatch")
+    if text.count("document.Editor.SetImpliedSelection(sourceIds.ToArray())") != 1:
+        errors.append("Build3D must have exactly one resolved-source implied-selection handoff")
     if "EntitySnapshotReader.ReadImpliedSelection(document)" in text:
         errors.append("Build3D source preflight must read resolved source handles directly instead of depending on implied-selection mutation")
 
@@ -98,4 +109,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DBUILD3D has one canonical owner, preserves PICKFIRST during source preflight, consumes centralized native category capability, validates one wall source type, dispatches WallPier deterministically and keeps post-commit UI failures non-fatal.")
+print("PASS: QS3DBUILD3D keeps source preflight read-only, hands validated source IDs to implied-selection native builders only at dispatch, preserves generated selection after success, and retains canonical native category/WallPier handling with non-fatal post-commit UI sync.")
