@@ -90,16 +90,24 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static string AppendTechnicalContext(string query)
         {
-            const string suffix = " kỹ thuật xây dựng chi tiết thi công";
+            return AppendBoundedSuffix(query, " kỹ thuật xây dựng chi tiết thi công", "ngữ cảnh kỹ thuật");
+        }
+
+        private static string AppendBoundedSuffix(string query, string suffix, string context)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (suffix == null) throw new ArgumentNullException(nameof(suffix));
             if (query.Length + suffix.Length > MaxQueryLength)
-                throw new InvalidOperationException("Từ khóa quá dài sau khi thêm ngữ cảnh kỹ thuật.");
+                throw new InvalidOperationException("Từ khóa quá dài sau khi thêm " + context + ". Giới hạn " + MaxQueryLength + " ký tự.");
             return query + suffix;
         }
 
         private static string BuildSearchUrl(string kind, string query)
         {
             var normalizedKind = (kind ?? string.Empty).Trim().ToLowerInvariant();
-            var effectiveQuery = normalizedKind == "shorts" ? query + " video ngắn shorts" : query;
+            var effectiveQuery = normalizedKind == "shorts"
+                ? AppendBoundedSuffix(query, " video ngắn shorts", "ngữ cảnh video ngắn")
+                : query;
             var encoded = Uri.EscapeDataString(effectiveQuery);
 
             switch (normalizedKind)
