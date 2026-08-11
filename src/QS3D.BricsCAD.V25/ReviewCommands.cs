@@ -173,22 +173,8 @@ namespace QS3D.BricsCAD.V25
                 var rows = new QuantityRevisionReport().Build(before, after);
                 Action<QuantityRevisionRow> locate = row => LocateCurrentElement(doc, row.ElementId, "Revision Locate");
                 Application.ShowModelessWindow(IntPtr.Zero, new RevisionWindow(doc, before, after, rows, locate), true);
-                TryRecordRevisionCompare(doc, before, after, rows.Count);
                 PaletteCoordinator.SetStatus("Revision diff: " + rows.Count + " thay đổi quantity.");
             });
-        }
-
-        private static void TryRecordRevisionCompare(Document document, RevisionSnapshot before, RevisionSnapshot after, int rowCount)
-        {
-            try
-            {
-                if (ExistingProjectMutationContext.TryGet(document, out var project))
-                    AuditTrail.ForProject(project).Record("revision.compare", string.Empty, before.Id + " → " + after.Id + " • " + rowCount + " quantity changes");
-            }
-            catch (System.Exception auditError)
-            {
-                try { document.Editor.WriteMessage("\nQS3D Revision diff đã mở; audit warning: " + auditError.Message); } catch { }
-            }
         }
 
         private static int LocateCurrentElement(Document document, string elementId, string operation)
