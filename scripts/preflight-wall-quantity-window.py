@@ -10,9 +10,23 @@ CODE = ROOT / "src/QS3D.BricsCAD.V25/UI/WallQuantityWindow.xaml.cs"
 
 errors = []
 
+
 def require(text, token, label):
     if token not in text:
         errors.append(f"{label}: missing {token!r}")
+
+
+def require_order(text, tokens, label):
+    positions = []
+    for token in tokens:
+        pos = text.find(token)
+        if pos < 0:
+            errors.append(f"{label}: missing ordered token {token!r}")
+            return
+        positions.append(pos)
+    if positions != sorted(positions):
+        errors.append(f"{label}: unsafe order {tokens!r}")
+
 
 command = COMMAND.read_text(encoding="utf-8")
 xaml = XAML.read_text(encoding="utf-8")
@@ -32,10 +46,39 @@ require(code, "ElementCategory.WallPier", "wall filter")
 require(code, "DocumentBoundWindowLifetime.Attach", "document lifetime")
 require(code, "_sourceProjectId", "project identity")
 require(code, "_suppressFilterEvents = true;\n            InitializeComponent();", "initialization guard")
+require(code, "ResolveCurrentRow(currentProject, displayedView)", "locate current-row revalidation")
+require(code, "currentProject.FindElement(elementId)", "locate semantic identity")
+require(code, "IsWallCategory(currentElement.Category)", "locate current wall category")
+require(code, "ProjectQuantityReportBuilder.Detail(currentSnapshot, new[] { elementId })", "locate detached current detail")
+require(code, "SourceHandleResolver.Resolve(currentProject, currentRow.ElementIds)", "locate current handles")
+require(code, "QS3D.BricsCAD.V25.Cad.CadHandleService.Select(_document, handles)", "native CAD select")
+require(code, '_document.SendStringToExecute("QS3DZOOMSELECTED ', "native CAD zoom")
 require(xaml, 'x:Name="WallList"', "wall browser")
 require(xaml, 'x:Name="TakeoffGrid"', "detail grid")
 require(xaml, 'x:Name="SelectedThicknessText"', "selected facts")
 require(xaml, 'x:Name="TotalNetText"', "totals")
+require(xaml, 'x:Name="AutoRevealCheck"', "auto 3D reveal")
+require(xaml, 'Content="Định vị 3D"', "explicit 3D locate")
+require(xaml, 'MouseDoubleClick="OnWallListDoubleClick"', "wall list double-click locate")
+require(xaml, 'MouseDoubleClick="OnGridDoubleClick"', "detail double-click locate")
+
+locate_start = code.find("private void LocateSelected")
+locate_end = code.find("private QuantityReportRow ResolveCurrentRow", locate_start)
+if locate_start < 0 or locate_end < 0:
+    errors.append("locate flow: cannot isolate LocateSelected")
+else:
+    locate = code[locate_start:locate_end]
+    require_order(
+        locate,
+        [
+            'EnsureCurrentProject("định vị Tường trong View 3D")',
+            "ResolveCurrentRow(currentProject, displayedView)",
+            "SourceHandleResolver.Resolve(currentProject, currentRow.ElementIds)",
+            "CadHandleService.Select(_document, handles)",
+            'SendStringToExecute("QS3DZOOMSELECTED ',
+        ],
+        "locate revalidation/select/zoom order",
+    )
 
 for forbidden in (
     "ProjectContextCoordinator.GetOrCreate",
@@ -43,6 +86,7 @@ for forbidden in (
     "QsdbProjectStore",
     "TransactionManager",
     "StartTransaction(",
+    "ProjectStateSnapshot.Capture(",
 ):
     if forbidden in code:
         errors.append(f"read-only boundary: forbidden token {forbidden!r}")
