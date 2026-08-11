@@ -9,7 +9,9 @@ xaml = UI / "WorkspacePanel.xaml"
 filter_code = UI / "WorkspacePanel.PropertyFiltering.cs"
 selection_code = UI / "WorkspacePanel.SelectionInspection.cs"
 multi_code = UI / "WorkspacePanel.MultiSelectionProperties.cs"
+view_model_code = UI / "ViewModels" / "WorkspaceViewModel.cs"
 bulk_code = ROOT / "src" / "QS3D.Core" / "Selection" / "SemanticSelectionBulkEditService.cs"
+policy_code = ROOT / "src" / "QS3D.Core" / "Services" / "SemanticPropertyEditPolicy.cs"
 atomicity_smoke = ROOT / "tests" / "QS3D.Core.SmokeTests" / "SemanticMutationAtomicitySmoke.cs"
 errors = []
 
@@ -154,6 +156,57 @@ else:
         if forbidden in text:
             errors.append("Workspace multi-selection adapter crossed the semantic/CAD mutation boundary: " + forbidden)
 
+if not view_model_code.is_file():
+    errors.append("missing WorkspaceViewModel.cs")
+else:
+    text = view_model_code.read_text(encoding="utf-8")
+    for token in (
+        "using QS3D.Core.Services;",
+        "MeasuredSolidQuantityPolicy.VolumeProperty",
+        "MeasuredSolidQuantityPolicy.SurfaceAreaProperty",
+        "var isReadOnlyInstanceProperty = !SemanticPropertyEditPolicy.IsEditablePropertyKey(key);",
+        'row.Group = IsSourceDerivedInstanceKey(key) ? "NGUỒN CAD / ĐO ĐẠC" : "HỆ THỐNG / CHỈ ĐỌC";',
+        'Status = "Không thể cập nhật " + DisplayNameFor(key) + ": đây là thuộc tính nguồn/identity/ownership chỉ đọc.";',
+        'Status = "Không thể đặt lại " + DisplayNameFor(key) + ": đây là thuộc tính nguồn/identity/ownership chỉ đọc.";',
+    ):
+        if token not in text:
+            errors.append("Workspace single-selection edit policy guard missing: " + token)
+    if "hasInstance && IsSourceDerivedInstanceKey(key)" in text:
+        errors.append("source-derived Family keys must stay read-only even before an Instance override exists")
+
+    load_start = text.find("private void LoadInstanceProperties(")
+    load_end = text.find("private PropertyRowViewModel CreatePropertyRow(", load_start)
+    load_body = text[load_start:load_end] if load_start >= 0 and load_end > load_start else ""
+    policy_read = load_body.find("!SemanticPropertyEditPolicy.IsEditablePropertyKey(key)")
+    readonly_set = load_body.find("row.IsReadOnly = true;", policy_read)
+    apply_wiring = load_body.find("row.Apply = value =>", policy_read)
+    if policy_read < 0 or readonly_set < policy_read or apply_wiring < readonly_set:
+        errors.append("single-selection presentation must classify Core-blocked keys before wiring editable Instance callbacks")
+
+    apply_start = text.find("private string ApplyInstanceProperty(")
+    apply_end = text.find("private void ResetInstanceProperty(", apply_start)
+    apply_body = text[apply_start:apply_end] if apply_start >= 0 and apply_end > apply_start else ""
+    guard = apply_body.find("SemanticPropertyEditPolicy.IsEditablePropertyKey(key)")
+    set_property = apply_body.find("element.SetProperty(key, next)")
+    touch = apply_body.find("project.Touch()")
+    if guard < 0 or set_property < 0 or touch < 0 or guard > set_property or guard > touch:
+        errors.append("single-selection Instance mutation must fail closed through Core edit policy before SetProperty/Touch")
+
+if not policy_code.is_file():
+    errors.append("missing SemanticPropertyEditPolicy.cs")
+else:
+    text = policy_code.read_text(encoding="utf-8")
+    for token in (
+        "public static class SemanticPropertyEditPolicy",
+        "public static bool IsEditablePropertyKey(string propertyName)",
+        "MeasuredSolidQuantityPolicy.VolumeProperty",
+        "MeasuredSolidQuantityPolicy.SurfaceAreaProperty",
+        "internal static string RequireEditablePropertyKey(string propertyName)",
+        "EditBlockReason(propertyName.Trim()) == null",
+    ):
+        if token not in text:
+            errors.append("Core semantic property edit policy contract missing: " + token)
+
 if not bulk_code.is_file():
     errors.append("missing SemanticSelectionBulkEditService.cs")
 else:
@@ -190,4 +243,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace routes exact semantic multi-selection into guarded common/mixed rows; Core multi-selection writes revalidate selection and execute inside rollback-protected semantic mutation boundaries.")
+print("PASS: Workspace keeps guarded common/mixed selection rows and Core-aligned single-selection read-only policy; single and bulk mutation paths reject source/identity/ownership keys while bulk writes retain rollback-protected semantic mutation boundaries.")
