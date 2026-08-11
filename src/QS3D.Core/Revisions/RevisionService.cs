@@ -91,7 +91,7 @@ namespace QS3D.Core.Revisions
                 Add(delta, "FamilyId", a.FamilyId, b.FamilyId);
                 Add(delta, "FloorId", a.FloorId, b.FloorId);
                 Add(delta, "ZoneId", a.ZoneId, b.ZoneId);
-                Add(delta, "SourceHandles", string.Join(",", a.SourceHandles), string.Join(",", b.SourceHandles));
+                CompareSourceHandles(delta, a.SourceHandles, b.SourceHandles, id);
                 CompareDependencies(delta, a.Dependencies, b.Dependencies);
                 CompareProperties(delta, a.Properties, b.Properties);
                 CompareQuantities(delta, a.Quantities, b.Quantities, id);
@@ -100,20 +100,25 @@ namespace QS3D.Core.Revisions
             return result;
         }
 
-        private static IReadOnlyList<string> CanonicalSourceHandles(ProjectElement element)
+        private static IReadOnlyList<string> CanonicalSourceHandles(ProjectElement element) =>
+            CanonicalSourceHandles(element.SourceHandles, "element " + element.Id);
+
+        private static IReadOnlyList<string> CanonicalSourceHandles(IEnumerable<string> sourceHandles, string label)
         {
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (var i = 0; i < element.SourceHandles.Count; i++)
+            var index = 0;
+            foreach (var rawValue in sourceHandles ?? Enumerable.Empty<string>())
             {
-                var raw = element.SourceHandles[i] ?? string.Empty;
+                var raw = rawValue ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(raw))
-                    throw new InvalidOperationException("Revision capture encountered a blank source handle on element " + element.Id + " at index " + i.ToString(CultureInfo.InvariantCulture) + ".");
+                    throw new InvalidOperationException("Revision " + label + " contains a blank source handle at index " + index.ToString(CultureInfo.InvariantCulture) + ".");
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
-                    throw new InvalidOperationException("Revision capture encountered a non-canonical padded source handle on element " + element.Id + ": " + raw + ".");
+                    throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded source handle: " + raw + ".");
                 if (!seen.Add(raw))
-                    throw new InvalidOperationException("Revision capture encountered a duplicate source handle on element " + element.Id + ": " + raw + ".");
+                    throw new InvalidOperationException("Revision " + label + " contains a duplicate source handle: " + raw + ".");
                 result.Add(raw);
+                index++;
             }
             result.Sort(StringComparer.OrdinalIgnoreCase);
             return result.AsReadOnly();
@@ -131,6 +136,19 @@ namespace QS3D.Core.Revisions
             }
             result.Sort(StringComparer.OrdinalIgnoreCase);
             return result.AsReadOnly();
+        }
+
+        private static void CompareSourceHandles(RevisionDelta delta, IEnumerable<string> before, IEnumerable<string> after, string elementId)
+        {
+            var left = CanonicalSourceHandles(before, "before element " + elementId);
+            var right = CanonicalSourceHandles(after, "after element " + elementId);
+            if (left.SequenceEqual(right, StringComparer.OrdinalIgnoreCase)) return;
+            delta.Fields.Add(new RevisionFieldDelta
+            {
+                Field = "SourceHandles",
+                Before = string.Join(",", left),
+                After = string.Join(",", right)
+            });
         }
 
         private static void CompareDependencies(RevisionDelta delta, IEnumerable<string> before, IEnumerable<string> after)
