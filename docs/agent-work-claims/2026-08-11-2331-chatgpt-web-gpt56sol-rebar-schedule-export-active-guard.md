@@ -3,8 +3,14 @@
 - Status: `ACTIVE`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-11T23:31:00+07:00`
-- Baseline main SHA: `3688ad298dbaea5db86baf4d941034c8e819815d`
+- Pre-registration observed main SHA: `3688ad298dbaea5db86baf4d941034c8e819815d`
+- Registration parent main SHA: `f12cf0d0e50e196c9a24645d29afcb0f270a8a54`
+- Claim commit: `4a46ef7b2dacdf8e1f362c2b201514de5de71b67`
 - Priority: evidence-driven remote-safe modeless UI hardening
+
+## Coordination note
+
+`main` advanced between the pre-registration HEAD read and the contents-API claim commit. The actual claim parent above is authoritative; this claim-only correction was committed before any substantive source edit.
 
 ## Confirmed defect
 
