@@ -108,6 +108,7 @@ namespace QS3D.Core.Domain
         public void MarkClean(ElementDirtyFlags flags)
         {
             if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
+            if (flags == ElementDirtyFlags.None) return;
             Dirty &= ~flags;
             UpdatedUtc = DateTime.UtcNow;
         }
@@ -236,6 +237,7 @@ namespace QS3D.Core.Domain
         private void MarkDirtyCore(ElementDirtyFlags flags, bool markGeneratedGeometryStale)
         {
             if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
+            if (flags == ElementDirtyFlags.None) return;
             if (markGeneratedGeometryStale)
                 MarkGeneratedGeometryStale("Semantic/source state changed.");
             Dirty |= flags;
