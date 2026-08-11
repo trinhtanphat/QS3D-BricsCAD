@@ -45,10 +45,18 @@ namespace QS3D.Core.Rebar
             var projectedBars = 2L * input.BarsAlongWidth + 2L * Math.Max(0, input.BarsAlongDepth - 2);
             if (projectedBars > MaxBars) throw new InvalidOperationException("Rectangular rebar layout exceeds the supported bar count.");
 
-            var radiusM = input.DiameterMm / 2000d;
+            var diameterM = input.DiameterMm / 1000d;
+            var radiusM = diameterM / 2d;
             var halfWidth = input.WidthM / 2d - input.CoverM - radiusM;
             var halfDepth = input.DepthM / 2d - input.CoverM - radiusM;
             if (!(halfWidth > 0d) || !(halfDepth > 0d)) throw new InvalidOperationException("Cover + bar radius leaves no usable reinforcement envelope inside the host section.");
+
+            var widthSpacingM = Finite((2d * halfWidth) / (input.BarsAlongWidth - 1d), "rectangular rebar width spacing");
+            var depthSpacingM = Finite((2d * halfDepth) / (input.BarsAlongDepth - 1d), "rectangular rebar depth spacing");
+            if (widthSpacingM + 1e-12d < diameterM)
+                throw new InvalidOperationException("Rectangular rebar centers along width are closer than one bar diameter.");
+            if (depthSpacingM + 1e-12d < diameterM)
+                throw new InvalidOperationException("Rectangular rebar centers along depth are closer than one bar diameter.");
 
             var points = new List<Point2>((int)projectedBars);
             for (var i = 0; i < input.BarsAlongWidth; i++)
@@ -89,9 +97,10 @@ namespace QS3D.Core.Rebar
             if (value < 0d) throw new ArgumentOutOfRangeException(name);
         }
 
-        private static void Finite(double value, string name)
+        private static double Finite(double value, string name)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(name);
+            return value;
         }
     }
 }
