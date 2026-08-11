@@ -30,15 +30,20 @@ if bq.is_file():
     mutation = text.find("VisibleBqColumnsKey", persist)
     if persist < 0 or persist_guard < 0 or mutation < 0 or persist_guard > mutation:
         errors.append("BQ column preference mutation must require the source DWG before project metadata changes")
-    for needle in ('EnsureActive("tính lại BQ")', 'EnsureActive("định vị BQ")', 'EnsureActive("xuất BQ XLSX")'):
+    for needle in ('EnsureCurrentProject("tính lại BQ")', 'EnsureCurrentProject("định vị BQ")', 'EnsureCurrentProject("xuất BQ XLSX")'):
         if needle not in text:
-            errors.append("BQ modeless callback missing active-DWG guard: " + needle)
+            errors.append("BQ modeless callback missing current-project/source-DWG guard: " + needle)
+    helper = text.find("private void EnsureCurrentProject(string operation)")
+    helper_active = text.find("EnsureActive(operation);", helper)
+    helper_project = text.find("ProjectContextCoordinator.TryGetReadOnly(_document, out _)", helper)
+    if helper < 0 or helper_active < 0 or helper_project < 0 or not (helper < helper_active < helper_project):
+        errors.append("BQ EnsureCurrentProject must verify the bound DWG before existing-project inspection")
     export = text.find("private void OnExportClick")
-    export_guard = text.find('EnsureActive("xuất BQ XLSX")', export)
+    export_guard = text.find('EnsureCurrentProject("xuất BQ XLSX")', export)
     recalc = text.find("_rows = _recalculate()", export)
     exporter = text.find("XlsxQuantityExporter.Export", export)
     if export < 0 or export_guard < 0 or recalc < 0 or exporter < 0 or not (export_guard < recalc < exporter):
-        errors.append("BQ XLSX export must bind to the source DWG and recalculate before writing cached rows")
+        errors.append("BQ XLSX export must bind to the source DWG/current project and recalculate before writing cached rows")
 
 recognition = windows["Recognition"]
 if recognition.is_file():
@@ -78,4 +83,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Recognition/BQ/BBS/Revision/Health modeless CAD/project/export actions are bound to their source DWG; BQ refreshes before XLSX and BBS totals are checked.")
+print("PASS: Recognition/BQ/BBS/Revision/Health modeless CAD/project/export actions are bound to their source DWG; BQ verifies current project state and refreshes before XLSX while BBS totals are checked.")
