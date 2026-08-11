@@ -1,8 +1,9 @@
 # Work claim — Workspace multi-selection policy unification
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-workspace-1930`
 - Registered: `2026-08-11T19:30:00+07:00`
+- Completed: `2026-08-11T19:44:00+07:00`
 - Baseline main SHA: `44dae5d5f3a6184cadf93d27661d1b71dc9bc860`
 - Priority: continue-all source hardening after the Workspace semantic edit-policy batch
 
@@ -34,6 +35,15 @@ Unify Workspace multi-selection read-only/editability classification with the ca
 
 At registration time the agent-registration protocol claim excludes product source changes, and the concurrently published Create Similar claim reserves Direct Draw command/ownership surfaces. Neither overlaps this Workspace multi-selection policy lane. Recheck pushed claims and latest `main` before implementation and merge.
 
-## Completion condition
+## Completion
 
-The multi-selection adapter delegates editability to the canonical Core policy, the regression preflight enforces that single source of truth, the coherent implementation is merged to current `main`, and this claim is marked `COMPLETED` with exact pushed SHA and validation boundary.
+- `315b26440c35bbe1af244254aa3e68a7ed4c7b45` — `fix(workspace): unify multi-selection edit policy`
+  - removed the Workspace-local source/identity/ownership denylist;
+  - multi-selection read-only classification now delegates to `SemanticPropertyEditPolicy.IsEditablePropertyKey`;
+  - existing stale-project, exact CAD-selection, and `SemanticSelectionBulkEditService` mutation boundaries were preserved.
+- `3f16ab84f3a0d03901cd17b1eb9a447d805fb7ff` — `test(workspace): guard shared multi-selection policy`
+  - requires the shared Core policy call;
+  - rejects reintroduction of the previous duplicated Workspace denylist markers;
+  - preserves existing bulk atomicity/stale-selection source contracts.
+
+No GitHub Actions, build, release, WPF rendering, NETLOAD, or BricsCAD V25 runtime qualification was executed or claimed in this remote lane.
