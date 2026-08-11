@@ -265,7 +265,24 @@ namespace QS3D.Core.Geometry
             return value;
         }
 
-        private static double Cross(double ax, double ay, double bx, double by) => ax * by - ay * bx;
+        private static double Cross(double ax, double ay, double bx, double by)
+        {
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (!Finite(scaleA) || !Finite(scaleB)) throw new OverflowException("wall footprint determinant input exceeds the supported numeric range.");
+            if (scaleA == 0d || scaleB == 0d) return 0d;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!Finite(normalized)) throw new OverflowException("wall footprint determinant exceeds the supported numeric range.");
+            var smallerScale = Math.Min(scaleA, scaleB);
+            var largerScale = Math.Max(scaleA, scaleB);
+            var scaled = normalized * smallerScale;
+            if (!Finite(scaled)) throw new OverflowException("wall footprint determinant exceeds the supported numeric range.");
+            var value = scaled * largerScale;
+            if (!Finite(value)) throw new OverflowException("wall footprint determinant exceeds the supported numeric range.");
+            return value;
+        }
+
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static void Validate(Point2 point, string label)
         {
