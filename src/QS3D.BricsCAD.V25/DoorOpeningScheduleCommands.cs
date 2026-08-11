@@ -20,6 +20,18 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
+                var dialog = new SaveFileDialog
+                {
+                    Title = "Xuất bảng Cửa / Lỗ mở",
+                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
+                    DefaultExt = ".xlsx",
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                    FileName = drawingName + "-Cua-Lo-Mo.xlsx"
+                };
+                if (dialog.ShowDialog() != true) return;
+
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 var rows = DoorOpeningScheduleBuilder.Build(project);
@@ -40,17 +52,6 @@ namespace QS3D.BricsCAD.V25
                 }
                 var hosts = rows.SelectMany(x => x.HostIds).Distinct(StringComparer.OrdinalIgnoreCase).Count();
 
-                var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
-                var dialog = new SaveFileDialog
-                {
-                    Title = "Xuất bảng Cửa / Lỗ mở",
-                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-                    DefaultExt = ".xlsx",
-                    AddExtension = true,
-                    OverwritePrompt = true,
-                    FileName = drawingName + "-Cua-Lo-Mo.xlsx"
-                };
-                if (dialog.ShowDialog() != true) return;
                 DoorOpeningXlsxExporter.Export(dialog.FileName, rows);
 
                 var status = "Door XLSX: " + rows.Count + " nhóm • " + count + " Cửa/Lỗ • " + area.ToString("0.###") + " m² • " + hosts + " host.";
