@@ -10,56 +10,34 @@ QS3D has three different project-resolution intents. They must not be interchang
 
 Do not use `GetOrCreate` from a stale/modeless callback, a remove/refresh command, or another operation whose meaning requires a pre-existing semantic owner/project.
 
-## 2. Read-only inspection
+## 2. Read-only inspection and derived-data regeneration
 
-`ProjectContextCoordinator.TryGetReadOnly(document, out project)` is for Health, Locate, preview and other non-mutating inspection. With a cold cache it may load a validated detached snapshot from disk without binding that instance into the live project cache.
+`ProjectContextCoordinator.TryGetReadOnly(document, out project)` is for Health, Locate, preview, preference loading and other non-mutating inspection. With a cold cache it may load a validated detached snapshot from disk without binding that instance into the live project cache.
 
-A detached read-only snapshot must never be passed into a builder/service that mutates `ProjectState`, metadata, generated ownership, audit, dirty state or semantic elements.
+A read-only workflow that needs regenerated derived values must not call `RegenerateDirty(project)` on that returned object. It must create `ProjectStateSnapshot.CreateDetachedCopy(project)`, regenerate the copy, and build/export rows from that copy. This keeps refresh/export fresh without changing live dirty flags, audit, timestamps or semantic state merely because a user opened or exported a review window.
+
+Current detached-regeneration examples include regeneration-based schedule exports plus Door/Opening and Room Finish modeless refresh/export and BBS modeless XLSX export.
 
 ## 3. Existing canonical mutation
 
 `ExistingProjectMutationContext.TryGet/Require` is the adapter boundary for an operation that must mutate an already-existing project but must not create one.
 
-The resolver:
+The resolver first proves an existing project/sidecar through the non-creating read-only path, then resolves through `GetOrCreate` so the mutable instance is coordinator-owned, verifies that its `ProjectId` still matches the observed project, and fails closed/forgets the cache entry if the project changed between probe and bind. Corrupt or drawing-mismatched sidecars fail before a mutable project is returned.
 
-1. proves an existing project/sidecar with the non-creating read-only path;
-2. resolves through `GetOrCreate` only after that proof so the returned mutable instance is the coordinator-owned canonical cached project;
-3. verifies that the canonical `ProjectId` still matches the observed project;
-4. forgets the accidentally-created/replaced cache entry and fails closed if the project changes between probe and bind;
-5. lets corrupt sidecars or drawing-identity mismatches fail closed before the caller receives a mutable project.
-
-This avoids two distinct bugs:
-
-- **detached mutation** — native Table/tag/Auto Host code mutates a cold-cache snapshot that is not the live canonical project;
-- **accidental project creation** — a stale Recognition callback or ownership-dependent command silently creates a new empty project after the original project is unavailable.
-
-## Current migrated mutation paths
-
-The current source contract covers:
-
-- generic Semantic Element native Table Build/Refresh/Remove;
-- BQ native Table Build/Refresh/Remove;
-- BBS native Table Build/Refresh/Remove;
-- Material Usage native Table Build/Refresh/Remove;
-- Room Finish native Table Build/Refresh/Remove;
-- Door/Opening native Table Build/Refresh/Remove;
-- `QS3DAUTOLINKHOSTS` semantic host-link mutation;
-- Recognition modeless Apply and skip-audit callback;
-- Semantic Tag create/refresh/remove.
-
-Their Health/Locate paths intentionally remain on `TryGetReadOnly` where no mutation is required.
+Use this path for real writes such as native Table/tag ownership changes, Auto Host semantic links, Recognition Apply and BQ visible-column preference persistence. BQ preference loading remains read-only; only the metadata write promotes to canonical mutation context and keeps its rollback snapshot.
 
 ## Failure and persistence expectations
 
-- No existing project/sidecar: mutation command fails/returns without creating a project.
-- Existing project in cache: the exact cached instance is used.
-- Cold cache + valid `.qsdb`: command rebinds a canonical project before mutation; subsequent save/palette/project operations see the same object.
-- Corrupt/mismatched `.qsdb`: fail closed; do not replace it with a default project for the mutation.
-- Sidecar disappears/replaces between probe and bind: do not expose the newly-created/replaced project to the mutation caller.
-- Read-only Health/Locate remains non-creating and may stay detached on a cold cache.
+- No existing project/sidecar: ownership-dependent writes fail without creating a project.
+- Cold cache + valid `.qsdb`: true writes bind the canonical project before mutation.
+- Read-only refresh/export: read existing state, clone it, regenerate/build the clone, and leave live project state untouched.
+- Corrupt/mismatched `.qsdb`: fail closed rather than replacing it with a default project.
+- Sidecar disappears/replaces during true mutation binding: fail closed before exposing replacement state.
+- Health/Locate/filter/preference-load and detached review/export remain non-creating.
+- Save-file cancellation happens before detached copy/regeneration for pure exporters.
 
-Static enforcement is in `scripts/preflight-existing-project-mutation-context.py`.
+Static enforcement is in `scripts/preflight-existing-project-mutation-context.py` plus the focused export/modeless freshness preflights.
 
 ## LOCAL_ONLY qualification
 
-Licensed V25 qualification must cover a cold-cache reopen with an existing `.qsdb`, mutation followed by save/reopen, absent-sidecar refusal, drawing switch/multi-DWG isolation, stale Recognition Apply, native Table metadata persistence, and Semantic Tag ownership persistence. The exact runnable scenarios are indexed in `docs/LOCAL-AGENT-INBOX.md`.
+Licensed V25 qualification must cover cold-cache existing-sidecar behavior, absent-sidecar refusal, drawing switch/multi-DWG isolation, stale Recognition Apply, native Table/tag ownership persistence, BQ preference persistence, and modeless/export detached regeneration. For the latter, record before/after live `ProjectId`, dirty/change-version/timestamp/audit indicators and prove that refresh/export obtains fresh rows without mutating live project state. The exact runnable scenarios are indexed in `docs/LOCAL-AGENT-INBOX.md`.
