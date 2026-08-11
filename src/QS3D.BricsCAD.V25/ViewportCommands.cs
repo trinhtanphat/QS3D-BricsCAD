@@ -50,20 +50,43 @@ namespace QS3D.BricsCAD.V25
             }
 
             var handles = snapshots.Select(x => x.Handle).ToArray();
+            SemanticUntrackResult result;
             try
             {
                 var project = ExistingProjectMutationContext.Require(doc, "Untrack semantic elements");
-                var result = SemanticUntrackService.Untrack(project, handles, predicate);
-                PaletteCoordinator.RefreshProject();
-                PaletteCoordinator.SetStatus("Đã bỏ theo dõi " + result.Count + " " + label + "; hình học CAD được giữ nguyên.");
-                doc.Editor.WriteMessage("\nQS3D: untracked " + result.Count + " " + label + "; CAD geometry was not erased.");
+                result = SemanticUntrackService.Untrack(project, handles, predicate);
             }
             catch (Exception ex)
             {
-                var message = "Không thể bỏ theo dõi " + label + ": " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                doc.Editor.WriteMessage("\nQS3D: " + message);
+                ReportUntrackError(doc, label, ex);
+                return;
             }
+
+            FinalizeUntrackUi(doc, result.Count, label);
+        }
+
+        private static void FinalizeUntrackUi(Document document, int count, string label)
+        {
+            var status = "Đã bỏ theo dõi " + count + " " + label + "; hình học CAD được giữ nguyên.";
+            Exception? warning = null;
+            try { PaletteCoordinator.RefreshProject(); }
+            catch (Exception ex) { warning = ex; }
+            try { PaletteCoordinator.SetStatus(status); }
+            catch (Exception ex) { if (warning == null) warning = ex; }
+            try { document.Editor.WriteMessage("\nQS3D: untracked " + count + " " + label + "; CAD geometry was not erased."); }
+            catch (Exception ex) { if (warning == null) warning = ex; }
+            if (warning == null) return;
+            try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau untrack commit: " + warning.Message); }
+            catch { }
+        }
+
+        private static void ReportUntrackError(Document document, string label, Exception ex)
+        {
+            var message = "Không thể bỏ theo dõi " + label + ": " + ex.Message;
+            try { PaletteCoordinator.SetStatus(message); }
+            catch { }
+            try { document.Editor.WriteMessage("\nQS3D: " + message); }
+            catch { }
         }
 
         private static void EnsureTiledModelSpace(Document document)
