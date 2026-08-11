@@ -1,41 +1,45 @@
 # Work claim — Regeneration work profile DTO bounded collections
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-regeneration-profile-dto-cardinality`
 - Registered: `2026-08-12T00:09:00+07:00`
+- Completed: `2026-08-12T00:12:00+07:00`
 - Baseline main SHA: `48591255a4dda245bed178f001e89a415bb20f8a`
+- Reservation commit: `21a60734ea9a105f93cb701bd6c61226af599f0e`
 - Priority: P1 — public work-profile construction must enforce its declared project cardinality before materializing arbitrary enumerables.
 
-## Confirmed defect
+## Defect fixed
 
-`RegenerationWorkProfile` is a public DTO constructor that already receives and validates `projectElementCount`, but then eagerly calls `ToList()` on `targetElementIds`, `items`, and `categories`. All three collections are summaries/scopes of that project and therefore can never validly contain more entries than `projectElementCount`. A caller can currently provide an excessively large or non-terminating enumerable and bypass the DTO's otherwise strict invariant checks before construction returns.
+`RegenerationWorkProfile` is a public DTO constructor that already receives and validates `projectElementCount`, but previously eagerly called `ToList()` on `targetElementIds`, `items`, and `categories`. All three collections are summaries/scopes of that project and therefore can never validly contain more entries than `projectElementCount`. A caller could provide an excessively large or non-terminating enumerable and bypass the DTO's otherwise strict invariant checks before construction returned.
 
-`projectElementCount` is an exact natural upper bound for all three collections; no new product limit is required.
+The constructor now materializes all three project-scoped collections through a shared bounded helper using `projectElementCount` as the exact semantic maximum.
 
 ## Reserved scope
 
 - `src/QS3D.Core/Services/RegenerationWorkProfiler.cs`
-- `tests/QS3D.Core.SmokeTests/RegenerationWorkProfileCollectionBoundSmoke.cs` (new auto-registered focused smoke)
+- `tests/QS3D.Core.SmokeTests/RegenerationWorkProfileCollectionBoundSmoke.cs`
 - this claim file
 
-## Intended contract
+## Published commits
 
-- `TargetElementIds`, `Items`, and `Categories` are materialized with a stop-at-`projectElementCount + 1` guard.
-- Null enumerable behavior remains `ArgumentNullException`.
-- Collections at or below project cardinality preserve ordering and values.
+- `bd5a432d51dfc73531dc30fcd768beb228ae796f` — bound target IDs, work items, and category summaries at declared project element cardinality while retaining null and ordering semantics.
+- `5fca7633d9e15586ad7f7c640bd36408bf571bfe` — add isolated auto-registered sentinel coverage for each collection plus exact-cardinality ordering preservation.
+
+## Delivered contract
+
+- Direct public DTO construction cannot consume any of its project-scoped collections beyond `projectElementCount`.
+- Null collection inputs remain rejected with `ArgumentNullException`.
+- Exact-cardinality values retain their original ordering and values.
 - Existing category/scope/dirty/count validation and profiler algorithms remain unchanged.
 
-## Coordination
+## Validation notes
 
-The prior completed profile DTO integrity claim addressed undefined enums, dirty bits, and negative metrics only. The just-completed profiler subset-target claim addresses `ProfileSubset(...)` input, not direct public DTO construction. No recent exact collection-cardinality claim was found.
-
-## Validation plan
-
-- Add sentinel enumerables independently for target IDs, work items, and category summaries to prove each stops at the project cardinality boundary.
-- Verify exact-cardinality finite collections remain accepted and preserve order.
-- Re-fetch source before update, SHA-guard writes, inspect exact diffs, and close this claim.
-- No GitHub Actions dispatch; no executable .NET or BricsCAD V25 runtime PASS claim from this hosted environment.
+- Exact source/test diffs were fetched after publication and are limited to reserved surfaces.
+- Each sentinel enumerable would expose prior over-enumeration; the new helper fails at the first entry beyond declared project cardinality without requesting another item.
+- Dedicated smoke auto-registers via `ModuleInitializer`; shared test registry was not edited.
+- No force-push and no GitHub Actions dispatch.
+- This hosted environment does not provide the repository .NET/BricsCAD V25 qualification toolchain, so executable/native runtime PASS is not claimed.
 
 ## Completion condition
 
-Public regeneration work-profile construction cannot eagerly enumerate any project-scoped collection beyond the declared project cardinality, regression is on `main`, and this claim is closed.
+Satisfied for the remote-safe source/static contract. Exact executable/native qualification remains separate.
