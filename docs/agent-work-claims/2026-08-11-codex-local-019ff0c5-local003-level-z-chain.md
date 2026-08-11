@@ -70,6 +70,23 @@ The earlier claims for these exact surfaces are `COMPLETED` and released; curren
 
 The complete shared Level Z-chain is integrated on current `main`, deterministic tests/static guards pass, the exact-V25 build and required sanitized runtime matrix are recorded, `LOCAL-003` status/evidence is updated truthfully, no dependent family remains on a conflicting Z calculation, and this claim is marked `COMPLETED` with exact pushed SHA(s).
 
+## 2026-08-12 final exact-V25 gate reconciliation expansion
+
+Baseline audited before this expansion: `origin/main@c324c7e8`. The Level-owned Core focused smoke passes, and the Level source itself contributes no remaining adapter compiler error. However, the required whole-project Core/V25 gates are still blocked by released remote lanes that were merged without local compiler/runtime execution. The earlier owners of every exact surface below are `COMPLETED` or `RELEASED`; the current ACTIVE/BLOCKED audit found no other agent reserving these exact repairs. The separate active local BQ preflight claim belongs to the same `codex-local-019ff0c5` identity and explicitly excluded the product-source changes while their former owners were active.
+
+Reserve only the following behavior-preserving gate reconciliation needed to produce and qualify one exact-SHA Level candidate:
+
+- `tests/QS3D.Core.SmokeTests/QuantityCalculationSettingsCloneValidationSmoke.cs`: replace two invalid `const string` numeric concatenations with immutable runtime strings; preserve messages and cardinality expectations.
+- `src/QS3D.BricsCAD.V25/Updates/SemanticReleaseVersion.cs` and `Updates/UpdateManifestProbe.cs`: make the already-validated non-null string flow explicit without nullable suppression; preserve SemVer, tag and manifest policy.
+- `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs` and `WorkspacePanel.DarkContextMenu.cs`: expand invalid two-argument WPF `Thickness` calls to the equivalent horizontal/vertical four-side values and make existing optional UI references explicit; no layout redesign or handler change.
+- `src/QS3D.BricsCAD.V25/UI/RightPanel.CompactShell.cs` and `RightPanel.XrefLock.cs`: preserve optional compact controls and qualify the intended BricsCAD `Application`; no Xref/layer behavior change.
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs` and `WallQuantityWindow.xaml.cs`: make already-guarded optional row/project lookups explicit to nullable analysis; no quantity, locate, modeless-affinity or export behavior change.
+- `tests/QS3D.Core.SmokeTests/DoorOpeningXlsxSmoke.cs` and `MaterialUsageXlsxSmoke.cs`: align stale invalid-XML-character assertions with the released exporter contract that sanitizes to U+FFFD before writing valid worksheet XML; continue proving the control character is absent.
+- `tests/QS3D.Core.SmokeTests/GeneratedRebarProviderOwnershipSmoke.cs`: align the stale null-element assertion with the released generated-handle ownership index contract that rejects malformed null semantic entries fail-closed.
+- `src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs` plus validation-only `tests/QS3D.Core.SmokeTests/ScheduleReportingIdentitySmoke.cs`: return the canonical project Family identity after case-insensitive lookup instead of the caller's trimmed casing; preserve grouping, quantity arithmetic and immutable input state.
+
+Do not broaden this expansion into updater policy, Workspace/Right Panel design, quantity arithmetic, XLSX format changes, generated ownership semantics or reporting redesign. Re-run full Core smoke and installed-V25 `Release|x64` after these exact repairs. If a further unrelated blocker appears, diagnose it first and update the published claim again before editing any additional surface.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
@@ -90,3 +107,13 @@ The complete shared Level Z-chain is integrated on current `main`, deterministic
 - Whole-tree qualification is not claimed: aggregate preflight and adapter V25 build still have failures in concurrently owned Plan-to-3D, Right Panel, updater, Workspace and quantity-reporting surfaces. No Level/opening compiler or focused-gate failure was observed.
 - Remaining: Curtain host/frame/panel/live-state placement, generated rebar/mesh/shape placement, final policy/UI enablement, and the complete exact-SHA mm/m BricsCAD V25 runtime matrix.
 - Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL`.
+
+## 2026-08-11 full-chain source candidate heartbeat
+
+- Synchronized source baseline before this heartbeat: `origin/main@15c80902c6067f222cb6d4764b4b089079de67cf`.
+- The coherent source candidate now routes native hosts, hosted straight/curved opening cuts and Auto Host, Curtain LINE/path frame/panel/live-state output, generated longitudinal/tie/stirrup/mesh/shape reinforcement and effective semantic quantities through one branch-lazy Level placement contract.
+- Generated vertical snapshots and Level-edit stale propagation cover the integrated dependent families. Guarded Bottom/Top/Clear actions are present in the Floor/Level modeless UI and preserve the bound-project identity guard.
+- Source-enabled policy categories are ArchitecturalWall, GlassWall, WallPier, StructuralWall, Beam, Slab, Column, Foundation, Stair, Railing, Door and WallOpening; unsupported categories remain fail-closed.
+- Focused static Level/opening/rebar/Floor stale-project gates pass on the synchronized working tree. The aggregate Core/V25 build is currently blocked before Level compilation by unrelated current-main errors in `QsdbProjectXmlSchemaValidator.cs` and `CurtainFrameOpeningPlanner.cs`; no Level-owned compiler error has been observed.
+- `QS3DLEVELZPROBE` and `scripts/test-bricscad-v25-level-z.ps1` are prepared for a clean exact-SHA candidate. No result is claimed yet: focused native probe, complete mm/m/full-family/Undo/save-reopen/multi-DWG/private matrix and customer-release qualification remain `PENDING_LOCAL / NOT_LOCAL_PASS`.
+- Claim remains `ACTIVE`; LOCAL-003 is `IN_PROGRESS` and must not be closed until exact-SHA evidence is recorded.
