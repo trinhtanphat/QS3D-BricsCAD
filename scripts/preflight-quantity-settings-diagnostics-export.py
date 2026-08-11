@@ -35,6 +35,14 @@ def main():
         "new ReadOnlyCollection<int>",
         "new ReadOnlyCollection<QuantityCalculationMatrixDiagnosticPairSnapshot>",
         "public static class QuantityCalculationMatrixDiagnosticSnapshotExporter",
+        "var temp = Path.Combine(",
+        "Guid.NewGuid().ToString(\"N\") + \".tmp\"",
+        "File.Open(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)",
+        "Write(stream, snapshot);",
+        "stream.Flush(true);",
+        "File.Replace(temp, fullPath, null, true);",
+        "File.Move(temp, fullPath);",
+        "if (File.Exists(temp)) File.Delete(temp);",
         "new DataContractJsonSerializer(typeof(QuantityCalculationMatrixDiagnosticSnapshot))",
     ], "core snapshot")
     missing += require(command, [
@@ -49,9 +57,13 @@ def main():
     missing += require(smoke, [
         "SnapshotPreservesExactDirectedDiagnostics();",
         "JsonExportIsPortableAndSanitized();",
+        "SavePublishesAndReplacesPortableJson();",
         "SnapshotCreationDoesNotMutateCaller();",
         "Sequence(snapshot.ObservedCategoryCodes, 1301, 1302);",
         "Pair(snapshot.MissingDirectedPairs[1], 1301, 1302);",
+        'Contains(firstJson, "\\\"observedCategoryCodes\\\":[10]");',
+        'Contains(secondJson, "\\\"observedCategoryCodes\\\":[20]");',
+        "Equal(1, Directory.GetFiles(directory).Length);",
         'NotContains(json, "SettingsPath");',
         'NotContains(json, "ProjectId");',
         'NotContains(json, "Handle");',
@@ -67,11 +79,34 @@ def main():
             print(" -", item)
         return 1
 
+    save_start = core.find("public static void Save(string path, QuantityCalculationMatrixDiagnosticSnapshot snapshot)")
+    write_start = core.find("public static void Write(Stream stream, QuantityCalculationMatrixDiagnosticSnapshot snapshot)", save_start)
+    if save_start < 0 or write_start <= save_start:
+        print("ERROR: cannot isolate diagnostic snapshot Save/Write methods.")
+        return 1
+    save_method = core[save_start:write_start]
+
+    temp_at = save_method.find("var temp = Path.Combine(")
+    create_at = save_method.find("File.Open(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)", temp_at)
+    write_at = save_method.find("Write(stream, snapshot);", create_at)
+    flush_at = save_method.find("stream.Flush(true);", write_at)
+    exists_at = save_method.find("if (File.Exists(fullPath))", flush_at)
+    replace_at = save_method.find("File.Replace(temp, fullPath, null, true);", exists_at)
+    move_at = save_method.find("File.Move(temp, fullPath);", replace_at)
+    finally_at = save_method.find("finally", move_at)
+    cleanup_at = save_method.find("if (File.Exists(temp)) File.Delete(temp);", finally_at)
+    if not (0 <= temp_at < create_at < write_at < flush_at < exists_at < replace_at < move_at < finally_at < cleanup_at):
+        print("ERROR: diagnostic Save must serialize/flush a same-directory temp before replace/move and always clean temp in finally.")
+        return 1
+    if "File.Open(fullPath, FileMode.Create" in save_method:
+        print("ERROR: diagnostic Save must not truncate/open the destination before successful temp serialization.")
+        return 1
+
     load_at = command.find("new QuantitySettingsStore().Load();")
     snapshot_at = command.find("QuantityCalculationMatrixDiagnosticSnapshot.Create(settings);")
     dialog_at = command.find("new SaveFileDialog")
-    save_at = command.find("QuantityCalculationMatrixDiagnosticSnapshotExporter.Save(dialog.FileName, snapshot);")
-    if not (0 <= load_at < snapshot_at < dialog_at < save_at):
+    command_save_at = command.find("QuantityCalculationMatrixDiagnosticSnapshotExporter.Save(dialog.FileName, snapshot);")
+    if not (0 <= load_at < snapshot_at < dialog_at < command_save_at):
         print("ERROR: export command must preserve Load -> snapshot -> dialog -> selected-file write ordering.")
         return 1
 
@@ -125,7 +160,7 @@ def main():
         print("ERROR: health export must never write through the machine settings store contract.")
         return 1
 
-    print("PASS: QS3DQSETTINGSHEALTHEXPORT writes only a sanitized portable matrix snapshot to the user-selected JSON path and preserves settings/project/drawing read-only boundaries.")
+    print("PASS: QS3DQSETTINGSHEALTHEXPORT writes only a sanitized portable matrix snapshot, publishes it atomically through a same-directory temp, and preserves settings/project/drawing read-only boundaries.")
     return 0
 
 
