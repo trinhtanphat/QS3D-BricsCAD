@@ -302,7 +302,7 @@ namespace QS3D.Core.Navigation
             foreach (var name in expectedAttributes)
                 if (root.Attribute(name) == null)
                     throw new InvalidDataException("Project browser workspace root is missing required attribute: " + name + ".");
-            RejectNonWhitespaceText(root, "root");
+            ValidateContainerNodes(root, "root");
         }
 
         private static void ValidateCollectionShape(XElement container, string itemName)
@@ -312,24 +312,26 @@ namespace QS3D.Core.Navigation
             foreach (var child in container.Elements())
                 if (child.Name != itemName)
                     throw new InvalidDataException("Project browser workspace collection contains unsupported element: " + child.Name + ".");
-            RejectNonWhitespaceText(container, container.Name.LocalName);
+            ValidateContainerNodes(container, container.Name.LocalName);
         }
 
         private static void ValidateItemShape(XElement element, string itemName)
         {
             if (element.HasAttributes)
                 throw new InvalidDataException("Project browser workspace " + itemName + " item contains unsupported attributes.");
-            if (element.Elements().Any())
-                throw new InvalidDataException("Project browser workspace " + itemName + " item must contain text only.");
+            foreach (var node in element.Nodes())
+                if (!(node is XText))
+                    throw new InvalidDataException("Project browser workspace " + itemName + " item must contain text only.");
         }
 
-        private static void RejectNonWhitespaceText(XElement element, string label)
+        private static void ValidateContainerNodes(XElement element, string label)
         {
             foreach (var node in element.Nodes())
             {
+                if (node is XElement) continue;
                 var text = node as XText;
-                if (text != null && !string.IsNullOrWhiteSpace(text.Value))
-                    throw new InvalidDataException("Project browser workspace " + label + " contains unsupported mixed text.");
+                if (text != null && string.IsNullOrWhiteSpace(text.Value)) continue;
+                throw new InvalidDataException("Project browser workspace " + label + " contains unsupported node content.");
             }
         }
 
