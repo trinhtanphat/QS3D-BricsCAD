@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 ADAPTER = ROOT / "src/QS3D.BricsCAD.V25"
 COORDINATOR = ADAPTER / "ProjectContextCoordinator.cs"
+MUTATION_CONTEXT = ADAPTER / "ExistingProjectMutationContext.cs"
 RELEASE = ADAPTER / "ReleaseReadinessCommands.cs"
 HEALTH_ALL = ADAPTER / "HealthAllCommands.cs"
 HUB = ADAPTER / "UI/ScheduleHubWindow.xaml"
@@ -28,7 +29,7 @@ TABLES = {
 }
 
 errors = []
-required = [COORDINATOR, RELEASE, HEALTH_ALL, HUB] + [value[0] for value in TABLES.values()]
+required = [COORDINATOR, MUTATION_CONTEXT, RELEASE, HEALTH_ALL, HUB] + [value[0] for value in TABLES.values()]
 for path in required:
     if not path.is_file():
         errors.append("missing read-only health/lifecycle file: " + str(path.relative_to(ROOT)))
@@ -79,6 +80,22 @@ if COORDINATOR.is_file():
     elif "UnsavedProjectKeys" in path_body or "Guid.NewGuid" in path_body:
         errors.append("TryGetExistingProjectPath must not allocate transient project identity")
 
+if MUTATION_CONTEXT.is_file():
+    text = MUTATION_CONTEXT.read_text(encoding="utf-8")
+    require_body = method_body(text, "public static ProjectState Require(")
+    try_get_body = method_body(text, "public static bool TryGet(")
+    for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var observed)",
+        "var canonical = ProjectContextCoordinator.GetOrCreate(document);",
+        "string.Equals(canonical.ProjectId, expectedProjectId",
+        "ProjectContextCoordinator.Forget(document);",
+    ):
+        if token not in try_get_body:
+            errors.append("ExistingProjectMutationContext.TryGet missing canonical existing-project binding guard: " + token)
+    for token in ("TryGet(document, out var project)", "không tạo project mới"):
+        if token not in require_body:
+            errors.append("ExistingProjectMutationContext.Require missing fail-closed existing-project contract: " + token)
+
 for path, command_name in ((RELEASE, "QS3DRELEASECHECK"), (HEALTH_ALL, "QS3DHEALTHALL")):
     if not path.is_file():
         continue
@@ -102,21 +119,20 @@ for name, (path, health_marker, commands) in TABLES.items():
         continue
     if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in health:
         errors.append(name + " native Table health must use TryGetReadOnly")
-    if "ProjectContextCoordinator.GetOrCreate(document)" in health:
-        errors.append(name + " native Table health must not create/touch project state")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in health or "ExistingProjectMutationContext" in health:
+        errors.append(name + " native Table health must remain read-only and must not bind mutable project state")
     if "không tạo project mới" not in health:
         errors.append(name + " native Table health must explain BLOCKED no-project behavior")
 
     existing = method_body(text, "private static QS3D.Core.Domain.ProjectState RequireExistingProject(")
     if not existing:
         errors.append(name + " native Table must expose an existing-project guard for Build/Refresh/Remove")
-    else:
-        if "ExistingProjectMutationContext.Require(document, operation)" not in existing:
-            errors.append(name + " native Table existing-project guard must use the canonical mutation context")
+    elif "ExistingProjectMutationContext.Require(document, operation)" not in existing:
+        errors.append(name + " native Table existing-project guard must bind canonical existing state through ExistingProjectMutationContext.Require")
     if text.count("RequireExistingProject(document,") < 3:
         errors.append(name + " native Table Build/Refresh/Remove must each require the existing project explicitly")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
-        errors.append(name + " native Table lifecycle must not create/cache replacement project state")
+        errors.append(name + " native Table lifecycle must not directly create/cache replacement project state")
 
 if HUB.is_file():
     text = HUB.read_text(encoding="utf-8")
@@ -137,4 +153,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Release Check, Health All and native Table health inspect existing QS3D state read-only; Build/Refresh/Remove explicitly require the existing project without creating replacement state, and Schedule Hub exposes each lifecycle command exactly once.")
+print("PASS: Release Check, Health All and native Table health inspect existing QS3D state read-only; Build/Refresh/Remove bind canonical existing project state through the guarded mutation context, and Schedule Hub exposes each lifecycle command exactly once.")

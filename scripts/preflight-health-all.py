@@ -69,6 +69,8 @@ if command.is_file():
         "ModelHealthWindow",
     ):
         if needle not in text: errors.append("unified health command missing: " + needle)
+    if "SourceHandleResolver.Resolve(project, new[] { element.Id })" in text:
+        errors.append("unified Health All modeless Locate must not use the project snapshot captured when the window opened")
 
 room_health = ROOT / "src/QS3D.Core/Diagnostics/RoomFinishHealthService.cs"
 if room_health.is_file():
@@ -107,4 +109,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: full health aggregates HT_Phòng provenance plus generated/rebar/curtain ownership/stale checks with dependency-aware Locate wiring.")
+print("PASS: full health aggregates HT_Phòng provenance plus generated/rebar/curtain ownership/stale checks and modeless Locate re-resolves current project state before dependency-aware CAD selection.")
