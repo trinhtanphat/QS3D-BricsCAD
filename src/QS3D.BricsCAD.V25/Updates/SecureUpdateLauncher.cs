@@ -56,16 +56,17 @@ namespace QS3D.BricsCAD.V25.Updates
             }
         }
 
-        internal static bool TrySchedule(UpdateReleaseInfo release, out string error)
+        internal static bool TrySchedule(UpdateReleaseInfo? release, out string error)
         {
             error = string.Empty;
-            if (release == null || release.ManifestUri == null)
+            var manifestUri = release?.ManifestUri;
+            if (manifestUri == null)
             {
                 error = "Release này không có signed update manifest.";
                 return false;
             }
-            if (!string.Equals(release.ManifestUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(release.ManifestUri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(manifestUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(manifestUri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
             {
                 error = "Update manifest không thuộc host GitHub HTTPS được phép.";
                 return false;
@@ -91,7 +92,7 @@ namespace QS3D.BricsCAD.V25.Updates
                 string bricscadPath;
                 using (var process = Process.GetCurrentProcess())
                 {
-                    bricscadPath = process.MainModule?.FileName;
+                    bricscadPath = process.MainModule?.FileName ?? string.Empty;
                 }
                 if (string.IsNullOrWhiteSpace(bricscadPath) || !File.Exists(bricscadPath))
                     throw new InvalidOperationException("Không xác định được bricscad.exe đang chạy.");
@@ -104,7 +105,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
                 var worker = BuildWorkerScript(
                     updaterPath,
-                    release.ManifestUri.AbsoluteUri,
+                    manifestUri.AbsoluteUri,
                     signerThumbprint,
                     installDirectory,
                     bricscadPath,
@@ -242,12 +243,12 @@ namespace QS3D.BricsCAD.V25.Updates
             return script.ToString();
         }
 
-        private static string NormalizeThumbprint(string value)
+        private static string NormalizeThumbprint(string? value)
         {
             return (value ?? string.Empty).Replace(" ", string.Empty).ToUpperInvariant();
         }
 
-        private static string PsLiteral(string value)
+        private static string PsLiteral(string? value)
         {
             return "'" + (value ?? string.Empty).Replace("'", "''") + "'";
         }

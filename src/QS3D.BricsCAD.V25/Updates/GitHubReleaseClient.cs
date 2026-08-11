@@ -11,7 +11,7 @@ namespace QS3D.BricsCAD.V25.Updates
 {
     internal sealed class UpdateReleaseInfo
     {
-        internal UpdateReleaseInfo(SemanticReleaseVersion version, string tag, string name, bool prerelease, DateTime publishedUtc, Uri pageUri, Uri manifestUri, string notes)
+        internal UpdateReleaseInfo(SemanticReleaseVersion version, string tag, string name, bool prerelease, DateTime publishedUtc, Uri pageUri, Uri? manifestUri, string notes)
         {
             Version = version;
             Tag = tag;
@@ -29,7 +29,7 @@ namespace QS3D.BricsCAD.V25.Updates
         internal bool IsPrerelease { get; }
         internal DateTime PublishedUtc { get; }
         internal Uri PageUri { get; }
-        internal Uri ManifestUri { get; }
+        internal Uri? ManifestUri { get; }
         internal string Notes { get; }
         internal bool HasSignedUpdateManifest => ManifestUri != null;
     }
@@ -65,37 +65,45 @@ namespace QS3D.BricsCAD.V25.Updates
                     await CopyBoundedAsync(source, buffer, MaxResponseBytes).ConfigureAwait(false);
                     buffer.Position = 0;
                     var serializer = new DataContractJsonSerializer(typeof(GitHubReleaseDto[]));
-                    var payload = serializer.ReadObject(buffer) as GitHubReleaseDto[] ?? Array.Empty<GitHubReleaseDto>();
+                    var payload = serializer.ReadObject(buffer) as GitHubReleaseDto?[] ?? Array.Empty<GitHubReleaseDto?>();
                     return Convert(payload);
                 }
             }
         }
 
-        private static IReadOnlyList<UpdateReleaseInfo> Convert(IEnumerable<GitHubReleaseDto> releases)
+        private static IReadOnlyList<UpdateReleaseInfo> Convert(IEnumerable<GitHubReleaseDto?>? releases)
         {
             var result = new List<UpdateReleaseInfo>();
-            foreach (var release in releases ?? Enumerable.Empty<GitHubReleaseDto>())
+            foreach (var release in releases ?? Enumerable.Empty<GitHubReleaseDto?>())
             {
                 if (release == null || release.Draft) continue;
-                if (!SemanticReleaseVersion.TryParse(release.TagName, out var version)) continue;
+                if (!SemanticReleaseVersion.TryParse(release.TagName, out var version) || version == null) continue;
                 if (release.Prerelease != version.IsPrerelease) continue;
-                if (!TryGitHubUri(release.HtmlUrl, out var pageUri)) continue;
+                if (!TryGitHubUri(release.HtmlUrl, out var pageUri) || pageUri == null) continue;
 
-                Uri manifestUri = null;
-                var manifest = (release.Assets ?? Array.Empty<GitHubAssetDto>())
+                Uri? manifestUri = null;
+                var manifest = (release.Assets ?? Array.Empty<GitHubAssetDto?>())
                     .FirstOrDefault(asset => asset != null && string.Equals(asset.Name, UpdateManifestAssetName, StringComparison.Ordinal));
-                if (manifest != null && TryGitHubUri(manifest.BrowserDownloadUrl, out var candidate))
+                if (manifest != null && TryGitHubUri(manifest.BrowserDownloadUrl, out var candidate) && candidate != null)
                     manifestUri = candidate;
 
                 var publishedUtc = DateTime.MinValue;
-                if (!string.IsNullOrWhiteSpace(release.PublishedAt))
-                    DateTime.TryParse(release.PublishedAt, null, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out publishedUtc);
+                var publishedAt = release.PublishedAt;
+                if (publishedAt != null && publishedAt.Trim().Length != 0)
+                    DateTime.TryParse(publishedAt, null, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out publishedUtc);
 
                 var notes = NormalizeNotes(release.Body);
+                var tag = release.TagName ?? version.Original;
+                var name = tag;
+                if (release.Name != null)
+                {
+                    var candidateName = release.Name.Trim();
+                    if (candidateName.Length != 0) name = candidateName;
+                }
                 result.Add(new UpdateReleaseInfo(
                     version,
-                    release.TagName ?? version.Original,
-                    string.IsNullOrWhiteSpace(release.Name) ? (release.TagName ?? version.Original) : release.Name.Trim(),
+                    tag,
+                    name,
                     release.Prerelease,
                     publishedUtc,
                     pageUri,
@@ -105,10 +113,12 @@ namespace QS3D.BricsCAD.V25.Updates
             return result;
         }
 
-        private static bool TryGitHubUri(string value, out Uri uri)
+        private static bool TryGitHubUri(string? value, out Uri? uri)
         {
             uri = null;
+            if (value == null) return false;
             if (!Uri.TryCreate(value, UriKind.Absolute, out var candidate)) return false;
+            if (candidate == null) return false;
             if (!string.Equals(candidate.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) return false;
             if (!string.Equals(candidate.Host, "github.com", StringComparison.OrdinalIgnoreCase)) return false;
             if (!string.IsNullOrEmpty(candidate.UserInfo)) return false;
@@ -116,14 +126,14 @@ namespace QS3D.BricsCAD.V25.Updates
             return true;
         }
 
-        private static string NormalizeNotes(string value)
+        private static string NormalizeNotes(string? value)
         {
-            if (string.IsNullOrWhiteSpace(value)) return "Không có ghi chú phát hành.";
+            if (value == null || value.Trim().Length == 0) return "Không có ghi chú phát hành.";
             var normalized = value.Replace("\r\n", "\n").Replace('\r', '\n').Trim();
             return normalized.Length <= 1800 ? normalized : normalized.Substring(0, 1800).TrimEnd() + "…";
         }
 
-        private static async Task CopyBoundedAsync(Stream input, Stream output, int maxBytes)
+        private static async Task CopyBoundedAsync(Stream? input, Stream output, int maxBytes)
         {
             if (input == null) throw new InvalidOperationException("GitHub Releases response body was empty.");
             var buffer = new byte[16384];
@@ -141,21 +151,21 @@ namespace QS3D.BricsCAD.V25.Updates
         [DataContract]
         private sealed class GitHubReleaseDto
         {
-            [DataMember(Name = "tag_name")] public string TagName { get; set; }
-            [DataMember(Name = "name")] public string Name { get; set; }
+            [DataMember(Name = "tag_name")] public string? TagName { get; set; }
+            [DataMember(Name = "name")] public string? Name { get; set; }
             [DataMember(Name = "draft")] public bool Draft { get; set; }
             [DataMember(Name = "prerelease")] public bool Prerelease { get; set; }
-            [DataMember(Name = "published_at")] public string PublishedAt { get; set; }
-            [DataMember(Name = "html_url")] public string HtmlUrl { get; set; }
-            [DataMember(Name = "body")] public string Body { get; set; }
-            [DataMember(Name = "assets")] public GitHubAssetDto[] Assets { get; set; }
+            [DataMember(Name = "published_at")] public string? PublishedAt { get; set; }
+            [DataMember(Name = "html_url")] public string? HtmlUrl { get; set; }
+            [DataMember(Name = "body")] public string? Body { get; set; }
+            [DataMember(Name = "assets")] public GitHubAssetDto?[]? Assets { get; set; }
         }
 
         [DataContract]
         private sealed class GitHubAssetDto
         {
-            [DataMember(Name = "name")] public string Name { get; set; }
-            [DataMember(Name = "browser_download_url")] public string BrowserDownloadUrl { get; set; }
+            [DataMember(Name = "name")] public string? Name { get; set; }
+            [DataMember(Name = "browser_download_url")] public string? BrowserDownloadUrl { get; set; }
         }
     }
 }

@@ -20,7 +20,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
     internal sealed class UpdateCheckResult
     {
-        internal UpdateCheckResult(UpdateState state, SemanticReleaseVersion currentVersion, UpdateReleaseInfo release, string message, string detail)
+        internal UpdateCheckResult(UpdateState state, SemanticReleaseVersion currentVersion, UpdateReleaseInfo? release, string? message, string? detail)
         {
             State = state;
             CurrentVersion = currentVersion;
@@ -31,19 +31,19 @@ namespace QS3D.BricsCAD.V25.Updates
 
         internal UpdateState State { get; }
         internal SemanticReleaseVersion CurrentVersion { get; }
-        internal UpdateReleaseInfo Release { get; }
+        internal UpdateReleaseInfo? Release { get; }
         internal string Message { get; }
         internal string Detail { get; }
-        internal bool HasUpdate => Release != null && Release.Version.CompareTo(CurrentVersion) > 0;
-        internal bool CanAutoInstall => State == UpdateState.UpdateAvailable && Release != null && Release.ManifestUri != null && !SecureUpdateLauncher.IsScheduled;
+        internal bool HasUpdate => Release is UpdateReleaseInfo release && release.Version.CompareTo(CurrentVersion) > 0;
+        internal bool CanAutoInstall => State == UpdateState.UpdateAvailable && Release is UpdateReleaseInfo release && release.ManifestUri != null && !SecureUpdateLauncher.IsScheduled;
     }
 
     internal sealed class UpdateCoordinator
     {
         private readonly object _sync = new object();
         private readonly GitHubReleaseClient _client = new GitHubReleaseClient();
-        private Dispatcher _dispatcher;
-        private Task<UpdateCheckResult> _inFlight;
+        private Dispatcher? _dispatcher;
+        private Task<UpdateCheckResult>? _inFlight;
         private UpdateCheckResult _last;
         private int _generation;
         private bool _started;
@@ -56,8 +56,8 @@ namespace QS3D.BricsCAD.V25.Updates
 
         internal static UpdateCoordinator Instance { get; } = new UpdateCoordinator();
 
-        internal event EventHandler<UpdateCheckResult> StateChanged;
-        internal event EventHandler<UpdateCheckResult> AutomaticUpdateFound;
+        internal event EventHandler<UpdateCheckResult>? StateChanged;
+        internal event EventHandler<UpdateCheckResult>? AutomaticUpdateFound;
 
         internal UpdateCheckResult LastResult
         {
@@ -93,12 +93,13 @@ namespace QS3D.BricsCAD.V25.Updates
         internal async Task<UpdateCheckResult> ScheduleLatestAsync()
         {
             var fresh = await CheckAsync(false).ConfigureAwait(false);
-            if (!fresh.CanAutoInstall)
+            var release = fresh.Release;
+            if (!fresh.CanAutoInstall || release == null)
                 return fresh;
 
-            if (!SecureUpdateLauncher.TrySchedule(fresh.Release, out var error))
+            if (!SecureUpdateLauncher.TrySchedule(release, out var error))
             {
-                var failed = new UpdateCheckResult(UpdateState.Error, fresh.CurrentVersion, fresh.Release, "Không thể lên lịch cập nhật.", error);
+                var failed = new UpdateCheckResult(UpdateState.Error, fresh.CurrentVersion, release, "Không thể lên lịch cập nhật.", error);
                 Publish(failed, false);
                 return failed;
             }
@@ -106,7 +107,7 @@ namespace QS3D.BricsCAD.V25.Updates
             var scheduled = new UpdateCheckResult(
                 UpdateState.Scheduled,
                 fresh.CurrentVersion,
-                fresh.Release,
+                release,
                 "Đã lên lịch cập nhật.",
                 "QS3D sẽ yêu cầu BricsCAD đóng theo cơ chế cửa sổ bình thường để giữ nguyên các nhắc lưu bản vẽ. Nếu bạn hủy đóng, updater chỉ tiếp tục chờ; khi mọi BricsCAD đã thoát, nó mới xác minh chữ ký, cập nhật và mở lại sau khi thành công.");
             Publish(scheduled, false);
