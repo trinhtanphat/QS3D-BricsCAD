@@ -196,7 +196,7 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DREGEN", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var project = ExistingProjectMutationContext.Require(doc, "Regenerate");
                 var count = RegenerateProject(project);
                 PaletteCoordinator.RefreshProject();
                 var message = count == 0 ? "QS3D: không có cấu kiện dirty cần regenerate." : "QS3D: đã regenerate " + count + " lượt cấu kiện.";
@@ -213,7 +213,12 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) { PaletteCoordinator.RefreshAll(); return; }
             Guard(doc, "QS3DREFRESH", () =>
             {
-                var count = RegenerateProject(ProjectContextCoordinator.GetOrCreate(doc));
+                var count = 0;
+                if (ProjectContextCoordinator.TryGetReadOnly(doc, out _))
+                {
+                    var project = ExistingProjectMutationContext.Require(doc, "Refresh");
+                    count = RegenerateProject(project);
+                }
                 PaletteCoordinator.RefreshAll();
                 doc.Editor.WriteMessage("\nQS3D đã làm mới Project/Layer/Xref" + (count > 0 ? " và regenerate " + count + " lượt cấu kiện." : "."));
             });

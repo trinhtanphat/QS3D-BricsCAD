@@ -81,12 +81,13 @@ checks = {
         "MaxFramesPerElement = 4096",
         "MaxFramesPerBatch = 8192",
         "GeneratedCurtainFrameOwnershipGuard.Build(project)",
-        "ownership.EnsureOwned(handle, element)",
+        "ownership.EnsureOwned(original, element)",
+        "GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership",
         'GeneratedCurtainFrameMode"] = update.OpeningCount > 0 ? OpeningAwareMode : Mode',
         "ClearGeneratedCurtainFrameStale",
         "CreateBox",
-        "GetObject(ids[0], OpenMode.ForWrite",
-        "Refusing destructive erase",
+        "GetObject(item.Value, OpenMode.ForWrite",
+        "Refusing destructive replacement before any frame is erased",
     ],
     "src/QS3D.BricsCAD.V25/CurtainWallFrameCommands.cs": [
         'CommandMethod("QS3DCURTAINFRAMES3D"', "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls"

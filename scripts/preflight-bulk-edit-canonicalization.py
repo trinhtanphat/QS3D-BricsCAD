@@ -14,8 +14,8 @@ for path in (SERVICE, SMOKE, REG):
 
 if SERVICE.is_file():
     text = SERVICE.read_text(encoding="utf-8")
-    if text.count("SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName)") < 2:
-        errors.append("BulkEditService must canonicalize and validate propertyName through the shared policy in both set and multiply paths")
+    if text.count("var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);") < 2:
+        errors.append("BulkEditService must canonicalize and validate propertyName through the shared edit policy in both set and multiply paths")
     for token in (
         "element.Properties.TryGetValue(key, out var before)",
         "element.Properties[key] = next;",
@@ -47,4 +47,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] bulk property edit/multiply paths are statically guarded to use trimmed canonical keys and preserve geometry-dirty policy")
+print("[PASS] bulk property edit/multiply paths are statically guarded to use the shared canonical property policy and preserve geometry-dirty policy")

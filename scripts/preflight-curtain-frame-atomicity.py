@@ -45,7 +45,8 @@ for label, contract in contracts.items():
     for token in (
         "ProjectStateSnapshot.Capture(project)",
         "var cadCommitted = false;",
-        "ErasePrevious(document, transaction, project, element, ownership)",
+        "var previous = ValidatePrevious(document, transaction, project, element, ownership);",
+        "ErasePrevious(transaction, project, element, previous);",
         semantic_token,
         touch_token,
         commit_token,
@@ -58,11 +59,15 @@ for label, contract in contracts.items():
             errors.append(label + ": missing atomic frame replacement contract: " + token)
 
     semantic = body.find(semantic_token)
+    validate_previous = body.find("var previous = ValidatePrevious(document, transaction, project, element, ownership);")
+    erase_previous = body.find("ErasePrevious(transaction, project, element, previous);")
     touch = body.find(touch_token)
     commit = body.find(commit_token)
     restore = body.find("rollback.Restore(project)")
     if min(semantic, touch, commit, restore) >= 0 and not semantic < touch < commit < restore:
         errors.append(label + ": semantic ownership and project revision must commit while CAD remains rollback-capable")
+    if min(validate_previous, erase_previous, semantic) >= 0 and not validate_previous < erase_previous < semantic:
+        errors.append(label + ": complete previous-frame validation must precede erase and semantic commit")
     if commit >= 0 and semantic_token in body[commit + len(commit_token):]:
         errors.append(label + ": semantic frame ownership is still mutated after CAD commit")
     if commit >= 0 and touch_token in body[commit + len(commit_token):]:

@@ -49,7 +49,8 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs": [
         "GeneratedCurtainFrameOwnershipGuard.Build(project)", "CurtainWallDetailPlanner.Plan", "CurtainFrameDepthM",
-        "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192", "ownership.EnsureOwned", "Refusing destructive erase",
+        "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192", "ownership.EnsureOwned", "Refusing destructive replacement",
+        "GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership",
         "GeneratedCurtainFrameHandles", "ClearGeneratedCurtainFrameStale();",
     ],
     "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml": [
