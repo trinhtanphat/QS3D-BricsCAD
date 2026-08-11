@@ -85,7 +85,7 @@ if grid.is_file():
         "ValidatePrevious", "CadHandleService.NormalizeHexHandle", "OpenMode.ForRead",
         "result.Count != expected.Count",
         "Refusing destructive replacement before any Grid annotation is erased.",
-        "Refusing partial destructive replacement.",
+        "Refusing partial destructive replacement",
     ):
         if needle not in text: errors.append("Grid annotation exact-set replacement guard missing: " + needle)
 
