@@ -163,7 +163,12 @@ if RULES.is_file() and "ProjectStateSnapshot.CreateDetachedCopy(project)" not in
 
 if REGEN.is_file():
     regen = REGEN.read_text(encoding="utf-8")
-    for token in ("ProjectStateSnapshot.CreateDetachedCopy(project)", "NewEngine().RegenerateDirty(detached)"):
+    for token in (
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "var engine = NewEngine();",
+        "engine.RegenerateDirty(detached)",
+        "engine.RegenerateDirtySubset(detached, targets)",
+    ):
         if token not in regen:
             errors.append("Regeneration preview lost detached-state execution: " + token)
 
@@ -177,4 +182,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: preview/diagnostic commands use read-only project lookup, review exports confirm destination before project access, previews execute on detached Core state, and Diagnostic Summary confirms destination before health scanning and atomically publishes aggregate output.")
+print("PASS: preview/diagnostic commands use read-only project lookup, review exports confirm destination before project access, previews execute through one engine on detached Core state, and Diagnostic Summary atomically publishes aggregate output.")
