@@ -87,7 +87,7 @@ Smoke registration is isolated through a module initializer to avoid the shared 
 - explicit null-target exceptions;
 - all six smoke cases and module registration.
 
-It rejects legacy raw equality and `if (element == null) continue;` behavior, and verifies null validation occurs before `project.Touch()` in the assignment methods.
+It rejects legacy raw equality and `if (element == null) continue;` behavior. For Floor it verifies `Assign()` resolves the full target set before `project.Touch()` and verifies the shared resolver rejects null before ownership dereference; for Zone it verifies the inline null guard executes before `project.Touch()`.
 
 ## Integration strategy
 
