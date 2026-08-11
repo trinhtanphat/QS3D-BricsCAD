@@ -194,7 +194,10 @@ namespace QS3D.Core.Geometry
             for (var i = 0; i < rings.Count; i++)
             {
                 var ring = rings[i];
-                curves.Add(GridReferenceCurve.Arc(ring.ElementId, input.CenterM, ring.RadiusM, 0d, TwoPi));
+                var curve = GridReferenceCurve.Arc(ring.ElementId, input.CenterM, ring.RadiusM, 0d, TwoPi);
+                if (!Finite(curve.Start.X) || !Finite(curve.Start.Y) || !Finite(curve.End.X) || !Finite(curve.End.Y))
+                    throw new OverflowException("Radial Grid ring endpoint generation exceeded the supported numeric range for " + ring.ElementId + ".");
+                curves.Add(curve);
             }
             return curves.AsReadOnly();
         }
