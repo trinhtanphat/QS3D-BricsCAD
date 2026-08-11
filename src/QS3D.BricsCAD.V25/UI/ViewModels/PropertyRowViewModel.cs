@@ -13,10 +13,26 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
         private string _value = string.Empty;
         private bool _canReset;
+        private bool _isReadOnly;
         public string Group { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string Unit { get; set; } = string.Empty;
-        public bool IsReadOnly { get; set; }
+        public bool IsReadOnly
+        {
+            get => _isReadOnly;
+            set
+            {
+                if (_isReadOnly == value) return;
+                _isReadOnly = value;
+                if (_isReadOnly && _canReset)
+                {
+                    _canReset = false;
+                    OnChanged(nameof(CanReset));
+                }
+                OnChanged();
+                OnChanged(nameof(IsEditable));
+            }
+        }
         public bool IsEditable => !IsReadOnly;
         public string EditorKind { get; set; } = TextEditor;
         public IReadOnlyList<string> Choices { get; set; } = Array.Empty<string>();
@@ -26,7 +42,13 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public bool CanReset
         {
             get => _canReset;
-            set { if (_canReset == value) return; _canReset = value; OnChanged(); }
+            set
+            {
+                var next = !_isReadOnly && value;
+                if (_canReset == next) return;
+                _canReset = next;
+                OnChanged();
+            }
         }
 
         public string Value

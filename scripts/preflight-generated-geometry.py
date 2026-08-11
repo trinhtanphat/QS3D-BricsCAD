@@ -115,8 +115,10 @@ if ownership.is_file():
 workspace = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs"
 if workspace.is_file():
     text = workspace.read_text(encoding="utf-8")
-    for needle in ("element.SetProperty(key, next)", "element.MarkDirty(ElementDirtyFlags.All)"):
+    for needle in ("element.SetProperty(key, next)",):
         if needle not in text: errors.append("Workspace semantic edit must flow through stale-aware element mutation: " + needle)
+    if "element.MarkDirty(ElementDirtyFlags.All)" in text:
+        errors.append("Workspace must preserve ProjectElement.SetProperty property-specific dirty/geometry invalidation")
 
 wall_snap = ROOT / "src/QS3D.BricsCAD.V25/WallJunctionSnapCommands.cs"
 if wall_snap.is_file():

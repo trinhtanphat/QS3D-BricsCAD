@@ -202,6 +202,19 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related docs: `src/QS3D.BricsCAD.V25/BrcPublicProbeCommands.cs`; `src/QS3D.BricsCAD.V25/BrcQuantityRoundTripProbeCommands.cs`; `scripts/test-bricscad-v25-brc-probe.ps1`; `scripts/test-bricscad-v25-brc-quantity-roundtrip.ps1`; `docs/PRODUCT-BOUNDARY.md`; `docs/COMMANDS.md`; `docs/LOCAL-V25-QUALIFICATION.md`
 - Updated: 2026-08-11
 
+## LOCAL-014 — Plan-to-3D preview-to-commit and batch compensation
+
+- Priority: P1
+- Status: OPEN
+- Area: `QS3DCONVERT2D` / `QS3DPLAN2WALLS` / immediate native wall creation
+- Source-side status: REMOTE_DONE for the current source eligibility, project-identity, drawing-unit and preview-to-commit freshness guards. Interactive proof remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`.
+- Why local: Exact Model Space/UCS state, live ObjectId/source changes while prompts are open, native Solid3d ownership, editor selection and ownership-scoped rollback require licensed BricsCAD V25.
+- Scenario: On disposable drawings, run `QS3DCONVERT2D` and `QS3DPLAN2WALLS` with LINE/open-POLYLINE sources. Cancel selection and each numeric prompt before project creation; switch DWG, Model Space/UCS or drawing-unit policy during prompts; delete, edit or change source eligibility; and make a project appear or replace the reviewed project before commit. Every stale/cancel case must fail closed before snapshot, semantic mutation or native output. Then run successful mixed LINE/open-POLYLINE batches and inject a mid-batch native failure: source CAD must remain unchanged, only this batch's owned solids may be compensated, the semantic snapshot must restore, and another DWG must remain untouched.
+- Evidence required: Exact SHA and V25 version; before/after DWG/project identity; source count/type/eligibility summary; preview-to-commit freshness result; Model Space/UCS and unit-switch refusal; project appears/replacement refusal; successful semantic + native ownership counts; injected-failure compensation and rollback result; save/reopen and Undo/Redo result. Evidence must be sanitized and must not include private drawing paths or raw Handle lists.
+- Evidence: PENDING_LOCAL
+- Related docs: `docs/PLAN-TO-3D-WORKFLOW.md`; `src/QS3D.BricsCAD.V25/PlanTo3DCommands.cs`; `scripts/preflight-plan-to-3d-project-lifecycle.py`; `docs/LOCAL-V25-QUALIFICATION.md`
+- Updated: 2026-08-11
+
 ## Close-out rule
 
 Closing all `OPEN` P0/P1 items does not automatically mean the product is commercially released. Release publication still follows `CI_POLICY.md` and requires the owner's separate explicit release authorization. This inbox only records local engineering qualification truth.
