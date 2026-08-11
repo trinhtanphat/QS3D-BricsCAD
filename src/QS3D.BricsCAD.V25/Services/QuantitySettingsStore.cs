@@ -104,6 +104,23 @@ namespace QS3D.BricsCAD.V25.Services
             return path + ".bak";
         }
 
+        private static bool CanRotatePrimaryIntoBackup(string path)
+        {
+            try
+            {
+                ReadAndValidate(path);
+                return true;
+            }
+            catch (InvalidDataException ex) when (!IsUnsupportedSchema(ex))
+            {
+                return false;
+            }
+            catch (FileNotFoundException)
+            {
+                return false;
+            }
+        }
+
         private static void WriteAtomic(string path, QuantityCalculationSettings settings)
         {
             var directory = Path.GetDirectoryName(path);
@@ -123,8 +140,10 @@ namespace QS3D.BricsCAD.V25.Services
                 if (File.Exists(path))
                 {
                     var backup = GetBackupPath(path);
-                    if (File.Exists(backup)) File.Delete(backup);
-                    File.Replace(temp, path, backup, true);
+                    if (CanRotatePrimaryIntoBackup(path))
+                        File.Replace(temp, path, backup, true);
+                    else
+                        File.Replace(temp, path, null, true);
                 }
                 else
                 {
