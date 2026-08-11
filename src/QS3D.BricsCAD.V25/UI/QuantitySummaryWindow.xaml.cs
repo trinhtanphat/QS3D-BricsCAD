@@ -115,7 +115,7 @@ namespace QS3D.BricsCAD.V25.UI
             var category = CategoryList.SelectedItem as string;
             try
             {
-                EnsureActive("tính lại BQ");
+                EnsureCurrentProject("tính lại BQ");
                 _rows = _recalculate() ?? Array.Empty<QuantityReportRow>();
                 ReloadFloors(floor);
                 ReloadCategories(category);
@@ -130,7 +130,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (QuantityGrid == null || !(sender is CheckBox box) || box.Tag == null || _loadingColumnPreferences) return;
             try
             {
-                EnsureActive("đổi cấu hình cột BQ");
+                EnsureCurrentProject("đổi cấu hình cột BQ");
                 if (!TryColumnIndex(box, out var index) || index >= QuantityGrid.Columns.Count) return;
                 QuantityGrid.Columns[index].Visibility = box.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
                 PersistColumnPreferences();
@@ -148,7 +148,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureActive("mở ED2 Excel");
+                EnsureCurrentProject("mở ED2 Excel");
                 _document.SendStringToExecute("QS3DED2 ", true, false, false);
             }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
@@ -158,7 +158,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureActive("định vị từ Excel");
+                EnsureCurrentProject("định vị từ Excel");
                 _document.SendStringToExecute("QS3DEXCELLOCATE ", true, false, false);
             }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
@@ -169,7 +169,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (_locate == null || !(QuantityGrid.SelectedItem is QuantityReportRow row)) return;
             try
             {
-                EnsureActive("định vị BQ");
+                EnsureCurrentProject("định vị BQ");
                 _locate(row);
             }
             catch (Exception ex) { MessageBox.Show(this, "Không thể định vị: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
@@ -179,7 +179,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureActive("xuất BQ XLSX");
+                EnsureCurrentProject("xuất BQ XLSX");
                 var dialog = new SaveFileDialog { Title = "Xuất bảng khối lượng QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = "QS3D-Khoi-Luong.xlsx", AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
                 if (dialog.ShowDialog(this) != true) return;
 
@@ -210,6 +210,13 @@ namespace QS3D.BricsCAD.V25.UI
                     "Lưu cấu hình cột BQ thất bại và rollback project cũng không hoàn tất.",
                     new AggregateException(operationError, restoreError));
             }
+        }
+
+        private void EnsureCurrentProject(string operation)
+        {
+            EnsureActive(operation);
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out _))
+                throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng bảng BQ và mở lại trước khi " + operation + ".");
         }
 
         private void EnsureActive(string operation)
