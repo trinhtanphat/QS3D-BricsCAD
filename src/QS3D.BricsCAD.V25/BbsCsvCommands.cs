@@ -32,7 +32,7 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
-                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                if (!ExistingProjectMutationContext.TryGet(document, out var project))
                 {
                     Report(document, "BBS CSV: BLOCKED • chưa có QS3D project state/sidecar; export không tạo project mới.");
                     return;
