@@ -86,10 +86,14 @@ Project summary is read-only. Existing business commands keep ownership of their
 
 ## Keyboard / interaction
 
-- `Ctrl+F` focuses command search.
+- `Ctrl+F` focuses command search and selects the current query.
+- While the command search box has focus, `Enter` runs the currently selected result (the first filtered result is selected automatically when appropriate).
+- While the command search box has focus, `↓` moves focus into the selected command result and scrolls it into view.
+- `Enter` also runs the selected command while the command list has focus.
 - Double-click runs command/favorite/recent-command items.
-- `Enter` runs the selected command while the command list has focus.
 - `Esc` closes Start Center.
+
+This keeps the common launcher path keyboard-only: `Ctrl+F` → type → `Enter`, while still supporting `↓` when the user wants to inspect/navigate the result list before running anything.
 
 ## Static regression gates
 
@@ -103,6 +107,7 @@ Project summary is read-only. Existing business commands keep ownership of their
 - tokenized AND-semantics launcher search;
 - Unicode decomposition, combining-mark removal and `đ/Đ` folding for accent-insensitive Vietnamese lookup;
 - recent-DWG search, pinned/available/missing filters and filtered/total count wiring;
+- `Ctrl+F` search plus SearchBox `Enter` execution and `↓` result-list focus/scroll behavior;
 - source registration for `QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DQSETTINGSHEALTHEXPORT` and `QS3DRULECREATE` before those commands may appear in the launcher;
 - click-time `MdiActiveDocument` resolution;
 - non-creating `TryGetReadOnly` dashboard behavior;
@@ -128,7 +133,7 @@ Remote/source review is not BricsCAD runtime proof. Exact-candidate local qualif
 5. two-DWG switching while Start Center stays open, with dashboard/command/Ribbon dispatch always following the active DWG and no project creation merely from viewing;
 6. Favorites/recent commands survive BricsCAD restart;
 7. recent-DWG dedupe, pin/unpin, successful open, missing-file status and Remove/Clear no-delete behavior;
-8. `Ctrl+F`, `Enter`, double-click and `Esc` interaction;
+8. keyboard flow: `Ctrl+F` focuses/selects search text; typing a query then `Enter` runs the selected allowlisted result directly from SearchBox; typing then `↓` moves focus into the selected result and keeps it visible; list-focused `Enter`, double-click and `Esc` retain their documented behavior;
 9. launcher queries `wall qty`, `model health`, `rebar mesh`, `tham khảo`, `tham khao`, `đối tượng` and `doi tuong` return only items matching every token after the documented fold, and launching the resulting `QS3DWALLQTY`, health/rebar and `QS3DREFSEARCH` entries follows the click-time active DWG;
 10. a disposable `start-center-v1.txt` containing one malformed Base64 line between valid favorite/recent/project records skips only the malformed line and preserves the later valid records after Start Center reload/restart;
 11. `QS3DQSETTINGSHEALTHEXPORT` launched from Start Center opens its normal guarded export flow rather than any Start Center-specific implementation;
