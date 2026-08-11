@@ -38,6 +38,7 @@ if not filter_code.is_file():
 else:
     text = filter_code.read_text(encoding="utf-8")
     for token in (
+        "private const int MaxPropertySearchTokens = 12;",
         "private void OnWorkspaceDataContextChanged",
         "PreviewKeyDown -= OnPropertyFilterShortcut;",
         "PreviewKeyDown += OnPropertyFilterShortcut;",
@@ -52,10 +53,18 @@ else:
         "private void OnClearPropertySearchClick",
         "private void ApplyPropertyFilter()",
         "CollectionViewSource.GetDefaultView(PropertyList?.ItemsSource)",
-        "Contains(row.Group, text)",
-        "Contains(row.Name, text)",
-        "Contains(row.Unit, text)",
-        "Contains(row.Value, text)",
+        ".Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)",
+        ".Take(MaxPropertySearchTokens)",
+        "tokens.All(token => MatchesPropertyToken(row, token))",
+        "private static bool MatchesPropertyToken",
+        "Contains(row.Group, token)",
+        "Contains(row.Name, token)",
+        "Contains(row.Unit, token)",
+        "Contains(row.Value, token)",
+        "Contains(row.EditorKind, token)",
+        "row.Choices.Any(choice => Contains(choice, token))",
+        'Contains("CAD đọc khóa readonly source nguồn", token)',
+        'Contains("Instance override ghi đè", token)',
         "StringComparison.CurrentCultureIgnoreCase",
     ):
         if token not in text:
@@ -78,4 +87,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace exposes a denser BLT-style Family/property palette with property search, Ctrl+Shift+F/Escape keyboard UX, source/override state cues, counts and wider editors; filtering remains presentation-only.")
+print("PASS: Workspace exposes a denser BLT-style Family/property palette with bounded multi-term search, Ctrl+Shift+F/Escape keyboard UX, source/override/editor/choice aliases, counts and wider editors; filtering remains presentation-only.")
