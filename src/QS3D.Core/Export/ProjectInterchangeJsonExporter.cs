@@ -211,12 +211,25 @@ namespace QS3D.Core.Export
 
         private static void ValidateSemanticCollections(ProjectState project)
         {
-            if (project.Zones.Any(x => x == null))
-                throw new InvalidDataException("Interchange export Zones contains a null entry.");
-            if (project.Floors.Any(x => x == null))
-                throw new InvalidDataException("Interchange export Floors contains a null entry.");
-            if (project.Families.Any(x => x == null))
-                throw new InvalidDataException("Interchange export Families contains a null entry.");
+            ValidateUniqueIds(project.Zones, x => x.Id, "Zone");
+            ValidateUniqueIds(project.Floors, x => x.Id, "Floor");
+            ValidateUniqueIds(project.Families, x => x.Id, "Family");
+            ValidateUniqueIds(project.Elements, x => x.Id, "element");
+        }
+
+        private static void ValidateUniqueIds<T>(IEnumerable<T> source, Func<T, string> idSelector, string label) where T : class
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in source)
+            {
+                if (item == null)
+                    throw new InvalidDataException("Interchange export " + label + " collection contains a null entry.");
+                var id = (idSelector(item) ?? string.Empty).Trim();
+                if (id.Length == 0)
+                    throw new InvalidDataException("Interchange export " + label + " collection contains an empty id.");
+                if (!seen.Add(id))
+                    throw new InvalidDataException("Interchange export contains duplicate " + label + " id: " + id + ".");
+            }
         }
 
         private static void Property(StringBuilder json, int indent, string name, string value, bool comma)
