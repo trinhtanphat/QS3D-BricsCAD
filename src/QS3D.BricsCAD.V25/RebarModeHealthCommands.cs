@@ -17,15 +17,20 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    Report(document, "Rebar Mode Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.");
+                    return;
+                }
+
                 var issues = new GeneratedRebarModeHealthService().Inspect(project);
                 var summary = new HealthSummary(issues);
                 var message = "Rebar Mode Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                Report(document, message);
                 var window = new ModelHealthWindow(document, issues, issue =>
                 {
-                    var element = project.FindElement(issue.ElementId);
+                    if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+                    var element = currentProject.FindElement(issue.ElementId);
                     if (element == null) return;
                     var handles = element.Properties.TryGetValue("GeneratedRebarHandles", out var raw) && !string.IsNullOrWhiteSpace(raw)
                         ? raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToArray()
@@ -38,10 +43,14 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
-                var message = "QS3DREBARMODEHEALTH lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                Report(document, "QS3DREBARMODEHEALTH lỗi: " + ex.Message);
             }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
     }
 }
