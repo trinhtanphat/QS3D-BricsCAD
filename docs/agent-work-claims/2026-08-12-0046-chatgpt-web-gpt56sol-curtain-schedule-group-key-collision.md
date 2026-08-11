@@ -1,46 +1,42 @@
 # Work claim — Curtain wall schedule collision-free grouping identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T00:46:00+07:00`
+- Completed: `2026-08-12T00:49:00+07:00`
 - Baseline main SHA: `6f08b169e50e51d2a401c7d2a45b354049992a9c`
+- Claim commit: `ad4f2f304fc449ba7ce59b5b904675a68d1fdc48`
 - Priority: evidence-driven remote-safe reporting integrity
 
 ## Confirmed defect
 
-`CurtainWallScheduleBuilder` groups rows with `floorId + "\u001f" + familyId`. Accepted floor/family IDs are trimmed but are not contractually forbidden from containing U+001F internally. Distinct tuples such as `(A<US>B, C)` and `(A, B<US>C)` therefore serialize to the same dictionary key and are incorrectly merged, corrupting wall counts, quantities and provenance.
+`CurtainWallScheduleBuilder` grouped rows with `floorId + "\u001f" + familyId`. Accepted floor/family IDs can contain U+001F internally, so distinct tuples such as `(A<US>B, C)` and `(A, B<US>C)` serialized to the same dictionary key and were incorrectly merged.
 
-## Reserved scope
+## Completed scope
 
-Replace the ambiguous two-token delimiter grouping identity with deterministic collision-free encoding while preserving existing case-insensitive grouping semantics, row ordering, quantities and provenance behavior.
+Curtain schedule grouping now uses length-prefixed floor/family tokens. Existing case-insensitive grouping semantics, ordering, quantities and provenance behavior remain unchanged, and no accepted ID characters were banned.
 
-## Expected surfaces
+## Product/test commits
 
-- `src/QS3D.Core/Reporting/CurtainWallSchedule.cs`
-- `tests/QS3D.Core.SmokeTests/CurtainWallScheduleGroupKeyCollisionSmoke.cs`
-- `tests/QS3D.Core.SmokeTests/CurtainWallScheduleGroupKeyCollisionRegistration.cs`
-- this claim file
+- `6c7232a6d1ba3c6ee9674771015ba86cc0d7f5ba` — `fix(reporting): make curtain schedule grouping collision-free`
+- `15ae81fc9bd825fbd1d817c9892b010014e897ba` — `test(reporting): cover curtain schedule group key collision`
+- `9798088227a699deec52139543ec6edbd4d10cda` — `test(reporting): register curtain schedule group key smoke`
+
+## Validation
+
+- Re-fetched the target blob after claim publication before the product write.
+- Product diff only replaces the ambiguous delimiter grouping with a length-prefixed `GroupKey` helper and adds invariant integer formatting support.
+- Regression creates two elements with tuple `(A<US>B, C)`, proving identical tuples still group and sum `LengthM`, plus one `(A, B<US>C)` element that formerly collided but now remains independent.
+- Registration uses a dedicated module initializer.
+- After registration, observed `main` at `b8075871e6ebd406f2ca7e64c42c5bff4aeed6ac`; comparison from `9798088227a699deec52139543ec6edbd4d10cda` reported `status=ahead`, `behind_by=0`, merge base equal to the registration commit. The concurrent change touched an unrelated selection inspector.
+- GitHub Actions were not dispatched.
+- No .NET SDK or BricsCAD V25 runtime PASS is claimed from this hosted session.
 
 ## Excluded scope
 
 - No curtain geometry/layout/fingerprint/regeneration changes.
-- No schedule field/business-rule changes.
-- No new restrictions on accepted floor/family ID characters.
-- No XLSX export changes.
-- No GitHub Actions dispatch.
+- No schedule field/business-rule or XLSX export changes.
 
-## Validation plan
+## Completion
 
-- Preserve normal grouping for identical floor/family tuples.
-- Prove `(A<US>B, C)` and `(A, B<US>C)` produce distinct rows rather than one merged row.
-- Verify row counts and representative quantities remain independent.
-- Use length-prefixed token encoding, a dedicated module initializer, target re-fetch before source write, exact diff review and ancestry verification.
-- No .NET/V25 runtime PASS will be claimed unless actually executed.
-
-## Coordination
-
-Recent searches found no active/recent claim reserving `CurtainWallSchedule.cs`. Geometry/native curtain lanes are excluded.
-
-## Completion condition
-
-Distinct accepted curtain schedule grouping tuples cannot alias through delimiter injection, regression source is on current `main`, concurrent work is preserved, and this claim is closed with exact commit SHAs.
+Distinct accepted curtain schedule grouping tuples no longer alias through delimiter injection on current `main`; claim released as completed.
