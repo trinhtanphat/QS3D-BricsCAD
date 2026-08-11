@@ -8,9 +8,9 @@ namespace QS3D.Core.Reporting
     /// Immutable runtime lookup snapshot for quantity calculation settings.
     ///
     /// Integer-code lookup is always exact. Native ElementCategory lookup first
-    /// tries the native enum value, then falls back only to legacy BLT codes
-    /// whose display-name equivalence is already established by the QS3D setup UI.
-    /// Missing rules are never synthesized or mirrored.
+    /// tries the native enum value, then falls back only to legacy BLT codes whose
+    /// Vietnamese category label is an exact match for the existing native QS3D
+    /// label in the Setup & Rules UI. Missing rules are never synthesized or mirrored.
     /// </summary>
     public sealed class QuantityCalculationRuleSet
     {
@@ -91,16 +91,15 @@ namespace QS3D.Core.Reporting
             var native = (int)category;
             switch (category)
             {
+                // These are the only legacy fallbacks whose Vietnamese labels are
+                // exact matches in QuantityCategoryDisplayName.Native/Compatibility.
                 case ElementCategory.Room: return new[] { native, 201 };
                 case ElementCategory.FloorFinish: return new[] { native, 202 };
                 case ElementCategory.Skirting: return new[] { native, 204 };
                 case ElementCategory.WallFinish: return new[] { native, 205 };
                 case ElementCategory.Railing: return new[] { native, 207 };
-                case ElementCategory.Beam: return new[] { native, 301 };
-                case ElementCategory.Slab: return new[] { native, 401 };
                 case ElementCategory.Column: return new[] { native, 601 };
                 case ElementCategory.StructuralWall: return new[] { native, 701 };
-                case ElementCategory.ArchitecturalWall: return new[] { native, 704 };
                 default: return new[] { native };
             }
         }
