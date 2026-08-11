@@ -129,7 +129,11 @@ if not errors:
     required_command = [
         '[CommandMethod("QS3DINTERCHANGEREMAPAPPEND", CommandFlags.Modal)]',
         "ProjectInterchangeRemapAppendImporter.Plan(project, json)",
-        "ProjectInterchangeRemapAppendImporter.Import(project, json)",
+        "var previewChangeVersion = project.ChangeVersion;",
+        "var currentProject = ProjectContextCoordinator.GetOrCreate(document);",
+        "ReferenceEquals(currentProject, project)",
+        "currentProject.ChangeVersion != previewChangeVersion",
+        "ProjectInterchangeRemapAppendImporter.Import(currentProject, json)",
         "if (!plan.CanImport)",
         "Interchange Import As New BLOCKED",
         "plan.Remap.OpaqueReferenceWarnings.Count",
@@ -150,6 +154,8 @@ if not errors:
     for needle in required_command:
         if needle not in c:
             errors.append("remap append command missing guarded UX contract: " + needle)
+    if "ProjectInterchangeRemapAppendImporter.Import(project, json)" in c:
+        errors.append("confirmed remap append must mutate the re-resolved current project, not the stale preview reference")
     if "Import As New plan is not executable. Run QS3DINTERCHANGEREMAPPLAN" in c:
         errors.append("blocked remap plans should surface as normal BLOCKED status, not generic command exceptions")
 
@@ -174,4 +180,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New keeps blocked plans inspectable, fails closed before mutation, bounds Zone/Floor/Family identities to target runtime services, aligns opaque-reference policy, and preserves existing target identities.")
+print("Import As New keeps blocked plans inspectable, binds confirmation to the exact reviewed project/version, fails closed before mutation, bounds target identities, aligns opaque-reference policy, and preserves existing target identities.")
