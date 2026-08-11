@@ -73,6 +73,7 @@ namespace QS3D.Core.SmokeTests
             GeneratedHandleOwnershipIndexSmoke.Run();
             DependencyGraphDirectDependentsSmoke.Run();
             ProjectStateLookupSmoke.Run();
+            ProjectElementCategoryIntegritySmoke.Run();
             SelectionStateSmoke.Run();
             BulkEditCanonicalizationSmoke.Run();
             RegenerationAtomicitySmoke.Run();
