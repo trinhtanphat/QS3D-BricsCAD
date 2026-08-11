@@ -132,4 +132,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: GlassWall keeps its backing host and adds bounded, finite, selectable opening-aware curtain-frame overlays with deterministic fingerprint stale detection, relation/property stale propagation, policy-driven destructive/health ownership protection, complete invalidation metadata cleanup and UI/build command wiring. Curved frame overlay remains intentionally unsupported/runtime-gated.")
+print("PASS: GlassWall keeps its backing host and adds bounded, finite, selectable opening-aware LINE and guarded open/bulged WCS-XY path curtain-frame overlays with deterministic fingerprint stale detection, relation/property stale propagation, policy-driven destructive/health ownership protection, complete invalidation metadata cleanup and UI/build command wiring. Broader freeform/non-planar paths remain unsupported and exact V25 runtime-gated.")

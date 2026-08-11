@@ -101,7 +101,7 @@ Implemented in source:
 - defensive native Ribbon bootstrapper, Full Domain Hub, Curtain Wall Hub and Geometry Extensions;
 - Ribbon/Hub exposure for Tường KT, **Vách Kính Hub / Curtain 3D / frame health**, wall snap, Auto/Manual Host, straight/curved Door/Opening cuts, review commands and Full Health;
 - generated-rebar UI for column/beam longitudinal bars, BBS shape, beam stirrups, column ties, **Slab X/Y mesh** and **StructuralWall horizontal/vertical mesh**, including dedicated health commands and `QS3DREBARHEALTHALL`;
-- Curtain Hub Family controls for panel width/height, perimeter/mullion/transom widths, frame material and native frame depth; LINE GlassWall can keep a backing host and build dedicated frame overlays without replacing opening-host ownership;
+- Curtain Hub Family controls for panel width/height, perimeter/mullion/transom widths, frame material and native frame depth; LINE and guarded open/bulged WCS-XY GlassWall paths keep a backing host and build dedicated frame overlays without replacing opening-host ownership;
 - live right-palette Layer color/lock state from the actual DWG rather than decorative sample state;
 - premium dark theme source guards for focus, HiDPI layout rounding and recycling/row/column virtualization;
 - BQ, BBS, recognition, revision, template, audit, Model Health and Full Health windows/workflows;

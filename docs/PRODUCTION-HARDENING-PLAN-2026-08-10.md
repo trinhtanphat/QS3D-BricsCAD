@@ -64,7 +64,7 @@ The canonical generated host builders no longer commit CAD first and semantic ge
 - specialized LINE WallPier profile replacement;
 - structural native replacement for Beam, Slab, Column, StructuralWall, Foundation, Stair, Railing and Earthwork.
 
-This specifically closes the old split-brain window where a new `Solid3d` could survive a successful DB transaction while `GeneratedSolidHandle`/semantic ownership failed to advance. It deliberately does **not** claim whole-command atomicity for multi-transaction orchestrators such as Curtain host + frame generation.
+This specifically closes the old split-brain window where a new `Solid3d` could survive a successful DB transaction while `GeneratedSolidHandle`/semantic ownership failed to advance. Curtain host + frame generation now adds a separate command-level outer transaction as described below.
 
 ### P0 — Curtain frame replacement atomicity
 
@@ -74,11 +74,11 @@ The separate LINE and open/bulged-path Curtain frame builders now use the same c
 - erase previous owned frame solids and create replacements inside one BricsCAD transaction;
 - publish `GeneratedCurtainFrameHandles`, counts, configuration/path metadata, stale-state clearing and audit while that CAD transaction can still abort;
 - restore the project snapshot when the native transaction does not commit;
-- keep `project.Touch()` and live-geometry fingerprint stamping post-commit, because timestamp/UI/live-stamp failure must not misreport an otherwise-valid geometry commit as failed.
+- keep `project.Touch()` before each builder CAD commit so revision state remains rollback-capable; live-geometry fingerprint stamping stays best-effort post-commit.
 
 `CurtainWallFrameLiveStateService.TryStampSelected(...)` intentionally treats post-commit live fingerprint stamping as best-effort. A missing/pending live fingerprint remains visible to health/readiness instead of turning committed frame geometry into a false command failure.
 
-This closes the per-frame-builder CAD/semantic split-brain window for both LINE and guarded open/bulged path overlays. It still does **not** make the higher-level `QS3DCURTAIN3D` host+frame sequence one native transaction.
+This closes the per-frame-builder CAD/semantic split-brain window for both LINE and guarded open/bulged path overlays. The higher-level command now provides the outer transaction boundary.
 
 ### P0 — physical opening prevalidation
 
@@ -117,11 +117,9 @@ This is a runtime gate, not a source-code TODO that should be faked by mocks.
 
 ### 2. Curtain whole-command orchestration transaction boundary
 
-`QS3DCURTAIN3D` intentionally composes host generation and frame-overlay generation, and those operations still use separate native transaction families. **Each canonical host replacement family and each LINE/path frame replacement builder is now cross-layer atomic on its own.** The remaining gap is only the orchestration boundary between those individually-safe stages.
+`QS3DCURTAIN3D` composes host generation and frame-overlay generation through canonical builders that remain individually cross-layer atomic. The command now opens one outer native transaction before those nested builder transactions and commits only after every host/frame phase succeeds; a command-level `ProjectStateSnapshot` restores semantic regeneration/ownership if the outer transaction aborts.
 
-Before claiming the whole command is all-or-nothing, define and prove an explicit orchestration journal/compensation contract or a shared native transaction design that can safely restore both the prior backing host and prior frame family if a later stage fails.
-
-Until then:
+Source/static/build acceptance can now assert a real atomic boundary. Runtime acceptance still requires exact-SHA failure injection after every phase. Until that is proven:
 
 - source/builders must continue fail-closed on foreign ownership;
 - semantic/rule validation must happen before the first native mutation;
@@ -171,7 +169,7 @@ Still not claimed complete:
 
 - fabrication-grade panel-by-panel backing glass ownership/boolean model;
 - runtime validation of path-frame solids on representative curved/bulged DWGs;
-- whole-command host+frame rollback journal/shared transaction contract.
+- exact-SHA whole-command failure-injection and save/reopen proof for the outer transaction contract.
 
 ### Wall junctions
 

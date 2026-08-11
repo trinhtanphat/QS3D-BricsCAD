@@ -70,16 +70,17 @@ for token in (
     if token not in test:
         errors.append("remap provenance smoke missing regression token: " + token)
 
+doc_lower = doc.lower()
 for token in (
     "two complementary records",
     "raw source handles",
     "source-to-target semantic lineage",
-    "never target CAD ownership",
+    "neither record can be treated as target CAD ownership",
     "Import As New",
     "portable semantic re-export",
     "LOCAL_ONLY",
 ):
-    if token not in doc:
+    if token.lower() not in doc_lower:
         errors.append("remap provenance documentation missing boundary token: " + token)
 
 if errors:
