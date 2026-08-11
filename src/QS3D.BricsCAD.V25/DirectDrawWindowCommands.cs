@@ -119,7 +119,8 @@ namespace QS3D.BricsCAD.V25
                 createdElement.SetProperty("BottomOffsetM", sillM.ToString("R", CultureInfo.InvariantCulture));
                 createdElement.SetProperty("BooleanClearanceM", clearanceM.ToString("R", CultureInfo.InvariantCulture));
 
-                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                    .RegenerateDirtySubset(project, new[] { createdElementId });
 
                 EnsureActive(document, "Direct Draw Cửa Sổ / Auto Host");
                 document.Editor.SetImpliedSelection(new[] { sourceId });
@@ -133,7 +134,8 @@ namespace QS3D.BricsCAD.V25
                 if (!createdElement.Properties.TryGetValue("HostWallId", out hostId) || string.IsNullOrWhiteSpace(hostId))
                     throw new InvalidOperationException("Cửa Sổ chưa tìm được host duy nhất; operation được rollback để không tạo opening mồ côi.");
 
-                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                    .RegenerateDirtySubset(project, new[] { createdElementId, hostId });
                 project.Touch();
             }
             catch (Exception operationError)
