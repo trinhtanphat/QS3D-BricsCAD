@@ -33,7 +33,7 @@ if not errors:
         "MapOptional(plan.Remap, InterchangeRemapIdentityKind.Zone",
         "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, dependency)",
         "string.Equals(property.Key, HostWallIdKey, StringComparison.OrdinalIgnoreCase)",
-        "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, property.Value.Trim())",
+        "plan.Remap.MapId(InterchangeRemapIdentityKind.Element, sourceHost)",
         "LooksLikeUnregisteredSemanticReference(property.Key, property.Value)",
         "IsImportedOwnershipMetadata(property.Key)",
         'k.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
