@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             InvalidExpansionFailsClosed();
             ViewportCollectionsAreImmutable();
             NodeCapFailsBeforeIndexMutation();
+            ViewportOffsetAtTotalReturnsEmptyFinalPage();
         }
 
         private static void ExpansionControlsVisibleRows()
@@ -109,6 +110,20 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new Exception("Expected saturated Project Browser index to fail closed before mutation.");
+        }
+
+        private static void ViewportOffsetAtTotalReturnsEmptyFinalPage()
+        {
+            var root = BuildRoot();
+            var rootPath = ProjectBrowserVirtualizationPlanner.GetRootPath(root);
+            var first = ProjectBrowserVirtualizationPlanner.BuildViewport(root, new[] { rootPath }, 0, 10);
+            var final = ProjectBrowserVirtualizationPlanner.BuildViewport(root, new[] { rootPath }, first.TotalVisibleRows, 10);
+
+            Equal(first.TotalVisibleRows, final.TotalVisibleRows);
+            Equal(first.TotalVisibleRows, final.Offset);
+            Equal(0, final.Rows.Count);
+            True(final.HasPrevious);
+            True(!final.HasNext);
         }
 
         private static ProjectBrowserNode BuildRoot()
