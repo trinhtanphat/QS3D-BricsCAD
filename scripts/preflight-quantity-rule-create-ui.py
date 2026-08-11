@@ -55,9 +55,9 @@ else:
     else:
         handler = code[handler_start:handler_end]
         duplicate = handler.find("IntersectionRows.Any(")
-        confirm = handler.find("MessageBox.Show(")
-        yes = handler.find("answer != MessageBoxResult.Yes")
-        append = handler.find("IntersectionRows.Add(new QuantityIntersectionRuleRow(new QuantityIntersectionRuleSetting")
+        confirm = handler.find("var answer = MessageBox.Show(", duplicate)
+        yes = handler.find("answer != MessageBoxResult.Yes", confirm)
+        append = handler.find("IntersectionRows.Add(new QuantityIntersectionRuleRow(new QuantityIntersectionRuleSetting", yes)
         refresh = handler.find("RefreshSelectedIntersectionRule();", append)
         if min(duplicate, confirm, yes, append, refresh) < 0 or not (duplicate < confirm < yes < append < refresh):
             errors.append("create handler must re-check duplicate, confirm, append one row, then refresh")
