@@ -18,8 +18,10 @@ namespace QS3D.Core.Rebar
     {
         public BeamLongitudinalRebarLayout(IReadOnlyList<Point2> topBarCenters, IReadOnlyList<Point2> bottomBarCenters, double topElevationM, double bottomElevationM)
         {
-            TopBarCenters = topBarCenters ?? throw new ArgumentNullException(nameof(topBarCenters));
-            BottomBarCenters = bottomBarCenters ?? throw new ArgumentNullException(nameof(bottomBarCenters));
+            if (topBarCenters == null) throw new ArgumentNullException(nameof(topBarCenters));
+            if (bottomBarCenters == null) throw new ArgumentNullException(nameof(bottomBarCenters));
+            TopBarCenters = new List<Point2>(topBarCenters).AsReadOnly();
+            BottomBarCenters = new List<Point2>(bottomBarCenters).AsReadOnly();
             TopElevationM = topElevationM;
             BottomElevationM = bottomElevationM;
         }
