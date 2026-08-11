@@ -25,7 +25,7 @@ namespace QS3D.BricsCAD.V25
                 if (snapshots.Count > MaxBatch)
                     throw new InvalidOperationException("Grid annotation selection vượt giới hạn " + MaxBatch + " source entities.");
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Grid Annotation");
                 var selected = new List<ProjectElement>();
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -59,7 +59,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Grid Annotation All");
                 var grids = project.Elements
                     .Where(x => x.Category == ElementCategory.Grid &&
                                 x.Properties.TryGetValue(GridNamingService.GridLabelKey, out var label) &&
