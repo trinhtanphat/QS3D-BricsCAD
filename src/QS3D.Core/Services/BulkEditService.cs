@@ -30,8 +30,8 @@ namespace QS3D.Core.Services
             var next = value ?? string.Empty;
             foreach (var element in OwnedDistinct(project, elements))
             {
-                element.Properties.TryGetValue(key, out var before);
-                if (string.Equals(before ?? string.Empty, next, StringComparison.Ordinal)) continue;
+                var hadBefore = element.Properties.TryGetValue(key, out var before);
+                if (hadBefore && string.Equals(before ?? string.Empty, next, StringComparison.Ordinal)) continue;
                 updates.Add(new PendingPropertyUpdate { Element = element, Value = next });
             }
 
