@@ -13,20 +13,24 @@ namespace QS3D.Core.Documentation
     {
         internal SemanticDocumentationCatalog(
             IReadOnlyList<SemanticViewDefinition> views,
-            IReadOnlyList<SemanticSheetDefinition> sheets)
+            IReadOnlyList<SemanticSheetDefinition> sheets,
+            IReadOnlyList<SemanticScheduleDefinition> schedules)
         {
             Views = new List<SemanticViewDefinition>(views).AsReadOnly();
             Sheets = new List<SemanticSheetDefinition>(sheets).AsReadOnly();
+            Schedules = new List<SemanticScheduleDefinition>(schedules).AsReadOnly();
         }
 
         public IReadOnlyList<SemanticViewDefinition> Views { get; }
         public IReadOnlyList<SemanticSheetDefinition> Sheets { get; }
+        public IReadOnlyList<SemanticScheduleDefinition> Schedules { get; }
     }
 
     public sealed class SemanticDocumentationCatalogStore
     {
         public const string MetadataKey = "QS3D.Documentation.Catalog.v1";
-        private const int FormatVersion = 1;
+        private const int LegacyFormatVersion = 1;
+        private const int FormatVersion = 2;
         private const int MaxCatalogChars = 1024 * 1024;
 
         public void Save(
@@ -34,16 +38,28 @@ namespace QS3D.Core.Documentation
             IEnumerable<SemanticViewDefinition> views,
             IEnumerable<SemanticSheetDefinition> sheets)
         {
+            Save(project, views, sheets, Array.Empty<SemanticScheduleDefinition>());
+        }
+
+        public void Save(
+            ProjectState project,
+            IEnumerable<SemanticViewDefinition> views,
+            IEnumerable<SemanticSheetDefinition> sheets,
+            IEnumerable<SemanticScheduleDefinition> schedules)
+        {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (views == null) throw new ArgumentNullException(nameof(views));
             if (sheets == null) throw new ArgumentNullException(nameof(sheets));
+            if (schedules == null) throw new ArgumentNullException(nameof(schedules));
 
             var viewDefinitions = MaterializeViews(views);
             var sheetDefinitions = MaterializeSheets(sheets);
+            var scheduleDefinitions = MaterializeSchedules(schedules);
             var viewPlans = SemanticViewPlanner.BuildCatalog(project, viewDefinitions);
             SemanticSheetPlanner.BuildCatalog(sheetDefinitions, viewPlans);
+            SemanticSchedulePlanner.BuildCatalog(project, scheduleDefinitions, viewPlans);
 
-            if (viewDefinitions.Count == 0 && sheetDefinitions.Count == 0)
+            if (viewDefinitions.Count == 0 && sheetDefinitions.Count == 0 && scheduleDefinitions.Count == 0)
             {
                 if (!project.Metadata.ContainsKey(MetadataKey)) return;
                 project.Touch();
@@ -51,7 +67,7 @@ namespace QS3D.Core.Documentation
                 return;
             }
 
-            var payload = Serialize(viewDefinitions, sheetDefinitions);
+            var payload = Serialize(viewDefinitions, sheetDefinitions, scheduleDefinitions);
             if (payload.Length > MaxCatalogChars)
                 throw new InvalidOperationException("Semantic documentation catalog exceeds the 1 MiB metadata limit.");
             if (project.Metadata.TryGetValue(MetadataKey, out var current) && string.Equals(current, payload, StringComparison.Ordinal)) return;
@@ -64,21 +80,29 @@ namespace QS3D.Core.Documentation
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (!project.Metadata.TryGetValue(MetadataKey, out var payload) || string.IsNullOrEmpty(payload))
-                return new SemanticDocumentationCatalog(Array.Empty<SemanticViewDefinition>(), Array.Empty<SemanticSheetDefinition>());
+                return new SemanticDocumentationCatalog(
+                    Array.Empty<SemanticViewDefinition>(),
+                    Array.Empty<SemanticSheetDefinition>(),
+                    Array.Empty<SemanticScheduleDefinition>());
             if (payload.Length > MaxCatalogChars)
                 throw new InvalidDataException("Semantic documentation catalog exceeds the 1 MiB metadata limit.");
 
             var root = ParseRoot(payload);
             if (!string.Equals(root.Name.LocalName, "documentation", StringComparison.Ordinal))
                 throw new InvalidDataException("Semantic documentation catalog root is invalid.");
-            if (Integer(root.Attribute("version")?.Value, "documentation version") != FormatVersion)
+            var version = Integer(root.Attribute("version")?.Value, "documentation version");
+            if (version != LegacyFormatVersion && version != FormatVersion)
                 throw new InvalidDataException("Unsupported semantic documentation catalog version.");
 
             var views = ReadViews(root.Element("views"));
             var sheets = ReadSheets(root.Element("sheets"));
+            var schedules = version >= FormatVersion
+                ? ReadSchedules(root.Element("schedules"))
+                : Array.Empty<SemanticScheduleDefinition>();
             var viewPlans = SemanticViewPlanner.BuildCatalog(project, views);
             SemanticSheetPlanner.BuildCatalog(sheets, viewPlans);
-            return new SemanticDocumentationCatalog(views, sheets);
+            SemanticSchedulePlanner.BuildCatalog(project, schedules, viewPlans);
+            return new SemanticDocumentationCatalog(views, sheets, schedules);
         }
 
         private static IReadOnlyList<SemanticViewDefinition> MaterializeViews(IEnumerable<SemanticViewDefinition> values)
@@ -103,9 +127,21 @@ namespace QS3D.Core.Documentation
             return result.AsReadOnly();
         }
 
+        private static IReadOnlyList<SemanticScheduleDefinition> MaterializeSchedules(IEnumerable<SemanticScheduleDefinition> values)
+        {
+            var result = new List<SemanticScheduleDefinition>();
+            foreach (var value in values)
+            {
+                if (value == null) throw new ArgumentException("Semantic documentation schedule cannot be null.", nameof(values));
+                result.Add(value);
+            }
+            return result.AsReadOnly();
+        }
+
         private static string Serialize(
             IReadOnlyList<SemanticViewDefinition> views,
-            IReadOnlyList<SemanticSheetDefinition> sheets)
+            IReadOnlyList<SemanticSheetDefinition> sheets,
+            IReadOnlyList<SemanticScheduleDefinition> schedules)
         {
             var root = new XElement("documentation",
                 new XAttribute("version", FormatVersion),
@@ -118,7 +154,12 @@ namespace QS3D.Core.Documentation
                     sheets
                         .OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase)
                         .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                        .Select(SerializeSheet)));
+                        .Select(SerializeSheet)),
+                new XElement("schedules",
+                    schedules
+                        .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                        .Select(SerializeSchedule)));
             return root.ToString(SaveOptions.DisableFormatting);
         }
 
@@ -167,6 +208,18 @@ namespace QS3D.Core.Documentation
                             new XAttribute("yMm", Number(x.Ymm)),
                             new XAttribute("widthMm", Number(x.WidthMm)),
                             new XAttribute("heightMm", Number(x.HeightMm))))));
+        }
+
+        private static XElement SerializeSchedule(SemanticScheduleDefinition schedule)
+        {
+            return new XElement("schedule",
+                new XAttribute("id", schedule.Id ?? string.Empty),
+                new XAttribute("name", schedule.Name ?? string.Empty),
+                new XAttribute("viewId", schedule.ViewId ?? string.Empty),
+                new XElement("columns",
+                    schedule.Columns.Select(x => new XElement("column",
+                        new XAttribute("header", x?.Header ?? string.Empty),
+                        new XAttribute("template", x?.Template ?? string.Empty)))));
         }
 
         private static XElement ParseRoot(string payload)
@@ -249,6 +302,28 @@ namespace QS3D.Core.Documentation
                     Double(Required(item, "heightMm"), "sheet heightMm"),
                     placements,
                     Optional(item, "titleBlockName")));
+            }
+            return result.AsReadOnly();
+        }
+
+        private static IReadOnlyList<SemanticScheduleDefinition> ReadSchedules(XElement? container)
+        {
+            if (container == null) return Array.Empty<SemanticScheduleDefinition>();
+            var result = new List<SemanticScheduleDefinition>();
+            foreach (var item in container.Elements("schedule"))
+            {
+                var columns = new List<SemanticDocumentationColumn>();
+                foreach (var column in item.Element("columns")?.Elements("column") ?? Enumerable.Empty<XElement>())
+                {
+                    columns.Add(new SemanticDocumentationColumn(
+                        Required(column, "header"),
+                        Required(column, "template")));
+                }
+                result.Add(new SemanticScheduleDefinition(
+                    Required(item, "id"),
+                    Required(item, "name"),
+                    Required(item, "viewId"),
+                    columns));
             }
             return result.AsReadOnly();
         }
