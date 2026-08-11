@@ -149,6 +149,7 @@ namespace QS3D.Core.Formulas
 
             private double ParseUnary(int depth)
             {
+                GuardDepth(depth);
                 SkipWhiteSpace();
                 if (Match('+')) return ParseUnary(depth + 1);
                 if (Match('-')) return EnsureFinite(-ParseUnary(depth + 1), "Unary negation produced a non-finite result.");
