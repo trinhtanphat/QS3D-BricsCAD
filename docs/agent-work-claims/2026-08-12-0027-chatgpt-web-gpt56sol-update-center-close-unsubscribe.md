@@ -1,6 +1,6 @@
 # Work claim — Update Center close-failure subscription cleanup
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T00:27:00+07:00`
 - Baseline main SHA: `9fe9483ce571604caa52022ffb23a852efc369f7`
@@ -8,29 +8,35 @@
 
 ## Verified defect
 
-`UpdateCenterWindow` subscribes to singleton `UpdateCoordinator.Instance.StateChanged` and removes that handler only from its `Closed` event. `UpdateCenterWindowHost.Close()` intentionally catches `window.Close()` exceptions and then drops `_window` anyway. If `Window.Close()` throws before `Closed` is raised, the host loses its only reference while the singleton coordinator still holds `OnStateChanged` strongly. A later updater lifecycle can therefore retain/call an orphaned window instance.
+`UpdateCenterWindow` previously subscribed to singleton `UpdateCoordinator.Instance.StateChanged` and removed that handler only from its `Closed` event. `UpdateCenterWindowHost.Close()` intentionally catches `window.Close()` exceptions and then drops `_window` anyway. If `Window.Close()` throws before `Closed` is raised, the host could lose its reference while the singleton coordinator still strongly retained `OnStateChanged` and the orphaned window.
 
-This is an exception-path lifecycle leak visible directly from source; it does not require changing updater network, signing, scheduling or installation behavior.
+## Implemented contract
 
-## Reserved scope
+1. `UpdateCenterWindow` now tracks coordinator subscription ownership explicitly with `_coordinatorAttached`.
+2. `DetachCoordinator()` is idempotent and owns the actual `StateChanged -= OnStateChanged` operation.
+3. Normal WPF `Closed` delegates to `DetachCoordinator()`.
+4. `UpdateCenterWindowHost.Close()` retains its non-throwing public behavior but runs `DetachCoordinator()` from `finally`, so cleanup occurs whether `window.Close()` succeeds or throws.
+5. Host `_window` clearing remains idempotent and occurs after subscription cleanup.
+6. No force-close behavior was added and no coordinator/network/signing/launcher/installer/release source was changed.
 
-- `src/QS3D.BricsCAD.V25/Updates/UpdateCenterWindow.cs`
-- `scripts/preflight-update-center-close-cleanup.py` (new)
-- `docs/UPDATE-CENTER-CLOSE-CLEANUP-PLAN-2026-08-12.md` (new)
-- this claim file
+## Commits
 
-## Intended contract
+- Claim registration: `dfcbabad2c84cc1decd9207ade393163b26f3eb6`
+- Planning: `86e7272fb3d869bcb1db2b1b21c3a9d534cd3842`
+- Source fix: `00522ce67118312d361890a458d603e5e6a03896`
+- Focused regression gate: `0d26c546c2a91e2d17df5c4ccd55524edf651e18`
 
-1. Coordinator event detachment is explicit and idempotent rather than depending solely on successful WPF `Closed` delivery.
-2. Normal `Closed` still detaches the handler.
-3. Host-driven `Close()` detaches in a `finally`-equivalent path even when `Window.Close()` throws.
-4. `_window` host reference cleanup remains idempotent.
-5. No force-close/kill behavior is added, and no updater security/scheduling/source outside the reserved UI file is changed.
+## Verification
 
-## Validation / release conditions
+- Re-fetched exact committed `UpdateCenterWindow.cs` and `scripts/preflight-update-center-close-cleanup.py` from current `main` after the gate commit.
+- Against observed `main` `ca3aef380b3a841d5867b6528f8799b31b4b5d68`:
+  - source fix compare: `behind_by: 0`;
+  - focused gate compare: `behind_by: 0`.
+- Commits added after the source fix did not modify `UpdateCenterWindow.cs`.
+- The gate rejects a return to the old Closed-only anonymous unsubscription and requires detach from the host `finally` path.
+- Verification is source/static only. Real WPF exception-path timing and BricsCAD V25 shutdown/reload qualification remain `LOCAL-009 / PENDING_LOCAL`.
+- No GitHub Actions workflow was dispatched and no release was created/published in this batch.
 
-- Commit a planning MD before implementation.
-- Add a focused source regression requiring explicit idempotent detach and exception-safe host cleanup, while rejecting a return to Closed-only unsubscription.
-- Re-fetch exact source/gate and require `behind_by: 0` ancestry before claim closure.
-- Real WPF/BricsCAD close timing remains `LOCAL-009 / PENDING_LOCAL`; do not claim remote runtime PASS.
-- Do not dispatch GitHub Actions and do not publish a release.
+## Outcome
+
+A failed modeless `Window.Close()` can no longer leave the singleton updater coordinator as the strong event owner of an Update Center instance that the host has discarded. Claim released.
