@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             FamilyOpaqueReferenceBlocksPreview();
             ElementOpaqueReferenceBlocksPreviewEvenForExternalValue();
             BlockedAppendPlanRemainsInspectableAndImportFailsClosed();
+            OverLimitCatalogIdentitiesAreBoundedBeforeImport();
         }
 
         private static void FamilyNameCollisionIsScopedByCategory()
@@ -87,6 +88,49 @@ namespace QS3D.Core.SmokeTests
             Equal(floors, target.Floors.Count);
             Equal(families, target.Families.Count);
             Equal(elements, target.Elements.Count);
+        }
+
+        private static void OverLimitCatalogIdentitiesAreBoundedBeforeImport()
+        {
+            var target = NewProject("target", ElementCategory.Column, "TARGET-FAM", "Target Family", "TARGET-ELEM");
+            var source = new ProjectState("source", "Source");
+            var zoneId = new string('Z', 70);
+            var zoneName = new string('N', 130);
+            var floorId = new string('F', 70);
+            var floorName = new string('L', 130);
+            var familyId = new string('A', 90);
+            var familyName = new string('B', 170);
+            source.Zones.Add(new ZoneDefinition(zoneId, zoneName));
+            source.Floors.Add(new FloorDefinition(floorId, floorName, 3d));
+            source.Families.Add(new ProjectFamily(familyId, familyName, ElementCategory.Beam));
+            source.Elements.Add(new ProjectElement("SOURCE-ELEM", ElementCategory.Beam, familyId, floorId, zoneId));
+            var json = ProjectInterchangeJsonExporter.Build(source);
+
+            var plan = ProjectInterchangeRemapAppendImporter.Plan(target, json);
+            True(plan.CanImport);
+            var zone = plan.Remap.Items.Single(x => x.Kind == InterchangeRemapIdentityKind.Zone);
+            var floor = plan.Remap.Items.Single(x => x.Kind == InterchangeRemapIdentityKind.Floor);
+            var family = plan.Remap.Items.Single(x => x.Kind == InterchangeRemapIdentityKind.Family);
+            True(zone.IdChanged && zone.NameChanged);
+            True(floor.IdChanged && floor.NameChanged);
+            True(family.IdChanged && family.NameChanged);
+            True(zone.TargetId.Length <= 64 && zone.TargetName.Length <= 120);
+            True(floor.TargetId.Length <= 64 && floor.TargetName.Length <= 120);
+            True(family.TargetId.Length <= 80 && family.TargetName.Length <= 160);
+
+            var result = ProjectInterchangeRemapAppendImporter.Import(target, json);
+            Equal(1, result.ZonesAdded);
+            Equal(1, result.FloorsAdded);
+            Equal(1, result.FamiliesAdded);
+            Equal(1, result.ElementsAdded);
+            True(target.FindZone(zone.TargetId) != null);
+            True(target.FindFloor(floor.TargetId) != null);
+            True(target.FindFamily(family.TargetId) != null);
+            var imported = target.FindElement("SOURCE-ELEM");
+            True(imported != null);
+            Equal(zone.TargetId, imported!.ZoneId);
+            Equal(floor.TargetId, imported.FloorId);
+            Equal(family.TargetId, imported.FamilyId);
         }
 
         private static ProjectState NewProject(
