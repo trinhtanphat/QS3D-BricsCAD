@@ -357,8 +357,8 @@ namespace QS3D.Core.Export
         }
 
         private static bool CatalogIdentityFitsRuntime(
-            string sourceId,
-            string sourceName,
+            string? sourceId,
+            string? sourceName,
             bool existingTargetIdentity,
             int maxIdLength,
             int maxNameLength,
@@ -380,7 +380,7 @@ namespace QS3D.Core.Export
             return true;
         }
 
-        private static bool FamilyPropertiesFitRuntime(ProjectFamily family, out string reason)
+        private static bool FamilyPropertiesFitRuntime(InterchangeFamilySnapshot family, out string reason)
         {
             foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
@@ -490,7 +490,7 @@ namespace QS3D.Core.Export
             InterchangeIdentityKind kind,
             string id,
             string label,
-            string name)
+            string? name)
         {
             Add(items, new InterchangeImportResolutionItem(
                 kind,
@@ -505,7 +505,7 @@ namespace QS3D.Core.Export
             InterchangeIdentityKind kind,
             string id,
             string label,
-            string name)
+            string? name)
         {
             Add(items, new InterchangeImportResolutionItem(
                 kind,
@@ -532,13 +532,13 @@ namespace QS3D.Core.Export
                 : InterchangeDrawingFingerprintRelation.Different;
         }
 
-        private static string FamilyNameKey(ElementCategory category, string name) =>
+        private static string FamilyNameKey(ElementCategory category, string? name) =>
             category + "\u001f" + (name ?? string.Empty).Trim();
 
         private static bool NameOwnedByDifferentIdentity(
             IReadOnlyDictionary<string, string> owners,
-            string key,
-            string sourceId)
+            string? key,
+            string? sourceId)
         {
             var normalizedKey = (key ?? string.Empty).Trim();
             if (!owners.TryGetValue(normalizedKey, out var ownerId)) return false;

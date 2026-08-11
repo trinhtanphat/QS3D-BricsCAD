@@ -95,8 +95,8 @@ namespace QS3D.BricsCAD.V25.Cad
             Document document,
             ProjectState project,
             IList<ProjectElement> targets,
-            GeneratedRebarOwnershipGuard.OwnershipIndex rebarOwnership,
-            GeneratedCurtainFrameOwnershipGuard.OwnershipIndex curtainOwnership)
+            GeneratedRebarOwnershipGuard.OwnershipIndex? rebarOwnership,
+            GeneratedCurtainFrameOwnershipGuard.OwnershipIndex? curtainOwnership)
         {
             foreach (var element in targets)
             {

@@ -191,7 +191,7 @@ namespace QS3D.Core.Documentation
 
         private static string Serialize(IEnumerable<SemanticScheduleDefinition> definitions)
         {
-            var root = new XElement("semanticSchedules", new XAttribute("version", "1"), definitions.Select(Normalize)
+            var schedules = definitions.Select(Normalize)
                 .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .Select(x => new XElement("schedule",
                     new XAttribute("id", x.Id), new XAttribute("name", x.Name), new XAttribute("title", x.Title),
@@ -199,7 +199,8 @@ namespace QS3D.Core.Documentation
                     new XElement("categories", x.Categories.Select(c => new XElement("category", new XAttribute("value", c)))),
                     new XElement("include", x.IncludeElementIds.Select(id => new XElement("id", new XAttribute("value", id)))),
                     new XElement("exclude", x.ExcludeElementIds.Select(id => new XElement("id", new XAttribute("value", id)))),
-                    new XElement("columns", x.Columns.Select(c => new XElement("column", new XAttribute("header", c.Header), new XAttribute("template", c.Template))))))));
+                    new XElement("columns", x.Columns.Select(c => new XElement("column", new XAttribute("header", c.Header), new XAttribute("template", c.Template))))));
+            var root = new XElement("semanticSchedules", new XAttribute("version", "1"), schedules);
             return root.ToString(SaveOptions.DisableFormatting);
         }
 

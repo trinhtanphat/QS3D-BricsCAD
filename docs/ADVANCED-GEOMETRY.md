@@ -74,10 +74,10 @@ Frame ownership is independent from the backing host and rebar ownership. Source
 
 Current limitations are explicit:
 
-- frame overlay supports GlassWall LINE, not curved/open-POLYLINE frame generation;
+- frame overlay supports horizontal GlassWall LINE and guarded open/bulged WCS-XY POLYLINE paths; broader freeform/non-planar paths remain unsupported;
 - backing glass remains one host solid rather than panel-by-panel glass solids;
 - Door/Opening subtraction currently cuts the backing host, not the frame overlay;
-- opening-aware mullion/transom interruption remains future work.
+- linked Door/Opening rectangles interrupt supported LINE/path mullion/transom runs; corner-spanning/freeform clipping remains future work.
 
 ## Shape-driven rebar 3D
 

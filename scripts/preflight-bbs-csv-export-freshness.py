@@ -12,7 +12,7 @@ else:
     text = SOURCE.read_text(encoding="utf-8")
     dialog = text.find("var dialog = new SaveFileDialog")
     confirmed = text.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
-    project = text.find("ProjectContextCoordinator.GetOrCreate(document)")
+    project = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
     regen = text.find("RegenerateDirty(project)", project + 1)
     build = text.find("ProjectRebarScheduleBuilder.Build(project)", regen + 1)
     export = text.find("RebarCsvExporter.Export(dialog.FileName, rows)", build + 1)
@@ -24,7 +24,7 @@ else:
 
     pre_dialog = text[:confirmed if confirmed >= 0 else 0]
     for forbidden in (
-        "ProjectContextCoordinator.GetOrCreate(document)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "RegenerateDirty(project)",
         "ProjectRebarScheduleBuilder.Build(project)",
     ):
