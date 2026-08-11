@@ -141,7 +141,7 @@ try {
     $argumentParts.Add('/B')
     $argumentParts.Add('"' + $scriptPath + '"')
     $arguments = [string]::Join(' ', $argumentParts)
-    $process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -PassThru -WindowStyle Hidden
+    $process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
 
     $deadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
     while ((Get-Date) -lt $deadline) {

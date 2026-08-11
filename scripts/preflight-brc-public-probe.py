@@ -137,6 +137,7 @@ if RUNNER.is_file():
         "QS3D_BRC_PROBE_NONCE",
         "Start-Process",
         "-PassThru",
+        "-WorkingDirectory $ArtifactDir",
         "finally",
         "Stop-Qs3dLaunchedProcess -Process $process",
         "Stop-Process -Id $Process.Id",
