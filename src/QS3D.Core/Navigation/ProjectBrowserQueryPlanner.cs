@@ -45,6 +45,7 @@ namespace QS3D.Core.Navigation
 
     public static class ProjectBrowserQueryPlanner
     {
+        private const int MaxElements = 250000;
         private const int MaxQueryLength = 160;
         private const int MaxFilterIds = 10000;
 
@@ -54,21 +55,25 @@ namespace QS3D.Core.Navigation
             ProjectBrowserQueryOptions? options = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!Enum.IsDefined(typeof(ProjectBrowserGrouping), grouping)) throw new ArgumentOutOfRangeException(nameof(grouping));
             options = options ?? new ProjectBrowserQueryOptions();
-
-            var unfilteredRoot = ProjectBrowserPlanner.Build(project, grouping);
-            var familyIndex = BuildUniqueFamilyIndex(project);
-            var floorIndex = BuildUniqueFloorIndex(project);
-            var zoneIndex = BuildUniqueZoneIndex(project);
-            ValidateFamilyReferences(project, familyIndex);
 
             var query = NormalizeQuery(options.Query);
             var categories = NormalizeCategories(options.Categories);
+            var isFiltered = query.Length > 0 || options.DirtyOnly || categories.Count > 0 || options.FloorIds.Count > 0 || options.ZoneIds.Count > 0;
+            if (!isFiltered)
+                return new ProjectBrowserQueryResult(ProjectBrowserPlanner.Build(project, grouping), project.Elements.Count, false);
+
+            if (project.Elements.Count > MaxElements)
+                throw new InvalidOperationException("Project browser supports at most " + MaxElements + " semantic elements.");
+
+            var familyIndex = BuildUniqueFamilyIndex(project);
+            var floorIndex = BuildUniqueFloorIndex(project);
+            var zoneIndex = BuildUniqueZoneIndex(project);
+            ValidateElementReferences(project, familyIndex, floorIndex, zoneIndex);
+
             var floorIds = NormalizeReferenceIds(options.FloorIds, floorIndex, "floor");
             var zoneIds = NormalizeReferenceIds(options.ZoneIds, zoneIndex, "zone");
-            var isFiltered = query.Length > 0 || options.DirtyOnly || categories.Count > 0 || floorIds.Count > 0 || zoneIds.Count > 0;
-            if (!isFiltered) return new ProjectBrowserQueryResult(unfilteredRoot, project.Elements.Count, false);
-
             var matched = new List<ProjectElement>();
             foreach (var element in project.Elements)
             {
@@ -174,7 +179,7 @@ namespace QS3D.Core.Navigation
             {
                 if (family == null) throw new InvalidOperationException("Project browser found a null family definition.");
                 var id = (family.Id ?? string.Empty).Trim();
-                if (id.Length == 0) throw new InvalidOperationException("Project browser found a blank family id.");
+                if (id.Length == 0 || string.IsNullOrWhiteSpace(family.Name)) throw new InvalidOperationException("Project browser found an invalid family definition.");
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Project browser found duplicate family id: " + id + ".");
                 result.Add(id, family);
             }
@@ -188,7 +193,7 @@ namespace QS3D.Core.Navigation
             {
                 if (floor == null) throw new InvalidOperationException("Project browser found a null floor definition.");
                 var id = (floor.Id ?? string.Empty).Trim();
-                if (id.Length == 0) throw new InvalidOperationException("Project browser found a blank floor id.");
+                if (id.Length == 0 || string.IsNullOrWhiteSpace(floor.Name)) throw new InvalidOperationException("Project browser found an invalid floor definition.");
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Project browser found duplicate floor id: " + id + ".");
                 result.Add(id, floor);
             }
@@ -202,20 +207,37 @@ namespace QS3D.Core.Navigation
             {
                 if (zone == null) throw new InvalidOperationException("Project browser found a null zone definition.");
                 var id = (zone.Id ?? string.Empty).Trim();
-                if (id.Length == 0) throw new InvalidOperationException("Project browser found a blank zone id.");
+                if (id.Length == 0 || string.IsNullOrWhiteSpace(zone.Name)) throw new InvalidOperationException("Project browser found an invalid zone definition.");
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Project browser found duplicate zone id: " + id + ".");
                 result.Add(id, zone);
             }
             return result;
         }
 
-        private static void ValidateFamilyReferences(ProjectState project, Dictionary<string, ProjectFamily> families)
+        private static void ValidateElementReferences(
+            ProjectState project,
+            Dictionary<string, ProjectFamily> families,
+            Dictionary<string, FloorDefinition> floors,
+            Dictionary<string, ZoneDefinition> zones)
         {
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
+                if (element == null) throw new InvalidOperationException("Project browser found a null semantic element.");
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0) throw new InvalidOperationException("Project browser found a blank semantic element id.");
+                if (!ids.Add(elementId)) throw new InvalidOperationException("Project browser found duplicate semantic element id: " + elementId + ".");
+                if (!Enum.IsDefined(typeof(ElementCategory), element.Category)) throw new InvalidOperationException("Project browser found undefined element category on: " + elementId + ".");
+
                 var familyId = (element.FamilyId ?? string.Empty).Trim();
                 if (familyId.Length > 0 && !families.ContainsKey(familyId))
-                    throw new InvalidOperationException("Project browser found missing family reference " + familyId + " on element " + element.Id + ".");
+                    throw new InvalidOperationException("Project browser found missing family reference " + familyId + " on element " + elementId + ".");
+                var floorId = (element.FloorId ?? string.Empty).Trim();
+                if (floorId.Length > 0 && !floors.ContainsKey(floorId))
+                    throw new InvalidOperationException("Project browser found missing floor reference " + floorId + " on element " + elementId + ".");
+                var zoneId = (element.ZoneId ?? string.Empty).Trim();
+                if (zoneId.Length > 0 && !zones.ContainsKey(zoneId))
+                    throw new InvalidOperationException("Project browser found missing zone reference " + zoneId + " on element " + elementId + ".");
             }
         }
     }
