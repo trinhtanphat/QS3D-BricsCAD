@@ -335,7 +335,7 @@ namespace QS3D.BricsCAD.V25
         private static double? PromptPositiveMeters(Editor editor, string label, double defaultValue)
         {
             var safeDefault = CadGeometryGuard.Positive(defaultValue, label + " default");
-            var options = new PromptDoubleOptions("\n" + label + " <" + safeDefault.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = false,
                 AllowZero = false,
@@ -353,7 +353,7 @@ namespace QS3D.BricsCAD.V25
         private static double? PromptFiniteMeters(Editor editor, string label, double defaultValue)
         {
             var safeDefault = CadGeometryGuard.Finite(defaultValue, label + " default");
-            var options = new PromptDoubleOptions("\n" + label + " <" + safeDefault.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = true,
                 AllowZero = true,
