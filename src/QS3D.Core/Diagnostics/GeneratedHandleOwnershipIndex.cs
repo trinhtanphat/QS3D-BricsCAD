@@ -31,11 +31,11 @@ namespace QS3D.Core.Diagnostics
         public static GeneratedHandleOwnershipIndex Build(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            EnsureUniqueElementIds(project);
             var entries = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
                 foreach (var ownerHandle in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
                 {
                     var handle = (ownerHandle.Key ?? string.Empty).Trim();
@@ -47,7 +47,7 @@ namespace QS3D.Core.Diagnostics
                         continue;
                     }
 
-                    var sameElement = string.Equals(existing.Owner.Id, element.Id, StringComparison.OrdinalIgnoreCase);
+                    var sameElement = ReferenceEquals(existing.Owner, element);
                     var sameLogicalSlot = GeneratedHandleOwnershipPolicy.AreSameLogicalOwnerSlots(existing.PropertyKey, ownerHandle.Value);
                     if (sameElement && sameLogicalSlot) continue;
 
@@ -74,6 +74,18 @@ namespace QS3D.Core.Diagnostics
             owner = entry.Owner;
             propertyKey = entry.PropertyKey;
             return true;
+        }
+
+        private static void EnsureUniqueElementIds(ProjectState project)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null element entry.");
+                if (!seen.Add(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+            }
         }
     }
 }
