@@ -14,6 +14,19 @@ Remote agents must not repeatedly re-audit, re-run, re-open or re-report these g
 
 The purpose of this rule is to stop remote reviews from spending time rediscovering the same environment boundary and to keep runtime truth tied to the machine that can actually prove it.
 
+## Mandatory remote-blocker parking rule
+
+This is an owner-required rule for every non-local agent.
+
+- If a requested step cannot be completed remotely because it needs a local workstation, licensed BricsCAD V25, native runtime interaction, customer/private data, local credentials/secrets, machine-specific signing/trust, desktop UI evidence, or any other capability unavailable to the current agent, the agent **MUST add or update a row in `docs/LOCAL-AGENT-INBOX.md` before ending the batch**.
+- The inbox row must state the exact blocker, affected command/file/scenario, why the remote environment cannot prove or execute it, the exact local action/verification required, expected evidence, priority/status, and the source SHA when relevant.
+- After a blocker is parked, every later remote/non-local agent **MUST treat the inbox row as a stop marker and MUST NOT retry, re-audit, reopen, or re-report the same local-only work** unless the repository source or available execution capability has materially changed.
+- A remote agent must still complete every source-safe part it can prove. `LOCAL_ONLY` is not a reason to park source editing, static review, deterministic tests, preflights, or documentation that remain remotely executable.
+- If a later remote change narrows, closes, or changes the local requirement, update the existing inbox row instead of creating a duplicate.
+- Never claim `LOCAL_PASS` from source inspection, mocks, static preflights, a remote build, or an unlicensed/non-equivalent environment.
+
+In short: **if remote cannot do it, note it once in the local inbox with an executable handoff; future remote agents skip it and local agents own the proof.**
+
 ## Current remote completion snapshot
 
 Before creating another broad remote backlog, read `docs/REMOTE-IMPLEMENTATION-COMPLETION-2026-08-11.md`. It is the newest repository-level classification of the current source-safe implementation wave and explains which remaining gaps are `LOCAL_ONLY`, `POLICY_REQUIRED`, `ENGINEERING_REQUIRED` or `FORMAT_SCOPE_REQUIRED`.
