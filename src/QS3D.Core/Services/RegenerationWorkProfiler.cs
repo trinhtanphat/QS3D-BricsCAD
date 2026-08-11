@@ -97,11 +97,11 @@ namespace QS3D.Core.Services
             ProjectId = projectId;
             SourceChangeVersion = sourceChangeVersion;
             Scope = scope;
-            TargetElementIds = (targetElementIds ?? throw new ArgumentNullException(nameof(targetElementIds))).ToList().AsReadOnly();
+            TargetElementIds = MaterializeBounded(targetElementIds, projectElementCount, nameof(targetElementIds), "target element");
             ProjectElementCount = projectElementCount;
             DirtyProjectElementCount = dirtyProjectElementCount;
-            Items = (items ?? throw new ArgumentNullException(nameof(items))).ToList().AsReadOnly();
-            Categories = (categories ?? throw new ArgumentNullException(nameof(categories))).ToList().AsReadOnly();
+            Items = MaterializeBounded(items, projectElementCount, nameof(items), "work item");
+            Categories = MaterializeBounded(categories, projectElementCount, nameof(categories), "category");
             InternalDependencyEdgeCount = internalDependencyEdgeCount;
             MaxDependencyDepth = maxDependencyDepth;
         }
@@ -120,6 +120,19 @@ namespace QS3D.Core.Services
         public int SemanticDirtyElementCount => Items.Count(x => x.HasSemanticDirtyWork);
         public int GeometryOnlyDirtyElementCount => PlannedElementCount - SemanticDirtyElementCount;
         public bool HasWork => PlannedElementCount > 0;
+
+        private static IReadOnlyList<T> MaterializeBounded<T>(IEnumerable<T> values, int maxCount, string parameterName, string label)
+        {
+            if (values == null) throw new ArgumentNullException(parameterName);
+            var result = new List<T>();
+            foreach (var value in values)
+            {
+                if (result.Count >= maxCount)
+                    throw new ArgumentException("Regeneration work profile " + label + " collection cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", parameterName);
+                result.Add(value);
+            }
+            return result.AsReadOnly();
+        }
     }
 
     public sealed class RegenerationWorkProfiler
