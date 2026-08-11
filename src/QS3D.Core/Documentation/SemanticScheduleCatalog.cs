@@ -24,12 +24,12 @@ namespace QS3D.Core.Documentation
             Id = id ?? string.Empty;
             Name = name ?? string.Empty;
             Title = title ?? string.Empty;
-            Categories = (categories ?? Array.Empty<ElementCategory>()).ToArray();
+            Categories = new List<ElementCategory>(categories ?? Array.Empty<ElementCategory>()).AsReadOnly();
             FloorId = floorId ?? string.Empty;
             ZoneId = zoneId ?? string.Empty;
-            IncludeElementIds = (includeElementIds ?? Array.Empty<string>()).ToArray();
-            ExcludeElementIds = (excludeElementIds ?? Array.Empty<string>()).ToArray();
-            Columns = (columns ?? throw new ArgumentNullException(nameof(columns))).ToArray();
+            IncludeElementIds = new List<string>(includeElementIds ?? Array.Empty<string>()).AsReadOnly();
+            ExcludeElementIds = new List<string>(excludeElementIds ?? Array.Empty<string>()).AsReadOnly();
+            Columns = new List<SemanticDocumentationColumn>(columns ?? throw new ArgumentNullException(nameof(columns))).AsReadOnly();
         }
 
         public string Id { get; }
@@ -121,9 +121,12 @@ namespace QS3D.Core.Documentation
             foreach (var id in exclude)
                 if (project.FindElement(id) == null) throw new InvalidOperationException("Semantic schedule exclude list references missing Element " + id + ".");
 
+            var candidates = project.Elements.ToArray();
+            if (candidates.Any(x => x == null))
+                throw new InvalidOperationException("Project contains a null semantic element.");
+
             var categorySet = new HashSet<ElementCategory>(normalized.Categories);
-            var ids = project.Elements
-                .Where(x => x != null)
+            var ids = candidates
                 .Where(x => categorySet.Count == 0 || categorySet.Contains(x.Category))
                 .Where(x => normalized.FloorId.Length == 0 || string.Equals(x.FloorId, normalized.FloorId, StringComparison.OrdinalIgnoreCase))
                 .Where(x => normalized.ZoneId.Length == 0 || string.Equals(x.ZoneId, normalized.ZoneId, StringComparison.OrdinalIgnoreCase))
@@ -134,8 +137,7 @@ namespace QS3D.Core.Documentation
                 .Select(x => x.Id)
                 .ToArray();
 
-            if (ids.Length == 0) throw new InvalidOperationException("Semantic schedule selects no elements.");
-            return SemanticDocumentationTableBuilder.Build(project, normalized.Title, ids, normalized.Columns);
+            return SemanticDocumentationTableBuilder.Build(project, normalized.Title, ids, normalized.Columns, allowEmpty: true);
         }
 
         private static void ValidateCatalog(IReadOnlyList<SemanticScheduleDefinition> definitions)
