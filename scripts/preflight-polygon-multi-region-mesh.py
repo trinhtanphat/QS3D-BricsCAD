@@ -31,8 +31,7 @@ for token in (
     "island.Region.Holes",
     "MaxTotalBars = 32768",
     "RegionId",
-    "XActualSpacingM",
-    "YActualSpacingM",
+    "public PolygonalSlabMeshLayout Layout { get; }",
 ):
     if token not in source:
         errors.append("polygon multi-region mesh source missing contract token: " + token)
@@ -42,6 +41,8 @@ for token in (
     "CountModeKeepsPerRegionSpacingSemantics",
     "HoleSplittingStaysInsideRegionLayout",
     "InvalidRegionTopologyFailsBeforeMeshPlanning",
+    "wide.YActualSpacingM > small.YActualSpacingM",
+    "Near(small.XActualSpacingM, wide.XActualSpacingM)",
     "ModuleInitializer",
 ):
     if token not in test:
@@ -64,4 +65,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: disconnected polygon mesh planning reuses the single-region planner independently per stable RegionId with a bounded aggregate output.")
+print("PASS: disconnected polygon mesh planning delegates each stable RegionId to the single-region planner; smoke coverage proves per-region actual-spacing semantics and bounded aggregate output.")
