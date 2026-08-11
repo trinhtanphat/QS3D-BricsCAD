@@ -1,8 +1,9 @@
 # Work Claim: Project Browser Workspace Enum Canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12
+- Completed: 2026-08-12
 - Mode: Remote source-safe
 - Baseline main SHA: `dc6e4d01dea6c1c48dc1a3287ef40fe8fddd741c`
 - Scope: fail closed on numeric/non-canonical enum representations in persisted Project Browser workspace state while preserving serializer-emitted enum names.
@@ -14,20 +15,30 @@
 - `tests/QS3D.Core.SmokeTests/ProjectBrowserWorkspaceEnumCanonicalitySmokeRegistration.cs`
 - `docs/agent-work-claims/2026-08-12-0032-chatgpt-web-gpt56sol-browser-workspace-enum-canonicality.md`
 
-## Defect evidence
+## Completed work
 
-`Deserialize(...)` currently combines case-sensitive `Enum.TryParse(...)` with `Enum.IsDefined(...)` for `ProjectBrowserGrouping` and category items. .NET enum parsing still accepts defined numeric text such as `"0"`, even though `Serialize(...)` emits canonical enum names through `ToString()`. A persisted workspace payload can therefore load successfully and silently change representation when re-serialized.
+- Persisted `ProjectBrowserGrouping` text must now equal the enum's canonical `ToString()` representation after parsing.
+- Persisted `ElementCategory` items must now equal their canonical enum names after parsing.
+- Defined numeric enum aliases such as `"0"` therefore fail closed instead of loading and silently changing representation on re-serialize.
+- Serializer-emitted enum names remain accepted unchanged.
+- Added an isolated smoke module covering the canonical baseline plus numeric grouping/category rejection, with module-initializer registration that avoids shared smoke registry edits.
 
-## Boundaries
+## Published commits
 
-- Navigation/Core only; no BricsCAD/native/UI changes.
-- Preserve all current enum values and serializer output.
-- Do not change workspace schema/version, collection cardinality, query semantics, or project validation behavior.
-- No GitHub Actions dispatch.
+- Claim-first commit: `024d4dfd3b9ed21c980f8fa518ba73a56fb84eac`.
+- Initial focused smoke: `f546bac4c06f263699158288878d36f7b65066c9`.
+- Source fix: `f770152dcda1bd13d8af4e183b41a7d040442252`.
+- Smoke registration: `c355efad7ea9b8a4f645b8fc7040d45ab5eca0d9`.
+- Smoke fixture simplification: `f59ef7ab112d928605ba93634cb2d6db1d974a7f`.
 
-## Validation plan
+## Validation notes
 
-- Require parsed grouping/category text to equal the enum's canonical `ToString()` representation using ordinal comparison.
-- Add isolated smoke coverage proving serializer-emitted names still load and defined numeric grouping/category aliases fail closed.
-- Review exact diff through GitHub connector.
-- Do not claim BricsCAD V25 runtime validation or remotely executed smoke pass unless actually available.
+- Re-read the exact `main` source after the write and confirmed both grouping and category canonical-name guards are present.
+- Re-read the focused smoke and registration files on `main` and confirmed canonical-name success plus numeric-alias rejection are encoded and registered.
+- Writes used current blob SHAs for existing files, so stale same-file updates would have been rejected instead of overwriting concurrent work.
+- GitHub Actions were not dispatched.
+- This Core-only source batch does not claim BricsCAD V25 runtime validation or a remotely executed smoke-test pass.
+
+## Blocked dependencies
+
+None.
