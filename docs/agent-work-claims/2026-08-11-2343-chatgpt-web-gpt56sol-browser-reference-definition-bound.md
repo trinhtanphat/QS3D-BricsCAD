@@ -1,0 +1,23 @@
+# Agent Work Claim
+
+- Agent/session: `chatgpt-web-gpt56sol-browser-reference-definition-bound-2026-08-11`
+- Status: `ACTIVE`
+- Objective: Bound Project Browser floor/zone reference-definition enumeration to the existing domain limit so malformed or directly constructed `ProjectState` inputs cannot force indexing beyond supported Floor/Zone capacity.
+- Owned files/symbols:
+  - `src/QS3D.Core/Navigation/ProjectBrowserPlanner.cs` (`ProjectBrowserPlanner.Build` Floor/Zone definition bounds only)
+  - `tests/QS3D.Core.SmokeTests/ProjectBrowserReferenceDefinitionBoundsSmoke.cs`
+  - `tests/QS3D.Core.SmokeTests/ProjectBrowserReferenceDefinitionBoundsSmokeRegistration.cs`
+- Coordination-only files:
+  - `docs/agent-work-claims/2026-08-11-2343-chatgpt-web-gpt56sol-browser-reference-definition-bound.md`
+- Acceptance checks:
+  - More than 2000 Floor definitions fail before Project Browser index construction.
+  - More than 2000 Zone definitions fail before Project Browser index construction.
+  - The bound matches the existing `ProjectFloorService` / `ProjectZoneService` supported capacity.
+  - Existing supported Project Browser groupings remain unchanged at or below the bound.
+  - Focused Core smoke coverage records both guardrails.
+  - No BricsCAD V25 runtime qualification claim.
+- Overlap/coordination notes:
+  - Current `main`, recent claim commits, and claim registry were checked immediately before this claim-only commit.
+  - Scope excludes Project Browser query-option bounds, workspace persistence/XML, selection/reveal, and UI lanes.
+  - The previously investigated Model Health severity lane is owned by another session and is intentionally excluded.
+  - No GitHub Actions will be run.
