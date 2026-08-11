@@ -2,18 +2,23 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: prevent `QS3DRULECREATE` from persisting a settings clone captured before its multi-prompt confirmation window when Quantity Settings changed during user input.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/QuantityRuleCreateCommands.cs`
   - `scripts/preflight-quantity-rule-create.py`
   - `scripts/preflight-quantity-rule-create-freshness.py`
   - this claim file
-- Contract:
+- Implemented contract:
   - initial settings load remains read-only and drives observed category prompts/early duplicate feedback;
-  - after explicit Yes confirmation, re-load and normalize the latest persisted settings;
-  - revalidate both category codes still exist in the latest settings and the directed rule is still missing;
-  - append/validate/save exactly one A -> B rule on the latest clone, preserving any concurrent unrelated settings changes made during prompts;
+  - after explicit Yes confirmation, command re-loads and normalizes the latest persisted settings;
+  - both category codes are revalidated against latest state and the directed rule is rechecked for concurrent creation;
+  - exactly one A -> B rule is appended/validated/saved on the latest clone, preserving unrelated settings changes made during prompts;
   - reverse-rule independence, store-only persistence, atomic store behavior and no-CAD/project mutation remain unchanged;
-  - reconcile the existing quantity-rule-create preflight with the latest-settings persistence boundary;
-  - no GitHub Actions dispatch and no BricsCAD V25 runtime PASS from this web session.
+  - existing quantity-rule-create ownership/behavior preflight now locks the post-confirmation latest-settings boundary.
+- Source commit: `cad2ea8b733dbfc9037b2846e7e91fbb4dda732d` — `fix(quantity): refresh rule settings after confirm`.
+- Existing guard reconciliation: `85e0a513f03e65a398798d68371119a92b8756d7` — `test(quantity): align rule create freshness gate`.
+- Freshness guard: `449e96ddd5143fd9779995b75b34d6828863279a` — `scripts/preflight-quantity-rule-create-freshness.py`.
+- Validation actually performed: connector-side current-source review, existing preflight reconciliation review, and freshness-guard source review. Preflight scripts were not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.
