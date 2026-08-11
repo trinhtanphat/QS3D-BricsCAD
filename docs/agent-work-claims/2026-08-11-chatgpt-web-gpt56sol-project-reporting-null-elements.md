@@ -1,6 +1,6 @@
 # Work claim — project reporting null-element identity integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-project-reporting-null-elements`
 - Registered: `2026-08-11T21:40:00+07:00`
 - Baseline: newest `main` at claim branch creation
@@ -8,7 +8,7 @@
 
 ## Confirmed defect
 
-`ProjectState.Elements` is an exposed mutable `IList<ProjectElement>`, so a malformed caller can insert `null`. `ReportingProjectIdentityGuard.RequireUniqueElementIds(...)` dereferences `element.Id` without a null check, causing an incidental `NullReferenceException` before schedule context is reported. `ProjectQuantityReportBuilder.Build(...)` has a separate direct `element.Id` loop and can fail the same way for unscoped BQ/ED2. This is inconsistent with the explicit null-member integrity now enforced by legacy reporting.
+`ProjectState.Elements` is an exposed mutable `IList<ProjectElement>`, so a malformed caller can insert `null`. `ReportingProjectIdentityGuard.RequireUniqueElementIds(...)` dereferenced `element.Id` without a null check, causing an incidental `NullReferenceException` before schedule context was reported. `ProjectQuantityReportBuilder.Build(...)` had a separate direct `element.Id` loop and could fail the same way for unscoped BQ/ED2. This was inconsistent with the explicit null-member integrity already enforced by legacy reporting.
 
 ## Reserved scope
 
@@ -43,6 +43,20 @@
 
 Previous reporting identity/provenance/null/non-negative/material claims are completed. The active Core mutation atomicity claim excludes reporting. Current Quantity Settings/UI/updater/rebar claims reserve disjoint surfaces.
 
+## Completion
+
+- Claim-only PR: `#481`, squash merge on `main`: `871d5f62537e2fd50477a59226afa64cab869c5c`.
+- Implementation PR: `#484` — `fix(reporting): reject null project elements`.
+- Reviewed implementation head before squash: `d3f763979d79029ea88304bb637661826af96b9f`.
+- Squash merge on `main`: `ba0e79896a0edebe8be35290ff4422e02d43c3cd`.
+- `ReportingProjectIdentityGuard` now rejects the first null project element with its zero-based index before dereferencing identity.
+- `ProjectQuantityReportBuilder` now invokes the shared identity guard before Room Finish validation, selection resolution or quantity calculation and no longer carries a duplicate blank/duplicate ID scan in its loop.
+- The already-registered `ScheduleReportingIdentitySmoke` now covers null project elements across Material Usage, Curtain Wall, Door/Opening, Room Finish and project-backed Group/Detail while preserving prior duplicate/provenance regressions.
+- Final implementation PR diff: 3 files / 33 additions / 4 deletions.
+- Concurrent-main comparison before integration showed no overlap with the three reserved files.
+- GitHub Actions/build/release were not dispatched.
+- No native BricsCAD V25/WPF runtime PASS is claimed.
+
 ## Completion condition
 
-Project-backed BQ/ED2 and all guarded Core schedules fail closed on null project elements through one shared reporting identity boundary, focused smoke coverage is merged to current `main`, and this claim is closed with exact SHAs and truthful validation scope.
+Satisfied by PR `#484` and merge `ba0e79896a0edebe8be35290ff4422e02d43c3cd`: project-backed BQ/ED2 and all guarded Core schedules now fail closed on null project elements through one shared reporting identity boundary with focused regression coverage.
