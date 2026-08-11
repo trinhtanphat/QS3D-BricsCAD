@@ -20,12 +20,12 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 ## LOCAL-001 — exact V25 build/load baseline
 
 - Priority: P0
-- Status: OPEN
+- Status: IN_PROGRESS
 - Area: BricsCAD V25 adapter / packaging baseline
 - Why local: Requires licensed BricsCAD V25 x64, installed managed references, Windows desktop, NETLOAD/DemandLoad, and native command execution.
 - Scenario: Run `scripts/run-local-v25-qualification.ps1` from a clean exact SHA with the real V25 install directory; prove Core Release build, Core smoke, adapter exact-V25 build, NETLOAD, DemandLoad, command registration, save/reopen, and multi-DWG isolation. Cold-start/reopen a drawing with an existing `.qsdb`: true writes must bind the canonical same-ProjectId project, while one regeneration-based CSV/XLSX export and one modeless Door/Room refresh/export must use detached regenerated state and leave live project dirty/change-version/timestamp/audit state unchanged. Repeat with the sidecar absent and verify ownership-dependent writes refuse without leaving a replacement project.
 - Evidence required: Exact QS3D SHA, Windows build, BricsCAD V25 build, .NET/MSBuild version, command/load results, cold-cache ProjectId continuity for true writes, before/after live-state invariants for detached refresh/export, absent-sidecar refusal/no-new-project result, sanitized failure log if any.
-- Evidence: PENDING_LOCAL
+- Evidence: Automated baseline PASS at exact SHA `16cbd1c7cd8a2ae22ff9dfb185419efd56fab477`: clean-tree/policy/source preflights, aggregate feature preflights, Core Release build and deterministic smoke, exact-V25 adapter Release build, offline WPF theme/Workspace/RightPanel smoke, and licensed V25 NETLOAD/Ribbon/Palette runtime probe. Sanitized runtime identity recorded BricsCAD `25.2.10`, x64 CLR `4.0.30319.42000`, with Ribbon and both palettes ready. Scope remains `source-build+runtime-smoke`; full interactive matrix, save/reopen, multi-DWG isolation and DemandLoad were **NOT RUN**, so this item is not `PASS` and customer-release qualification remains false.
 - Related docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/EXISTING-PROJECT-MUTATION-CONTEXT.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
 - Updated: 2026-08-11
 
@@ -147,6 +147,18 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Evidence required: Exact SHA; failure stage/exception; before/after semantic snapshot summary; native owner counts; transaction/Undo result; active-DWG identity; Recognition no-project-creation result; Door/Room/BBS detached live-state invariants; BQ canonical preference result; post-commit UI result; save/reopen result; sanitized evidence where useful.
 - Evidence: PENDING_LOCAL
 - Related docs: `docs/PROJECT-ROLLBACK-FAILURE-MATRIX.md`; `docs/EXISTING-PROJECT-MUTATION-CONTEXT.md`; `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
+- Updated: 2026-08-11
+
+## LOCAL-012 — clean-room public BRC proxy measurement and quantity round-trip
+
+- Priority: P0
+- Status: IN_PROGRESS
+- Area: BRC proxy measurement / Recognition / B4D / ED2 / Excel Locate
+- Why local: Requires licensed BricsCAD V25, authorized BRC-containing drawing content and native public proxy/entity behavior. All source drawings and workbooks are reference-only; qualification must create disposable drawing copies and a new workbook/output before any command runs, and must never inspect BLT binaries or proprietary/internal BLT APIs.
+- Scenario: On disposable copies only, run the automation-only `QS3DBRCPROBE` clean-room diagnostic and record only sanitized public-API capability/count evidence. Determine whether supported public BricsCAD APIs provide finite positive category-appropriate Length, Area or Volume for BRC/proxy entities. Then exercise `QS3DB4D` → `QS3DED2` → a newly created workbook → `QS3DEXCELLOCATE`, verifying quantity/provenance and Handle ↔ active BRC/CAD object round-trip without modifying either reference original. If a proxy remains opaque or lacks a finite positive primary metric, keep it review-only and fail closed: do not auto-accept/capture it and do not invent geometry or quantities.
+- Evidence required: Exact QS3D SHA; hashes or other non-sensitive identity for each disposable reference copy and confirmation that originals were not modified; sanitized aggregate `QS3DBRCPROBE` marker; public measurement/count results; B4D recognition/capture decision; ED2 new-workbook row/provenance summary; Excel Locate success/refusal result; and explicit opaque-proxy fail-closed evidence where applicable. `PASS` is allowed only with sanitized evidence tied to the exact tested SHA.
+- Evidence: PENDING_LOCAL
+- Related docs: `docs/PRODUCT-BOUNDARY.md`; `docs/COMMANDS.md`; `docs/LOCAL-V25-QUALIFICATION.md`
 - Updated: 2026-08-11
 
 ## Close-out rule

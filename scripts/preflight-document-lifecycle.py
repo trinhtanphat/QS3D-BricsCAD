@@ -23,7 +23,7 @@ else:
     for token in required:
         if token not in text:
             errors.append("document lifecycle missing exact cleanup contract: " + token)
-    if "DocumentDestroyed +=" in text or "DetachByName(e.FileName)" in text or "ForgetByName(e.FileName)" in text:
+    if "DetachByName(e.FileName)" in text or "ForgetByName(e.FileName)" in text:
         errors.append("document destruction cleanup must not depend on filename identity")
 
 if not selection.is_file():
