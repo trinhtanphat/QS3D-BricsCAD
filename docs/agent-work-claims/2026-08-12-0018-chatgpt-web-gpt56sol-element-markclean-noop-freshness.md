@@ -1,46 +1,31 @@
 # Work claim — ProjectElement MarkClean no-op freshness
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-element-markclean-noop-freshness`
 - Registered: `2026-08-12T00:18:00+07:00`
 - Baseline main SHA: `86712f56885f7b77b1de9b98b1bf8dd8dac7e02b`
+- Claim commit: `13a1c6d587513707ad0f046046d49285192969d6`
+- Implementation commit: `cc7d510ee25f3761bd95f5f26b44ec04e37974d1`
+- Regression commit: `5614f7a4bc5492e8a8ee2011ff0e58e2bdfba474`
 - Priority: deterministic follow-up to the completed dirty-None no-op invariant
 
-## Confirmed defect
+## Completed
 
-The completed dirty-None lane made `MarkClean(ElementDirtyFlags.None)` timestamp-stable, but `MarkClean(nonEmptyFlags)` still always assigns `UpdatedUtc = DateTime.UtcNow` even when none of the requested flags are currently dirty. Repeating a clean operation on already-clean bits therefore creates a false freshness mutation without changing `Dirty`.
+`ProjectElement.MarkClean(nonEmptyFlags)` now returns without mutation when none of the requested flags are currently dirty. If one or more requested bits are dirty, the existing clear operation and `UpdatedUtc` advancement remain unchanged. Existing range validation and exact `None` handling remain in place.
 
-## Reserved scope
+## Validation actually performed
 
-After existing range/None validation, make `MarkClean` return without mutation when `(Dirty & flags) == ElementDirtyFlags.None`. If any requested bit is currently dirty, preserve the existing bit clear and timestamp update.
+- Verified the claim commit remained an ancestor of moving `main`; the intervening commit touched only an unrelated support-bundle claim.
+- Inspected exact implementation commit diff: one source logic line was added to `MarkClean`, with no other source changes.
+- Re-fetched current `main` and confirmed the guard is present.
+- Re-fetched the module-initialized smoke covering first clean timestamp advancement, repeated non-empty clean no-op, partial multi-flag real mutation, exact `None`, and invalid-bit non-mutation.
+- GitHub Actions were not dispatched and no BricsCAD V25 runtime qualification is claimed.
 
-## Expected surfaces
-
-- `src/QS3D.Core/Domain/ProjectElement.cs` (`MarkClean` only)
-- `tests/QS3D.Core.SmokeTests/ProjectElementMarkCleanNoOpSmoke.cs`
-- module-initializer registration in that new smoke file
-- this claim file
-
-## Excluded scope
+## Excluded scope retained
 
 - No `MarkDirty`, Category, SetProperty, SetQuantity, generated stale or relation mutation changes.
 - No ProjectState ChangeVersion/regeneration/persistence/V25/UI behavior changes.
-- No reinterpretation of a partial clean: if at least one requested bit is dirty, the call remains a real mutation.
-- No GitHub Actions dispatch.
-
-## Validation plan
-
-- First clean of a dirty bit clears it and advances `UpdatedUtc`.
-- Repeating the same non-empty clean when the bit is already clean leaves `Dirty` and `UpdatedUtc` unchanged.
-- A multi-flag clean with one dirty and one already-clean bit remains a real mutation and advances timestamp.
-- Invalid flag bits still throw before mutation.
-- Existing `None` behavior remains unchanged.
-- Re-fetch target after claim publication, inspect exact source diff, and read back current source/test from `main`.
-
-## Coordination
-
-Historical commit `0581b5db3a0e185b6855d1dbfce58282439c74e6` intentionally handled exact `None` only and preserved non-empty behavior. This follow-up owns only the now-demonstrated no-op subset case. Current concurrent claims on diagnostics/Grid/V25/enumeration/revision surfaces do not overlap.
 
 ## Completion condition
 
-Current `main` does not advance element freshness when `MarkClean` clears no dirty bit, still updates on actual clears, includes focused deterministic regression coverage, and this claim is closed `COMPLETED`.
+Satisfied on current `main`; this lane is released for future work.
