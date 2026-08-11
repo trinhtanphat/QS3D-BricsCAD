@@ -17,26 +17,29 @@ Fail closed deterministically when a semantic view resolves a Floor/Zone referen
 ## Expected surfaces
 
 - `src/QS3D.Core/Documentation/SemanticViewPlanner.cs`
-- `tests/QS3D.Core.SmokeTests/SemanticViewSheetPlannerSmoke.cs`
+- `tests/QS3D.Core.SmokeTests/SemanticViewNullReferenceSmoke.cs`
+- `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs`
 - this claim file
 
 ## Excluded scope
 
 - No native BricsCAD view/layout materialization changes.
 - No Sheet Index, title-block, Interchange, persistence schema, or project collection API changes.
+- No changes to unrelated smoke registrations beyond adding this focused smoke entry.
 - No GitHub Actions dispatch and no BricsCAD V25 runtime PASS claim.
 
 ## Validation plan
 
-- Add focused smoke cases for null Floor and null Zone entries with matching semantic-view filters; both must fail with the existing domain-level `InvalidOperationException` path rather than `NullReferenceException`.
+- Add a focused dedicated smoke for null Floor and null Zone entries with matching semantic-view filters; both must fail with the existing domain-level `InvalidOperationException` path rather than `NullReferenceException`.
+- Register only that smoke in the existing deterministic smoke runner.
 - Preserve existing missing and ambiguous Floor/Zone semantics.
-- Re-fetch current `main`, claims, and both target blobs immediately before writes; never force-push.
+- Re-fetch current `main`, claims, and every target blob immediately before writes; never force-push.
 - Record source/static verification only if this hosted session cannot execute the repository build.
 
 ## Coordination
 
-No active claim filename matching semantic-view scope was present in the current claim registry at registration time. This lane is limited to the pure-Core planner and its existing smoke file.
+No active claim filename matching semantic-view scope was present in the current claim registry at registration time. This lane remains limited to the pure-Core planner plus focused smoke coverage; the dedicated smoke avoids replacing the larger shared semantic-view/sheet smoke file.
 
 ## Completion condition
 
-Current `main` fail-closes null Floor/Zone project references during semantic view planning, includes focused regression coverage, and this claim is marked `COMPLETED`.
+Current `main` fail-closes null Floor/Zone project references during semantic view planning, includes registered focused regression coverage, and this claim is marked `COMPLETED`.
