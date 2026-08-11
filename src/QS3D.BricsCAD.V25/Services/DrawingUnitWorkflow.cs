@@ -12,11 +12,20 @@ namespace QS3D.BricsCAD.V25.Services
         public static bool EnsureResolved(Document document, string operation)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
+            var readOnlyExportPreparation = string.Equals(operation, "QS3DED2", StringComparison.OrdinalIgnoreCase);
             if (CadUnitService.TryGetPolicy(document, out _, out var resolution))
             {
-                PersistLegacyBindingIfNeeded(document, resolution);
+                if (!readOnlyExportPreparation)
+                    PersistLegacyBindingIfNeeded(document, resolution);
                 return true;
             }
+
+            if (readOnlyExportPreparation)
+            {
+                document.Editor.WriteMessage("\nQS3DED2: drawing unit is undefined/unsupported. Run QS3DUNITS first; ED2 export preparation does not create or persist project/unit state before Save confirmation.");
+                return false;
+            }
+
             document.Editor.WriteMessage("\n" + operation + ": INSUNITS is undefined/unsupported; choose the real drawing unit before quantity conversion.");
             return PromptAndPersist(document);
         }
