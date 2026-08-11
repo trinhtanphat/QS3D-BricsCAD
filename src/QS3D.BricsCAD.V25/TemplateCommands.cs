@@ -17,15 +17,15 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DTEMPLATEEXPORT", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
                 var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
                 var dialog = new SaveFileDialog { Title = "Xuất QS3D Template", Filter = "QS3D Template (*.qstemplate)|*.qstemplate", DefaultExt = ".qstemplate", AddExtension = true, OverwritePrompt = true, FileName = drawingName + ".qstemplate" };
                 if (dialog.ShowDialog() != true) return;
+
+                var project = ProjectContextCoordinator.GetOrCreate(doc);
                 var store = new TemplateProfileStore();
                 var profile = store.ExportProject(project, "template-" + Guid.NewGuid().ToString("N"), drawingName + " Template");
                 store.Save(profile, dialog.FileName);
-                PaletteCoordinator.SetStatus("Đã xuất template: " + dialog.FileName);
-                doc.Editor.WriteMessage("\nQS3D template exported: " + dialog.FileName);
+                FinalizeExportUi(doc, "Đã xuất template: " + dialog.FileName, "QS3D template exported: " + dialog.FileName);
             });
         }
 
@@ -75,6 +75,20 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 doc.Editor.WriteMessage("\nQS3D " + message);
             });
+        }
+
+        private static void FinalizeExportUi(Document document, string status, string message)
+        {
+            try
+            {
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\n" + message);
+            }
+            catch (System.Exception ex)
+            {
+                try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export template: " + ex.Message); }
+                catch { }
+            }
         }
 
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
