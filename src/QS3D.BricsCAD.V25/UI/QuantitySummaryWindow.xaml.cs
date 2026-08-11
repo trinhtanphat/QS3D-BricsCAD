@@ -85,7 +85,7 @@ namespace QS3D.BricsCAD.V25.UI
             for (var index = 0; index < QuantityGrid.Columns.Count && index < ColumnKeys.Length; index++)
                 if (QuantityGrid.Columns[index].Visibility == Visibility.Visible) visible.Add(ColumnKeys[index]);
 
-            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+            if (!ExistingProjectMutationContext.TryGet(_document, out var project))
                 throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng bảng BQ và mở lại trước khi đổi cấu hình cột.");
             var rollback = ProjectStateSnapshot.Capture(project);
             try
