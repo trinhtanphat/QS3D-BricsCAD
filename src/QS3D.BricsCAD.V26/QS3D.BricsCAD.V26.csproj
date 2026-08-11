@@ -19,13 +19,25 @@
   <!--
     BricsCAD V26 moved its managed host to .NET 8. Keep the proven adapter source
     shared with V25, but build it in an isolated project/output so the net48 V25
-    product lane remains unchanged. PluginEntry and Updates are version-specific:
-    V26 must never consume the V25 signed-update channel.
+    product lane remains unchanged. Host-neutral updater lifecycle/UI code is linked
+    from V25; release identity, manifest validation and secure launcher stay V26-only.
   -->
   <ItemGroup>
     <Compile Include="..\QS3D.BricsCAD.V25\**\*.cs"
              Exclude="..\QS3D.BricsCAD.V25\bin\**\*;..\QS3D.BricsCAD.V25\obj\**\*;..\QS3D.BricsCAD.V25\PluginEntry.cs;..\QS3D.BricsCAD.V25\Updates\**\*.cs">
       <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+    <Compile Include="..\QS3D.BricsCAD.V25\Updates\SemanticReleaseVersion.cs">
+      <Link>Updates\SemanticReleaseVersion.cs</Link>
+    </Compile>
+    <Compile Include="..\QS3D.BricsCAD.V25\Updates\UpdateBootstrapper.cs">
+      <Link>Updates\UpdateBootstrapper.cs</Link>
+    </Compile>
+    <Compile Include="..\QS3D.BricsCAD.V25\Updates\UpdateCenterWindow.cs">
+      <Link>Updates\UpdateCenterWindow.cs</Link>
+    </Compile>
+    <Compile Include="..\QS3D.BricsCAD.V25\Updates\UpdateCoordinator.cs">
+      <Link>Updates\UpdateCoordinator.cs</Link>
     </Compile>
     <Page Include="..\QS3D.BricsCAD.V25\UI\**\*.xaml">
       <Link>UI\%(RecursiveDir)%(Filename)%(Extension)</Link>
