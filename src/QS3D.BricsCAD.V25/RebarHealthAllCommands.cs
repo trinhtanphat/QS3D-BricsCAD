@@ -56,7 +56,8 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.WriteMessage("\nQS3D " + message);
                 Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue =>
                 {
-                    var element = project.FindElement(issue.ElementId);
+                    if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+                    var element = currentProject.FindElement(issue.ElementId);
                     if (element == null) return;
                     var handles = HandlesForIssue(element, issue.Code);
                     var count = CadHandleService.Select(document, handles);
