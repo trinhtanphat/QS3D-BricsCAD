@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -12,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             LegacyPlacementRemainsSourceRelative();
             BottomAndTopLevelsResolveAbsolutePlacement();
             LevelReferencesValidateOnlyConsumedLegacyInputs();
+            EffectiveHeightIsPreparedWhileProductionRegenerationStaysBlocked();
             TopAssignmentRequiresBottomAndValidRange();
             DuplicateLevelIdsFailClosedDuringPlacement();
             FloorMutationTracksAllReferenceKinds();
@@ -111,6 +113,69 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => ElementVerticalPlacementService.Resolve(project, legacy, 0d, 3d, double.PositiveInfinity));
         }
 
+        private static void EffectiveHeightIsPreparedWhileProductionRegenerationStaysBlocked()
+        {
+            var project = NewProject();
+
+            var wall = NewElement(project, "effective-wall", ElementCategory.ArchitecturalWall);
+            wall.Properties["LengthM"] = "2";
+            wall.Properties["HeightM"] = "99";
+            wall.Properties["ThicknessM"] = "0.2";
+            AssignBounded(project, wall);
+            Near(4d, ElementVerticalPlacementService.ResolveEffectiveHeight(project, wall, 99d));
+            Throws<InvalidOperationException>(() => new WallRegenerator().Regenerate(project, wall));
+            Equal("99", wall.Properties["HeightM"]);
+
+            var opening = NewElement(project, "effective-opening", ElementCategory.WallOpening);
+            opening.Properties["WidthM"] = "1.25";
+            opening.Properties["HeightM"] = "99";
+            AssignBounded(project, opening);
+            Throws<InvalidOperationException>(() => new OpeningRegenerator().Regenerate(project, opening));
+            Equal("99", opening.Properties["HeightM"]);
+
+            var beam = NewElement(project, "effective-beam", ElementCategory.Beam);
+            beam.Properties["LengthM"] = "2";
+            beam.Properties["WidthM"] = "0.3";
+            beam.Properties["HeightM"] = "99";
+            AssignBounded(project, beam);
+            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, beam));
+            Equal("99", beam.Properties["HeightM"]);
+
+            var column = NewElement(project, "effective-column", ElementCategory.Column);
+            column.Properties["WidthM"] = "0.4";
+            column.Properties["DepthM"] = "0.5";
+            column.Properties["HeightM"] = "99";
+            AssignBounded(project, column);
+            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, column));
+            Equal("99", column.Properties["HeightM"]);
+
+            var structuralWall = NewElement(project, "effective-structural-wall", ElementCategory.StructuralWall);
+            structuralWall.Properties["LengthM"] = "2";
+            structuralWall.Properties["HeightM"] = "99";
+            structuralWall.Properties["ThicknessM"] = "0.2";
+            AssignBounded(project, structuralWall);
+            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, structuralWall));
+            Equal("99", structuralWall.Properties["HeightM"]);
+
+            var slab = NewElement(project, "effective-slab", ElementCategory.Slab);
+            slab.Properties["AreaM2"] = "10";
+            slab.Properties["ThicknessM"] = "0.2";
+            slab.Properties["PerimeterM"] = "14";
+            AssignBounded(project, slab);
+            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, slab));
+            Equal("0.2", slab.Properties["ThicknessM"]);
+
+            var foundation = NewElement(project, "effective-foundation", ElementCategory.Foundation);
+            foundation.Properties["BaseAreaM2"] = "6";
+            foundation.Properties["ThicknessM"] = "0.3";
+            foundation.Properties["PerimeterM"] = "10";
+            AssignBounded(project, foundation);
+            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, foundation));
+            Equal("0.3", foundation.Properties["ThicknessM"]);
+
+            Near(4d, ElementVerticalPlacementService.ResolveEffectiveHeight(project, foundation, double.NaN));
+        }
+
         private static void DuplicateLevelIdsFailClosedDuringPlacement()
         {
             var project = NewProject();
@@ -130,14 +195,28 @@ namespace QS3D.Core.SmokeTests
             var top = NewElement(project, "top");
             ProjectFloorService.AssignBottomLevel(project, "L0", new[] { top });
             ProjectFloorService.AssignTopLevel(project, "L1", new[] { top });
+            var dependent = NewElement(project, "dependent");
+            dependent.DependsOn.Add(bottom.Id);
+            dependent.Properties["GeneratedSolidHandle"] = "AA10";
+            dependent.ClearGeneratedGeometryStale();
+            var transitive = NewElement(project, "transitive");
+            transitive.DependsOn.Add(dependent.Id);
+            transitive.Properties["GeneratedSolidHandle"] = "AA11";
+            transitive.ClearGeneratedGeometryStale();
 
             floorOnly.MarkClean(ElementDirtyFlags.All);
             bottom.MarkClean(ElementDirtyFlags.All);
             top.MarkClean(ElementDirtyFlags.All);
+            dependent.MarkClean(ElementDirtyFlags.All);
+            transitive.MarkClean(ElementDirtyFlags.All);
             ProjectFloorService.Update(project, "L1", "Level 1", 3.2d);
             True((floorOnly.Dirty & ElementDirtyFlags.Geometry) != 0);
             True((bottom.Dirty & ElementDirtyFlags.Geometry) != 0);
             True((top.Dirty & ElementDirtyFlags.Geometry) != 0);
+            True((dependent.Dirty & (ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity)) == (ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity));
+            True((transitive.Dirty & (ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity)) == (ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity));
+            True(dependent.IsGeneratedSolidStale());
+            True(transitive.IsGeneratedSolidStale());
             Equal(3, ProjectFloorService.ReferenceCount(project, "L1"));
 
             ProjectFloorService.SetActive(project, "L2");
@@ -199,9 +278,20 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectElement NewElement(ProjectState project, string id)
         {
-            var element = new ProjectElement(id, ElementCategory.Beam, string.Empty, "L0", string.Empty);
+            return NewElement(project, id, ElementCategory.Beam);
+        }
+
+        private static ProjectElement NewElement(ProjectState project, string id, ElementCategory category)
+        {
+            var element = new ProjectElement(id, category, string.Empty, "L0", string.Empty);
             project.Elements.Add(element);
             return element;
+        }
+
+        private static void AssignBounded(ProjectState project, ProjectElement element)
+        {
+            Equal(1, ProjectFloorService.AssignBottomLevel(project, "L1", new[] { element }));
+            Equal(1, ProjectFloorService.AssignTopLevel(project, "L2", new[] { element }));
         }
 
         private static void Near(double expected, double actual)

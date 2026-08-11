@@ -79,6 +79,13 @@ namespace QS3D.BricsCAD.V25.Cad
                         var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .2d), element.Id + "/ThicknessM");
                         var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
                         var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document,
+                            project,
+                            element,
+                            line.StartPoint.Z,
+                            heightM,
+                            bottomOffsetM);
                         var dx = CadGeometryGuard.Subtract(line.EndPoint.X, line.StartPoint.X, element.Id + "/dx");
                         var dy = CadGeometryGuard.Subtract(line.EndPoint.Y, line.StartPoint.Y, element.Id + "/dy");
                         var dz = CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z, element.Id + "/dz");
@@ -91,13 +98,11 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (length <= 1e-6) throw new InvalidOperationException("Wall source LINE quá ngắn: " + element.Id);
 
                         var thickness = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, thicknessM, element.Id + "/ThicknessM"), element.Id + "/Thickness drawing units");
-                        var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/HeightM"), element.Id + "/Height drawing units");
-                        var bottomOffset = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
+                        var height = placement.HeightDrawingUnits;
                         var angle = CadGeometryGuard.Finite(Math.Atan2(dy, dx), element.Id + "/angle");
                         var midX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/mid X");
                         var midY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/mid Y");
-                        var midZ = CadGeometryGuard.Add(line.StartPoint.Z, bottomOffset, element.Id + "/base Z");
-                        midZ = CadGeometryGuard.Add(midZ, height / 2d, element.Id + "/mid Z");
+                        var midZ = CadGeometryGuard.Add(placement.BottomDrawingUnits, height / 2d, element.Id + "/mid Z");
                         var mid = new Point3d(midX, midY, midZ);
 
                         var solid = new Solid3d();

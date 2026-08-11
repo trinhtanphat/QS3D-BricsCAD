@@ -73,6 +73,13 @@ namespace QS3D.BricsCAD.V25.Cad
                         var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.2d), element.Id + "/ThicknessM");
                         var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
                         var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document,
+                            project,
+                            element,
+                            line.StartPoint.Z,
+                            heightM,
+                            bottomOffsetM);
                         var mode = ResolveMode(element, family);
                         var chamferM = mode == WallPierProfileMode.Chamfered ? CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WallPierChamferM", 0.02d), element.Id + "/WallPierChamferM") : 0d;
                         var profilePlan = WallPierProfilePlanner.Plan(new WallPierProfileInput
@@ -80,7 +87,7 @@ namespace QS3D.BricsCAD.V25.Cad
                             Mode = mode,
                             WidthM = lengthM,
                             DepthM = thicknessM,
-                            HeightM = heightM,
+                            HeightM = placement.HeightM,
                             ChamferM = chamferM
                         });
 
@@ -88,8 +95,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var chamferDrawing = mode == WallPierProfileMode.Chamfered
                             ? CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, chamferM, element.Id + "/WallPierChamferM"), element.Id + "/chamfer drawing units")
                             : 0d;
-                        var heightDrawing = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/HeightM"), element.Id + "/height drawing units");
-                        var bottomDrawing = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
+                        var heightDrawing = placement.HeightDrawingUnits;
                         var ux = dx / lengthDrawing;
                         var uy = dy / lengthDrawing;
                         var vx = -uy;
@@ -111,7 +117,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                 polyline.AddVertexAt(index, new Point2d(x, y), 0d, 0d, 0d);
                             }
                             polyline.Closed = true;
-                            polyline.Elevation = CadGeometryGuard.Add(line.StartPoint.Z, bottomDrawing, element.Id + "/profile elevation");
+                            polyline.Elevation = placement.BottomDrawingUnits;
                             var regions = Region.CreateFromCurves(new DBObjectCollection { polyline });
                             if (regions == null || regions.Count != 1 || !(regions[0] is Region generatedRegion))
                                 throw new InvalidOperationException("Không thể tạo Region hợp lệ cho WallPier profile " + element.Id + ".");

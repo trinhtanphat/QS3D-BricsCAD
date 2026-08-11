@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         {
             NonGeometryPropertyPreservesFreshGeneratedOutput();
             GeometryPropertyStalesGeneratedOutput();
+            LevelReferencePropertiesStaleGeneratedOutput();
             BroadPropertyDirtyRetainsCompatibility();
             NoOpPropertyWriteDoesNotMutateState();
             NonGeometryPropertyDoesNotClearExistingStaleState();
@@ -37,6 +38,25 @@ namespace QS3D.Core.SmokeTests
             Has(element.Dirty, ElementDirtyFlags.Quantity);
             Has(element.Dirty, ElementDirtyFlags.Geometry);
             True(element.IsGeneratedGeometryStale());
+        }
+
+        private static void LevelReferencePropertiesStaleGeneratedOutput()
+        {
+            foreach (var property in new[]
+            {
+                ProjectFloorService.BottomLevelIdKey,
+                ProjectFloorService.BottomLevelOffsetKey,
+                ProjectFloorService.TopLevelIdKey,
+                ProjectFloorService.TopLevelOffsetKey
+            })
+            {
+                var element = FreshGeneratedBeam();
+
+                element.SetProperty(property, property.EndsWith("Id", StringComparison.Ordinal) ? "L1" : "0.1");
+
+                Has(element.Dirty, ElementDirtyFlags.Geometry);
+                True(element.IsGeneratedGeometryStale());
+            }
         }
 
         private static void BroadPropertyDirtyRetainsCompatibility()

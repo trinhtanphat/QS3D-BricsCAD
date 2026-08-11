@@ -25,6 +25,21 @@ namespace QS3D.Core.Domain
 
     public static class ElementVerticalPlacementService
     {
+        public static double ResolveEffectiveHeight(
+            ProjectState project,
+            ProjectElement element,
+            double legacyHeightM)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (element == null) throw new ArgumentNullException(nameof(element));
+            if (Property(element, ProjectFloorService.BottomLevelIdKey).Length == 0 &&
+                Property(element, ProjectFloorService.TopLevelIdKey).Length == 0 &&
+                !HasConfiguredProperty(element, ProjectFloorService.BottomLevelOffsetKey) &&
+                !HasConfiguredProperty(element, ProjectFloorService.TopLevelOffsetKey))
+                return legacyHeightM;
+            return Resolve(project, element, 0d, legacyHeightM, 0d).HeightM;
+        }
+
         public static ElementVerticalPlacement Resolve(
             ProjectState project,
             ProjectElement element,

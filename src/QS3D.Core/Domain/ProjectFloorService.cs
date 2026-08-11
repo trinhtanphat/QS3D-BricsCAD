@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.Domain
 {
@@ -44,9 +45,18 @@ namespace QS3D.Core.Domain
             var elevationChanged = !NearlyEqual(floor.ElevationM, elevationM);
             if (!nameChanged && !elevationChanged) return floor;
 
-            var referencedElements = ResolveProjectElements(project)
+            var projectElements = ResolveProjectElements(project);
+            var referencedElements = projectElements
                 .Where(x => ReferencesFloor(x, floor.Id))
                 .ToList();
+            var referencedIds = new HashSet<string>(referencedElements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+            var dependencyGraph = new DependencyGraph();
+            dependencyGraph.Rebuild(projectElements);
+            var dependentIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in referencedElements)
+                dependentIds.UnionWith(dependencyGraph.GetDependentsTransitive(element.Id));
+            dependentIds.ExceptWith(referencedIds);
+            var dependentElements = projectElements.Where(x => dependentIds.Contains(x.Id)).ToList();
 
             project.Touch();
             floor.Name = normalizedName;
@@ -57,6 +67,8 @@ namespace QS3D.Core.Domain
                 if (elevationChanged) flags |= ElementDirtyFlags.Geometry;
                 element.MarkDirty(flags);
             }
+            foreach (var element in dependentElements)
+                element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             return floor;
         }
 

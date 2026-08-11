@@ -8,7 +8,11 @@ namespace QS3D.Core.Domain
         private static readonly ISet<string> GeometryProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "LengthM", "WidthM", "HeightM", "DepthM", "ThicknessM",
-            "BottomOffsetM", "TopOffsetM", "ProfileWidthM", "AreaM2", "PerimeterM"
+            "BottomOffsetM", "TopOffsetM", "ProfileWidthM", "AreaM2", "PerimeterM",
+            ProjectFloorService.BottomLevelIdKey,
+            ProjectFloorService.BottomLevelOffsetKey,
+            ProjectFloorService.TopLevelIdKey,
+            ProjectFloorService.TopLevelOffsetKey
         };
 
         private static readonly ISet<string> GeneratedOutputProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

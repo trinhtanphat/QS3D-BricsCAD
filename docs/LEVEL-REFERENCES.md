@@ -26,9 +26,11 @@ Element-level opt-in references are:
 
 ## Current integration boundary
 
-This batch establishes Core semantics, lifecycle guards, Health All / Release Check diagnostics, smoke coverage and static preflight only.
+Core now carries the complete semantic placement contract, treats all four Level keys as geometry-driving, propagates Floor elevation changes through transitive dependents, and has prepared effective-span quantity paths for Wall/Opening plus Beam/Slab/Column/StructuralWall/Foundation. The first native host wave also routes ArchitecturalWall/GlassWall/WallPier and those structural host builders through the same CAD-unit adapter.
 
-The Floor/Level UI intentionally does **not** expose Bottom/Top Level assignment yet. Native CAD builders currently share source-relative placement assumptions with physical openings, curtain frames and rebar. Exposing Level assignment before those paths consume the same placement resolver would create a misleading UI where semantic Level state and CAD geometry disagree.
+This preparation is deliberately dormant for Level-configured elements. `LevelReferenceNativeIntegrationPolicy.EnsureQualified(...)` blocks both native host mutation and production quantity regeneration while the policy qualifies no category. Legacy elements without Level metadata continue through the existing source-relative path. This fail-closed boundary prevents imported or hand-edited Level metadata from moving only a host or producing an ED2/BQ quantity that its opening, Curtain or rebar dependents cannot yet match.
+
+The Floor/Level UI intentionally does **not** expose Bottom/Top Level assignment yet. Physical opening cutters, curtain frames/panels and generated reinforcement still need to consume the same placement resolver before any category can be enabled.
 
 The native integration batch must therefore update the vertical-placement chain coherently, including host solids, semantic quantity regeneration and every dependent generated system that derives Z/effective height. Only after that integration is source-reviewed and qualified on BricsCAD V25 should Bottom/Top Level assignment be exposed in the Level Manager.
 

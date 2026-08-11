@@ -53,3 +53,12 @@ If a concurrent commit touches a required builder for another feature, this agen
 ## Completion condition
 
 The complete shared Level Z-chain is integrated on current `main`, deterministic tests/static guards pass, the exact-V25 build and required sanitized runtime matrix are recorded, `LOCAL-003` status/evidence is updated truthfully, no dependent family remains on a conflicting Z calculation, and this claim is marked `COMPLETED` with exact pushed SHA(s).
+
+## 2026-08-11 source-safe wave heartbeat
+
+- Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
+- Implemented: geometry-driving Level-key invalidation, transitive dependent stale propagation, pure effective-span preparation, and the first wall/structural native host adapter wave.
+- Safety boundary: native mutation and production quantity regeneration reject configured Level references through `LevelReferenceNativeIntegrationPolicy.EnsureQualified(...)`; the policy still qualifies no category.
+- Validation pending exact commit: Core build/smoke, BricsCAD V25 x64 Release build and aggregate preflight.
+- Remaining: straight/curved opening cutters, AutoHost, Curtain LINE/path frame/panel/live fingerprints, generated rebar/mesh/shape families, UI, and the complete mm/m V25 runtime matrix.
+- Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL`.

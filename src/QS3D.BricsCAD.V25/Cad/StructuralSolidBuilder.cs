@@ -65,12 +65,12 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (UsesLine(category))
                         {
                             if (!(entity is Line line)) throw new InvalidOperationException(category + " element " + element.Id + " cần source LINE để dựng 3D.");
-                            solid = BuildLinePrism(document, line, element, family, category);
+                            solid = BuildLinePrism(document, project, line, element, family, category);
                         }
                         else
                         {
                             if (!(entity is Polyline polyline) || !polyline.Closed) throw new InvalidOperationException(category + " element " + element.Id + " cần closed POLYLINE để dựng 3D.");
-                            solid = BuildClosedPolylinePrism(document, polyline, element, family, category);
+                            solid = BuildClosedPolylinePrism(document, project, polyline, element, family, category);
                         }
 
                         try
@@ -129,7 +129,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private static bool UsesLine(ElementCategory category) =>
             category == ElementCategory.Beam || category == ElementCategory.StructuralWall || category == ElementCategory.Railing;
 
-        private static Solid3d BuildLinePrism(Document document, Line line, ProjectElement element, ProjectFamily? family, ElementCategory category)
+        private static Solid3d BuildLinePrism(Document document, ProjectState project, Line line, ProjectElement element, ProjectFamily? family, ElementCategory category)
         {
             double widthM;
             double heightM;
@@ -153,6 +153,15 @@ namespace QS3D.BricsCAD.V25.Cad
             widthM = CadGeometryGuard.Positive(widthM, element.Id + "/3D width");
             heightM = CadGeometryGuard.Positive(heightM, element.Id + "/3D height");
             var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+            var placement = category == ElementCategory.Railing
+                ? null
+                : CadVerticalPlacementResolver.Resolve(
+                    document,
+                    project,
+                    element,
+                    line.StartPoint.Z,
+                    heightM,
+                    bottomM);
             var dx = CadGeometryGuard.Subtract(line.EndPoint.X, line.StartPoint.X, element.Id + "/dx");
             var dy = CadGeometryGuard.Subtract(line.EndPoint.Y, line.StartPoint.Y, element.Id + "/dy");
             var dz = CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z, element.Id + "/dz");
@@ -165,13 +174,17 @@ namespace QS3D.BricsCAD.V25.Cad
             if (length <= 1e-6) throw new InvalidOperationException("Structural LINE quá ngắn: " + element.Id);
 
             var width = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, widthM, element.Id + "/3D width"), element.Id + "/3D width drawing units");
-            var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/3D height"), element.Id + "/3D height drawing units");
-            var bottom = CadGeometryGuard.ToDrawingUnits(document, bottomM, element.Id + "/BottomOffsetM");
+            var height = placement?.HeightDrawingUnits ?? CadGeometryGuard.Positive(
+                CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/3D height"),
+                element.Id + "/3D height drawing units");
+            var bottom = placement?.BottomDrawingUnits ?? CadGeometryGuard.Add(
+                line.StartPoint.Z,
+                CadGeometryGuard.ToDrawingUnits(document, bottomM, element.Id + "/BottomOffsetM"),
+                element.Id + "/legacy base Z");
             var angle = CadGeometryGuard.Finite(Math.Atan2(dy, dx), element.Id + "/angle");
             var midX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/mid X");
             var midY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/mid Y");
-            var midZ = CadGeometryGuard.Add(line.StartPoint.Z, bottom, element.Id + "/base Z");
-            midZ = CadGeometryGuard.Add(midZ, height / 2d, element.Id + "/mid Z");
+            var midZ = CadGeometryGuard.Add(bottom, height / 2d, element.Id + "/mid Z");
             var mid = new Point3d(midX, midY, midZ);
 
             var solid = new Solid3d();
@@ -183,7 +196,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return solid;
         }
 
-        private static Solid3d BuildClosedPolylinePrism(Document document, Polyline polyline, ProjectElement element, ProjectFamily? family, ElementCategory category)
+        private static Solid3d BuildClosedPolylinePrism(Document document, ProjectState project, Polyline polyline, ProjectElement element, ProjectFamily? family, ElementCategory category)
         {
             var direction = 1d;
             double heightM;
@@ -199,9 +212,14 @@ namespace QS3D.BricsCAD.V25.Cad
             heightM = CadGeometryGuard.Positive(heightM, element.Id + "/extrusion height");
             var offsetKey = category == ElementCategory.Earthwork ? "TopOffsetM" : "BottomOffsetM";
             var offsetM = CadGeometryGuard.Number(element, family, offsetKey, 0d);
-            var heightMagnitude = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/extrusion height"), element.Id + "/extrusion drawing height");
+            CadVerticalPlacement? placement = null;
+            if (category == ElementCategory.Slab || category == ElementCategory.Foundation || category == ElementCategory.Column)
+                placement = CadVerticalPlacementResolver.Resolve(document, project, element, polyline.Elevation, heightM, offsetM);
+            var heightMagnitude = placement?.HeightDrawingUnits ?? CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/extrusion height"), element.Id + "/extrusion drawing height");
             var height = CadGeometryGuard.Finite(heightMagnitude * direction, element.Id + "/signed extrusion height");
-            var offset = CadGeometryGuard.ToDrawingUnits(document, offsetM, element.Id + "/" + offsetKey);
+            var offset = placement == null
+                ? CadGeometryGuard.ToDrawingUnits(document, offsetM, element.Id + "/" + offsetKey)
+                : CadGeometryGuard.Subtract(placement.BottomDrawingUnits, polyline.Elevation, element.Id + "/resolved base displacement");
 
             var solid = new Solid3d();
             solid.SetDatabaseDefaults(document.Database);

@@ -77,11 +77,12 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Priority: P0
 - Status: OPEN
 - Area: Structural / Wall / Opening / Rebar vertical placement
+- Source-side status: PARTIAL. Core effective-span/invalidation preparation and the first wall/structural host adapter wave are source-reviewed, but configured Level references remain fail-closed for native mutation and production quantity regeneration. Opening/Curtain/rebar integration and exact-V25 proof remain `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`.
 - Why local: Correctness depends on native V25 geometry, cutters, generated rebar alignment, and save/reopen behavior after Level edits.
 - Scenario: Qualify the shared `ElementVerticalPlacementService` chain across wall families, Beam/Column/Slab/Foundation, Door/WallOpening, Curtain frames/panels, and generated reinforcement. Cover legacy/no-Level, Bottom-only, Bottom+Top, Top-only fail-closed, deleted/renamed Level, and dependent invalidation.
 - Evidence required: Exact SHA; before/after Z measurements; host-opening-rebar alignment; health/release blocker behavior; save/reopen and Level-edit invalidation results.
 - Evidence: PENDING_LOCAL
-- Related docs: `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
+- Related docs: `docs/LEVEL-REFERENCES.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`; `scripts/preflight-level-native-host-placement.py`
 - Updated: 2026-08-11
 
 ## LOCAL-004 — source reconcile native atomicity

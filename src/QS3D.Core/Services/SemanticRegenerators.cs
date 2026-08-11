@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
 
@@ -17,6 +18,16 @@ namespace QS3D.Core.Services
         }
     }
 
+    internal static class QualifiedVerticalQuantity
+    {
+        public static double EffectiveHeight(ProjectState project, ProjectElement element, double legacyHeightM)
+        {
+            var effectiveHeight = ElementVerticalPlacementService.ResolveEffectiveHeight(project, element, legacyHeightM);
+            LevelReferenceNativeIntegrationPolicy.EnsureQualified(element, "Quantity regeneration with Level references");
+            return effectiveHeight;
+        }
+    }
+
     public sealed class WallRegenerator : IElementRegenerator
     {
         public bool CanRegenerate(ElementCategory category) => category == ElementCategory.ArchitecturalWall || category == ElementCategory.GlassWall || category == ElementCategory.WallPier;
@@ -27,7 +38,8 @@ namespace QS3D.Core.Services
             if (element == null) throw new ArgumentNullException(nameof(element));
 
             var length = QuantityMath.Positive(SemanticNumber.Get(element, "LengthM"));
-            var height = QuantityMath.Positive(SemanticNumber.Get(element, "HeightM"));
+            var legacyHeight = SemanticNumber.Get(element, "HeightM");
+            var height = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, element, legacyHeight));
             var thickness = QuantityMath.Positive(SemanticNumber.Get(element, "ThicknessM"));
             var grossArea = QuantityMath.Multiply(length, height, element.Id + "/gross wall area");
             var linkedOpeningArea = LinkedOpeningArea(project, element);
@@ -209,7 +221,8 @@ namespace QS3D.Core.Services
                 else
                 {
                     var width = QuantityMath.Positive(SemanticNumber.Get(child, "WidthM"));
-                    var height = QuantityMath.Positive(SemanticNumber.Get(child, "HeightM"));
+                    var legacyHeight = SemanticNumber.Get(child, "HeightM");
+                    var height = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, child, legacyHeight));
                     area = QuantityMath.Multiply(width, height, child.Id + "/opening area");
                 }
                 total = QuantityMath.Add(total, area, wall.Id + "/linked opening area");
@@ -260,7 +273,8 @@ namespace QS3D.Core.Services
             if (element == null) throw new ArgumentNullException(nameof(element));
 
             var width = QuantityMath.Positive(SemanticNumber.Get(element, "WidthM"));
-            var height = QuantityMath.Positive(SemanticNumber.Get(element, "HeightM"));
+            var legacyHeight = SemanticNumber.Get(element, "HeightM");
+            var height = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, element, legacyHeight));
             var area = QuantityMath.Multiply(width, height, element.Id + "/opening area");
 
             element.SetQuantity("OpeningAreaM2", area);

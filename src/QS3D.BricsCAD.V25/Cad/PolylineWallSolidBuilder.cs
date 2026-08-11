@@ -23,6 +23,7 @@ namespace QS3D.BricsCAD.V25.Cad
             public double FootprintAreaM2 { get; set; }
             public double ThicknessM { get; set; }
             public double HeightM { get; set; }
+            public double NativeHeightM { get; set; }
             public bool UsedBevelJoin { get; set; }
             public bool IsWallPierPathProfile { get; set; }
             public WallPierProfileMode WallPierMode { get; set; }
@@ -77,6 +78,14 @@ namespace QS3D.BricsCAD.V25.Cad
                         var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.2d), element.Id + "/ThicknessM");
                         var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
                         var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document,
+                            project,
+                            element,
+                            polyline.Elevation,
+                            heightM,
+                            bottomOffsetM);
+                        var nativeHeightM = placement.HeightM;
                         var miterLimit = ProjectNumber(project, "WallMiterLimit", 4d, 1d);
                         var sagittaM = ProjectNumber(project, "WallArcSagittaM", 0.002d, 1e-6d);
                         var centerline = ReadCenterline(document, polyline, sagittaM);
@@ -100,7 +109,7 @@ namespace QS3D.BricsCAD.V25.Cad
                             {
                                 Centerline = centerline,
                                 ThicknessM = thicknessM,
-                                HeightM = heightM,
+                                HeightM = nativeHeightM,
                                 Mode = wallPierMode,
                                 ChamferM = wallPierChamferM,
                                 MiterLimit = miterLimit,
@@ -121,8 +130,8 @@ namespace QS3D.BricsCAD.V25.Cad
                             centerlineLengthM = footprint.CenterlineLength;
                             footprintAreaM2 = footprint.Area;
                             footprintPerimeterM = footprint.Perimeter;
-                            grossVolumeM3 = footprintAreaM2 * heightM;
-                            lateralAreaM2 = footprintPerimeterM * heightM;
+                            grossVolumeM3 = footprintAreaM2 * nativeHeightM;
+                            lateralAreaM2 = footprintPerimeterM * nativeHeightM;
                             usedBevelJoin = footprint.UsedBevelJoin;
                         }
 
@@ -139,7 +148,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                     CadGeometryGuard.ToDrawingUnits(document, point.Y, element.Id + "/footprint Y")), 0d, 0d, 0d);
                             }
                             profile.Closed = true;
-                            profile.Elevation = CadGeometryGuard.Add(polyline.Elevation, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/profile elevation");
+                            profile.Elevation = placement.BottomDrawingUnits;
 
                             var curves = new DBObjectCollection { profile };
                             var regions = Region.CreateFromCurves(curves);
@@ -147,7 +156,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                 throw new InvalidOperationException("Không thể tạo một Region hợp lệ từ wall footprint " + element.Id + ".");
                             region = generatedRegion;
 
-                            var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/HeightM"), element.Id + "/Height drawing units");
+                            var height = placement.HeightDrawingUnits;
                             solid.SetDatabaseDefaults(document.Database);
                             solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), new SweepOptions());
                             solid.Layer = polyline.Layer;
@@ -165,6 +174,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                 FootprintAreaM2 = footprintAreaM2,
                                 ThicknessM = thicknessM,
                                 HeightM = heightM,
+                                NativeHeightM = nativeHeightM,
                                 UsedBevelJoin = usedBevelJoin,
                                 IsWallPierPathProfile = category == ElementCategory.WallPier,
                                 WallPierMode = wallPierMode,
@@ -230,7 +240,7 @@ namespace QS3D.BricsCAD.V25.Cad
             properties["WallPierPathProfileChamferM"] = update.WallPierChamferM.ToString("R", CultureInfo.InvariantCulture);
             properties["WallPierPathProfileCenterlineLengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
             properties["WallPierPathProfileThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
-            properties["WallPierPathProfileHeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
+            properties["WallPierPathProfileHeightM"] = update.NativeHeightM.ToString("R", CultureInfo.InvariantCulture);
             properties["WallPierPathProfileAreaM2"] = update.FootprintAreaM2.ToString("R", CultureInfo.InvariantCulture);
             properties["WallPierPathProfilePerimeterM"] = update.WallPierPerimeterM.ToString("R", CultureInfo.InvariantCulture);
             properties["WallPierPathProfileGrossVolumeM3"] = update.WallPierGrossVolumeM3.ToString("R", CultureInfo.InvariantCulture);

@@ -21,6 +21,9 @@ def require(text: str, token: str, label: str) -> None:
 
 floors = read("src/QS3D.Core/Domain/ProjectFloorService.cs")
 placement = read("src/QS3D.Core/Domain/ElementVerticalPlacementService.cs")
+geometry_policy = read("src/QS3D.Core/Domain/ElementGeometryPolicy.cs")
+semantic_regenerators = read("src/QS3D.Core/Services/SemanticRegenerators.cs")
+structural_regenerator = read("src/QS3D.Core/Services/StructuralRegenerator.cs")
 health = read("src/QS3D.Core/Diagnostics/LevelReferenceHealthService.cs")
 qualification = read("src/QS3D.Core/Diagnostics/LevelReferenceNativeIntegrationPolicy.cs")
 health_all = read("src/QS3D.BricsCAD.V25/HealthAllCommands.cs")
@@ -38,8 +41,19 @@ for token in [
     "AssignTopLevel",
     "ClearVerticalLevels",
     "ReferencesFloor",
+    "new DependencyGraph()",
+    "GetDependentsTransitive",
+    "dependentIds.ExceptWith(referencedIds)",
 ]:
     require(floors, token, "ProjectFloorService")
+
+for token in [
+    "ProjectFloorService.BottomLevelIdKey",
+    "ProjectFloorService.BottomLevelOffsetKey",
+    "ProjectFloorService.TopLevelIdKey",
+    "ProjectFloorService.TopLevelOffsetKey",
+]:
+    require(geometry_policy, token, "level geometry invalidation policy")
 
 for token in [
     "TopLevelId requires BottomLevelId",
@@ -48,8 +62,30 @@ for token in [
     "bottomLevel.ElevationM",
     "topLevel.ElevationM",
     "topElevation <= bottomElevation",
+    "public static double ResolveEffectiveHeight",
+    "return Resolve(project, element, 0d, legacyHeightM, 0d).HeightM;",
 ]:
     require(placement, token, "vertical placement contract")
+
+effective_height_call = "QualifiedVerticalQuantity.EffectiveHeight(project, "
+if semantic_regenerators.count(effective_height_call) < 3:
+    print("[FAIL] wall/opening quantity regenerators must route prepared Level spans through the qualification guard")
+    sys.exit(1)
+if structural_regenerator.count(effective_height_call) < 6:
+    print("[FAIL] structural quantity regenerators must route prepared Level spans through the qualification guard")
+    sys.exit(1)
+for token in [
+    "var effectiveHeight = ElementVerticalPlacementService.ResolveEffectiveHeight(project, element, legacyHeightM);",
+    'LevelReferenceNativeIntegrationPolicy.EnsureQualified(element, "Quantity regeneration with Level references")',
+    "return effectiveHeight;",
+]:
+    require(semantic_regenerators, token, "qualified quantity Level boundary")
+quantity_resolve = semantic_regenerators.find("var effectiveHeight = ElementVerticalPlacementService.ResolveEffectiveHeight")
+quantity_guard = semantic_regenerators.find("LevelReferenceNativeIntegrationPolicy.EnsureQualified(element", quantity_resolve)
+quantity_return = semantic_regenerators.find("return effectiveHeight;", quantity_guard)
+if min(quantity_resolve, quantity_guard, quantity_return) < 0 or not quantity_resolve < quantity_guard < quantity_return:
+    print("[FAIL] quantity Level boundary must validate the semantic span before refusing unqualified production use")
+    sys.exit(1)
 
 level_lookup = placement.find("var bottomLevelId")
 legacy_branch = placement.find("if (bottomLevelId.Length == 0)", level_lookup)
@@ -81,6 +117,9 @@ for token in [
     "public static class LevelReferenceNativeIntegrationPolicy",
     "public static bool IsQualified(ElementCategory category)",
     "return false;",
+    "HasConfiguredReferences",
+    "EnsureQualified",
+    "until its native host and dependent placement chain is qualified",
 ]:
     require(qualification, token, "native integration qualification policy")
 
@@ -89,6 +128,11 @@ require(release, "new LevelReferenceHealthService().Inspect(project)", "Release 
 require(smoke, "LegacyPlacementRemainsSourceRelative", "legacy compatibility smoke")
 require(smoke, "BottomAndTopLevelsResolveAbsolutePlacement", "absolute placement smoke")
 require(smoke, "LevelReferencesValidateOnlyConsumedLegacyInputs", "branch-local legacy input validation smoke")
+require(smoke, "EffectiveHeightIsPreparedWhileProductionRegenerationStaysBlocked", "prepared-but-blocked effective quantity span smoke")
+require(smoke, "ResolveEffectiveHeight(project, foundation, double.NaN)", "bounded effective height smoke")
+require(smoke, "Throws<InvalidOperationException>(() => new WallRegenerator().Regenerate(project, wall))", "unqualified wall quantity refusal smoke")
+require(smoke, "Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, foundation))", "unqualified structural quantity refusal smoke")
+require(smoke, "transitive.IsGeneratedSolidStale()", "transitive floor invalidation smoke")
 require(smoke, "bounded-ignores-all-legacy", "Bottom+Top legacy-independence smoke")
 require(smoke, "TopAssignmentRequiresBottomAndValidRange", "assignment safety smoke")
 require(smoke, "FloorMutationTracksAllReferenceKinds", "floor lifecycle smoke")
