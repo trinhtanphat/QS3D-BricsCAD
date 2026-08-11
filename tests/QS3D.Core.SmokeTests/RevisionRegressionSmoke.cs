@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             QuantityDiffRejectsOverflow();
             SummaryRejectsOverflow();
             DuplicateElementIdsAreRejected();
+            PaddedElementIdsAreRejected();
         }
 
         private static void CaptureRejectsNonFiniteQuantities()
@@ -50,6 +51,22 @@ namespace QS3D.Core.SmokeTests
             var empty = new RevisionSnapshot { Id = "empty", CreatedUtc = DateTime.UtcNow };
             Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(snapshot, empty));
             Throws<InvalidOperationException>(() => new RevisionService().Compare(snapshot, empty));
+        }
+
+        private static void PaddedElementIdsAreRejected()
+        {
+            var padded = Snapshot("padded", " E1 ", 1d);
+            var canonical = Snapshot("canonical", "E1", 1d);
+            Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(padded, canonical));
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(padded, canonical));
+
+            var collision = Snapshot("collision", "E1", 1d);
+            var paddedCollision = new RevisionElementSnapshot { ElementId = " E1 ", Category = "Beam" };
+            paddedCollision.Quantities["Q"] = 2d;
+            collision.Elements.Add(paddedCollision);
+            var empty = new RevisionSnapshot { Id = "empty", CreatedUtc = DateTime.UtcNow };
+            Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(collision, empty));
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(collision, empty));
         }
 
         private static RevisionSnapshot Snapshot(string id, string elementId, double quantity)
