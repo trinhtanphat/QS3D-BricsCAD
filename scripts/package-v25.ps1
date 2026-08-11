@@ -17,10 +17,31 @@ function Read-ProjectProductVersion {
     return $versions[0].Trim()
 }
 
+function Convert-ToStrictSemVerText {
+    param([string]$Value, [string]$Label)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
+    $text = $Value.Trim()
+    $match = [regex]::Match(
+        $text,
+        '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $match.Success) { throw "$Label is not strict SemVer: $text" }
+
+    if ($match.Groups[4].Success) {
+        foreach ($identifier in $match.Groups[4].Value.Split('.')) {
+            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') {
+                throw "$Label has a numeric prerelease identifier with a leading zero: $text"
+            }
+        }
+    }
+    return $text
+}
+
 $pluginProject = Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj'
 $coreProject = Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj'
-$productVersion = Read-ProjectProductVersion -ProjectPath $pluginProject
-$coreProductVersion = Read-ProjectProductVersion -ProjectPath $coreProject
+$productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D plugin product version'
+$coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject) -Label 'QS3D Core product version'
 if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::OrdinalIgnoreCase)) {
     throw "QS3D plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion"
 }
