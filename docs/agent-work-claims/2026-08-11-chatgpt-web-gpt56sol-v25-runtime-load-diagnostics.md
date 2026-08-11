@@ -1,8 +1,9 @@
 # Work claim — V25 runtime load diagnostics
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol / v25-runtime-load-diagnostics`
 - Registered: `2026-08-11T21:00:00+07:00`
+- Completed: `2026-08-11T21:22:00+07:00`
 - Baseline main SHA: `1e8227e72ff54c1fd6daf4c32121b09339370d0b`
 - Priority: user-reproduced V25 installation/load failure plus misleading drawing-font warnings in the current support session
 
@@ -26,18 +27,25 @@ Harden the existing BricsCAD V25 install/runtime support path so user-visible fa
 - bundling or redistributing third-party/proprietary VNI/SHX font files
 - changing DWG text styles automatically or silently suppressing BricsCAD font warnings
 
-## Validation plan
+## Implemented
 
-- Re-read current installer source and package contract before edits.
-- Add a static regression preflight proving actionable process diagnostics, payload/registry checks, and documentation classification of font substitution versus plugin load failure.
-- Execute the source-level preflight where possible in the remote environment.
-- Re-fetch committed files and current `main` after each write; preserve concurrent commits.
-- Record any Windows/BricsCAD-native load verification as LOCAL_ONLY instead of claiming remote proof.
+- `339d9b762d5021450c19186066be565d20c225b7` — added `docs/V25-RUNTIME-TROUBLESHOOTING.md`, separating DWG font substitution (`vntimeh.shx` / `VNI-Times` -> `simplex.shx`) from QS3D assembly load failures, documenting the V25 Pro-or-higher host boundary, DemandLoad values, and safe local diagnosis.
+- `8bfb74a049083105d58d65ecdd9ef74739050fc4` — added auto-discovered `scripts/preflight-v25-runtime-diagnostics.py` to gate the support/runtime diagnostic contract.
+- `9b0bc0ea56b759e7f92c63ceaf3af27b1d46d524` — hardened `scripts/install-v25-autoload.ps1`: running BricsCAD failures now report process name/PID/path when available; the installer explicitly warns that QS3D requires V25 Pro or higher; DemandLoad writes are read back and validated for Loader, LoadCtrls, Description, and every packaged command; mismatches fail into the existing rollback path. Existing `Unblock-File` payload handling and package integrity/signing behavior were preserved.
+
+## Validation evidence
+
+- Re-fetched `scripts/install-v25-autoload.ps1` from current `main` after the write; committed blob `f6fe92f5144c4f8eb393a35f664a6c84b3cd1fc9` contains the process diagnostics, Pro-or-higher warning, preserved `Unblock-File`, and DemandLoad readback gate.
+- Bricsys V25 documentation confirms registry DemandLoad values `2 = OnStartup` and `4 = OnCommand`, matching the installer contract.
+- Bricsys V25 BRX documentation confirms the BRX/.NET API is available only for BricsCAD Pro and higher license levels.
+- `main` advanced concurrently after the installer commit; compare evidence showed `9b0bc0e...` remained the merge base/ancestor and was not overwritten.
+- GitHub reported no workflow run attached directly to `9b0bc0e...`. The remote execution environment has neither Windows/PowerShell nor licensed BricsCAD V25, so no native runtime PASS is claimed here.
+- The repository already has the matching native exact-V25 build/NETLOAD/DemandLoad/runtime lane under `docs/LOCAL-AGENT-INBOX.md` item `LOCAL-001`; this batch does not create a duplicate LOCAL_ONLY queue item. The next exact-candidate local qualification should include the new installer diagnostics and the font-warning/non-plugin-failure classification.
 
 ## Coordination
 
-The active GitHub auto-update claim owns update discovery/install trust-chain surfaces. This claim does not edit its allowed paths and treats the existing signed-update contract as immutable. No current claim filename indicates ownership of V25 install/runtime diagnostics or DWG font-substitution troubleshooting.
+The active GitHub auto-update claim owns update discovery/install trust-chain surfaces. This claim did not edit its allowed paths and treated the existing signed-update contract as immutable.
 
 ## Completion condition
 
-Actionable V25 installer/runtime diagnostics, focused regression coverage, and font-substitution troubleshooting are pushed to `main`; native-only verification is explicitly handed off if still required; the claim is marked `COMPLETED` with commit/evidence details.
+Completed: actionable V25 installer/runtime diagnostics, focused regression coverage, and font-substitution troubleshooting are pushed to `main`; native-only verification remains explicitly owned by existing `LOCAL-001` and is not misrepresented as a remote PASS.
