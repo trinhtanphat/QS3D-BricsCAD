@@ -239,8 +239,13 @@ if selection_sync.exists() and "ReferenceEquals(document, Application.DocumentMa
 palette = ROOT / "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs"
 if palette.exists():
     text = palette.read_text(encoding="utf-8")
-    if "MinimumSize = new DrawingSize(460, 420)" not in text: errors.append("workspace PaletteSet minimum width must match compact BLT workspace target")
+    if "MinimumSize = new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight)" not in text: errors.append("workspace PaletteSet minimum must use the centralized compact layout policy")
     if "MinimumSize = new Size(520, 420)" in text: errors.append("workspace PaletteSet still forces the old oversized minimum width")
+layout_store = ROOT / "src/QS3D.BricsCAD.V25/Services/UserUiLayoutStore.cs"
+if layout_store.exists():
+    text = layout_store.read_text(encoding="utf-8")
+    if "internal const int WorkspacePaletteMinWidth = 460;" not in text or "internal const int WorkspacePaletteMinHeight = 420;" not in text:
+        errors.append("centralized workspace PaletteSet minimum must preserve the compact 460x420 target")
 
 right = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs"
 if right.exists():
