@@ -16,14 +16,20 @@ else:
         "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
         "BRICSCAD_V25_PUBLIC_MSI_URL:",
         "BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}",
-        "[string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256) -or $env:BRICSCAD_V25_MSI_SHA256 -notmatch '^[0-9A-Fa-f]{64}$'",
-        "Repository variable BRICSCAD_V25_MSI_SHA256 is required",
+        "BRICSCAD_V25_MSI_SHA256 must be a 64-hex SHA-256 value when configured.",
         "$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash",
+        "[string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256) -and",
         "[string]::Equals($actual, $env:BRICSCAD_V25_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)",
         "BricsCAD V25 MSI SHA-256 mismatch.",
         "$signature = Get-AuthenticodeSignature -FilePath $msi",
         "$signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid",
         "BricsCAD V25 MSI Authenticode signature is not valid",
+        "New-Object -ComObject WindowsInstaller.Installer",
+        "WHERE `Property`='ProductVersion'",
+        "$productVersion -notmatch '^25\\.2\\.10(?:\\.|$)'",
+        "Downloaded MSI is not the pinned BricsCAD V25.2.10 product.",
+        "WHERE `Property`='ProductName'",
+        "$productName -notmatch 'BricsCAD'",
         "([string]$metadata.productVersion).Trim()",
         "PACKAGE-METADATA productVersion must match source product version.",
         "PACKAGE-METADATA assembly version is missing.",
@@ -32,20 +38,15 @@ else:
         if token not in text:
             errors.append("cloud V25 workflow missing pinning/signature/version/manual-release token: " + token)
 
-    optional_hash_patterns = (
-        "if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256))",
-        "if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256) -and",
-    )
-    for token in optional_hash_patterns:
-        if token in text:
-            errors.append("cloud V25 workflow must not make MSI SHA-256 verification optional: " + token)
-
     hash_index = text.find("$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash")
-    compare_index = text.find("[string]::Equals($actual, $env:BRICSCAD_V25_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)")
     signature_index = text.find("$signature = Get-AuthenticodeSignature -FilePath $msi")
+    product_index = text.find("WHERE `Property`='ProductVersion'")
     extract_index = text.find("$process = Start-Process -FilePath msiexec.exe")
-    if min(hash_index, compare_index, signature_index, extract_index) < 0 or not hash_index < compare_index < signature_index < extract_index:
-        errors.append("cloud V25 workflow must verify mandatory SHA-256 and valid Authenticode before administrative extraction")
+    if min(hash_index, signature_index, product_index, extract_index) < 0 or not hash_index < signature_index < product_index < extract_index:
+        errors.append("cloud V25 workflow must calculate digest and verify valid Authenticode + V25.2.10 MSI identity before administrative extraction")
+
+    if "Repository variable BRICSCAD_V25_MSI_SHA256 is required" in text:
+        errors.append("cloud preview must not require a manually preconfigured digest when pinned-object Authenticode + MSI product identity are mandatory")
 
     tag_check = text.find("Release tag must exactly match source product version.")
     product_check = text.find("PACKAGE-METADATA productVersion must match source product version.")
@@ -59,10 +60,10 @@ if not DOC.is_file():
 else:
     doc = DOC.read_text(encoding="utf-8")
     for token in (
-        "`BRICSCAD_V25_MSI_SHA256`: **required**",
-        "fails closed if the digest is missing/malformed",
-        "verify the downloaded MSI against the required pinned SHA-256",
-        "verify the MSI Authenticode signature",
+        "`BRICSCAD_V25_MSI_SHA256`: optional",
+        "mandatory Authenticode signature",
+        "MSI ProductVersion must identify V25.2.10",
+        "calculate and log the downloaded MSI SHA-256",
     ):
         if token not in doc:
             errors.append("cloud V25 release documentation missing integrity statement: " + token)
@@ -74,4 +75,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cloud V25 preview release remains manual-only, requires SHA-256 plus Authenticode before extraction, and binds PACKAGE-METADATA productVersion to source before publication.")
+print("PASS: cloud V25 preview remains manual-only; exact-object routing, mandatory Authenticode and V25.2.10 MSI identity precede extraction, with optional SHA-256 pinning and source/package version binding.")
