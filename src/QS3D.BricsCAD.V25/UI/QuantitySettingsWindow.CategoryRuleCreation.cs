@@ -25,6 +25,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _categoryRuleCreationEventsHooked = true;
             }
 
+            InitializeUnsavedChangesTracking();
             RebuildMissingCategoryRuleChoices();
         }
 
