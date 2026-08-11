@@ -35,7 +35,10 @@ else:
         "ownedElement == null || !ReferenceEquals(ownedElement, element) || ownedFamily == null || !ReferenceEquals(ownedFamily, family)",
         "if (!ownedFamily.Properties.TryGetValue(key, out var liveFamilyRaw))",
         "row.Value = ToDisplayValue(key, liveFamilyRaw ?? string.Empty);",
-        "element.SetProperty(key, next);\n            project.Touch();",
+        'ProjectSemanticMutationExecutor.Execute(',
+        '"Workspace single-instance property edit"',
+        "element.SetProperty(key, next);",
+        "project.Touch();",
     )
     for token in required:
         if token not in text:

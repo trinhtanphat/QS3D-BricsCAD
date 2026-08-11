@@ -68,8 +68,138 @@ namespace QS3D.Core.Export
             if (summaryRows.Count == 0) throw new InvalidDataException("ED2 TONG_HOP must contain at least one row.");
             if (summaryCount != detailRows.Count || !summaryIds.SetEquals(detailIds) || !summaryHandles.SetEquals(detailHandles))
                 throw new InvalidDataException("ED2 CHI_TIET and TONG_HOP do not describe the same semantic scope.");
+            ValidateEd2NumericParity(detailRows, summaryRows);
             ExportCore(path, detailRows, summaryRows);
         }
+
+        private static void ValidateEd2NumericParity(
+            IReadOnlyList<QuantityReportRow> detailRows,
+            IReadOnlyList<QuantityReportRow> summaryRows)
+        {
+            var detailById = detailRows.ToDictionary(
+                row => Required(row.ElementIds[0], "ED2 CHI_TIET Element ID"),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var summary in summaryRows)
+            {
+                var group = summary.ElementIds
+                    .Select(id => detailById[Required(id, "ED2 TONG_HOP Element ID")])
+                    .ToList();
+                if (group.Count == 0)
+                    throw new InvalidDataException("ED2 TONG_HOP contains a summary row without CHI_TIET elements.");
+
+                foreach (var detail in group) ValidateEd2SummaryIdentity(summary, detail);
+                if (summary.Count != group.Count)
+                    throw NumericParityError("Count");
+
+                RequireAggregateParity(summary.GrossConcreteM3, group, x => x.GrossConcreteM3, "GrossConcreteM3");
+                RequireAggregateParity(summary.DeductionM3, group, x => x.DeductionM3, "DeductionM3");
+                RequireAggregateParity(summary.NetConcreteM3, group, x => x.NetConcreteM3, "NetConcreteM3");
+                RequireAggregateParity(summary.FormworkM2, group, x => x.FormworkM2, "FormworkM2");
+                RequireAggregateParity(summary.LengthM, group, x => x.LengthM, "LengthM");
+                RequireAggregateParity(summary.OuterPerimeterM, group, x => x.OuterPerimeterM, "OuterPerimeterM");
+                RequireAggregateParity(summary.InnerPerimeterM, group, x => x.InnerPerimeterM, "InnerPerimeterM");
+                RequireAggregateParity(summary.DoorAreaM2, group, x => x.DoorAreaM2, "DoorAreaM2");
+                RequireAggregateParity(summary.SideAreaM2, group, x => x.SideAreaM2, "SideAreaM2");
+                RequireAggregateParity(summary.BottomAreaM2, group, x => x.BottomAreaM2, "BottomAreaM2");
+                RequireAggregateParity(summary.TopAreaM2, group, x => x.TopAreaM2, "TopAreaM2");
+                RequireAggregateParity(summary.OtherAreaM2, group, x => x.OtherAreaM2, "OtherAreaM2");
+                RequireDensityParity(summary, group);
+                RequireMassParity(summary, group);
+            }
+        }
+
+        private static void ValidateEd2SummaryIdentity(QuantityReportRow summary, QuantityReportRow detail)
+        {
+            RequireIdentityParity(summary.Floor, detail.Floor, "Floor");
+            RequireIdentityParity(summary.Zone, detail.Zone, "Zone");
+            RequireIdentityParity(summary.Category, detail.Category, "Category");
+            RequireIdentityParity(summary.FamilyId, detail.FamilyId, "FamilyId");
+            RequireIdentityParity(summary.FamilyName, detail.FamilyName, "FamilyName");
+            RequireIdentityParity(summary.Material, detail.Material, "Material");
+        }
+
+        private static void RequireIdentityParity(string summaryValue, string detailValue, string field)
+        {
+            if (!string.Equals((summaryValue ?? string.Empty).Trim(), (detailValue ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("ED2 TONG_HOP " + field + " does not match its CHI_TIET elements.");
+        }
+
+        private static void RequireAggregateParity(
+            double actual,
+            IReadOnlyList<QuantityReportRow> group,
+            Func<QuantityReportRow, double> selector,
+            string field)
+        {
+            var expected = 0d;
+            foreach (var detail in group) expected = AddFinite(expected, selector(detail), field);
+            RequireFinite(actual, field);
+            if (actual != expected) throw NumericParityError(field);
+        }
+
+        private static void RequireDensityParity(QuantityReportRow summary, IReadOnlyList<QuantityReportRow> group)
+        {
+            var expected = group[0].DensityKgM3;
+            ValidateDensity(expected);
+            foreach (var detail in group)
+            {
+                ValidateDensity(detail.DensityKgM3);
+                if (!NullableEqual(detail.DensityKgM3, expected))
+                    throw new InvalidDataException("ED2 TONG_HOP groups CHI_TIET elements with different density values.");
+            }
+            ValidateDensity(summary.DensityKgM3);
+            if (!NullableEqual(summary.DensityKgM3, expected)) throw NumericParityError("DensityKgM3");
+        }
+
+        private static void RequireMassParity(QuantityReportRow summary, IReadOnlyList<QuantityReportRow> group)
+        {
+            double? expected = 0d;
+            foreach (var detail in group)
+            {
+                ValidateMass(detail.MassKg);
+                if (expected.HasValue && detail.MassKg.HasValue)
+                    expected = AddFinite(expected.Value, detail.MassKg.Value, "MassKg");
+                else
+                    expected = null;
+            }
+            ValidateMass(summary.MassKg);
+            if (!NullableEqual(summary.MassKg, expected)) throw NumericParityError("MassKg");
+        }
+
+        private static void ValidateDensity(double? value)
+        {
+            if (!value.HasValue) return;
+            RequireFinite(value.Value, "DensityKgM3");
+            if (value.Value <= 0d) throw new InvalidDataException("ED2 density must be greater than zero when present.");
+        }
+
+        private static void ValidateMass(double? value)
+        {
+            if (!value.HasValue) return;
+            RequireFinite(value.Value, "MassKg");
+            if (value.Value < 0d) throw new InvalidDataException("ED2 mass must be non-negative when present.");
+        }
+
+        private static double AddFinite(double left, double right, string field)
+        {
+            RequireFinite(left, field);
+            RequireFinite(right, field);
+            var total = left + right;
+            RequireFinite(total, field);
+            return total;
+        }
+
+        private static void RequireFinite(double value, string field)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new InvalidDataException("ED2 " + field + " must be finite.");
+        }
+
+        private static bool NullableEqual(double? left, double? right) =>
+            left.HasValue == right.HasValue && (!left.HasValue || left.Value == right!.Value);
+
+        private static InvalidDataException NumericParityError(string field) =>
+            new InvalidDataException("ED2 TONG_HOP " + field + " does not equal the CHI_TIET aggregate.");
 
         private static string Required(string? value, string label)
         {

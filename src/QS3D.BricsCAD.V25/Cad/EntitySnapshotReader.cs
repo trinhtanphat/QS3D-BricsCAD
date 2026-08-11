@@ -91,7 +91,10 @@ namespace QS3D.BricsCAD.V25.Cad
             if (id.IsNull || id.IsErased) return;
             var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
             if (entity == null) return;
-            var snapshot = new EntitySnapshot(entity.Handle.ToString(), entity.GetType().Name, entity.Layer);
+            var snapshot = new EntitySnapshot(entity.Handle.ToString(), entity.GetType().Name, entity.Layer)
+            {
+                HasQs3dGeneratedOwnershipMarker = GeneratedNativeSourceGuard.HasKnownOwnershipMarker(entity)
+            };
             PopulateMetrics(entity, snapshot);
             PopulateMetadata(transaction, entity, snapshot);
             result.Add(snapshot);

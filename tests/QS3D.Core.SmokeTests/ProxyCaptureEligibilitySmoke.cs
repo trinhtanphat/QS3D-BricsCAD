@@ -42,6 +42,18 @@ namespace QS3D.Core.SmokeTests
 
             var blockDoor = new ProjectRecognitionService().Suggest(project, new EntitySnapshot("F", "BlockReference", "BLT-COL"));
             if (blockDoor.TopCandidate == null) throw new Exception("Non-proxy recognition behavior must remain available.");
+
+            var generated = new EntitySnapshot("G", "Solid3d", "blt beam")
+            {
+                VolumeDrawingUnitsCubed = 1d,
+                HasQs3dGeneratedOwnershipMarker = true
+            };
+            var generatedResult = new RecognitionEngine().Suggest(generated);
+            if (generatedResult.TopCandidate == null || generatedResult.IsCaptureReady || !generatedResult.RequiresReview)
+                throw new Exception("Native QS3D generated output must remain non-capturable even with valid metrics.");
+            if (new RecognitionBatch(new[] { generatedResult }).AutoAccepted.Count != 0)
+                throw new Exception("Native QS3D generated output must never be auto-accepted as a source.");
+            Throws<InvalidOperationException>(() => EntitySnapshotCaptureEligibility.EnsureReady(generated, ElementCategory.Beam));
         }
 
         private static void Throws<T>(Action action) where T : Exception

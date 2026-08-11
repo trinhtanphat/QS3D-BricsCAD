@@ -9,6 +9,11 @@ namespace QS3D.Core.Recognition
         public static bool IsReady(EntitySnapshot snapshot, ElementCategory category, out string reason)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            if (snapshot.HasQs3dGeneratedOwnershipMarker)
+            {
+                reason = "CAD object has a native QS3D generated-output ownership marker and cannot be captured as a semantic source.";
+                return false;
+            }
             if (!string.Equals(snapshot.EntityType, "ProxyEntity", StringComparison.OrdinalIgnoreCase))
             {
                 reason = string.Empty;

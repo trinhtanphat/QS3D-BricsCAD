@@ -19,6 +19,7 @@ namespace QS3D.Core.Model
         public double? AreaDrawingUnitsSquared { get; set; }
         public double? SurfaceAreaDrawingUnitsSquared { get; set; }
         public double? VolumeDrawingUnitsCubed { get; set; }
+        public bool HasQs3dGeneratedOwnershipMarker { get; set; }
         public IDictionary<string, string> Metadata { get; }
     }
 }

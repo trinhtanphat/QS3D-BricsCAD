@@ -54,6 +54,7 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, operation, () =>
             {
                 var snapshots = scanCurrentSpace ? EntitySnapshotReader.ReadCurrentSpace(doc) : EntitySnapshotReader.ReadCurrentSelection(doc);
+                snapshots = snapshots.Where(x => !x.HasQs3dGeneratedOwnershipMarker).ToList();
                 string? expectedProjectId = null;
                 if (scanCurrentSpace && ProjectContextCoordinator.TryGetReadOnly(doc, out var previewProject))
                 {

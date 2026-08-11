@@ -103,9 +103,16 @@ namespace QS3D.Core.SmokeTests
 
                 var secondDetail = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
                 secondDetail.ElementIds.Add("WF-2"); secondDetail.SourceHandles.Add("40AA");
-                var summary = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 2, GrossConcreteM3 = 1e-9d };
-                summary.ElementIds.Add("WF-1"); summary.ElementIds.Add("WF-2"); summary.SourceHandles.Add("AB12"); summary.SourceHandles.Add("30DE"); summary.SourceHandles.Add("40AA");
-                XlsxQuantityExporter.ExportEd2(ed2Path, new[] { row, secondDetail }, new[] { summary });
+                var summary = new QuantityReportRow
+                {
+                    Floor = "F", Zone = "Z", Category = "WallFinish", FamilyId = "finish-family",
+                    FamilyName = "$12510 cost note", Material = "Concrete", DensityKgM3 = 2400d,
+                    MassKg = 4500d, DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1, GrossConcreteM3 = 1e-9d
+                };
+                summary.ElementIds.Add("WF-1"); summary.SourceHandles.Add("AB12"); summary.SourceHandles.Add("30DE");
+                var secondSummary = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
+                secondSummary.ElementIds.Add("WF-2"); secondSummary.SourceHandles.Add("40AA");
+                XlsxQuantityExporter.ExportEd2(ed2Path, new[] { row, secondDetail }, new[] { summary, secondSummary });
                 using (var archive = ZipFile.OpenRead(ed2Path))
                 {
                     True(archive.GetEntry("xl/worksheets/sheet1.xml") != null);
@@ -142,6 +149,7 @@ namespace QS3D.Core.SmokeTests
                 var ed2Detail = XlsxHandleReader.ReadHandleLookup(ed2Path, 3);
                 Equal(1, ed2Detail.Handles.Count); Equal("40AA", ed2Detail.Handles[0]); Equal(1, ed2Detail.ElementIds.Count); Equal("WF-2", ed2Detail.ElementIds[0]); Equal("DWG-FINGERPRINT-1", ed2Detail.DrawingFingerprint);
                 Equal("CHI_TIET", ed2Detail.WorksheetName); True(ed2Detail.IsModernSchema); True(ed2Detail.IsEd2Detail);
+                summary.Count = 2;
                 Throws<InvalidDataException>(() => XlsxQuantityExporter.ExportEd2(ed2Path, new[] { summary }, new[] { summary }));
 
                 CreateReorderedEd2Workbook(reorderedEd2Path);
