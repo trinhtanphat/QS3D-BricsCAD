@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Xml.Linq;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -14,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             PaddedMapKeyFailsBeforePersistence();
             PaddedMapKeyFailsOnLoad();
             PaddedQuantityNameFailsBeforePersistence();
+            DuplicateQuantityNameFailsOnLoad();
             NonCanonicalHandleAndDependencyFailBeforePersistence();
             NullAuditEventFailsClosed();
             NonUtcTimestampFailsBeforePersistence();
@@ -66,6 +68,50 @@ namespace QS3D.Core.SmokeTests
             var element = AddElement(project);
             element.Quantities[" AreaM2 "] = 3d;
             RejectSave(project, "Padded quantity name was silently persisted/normalized.");
+        }
+
+        private static void DuplicateQuantityNameFailsOnLoad()
+        {
+            RejectDuplicateQuantityOnLoad("AreaM2");
+            RejectDuplicateQuantityOnLoad("aream2");
+        }
+
+        private static void RejectDuplicateQuantityOnLoad(string duplicateName)
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-duplicate-quantity-load-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var project = NewProject("duplicate-quantity-load");
+                var first = AddElement(project);
+                first.SetQuantity("AreaM2", 3d);
+                var second = new ProjectElement("E2", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+                second.SetQuantity("AreaM2", 4d);
+                project.Elements.Add(second);
+
+                var store = new QsdbProjectStore();
+                store.Save(project, path);
+                var baseline = store.Load(path);
+                if (baseline.Elements.Count != 2 || baseline.Elements[0].Quantities["AreaM2"] != 3d || baseline.Elements[1].Quantities["AreaM2"] != 4d)
+                    throw new Exception("Unique per-element quantities did not roundtrip before duplicate-quantity tampering.");
+
+                var document = XDocument.Load(path, LoadOptions.None);
+                var firstPersistedElement = document.Root?.Element("elements")?.Element("element")
+                    ?? throw new Exception("Serialized QSDB element fixture was not found.");
+                var quantities = firstPersistedElement.Element("quantities")
+                    ?? throw new Exception("Serialized QSDB quantity fixture was not found.");
+                quantities.Add(new XElement("q", new XAttribute("name", duplicateName), new XAttribute("value", "99")));
+                document.Save(path, SaveOptions.DisableFormatting);
+
+                var rejected = false;
+                try { store.Load(path); }
+                catch (InvalidDataException) { rejected = true; }
+                if (!rejected) throw new Exception("Duplicate persisted element quantity name was silently overwritten while loading QSDB: " + duplicateName);
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
         }
 
         private static void NonCanonicalHandleAndDependencyFailBeforePersistence()
