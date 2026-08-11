@@ -6,7 +6,7 @@ namespace QS3D.Core.Review
 {
     public sealed class PreviewReviewQueryOptions
     {
-        public PreviewReviewQueryOptions(string searchText = null, string category = null, string change = null, string fieldPrefix = null)
+        public PreviewReviewQueryOptions(string? searchText = null, string? category = null, string? change = null, string? fieldPrefix = null)
         {
             SearchText = CanonicalOptional(searchText);
             Category = CanonicalOptional(category);
@@ -19,7 +19,7 @@ namespace QS3D.Core.Review
         public string Change { get; }
         public string FieldPrefix { get; }
 
-        private static string CanonicalOptional(string value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+        private static string CanonicalOptional(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value!.Trim();
     }
 
     public sealed class PreviewReviewFacet
@@ -57,7 +57,7 @@ namespace QS3D.Core.Review
 
     public sealed class PreviewReviewQueryService
     {
-        public PreviewReviewQueryResult Query(PreviewReviewSnapshot snapshot, PreviewReviewQueryOptions options = null)
+        public PreviewReviewQueryResult Query(PreviewReviewSnapshot snapshot, PreviewReviewQueryOptions? options = null)
         {
             RequireVerified(snapshot);
             var safe = options ?? new PreviewReviewQueryOptions();
@@ -96,7 +96,7 @@ namespace QS3D.Core.Review
                 || Contains(entry.AfterProvenance, options.SearchText);
         }
 
-        private static bool Contains(string value, string search) =>
+        private static bool Contains(string? value, string search) =>
             (value ?? string.Empty).IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0;
 
         private static IReadOnlyList<PreviewReviewFacet> BuildFacets(
@@ -133,8 +133,8 @@ namespace QS3D.Core.Review
             PreviewReviewDeltaKind kind,
             string elementId,
             string field,
-            PreviewReviewEntry baseline,
-            PreviewReviewEntry candidate)
+            PreviewReviewEntry? baseline,
+            PreviewReviewEntry? candidate)
         {
             Kind = kind;
             ElementId = elementId ?? string.Empty;
@@ -146,8 +146,8 @@ namespace QS3D.Core.Review
         public PreviewReviewDeltaKind Kind { get; }
         public string ElementId { get; }
         public string Field { get; }
-        public PreviewReviewEntry Baseline { get; }
-        public PreviewReviewEntry Candidate { get; }
+        public PreviewReviewEntry? Baseline { get; }
+        public PreviewReviewEntry? Candidate { get; }
     }
 
     public sealed class PreviewReviewSummaryDelta
@@ -200,7 +200,7 @@ namespace QS3D.Core.Review
             {
                 left.TryGetValue(key, out var before);
                 right.TryGetValue(key, out var after);
-                var sample = before ?? after;
+                var sample = before ?? after ?? throw new InvalidOperationException("Preview review comparison row has no source entry.");
                 var kind = before == null
                     ? PreviewReviewDeltaKind.Added
                     : after == null
