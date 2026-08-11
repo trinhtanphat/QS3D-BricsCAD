@@ -14,24 +14,33 @@ if not SOURCE.is_file():
 else:
     text = SOURCE.read_text(encoding="utf-8")
     required = (
+        "using System.Windows.Data;",
         "private const int MaxLayerSearchTokens = 8;",
-        "private IReadOnlyList<LayerSnapshot> _layerSnapshots = Array.Empty<LayerSnapshot>();",
         "private void ReloadLayers()",
-        "_layerSnapshots = DrawingCatalogReader.ReadLayers(doc);",
+        "foreach (var item in DrawingCatalogReader.ReadLayers(doc))",
+        "var brush = new SolidColorBrush(Color.FromRgb(item.Red, item.Green, item.Blue));",
+        "brush.Freeze();",
         "private void ApplyLayerFilter()",
+        "CollectionViewSource.GetDefaultView(_viewModel.Layers)",
         ".Take(MaxLayerSearchTokens)",
-        "tokens.All(token => MatchesLayerToken(x, token))",
-        "private static bool MatchesLayerToken(LayerSnapshot layer, string token)",
+        "new Predicate<object>(item => item is LayerItemViewModel layer && tokens.All(token => MatchesLayerToken(layer, token)))",
+        "private void RestoreLayerSelection(IEnumerable<string> names)",
+        "foreach (var item in LayerList.Items.Cast<LayerItemViewModel>())",
+        "private static bool MatchesLayerToken(LayerItemViewModel layer, string token)",
         'AliasContains("hiện visible on", token)',
         'AliasContains("ẩn hidden off", token)',
         'AliasContains("khóa locked lock", token)',
         'AliasContains("mở unlocked unlock", token)',
+        "var visible = LayerList.Items.Cast<LayerItemViewModel>().ToList();",
         "private void OnLayerSearchChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) ApplyLayerFilter(); }",
         "ReloadLayers();",
     )
     for token in required:
         if token not in text:
-            errors.append("RightPanel cached layer-search contract missing: " + token)
+            errors.append("RightPanel view-filter layer-search contract missing: " + token)
+
+    if "_layerSnapshots" in text:
+        errors.append("RightPanel must not retain a duplicate layer snapshot cache after moving filtering onto the collection view")
 
     search_handler = re.search(
         r"private void OnLayerSearchChanged\(object sender, TextChangedEventArgs e\)\s*\{(?P<body>.*?)\}",
@@ -43,20 +52,40 @@ else:
     else:
         body = search_handler.group("body")
         if "ApplyLayerFilter()" not in body:
-            errors.append("layer search must filter the cached snapshot list")
-        for forbidden in ("DrawingCatalogReader.ReadLayers", "ReloadLayers()", "Refresh()"):
+            errors.append("layer search must filter the existing WPF collection view")
+        for forbidden in ("DrawingCatalogReader.ReadLayers", "ReloadLayers()", "Refresh()", "SolidColorBrush", "_viewModel.Layers.Clear"):
             if forbidden in body:
-                errors.append("layer search keystrokes must not reopen the CAD layer table: " + forbidden)
+                errors.append("layer-search keystrokes must not reload CAD or rebuild layer rows: " + forbidden)
 
     filter_method = re.search(
-        r"private void ApplyLayerFilter\(\)\s*\{(?P<body>.*?)\n        \}",
+        r"private void ApplyLayerFilter\(\)\s*\{(?P<body>.*?)\n        \}\n\n        private void RestoreLayerSelection",
         text,
         re.DOTALL,
     )
     if not filter_method:
-        errors.append("missing ApplyLayerFilter method")
-    elif "DrawingCatalogReader.ReadLayers" in filter_method.group("body"):
-        errors.append("ApplyLayerFilter must remain presentation-only and use _layerSnapshots")
+        errors.append("missing bounded ApplyLayerFilter method")
+    else:
+        body = filter_method.group("body")
+        for forbidden in ("DrawingCatalogReader.ReadLayers", "_viewModel.Layers.Clear", "new SolidColorBrush", "LayerVisibilityService"):
+            if forbidden in body:
+                errors.append("ApplyLayerFilter must remain allocation-light/presentation-only: " + forbidden)
+        for token in ("view.Filter =", "view.Refresh();"):
+            if token not in body:
+                errors.append("ApplyLayerFilter must operate through the WPF collection view: " + token)
+
+    reload_method = re.search(
+        r"private void ReloadLayers\(\)\s*\{(?P<body>.*?)\n        \}\n\n        private void ApplyLayerFilter",
+        text,
+        re.DOTALL,
+    )
+    if not reload_method:
+        errors.append("missing bounded ReloadLayers method")
+    else:
+        body = reload_method.group("body")
+        if "DrawingCatalogReader.ReadLayers(doc)" not in body:
+            errors.append("real layer refresh must still re-read current CAD state")
+        if "RestoreLayerSelection(selectedNames);" not in body:
+            errors.append("real layer refresh must restore visible user selection by stable layer name")
 
 if not XAML.is_file():
     errors.append("missing RightPanel.xaml")
@@ -97,11 +126,11 @@ else:
         if forbidden in text:
             errors.append("RightPanel keyboard shortcuts must not duplicate CAD internals or double-register the XAML key handler: " + forbidden)
 
-print("QS3D RightPanel cached layer-search preflight")
+print("QS3D RightPanel layer-search preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: layer search is bounded multi-term filtering over cached CAD snapshots; Ctrl+F/Escape stay presentation-only, F5 reuses the canonical panel Refresh path, XAML owns one key route, and real layer mutations explicitly reload live CAD state.")
+print("PASS: layer rows/brushes are rebuilt only on real CAD refresh, search keystrokes filter the existing WPF view without reopening CAD or rebuilding rows, visible selection is restored by layer name, and Ctrl+F/F5/Escape use one XAML key route.")
