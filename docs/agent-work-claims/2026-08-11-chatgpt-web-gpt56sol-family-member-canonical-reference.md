@@ -1,36 +1,35 @@
 # Work claim — Family member canonical reference guard
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-family-member-canonical-reference`
 - Registered: `2026-08-11T22:37:00+07:00`
+- Completed: `2026-08-11T22:40:00+07:00`
 - Baseline main SHA observed: `08d065ac766fc23c19df2d3d4a4ecba232c41c3a`
-- Priority: P1 — `ProjectElement.FamilyId` is publicly mutable, but `ProjectFamilyService.ResolveFamilyMembers()` compares its raw text to a canonical Family id. A recoverable padded relation can therefore disappear from `ReferenceCount`, Family property propagation, and the deletion safety check even though `ProjectState.FindFamily()` treats trimmed IDs canonically elsewhere.
+- Priority: P1 — `ProjectElement.FamilyId` is publicly mutable, while the previous `ProjectFamilyService.ResolveFamilyMembers()` compared its raw text to a canonical Family id. Recoverable padded relations could therefore disappear from Family reference counting/property propagation/deletion safety.
 
-## Reserved scope
+## Implemented
 
-- Canonicalize Family member matching inside `ProjectFamilyService.ResolveFamilyMembers()` by trimming nullable relation text before the existing case-insensitive comparison.
-- Add deterministic Core smoke coverage proving padded/case-varied Family relations remain visible to `ReferenceCount` and block Family deletion, while unrelated Family references remain excluded.
-- Add a focused static preflight for this exact member-resolution boundary.
+- `f50ca9caba58bd9c956cc75f236698a52ffcc0cd` — `ResolveFamilyMembers()` now trims nullable `ProjectElement.FamilyId` before the existing case-insensitive Family-id comparison.
+- `29bbffe36ad42d000ad93c573bff36b7c49166d9` — added deterministic smoke coverage for padded and case-varied relations, deletion rejection without project mutation, and correct exclusion/deletion of an unrelated Family.
+- `07f0418176c8110cb43856edda4ffa8dbab3a4ef` — module-registers the focused Core smoke.
+- `9d59a61e4dfdc0ff34cb162b1b6a0cba3f764bcb` — added `scripts/preflight-project-family-member-canonical-reference.py`, requiring canonical relation matching inside `ResolveFamilyMembers()` and rejecting the previous raw comparison.
 
-## Expected surfaces
+## Preserved contracts
 
-- `src/QS3D.Core/Domain/ProjectFamilyService.cs`
-- `tests/QS3D.Core.SmokeTests/ProjectFamilyMemberCanonicalReferenceSmoke.cs` (new)
-- `tests/QS3D.Core.SmokeTests/ProjectFamilyMemberCanonicalReferenceSmokeRegistration.cs` (new)
-- `scripts/preflight-project-family-member-canonical-reference.py` (new)
-- this claim file for close-out
+- No `ProjectElement` relation setter rewrite, persistence migration, Workspace/Family UI, quantity settings/rules, CAD/native source, Ribbon, updater or release behavior changed.
+- Duplicate semantic-element detection and Family assignment semantics remain unchanged.
+- The earlier active-Family metadata deletion guard remains intact.
 
-## Excluded scope
+## Validation
 
-- No rewrite of `ProjectElement` relation setters, persistence migration, Workspace/Family UI, quantity settings/rules, CAD/native source, Ribbon, updater, release or GitHub Actions.
-- No change to duplicate-element detection or Family assignment semantics beyond member identity matching.
+- Re-fetched current `main` and confirmed `ResolveFamilyMembers()` uses `(element.FamilyId ?? string.Empty).Trim()` with `StringComparison.OrdinalIgnoreCase`.
+- Current `main` immediately after the source/test/preflight batch had `9d59a61e4dfdc0ff34cb162b1b6a0cba3f764bcb` as the parent of the next concurrent commit, confirming this lane was integrated without overwriting concurrent history.
+- Focused smoke/preflight source is present and module-registered. No GitHub Actions workflow was dispatched and no BricsCAD V25 runtime claim is made; this is CAD-independent Core behavior.
 
-## Validation plan
+## LOCAL_ONLY disposition
 
-- Deterministic smoke: padded relation counts as a reference; case-varied padded relation counts; deletion is rejected without mutation; unrelated Family remains zero-reference/deletable.
-- Static preflight requires trimmed FamilyId comparison inside `ResolveFamilyMembers()` and rejects the previous raw comparison.
-- Re-fetch current `main` before source write and preserve concurrent winners.
+- None added.
 
-## Completion condition
+## Completion evidence
 
-- Family reference counting/property propagation/deletion safety all use canonical relation identity, with regression coverage and a completed pushed claim.
+Family reference count, property propagation and deletion safety now agree on canonical Family relation identity even when recoverable runtime state contains padded/case-varied `FamilyId` text. Final implementation/preflight tip for this lane: `9d59a61e4dfdc0ff34cb162b1b6a0cba3f764bcb`.
