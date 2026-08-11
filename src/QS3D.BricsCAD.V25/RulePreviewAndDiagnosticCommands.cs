@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Bricscad.ApplicationServices;
-using Bricscad.Runtime;
+using Teigha.Runtime;
 using Microsoft.Win32;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Diagnostics;
