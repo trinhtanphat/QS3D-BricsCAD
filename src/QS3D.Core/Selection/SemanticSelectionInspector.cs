@@ -270,6 +270,7 @@ namespace QS3D.Core.Selection
             var normalized = key.Trim();
             if (normalized.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (normalized.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return true;
+            if (normalized.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             if (normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             return false;
         }
