@@ -14,6 +14,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class FloorLevelWindow : Window
     {
         private readonly Document _document;
+        private ProjectState _boundProject;
         private string _editingFloorId = string.Empty;
         private bool _loading;
 
@@ -54,8 +55,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureBoundDrawingIsActive("lưu tầng");
-                var project = ExistingProjectMutationContext.Require(_document, "Lưu Floor/Level");
+                var project = RequireBoundProjectForMutation("lưu tầng", "Lưu Floor/Level");
                 var name = (FloorNameBox.Text ?? string.Empty).Trim();
                 var elevation = ParseElevation(FloorElevationBox.Text);
                 var rollback = ProjectStateSnapshot.Capture(project);
@@ -97,8 +97,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureBoundDrawingIsActive("xóa tầng");
-                var project = ExistingProjectMutationContext.Require(_document, "Xóa Floor/Level");
+                var project = RequireBoundProjectForMutation("xóa tầng", "Xóa Floor/Level");
                 var floor = RequireSelectedFloor(project);
                 var rollback = ProjectStateSnapshot.Capture(project);
                 var deleted = false;
@@ -128,8 +127,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureBoundDrawingIsActive("đặt tầng hoạt động");
-                var project = ExistingProjectMutationContext.Require(_document, "Đặt Floor/Level active");
+                var project = RequireBoundProjectForMutation("đặt tầng hoạt động", "Đặt Floor/Level active");
                 var floor = RequireSelectedFloor(project);
                 var previous = project.ActiveFloorId;
                 var rollback = ProjectStateSnapshot.Capture(project);
@@ -157,11 +155,9 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureBoundDrawingIsActive("gán tầng cho selection");
+                var previewProject = RequireBoundProjectForRead("gán tầng cho selection");
                 if (!(FloorList.SelectedItem is FloorDefinition selectedFloor))
                     throw new InvalidOperationException("Chọn một tầng trước khi thực hiện thao tác.");
-                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject))
-                    throw new InvalidOperationException("Gán Floor/Level cho selection cần một QS3D project hiện hữu; thao tác này không tạo project mới.");
                 var previewFloor = previewProject.Floors.FirstOrDefault(x => string.Equals(x.Id, selectedFloor.Id, StringComparison.OrdinalIgnoreCase))
                     ?? throw new InvalidOperationException("Tầng đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại.");
                 var expectedProjectId = previewProject.ProjectId;
@@ -173,7 +169,8 @@ namespace QS3D.BricsCAD.V25.UI
                 if (previewIds.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
 
                 var project = ExistingProjectMutationContext.Require(_document, "Gán Floor/Level cho selection");
-                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                if (!ReferenceEquals(project, _boundProject) || !ReferenceEquals(project, previewProject) ||
+                    !string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("QS3D project đã thay đổi sau khi đọc selection. Không có Floor/Level assignment nào được áp dụng; hãy Refresh và thử lại.");
                 var floor = project.Floors.FirstOrDefault(x => string.Equals(x.Id, previewFloor.Id, StringComparison.OrdinalIgnoreCase))
                     ?? throw new InvalidOperationException("Tầng đã thay đổi hoặc bị xóa khỏi project hiện tại. Hãy Refresh và chọn lại.");
@@ -244,6 +241,7 @@ namespace QS3D.BricsCAD.V25.UI
                     : preferredFloorId;
                 if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 {
+                    _boundProject = null;
                     _loading = true;
                     try { FloorList.ItemsSource = null; FloorList.SelectedItem = null; }
                     finally { _loading = false; }
@@ -274,6 +272,7 @@ namespace QS3D.BricsCAD.V25.UI
                 finally { _loading = false; }
                 LoadEditorFromSelection();
                 RefreshLabels();
+                _boundProject = project;
                 Title = "QS3D • Level Picker • " + DrawingLabel(_document);
                 if (floors.Count == 0)
                 {
@@ -283,7 +282,11 @@ namespace QS3D.BricsCAD.V25.UI
                     SetStatus("Project chưa có tầng. Dùng Mới → nhập tên/cao độ → Lưu.");
                 }
             }
-            catch (Exception ex) { SetStatus("Đọc Floor/Level lỗi: " + ex.Message); }
+            catch (Exception ex)
+            {
+                _boundProject = null;
+                SetStatus("Đọc Floor/Level lỗi: " + ex.Message);
+            }
         }
 
         private FloorDefinition RequireSelectedFloor(ProjectState project)
@@ -365,6 +368,25 @@ namespace QS3D.BricsCAD.V25.UI
                     operation + " thất bại và rollback project cũng không hoàn tất.",
                     new AggregateException(operationError, restoreError));
             }
+        }
+
+        private ProjectState RequireBoundProjectForRead(string operation)
+        {
+            EnsureBoundDrawingIsActive(operation);
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject) ||
+                _boundProject == null ||
+                !ReferenceEquals(currentProject, _boundProject))
+                throw new InvalidOperationException("QS3D project đã thay đổi từ lần Refresh gần nhất. Hãy Refresh Level Picker trước khi " + operation + ".");
+            return currentProject;
+        }
+
+        private ProjectState RequireBoundProjectForMutation(string operation, string mutationContext)
+        {
+            var currentProject = RequireBoundProjectForRead(operation);
+            var project = ExistingProjectMutationContext.Require(_document, mutationContext);
+            if (!ReferenceEquals(project, currentProject) || !ReferenceEquals(project, _boundProject))
+                throw new InvalidOperationException("QS3D project đã thay đổi trước khi " + operation + ". Không có thay đổi nào được áp dụng; hãy Refresh Level Picker và thử lại.");
+            return project;
         }
 
         private void EnsureBoundDrawingIsActive(string operation)
