@@ -1,6 +1,6 @@
 # Work claim — LOCAL-013 Excel Locate negative matrix
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:48:24+07:00`
 - Baseline main SHA: `ab11b45414ff50b8f9c2010abeb2f89bfe4331ad`
@@ -41,3 +41,12 @@ This reservation is runtime/evidence-only and does not overlap the active LOCAL-
 ## Completion condition
 
 The exact clean candidate passes the positive and four-case negative Excel Locate matrix on licensed BricsCAD V25, sanitized LOCAL-013 evidence is pushed to current `main`, private artifacts are removed, no Actions are dispatched, and this claim is marked `COMPLETED` with the exact implementation/evidence SHA.
+
+## Completion record
+
+- Product implementation: `21f1ae2b` (`fix(ed2): harden Excel locate round-trip`).
+- Exact runtime candidate: `813c51ffe6b357c86a1e2a3c93d7f2d515c057b2`.
+- Validation: aggregate `447/447`, Core smoke `ALL PASS`, V25 x64 Release build `0 warnings / 0 errors`, licensed NETLOAD/Ribbon/Palette PASS, LOCAL-013 positive locate plus four typed negative refusals PASS.
+- Safety evidence: PICKFIRST preserved `4/4`, semantic state unchanged `4/4`, stale resolution `0/1`, partial resolution `1/2`, original/copies hash-stable, no sidecar/process left, no proxy quantity/locate claim.
+- Remaining product queue: exact-current workbook visual rendering remains `NOT_RUN`, so the product-level LOCAL-013 item remains `IN_PROGRESS`; this reserved negative-matrix lane is complete.
+- GitHub Actions: not dispatched.
