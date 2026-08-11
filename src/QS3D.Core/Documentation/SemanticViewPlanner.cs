@@ -72,6 +72,7 @@ namespace QS3D.Core.Documentation
 
     public static class SemanticViewPlanner
     {
+        private const int MaxCatalogViews = 10000;
         private const int MaxFilterIds = 100000;
         private const int MaxIdLength = 128;
         private const int MaxNameLength = 160;
@@ -124,9 +125,7 @@ namespace QS3D.Core.Documentation
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
 
-            var materialized = definitions.ToList();
-            if (materialized.Count > 10000) throw new InvalidOperationException("Semantic view catalog supports at most 10000 views.");
-
+            var materialized = MaterializeCatalogBounded(definitions);
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var plans = new List<SemanticViewPlan>(materialized.Count);
@@ -143,6 +142,21 @@ namespace QS3D.Core.Documentation
                 .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+        }
+
+        private static List<SemanticViewDefinition> MaterializeCatalogBounded(IEnumerable<SemanticViewDefinition> definitions)
+        {
+            var result = new List<SemanticViewDefinition>(Math.Min(MaxCatalogViews, 256));
+            using (var enumerator = definitions.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxCatalogViews)
+                        throw new InvalidOperationException("Semantic view catalog supports at most " + MaxCatalogViews + " views.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result;
         }
 
         private static Dictionary<string, ProjectElement> BuildUniqueElementIndex(ProjectState project)
