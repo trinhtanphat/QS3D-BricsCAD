@@ -18,7 +18,14 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    var blocked = "Semantic Tag Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.";
+                    PaletteCoordinator.SetStatus(blocked);
+                    document.Editor.WriteMessage("\nQS3D " + blocked);
+                    return;
+                }
+
                 var persisted = new GeneratedSemanticTagHealthService().Inspect(project);
                 var runtime = GeneratedSemanticTagRuntimeHealthService.Inspect(document, project);
                 var issues = persisted.Concat(runtime)
