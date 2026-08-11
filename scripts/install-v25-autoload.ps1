@@ -264,7 +264,9 @@ try {
         foreach ($name in $payload) {
             $source = Join-Path $package $name
             if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing installer payload: $name" }
-            Copy-Item -LiteralPath $source -Destination (Join-Path $stage $name) -Force
+            $destination = Join-Path $stage $name
+            Copy-Item -LiteralPath $source -Destination $destination -Force
+            Unblock-File -LiteralPath $destination -ErrorAction Stop
         }
 
         if (Test-Path -LiteralPath $installFull) {
