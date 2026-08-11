@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Diagnostics;
@@ -14,6 +15,7 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private readonly Action<ModelHealthIssue>? _locate;
         private readonly Document _document;
+        private readonly IReadOnlyList<ModelHealthIssue> _issues;
         private readonly string _projectIdAtOpen;
         private readonly DateTime _updatedUtcAtOpen;
         private readonly long _changeVersionAtOpen;
@@ -34,6 +36,7 @@ namespace QS3D.BricsCAD.V25.UI
             _document = document ?? throw new ArgumentNullException(nameof(document));
             if (projectAtOpen == null) throw new ArgumentNullException(nameof(projectAtOpen));
             if (issues == null) throw new ArgumentNullException(nameof(issues));
+            _issues = issues.ToList();
             _locate = locate;
             _projectIdAtOpen = projectAtOpen.ProjectId;
             _updatedUtcAtOpen = projectAtOpen.UpdatedUtc;
@@ -42,12 +45,53 @@ namespace QS3D.BricsCAD.V25.UI
             InitializeComponent();
             DocumentBoundWindowLifetime.Attach(this, _document);
             Activated += (_, __) => RefreshSnapshotFreshness();
-            IssueGrid.ItemsSource = issues;
-            SummaryText.Text = issues.Count(x => x.Severity == HealthSeverity.Error) + " lỗi • " + issues.Count(x => x.Severity == HealthSeverity.Warning) + " cảnh báo • " + issues.Count(x => x.Severity == HealthSeverity.Info) + " thông tin";
+            UpdateTotalSummary();
+            ApplyFilter();
         }
 
         private void OnLocateClick(object sender, RoutedEventArgs e) => Locate();
         private void OnGridDoubleClick(object sender, MouseButtonEventArgs e) => Locate();
+        private void OnFilterChanged(object sender, RoutedEventArgs e) => ApplyFilter();
+
+        private void ApplyFilter()
+        {
+            if (IssueGrid == null || SearchBox == null || SeverityCombo == null || VisibleCountText == null) return;
+
+            var query = (SearchBox.Text ?? string.Empty).Trim();
+            var severity = (SeverityCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "All";
+            var filtered = _issues
+                .Where(issue => MatchesSeverity(issue, severity) && MatchesSearch(issue, query))
+                .ToList();
+
+            IssueGrid.ItemsSource = filtered;
+            VisibleCountText.Text = filtered.Count + " / " + _issues.Count;
+        }
+
+        private static bool MatchesSeverity(ModelHealthIssue issue, string severity)
+        {
+            return string.Equals(severity, "All", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(issue.Severity.ToString(), severity, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool MatchesSearch(ModelHealthIssue issue, string query)
+        {
+            if (query.Length == 0) return true;
+            return ContainsIgnoreCase(issue.Code, query) ||
+                   ContainsIgnoreCase(issue.ElementId, query) ||
+                   ContainsIgnoreCase(issue.Message, query);
+        }
+
+        private static bool ContainsIgnoreCase(string? value, string query)
+        {
+            return !string.IsNullOrEmpty(value) && value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private void UpdateTotalSummary()
+        {
+            SummaryText.Text = _issues.Count(x => x.Severity == HealthSeverity.Error) + " lỗi • " +
+                               _issues.Count(x => x.Severity == HealthSeverity.Warning) + " cảnh báo • " +
+                               _issues.Count(x => x.Severity == HealthSeverity.Info) + " thông tin";
+        }
 
         private void Locate()
         {
@@ -112,6 +156,9 @@ namespace QS3D.BricsCAD.V25.UI
             if (_staleSnapshot) return;
             _staleSnapshot = true;
             if (IssueGrid != null) IssueGrid.IsEnabled = false;
+            if (SearchBox != null) SearchBox.IsEnabled = false;
+            if (SeverityCombo != null) SeverityCombo.IsEnabled = false;
+            if (VisibleCountText != null) VisibleCountText.Text = "STALE";
             if (SummaryText != null)
                 SummaryText.Text = "SNAPSHOT ĐÃ CŨ • " + reason + " Đóng cửa sổ và chạy lại Health.";
         }
