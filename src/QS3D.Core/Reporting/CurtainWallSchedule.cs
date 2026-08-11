@@ -43,9 +43,11 @@ namespace QS3D.Core.Reporting
 
             foreach (var element in project.Elements.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
-                var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
-                var family = families.TryGetValue(element.FamilyId, out var familyDefinition) ? familyDefinition.Name : element.FamilyId;
-                var key = element.FloorId + "\u001f" + element.FamilyId;
+                var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
+                var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+                var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
+                var family = families.TryGetValue(familyId, out var familyDefinition) ? familyDefinition.Name : familyId;
+                var key = floorId + "\u001f" + familyId;
                 if (!rows.TryGetValue(key, out var row))
                 {
                     row = new CurtainWallScheduleRow
