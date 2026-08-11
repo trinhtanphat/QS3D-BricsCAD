@@ -22,15 +22,32 @@ for path in [APPEND, REMAP]:
     if not path.is_file():
         continue
     text = path.read_text(encoding="utf-8")
-    for token in [
+    tokens = [
         "previewChangeVersion = project.ChangeVersion",
-        "ProjectContextCoordinator.GetOrCreate(document)",
-        "ReferenceEquals(currentProject, project)",
         "currentProject.ChangeVersion != previewChangeVersion",
         "changed after preview",
-    ]:
+    ]
+    if path == REMAP:
+        tokens += [
+            "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+            'ExistingProjectMutationContext.Require(document, "Interchange Import As New")',
+            "var previewProjectId = project.ProjectId;",
+            "var previewUpdatedUtc = project.UpdatedUtc;",
+            "var previewDrawingFingerprint = project.DrawingFingerprint ?? string.Empty;",
+            "currentProject.UpdatedUtc != previewUpdatedUtc",
+            "currentProject.DrawingFingerprint ?? string.Empty",
+        ]
+    else:
+        tokens += [
+            "ProjectContextCoordinator.GetOrCreate(document)",
+            "ReferenceEquals(currentProject, project)",
+        ]
+    for token in tokens:
         if token not in text:
             errors.append(str(path.relative_to(ROOT)) + " missing freshness guard token: " + token)
+
+    if path == REMAP and "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append(str(path.relative_to(ROOT)) + " preview must not create or cache replacement project state")
 
 if APPEND.is_file() and "ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)" not in APPEND.read_text(encoding="utf-8"):
     errors.append("append import must mutate the re-resolved current project")
