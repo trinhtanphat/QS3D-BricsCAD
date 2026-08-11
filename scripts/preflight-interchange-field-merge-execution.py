@@ -8,9 +8,10 @@ COORDINATOR = ROOT / "src" / "QS3D.Core" / "Export" / "ProjectInterchangeImportC
 SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "ProjectInterchangeFieldMergeImporterSmoke.cs"
 ADAPTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "InterchangeFieldMergeImportService.cs"
 COMMAND = ROOT / "src" / "QS3D.BricsCAD.V25" / "ProjectInterchangeFieldMergeCommands.cs"
+PROJECT_TOOLS = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "ProjectToolsWindow.xaml"
 
 errors = []
-for path in (IMPORTER, COORDINATOR, SMOKE, ADAPTER, COMMAND):
+for path in (IMPORTER, COORDINATOR, SMOKE, ADAPTER, COMMAND, PROJECT_TOOLS):
     if not path.is_file():
         errors.append("missing field-merge execution contract file: " + str(path.relative_to(ROOT)))
 
@@ -20,6 +21,7 @@ if not errors:
     smoke = SMOKE.read_text(encoding="utf-8")
     adapter = ADAPTER.read_text(encoding="utf-8")
     command = COMMAND.read_text(encoding="utf-8")
+    project_tools = PROJECT_TOOLS.read_text(encoding="utf-8")
 
     required = (
         "ProjectInterchangeFieldMergeAuthorization",
@@ -126,6 +128,9 @@ if not errors:
     if "InterchangeConfirmationGuard.RequireFresh" in command:
         errors.append("field-merge command must not use reference-identity freshness before a cold-cache canonical bind; exact target identity/version is checked after confirmation instead")
 
+    if project_tools.count('Tag="QS3DINTERCHANGEFIELDMERGE"') != 1:
+        errors.append("Project Tools must expose the dedicated reviewed field-merge command exactly once")
+
     if "FieldMerge" in coordinator or "FieldPrecedence" in coordinator:
         errors.append("field merge must stay a dedicated reviewed BricsCAD command until exact-V25 qualification closes the generic coordinator exposure gate")
 
@@ -150,4 +155,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: reviewed Core field merge is target/source/decision fresh and exact-handle cleanup-bound; BricsCAD previews through a non-creating read-only project, defers canonical binding until explicit confirmation, rechecks target identity/version before the atomic native transaction, and keeps generic coordinator exposure gated on exact-V25 qualification.")
+print("PASS: reviewed Core field merge is target/source/decision fresh and exact-handle cleanup-bound; BricsCAD previews through a non-creating read-only project, defers canonical binding until explicit confirmation, rechecks target identity/version before the atomic native transaction, exposes the dedicated workflow through Project Tools, and keeps generic coordinator exposure gated on exact-V25 qualification.")
