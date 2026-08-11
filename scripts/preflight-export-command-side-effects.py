@@ -103,16 +103,15 @@ for label, path, build, aggregate, export, finalize in CASES:
     if "Cảnh báo UI sau export" not in text:
         errors.append(label + " missing best-effort post-export UI warning boundary")
 
-# Template export has no semantic regeneration, but Cancel must still be side-effect free: opening
-# the dialog must not create/cache a project. Once the template file is committed, UI reporting is
-# best effort so a Palette/Editor failure cannot turn a successful export into a reported failure.
+# Template export has no semantic regeneration. Cancel remains side-effect free, and after Save
+# confirmation the exporter resolves only an existing project read-only before writing the template.
 template_path = ROOT / "src/QS3D.BricsCAD.V25/TemplateCommands.cs"
 if not template_path.is_file():
     errors.append("missing src/QS3D.BricsCAD.V25/TemplateCommands.cs")
 else:
     text = template_path.read_text(encoding="utf-8")
     dialog = "if (dialog.ShowDialog() != true) return;"
-    project = "ProjectContextCoordinator.GetOrCreate(doc)"
+    project = "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)"
     build = "store.ExportProject(project,"
     export = "store.Save(profile, dialog.FileName);"
     finalize = "FinalizeExportUi(doc,"
@@ -128,14 +127,16 @@ else:
             errors.append("Template missing export-boundary token: " + token)
     if min(positions.values()) >= 0:
         if not (positions[dialog] < positions[project] < positions[build] < positions[export] < positions[finalize]):
-            errors.append("Template must confirm destination before project creation/profile build, commit the file, then finalize UI")
+            errors.append("Template must confirm destination before existing-project lookup/profile build, commit the file, then finalize UI")
         before_dialog = text[:positions[dialog]]
         for forbidden in (project, build):
             if forbidden in before_dialog:
-                errors.append("Template Cancel path must not create/read project export state before save confirmation: " + forbidden)
+                errors.append("Template Cancel path must not read project export state before save confirmation: " + forbidden)
         between_export_and_finalize = text[positions[export] + len(export):positions[finalize]]
         if "PaletteCoordinator." in between_export_and_finalize or "Editor.WriteMessage" in between_export_and_finalize:
             errors.append("Template must not perform fallible UI work between persistent export and FinalizeExportUi")
+    if "ProjectContextCoordinator.GetOrCreate(doc)" in text:
+        errors.append("Template read-only export must not create/cache replacement project state")
     if "Cảnh báo UI sau export template" not in text:
         errors.append("Template missing best-effort post-export UI warning boundary")
 
@@ -146,4 +147,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: schedule exporters regenerate detached read-only state after destination confirmation; template export keeps its explicit create-capable boundary; all isolate post-export UI.")
+print("PASS: schedule exporters regenerate detached read-only state after destination confirmation; template export resolves only existing project state; all isolate post-export UI.")
