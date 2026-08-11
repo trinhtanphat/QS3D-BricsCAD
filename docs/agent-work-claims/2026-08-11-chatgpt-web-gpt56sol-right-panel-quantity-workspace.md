@@ -1,0 +1,26 @@
+# Agent work claim — right-panel quantity workspace
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `ACTIVE`
+- Baseline main SHA: `5f929a1dae7caba121ce6f35c6ce972123539508`
+- Scope: extend the existing BricsCAD right palette to match the supplied BLT3D reference more closely by adding a live quantity explanation/project overview area while preserving the already-functional Xref and layer manager.
+- Files reserved:
+  - `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml`
+  - `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs`
+  - `src/QS3D.BricsCAD.V25/UI/ViewModels/RightPanelViewModel.cs`
+  - `src/QS3D.BricsCAD.V25/PaletteCoordinator.cs`
+  - `scripts/preflight-right-panel-quantity-workspace.py`
+  - this claim file for close-out
+- Functional contract:
+  - quantity overview is read-only and computed from the current canonical QS3D project without creating/replacing project state;
+  - explanation tree groups quantity rows by floor and supports locating the selected quantity row back in CAD using semantic source handles;
+  - project totals expose count, gross/deduction/net concrete, formwork and length and refresh together with Xref/layer state;
+  - selection sync highlights the quantity rows related to the current CAD/semantic selection without mutating the project;
+  - buttons that appear in the new UI must dispatch real existing workflows (`QS3DBQ`, `QS3DREGEN`) or perform a real locate/refresh action; no decorative stubs;
+  - preserve existing Xref attach/reload/move/detach/zoom and layer visibility/lock/search behavior.
+- Explicit exclusions:
+  - no edits to `Commands.cs`, Ribbon files, Start Center, Core reporting builders/formulas, Core persistence/mutation, Direct Draw/Create Similar, or Room Auto paths reserved by other active claims;
+  - no native BricsCAD runtime PASS claim from the remote connector environment.
+- Validation: add an auto-discovered static preflight that checks the new WPF bindings/handlers and read-only quantity data path, then re-fetch the implementation commit and CI/status evidence available from GitHub.
+- Completion condition: the screenshot-inspired quantity explanation + overview is functional in the right palette, selection/location integration is wired, existing right-panel behavior remains present, regression guard is committed, and this claim is marked `COMPLETED` with the exact implementation SHA.
