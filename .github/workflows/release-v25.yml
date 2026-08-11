@@ -279,11 +279,14 @@ jobs:
 
           $releaseAssets = @('dist\QS3D-BricsCAD-V25.zip', 'dist\QS3D-BricsCAD-V25.zip.sha256')
           if ($signPackage) { $releaseAssets += 'dist\QS3D-BricsCAD-V25.update.json' }
+          $localAssets = @{}
 
           $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
           foreach ($assetPath in $releaseAssets) {
             $asset = (Resolve-Path $assetPath).Path
             $name = [System.IO.Path]::GetFileName($asset)
+            if ($localAssets.ContainsKey($name)) { throw "Duplicate local release asset name: $name" }
+            $localAssets[$name] = $asset
             $encodedName = [Uri]::EscapeDataString($name)
             $contentType = if ($name.EndsWith('.zip')) { 'application/zip' } elseif ($name.EndsWith('.json')) { 'application/json' } else { 'text/plain' }
             Invoke-RestMethod `
@@ -298,9 +301,44 @@ jobs:
           $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
           $expectedAssets = @('QS3D-BricsCAD-V25.zip', 'QS3D-BricsCAD-V25.zip.sha256')
           if ($signPackage) { $expectedAssets += 'QS3D-BricsCAD-V25.update.json' }
+          $assetDownloadHeaders = @{}
+          foreach ($key in $headers.Keys) { $assetDownloadHeaders[$key] = $headers[$key] }
+          $assetDownloadHeaders['Accept'] = 'application/octet-stream'
+          $verificationRoot = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { [IO.Path]::GetTempPath() } else { $env:RUNNER_TEMP }
+
           foreach ($expectedAsset in $expectedAssets) {
-            if ($expectedAsset -notin @($draftRelease.assets | ForEach-Object { $_.name })) {
-              throw "Expected release asset was not uploaded: $expectedAsset. Release remains a draft."
+            $matches = @($draftRelease.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
+            if ($matches.Count -ne 1) {
+              throw "Expected exactly one uploaded release asset named $expectedAsset, found $($matches.Count). Release remains a draft."
+            }
+            if (-not $localAssets.ContainsKey($expectedAsset)) {
+              throw "Local release asset mapping is missing for $expectedAsset. Release remains a draft."
+            }
+
+            $uploadedAsset = $matches[0]
+            $localAsset = [string]$localAssets[$expectedAsset]
+            $localLength = [int64](Get-Item -LiteralPath $localAsset).Length
+            $remoteLength = [int64]$uploadedAsset.size
+            if ($remoteLength -ne $localLength) {
+              throw "Uploaded release asset size mismatch for $expectedAsset. Local=$localLength Remote=$remoteLength. Release remains a draft."
+            }
+
+            $downloadedAsset = Join-Path $verificationRoot ('qs3d-release-asset-' + [Guid]::NewGuid().ToString('N'))
+            try {
+              Invoke-WebRequest `
+                -Method Get `
+                -Uri ([string]$uploadedAsset.url) `
+                -Headers $assetDownloadHeaders `
+                -OutFile $downloadedAsset `
+                -UseBasicParsing
+              $localHash = (Get-FileHash -LiteralPath $localAsset -Algorithm SHA256).Hash
+              $remoteHash = (Get-FileHash -LiteralPath $downloadedAsset -Algorithm SHA256).Hash
+              if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Uploaded release asset SHA-256 mismatch for $expectedAsset. Release remains a draft."
+              }
+            }
+            finally {
+              if (Test-Path -LiteralPath $downloadedAsset) { Remove-Item -LiteralPath $downloadedAsset -Force -ErrorAction SilentlyContinue }
             }
           }
 
