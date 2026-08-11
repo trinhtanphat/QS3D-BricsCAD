@@ -97,10 +97,11 @@ namespace QS3D.Core.Rules
         public QuantityRuleElementPreview PreviewElement(ProjectState project, ProjectElement element)
         {
             RequireOwnedElement(project, element);
+            var sourceChangeVersion = project.ChangeVersion;
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var detachedElement = detached.FindElement(element.Id)
                 ?? throw new InvalidOperationException("Detached quantity-rule preview lost element " + element.Id + ".");
-            return PreviewDetached(detached, detachedElement, project.ChangeVersion);
+            return PreviewDetached(detached, detachedElement, sourceChangeVersion);
         }
 
         public QuantityRuleProjectPreview PreviewProject(ProjectState project)
