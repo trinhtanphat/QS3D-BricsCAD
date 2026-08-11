@@ -31,6 +31,9 @@ namespace QS3D.Core.Services
                 EnsureCanLeavePhysicalCutHost(project, opening, previousHostElement, previousHost, "re-host");
             }
 
+            if (relationshipChanged)
+                ClearAutoHostMetadata(opening);
+
             if (previousHost.Length > 0 && relationshipChanged)
             {
                 RemoveDependencies(opening, previousHost);
@@ -56,7 +59,13 @@ namespace QS3D.Core.Services
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             EnsureOpening(opening, openingId);
             var hasHostProperty = opening.Properties.TryGetValue("HostWallId", out var value);
-            if (!hasHostProperty) return;
+            if (!hasHostProperty)
+            {
+                if (!ClearAutoHostMetadata(opening)) return;
+                project.Touch();
+                AuditTrail.ForProject(project).Record("host.auto-provenance.clear", opening.Id, "stale metadata without HostWallId");
+                return;
+            }
 
             var hostId = (value ?? string.Empty).Trim();
             var host = hostId.Length > 0 ? project.FindElement(hostId) : null;
@@ -64,6 +73,7 @@ namespace QS3D.Core.Services
                 EnsureCanLeavePhysicalCutHost(project, opening, host, hostId, "unlink");
 
             opening.Properties.Remove("HostWallId");
+            ClearAutoHostMetadata(opening);
             var dependencyRemoved = RemoveDependencies(opening, hostId) > 0;
             opening.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             if (host != null)
@@ -75,6 +85,16 @@ namespace QS3D.Core.Services
             }
             project.Touch();
             AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
+        }
+
+        private static bool ClearAutoHostMetadata(ProjectElement opening)
+        {
+            var changed = false;
+            changed |= opening.Properties.Remove("AutoHostMatched");
+            changed |= opening.Properties.Remove("AutoHostGapM");
+            changed |= opening.Properties.Remove("AutoHostElevDeltaM");
+            changed |= opening.Properties.Remove("AutoHostCandidateCount");
+            return changed;
         }
 
         private static void EnsureCanLeavePhysicalCutHost(ProjectState project, ProjectElement opening, ProjectElement? host, string hostId, string operation)
