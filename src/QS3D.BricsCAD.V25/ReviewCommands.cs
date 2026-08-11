@@ -53,15 +53,29 @@ namespace QS3D.BricsCAD.V25
             var operation = scanCurrentSpace ? "QS3DB4D" : autoApply ? "QS3DRECOGNIZEAUTO" : "QS3DRECOGNIZE";
             Guard(doc, operation, () =>
             {
-                if (!DrawingUnitWorkflow.EnsureResolved(doc, operation)) return;
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
                 var snapshots = scanCurrentSpace ? EntitySnapshotReader.ReadCurrentSpace(doc) : EntitySnapshotReader.ReadCurrentSelection(doc);
-                if (scanCurrentSpace)
+                string? expectedProjectId = null;
+                if (scanCurrentSpace && ProjectContextCoordinator.TryGetReadOnly(doc, out var previewProject))
                 {
-                    var generatedHandles = CollectGeneratedHandles(project);
+                    expectedProjectId = previewProject.ProjectId;
+                    var generatedHandles = CollectGeneratedHandles(previewProject);
                     snapshots = snapshots.Where(x => !generatedHandles.Contains(x.Handle)).ToList();
                 }
                 if (snapshots.Count == 0) { doc.Editor.WriteMessage("\nQS3D: Current Space không có đối tượng CAD nguồn để quét."); return; }
+                if (!DrawingUnitWorkflow.EnsureResolved(doc, operation)) return;
+
+                ProjectState project;
+                if (expectedProjectId != null)
+                {
+                    project = ExistingProjectMutationContext.Require(doc, operation + " recognition");
+                    if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException(operation + ": QS3D project đã thay đổi trong lúc quét CAD source. Hãy chạy lại lệnh.");
+                }
+                else
+                {
+                    project = ProjectContextCoordinator.GetOrCreate(doc);
+                }
+
                 var batch = new ProjectRecognitionService().SuggestBatch(project, snapshots); var applied = 0; var skipped = 0;
                 Action<RecognitionResult> apply = result =>
                 {
