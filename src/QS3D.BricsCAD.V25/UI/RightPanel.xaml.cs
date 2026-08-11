@@ -107,7 +107,8 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         private static bool AliasContains(string aliases, string token) =>
-            aliases.IndexOf(token, StringComparison.CurrentCultureIgnoreCase) >= 0;
+            aliases.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .Any(alias => string.Equals(alias, token, StringComparison.CurrentCultureIgnoreCase));
 
         private void RefreshDrawingsOnly()
         {
