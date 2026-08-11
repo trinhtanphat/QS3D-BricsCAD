@@ -41,7 +41,7 @@ namespace QS3D.BricsCAD.V25.Services
                 .ToList();
             if (snapshots.Count == 0) return new SourceReconcileResult();
 
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var project = ExistingProjectMutationContext.Require(document, "Source Reconcile");
             var targets = ResolveTargets(project, snapshots);
             if (targets.Count == 0) return new SourceReconcileResult();
             EnsureActive(document, "Source reconcile / mutation");
