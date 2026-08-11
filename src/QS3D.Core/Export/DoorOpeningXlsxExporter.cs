@@ -64,14 +64,15 @@ namespace QS3D.Core.Export
         private static void RequireCellTextLength(string value, string label)
         {
             if ((value ?? string.Empty).Length > MaxCellTextLength)
-                throw new InvalidOperationException(
-                    "Door/opening XLSX " + label + " cannot exceed " + MaxCellTextLength + " characters.");
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
         }
 
         private static void RequireJoinedCellTextLength(IEnumerable<string> values, string label)
         {
             if (values == null)
-                throw new InvalidOperationException("Door/opening XLSX " + label + " collection is required.");
+                throw new ArgumentException("Door/opening XLSX " + label + " collection is required.", "rows");
 
             long length = 0L;
             var index = 0;
@@ -80,8 +81,9 @@ namespace QS3D.Core.Export
                 if (index > 0) length++;
                 length += (value ?? string.Empty).Length;
                 if (length > MaxCellTextLength)
-                    throw new InvalidOperationException(
-                        "Door/opening XLSX " + label + " cannot exceed " + MaxCellTextLength + " characters.");
+                    throw new ArgumentOutOfRangeException(
+                        "rows",
+                        "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
                 index++;
             }
         }
