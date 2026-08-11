@@ -69,23 +69,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     return false;
 
                 foreach (var tabSpec in CreateSpecs())
-                {
-                    if (CollectionContainsId(tabs, tabSpec.Id))
-                        continue;
-
-                    var tab = Create("Bricscad.Windows.RibbonTab");
-                    SetProperty(tab, "Id", tabSpec.Id);
-                    SetProperty(tab, "Name", tabSpec.Id);
-                    SetProperty(tab, "Title", tabSpec.Title);
-
-                    var panels = GetProperty(tab, "Panels")
-                                 ?? throw new InvalidOperationException("RibbonTab.Panels was not available.");
-
-                    foreach (var panelSpec in tabSpec.Panels)
-                        AddPanel(tabSpec, panelSpec, panels);
-
-                    Add(tabs, tab);
-                }
+                    ReconcileTab(tabs, tabSpec);
 
                 _initialized = true;
                 return true;
@@ -98,32 +82,147 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         public static void Reset() => _initialized = false;
 
+        private static void ReconcileTab(object tabs, RibbonTabSpec tabSpec)
+        {
+            var tab = FindById(tabs, tabSpec.Id);
+            var created = tab == null;
+            if (created)
+            {
+                tab = Create("Bricscad.Windows.RibbonTab");
+                SetProperty(tab, "Id", tabSpec.Id);
+            }
+
+            SetProperty(tab!, "Name", tabSpec.Id);
+            SetProperty(tab!, "Title", tabSpec.Title);
+
+            var panels = GetProperty(tab!, "Panels")
+                         ?? throw new InvalidOperationException("RibbonTab.Panels was not available.");
+
+            // Older QS3D versions used exactly one <TAB>_PANEL_SOURCE per tab. Remove only that
+            // known QS3D-owned legacy panel so a hot reload converges to the grouped architecture;
+            // dedicated/unknown augmenter panels are intentionally preserved.
+            RemoveLegacyFlatPanel(panels, tabSpec.Id + "_PANEL_SOURCE");
+
+            foreach (var panelSpec in tabSpec.Panels)
+                EnsurePanel(tabSpec, panelSpec, panels);
+
+            if (created)
+                Add(tabs, tab!);
+        }
+
+        private static void EnsurePanel(RibbonTabSpec tabSpec, RibbonPanelSpec panelSpec, object panels)
+        {
+            var sourceId = PanelSourceId(tabSpec, panelSpec);
+            var source = FindPanelSource(panels, sourceId);
+            if (source == null)
+            {
+                AddPanel(tabSpec, panelSpec, panels);
+                return;
+            }
+
+            SetProperty(source, "Name", panelSpec.Title);
+            SetProperty(source, "Title", panelSpec.Title);
+            EnsurePanelButtons(tabSpec, panelSpec, source);
+        }
+
         private static void AddPanel(RibbonTabSpec tabSpec, RibbonPanelSpec panelSpec, object panels)
         {
             var source = Create("Bricscad.Windows.RibbonPanelSource");
-            SetProperty(source, "Id", tabSpec.Id + "_" + panelSpec.Id + "_PANEL_SOURCE");
+            SetProperty(source, "Id", PanelSourceId(tabSpec, panelSpec));
             SetProperty(source, "Name", panelSpec.Title);
             SetProperty(source, "Title", panelSpec.Title);
+            EnsurePanelButtons(tabSpec, panelSpec, source);
 
+            var panel = Create("Bricscad.Windows.RibbonPanel");
+            SetProperty(panel, "Source", source);
+            Add(panels, panel);
+        }
+
+        private static void EnsurePanelButtons(RibbonTabSpec tabSpec, RibbonPanelSpec panelSpec, object source)
+        {
             var items = GetProperty(source, "Items")
                         ?? throw new InvalidOperationException("RibbonPanelSource.Items was not available.");
 
             foreach (var buttonSpec in panelSpec.Buttons)
             {
-                var button = Create("Bricscad.Windows.RibbonButton");
-                SetProperty(button, "Id", tabSpec.Id + "_" + panelSpec.Id + "_" + Normalize(buttonSpec.Text));
+                var buttonId = ButtonId(tabSpec, panelSpec, buttonSpec);
+                var button = FindById(items, buttonId);
+                if (button == null)
+                {
+                    button = Create("Bricscad.Windows.RibbonButton");
+                    SetProperty(button, "Id", buttonId);
+                    Add(items, button);
+                }
+
                 SetProperty(button, "Name", buttonSpec.Text);
                 SetProperty(button, "Text", buttonSpec.Text);
                 SetProperty(button, "ShowText", true);
                 SetProperty(button, "ShowImage", false);
                 SetProperty(button, "CommandParameter", buttonSpec.Command);
                 SetProperty(button, "CommandHandler", new RibbonCommandHandler());
-                Add(items, button);
+            }
+        }
+
+        private static string PanelSourceId(RibbonTabSpec tabSpec, RibbonPanelSpec panelSpec) =>
+            tabSpec.Id + "_" + panelSpec.Id + "_PANEL_SOURCE";
+
+        private static string ButtonId(RibbonTabSpec tabSpec, RibbonPanelSpec panelSpec, RibbonButtonSpec buttonSpec) =>
+            tabSpec.Id + "_" + panelSpec.Id + "_" + Normalize(buttonSpec.Text);
+
+        private static object? FindPanelSource(object panels, string sourceId)
+        {
+            if (!(panels is IEnumerable enumerable))
+                return null;
+
+            foreach (var panel in enumerable)
+            {
+                if (panel == null)
+                    continue;
+                var source = GetProperty(panel, "Source");
+                if (source == null)
+                    continue;
+                if (string.Equals(GetProperty(source, "Id") as string, sourceId, StringComparison.OrdinalIgnoreCase))
+                    return source;
+            }
+            return null;
+        }
+
+        private static void RemoveLegacyFlatPanel(object panels, string legacySourceId)
+        {
+            if (!(panels is IEnumerable enumerable))
+                return;
+
+            object? legacyPanel = null;
+            foreach (var panel in enumerable)
+            {
+                if (panel == null)
+                    continue;
+                var source = GetProperty(panel, "Source");
+                if (source == null)
+                    continue;
+                if (!string.Equals(GetProperty(source, "Id") as string, legacySourceId, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                legacyPanel = panel;
+                break;
             }
 
-            var panel = Create("Bricscad.Windows.RibbonPanel");
-            SetProperty(panel, "Source", source);
-            Add(panels, panel);
+            if (legacyPanel != null)
+                Remove(panels, legacyPanel);
+        }
+
+        private static object? FindById(object collection, string id)
+        {
+            if (!(collection is IEnumerable enumerable))
+                return null;
+
+            foreach (var item in enumerable)
+            {
+                if (item == null)
+                    continue;
+                if (string.Equals(GetProperty(item, "Id") as string, id, StringComparison.OrdinalIgnoreCase))
+                    return item;
+            }
+            return null;
         }
 
         private static RibbonButtonSpec Button(string text, string command) => new RibbonButtonSpec(text, command);
@@ -436,22 +535,18 @@ namespace QS3D.BricsCAD.V25.Ribbon
             method.Invoke(collection, new[] { item });
         }
 
-        private static bool CollectionContainsId(object collection, string id)
+        private static void Remove(object collection, object item)
         {
-            if (!(collection is IEnumerable enumerable))
-                return false;
+            var method = collection.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .FirstOrDefault(x =>
+                    x.Name == "Remove"
+                    && x.GetParameters().Length == 1
+                    && x.GetParameters()[0].ParameterType.IsAssignableFrom(item.GetType()));
 
-            foreach (var item in enumerable)
-            {
-                if (item == null)
-                    continue;
+            if (method == null)
+                throw new InvalidOperationException("Collection does not expose a compatible Remove method.");
 
-                var value = GetProperty(item, "Id") as string;
-                if (string.Equals(value, id, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-
-            return false;
+            method.Invoke(collection, new[] { item });
         }
 
         private static string Normalize(string text) =>
