@@ -170,7 +170,7 @@ namespace QS3D.Core.Domain
             var references = ResolveFamilyMembers(project, family.Id).Count;
             if (references > 0)
                 throw new InvalidOperationException("Family '" + family.Name + "' is referenced by " + references + " semantic element(s). Reassign them before deletion.");
-            if (project.Metadata.TryGetValue("ActiveFamilyId", out var active) && string.Equals(active, family.Id, StringComparison.OrdinalIgnoreCase))
+            if (project.Metadata.TryGetValue("ActiveFamilyId", out var active) && string.Equals((active ?? string.Empty).Trim(), family.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active Family. Activate another Family first.");
             project.Touch();
             return project.Families.Remove(family);
