@@ -17,31 +17,40 @@ else:
     if min(ed2_start, bbs_start, regen_start) < 0:
         errors.append("Commands.cs missing ED2/BBS/REGEN method boundaries")
     else:
-        detached = "QS3D.Core.Persistence.ProjectStateSnapshot.CreateDetachedCopy(project)"
-
         ed2 = text[ed2_start:bbs_start]
-        project = ed2.find("ProjectContextCoordinator.TryGetReadOnly(doc, out var project)")
+        read_only = ed2.find("ProjectContextCoordinator.TryGetReadOnly(doc, out var project)")
         confirm = ed2.find("if (dialog.ShowDialog() != true) return;")
-        snapshot = ed2.find(detached)
+        bind = ed2.find("ExistingProjectMutationContext.TryGet(doc, out var canonicalProject)")
+        identity = ed2.find("canonicalProject.ProjectId, expectedProjectId")
+        units = ed2.find('DrawingUnitWorkflow.EnsureResolved(doc, "QS3DED2")')
+        snapshot = ed2.find("QS3D.Core.Persistence.ProjectStateSnapshot.CreateDetachedCopy(canonicalProject)")
         regenerate = ed2.find("var regenerated = RegenerateProject(snapshot);")
         details = ed2.find("ProjectQuantityReportBuilder.Detail(snapshot)")
         summary = ed2.find("ProjectQuantityReportBuilder.Group(snapshot)")
         live = ed2.find("EnsureEd2HandlesAreLive(doc, details);")
         export = ed2.find("XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);")
-        if min(project, confirm, snapshot, regenerate, details, summary, live, export) < 0:
-            errors.append("ED2 export missing existing-project/detached-regeneration/export contract token")
-        elif not project < confirm < snapshot < regenerate < details < summary < live < export:
-            errors.append("ED2 must resolve existing project read-only, confirm Save, regenerate/build detached state, validate live handles, then export")
+        if min(read_only, confirm, bind, identity, units, snapshot, regenerate, details, summary, live, export) < 0:
+            errors.append("ED2 export missing read-only/canonical-unit/detached-regeneration/export contract token")
+        elif not read_only < confirm < bind < identity < units < snapshot < regenerate < details < summary < live < export:
+            errors.append("ED2 must inspect existing state read-only, confirm Save, bind the same canonical project, resolve units, regenerate/build detached state, validate live handles, then export")
         if "ProjectContextCoordinator.GetOrCreate(doc)" in ed2:
-            errors.append("ED2 export must not create/cache a project")
-        if "RegenerateProject(project)" in ed2:
+            errors.append("ED2 export must not directly create/cache a project")
+        if "RegenerateProject(project)" in ed2 or "RegenerateProject(canonicalProject)" in ed2:
             errors.append("ED2 export must not regenerate the live project")
-        if "ProjectStateSnapshot.CreateDetachedCopy(project)" in ed2[:confirm if confirm >= 0 else 0]:
-            errors.append("ED2 Cancel path must not allocate/regenerate detached export state before Save confirmation")
+        before_confirm = ed2[:confirm if confirm >= 0 else 0]
+        for forbidden in (
+            "ExistingProjectMutationContext.TryGet(doc, out var canonicalProject)",
+            'DrawingUnitWorkflow.EnsureResolved(doc, "QS3DED2")',
+            "ProjectStateSnapshot.CreateDetachedCopy",
+            "RegenerateProject(snapshot)",
+        ):
+            if forbidden in before_confirm:
+                errors.append("ED2 Cancel path must not bind/mutate units or allocate/regenerate export state before Save confirmation: " + forbidden)
 
         bbs = text[bbs_start:regen_start]
         confirm = bbs.find("if (dialog.ShowDialog() != true) return;")
         project = bbs.find("ProjectContextCoordinator.TryGetReadOnly(doc, out var project)")
+        detached = "QS3D.Core.Persistence.ProjectStateSnapshot.CreateDetachedCopy(project)"
         snapshot = bbs.find(detached)
         regenerate = bbs.find("RegenerateProject(snapshot);")
         build = bbs.find("ProjectRebarScheduleBuilder.Build(snapshot)")
@@ -74,4 +83,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ED2 and BBS XLSX use existing read-only projects and regenerate detached snapshots only after export confirmation.")
+print("PASS: ED2/BBS XLSX avoid phantom projects and live regeneration; ED2 defers canonical unit persistence until export confirmation.")
