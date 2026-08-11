@@ -1,6 +1,6 @@
 # Work claim — reporting element-reference normalization
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-reporting-reference-normalization`
 - Registered: `2026-08-11T22:00:00+07:00`
 - Baseline: newest `main` at claim branch creation
@@ -8,11 +8,11 @@
 
 ## Confirmed defect
 
-`ProjectElement` trims `FamilyId`, `FloorId` and `ZoneId` only in its constructor, but the three properties have public setters with no normalization. A later edit/import can assign values such as `" floor "` or `" family "`. Core reporting currently uses several of these raw strings directly in `TryGetValue(...)` lookups and grouping keys. The same semantic reference can therefore fail to resolve its Floor/Family/Zone display name and/or create a separate grouping key even though `ProjectState.Find*` identity semantics trim lookups and compare case-insensitively.
+`ProjectElement` trims `FamilyId`, `FloorId` and `ZoneId` only in its constructor, but the three properties have public setters with no normalization. A later edit/import can assign values such as `" floor "` or `" family "`. Core reporting used several of these raw strings directly in `TryGetValue(...)` lookups and grouping keys. The same semantic reference could therefore fail to resolve its Floor/Family/Zone display name and/or create a separate grouping key even though `ProjectState.Find*` identity semantics trim lookups and compare case-insensitively.
 
 ## Reserved scope
 
-- `src/QS3D.Core/Reporting/ReportingProjectIdentityGuard.cs` — add read-only reference normalization helper only
+- `src/QS3D.Core/Reporting/ReportingProjectIdentityGuard.cs`
 - `src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs`
 - `src/QS3D.Core/Reporting/MaterialUsageSchedule.cs`
 - `src/QS3D.Core/Reporting/CurtainWallSchedule.cs`
@@ -48,6 +48,21 @@
 
 The previous project reporting reference-identity claim is completed. Current Core mutation, Quantity Settings, updater, UI, rebar, interchange and release lanes reserve disjoint surfaces or explicitly exclude reporting read normalization.
 
+## Completion
+
+- Claim-only PR: `#490`, squash merge on `main`: `b9718ba36505e465e64515c2586b86b8b1408e02`.
+- Implementation PR: `#492` — `fix(reporting): normalize mutable reference ids`.
+- Final reviewed implementation head: `77aaf9d1f6d9dfc4efa1a7a90e9f6d34c7fd5c4f`.
+- Squash merge on `main`: `31765bef16cac17e73f029c6b17030c9e01e48cb`.
+- Added `ReportingProjectIdentityGuard.NormalizeReferenceId(...)` as a read-only null-safe trim helper.
+- Material Usage, Curtain Wall, Door/Opening and Room Finish schedules now use normalized Floor/Family references consistently for lookup, fallback display and grouping keys.
+- Project-backed BQ/ED2 now normalizes Floor/Zone/Family references before lookup and grouping, while detail identity remains based on semantic ElementId.
+- Regression coverage mutates `ProjectElement` references after construction and proves padded/case-varied references resolve and group like canonical project identities.
+- Final implementation PR diff: 7 files / 73 additions / 20 deletions.
+- Repeated concurrent-main comparisons showed no overlap with the seven implementation files before integration.
+- GitHub Actions/build/release were not dispatched.
+- No native BricsCAD V25/WPF runtime PASS is claimed.
+
 ## Completion condition
 
-Core reporting consistently normalizes mutable semantic reference strings before lookup/grouping, focused regression coverage is merged without overwriting concurrent work, and this claim is closed with exact SHAs and truthful validation scope.
+Satisfied by PR `#492` and merge `31765bef16cac17e73f029c6b17030c9e01e48cb`: Core reporting now consistently normalizes mutable semantic reference strings before lookup/grouping without mutating domain state or overwriting concurrent work.
