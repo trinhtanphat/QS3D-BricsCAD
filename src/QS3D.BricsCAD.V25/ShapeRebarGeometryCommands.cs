@@ -15,6 +15,13 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
+                if (selectedIds.Length == 0)
+                {
+                    Report(document, "Shape Rebar 3D: chọn cấu kiện semantic có BBS/RebarNotation hợp lệ.");
+                    return;
+                }
+
                 var project = ExistingProjectMutationContext.Require(document, "Shape Rebar 3D");
                 var result = ShapeRebarSolidBuilder.BuildSelected(document, project);
                 var message = result.Bars == 0
