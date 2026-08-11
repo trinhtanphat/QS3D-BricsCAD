@@ -19,24 +19,39 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border Background="{StaticResource Bg1Brush}" BorderThickness="0,0,0,1" Padding="16,12">
-            <DockPanel>
-                <StackPanel>
+        <Border Background="{StaticResource BgRaisedBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1" Padding="16,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="{StaticResource LuxuryBrush}"
+                        CornerRadius="2" Margin="0,2,0,2"/>
+                <StackPanel Grid.Column="1" Margin="12,0,0,0">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="KIỂM TRA MÔ HÌNH" FontWeight="Bold" FontSize="18"/>
-                        <Border Background="{StaticResource AccentSoftBrush}" BorderBrush="{StaticResource BorderStrongBrush}"
-                                BorderThickness="1" CornerRadius="8" Padding="7,1" Margin="8,0,0,0">
-                            <TextBlock Text="HEALTH REVIEW" Foreground="{StaticResource LuxuryBrush}" FontWeight="SemiBold" FontSize="9"/>
+                        <Border Style="{StaticResource StatusPill}" Margin="8,0,0,0">
+                            <TextBlock Text="HEALTH REVIEW" Foreground="{StaticResource LuxuryBrush}"
+                                       FontWeight="SemiBold" FontSize="9"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock x:Name="SummaryText" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="SummaryText" Style="{StaticResource Caption}" Margin="0,4,0,0"
+                               TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
-                <Button DockPanel.Dock="Right" Content="Định vị" Style="{StaticResource AccentButton}"
-                        Click="OnLocateClick" VerticalAlignment="Center"/>
-            </DockPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <Border Style="{StaticResource StatusPill}" Margin="0,0,7,0">
+                        <TextBlock Text="READ-ONLY TRIAGE" Style="{StaticResource Caption}" FontWeight="SemiBold"/>
+                    </Border>
+                    <Button Content="Định vị" Style="{StaticResource AccentButton}"
+                            Click="OnLocateClick" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
         </Border>
 
-        <Border Grid.Row="1" Style="{StaticResource Card}" Margin="12,10,12,0" Padding="10,8">
+        <Border Grid.Row="1" Style="{StaticResource PremiumCard}" Margin="12,10,12,0" Padding="10,9">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -44,12 +59,16 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                    <TextBlock Text="TÌM VẤN ĐỀ" Style="{StaticResource Caption}" Margin="0,0,0,3"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                        <Border Background="{StaticResource LuxuryBrush}" CornerRadius="2"
+                                Width="3" Height="15" Margin="0,0,7,0"/>
+                        <TextBlock Text="TÌM VẤN ĐỀ" Style="{StaticResource Caption}" FontWeight="SemiBold"/>
+                    </StackPanel>
                     <TextBox x:Name="SearchBox" MinHeight="28" VerticalContentAlignment="Center"
                              TextChanged="OnFilterChanged" ToolTip="Tìm theo mã lỗi, cấu kiện hoặc nội dung"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Margin="0,0,8,0">
-                    <TextBlock Text="MỨC ĐỘ" Style="{StaticResource Caption}" Margin="0,0,0,3"/>
+                    <TextBlock Text="MỨC ĐỘ" Style="{StaticResource Caption}" Margin="0,0,0,3" FontWeight="SemiBold"/>
                     <ComboBox x:Name="SeverityCombo" MinHeight="28" SelectedIndex="0"
                               SelectionChanged="OnFilterChanged">
                         <ComboBoxItem Content="Tất cả" Tag="All"/>
@@ -59,33 +78,55 @@
                     </ComboBox>
                 </StackPanel>
                 <StackPanel Grid.Column="2" MinWidth="115" VerticalAlignment="Bottom">
-                    <TextBlock Text="HIỂN THỊ" Style="{StaticResource Caption}" Margin="0,0,0,3"/>
-                    <Border Background="{StaticResource AccentSoftBrush}" BorderBrush="{StaticResource BorderStrongBrush}"
-                            BorderThickness="1" CornerRadius="5" Padding="8,5">
-                        <TextBlock x:Name="VisibleCountText" Text="0 / 0" HorizontalAlignment="Center" FontWeight="SemiBold"/>
+                    <TextBlock Text="HIỂN THỊ" Style="{StaticResource Caption}" Margin="0,0,0,3" FontWeight="SemiBold"/>
+                    <Border Style="{StaticResource StatusPill}" MinHeight="28" Padding="10,5">
+                        <TextBlock x:Name="VisibleCountText" Text="0 / 0"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   FontWeight="SemiBold" Foreground="{StaticResource LuxuryBrush}"/>
                     </Border>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0" Margin="12,10">
-            <DataGrid x:Name="IssueGrid" AutoGenerateColumns="False" IsReadOnly="True"
-                      CanUserAddRows="False" MouseDoubleClick="OnGridDoubleClick" BorderThickness="0">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Mức" Binding="{Binding Severity}" Width="90"/>
-                    <DataGridTextColumn Header="Mã" Binding="{Binding Code}" Width="150"/>
-                    <DataGridTextColumn Header="Cấu kiện" Binding="{Binding ElementId}" Width="165"/>
-                    <DataGridTextColumn Header="Nội dung" Binding="{Binding Message}" Width="*"/>
-                </DataGrid.Columns>
-            </DataGrid>
+        <Border Grid.Row="2" Style="{StaticResource PremiumCard}" Padding="0" Margin="12,10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Background="{StaticResource BgRaisedBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="0,0,0,1" Padding="10,7">
+                    <DockPanel>
+                        <TextBlock Text="DANH SÁCH VẤN ĐỀ" Style="{StaticResource GroupHeader}"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock DockPanel.Dock="Right" Text="DOUBLE-CLICK → CAD LOCATE"
+                                   Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                </Border>
+                <DataGrid x:Name="IssueGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                          CanUserAddRows="False" MouseDoubleClick="OnGridDoubleClick" BorderThickness="0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Mức" Binding="{Binding Severity}" Width="90"/>
+                        <DataGridTextColumn Header="Mã" Binding="{Binding Code}" Width="150"/>
+                        <DataGridTextColumn Header="Cấu kiện" Binding="{Binding ElementId}" Width="165"/>
+                        <DataGridTextColumn Header="Nội dung" Binding="{Binding Message}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
         </Border>
 
-        <Border Grid.Row="3" Background="{StaticResource Bg1Brush}" BorderThickness="0,1,0,0" Padding="11,7">
-            <DockPanel>
-                <Border Background="{StaticResource WarningBrush}" CornerRadius="5" Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+        <Border Grid.Row="3" Background="{StaticResource BgRaisedBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,1,0,0" Padding="11,7">
+            <DockPanel LastChildFill="True">
+                <Border Background="{StaticResource WarningBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <Border DockPanel.Dock="Right" Style="{StaticResource StatusPill}" Margin="12,0,0,0">
+                    <TextBlock Text="ISSUE → CAD LOCATE" Style="{StaticResource Caption}" FontWeight="SemiBold"/>
+                </Border>
                 <TextBlock Text="Lọc chỉ thay đổi danh sách đang xem. Nhấp đúp một lỗi hoặc dùng Định vị để chọn cấu kiện tương ứng trong DWG."
                            Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                <TextBlock DockPanel.Dock="Right" Text="READ-ONLY TRIAGE • ISSUE → CAD LOCATE" Style="{StaticResource Caption}" Margin="12,0,0,0"/>
             </DockPanel>
         </Border>
     </Grid>
