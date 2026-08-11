@@ -65,6 +65,7 @@ namespace QS3D.Core.Services
         public int RegenerateDirty(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ValidateProjectElements(project.Elements);
             return RegenerateTransactional(project, project.Elements, project.Elements.Count);
         }
 
@@ -95,6 +96,17 @@ namespace QS3D.Core.Services
             }
 
             return RegenerateTransactional(project, targets, targets.Count);
+        }
+
+        private static void ValidateProjectElements(IEnumerable<ProjectElement> elements)
+        {
+            var seenProjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in elements)
+            {
+                if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (!seenProjectIds.Add(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+            }
         }
 
         private static HashSet<string> CanonicalTargetIds(IEnumerable<string> elementIds)
