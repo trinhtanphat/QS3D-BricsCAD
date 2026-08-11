@@ -35,6 +35,30 @@ for path in BUILDERS:
         errors.append(path.name + " must mark every newly generated curtain-frame solid")
     if "GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(" not in text:
         errors.append(path.name + " must verify native ownership before destructive erase")
+    for token in (
+        "ValidatePrevious(",
+        "CadHandleService.NormalizeHexHandle(",
+        "ids.Count != expected.Count",
+        "OpenMode.ForRead",
+        "Refusing destructive replacement before any frame is erased.",
+        "Refusing partial destructive replacement:",
+    ):
+        if token not in text:
+            errors.append(path.name + " exact-set replacement guard missing token: " + token)
+
+    validate = text.find("var previous = ValidatePrevious(document, transaction, project, element, ownership);")
+    erase_previous = text.find("ErasePrevious(transaction, project, element, previous);")
+    mark = text.find("GeneratedCurtainFrameNativeOwnershipService.MarkGenerated(")
+    if validate < 0 or erase_previous < 0 or mark < 0 or not (validate < erase_previous < mark):
+        errors.append(path.name + " must validate the complete previous frame set before erase and replacement creation")
+
+    for fail_open in (
+        "if (ids.Count == 0) continue;",
+        "if (entity == null || entity.IsErased) continue;",
+    ):
+        if fail_open in text:
+            errors.append(path.name + " still silently skips missing generated frame handles: " + fail_open)
+
     erase = text.find("solid.Erase();")
     require = text.rfind("GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(", 0, erase if erase >= 0 else len(text))
     if erase >= 0 and require < 0:
@@ -80,4 +104,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: LINE/PATH curtain frames use dedicated project/element native ownership markers and dependent invalidation verifies native proof before destructive erase.")
+print("PASS: LINE/PATH curtain frames require complete live exact-set prevalidation plus dedicated project/element native ownership before destructive replacement/invalidation.")
