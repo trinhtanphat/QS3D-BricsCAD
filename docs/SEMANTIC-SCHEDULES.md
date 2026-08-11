@@ -49,6 +49,23 @@ Persistence is bounded:
 
 Saving identical normalized content does not touch the project change version again.
 
+## Model Health
+
+`SemanticScheduleHealthService` is a **read-only** Core diagnostic provider and is included in `ComprehensiveModelHealthService`.
+
+It reports bounded `SEMANTIC_SCHEDULE_*` issues for:
+
+- malformed/corrupt persisted schedule catalog data;
+- missing or ambiguous Floor/Level references;
+- missing or ambiguous Zone references;
+- missing or ambiguous include/exclude Element IDs;
+- invalid column templates, including blocked generated/native ownership properties;
+- diagnostic truncation if the bounded issue cap is reached.
+
+The provider builds case-insensitive identity-count indexes once, then checks schedule references without repeatedly scanning the whole project. It does not `Touch` the project, save/upsert/remove schedule definitions or rewrite metadata.
+
+A valid **zero-match** schedule is not a Model Health error. Zero selected rows remain a normal current-model result while stale explicit identities, invalid templates and corrupt catalog data are errors.
+
 ## Stale references
 
 Persisted definitions may outlive model edits. Rendering therefore fails closed when an explicitly referenced Floor/Zone or include/exclude Element no longer exists. The renderer does not silently retarget a schedule to another object with a similar name.

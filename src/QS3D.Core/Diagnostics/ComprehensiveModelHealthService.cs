@@ -31,6 +31,7 @@ namespace QS3D.Core.Diagnostics
 
             AddSafely(issues, seen, "ModelHealthService", () => new ModelHealthService().Inspect(project, liveSourceHandles, liveGeneratedSolidHandles));
             AddSafely(issues, seen, "RoomFinishHealthService", () => new RoomFinishHealthService().Inspect(project));
+            AddSafely(issues, seen, "SemanticScheduleHealthService", () => new SemanticScheduleHealthService().Inspect(project));
             AddSafely(issues, seen, "DependencyHealthService", () => new DependencyHealthService().Inspect(project));
             AddSafely(issues, seen, "LevelReferenceHealthService", () => new LevelReferenceHealthService().Inspect(project));
             AddSafely(issues, seen, "GridNamingHealthService", () => new GridNamingHealthService().Inspect(project));
