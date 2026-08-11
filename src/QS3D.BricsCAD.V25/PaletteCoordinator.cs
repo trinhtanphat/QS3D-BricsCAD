@@ -84,6 +84,17 @@ namespace QS3D.BricsCAD.V25
 
         public static void ResetForNoDocument()
         {
+            ResetPreservingVisibility();
+        }
+
+        public static void ResetForUnavailableProject(string status)
+        {
+            ResetPreservingVisibility();
+            SetStatus(status);
+        }
+
+        private static void ResetPreservingVisibility()
+        {
             if (_workspace == null && _right == null) return;
             var workspaceVisible = IsWorkspaceVisible;
             var rightVisible = IsRightPanelVisible;
