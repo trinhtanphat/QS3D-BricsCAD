@@ -16,7 +16,8 @@ namespace QS3D.Core.Rebar
     {
         public LinearRebarLayout(IReadOnlyList<double> offsetsM, double usableSpanM, double actualSpacingM)
         {
-            OffsetsM = offsetsM ?? throw new ArgumentNullException(nameof(offsetsM));
+            if (offsetsM == null) throw new ArgumentNullException(nameof(offsetsM));
+            OffsetsM = new List<double>(offsetsM).AsReadOnly();
             UsableSpanM = usableSpanM;
             ActualSpacingM = actualSpacingM;
         }
