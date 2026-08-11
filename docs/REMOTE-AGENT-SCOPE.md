@@ -14,6 +14,19 @@ Remote agents must not repeatedly re-audit, re-run, re-open or re-report these g
 
 The purpose of this rule is to stop remote reviews from spending time rediscovering the same environment boundary and to keep runtime truth tied to the machine that can actually prove it.
 
+## Owner mandatory no-repeat handoff rule
+
+This rule is mandatory for every non-local agent and applies to every future `continue all` pass:
+
+1. If the agent cannot complete or prove a task because it lacks the required local machine, licensed BricsCAD V25, private DWG, Windows interaction, signing secret, installed proprietary dependency, real GPU/driver state, or other machine-only condition, it must **stop retrying that environment-dependent step remotely**.
+2. In the **same batch**, the agent must add or update the exact task in `docs/LOCAL-AGENT-INBOX.md` with: why it is local-only, exact commands/scenario to execute, required evidence, current source SHA/baseline when relevant, and links to the source/runbook that the local agent needs.
+3. Once a LOCAL_ONLY task is recorded, other remote/non-local agents must treat that record as a skip marker. They may improve source/static guards around it, but they must not spend another pass rediscovering, re-running, or repeatedly reporting the same local gate unless current source materially changes the scenario.
+4. A remote agent must continue with every remaining source-safe task it can complete. `LOCAL_ONLY` is a handoff boundary, not permission to stop the rest of `continue all`.
+5. Only a local agent with the required environment may change the task to `PASS`, and only with sanitized evidence tied to the exact tested SHA. Remote/static evidence may only produce `REMOTE_DONE`, never `LOCAL_PASS`.
+6. Do not create parallel local task lists. `docs/LOCAL-AGENT-INBOX.md` remains the single live queue; other `LOCAL-*` Markdown files are supporting detail only.
+
+This owner rule is intentionally redundant with `AGENTS.md`: the duplication here is deliberate so hosted agents that enter through the remote-scope document cannot miss the handoff/no-repeat requirement.
+
 ## Current remote completion snapshot
 
 Before creating another broad remote backlog, read `docs/REMOTE-IMPLEMENTATION-COMPLETION-2026-08-11.md`. It is the newest repository-level classification of the current source-safe implementation wave and explains which remaining gaps are `LOCAL_ONLY`, `POLICY_REQUIRED`, `ENGINEERING_REQUIRED` or `FORMAT_SCOPE_REQUIRED`.
