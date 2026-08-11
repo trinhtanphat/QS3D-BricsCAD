@@ -15,7 +15,6 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var window = new ProjectToolsWindow(document);
-                DocumentBoundWindowLifetime.Attach(window, document);
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
                 PaletteCoordinator.SetStatus("Project Tools: tầng • vật liệu • template • module • health • khóa theo bản vẽ.");
             }
