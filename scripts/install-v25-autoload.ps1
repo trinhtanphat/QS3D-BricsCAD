@@ -118,6 +118,85 @@ function Assert-PackageIntegrity {
     return $commands
 }
 
+function Convert-ToStrictSemVerIdentity {
+    param([string]$Value, [string]$Label)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
+    $text = $Value.Trim()
+    $match = [regex]::Match(
+        $text,
+        '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $match.Success) { throw "$Label is not strict SemVer: $text" }
+
+    $components = @()
+    foreach ($index in 1..3) {
+        $parsed = 0
+        if (-not [int]::TryParse($match.Groups[$index].Value, [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
+            throw "$Label numeric component is outside the supported range: $text"
+        }
+        $components += $parsed
+    }
+
+    if ($match.Groups[4].Success) {
+        foreach ($identifier in $match.Groups[4].Value.Split('.')) {
+            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') {
+                throw "$Label has a numeric prerelease identifier with a leading zero: $text"
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Text = $text
+        Major = [int]$components[0]
+        Minor = [int]$components[1]
+        Patch = [int]$components[2]
+    }
+}
+
+function Assert-PackageIdentity {
+    param([string]$Directory)
+
+    $metadataPath = Join-Path $Directory 'PACKAGE-METADATA.json'
+    if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Missing package metadata: $metadataPath" }
+    try { $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json }
+    catch { throw "PACKAGE-METADATA.json is unreadable: $($_.Exception.Message)" }
+
+    if ([string]$metadata.product -ne 'QS3D') { throw 'PACKAGE-METADATA product must be QS3D.' }
+    if ([string]$metadata.target -ne 'BricsCAD V25 x64') { throw 'PACKAGE-METADATA target must be BricsCAD V25 x64.' }
+    if (-not $metadata.PSObject.Properties['version']) { throw 'PACKAGE-METADATA is missing version.' }
+    if (-not $metadata.PSObject.Properties['productVersion']) { throw 'PACKAGE-METADATA is missing productVersion.' }
+
+    try { $metadataAssemblyVersion = [Version]::Parse([string]$metadata.version) }
+    catch { throw "PACKAGE-METADATA version is invalid: $($metadata.version)" }
+    $metadataProductVersion = Convert-ToStrictSemVerIdentity -Value ([string]$metadata.productVersion) -Label 'PACKAGE-METADATA productVersion'
+
+    if ($metadataAssemblyVersion.Major -ne $metadataProductVersion.Major -or
+        $metadataAssemblyVersion.Minor -ne $metadataProductVersion.Minor -or
+        $metadataAssemblyVersion.Build -ne $metadataProductVersion.Patch) {
+        throw "PACKAGE-METADATA assembly version $metadataAssemblyVersion does not match productVersion core $($metadataProductVersion.Major).$($metadataProductVersion.Minor).$($metadataProductVersion.Patch)."
+    }
+
+    foreach ($name in @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')) {
+        $path = Join-Path $Directory $name
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Package identity payload is missing: $name" }
+
+        try { $assemblyVersion = [Reflection.AssemblyName]::GetAssemblyName($path).Version }
+        catch { throw "$name assembly version is unreadable: $($_.Exception.Message)" }
+        if (-not $assemblyVersion) { throw "$name assembly version is missing." }
+        if ($assemblyVersion -ne $metadataAssemblyVersion) {
+            throw "$name assembly version $assemblyVersion does not match PACKAGE-METADATA version $metadataAssemblyVersion."
+        }
+
+        try { $productVersionText = [string][Diagnostics.FileVersionInfo]::GetVersionInfo($path).ProductVersion }
+        catch { throw "$name product version is unreadable: $($_.Exception.Message)" }
+        $dllProductVersion = Convert-ToStrictSemVerIdentity -Value $productVersionText -Label ("$name product version")
+        if (-not [string]::Equals($dllProductVersion.Text, $metadataProductVersion.Text, [StringComparison]::Ordinal)) {
+            throw "$name product version $($dllProductVersion.Text) does not match PACKAGE-METADATA productVersion $($metadataProductVersion.Text)."
+        }
+    }
+}
+
 function Get-RegistryValueSnapshot {
     param([string]$Path, [string]$Name)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -301,6 +380,7 @@ if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
 
 $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
 $commands = Assert-PackageIntegrity -Directory $package -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
+Assert-PackageIdentity -Directory $package
 $targets = @(Get-RegistryTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)
 
 foreach ($target in $targets) {
