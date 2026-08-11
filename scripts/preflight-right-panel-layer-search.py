@@ -5,6 +5,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs"
+VIEWMODEL = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/RightPanelViewModel.cs"
 SHORTCUTS = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.SearchShortcuts.cs"
 XAML = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml"
 errors = []
@@ -24,6 +25,7 @@ else:
         "CollectionViewSource.GetDefaultView(_viewModel.Layers)",
         ".Take(MaxLayerSearchTokens)",
         "new Predicate<object>(item => item is LayerItemViewModel layer && tokens.All(token => MatchesLayerToken(layer, token)))",
+        "_viewModel.SetLayerCounts(view.Cast<object>().Count(), _viewModel.Layers.Count);",
         "private void RestoreLayerSelection(IEnumerable<string> names)",
         "foreach (var item in LayerList.Items.Cast<LayerItemViewModel>())",
         "private static bool MatchesLayerToken(LayerItemViewModel layer, string token)",
@@ -69,9 +71,9 @@ else:
         for forbidden in ("DrawingCatalogReader.ReadLayers", "_viewModel.Layers.Clear", "new SolidColorBrush", "LayerVisibilityService"):
             if forbidden in body:
                 errors.append("ApplyLayerFilter must remain allocation-light/presentation-only: " + forbidden)
-        for token in ("view.Filter =", "view.Refresh();"):
+        for token in ("view.Filter =", "view.Refresh();", "_viewModel.SetLayerCounts"):
             if token not in body:
-                errors.append("ApplyLayerFilter must operate through the WPF collection view: " + token)
+                errors.append("ApplyLayerFilter must operate through the WPF collection view and update result counts: " + token)
 
     reload_method = re.search(
         r"private void ReloadLayers\(\)\s*\{(?P<body>.*?)\n        \}\n\n        private void ApplyLayerFilter",
@@ -87,12 +89,35 @@ else:
         if "RestoreLayerSelection(selectedNames);" not in body:
             errors.append("real layer refresh must restore visible user selection by stable layer name")
 
+if not VIEWMODEL.is_file():
+    errors.append("missing RightPanelViewModel.cs")
+else:
+    text = VIEWMODEL.read_text(encoding="utf-8")
+    for token in (
+        "private int _visibleLayerCount;",
+        "private int _totalLayerCount;",
+        "public string LayerCountText => _visibleLayerCount == _totalLayerCount",
+        '" lớp"',
+        "public void SetLayerCounts(int visible, int total)",
+        "visible = Math.Max(0, Math.Min(visible, total));",
+        "OnChanged(nameof(LayerCountText));",
+    ):
+        if token not in text:
+            errors.append("RightPanel filtered/total layer count VM contract missing: " + token)
+
 if not XAML.is_file():
     errors.append("missing RightPanel.xaml")
 else:
     text = XAML.read_text(encoding="utf-8")
-    if 'PreviewKeyDown="OnRightPanelPreviewKeyDown"' not in text:
-        errors.append("RightPanel XAML must own the single PreviewKeyDown route for keyboard shortcuts")
+    for token in (
+        'PreviewKeyDown="OnRightPanelPreviewKeyDown"',
+        'Text="{Binding LayerCountText}"',
+        'ToolTip="Số lớp đang hiển thị / tổng số lớp"',
+    ):
+        if token not in text:
+            errors.append("RightPanel layer count/keyboard XAML contract missing: " + token)
+    if 'Text="{Binding Layers.Count, StringFormat={}{0} lớp}"' in text:
+        errors.append("RightPanel layer badge must show filtered/total count rather than only the backing collection count")
 
 if not SHORTCUTS.is_file():
     errors.append("missing RightPanel.SearchShortcuts.cs")
@@ -133,4 +158,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: layer rows/brushes are rebuilt only on real CAD refresh, search keystrokes filter the existing WPF view without reopening CAD or rebuilding rows, visible selection is restored by layer name, and Ctrl+F/F5/Escape use one XAML key route.")
+print("PASS: layer rows/brushes rebuild only on real CAD refresh, search keystrokes filter the existing WPF view without row churn, the badge shows filtered/total results, visible selection restores by stable layer name, and Ctrl+F/F5/Escape use one XAML key route.")
