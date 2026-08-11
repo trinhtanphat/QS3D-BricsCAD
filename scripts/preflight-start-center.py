@@ -137,6 +137,17 @@ def main():
     require(state, "ex is System.Security.SecurityException", "DWG/path security fail-soft guard")
     require(state, "catch (System.Security.SecurityException) { }", "local-state security fail-soft handling")
     forbid(state, 'throw new InvalidOperationException("LocalApplicationData is unavailable.")', "optional local-state path resolution")
+    state_load = section(
+        state,
+        "private static StartCenterUserStateSnapshot LoadCore()",
+        "private static StartCenterUserStateSnapshot Normalize",
+        "bounded local-state load")
+    require(state_load, "File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read)", "single opened state stream")
+    require(state_load, "if (stream.Length < 0 || stream.Length > MaxFileBytes) return state;", "opened-stream state size guard")
+    require(state_load, "new StreamReader(stream, Encoding.UTF8, true, 4096, false)", "streaming state reader")
+    require(state_load, "while ((raw = reader.ReadLine()) != null)", "line-by-line state parsing")
+    forbid(state_load, "new FileInfo(", "path-level state size precheck")
+    forbid(state_load, "File.ReadAllLines", "whole-file state materialization")
     forbid(state, "Process.Start", "Start Center state store")
 
     require(catalog, "StringSplitOptions.RemoveEmptyEntries", "multi-token launcher search")
@@ -170,7 +181,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, optional-state-fail-soft, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, optional-state-fail-soft, stream-size-bounded, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
