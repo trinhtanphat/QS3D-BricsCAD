@@ -150,6 +150,10 @@ namespace QS3D.BricsCAD.V25
                     var sourceType = NativeBuildCapability.IsWallCategory(category)
                         ? sourceSnapshots.Select(x => x.EntityType).Distinct(StringComparer.OrdinalIgnoreCase).Single()
                         : string.Empty;
+
+                    // Native builders consume SelectImplied(). Handoff the already-validated live source IDs
+                    // only at dispatch time so every preflight/regeneration failure leaves PICKFIRST untouched.
+                    document.Editor.SetImpliedSelection(sourceIds.ToArray());
                     built = BuildCategory(document, project, category, sourceType);
                     if (built <= 0)
                         throw new InvalidOperationException("Không tạo được solid từ source đang chọn. Tường KT cần LINE hoặc open POLYLINE; các cấu kiện khác phải đúng source profile được builder hỗ trợ.");
