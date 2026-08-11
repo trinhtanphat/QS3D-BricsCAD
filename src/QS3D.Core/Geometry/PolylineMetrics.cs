@@ -8,7 +8,11 @@ namespace QS3D.Core.Geometry
         public static double Length(IReadOnlyList<Point2> points, bool closed)
         {
             if (points == null) throw new ArgumentNullException(nameof(points));
-            if (points.Count < 2) return 0d;
+            if (points.Count < 2)
+            {
+                EnsureFinite(points);
+                return 0d;
+            }
 
             double total = 0d;
             for (var i = 1; i < points.Count; i++) total = AddFinite(total, points[i - 1].DistanceTo(points[i]));
@@ -19,7 +23,11 @@ namespace QS3D.Core.Geometry
         public static double SignedArea(IReadOnlyList<Point2> points)
         {
             if (points == null) throw new ArgumentNullException(nameof(points));
-            if (points.Count < 3) return 0d;
+            if (points.Count < 3)
+            {
+                EnsureFinite(points);
+                return 0d;
+            }
 
             var origin = points[0];
             EnsureFinite(origin);
@@ -49,6 +57,11 @@ namespace QS3D.Core.Geometry
         }
 
         public static double Area(IReadOnlyList<Point2> points) => Math.Abs(SignedArea(points));
+
+        private static void EnsureFinite(IReadOnlyList<Point2> points)
+        {
+            for (var i = 0; i < points.Count; i++) EnsureFinite(points[i]);
+        }
 
         private static void EnsureFinite(Point2 point)
         {
