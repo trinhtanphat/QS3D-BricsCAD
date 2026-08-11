@@ -48,7 +48,7 @@ namespace QS3D.Core.Geometry
             if (!FinitePositive(tolerance)) throw new ArgumentOutOfRangeException(nameof(tolerance));
             if (!FiniteNonNegative(minimumArea)) throw new ArgumentOutOfRangeException(nameof(minimumArea));
 
-            var segments = source.ToList();
+            var segments = source.Take(MaxInputSegments + 1).ToList();
             if (segments.Count > MaxInputSegments) throw new InvalidOperationException("Room boundary input exceeds the supported segment limit.");
             foreach (var segment in segments) ValidateSegment(segment, tolerance);
             if (segments.Count < 3) return Array.Empty<RoomBoundary>();
