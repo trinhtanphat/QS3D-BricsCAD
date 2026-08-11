@@ -146,8 +146,9 @@ namespace QS3D.BricsCAD.V25
 
                 var status = "ED2 " + scope + ": " + details.Count + " CHI_TIET • " + summary.Count +
                              " TONG_HOP • regenerate " + regenerated + " • " + dialog.FileName;
-                PaletteCoordinator.SetStatus(status);
-                doc.Editor.WriteMessage("\nQS3D " + status +
+                FinalizeExportUi(
+                    doc,
+                    status,
                     "\nDùng QS3DEXCELLOCATE với số dòng trong sheet CHI_TIET để định vị ngược theo Handle.");
             });
         }
@@ -174,7 +175,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 XlsxRebarScheduleExporter.Export(dialog.FileName, rows);
                 var status = "BBS: " + rows.Count + " bar mark • " + totalWeight.ToString("0.###") + " kg • " + dialog.FileName;
-                PaletteCoordinator.SetStatus(status); doc.Editor.WriteMessage("\nQS3D " + status);
+                FinalizeExportUi(doc, status);
             });
         }
 
@@ -512,6 +513,20 @@ namespace QS3D.BricsCAD.V25
                 "ED2 export blocked: " + missing.Count + " source Handle(s) are stale or missing" +
                 (sample.Length == 0 ? "." : " (" + sample + ").") +
                 " Run QS3DSYNCSOURCE or recapture before export.");
+        }
+
+        private static void FinalizeExportUi(Document document, string status, string extra = "")
+        {
+            try
+            {
+                PaletteCoordinator.SetStatus(status);
+                document.Editor.WriteMessage("\nQS3D " + status + extra);
+            }
+            catch (System.Exception uiError)
+            {
+                try { document.Editor.WriteMessage("\n[QS3D] Export đã hoàn tất; cảnh báo UI: " + uiError.Message); }
+                catch { }
+            }
         }
 
         private static void Capture(ElementCategory category, string label)
