@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             ExportRejectsMissingRegisteredReference();
             ExportRejectsNullSemanticCollections();
+            ExportRejectsDuplicateSemanticIdentities();
             ValidatorRejectsNullSemanticElementBeforeOrdering();
             ValidatorAndTypedReaderRejectMissingRegisteredReference();
             ValidatorAndTypedReaderRejectInvalidLevelChain();
@@ -43,6 +44,28 @@ namespace QS3D.Core.SmokeTests
             var familyProject = BaseProject("P-NULL-FAMILY");
             familyProject.Families.Add(null!);
             Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(familyProject));
+        }
+
+        private static void ExportRejectsDuplicateSemanticIdentities()
+        {
+            var zoneProject = BaseProject("P-DUP-ZONE");
+            zoneProject.Zones.Add(new ZoneDefinition("ZONE-1", "Zone 1"));
+            zoneProject.Zones.Add(new ZoneDefinition("zone-1", "Zone 1 duplicate"));
+            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(zoneProject));
+
+            var floorProject = BaseProject("P-DUP-FLOOR");
+            floorProject.Floors.Add(new FloorDefinition("a", "A duplicate", 4d));
+            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(floorProject));
+
+            var familyProject = BaseProject("P-DUP-FAMILY");
+            familyProject.Families.Add(new ProjectFamily("F-1", "Family 1", ElementCategory.Column));
+            familyProject.Families.Add(new ProjectFamily("f-1", "Family 1 duplicate", ElementCategory.Column));
+            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(familyProject));
+
+            var elementProject = BaseProject("P-DUP-ELEMENT");
+            elementProject.Elements.Add(new ProjectElement("E-1", ElementCategory.Column, string.Empty, "A", string.Empty));
+            elementProject.Elements.Add(new ProjectElement("e-1", ElementCategory.Column, string.Empty, "A", string.Empty));
+            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(elementProject));
         }
 
         private static void ValidatorRejectsNullSemanticElementBeforeOrdering()
