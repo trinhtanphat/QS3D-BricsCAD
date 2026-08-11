@@ -29,11 +29,15 @@ require(lifecycle, "private static void OnDocumentDestroyed(object sender, Docum
 require(lifecycle, "if (docs.Count == 0)", "last-document guard")
 require(lifecycle, "PaletteCoordinator.ResetForNoDocument();", "last-document palette reset")
 require(lifecycle, "EnsureProject(active, true);", "remaining-document rebind")
-require(palette, "public static void ResetForNoDocument()", "palette reset API")
+require(lifecycle, "PaletteCoordinator.ResetForUnavailableProject(message);", "project-load failure palette reset")
+require(palette, "public static void ResetForNoDocument()", "no-document palette reset API")
+require(palette, "public static void ResetForUnavailableProject(string status)", "unavailable-project reset API")
+require(palette, "private static void ResetPreservingVisibility()", "shared palette reset implementation")
 require(palette, "var workspaceVisible = IsWorkspaceVisible;", "workspace visibility preservation")
 require(palette, "var rightVisible = IsRightPanelVisible;", "right visibility preservation")
 require(palette, "Dispose();", "stale palette teardown")
 require(palette, "EnsureCreated();", "empty palette recreation")
+require(palette, "SetStatus(status);", "project-load failure status restoration")
 
 if errors:
     for error in errors:
@@ -41,4 +45,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: destroyed documents cannot leave stale workspace callbacks; remaining drawings rebind and the no-document palette preserves visibility.")
+print("PASS: destroyed or unavailable projects cannot leave stale palette callbacks; visibility is preserved and remaining drawings rebind.")
