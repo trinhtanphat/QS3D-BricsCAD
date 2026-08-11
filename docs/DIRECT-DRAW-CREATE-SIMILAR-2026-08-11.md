@@ -13,6 +13,8 @@ QS3DCREATESIMILARADV   = select one QS3D sample -> activate its current Family -
 
 The feature does not clone semantic objects and does not introduce another authoring engine. It only resolves the selected object's existing semantic owner and Family/Type, activates that Family through the canonical project mutation contract, then delegates to `QS3DDRAWACTIVE` / `QS3DDRAWACTIVEADV`.
 
+The existing **TẠO MỚI** Quick Workflow Ribbon also exposes one stable primary **Vẽ Tương Tự** button mapped to `QS3DCREATESIMILAR`. The Advanced variant remains command-driven so the Ribbon does not duplicate every Quick/Advanced pair.
+
 ## Accepted sample ownership
 
 One selected CAD object is accepted only when it resolves to exactly one semantic owner through an existing ownership path:
@@ -92,6 +94,7 @@ Local proof must include at least:
 7. active-DWG switch is rejected without cross-document Family mutation;
 8. Quick and Advanced cancellation preserve the existing target-command no-residue contract; intentional Active Family selection may remain;
 9. Window-vs-WallOpening routing remains determined by the existing Active Family dispatcher;
-10. save/reopen and document switching do not cause the sampled Family from one DWG to drive authoring in another DWG.
+10. the Ribbon contains exactly one **Vẽ Tương Tự** action with stable ID `QS3D_AUTHOR_CREATE_SIMILAR`, repeated Ribbon initialization remains idempotent, and the button always targets the active DWG;
+11. save/reopen and document switching do not cause the sampled Family from one DWG to drive authoring in another DWG.
 
 GitHub Actions remain manual-only under `CI_POLICY.md`; this source/docs lane does not authorize workflow dispatch.
