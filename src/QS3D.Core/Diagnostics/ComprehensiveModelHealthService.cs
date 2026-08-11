@@ -27,10 +27,12 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
 
+            var normalizedLiveSourceHandles = NormalizeHandleSet(liveSourceHandles);
+            var normalizedLiveGeneratedSolidHandles = NormalizeHandleSet(liveGeneratedSolidHandles);
             var issues = new List<ModelHealthIssue>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
 
-            AddSafely(issues, seen, "ModelHealthService", () => new ModelHealthService().Inspect(project, liveSourceHandles, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "ModelHealthService", () => new ModelHealthService().Inspect(project, normalizedLiveSourceHandles, normalizedLiveGeneratedSolidHandles));
             AddSafely(issues, seen, "RoomFinishHealthService", () => new RoomFinishHealthService().Inspect(project));
             AddSafely(issues, seen, "SemanticScheduleHealthService", () => new SemanticScheduleHealthService().Inspect(project));
             AddSafely(issues, seen, "DependencyHealthService", () => new DependencyHealthService().Inspect(project));
@@ -43,14 +45,14 @@ namespace QS3D.Core.Diagnostics
             AddSafely(issues, seen, "GeneratedGeometryStaleHealthService", () => new GeneratedGeometryStaleHealthService().Inspect(project));
             AddSafely(issues, seen, "GeneratedRebarModeHealthService", () => new GeneratedRebarModeHealthService().Inspect(project));
             AddSafely(issues, seen, "RebarFabricationQualificationHealthService", () => new RebarFabricationQualificationHealthService().Inspect(project));
-            AddSafely(issues, seen, "GeneratedRebarHealthService", () => new GeneratedRebarHealthService().InspectAll(project, liveGeneratedSolidHandles, liveGeneratedSolidHandles));
-            AddSafely(issues, seen, "GeneratedTieRebarHealthService", () => new GeneratedTieRebarHealthService().Inspect(project, liveGeneratedSolidHandles));
-            AddSafely(issues, seen, "GeneratedBeamStirrupHealthService", () => new GeneratedBeamStirrupHealthService().Inspect(project, liveGeneratedSolidHandles));
-            AddSafely(issues, seen, "GeneratedSlabMeshHealthService", () => new GeneratedSlabMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
-            AddSafely(issues, seen, "GeneratedWallMeshHealthService", () => new GeneratedWallMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
-            AddSafely(issues, seen, "GeneratedFoundationMeshHealthService", () => new GeneratedFoundationMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
-            AddSafely(issues, seen, "GeneratedCurtainFrameHealthService", () => new GeneratedCurtainFrameHealthService().Inspect(project, liveGeneratedSolidHandles));
-            AddSafely(issues, seen, "GeneratedCurtainPanelHealthService", () => new GeneratedCurtainPanelHealthService().Inspect(project, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedRebarHealthService", () => new GeneratedRebarHealthService().InspectAll(project, normalizedLiveGeneratedSolidHandles, normalizedLiveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedTieRebarHealthService", () => new GeneratedTieRebarHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedBeamStirrupHealthService", () => new GeneratedBeamStirrupHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedSlabMeshHealthService", () => new GeneratedSlabMeshHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedWallMeshHealthService", () => new GeneratedWallMeshHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedFoundationMeshHealthService", () => new GeneratedFoundationMeshHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedCurtainFrameHealthService", () => new GeneratedCurtainFrameHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedCurtainPanelHealthService", () => new GeneratedCurtainPanelHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles));
 
             return issues.AsReadOnly();
         }
@@ -64,6 +66,18 @@ namespace QS3D.Core.Diagnostics
             foreach (var token in GeneratedOutputCodeTokens)
                 if (code.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0) return true;
             return false;
+        }
+
+        private static ISet<string>? NormalizeHandleSet(ISet<string>? handles)
+        {
+            if (handles == null) return null;
+            var normalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in handles)
+            {
+                var handle = (raw ?? string.Empty).Trim();
+                if (handle.Length > 0) normalized.Add(handle);
+            }
+            return normalized;
         }
 
         private static void AddSafely(
