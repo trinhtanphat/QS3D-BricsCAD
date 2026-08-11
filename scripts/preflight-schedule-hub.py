@@ -27,7 +27,7 @@ checks = {
         'Text="SAME VALIDATION AS EXPORT"',
     ],
     required[1]: [
-        "private readonly Document _document", "ScheduleHubWindow(Document document)", "ProjectContextCoordinator.GetOrCreate(_document)",
+        "private readonly Document _document", "ScheduleHubWindow(Document document)", "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
         "RegenerationEngine", "DependencyGraph", "RegeneratorCatalog.CreateDefault()",
         "ProjectQuantityReportBuilder.Group(project)", "RoomFinishScheduleBuilder.Build(project)",
         "DoorOpeningScheduleBuilder.Build(project)", "CurtainWallScheduleBuilder.Build(project)",

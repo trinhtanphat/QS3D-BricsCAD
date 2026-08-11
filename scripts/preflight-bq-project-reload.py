@@ -22,7 +22,7 @@ else:
 
     required = (
         "using QS3D.Core.Persistence;",
-        "var project = ProjectContextCoordinator.GetOrCreate(_document);",
+        "if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))",
         "ProjectStateSnapshot.Capture(project)",
         "project.Metadata[TemplateProfileStore.VisibleBqColumnsKey] = string.Join(\"|\", visible);",
         "rollback.Restore(project);",
@@ -36,7 +36,7 @@ else:
     persist_pos = text.find("private void PersistColumnPreferences()")
     next_pos = text.find("private IEnumerable<CheckBox>", persist_pos)
     body = text[persist_pos:next_pos] if persist_pos >= 0 and next_pos > persist_pos else ""
-    resolve_pos = body.find("ProjectContextCoordinator.GetOrCreate(_document)")
+    resolve_pos = body.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)")
     snapshot_pos = body.find("ProjectStateSnapshot.Capture(project)")
     metadata_pos = body.find("project.Metadata[TemplateProfileStore.VisibleBqColumnsKey]")
     touch_pos = body.find("project.Touch();")

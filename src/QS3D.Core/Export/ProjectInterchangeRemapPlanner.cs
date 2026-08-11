@@ -142,7 +142,7 @@ namespace QS3D.Core.Export
                     if (ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference))
                     {
                         if (string.IsNullOrWhiteSpace(property.Value)) continue;
-                        var sourceReference = property.Value.Trim();
+                        var sourceReference = (property.Value ?? string.Empty).Trim();
                         var referenceMap = MapFor(reference.Kind, zoneMap, floorMap, familyMap, elementMap);
                         if (!referenceMap.ContainsKey(sourceReference))
                         {

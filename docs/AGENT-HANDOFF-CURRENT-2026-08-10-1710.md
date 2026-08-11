@@ -190,10 +190,7 @@ Fabrication-grade standards remain evidence/provenance only until an explicit go
 
 Individual GlassWall host and Curtain LINE/path frame replacement families have guarded internal transaction/project rollback contracts.
 
-`QS3DCURTAIN3D` still orchestrates multiple independent native phases. Keep the `Curtain 3D PARTIAL COMMIT` truthfulness boundary until either:
-
-- one shared native transaction orchestration exists; or
-- an ownership-safe persisted compensation/recovery journal exists and is proven on real V25.
+Superseding source note: `QS3DCURTAIN3D` now uses one outer native transaction around the canonical nested host/frame builders plus a command-level semantic snapshot. The old `Curtain 3D PARTIAL COMMIT` source boundary is retired; exact-SHA real-V25 phase-failure proof remains open.
 
 Panel-by-panel backing glass and broader unsupported/freeform native path parity also remain separate native architecture/runtime gates. See the local addendum.
 

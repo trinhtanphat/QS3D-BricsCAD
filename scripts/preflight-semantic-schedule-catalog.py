@@ -22,6 +22,7 @@ table = read(TABLE)
 test = read(TEST)
 doc = read(DOC)
 
+doc_boundary = doc.replace("**", "")
 for token in (
     'MetadataKey = "QS3D.Documentation.SemanticSchedules.v1"',
     "SemanticScheduleDefinition",
@@ -81,7 +82,7 @@ for token in (
     "portable interchange",
     "native BricsCAD Table",
 ):
-    if token not in doc:
+    if token not in doc_boundary:
         errors.append("semantic schedule documentation missing boundary token: " + token)
 
 if "Semantic schedule selects no elements" in source:

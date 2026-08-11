@@ -12,7 +12,7 @@ else:
     text = WINDOW.read_text(encoding="utf-8")
     required = (
         "private IReadOnlyList<RoomFinishScheduleRow> BuildCurrentRows(out int regenerated)",
-        "ProjectContextCoordinator.GetOrCreate(_document)",
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
         "RegenerateDirty(project)",
         "RoomFinishScheduleBuilder.Build(project)",
         "var current = BuildCurrentRows(out var regenerated);",

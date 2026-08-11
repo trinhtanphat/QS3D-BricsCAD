@@ -61,7 +61,7 @@ for forbidden in (
 
 for token in (
     "LocateCurrentElement(doc, row.ElementId, \"Revision Locate\")",
-    "var currentProject = ProjectContextCoordinator.GetOrCreate(document);",
+    "if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject))",
     "var element = currentProject.FindElement(elementId)",
     "SourceHandleResolver.Resolve(currentProject, new[] { element.Id })",
 ):

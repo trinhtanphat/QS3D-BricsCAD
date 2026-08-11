@@ -54,7 +54,11 @@ for label, path, build, aggregate, export, finalize in CASES:
 
     text = path.read_text(encoding="utf-8")
     dialog = "if (dialog.ShowDialog() != true) return;"
-    project = "ProjectContextCoordinator.GetOrCreate(document)"
+    project = (
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)"
+        if label in ("Door/Opening", "Material", "Room finish")
+        else "ProjectContextCoordinator.GetOrCreate(document)"
+    )
     regenerate = "RegenerateDirty(project)"
     positions = {
         dialog: text.find(dialog),
