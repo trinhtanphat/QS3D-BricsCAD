@@ -14,6 +14,13 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
+                if (selectedIds.Length == 0)
+                {
+                    Report(document, "Foundation Rebar 3D: chọn Foundation semantic có closed straight plan-view POLYLINE + RebarFoundationXNotation/RebarFoundationYNotation. Rectangle giữ local X/Y; polygon dùng drawing X/Y.");
+                    return;
+                }
+
                 var project = ExistingProjectMutationContext.Require(document, "Foundation Rebar 3D");
                 var result = FoundationMeshSolidBuilder.BuildSelected(document, project);
                 var message = result.Bars == 0

@@ -103,7 +103,7 @@ jobs:
       - name: Deterministic Core smoke tests
         run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
 
-      - name: Acquire official BricsCAD V25 compile references
+      - name: Acquire BricsCAD V25 compile references
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -113,10 +113,14 @@ jobs:
           Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path $extract -Force | Out-Null
 
-          $candidates = @(
-            [pscustomobject]@{ Name = 'pinned-user-mirror'; Url = $env:BRICSCAD_V25_MIRROR_MSI_URL },
-            [pscustomobject]@{ Name = 'pinned-public'; Url = $env:BRICSCAD_V25_PUBLIC_MSI_URL }
-          )
+          $candidates = @()
+          if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256)) {
+            $candidates += [pscustomobject]@{ Name = 'pinned-user-mirror'; Url = $env:BRICSCAD_V25_MIRROR_MSI_URL }
+          }
+          else {
+            Write-Warning 'Skipping pinned HTTP mirror because BRICSCAD_V25_MSI_SHA256 is not configured.'
+          }
+          $candidates += [pscustomobject]@{ Name = 'pinned-public'; Url = $env:BRICSCAD_V25_PUBLIC_MSI_URL }
           if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_URL)) {
             $candidates += [pscustomobject]@{ Name = 'signed-secret-fallback'; Url = $env:BRICSCAD_V25_MSI_URL }
           }
@@ -136,7 +140,7 @@ jobs:
             }
           }
           if ([string]::IsNullOrWhiteSpace($downloadedFrom)) {
-            throw 'Unable to download the pinned BricsCAD V25.2.10 x64 installer from the approved mirror, pinned official source, or configured signed fallback.'
+            throw 'Unable to download the pinned BricsCAD V25.2.10 x64 installer from the hash-gated approved mirror, pinned official HTTPS source, or configured signed HTTPS fallback.'
           }
 
           $actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
@@ -179,7 +183,7 @@ jobs:
           $brx = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'BrxMgd.dll')
           $td = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'TD_Mgd.dll')
           if ($brx.Count -lt 1 -or $td.Count -lt 1) {
-            throw 'Could not locate BrxMgd.dll and TD_Mgd.dll in the extracted official V25 installer.'
+            throw 'Could not locate BrxMgd.dll and TD_Mgd.dll in the extracted V25 installer.'
           }
 
           $candidateDirs = @($brx | ForEach-Object { $_.Directory.FullName } | Sort-Object -Unique)
@@ -197,7 +201,7 @@ jobs:
       - name: Validate BricsCAD V25 compile references
         shell: powershell
         run: |
-          if (-not $env:BRICSCAD_V25_DIR) { throw 'BRICSCAD_V25_DIR was not resolved from the official installer.' }
+          if (-not $env:BRICSCAD_V25_DIR) { throw 'BRICSCAD_V25_DIR was not resolved from the pinned installer.' }
           foreach ($name in @('BrxMgd.dll', 'TD_Mgd.dll')) {
             if (-not (Test-Path -LiteralPath (Join-Path $env:BRICSCAD_V25_DIR $name) -PathType Leaf)) {
               throw "Required BricsCAD V25 compile reference is missing: $name"
@@ -263,7 +267,7 @@ jobs:
             tag_name = $env:RELEASE_TAG
             target_commitish = $env:GITHUB_SHA
             name = "QS3D for BricsCAD V25 $env:RELEASE_TAG"
-            body = 'Owner-approved GitHub-hosted preview build. Source guards, Core build/smoke tests and the V25 adapter compile completed on windows-latest against managed references extracted from the pinned official BricsCAD V25.2.10 x64 installer. The installer Authenticode signature and MSI ProductVersion were verified before extraction; an optional configured SHA-256 pin is also enforced when present. Real BricsCAD NETLOAD/runtime validation was not executed in this cloud workflow. Package is an unsigned prerelease preview and intentionally excludes BricsCAD runtime assemblies.'
+            body = 'Owner-approved GitHub-hosted preview build. Source guards, Core build/smoke tests and the V25 adapter compile completed on windows-latest against managed references extracted from the pinned BricsCAD V25.2.10 x64 installer. The approved plain-HTTP mirror is considered only when a configured SHA-256 pin is present; the pinned official HTTPS object and same-object signed HTTPS fallback remain available without that mirror. The downloaded installer digest is logged, any configured digest is enforced, and Authenticode plus MSI ProductVersion identity are verified before extraction. Real BricsCAD NETLOAD/runtime validation was not executed in this cloud workflow. Package is an unsigned prerelease preview and intentionally excludes BricsCAD runtime assemblies.'
             draft = $true
             prerelease = $true
             generate_release_notes = $true
