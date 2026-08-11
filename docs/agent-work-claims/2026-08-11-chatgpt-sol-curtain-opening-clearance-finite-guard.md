@@ -1,0 +1,24 @@
+# Agent Work Claim
+
+- Status: ACTIVE
+- Agent: chatgpt-gpt56sol-curtain-clearance-20260811-2135
+- Timestamp: 2026-08-11T21:35:00+07:00
+- Baseline `main` SHA: `1bd4d39a7c275450cfc459bfade5d74d3081661a`
+- Priority: P1 deterministic correctness / fail-closed geometry
+- Exact scope: Harden `CurtainWallOpeningFramePlanner` against non-finite geometry produced when finite `clearanceM` overflows expanded-opening arithmetic; add regression coverage. Touch the panel planner only if directly required for propagation/regression.
+- Expected surfaces:
+  - `src/QS3D.Core/Geometry/CurtainWallOpeningFramePlanner.cs`
+  - `tests/QS3D.Core.SmokeTests/Program.cs`
+- Excluded scope:
+  - BricsCAD/native/runtime/UI behavior
+  - curtain-wall layout semantics unrelated to opening-clearance overflow
+  - persistence/session atomicity
+  - GitHub Actions
+- Validation:
+  - deterministic source-level regression coverage and static inspection
+  - no local `dotnet` or BricsCAD runtime is available in this environment
+- Coordination:
+  - checked the current claim registry immediately before registration; no Curtain scope was reserved
+  - known ACTIVE core mutation atomicity work is outside this lane
+  - re-check latest `main` and target blobs immediately before the implementation commit
+- Completion condition: Overflowed expanded-opening geometry fails closed with regression coverage; implementation is committed/pushed on the latest compatible `main`; this claim is then marked COMPLETED.

@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             SignedLicenseVerifies();
             TamperedLicenseFailsSignature();
             ProductAndTimeWindowsAreEnforced();
+            FeatureDelimiterIsRejected();
             DtdLicenseIsRejected();
         }
 
@@ -54,6 +55,13 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void FeatureDelimiterIsRejected()
+        {
+            var license = License();
+            license.Features.Add("admin,review");
+            Throws<InvalidDataException>(() => license.CanonicalPayload());
+        }
+
         private static void DtdLicenseIsRejected()
         {
             var directory = Path.Combine(Path.GetTempPath(), "qs3d-license-" + Guid.NewGuid().ToString("N"));
@@ -61,7 +69,7 @@ namespace QS3D.Core.SmokeTests
             var path = Path.Combine(directory, "bad.qslic");
             try
             {
-                File.WriteAllText(path, "<!DOCTYPE x [<!ENTITY e SYSTEM 'file:///etc/passwd'>]><qs3dLicense schema='1' id='x' customer='c' product='p' nonce='n'><valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/><signature algorithm='RSA-SHA256'>AA==</signature></qs3dLicense>");
+                File.WriteAllText(path, "<!DOCTYPE x [<!ENTITY e 'blocked'>]><qs3dLicense schema='1' id='x' customer='c' product='p' nonce='n'><valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/><signature algorithm='RSA-SHA256'>AA==</signature></qs3dLicense>");
                 Throws<XmlExceptionOrInvalidData>(() => new LicenseVerifier().Load(path));
             }
             finally
