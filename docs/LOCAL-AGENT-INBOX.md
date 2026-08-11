@@ -226,6 +226,19 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related docs: `docs/PLAN-TO-3D-WORKFLOW.md`; `src/QS3D.BricsCAD.V25/PlanTo3DCommands.cs`; `scripts/preflight-plan-to-3d-project-lifecycle.py`; `scripts/preflight-plan-to-3d-source-geometry-freshness.py`; `scripts/preflight-plan-to-3d-quick-authoring.py`; `scripts/preflight-plan-to-3d-scoped-regeneration.py`; `docs/LOCAL-V25-QUALIFICATION.md`
 - Updated: 2026-08-11
 
+## LOCAL-015 — Construction Reference Search browser/modeless runtime
+
+- Priority: P2
+- Status: OPEN
+- Area: `QS3DREFSEARCH` / modeless browser launcher
+- Source-side status: REMOTE_DONE for the document-bound command/window, fixed HTTPS category mapping, URL encoding, bounded query input, SafeSearch parameters, Windows shell-browser launch, no-scrape boundary and source-safe preflight. Exact Windows/BricsCAD/browser behavior remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`.
+- Why local: Requires licensed BricsCAD V25 on Windows, a real default browser association, modeless WPF/document lifecycle, and active-DWG switching.
+- Scenario: From a clean exact candidate SHA, run `QS3DREFSEARCH` and verify the modeless window renders with the QS3D theme. For `Ván khuôn móng` and at least one Unicode variant, exercise Hình ảnh, Web, Video, Mua sắm, Video ngắn and Tin tức; each action must open the intended fixed HTTPS provider URL in the Windows default browser with the query URL-encoded and SafeSearch enabled. Enter in the query box must map to Hình ảnh. Each quick-query button must only fill the query until a result category is chosen. With technical context enabled, verify the construction suffix is added before encoding. Empty input and input longer than 512 characters must refuse without launching a browser. Switch to another DWG while the old modeless window remains open and verify every launch attempt fails closed; reactivate the source DWG and verify launch resumes. Close the source drawing and verify `DocumentBoundWindowLifetime` tears down or disables the bound window without affecting another DWG. Confirm no `.qsdb`, semantic project state, CAD object, selection, audit state or drawing bytes are mutated by opening/using the launcher.
+- Evidence required: Exact tested SHA; Windows build; BricsCAD V25 build; default-browser identity; sanitized results for all six categories; Unicode/encoding and SafeSearch proof; Enter/quick-query/technical-context behavior; empty/>512 refusal; active-DWG switch refusal and source-DWG reactivation; source-drawing-close lifecycle; before/after proof of no project/CAD/audit mutation. Do not record private search terms or browsing history beyond sanitized test inputs.
+- Evidence: PENDING_LOCAL
+- Related source/docs: `src/QS3D.BricsCAD.V25/ReferenceSearchCommands.cs`; `src/QS3D.BricsCAD.V25/UI/ReferenceSearchWindow.xaml`; `src/QS3D.BricsCAD.V25/UI/ReferenceSearchWindow.xaml.cs`; `scripts/preflight-construction-reference-search.py`; `docs/CONSTRUCTION-REFERENCE-SEARCH.md`
+- Updated: 2026-08-11
+
 ## Close-out rule
 
 Closing all `OPEN` P0/P1 items does not automatically mean the product is commercially released. Release publication still follows `CI_POLICY.md` and requires the owner's separate explicit release authorization. This inbox only records local engineering qualification truth.
