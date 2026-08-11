@@ -10,6 +10,8 @@ namespace QS3D.Core.Reporting
     public sealed class QuantityCalculationSettings
     {
         public const int CurrentSchemaVersion = 2;
+        private const string NullCategoryRuleMessage = "CategoryRules cannot contain null entries.";
+        private const string NullIntersectionRuleMessage = "IntersectionRules cannot contain null entries.";
 
         [DataMember(Order = 1)] public int SchemaVersion { get; set; }
         [DataMember(Order = 2)] public double FormworkTolerance { get; set; }
@@ -91,8 +93,8 @@ namespace QS3D.Core.Reporting
                 RoomSearchRadiusMm = RoomSearchRadiusMm,
                 DimColor = DimColor,
                 DimTextHeight = DimTextHeight,
-                CategoryRules = (CategoryRules ?? new List<QuantityCategoryRuleSetting>()).Select(x => x.Clone()).ToList(),
-                IntersectionRules = (IntersectionRules ?? new List<QuantityIntersectionRuleSetting>()).Select(x => x.Clone()).ToList()
+                CategoryRules = (CategoryRules ?? new List<QuantityCategoryRuleSetting>()).Select(CloneCategoryRule).ToList(),
+                IntersectionRules = (IntersectionRules ?? new List<QuantityIntersectionRuleSetting>()).Select(CloneIntersectionRule).ToList()
             };
         }
 
@@ -122,7 +124,7 @@ namespace QS3D.Core.Reporting
             var categoryCodes = new HashSet<int>();
             foreach (var rule in CategoryRules)
             {
-                if (rule == null) throw new InvalidOperationException("CategoryRules cannot contain null entries.");
+                if (rule == null) throw new InvalidOperationException(NullCategoryRuleMessage);
                 if (rule.Category < 0) throw new InvalidOperationException("Category code cannot be negative.");
                 if (!categoryCodes.Add(rule.Category)) throw new InvalidOperationException("Duplicate category rule for code " + rule.Category + ".");
                 RequireFiniteNonNegative(rule.FaceAngleThresholdDeg, nameof(rule.FaceAngleThresholdDeg));
@@ -132,7 +134,7 @@ namespace QS3D.Core.Reporting
             var pairs = new HashSet<string>(StringComparer.Ordinal);
             foreach (var rule in IntersectionRules)
             {
-                if (rule == null) throw new InvalidOperationException("IntersectionRules cannot contain null entries.");
+                if (rule == null) throw new InvalidOperationException(NullIntersectionRuleMessage);
                 if (rule.Source < 0 || rule.Target < 0) throw new InvalidOperationException("Intersection category codes cannot be negative.");
                 var key = rule.Source + ":" + rule.Target;
                 if (!pairs.Add(key)) throw new InvalidOperationException("Duplicate intersection rule for " + key + ".");
@@ -147,6 +149,18 @@ namespace QS3D.Core.Reporting
         public QuantityIntersectionRuleSetting? FindIntersectionRule(int sourceCode, int targetCode)
         {
             return (IntersectionRules ?? new List<QuantityIntersectionRuleSetting>()).FirstOrDefault(x => x != null && x.Source == sourceCode && x.Target == targetCode);
+        }
+
+        private static QuantityCategoryRuleSetting CloneCategoryRule(QuantityCategoryRuleSetting? rule)
+        {
+            if (rule == null) throw new InvalidOperationException(NullCategoryRuleMessage);
+            return rule.Clone();
+        }
+
+        private static QuantityIntersectionRuleSetting CloneIntersectionRule(QuantityIntersectionRuleSetting? rule)
+        {
+            if (rule == null) throw new InvalidOperationException(NullIntersectionRuleMessage);
+            return rule.Clone();
         }
 
         private static void RequireFiniteNonNegative(double value, string name)
