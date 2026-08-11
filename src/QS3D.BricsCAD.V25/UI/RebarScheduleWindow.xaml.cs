@@ -5,6 +5,7 @@ using System.Windows.Input;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.Core.Export;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
@@ -73,15 +74,16 @@ namespace QS3D.BricsCAD.V25.UI
                 var dialog = new SaveFileDialog { Title = "Xuất BBS QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = _defaultFileName, AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
                 if (dialog.ShowDialog(this) != true) return;
 
-                if (!ExistingProjectMutationContext.TryGet(_document, out var project))
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng bảng BBS và mở lại trước khi xuất.");
-                new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                _rows = ProjectRebarScheduleBuilder.Build(project);
+                var snapshot = ProjectStateSnapshot.CreateDetachedCopy(project);
+                new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(snapshot);
+                _rows = ProjectRebarScheduleBuilder.Build(snapshot);
                 BindRows();
                 if (_rows.Count == 0) throw new InvalidOperationException("BBS hiện chưa có dòng để xuất.");
 
                 XlsxRebarScheduleExporter.Export(dialog.FileName, _rows);
-                MessageBox.Show(this, "Đã làm mới dữ liệu hiện hành và xuất BBS XLSX.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, "Đã làm mới dữ liệu trên snapshot đọc-only và xuất BBS XLSX.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
