@@ -118,6 +118,7 @@ namespace QS3D.BricsCAD.V25
         {
             var operation = "Direct Draw " + label;
             EnsureActive(document, operation);
+            var projectExistedBeforeAuthoring = projectPreview.HasProject;
             var project = projectPreview.ResolveForMutation(document, operation);
             var rollback = ProjectStateSnapshot.Capture(project);
             var sourceId = ObjectId.Null;
@@ -183,6 +184,7 @@ namespace QS3D.BricsCAD.V25
                 catch (Exception ex) { cleanupError = ex; }
                 try { rollback.Restore(project); }
                 catch (Exception ex) { restoreError = ex; }
+                if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);
                 try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
                 catch { }
 
