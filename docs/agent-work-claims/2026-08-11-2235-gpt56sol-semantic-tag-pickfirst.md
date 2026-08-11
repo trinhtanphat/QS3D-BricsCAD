@@ -1,44 +1,44 @@
 # Work claim — Semantic Tag PICKFIRST
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-semantic-tag-pickfirst-20260811-2235`
 - Registered: `2026-08-11T22:35:00+07:00`
+- Completed: `2026-08-11T22:47:00+07:00`
 - Baseline main SHA: `caccb67982d751ad0c827199a7d8a6bab6ec79cf`
+- Merge PR: `#509`
+- Merge SHA: `c825bb05ffc65acd0263e0df99239f02913db220`
 - Priority: reduce repeated CAD picking in selection-first documentation authoring
 
 ## Reserved scope
 
 Allow `QS3DTAG` and `QS3DTAGREFRESH` to consume one valid implied/PICKFIRST CAD source before falling back to the existing interactive entity picker, without weakening the existing input-before-bind lifecycle or source ownership validation.
 
-## Expected surfaces
+## Completed source behavior
 
-- `src/QS3D.BricsCAD.V25/SemanticTagCommands.cs`
-- one focused static preflight under `scripts/`
-- one focused authoring note under `docs/`
-- this claim file for close-out metadata
+- Both commands now declare `CommandFlags.Modal | CommandFlags.UsePickSet`.
+- Exactly one implied/PICKFIRST entity is consumed directly through `EntitySnapshotReader.ReadCurrentSelection(document)`.
+- Zero implied selections preserve the existing explicit `Editor.GetEntity(...)` fallback.
+- Multiple implied selections fail closed before canonical project binding instead of choosing an arbitrary source.
+- `QS3DTAG` still completes source selection and placement before `ExistingProjectMutationContext.Require(...)` and revalidates the canonical source owner before native build.
+- `QS3DTAGREFRESH` still completes source selection before canonical bind/native rebuild.
+- Generated QS3D output remains invalid as Semantic Tag source; authoritative-source-only ownership is unchanged.
+- No `GetOrCreate`/project bootstrap path was introduced.
 
-## Excluded scope
+## Added guard/docs
+
+- `scripts/preflight-semantic-tag-pickfirst.py`
+- `docs/SEMANTIC-TAG-PICKFIRST-2026-08-11.md`
+
+The focused static gate is committed as a source contract. This connector-only lane did not dispatch GitHub Actions or claim a live BricsCAD V25 execution PASS.
+
+## Excluded scope preserved
 
 - No semantic-tag builder/content/handle ownership changes.
-- No generated-object-as-source support; authoritative source-only policy remains unchanged.
+- No generated-object-as-source support.
 - No placement/UCS semantics changes.
 - No semantic tag removal/health/native cleanup changes.
 - No Workspace/Ribbon redesign.
-- No GitHub Actions dispatch or BricsCAD V25 runtime PASS claim.
 
-## Defect evidence
+## Runtime qualification boundary
 
-Current `QS3DTAG` and `QS3DTAGREFRESH` are `CommandFlags.Modal` and always call `Editor.GetEntity(...)`, so a user who already selected the authoritative semantic source must select the same object again. This is unnecessary interaction because the existing source resolver already validates ownership fail-closed before native mutation.
-
-## Validation plan
-
-- Add `CommandFlags.UsePickSet` to both commands.
-- Resolve exactly one implied selection handle first; zero implied selections fall back to the existing `GetEntity` prompt.
-- Multiple implied selections fail closed before any canonical project bind instead of choosing arbitrarily.
-- Preserve `QS3DTAG` placement completion before `ExistingProjectMutationContext.Require(...)`.
-- Preserve `QS3DTAGREFRESH` selection completion before canonical bind.
-- Add a static preflight locking these ordering and no-bootstrap constraints.
-
-## Completion condition
-
-Source change, static regression contract and focused documentation are merged into current `main`; claim is closed with exact SHAs and local-only runtime qualification remains explicit.
+PICKFIRST, explicit picker fallback, multiple-selection fail-closed, ESC, active-DWG switching and native editor behavior still require real BricsCAD V25 local qualification. See `docs/SEMANTIC-TAG-PICKFIRST-2026-08-11.md` for the exact matrix.
