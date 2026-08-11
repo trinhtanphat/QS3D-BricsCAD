@@ -1,43 +1,35 @@
 # Work claim — Semantic Tag Remove PICKFIRST
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-semantic-tag-remove-pickfirst-20260811-2248`
 - Registered: `2026-08-11T22:48:00+07:00`
+- Completed: `2026-08-11T22:51:00+07:00`
 - Baseline main SHA: `5bccb132a11babd4d5b69ca13ecf6f34d9a374f0`
+- Merge PR: `#511`
+- Merge SHA: `b8caaa544d35254b80671cc9a6717f35f2aa0ec3`
 - Priority: remove redundant repicking from explicit Semantic Tag removal
 
-## Reserved scope
+## Completed source behavior
 
-Allow `QS3DTAGREMOVE` to consume exactly one implied/PICKFIRST generated Semantic Tag MText or authoritative semantic source before falling back to its existing `Editor.GetEntity(...)` picker, preserving complete selection-before-bind and destructive-removal safety boundaries.
-
-## Expected surfaces
-
-- `src/QS3D.BricsCAD.V25/SemanticTagRemovalCommands.cs`
-- one focused static preflight under `scripts/`
-- one focused documentation note under `docs/`
-- this claim file for close-out metadata
-
-## Excluded scope
-
-- No `SemanticTagRemovalService` destructive lifecycle rewrite.
-- No ownership model, builder, tag content, health or refresh changes.
-- No Workspace/Ribbon redesign.
-- No broad semantic-tag refactor.
-- No GitHub Actions dispatch or BricsCAD V25 runtime PASS claim.
-
-## Defect evidence
-
-`QS3DTAGREMOVE` is currently `CommandFlags.Modal` and always calls `Editor.GetEntity(...)`. Users who preselect the generated Semantic Tag MText or its authoritative source must select the same object a second time before removal.
-
-## Validation plan
-
-- Add `CommandFlags.UsePickSet`.
-- Consume exactly one implied selection first; zero implied selection preserves explicit picker fallback.
+- `QS3DTAGREMOVE` now declares `CommandFlags.Modal | CommandFlags.UsePickSet`.
+- Exactly one implied/PICKFIRST generated Semantic Tag or authoritative source is consumed directly.
+- Zero implied selections preserve the explicit `Editor.GetEntity(...)` fallback.
 - Multiple implied selections fail closed before canonical project binding/destructive removal.
-- Preserve `ResolveTagOwner(...)` generated-tag slot validation and source ambiguity checks.
-- Preserve `SemanticTagRemovalService.Remove(...)` as the only destructive implementation.
-- Add static guard for selection-before-bind/remove ordering and no-bootstrap behavior.
+- `ResolveTagOwner(...)` still validates generated owner slot and authoritative source uniqueness before removal.
+- `SemanticTagRemovalService.Remove(...)` remains the only destructive implementation.
+- No project bootstrap path was added.
 
-## Completion condition
+## Added guard/docs
 
-Source, focused regression contract and documentation are merged into current `main`; claim is closed with exact merge SHA and runtime-only behavior remains pending V25 qualification.
+- `scripts/preflight-semantic-tag-remove-pickfirst.py`
+- `docs/SEMANTIC-TAG-REMOVE-PICKFIRST-2026-08-11.md`
+
+## Excluded scope preserved
+
+- No removal-service lifecycle rewrite.
+- No ownership model, builder, content, health or refresh changes.
+- No Workspace/Ribbon redesign.
+
+## Runtime qualification boundary
+
+PICKFIRST, explicit fallback, multiple-selection fail-closed, ESC, document switching and native destructive behavior still require real BricsCAD V25 local qualification. No GitHub Actions or live V25 runtime PASS was claimed by this source lane.
