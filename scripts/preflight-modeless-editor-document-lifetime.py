@@ -156,10 +156,26 @@ else:
     if "DocumentBoundWindowLifetime.Attach(window, document);" in text:
         errors.append("ProjectToolsCommands must not attach source-DWG lifetime twice; ProjectToolsWindow owns the attachment.")
 
+single_attach_commands = [
+    ("CurtainWallHubCommands.cs", "new CurtainWallWindow(document)"),
+    ("MaterialCatalogCommands.cs", "new MaterialCatalogWindow(document)"),
+    ("ScheduleHubCommands.cs", "new ScheduleHubWindow(document)"),
+]
+for command_name, constructor_token in single_attach_commands:
+    command_path = SRC / command_name
+    if not command_path.is_file():
+        errors.append("missing modeless command source: " + command_name)
+        continue
+    text = command_path.read_text(encoding="utf-8")
+    if constructor_token not in text or "Application.ShowModelessWindow" not in text:
+        errors.append(command_name + " must open the expected modeless window.")
+    if "DocumentBoundWindowLifetime.Attach(window, document);" in text:
+        errors.append(command_name + " must not attach source-DWG lifetime twice; the window constructor owns the attachment.")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: document-bound modeless windows close with their DWG; Audit/Health/Project Tools and manager refreshes remain read-only, manager writes bind existing canonical projects, manager commands avoid duplicate lifetime attachment, Model Health uses semantic snapshot stamps, Curtain re-resolves selected Family, and Rebar Mesh rejects replaced project state.")
+print("PASS: document-bound modeless windows close with their DWG; Audit/Health/Project Tools and manager refreshes remain read-only, manager writes bind existing canonical projects, modeless command callers avoid duplicate lifetime attachment, Model Health uses semantic snapshot stamps, Curtain re-resolves selected Family, and Rebar Mesh rejects replaced project state.")
