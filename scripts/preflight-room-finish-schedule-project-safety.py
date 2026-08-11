@@ -24,16 +24,26 @@ if WINDOW.is_file():
 
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
-    if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in text:
-        errors.append("QS3DFINISHXLSX must require an existing project")
-    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
-        errors.append("QS3DFINISHXLSX must not create/cache project state as an export side effect")
-    if "ProjectStateSnapshot.CreateDetachedCopy(project)" not in text or "RoomFinishScheduleBuilder.Build(snapshot)" not in text:
-        errors.append("QS3DFINISHXLSX must use the authoritative finish schedule builder")
+    for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(snapshot)",
+        "RoomFinishScheduleBuilder.Build(snapshot)",
+    ):
+        if token not in text:
+            errors.append("QS3DFINISHXLSX missing read-only detached-export token: " + token)
+    for forbidden in (
+        "ProjectContextCoordinator.GetOrCreate(document)",
+        "ExistingProjectMutationContext",
+        "RegenerateDirty(project)",
+        "RoomFinishScheduleBuilder.Build(project)",
+    ):
+        if forbidden in text:
+            errors.append("QS3DFINISHXLSX must not mutate/bind the live project during export: " + forbidden)
 
 if errors:
     for error in errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] HT_Phòng schedule refresh/export is source-DWG bound and existing-project-only")
+print("[PASS] HT_Phòng modeless schedule remains source-DWG bound; command export resolves existing state read-only and regenerates a detached snapshot")
