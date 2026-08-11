@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Bricscad.ApplicationServices;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using Teigha.DatabaseServices;
 using CoreOwnershipPolicy = QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy;
@@ -30,6 +31,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 RemoveByPrefix(element, "GeneratedCurtainFrame");
                 RemoveByPrefix(element, "GeneratedCurtainPanel");
                 RemoveByPrefix(element, "GeneratedGridAnnotation");
+                RemoveByPrefix(element, "GeneratedSemanticTag");
                 element.ClearGeneratedGeometryStale();
             }
         }
@@ -92,6 +94,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (curtainOwnership != null) EraseCurtainFrames(document, transaction, project, element, curtainOwnership);
                 if (curtainPanelOwnership != null) EraseCurtainPanels(document, transaction, project, element, curtainPanelOwnership);
                 EraseGridAnnotations(document, transaction, project, element);
+                EraseSemanticTags(document, transaction, project, element);
             }
             return new GeneratedGeometryInvalidation(targets);
         }
@@ -136,6 +139,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 }
 
                 EnsureGridAnnotationsLive(document, project, element);
+                EnsureSemanticTagsLive(document, project, element);
             }
         }
 
@@ -267,6 +271,32 @@ namespace QS3D.BricsCAD.V25.Cad
                         throw new InvalidOperationException(
                             "Generated Grid annotation handle " + id.Handle + " resolves to unsupported entity type " + entity.GetType().Name + ". Refusing destructive invalidation.");
                     GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "validate stale Grid annotation " + id.Handle);
+                }
+                validation.Commit();
+            }
+        }
+
+        private static void EnsureSemanticTagsLive(Document document, ProjectState project, ProjectElement element)
+        {
+            if (!element.Properties.TryGetValue(GeneratedSemanticTagHealthService.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+
+            var expected = ParseExpectedHandles(raw, element, GeneratedSemanticTagHealthService.HandlesKey);
+            foreach (var handle in expected)
+                EnsureSemanticTagOwned(project, element, handle);
+
+            var ids = ResolveCompleteSet(document, element, GeneratedSemanticTagHealthService.HandlesKey, expected);
+            using (var validation = document.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                foreach (var id in ids)
+                {
+                    var entity = validation.GetObject(id, OpenMode.ForRead, false) as Entity;
+                    if (entity == null || entity.IsErased)
+                        throw new InvalidOperationException(
+                            "Generated Semantic Tag for " + element.Id + " resolved to a non-live Entity. Refusing destructive invalidation before any generated geometry is erased.");
+                    if (!(entity is MText))
+                        throw new InvalidOperationException(
+                            "Generated Semantic Tag handle " + id.Handle + " is live but is not MText. Refusing destructive invalidation.");
+                    GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "validate stale Semantic Tag " + id.Handle);
                 }
                 validation.Commit();
             }
@@ -456,6 +486,29 @@ namespace QS3D.BricsCAD.V25.Cad
             }
         }
 
+        private static void EraseSemanticTags(Document document, Transaction transaction, ProjectState project, ProjectElement element)
+        {
+            if (!element.Properties.TryGetValue(GeneratedSemanticTagHealthService.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+
+            var expected = ParseExpectedHandles(raw, element, GeneratedSemanticTagHealthService.HandlesKey);
+            foreach (var handle in expected)
+                EnsureSemanticTagOwned(project, element, handle);
+
+            var ids = ResolveCompleteSet(document, element, GeneratedSemanticTagHealthService.HandlesKey, expected);
+            foreach (var id in ids)
+            {
+                var entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
+                if (entity == null || entity.IsErased)
+                    throw new InvalidOperationException(
+                        "Generated Semantic Tag handle " + id.Handle + " is no longer live. Refusing partial destructive invalidation.");
+                if (!(entity is MText))
+                    throw new InvalidOperationException(
+                        "Generated Semantic Tag handle " + id.Handle + " is live but is not MText. Refusing destructive invalidation.");
+                GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "erase stale Semantic Tag " + id.Handle);
+                entity.Erase();
+            }
+        }
+
         private static void EnsureGridAnnotationOwned(ProjectState project, ProjectElement element, string handle)
         {
             if (!CoreOwnershipPolicy.TryFindOwner(project, handle, out var owner, out var propertyKey) || owner == null)
@@ -465,6 +518,20 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw new InvalidOperationException(
                     "Generated Grid annotation handle " + handle + " is owned by " + owner.Id + "/" + propertyKey +
                     ", not " + element.Id + "/" + GridAnnotationBuilder.HandlesKey + ". Refusing destructive invalidation.");
+        }
+
+        private static void EnsureSemanticTagOwned(ProjectState project, ProjectElement element, string handle)
+        {
+            if (!CoreOwnershipPolicy.TryFindOwner(project, handle, out var owner, out var propertyKey) || owner == null)
+                throw new InvalidOperationException("Generated Semantic Tag handle " + handle + " has no semantic owner. Refusing destructive invalidation.");
+            if (!ReferenceEquals(owner, element) ||
+                !string.Equals(
+                    CoreOwnershipPolicy.CanonicalOwnerSlot(propertyKey),
+                    CoreOwnershipPolicy.CanonicalOwnerSlot(GeneratedSemanticTagHealthService.HandlesKey),
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Generated Semantic Tag handle " + handle + " is owned by " + owner.Id + "/" + propertyKey +
+                    ", not " + element.Id + "/" + GeneratedSemanticTagHealthService.HandlesKey + ". Refusing destructive invalidation.");
         }
     }
 }
