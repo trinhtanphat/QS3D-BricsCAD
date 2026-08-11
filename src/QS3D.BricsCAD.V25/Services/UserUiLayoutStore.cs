@@ -37,6 +37,7 @@ namespace QS3D.BricsCAD.V25.Services
                 var next = Clone(_current);
                 update(next);
                 Normalize(next);
+                if (Equivalent(_current, next)) return;
                 _current = next;
                 TrySaveCore(next);
             }
@@ -158,6 +159,18 @@ namespace QS3D.BricsCAD.V25.Services
             layout.FamilyColumnWidth = Clamp(layout.FamilyColumnWidth, 220d, 700d, 245d);
             layout.FamilyTopHeight = Clamp(layout.FamilyTopHeight, 160d, 900d, 250d);
             layout.RoomTopHeight = Clamp(layout.RoomTopHeight, 135d, 900d, 218d);
+        }
+
+        private static bool Equivalent(UserUiLayout left, UserUiLayout right)
+        {
+            return left.WorkspacePaletteWidth == right.WorkspacePaletteWidth &&
+                   left.WorkspacePaletteHeight == right.WorkspacePaletteHeight &&
+                   left.RightPaletteWidth == right.RightPaletteWidth &&
+                   left.RightPaletteHeight == right.RightPaletteHeight &&
+                   left.ModelColumnWidth == right.ModelColumnWidth &&
+                   left.FamilyColumnWidth == right.FamilyColumnWidth &&
+                   left.FamilyTopHeight == right.FamilyTopHeight &&
+                   left.RoomTopHeight == right.RoomTopHeight;
         }
 
         private static int Int(IDictionary<string, string> values, string key, int fallback) =>
