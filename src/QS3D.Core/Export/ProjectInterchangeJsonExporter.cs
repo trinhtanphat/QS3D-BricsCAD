@@ -82,12 +82,16 @@ namespace QS3D.Core.Export
             }
             json.Append("  ]\n");
             json.Append("}\n");
-            return json.ToString();
+
+            var snapshot = json.ToString();
+            RequireCanonicalSnapshot(snapshot);
+            return snapshot;
         }
 
         public static void Export(string path, ProjectState project)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Interchange export path is required.", nameof(path));
+            var content = Build(project);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
@@ -97,7 +101,7 @@ namespace QS3D.Core.Export
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
                 {
-                    writer.Write(Build(project));
+                    writer.Write(content);
                     writer.Flush();
                     stream.Flush(true);
                 }
@@ -107,6 +111,20 @@ namespace QS3D.Core.Export
             {
                 AtomicFileCommit.TryDelete(tempPath);
             }
+        }
+
+        private static void RequireCanonicalSnapshot(string snapshot)
+        {
+            var validation = ProjectInterchangeJsonValidator.Validate(snapshot);
+            if (validation.IsValid) return;
+
+            var issue = validation.Issues.FirstOrDefault(x => x.Severity == InterchangeValidationSeverity.Error);
+            if (issue == null)
+                throw new InvalidDataException("Interchange export produced a snapshot rejected by canonical validation.");
+
+            var path = string.IsNullOrWhiteSpace(issue.Path) ? string.Empty : " at " + issue.Path;
+            throw new InvalidDataException(
+                "Interchange export produced a snapshot rejected by canonical validation (" + issue.Code + path + "): " + issue.Message);
         }
 
         private static void AppendElement(StringBuilder json, ProjectElement element)
