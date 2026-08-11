@@ -38,12 +38,12 @@ namespace QS3D.Core.Diagnostics
                 {
                     if (!AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) included.Add(element);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     issues.Add(new ModelHealthIssue(
                         "BOM_EXCLUSION_FAILED",
                         HealthSeverity.Error,
-                        "Không thể quyết định an toàn cấu kiện có được đưa vào BQ hay không: " + ex.Message,
+                        "Không thể quyết định an toàn cấu kiện có được đưa vào BQ hay không.",
                         element.Id));
                 }
             }
@@ -73,9 +73,9 @@ namespace QS3D.Core.Diagnostics
                     if (traceHandles.Count == 0)
                         issues.Add(new ModelHealthIssue("BOM_TRACEABILITY_MISSING", HealthSeverity.Warning, "Dòng khối lượng không truy vết được về CAD Handle nguồn/generated.", element.Id));
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    issues.Add(new ModelHealthIssue("BOM_TRACEABILITY_FAILED", HealthSeverity.Error, "Không thể dựng provenance Handle an toàn: " + ex.Message, element.Id));
+                    issues.Add(new ModelHealthIssue("BOM_TRACEABILITY_FAILED", HealthSeverity.Error, "Không thể dựng provenance Handle an toàn cho cấu kiện.", element.Id));
                 }
 
                 if (liveHandleIndex != null)
@@ -98,9 +98,9 @@ namespace QS3D.Core.Diagnostics
                 foreach (var row in rows.Where(x => x.ElementIds.Count > 0 && x.SourceHandles.Count == 0))
                     issues.Add(new ModelHealthIssue("BOM_ROW_HANDLE_MISSING", HealthSeverity.Warning, "Nhóm khối lượng không có CAD Handle để truy xuất ngược.", row.ElementIds[0]));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                issues.Add(new ModelHealthIssue("BOM_REPORT_FAILED", HealthSeverity.Error, "Không thể dựng bảng khối lượng an toàn: " + ex.Message));
+                issues.Add(new ModelHealthIssue("BOM_REPORT_FAILED", HealthSeverity.Error, "Không thể dựng bảng khối lượng an toàn."));
             }
 
             return issues.AsReadOnly();
