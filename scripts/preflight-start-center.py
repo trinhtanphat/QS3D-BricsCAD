@@ -44,6 +44,9 @@ def main():
         require(xaml, name, "Start Center UX")
     for action in ("OnNewDrawingClick", "OnOpenDrawingClick", "OnSaveDrawingClick", "OnSaveAsDrawingClick"):
         require(xaml, action, "document action wiring")
+    for command in ("QS3DWALLQTY", "QS3DREFSEARCH", "QS3DRULECREATE", "QS3DQSETTINGSHEALTHEXPORT"):
+        require(xaml, 'Tag="' + command + '"', "featured Start Center workflow")
+    require(xaml, "hỗ trợ tiếng Việt có/không dấu", "Vietnamese search discoverability")
 
     require(window, "StartCenterCommandCatalog.TryGet", "allowlisted command dispatch")
     require(window, "Application.DocumentManager.MdiActiveDocument", "click-time active document resolution")
@@ -90,7 +93,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, accent-insensitive, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, accent-insensitive, featured, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 

@@ -104,6 +104,8 @@
                                 <Button Content="Vẽ Cửa Sổ" Tag="QS3DDRAWWINDOW" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
                                 <Button Content="Vẽ Tương Tự" Tag="QS3DCREATESIMILAR" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
                                 <Button Content="BQ" Tag="QS3DBQ" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
+                                <Button Content="Khối lượng Tường" Tag="QS3DWALLQTY" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
+                                <Button Content="Tham khảo" Tag="QS3DREFSEARCH" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
                                 <Button Content="Health All" Tag="QS3DHEALTHALL" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
                             </WrapPanel>
                         </StackPanel>
@@ -111,7 +113,7 @@
 
                     <Grid Grid.Row="1" Margin="0,0,0,8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="165"/></Grid.ColumnDefinitions>
-                        <TextBox x:Name="SearchBox" MinHeight="32" ToolTip="Tìm theo tên, command, nhóm hoặc từ khóa" TextChanged="OnSearchChanged"/>
+                        <TextBox x:Name="SearchBox" MinHeight="32" ToolTip="Tìm theo tên, command, nhóm hoặc từ khóa; hỗ trợ tiếng Việt có/không dấu" TextChanged="OnSearchChanged"/>
                         <ComboBox x:Name="GroupFilter" Grid.Column="1" Margin="8,0,0,0" SelectionChanged="OnGroupChanged"/>
                     </Grid>
 
@@ -197,8 +199,10 @@
                             <TextBlock Text="REVIEW &amp; DIAGNOSTICS" FontWeight="SemiBold"/>
                             <WrapPanel Margin="0,7,0,0">
                                 <Button Content="Rule Preview" Tag="QS3DRULEPREVIEW" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
+                                <Button Content="Tạo Rule" Tag="QS3DRULECREATE" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
                                 <Button Content="Regen Preview" Tag="QS3DREGENPREVIEW" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
                                 <Button Content="Model Health" Tag="QS3DHEALTHALL" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
+                                <Button Content="Settings Health" Tag="QS3DQSETTINGSHEALTHEXPORT" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
                                 <Button Content="Diagnostic Summary" Tag="QS3DDIAGSUMMARY" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
                                 <Button Content="Release Check" Tag="QS3DRELEASECHECK" Style="{StaticResource StartActionButton}" Click="OnAllowlistedCommandClick"/>
                             </WrapPanel>
