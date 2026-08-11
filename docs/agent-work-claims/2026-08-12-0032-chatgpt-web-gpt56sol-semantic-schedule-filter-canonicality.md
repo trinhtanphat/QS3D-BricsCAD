@@ -1,14 +1,26 @@
 # Work claim — Semantic Schedule Floor/Zone filter canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T00:32:00+07:00`
+- Completed: `2026-08-12T00:37:00+07:00`
 - Baseline main SHA observed: `11fcc65b75f1daecf718502d463a8adf0af315f0`
+- Claim commit: `a635389922783037280012be94a9d5f6b80d541e`
+- PR: `#581`
+- Squash merge on `main`: `e18d85f866b3ef3a333cdca68b0ae28256712f14`
 - Priority: P1 — deterministic semantic documentation correctness.
 
-## Confirmed defect
+## Defect closed
 
-`SemanticScheduleCatalog.Build()` validates the requested schedule Floor/Zone through canonical `ProjectState.FindFloor()` / `FindZone()` lookups, but then filters candidate elements with raw `x.FloorId` / `x.ZoneId` equality. Existing Floor/Zone mutation semantics intentionally treat trimmed case-insensitive relation identity as the same target and preserve padded/case-varied stored relation strings on no-op assignment. A valid schedule can therefore exclude semantically matching elements solely because their persisted/mutable relation string contains padding.
+`SemanticScheduleCatalog.Build()` validated requested schedule Floor/Zone references through canonical `ProjectState.FindFloor()` / `FindZone()` lookups but previously filtered candidate elements with raw `x.FloorId` / `x.ZoneId` equality. Existing Floor/Zone mutation semantics intentionally treat trimmed case-insensitive relation identity as the same target and preserve padded/case-varied stored relation strings on no-op assignment. A valid schedule could therefore exclude semantically matching elements solely because their stored relation text contained padding.
+
+## Implemented
+
+- Floor candidate filtering now compares `(x.FloorId ?? string.Empty).Trim()` against the normalized schedule Floor id using `OrdinalIgnoreCase`.
+- Zone candidate filtering now compares `(x.ZoneId ?? string.Empty).Trim()` against the normalized schedule Zone id using `OrdinalIgnoreCase`.
+- Rendering remains read-only; raw stored relation strings are not rewritten and `ProjectState.Touch()` is not introduced.
+- Category, include/exclude, null-element, deterministic ordering, stale-reference validation and header-only zero-match behavior remain unchanged.
+- Added isolated Core regression, module registration, static preflight and planning coverage.
 
 ## Reserved scope
 
@@ -26,15 +38,10 @@
 - Floor/Zone mutation services themselves.
 - BricsCAD V25 runtime qualification.
 
-## Implementation plan
+## Validation evidence
 
-1. Re-fetch moving `main` after claim and verify the raw filtering remains.
-2. Compare candidate element Floor/Zone relation identity after trimming against the normalized schedule id with `OrdinalIgnoreCase`.
-3. Preserve category, include/exclude, ordering, stale-reference validation and header-only zero-match semantics.
-4. Add a Core smoke where an element stores padded/case-varied FloorId/ZoneId but a canonical schedule filter must still include it without mutating project state or rewriting raw relations.
-5. Add static preflight requiring canonicalized relation comparisons and rejecting the raw equality path.
-6. Refresh moving `main`, verify no reserved-source overlap, then merge a focused PR and close the claim with exact evidence.
-
-## Validation policy
-
-This is pure Core read-only rendering behavior. GitHub Actions remain manual-only and are not dispatched. No licensed BricsCAD V25 runtime PASS will be claimed without actual local evidence.
+- Post-claim source re-fetched from `81032c6f86bec1b4806a9a290fb1f7a0286fda27` confirmed the raw relation comparisons remained before implementation.
+- PR #581 changed exactly five files; production source changed only the two Floor/Zone filter predicates.
+- Moving-main comparison before merge showed no overlap with `SemanticScheduleCatalog.cs` or this lane's new regression/plan files.
+- GitHub Actions were not dispatched because repository policy is manual-only.
+- Executable smoke/preflight PASS and licensed BricsCAD V25 runtime PASS are not claimed from this remote environment.
