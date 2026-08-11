@@ -125,9 +125,9 @@ namespace QS3D.BricsCAD.V25.UI
                    Contains(row.Unit, token) ||
                    Contains(row.Value, token) ||
                    Contains(row.EditorKind, token) ||
-                   row.Choices.Any(choice => Contains(choice, token)) ||
-                   (row.IsReadOnly && Contains("CAD đọc khóa readonly source nguồn", token)) ||
-                   (row.CanReset && Contains("Instance override ghi đè", token));
+                   Contains(row.StateLabel, token) ||
+                   Contains(row.StateSearchText, token) ||
+                   row.Choices.Any(choice => Contains(choice, token));
         }
 
         private static bool Contains(string? value, string text)
