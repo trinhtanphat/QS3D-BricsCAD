@@ -1,6 +1,6 @@
 # Work claim — Point2 invariant diagnostic formatting
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-11T22:10:00+07:00`
 - Baseline main SHA: `b46e1abce077eb20e393a487e9cfba48980747df`
@@ -8,7 +8,7 @@
 
 ## Reason
 
-`Point2.ToString()` currently formats `double` coordinates through the process `CurrentCulture`. On cultures that use a comma decimal separator, the point text becomes locale-dependent and ambiguous with the coordinate separator, so the same Core value produces different diagnostics on different machines.
+`Point2.ToString()` formatted `double` coordinates through the process `CurrentCulture`. On cultures that use a comma decimal separator, the point text became locale-dependent and ambiguous with the coordinate separator, so the same Core value produced different diagnostics on different machines.
 
 ## Reserved scope
 
@@ -35,8 +35,23 @@ Make `Point2` diagnostic string formatting culture-invariant without changing co
 
 ## Coordination
 
-Recent geometry claims were checked. The bulge-overflow lane is already completed and was limited to `BulgeArcTessellator` plus its room-boundary regression; no active claim found names `Point2` or culture-invariant point formatting. This claim intentionally avoids shared smoke registration by using a dedicated module initializer.
+Recent geometry claims were checked. The bulge-overflow lane was already completed and was limited to `BulgeArcTessellator` plus its room-boundary regression; no active claim found named `Point2` or culture-invariant point formatting. This claim intentionally avoided shared smoke registration by using a dedicated module initializer.
+
+## Completion
+
+- Implementation commits:
+  - `84938def700c08108f5d78f81da4b37887c1ecdd` — make `Point2.ToString()` use `CultureInfo.InvariantCulture` while preserving its existing general numeric format.
+  - `07386e8c93512acb99ff8dcfc138695b3bf05142` — add comma-decimal regression smoke with guaranteed culture restoration.
+  - `71b0b5bcd1b15cab64c3576876095251412f376c` — register the smoke through a dedicated module initializer.
+- Final observed `main` before claim close: `94c2b5f84a1d6184e921fb7d686a0abfdef8022f`.
+- Validation actually performed:
+  - re-fetched `src/QS3D.Core/Geometry/Point2.cs` from current `main` and confirmed the invariant formatter is present;
+  - re-fetched both new smoke sources from current `main` and confirmed the comma-decimal setup, exact ordinal assertion, `finally` restoration, and module registration are present;
+  - confirmed `QS3D.Core` targets `netstandard2.0` and the implementation uses APIs available there;
+  - did not execute `dotnet` because the hosted environment does not provide the .NET SDK;
+  - did not dispatch or rerun GitHub Actions.
+- BricsCAD V25 local gate impact: none; this change is CAD-independent Core diagnostic formatting and does not alter a BricsCAD/native runtime contract.
 
 ## Completion condition
 
-Current `main` contains invariant `Point2.ToString()` formatting plus the dedicated regression guard, and this claim is marked `COMPLETED` with implementation SHA(s), final observed main SHA, and validation actually performed.
+Satisfied: current `main` contains invariant `Point2.ToString()` formatting plus the dedicated regression guard. This claim is released as `COMPLETED`.
