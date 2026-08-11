@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 
 namespace QS3D.BricsCAD.V25.Services
 {
@@ -90,17 +92,43 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static int ScoreTerm(StartCenterCommandItem item, string query)
         {
+            var foldedQuery = FoldForSearch(query);
+            if (foldedQuery.Length == 0) return 0;
+
+            var command = FoldForSearch(item.Command);
+            var title = FoldForSearch(item.Title);
+            var group = FoldForSearch(item.Group);
+            var description = FoldForSearch(item.Description);
+            var keywords = FoldForSearch(item.Keywords);
+
             var score = 0;
-            if (item.Command.StartsWith(query, StringComparison.OrdinalIgnoreCase)) score += 120;
-            else if (item.Command.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0) score += 70;
+            if (command.StartsWith(foldedQuery, StringComparison.OrdinalIgnoreCase)) score += 120;
+            else if (command.IndexOf(foldedQuery, StringComparison.OrdinalIgnoreCase) >= 0) score += 70;
 
-            if (item.Title.StartsWith(query, StringComparison.CurrentCultureIgnoreCase)) score += 110;
-            else if (item.Title.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0) score += 80;
+            if (title.StartsWith(foldedQuery, StringComparison.OrdinalIgnoreCase)) score += 110;
+            else if (title.IndexOf(foldedQuery, StringComparison.OrdinalIgnoreCase) >= 0) score += 80;
 
-            if (item.Group.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0) score += 45;
-            if (item.Description.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0) score += 35;
-            if (item.Keywords.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0) score += 55;
+            if (group.IndexOf(foldedQuery, StringComparison.OrdinalIgnoreCase) >= 0) score += 45;
+            if (description.IndexOf(foldedQuery, StringComparison.OrdinalIgnoreCase) >= 0) score += 35;
+            if (keywords.IndexOf(foldedQuery, StringComparison.OrdinalIgnoreCase) >= 0) score += 55;
             return score;
+        }
+
+        private static string FoldForSearch(string value)
+        {
+            var text = value ?? string.Empty;
+            if (text.Length == 0) return string.Empty;
+
+            var normalized = text.Normalize(NormalizationForm.FormD);
+            var builder = new StringBuilder(normalized.Length);
+            foreach (var c in normalized)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
+                if (c == 'đ') builder.Append('d');
+                else if (c == 'Đ') builder.Append('D');
+                else builder.Append(c);
+            }
+            return builder.ToString().Normalize(NormalizationForm.FormC);
         }
 
         private static List<StartCenterCommandItem> Build()
@@ -182,6 +210,7 @@ namespace QS3D.BricsCAD.V25.Services
                 New("QS3DDIAGSUMMARY", "Diagnostic Summary", "Xuất diagnostic summary privacy-safe.", "Review & Health", "diagnostic support privacy", 96),
                 New("QS3DRELEASECHECK", "Release Check", "Review readiness theo guard hiện có.", "Review & Health", "release check readiness", 97),
                 New("QS3DQSETTINGSHEALTHEXPORT", "Quantity Settings Health", "Xuất JSON diagnostic ma trận Quantity Settings hiện tại.", "Review & Health", "quantity settings health export json diagnostic matrix", 98),
+                New("QS3DRULECREATE", "Tạo Quantity Rule", "Tạo luật giao cắt A -> B có xác nhận và dùng command hiện có.", "Review & Health", "quantity rule create intersection giao cắt cấu kiện", 99),
 
                 New("QS3DSAVE", "Lưu QS3D Project", "Lưu sidecar project hiện hữu.", "Dự án", "save project qsdb", 100),
                 New("QS3DRELOAD", "Reload QS3D Project", "Nạp lại project hiện hữu từ sidecar.", "Dự án", "reload project qsdb", 101),
