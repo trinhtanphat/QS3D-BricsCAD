@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             MissingViewFailsClosed();
             OversizedViewFailsClosed();
             DuplicateRequestedViewFailsClosed();
+            BoundedItemsDoNotOverEnumerate();
         }
 
         private static void PacksAcrossSheetsDeterministically()
@@ -100,6 +101,22 @@ namespace QS3D.Core.SmokeTests
                     BuildViews(1),
                     new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d)),
                 "A semantic view must not be materialized twice by one automatic layout request.");
+        }
+
+        private static void BoundedItemsDoNotOverEnumerate()
+        {
+            MustFail(
+                () => SemanticSheetAutoLayoutPlanner.Build(
+                    OverBoundedItems(),
+                    BuildViews(1),
+                    new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d)),
+                "Automatic sheet layout must stop enumeration as soon as its configured item bound is exceeded.");
+        }
+
+        private static IEnumerable<SemanticSheetAutoLayoutItem> OverBoundedItems()
+        {
+            for (var i = 0; i <= 10000; i++) yield return new SemanticSheetAutoLayoutItem("V1", 100d, 80d);
+            throw new ApplicationException("Automatic sheet layout enumerated beyond the first over-bound item.");
         }
 
         private static IReadOnlyList<SemanticViewPlan> BuildViews(int count)
