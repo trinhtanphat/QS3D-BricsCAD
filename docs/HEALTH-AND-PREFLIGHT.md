@@ -46,6 +46,12 @@ The secure updater keeps a separate outer boundary: it verifies the SHA-256 of t
 
 Before `new-v25-update-manifest.ps1` publishes the whole-archive SHA-256, the candidate ZIP must match signed staging for **every regular file**. Staging and ZIP paths are case-insensitively unique, their file sets must be identical, and each ZIP entry is stream-hashed against the corresponding staged file. Extra, missing, case-colliding or changed ZIP payloads therefore fail before the update manifest can bless the archive. Authenticode verification of the executable payloads remains an additional check after full file parity.
 
+### Customer release / strict SemVer — `scripts/preflight-customer-release.py`
+
+The product `<Version>` values in the V25 plugin and Core projects are release identities, not arbitrary strings. `package-v25.ps1` validates both as strict SemVer before creating distribution output, then requires them to match and preserves the existing exact `RELEASE_TAG == v<productVersion>` binding. Core numeric components therefore cannot contain leading zeroes, prerelease/build dot identifiers cannot be empty, and numeric prerelease identifiers cannot contain leading zeroes.
+
+The customer-release preflight carries deterministic valid/invalid SemVer cases, validates the current project versions independently, checks that the strict parser remains wired into both project-version reads, and verifies that both manual release workflows execute aggregate preflight and `package-v25.ps1` before their GitHub release/prerelease publication step. The workflow regexes remain an early shape check; the package/preflight boundary is the semantic authority.
+
 ## Command/UI wiring
 
 `scripts/preflight-command-wiring.py` collects QS3D `CommandMethod` registrations and checks command references from XAML buttons, Ribbon specs and simple UI dispatch paths. UI/Ribbon references must resolve to registered commands so multi-agent rename races do not become BricsCAD `Unknown command` failures.
