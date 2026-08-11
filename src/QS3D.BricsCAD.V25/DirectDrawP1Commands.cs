@@ -367,6 +367,9 @@ namespace QS3D.BricsCAD.V25
         {
             var operation = "Direct Draw P1 " + category;
             EnsureActive(document, operation);
+            var projectExistedBeforeAuthoring = projectPreview != null
+                ? projectPreview.HasProject
+                : ProjectContextCoordinator.TryGetReadOnly(document, out _);
             var project = projectPreview != null
                 ? projectPreview.ResolveForMutation(document, operation)
                 : ProjectContextCoordinator.GetOrCreate(document);
@@ -437,6 +440,7 @@ namespace QS3D.BricsCAD.V25
                 catch (Exception ex) { cleanupError = ex; }
                 try { rollback.Restore(project); }
                 catch (Exception ex) { restoreError = ex; }
+                if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);
                 try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
                 catch { }
 
