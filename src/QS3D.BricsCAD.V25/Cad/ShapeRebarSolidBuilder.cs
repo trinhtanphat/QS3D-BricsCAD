@@ -80,7 +80,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (requested > MaxBarsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxBarsPerElement + " thanh shape 3D.");
                         var source = OpenSelectedSource(document, transaction, element, selectedHandles) ?? throw new InvalidOperationException("Không tìm thấy selected live source CAD cho " + element.Id);
                         var placement = ResolvePlacement(document, project, element, source);
-                        ErasePrevious(document, transaction, element, ownership);
+                        ErasePrevious(document, transaction, project, element, ownership);
                         var item = new PendingElement { Element = element };
                         foreach (var row in elementRows)
                         {
@@ -106,6 +106,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                     solid.Layer = source.Layer;
                                     modelSpace.AppendEntity(solid);
                                     transaction.AddNewlyCreatedDBObject(solid, true);
+                                    GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, solid, project, element, HandlesKey);
                                     item.Handles.Add(solid.Handle.ToString());
                                     solid = null!;
                                 }
@@ -318,7 +319,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return new Vector3d(vector.X / length, vector.Y / length, vector.Z / length);
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -331,6 +332,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (entity == null || entity.IsErased) continue;
                 var solid = entity as Solid3d;
                 if (solid == null) throw new InvalidOperationException("Generated shape rebar handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
+                GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(solid, project, element, HandlesKey, "erase generated shape rebar " + handle);
                 solid.Erase();
             }
         }
