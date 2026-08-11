@@ -60,15 +60,14 @@ allowed_synthetic_cad = {
     Path("samples/generated/QS3D-Sample.dwg"),
     Path("samples/generated/QS3D-Sample.dxf"),
 }
-for ext in ("*.dwg", "*.dxf", "*.docx"):
-    found = []
-    for relative in eligible_files:
-        if not relative.match(ext):
-            continue
-        if ext in ("*.dwg", "*.dxf") and relative in allowed_synthetic_cad:
-            continue
-        found.append(str(relative))
-    if found: errors.append(f"private/reference artifact must not be committed ({ext}): {found}")
+private_extensions = {".dwg", ".dxf", ".docx"}
+for relative in eligible_files:
+    suffix = relative.suffix.casefold()
+    if suffix not in private_extensions:
+        continue
+    if suffix in {".dwg", ".dxf"} and relative in allowed_synthetic_cad:
+        continue
+    errors.append(f"private/reference artifact must not be committed ({suffix}): {relative}")
 sample_readme = ROOT / "samples/generated/README.md"
 if any((ROOT / relative).is_file() for relative in allowed_synthetic_cad):
     if not sample_readme.is_file():
@@ -86,10 +85,18 @@ if plugin.exists():
     for needle, message in {"<TargetFramework>net48</TargetFramework>": "plugin must target net48", "$(BRICSCAD_V25_DIR)\\BrxMgd.dll": "plugin must use external BrxMgd reference", "<Private>false</Private>": "BricsCAD references must not be copied locally"}.items():
         if needle not in text: errors.append(message)
 
-for workflow in (ROOT / ".github/workflows").glob("*.yml"):
-    text = workflow.read_text(encoding="utf-8")
-    if "workflow_dispatch:" not in text: errors.append(f"{workflow.name}: must remain manual-only")
-    if re.search(r"(?m)^\s*(push|pull_request)\s*:", text): errors.append(f"{workflow.name}: automatic trigger forbidden before real V25 runtime gate")
+workflow_dir = ROOT / ".github/workflows"
+if workflow_dir.is_dir():
+    workflow_files = sorted(
+        path for path in workflow_dir.iterdir()
+        if path.is_file() and path.suffix.casefold() in {".yml", ".yaml"}
+    )
+    for workflow in workflow_files:
+        text = workflow.read_text(encoding="utf-8")
+        if "workflow_dispatch:" not in text: errors.append(f"{workflow.name}: must remain manual-only")
+        if re.search(r"(?m)^\s*(push|pull_request)\s*:", text): errors.append(f"{workflow.name}: automatic trigger forbidden before real V25 runtime gate")
+else:
+    errors.append("missing workflows directory: .github/workflows")
 
 for xaml in ROOT.rglob("*.xaml"):
     if xaml.name == "Theme.xaml": continue
@@ -298,13 +305,13 @@ if review_commands.exists() and snapshot_reader.exists():
 semantic_capture = ROOT / "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs"
 if semantic_capture.exists():
     text = semantic_capture.read_text(encoding="utf-8")
-    for needle in ("ReplaceSourceMetric", "element.Properties.Remove(key)", 'StartsWith("CAD."'):
+    for needle in ("ReplaceSourceMetric", "element.Properties.Remove(key)", 'StartsWith("CAD.")'):
         if needle not in text: errors.append("CAD rescan must replace stale source-derived metrics/metadata: " + needle)
 
 ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 if ribbon.exists():
     text = ribbon.read_text(encoding="utf-8")
-    for command in ("QS3DTEMPLATEEXPORT", "QS3DTEMPLATEIMPORT", "QS3DRECOGNIZE", "QS3DRECOGNIZEAUTO", "QS3DBBSVIEW", "QS3DREVBASE", "QS3DREVDIFF"):
+    for command in ("QS3DTEMPLATEEXPORT", "QS3DTEMPLATEIMPORT", "QS3DRECOGNIZE", "QS3DRECOGNIZEAUTO", "QS3DBBSVIEW", "QS3DREVBASE", "QS3DREVBASE", "QS3DREVDIFF"):
         if command not in text: errors.append("Ribbon workflow entry missing: " + command)
 installer = ROOT / "scripts/install-bricscad-v25.ps1"
 if installer.exists():
