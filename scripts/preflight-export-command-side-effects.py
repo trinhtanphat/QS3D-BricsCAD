@@ -3,11 +3,12 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+CANONICAL = "ExistingProjectMutationContext.TryGet(document, out var project)"
 CASES = (
     (
         "Curtain",
         ROOT / "src/QS3D.BricsCAD.V25/CurtainWallScheduleCommands.cs",
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        CANONICAL,
         "CurtainWallScheduleBuilder.Build(project)",
         "panels = QuantityReportMath.AddCount(panels, row.PanelCount);",
         "CurtainWallXlsxExporter.Export(dialog.FileName, rows);",
@@ -17,7 +18,7 @@ CASES = (
     (
         "Door/Opening",
         ROOT / "src/QS3D.BricsCAD.V25/DoorOpeningScheduleCommands.cs",
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        CANONICAL,
         "DoorOpeningScheduleBuilder.Build(project)",
         "count = QuantityReportMath.AddCount(count, row.Count);",
         "DoorOpeningXlsxExporter.Export(dialog.FileName, rows);",
@@ -27,7 +28,7 @@ CASES = (
     (
         "Material",
         ROOT / "src/QS3D.BricsCAD.V25/MaterialUsageScheduleCommands.cs",
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        CANONICAL,
         "MaterialUsageScheduleBuilder.Build(project)",
         "elements = QuantityReportMath.AddCount(elements, row.ElementCount);",
         "MaterialUsageXlsxExporter.Export(dialog.FileName, rows);",
@@ -37,7 +38,7 @@ CASES = (
     (
         "Room finish",
         ROOT / "src/QS3D.BricsCAD.V25/RoomFinishScheduleCommands.cs",
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        CANONICAL,
         "RoomFinishScheduleBuilder.Build(project)",
         "primary = QuantityReportMath.Add(primary, row.PrimaryQuantity, \"HT_Phòng export primary quantity\");",
         "RoomFinishXlsxExporter.Export(dialog.FileName, rows);",
@@ -47,7 +48,7 @@ CASES = (
     (
         "BBS CSV",
         ROOT / "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs",
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        CANONICAL,
         "ProjectRebarScheduleBuilder.Build(project)",
         "totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, \"BBS CSV total weight\");",
         "RebarCsvExporter.Export(dialog.FileName, rows);",
@@ -89,19 +90,23 @@ for label, path, project, build, aggregate, export, finalize, existing_only in C
             < positions[export]
             < positions[finalize]
         ):
-            errors.append(label + " must confirm destination before current-project regeneration/build, then validate aggregates, export, and finalize UI")
+            errors.append(label + " must confirm destination before canonical-project regeneration/build, then validate aggregates, export, and finalize UI")
 
         before_dialog = text[:positions[dialog]]
         for forbidden in (project, regenerate, build):
             if forbidden in before_dialog:
-                errors.append(label + " Cancel path must not touch project/regeneration/schedule state before save confirmation: " + forbidden)
+                errors.append(label + " Cancel path must not touch canonical project/regeneration/schedule state before save confirmation: " + forbidden)
 
         between_export_and_finalize = text[positions[export] + len(export):positions[finalize]]
         if "PaletteCoordinator." in between_export_and_finalize or "Editor.WriteMessage" in between_export_and_finalize:
             errors.append(label + " must not perform fallible UI work between persistent export and FinalizeUi")
 
+        export_slice = text[positions[dialog]:positions[finalize] + len(finalize)]
+        if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" in export_slice:
+            errors.append(label + " regeneration export must not mutate a detached read-only project")
+
     if existing_only and "ProjectContextCoordinator.GetOrCreate(document)" in text:
-        errors.append(label + " read-only export must not create a replacement project")
+        errors.append(label + " existing-project export must not create a replacement project")
     if "Cảnh báo UI sau export" not in text:
         errors.append(label + " missing best-effort post-export UI warning boundary")
 
@@ -148,4 +153,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: schedule/template exporters confirm destination before project/regeneration work, enforce each command's existing-vs-create project boundary, validate/build before writing, and isolate post-export UI from persistent success.")
+print("PASS: schedule exporters confirm destination before canonical existing-project regeneration, template export preserves its explicit create-capable boundary, and all exporters isolate post-export UI from persistent success.")
