@@ -21,7 +21,13 @@ namespace QS3D.BricsCAD.V25
                 var dialog = new SaveFileDialog { Title = "Xuất QS3D Template", Filter = "QS3D Template (*.qstemplate)|*.qstemplate", DefaultExt = ".qstemplate", AddExtension = true, OverwritePrompt = true, FileName = drawingName + ".qstemplate" };
                 if (dialog.ShowDialog() != true) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                {
+                    const string blocked = "Template export: chưa có QS3D project hiện hữu; export không tạo project mới.";
+                    try { PaletteCoordinator.SetStatus(blocked); } catch { }
+                    try { doc.Editor.WriteMessage("\nQS3D " + blocked); } catch { }
+                    return;
+                }
                 var store = new TemplateProfileStore();
                 var profile = store.ExportProject(project, "template-" + Guid.NewGuid().ToString("N"), drawingName + " Template");
                 store.Save(profile, dialog.FileName);
