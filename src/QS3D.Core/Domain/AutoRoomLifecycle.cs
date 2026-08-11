@@ -167,19 +167,20 @@ namespace QS3D.Core.Domain
             if (room.Category != ElementCategory.Room || family.Category != ElementCategory.Room)
                 throw new InvalidOperationException("Auto-room family synchronization requires Room category values.");
 
+            var familyProperties = ProjectFamilyService.SnapshotProperties(family, "Target", "auto-room synchronization");
             var previousFamily = project.FindFamily(room.FamilyId);
             var prefix = FamilyDefaultSnapshotPrefix + room.Id + ":";
-            var currentFamilyKeys = new HashSet<string>(family.Properties.Keys, StringComparer.OrdinalIgnoreCase);
+            var currentFamilyKeys = new HashSet<string>(familyProperties.Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
             var roomSets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var roomRemoves = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var metadataSets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var metadataRemoves = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var changed = 0;
 
-            foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            foreach (var property in familyProperties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var key = property.Key;
-                var nextDefault = property.Value ?? string.Empty;
+                var nextDefault = property.Value;
                 var snapshotKey = prefix + key;
                 var hasCurrent = room.Properties.TryGetValue(key, out var currentValue);
                 var inherited = !hasCurrent;

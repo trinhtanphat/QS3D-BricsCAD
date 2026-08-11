@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             OrphanAndConflictingRoomFinishProvenanceAreSafe();
             ReactivationClearsStaleState();
             FamilyDefaultsPreserveInstanceOverrides();
+            MalformedFamilyDefaultsFailBeforeMutation();
         }
 
         private static void SourceSignatureIsDeterministic()
@@ -202,6 +203,55 @@ namespace QS3D.Core.SmokeTests
             Equal("4.2", room.Properties["HeightM"]);
             Equal("9.0", room.Properties["WidthM"]);
             True(!room.Properties.ContainsKey("FireRating"));
+        }
+
+        private static void MalformedFamilyDefaultsFailBeforeMutation()
+        {
+            AssertFamilyDefaultRejectedWithoutMutation<InvalidOperationException>(" HeightM ", "3.6");
+            AssertFamilyDefaultRejectedWithoutMutation<ArgumentException>("HeightM", new string('X', 1001));
+        }
+
+        private static void AssertFamilyDefaultRejectedWithoutMutation<TException>(string key, string value) where TException : Exception
+        {
+            var project = NewProject();
+            var previousFamily = project.FindFamily("room") ?? throw new Exception("Missing room family.");
+            previousFamily.Properties["HeightM"] = "3.0";
+            var targetFamily = new ProjectFamily("room-invalid", "Invalid Room", ElementCategory.Room);
+            targetFamily.Properties[key] = value;
+            project.Families.Add(targetFamily);
+
+            var room = AutoRoom("R-INVALID", "A;B;C", project);
+            room.Properties["HeightM"] = "3.0";
+            room.Properties["InstanceOverride"] = "keep";
+            room.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(room);
+            project.Metadata["AutoRoomFamilyDefault:" + room.Id + ":HeightM"] = "3.0";
+
+            var beforeFamilyId = room.FamilyId;
+            var beforeRoomProperties = Snapshot(room.Properties);
+            var beforeMetadata = Snapshot(project.Metadata);
+            var beforeDirty = room.Dirty;
+            var beforeRoomUpdatedUtc = room.UpdatedUtc;
+            var beforeChangeVersion = project.ChangeVersion;
+            var beforeProjectUpdatedUtc = project.UpdatedUtc;
+
+            Throws<TException>(() => AutoRoomLifecycle.SyncFamilyDefaults(project, room, targetFamily));
+
+            Equal(beforeFamilyId, room.FamilyId);
+            Equal(beforeRoomProperties, Snapshot(room.Properties));
+            Equal(beforeMetadata, Snapshot(project.Metadata));
+            Equal(beforeDirty, room.Dirty);
+            Equal(beforeRoomUpdatedUtc, room.UpdatedUtc);
+            Equal(beforeChangeVersion, project.ChangeVersion);
+            Equal(beforeProjectUpdatedUtc, project.UpdatedUtc);
+        }
+
+        private static string Snapshot(IDictionary<string, string> values)
+        {
+            return string.Join("\n", values
+                .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => x.Key + "=" + (x.Value ?? string.Empty)));
         }
 
         private static ProjectState NewProject()
