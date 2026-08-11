@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMANDS = ROOT / "src" / "QS3D.BricsCAD.V25" / "ProjectLifecycleProbeCommands.cs"
+WORKSPACE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml.cs"
 RUNNER = ROOT / "scripts" / "test-bricscad-v25-project-lifecycle.ps1"
 DOCS = ROOT / "docs" / "COMMANDS.md"
 INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
@@ -18,6 +19,7 @@ def read(path):
 
 
 source = read(COMMANDS)
+workspace = read(WORKSPACE)
 runner = read(RUNNER)
 docs = read(DOCS)
 inbox = read(INBOX)
@@ -53,6 +55,19 @@ for phase, command in (
 prep = runner.find('"QS3DLIFECYCLECOMMANDPREP", $command, "QS3DLIFECYCLECOMMANDVERIFY"')
 if prep < 0:
     errors.append("runner must execute prep -> real user command -> verify in one BricsCAD process")
+
+refresh_start = workspace.find("public void RefreshProject()")
+refresh_end = workspace.find("public void SetStatus", refresh_start)
+if refresh_start < 0 or refresh_end <= refresh_start:
+    errors.append("cannot isolate WorkspacePanel.RefreshProject")
+else:
+    refresh = workspace[refresh_start:refresh_end]
+    if "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)" not in refresh:
+        errors.append("Workspace refresh must probe project state read-only/non-creating")
+    if "ClearProject(" not in refresh:
+        errors.append("Workspace refresh must clear stale UI when no project exists")
+    if "ProjectContextCoordinator.GetOrCreate" in refresh or "ExistingProjectMutationContext" in refresh:
+        errors.append("passive Workspace refresh must not create or bind replacement project state")
 for token in (
     "git -C $repoRoot status --porcelain",
     "$exactSha = (& git -C $repoRoot rev-parse HEAD).Trim()",
