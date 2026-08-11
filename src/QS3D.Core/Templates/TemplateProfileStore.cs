@@ -77,76 +77,92 @@ namespace QS3D.Core.Templates
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             Validate(profile);
             var familyPlans = ValidateApply(project, profile);
+            var rollback = ProjectStateSnapshot.Capture(project);
 
-            var result = new TemplateApplyResult();
-            var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var changedCategories = new HashSet<ElementCategory>();
-
-            foreach (var plan in familyPlans)
+            try
             {
-                if (!plan.Changed) continue;
-                var target = plan.Existing;
-                if (target == null)
+                var result = new TemplateApplyResult();
+                var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var changedCategories = new HashSet<ElementCategory>();
+
+                foreach (var plan in familyPlans)
                 {
-                    target = new ProjectFamily(plan.Source.Id, plan.Source.Name, plan.Source.Category);
-                    foreach (var property in plan.Source.Properties) target.Properties[property.Key] = property.Value;
-                    project.Families.Add(target);
-                    result.FamiliesAdded++;
+                    if (!plan.Changed) continue;
+                    var target = plan.Existing;
+                    if (target == null)
+                    {
+                        target = new ProjectFamily(plan.Source.Id, plan.Source.Name, plan.Source.Category);
+                        foreach (var property in plan.Source.Properties) target.Properties[property.Key] = property.Value;
+                        project.Families.Add(target);
+                        result.FamiliesAdded++;
+                    }
+                    else
+                    {
+                        target.Name = plan.Source.Name;
+                        target.Category = plan.Source.Category;
+                        target.Properties.Clear();
+                        foreach (var property in plan.Source.Properties) target.Properties[property.Key] = property.Value;
+                        result.FamiliesUpdated++;
+                    }
+
+                    PropagateFamilyDefaults(project, plan.Source, plan.PreviousProperties, affected);
                 }
-                else
+
+                foreach (var source in profile.QuantityRules)
                 {
-                    target.Name = plan.Source.Name;
-                    target.Category = plan.Source.Category;
-                    target.Properties.Clear();
-                    foreach (var property in plan.Source.Properties) target.Properties[property.Key] = property.Value;
-                    result.FamiliesUpdated++;
+                    var existing = project.FindQuantityRule(source.Id);
+                    var same = existing != null && existing.Category == source.Category &&
+                               string.Equals(existing.OutputName, source.OutputName, StringComparison.OrdinalIgnoreCase) &&
+                               string.Equals(existing.Expression, source.Expression, StringComparison.Ordinal) &&
+                               string.Equals(existing.Version, source.Version, StringComparison.Ordinal);
+                    if (same) continue;
+
+                    if (existing != null)
+                    {
+                        changedCategories.Add(existing.Category);
+                        project.QuantityRules.Remove(existing);
+                        result.RulesUpdated++;
+                    }
+                    else result.RulesAdded++;
+
+                    project.QuantityRules.Add(new QuantityRule(source.Id, source.Category, source.OutputName, source.Expression, source.Version));
+                    changedCategories.Add(source.Category);
                 }
 
-                PropagateFamilyDefaults(project, plan.Source, plan.PreviousProperties, affected);
-            }
-
-            foreach (var source in profile.QuantityRules)
-            {
-                var existing = project.FindQuantityRule(source.Id);
-                var same = existing != null && existing.Category == source.Category &&
-                           string.Equals(existing.OutputName, source.OutputName, StringComparison.OrdinalIgnoreCase) &&
-                           string.Equals(existing.Expression, source.Expression, StringComparison.Ordinal) &&
-                           string.Equals(existing.Version, source.Version, StringComparison.Ordinal);
-                if (same) continue;
-
-                if (existing != null)
+                foreach (var mapping in profile.LayerMappings)
                 {
-                    changedCategories.Add(existing.Category);
-                    project.QuantityRules.Remove(existing);
-                    result.RulesUpdated++;
+                    if (!Enum.TryParse(mapping.Value, true, out ElementCategory category)) throw new InvalidDataException("Invalid template layer mapping category: " + mapping.Value);
+                    project.Metadata[LayerMappingPrefix + mapping.Key.Trim()] = category.ToString();
+                    result.LayerMappingsApplied++;
                 }
-                else result.RulesAdded++;
 
-                project.QuantityRules.Add(new QuantityRule(source.Id, source.Category, source.OutputName, source.Expression, source.Version));
-                changedCategories.Add(source.Category);
+                var visibleColumns = profile.VisibleBqColumns.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                if (visibleColumns.Length > 0) project.Metadata[VisibleBqColumnsKey] = string.Join("|", visibleColumns);
+
+                foreach (var element in project.Elements)
+                {
+                    if (!changedCategories.Contains(element.Category)) continue;
+                    element.MarkDirty(ElementDirtyFlags.Quantity);
+                    affected.Add(element.Id);
+                }
+
+                result.AffectedElements = affected.Count;
+                project.Touch();
+                AuditTrail.ForProject(project).Record("template.apply", string.Empty, profile.Id + " • families +" + result.FamiliesAdded + "/~" + result.FamiliesUpdated + " • rules +" + result.RulesAdded + "/~" + result.RulesUpdated + " • mappings " + result.LayerMappingsApplied);
+                return result;
             }
-
-            foreach (var mapping in profile.LayerMappings)
+            catch (Exception applyError)
             {
-                if (!Enum.TryParse(mapping.Value, true, out ElementCategory category)) throw new InvalidDataException("Invalid template layer mapping category: " + mapping.Value);
-                project.Metadata[LayerMappingPrefix + mapping.Key.Trim()] = category.ToString();
-                result.LayerMappingsApplied++;
+                try
+                {
+                    rollback.Restore(project);
+                }
+                catch (Exception rollbackError)
+                {
+                    throw new AggregateException("Template apply failed and project rollback also failed.", applyError, rollbackError);
+                }
+                throw;
             }
-
-            var visibleColumns = profile.VisibleBqColumns.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            if (visibleColumns.Length > 0) project.Metadata[VisibleBqColumnsKey] = string.Join("|", visibleColumns);
-
-            foreach (var element in project.Elements)
-            {
-                if (!changedCategories.Contains(element.Category)) continue;
-                element.MarkDirty(ElementDirtyFlags.Quantity);
-                affected.Add(element.Id);
-            }
-
-            result.AffectedElements = affected.Count;
-            project.Touch();
-            AuditTrail.ForProject(project).Record("template.apply", string.Empty, profile.Id + " • families +" + result.FamiliesAdded + "/~" + result.FamiliesUpdated + " • rules +" + result.RulesAdded + "/~" + result.RulesUpdated + " • mappings " + result.LayerMappingsApplied);
-            return result;
         }
 
         public void Save(TemplateProfile profile, string path)
