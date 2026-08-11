@@ -8,6 +8,7 @@ namespace QS3D.Core.SmokeTests
             LegacyQuantityReportIdentitySmoke.Run();
             ScheduleReportingIdentitySmoke.Run();
             XlsxScheduleNullRowSmoke.Run();
+            XlsxQuantityNullRowSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
             PersistenceHardeningSmoke.Run();
             AdvancedDomainSmoke.Run();
