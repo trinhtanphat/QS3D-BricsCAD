@@ -21,9 +21,9 @@ else:
         "_inFlightGeneration == generation",
         "_inFlightGeneration = generation;",
         "_inFlight = CheckCoreAsync(automatic, generation);",
-        "if (!IsGenerationCurrent(generation)) return result;",
-        "if (IsGenerationCurrent(generation)) Publish(result, false);",
-        "lock (_sync) return _started && generation == _generation;",
+        "private bool TryPublishCurrent(int generation, UpdateCheckResult result, bool automaticNotification)",
+        "if (!_started || generation != _generation) return false;",
+        "if (!_started || generation != _generation) return;",
         "var generation = CaptureGeneration();",
         "private int CaptureGeneration()",
         "TryScheduleCurrentGeneration(generation, release, out var lifecycleCurrent, out var error)",
@@ -31,7 +31,8 @@ else:
         "lifecycleCurrent = _started && generation == _generation;",
         "if (!lifecycleCurrent)",
         "return SecureUpdateLauncher.TrySchedule(release, out error);",
-        "if (lifecycleCurrent) Publish(failed, false);",
+        "if (lifecycleCurrent) TryPublishCurrent(generation, failed, false);",
+        "TryPublishCurrent(generation, scheduled, false);",
     ):
         if token not in text:
             errors.append("UpdateCoordinator lifecycle contract missing: " + token)
@@ -64,6 +65,19 @@ else:
     if check_body.count("CheckCoreAsync(automatic, generation)") != 1:
         errors.append("CheckAsync must expose exactly one guarded CheckCoreAsync launch path")
 
+    publish = text.find("private bool TryPublishCurrent(int generation, UpdateCheckResult result, bool automaticNotification)")
+    publish_lock = text.find("lock (_sync)", publish)
+    publish_current = text.find("if (!_started || generation != _generation) return false;", publish_lock)
+    publish_state = text.find("_last = result;", publish_current)
+    dispatcher_guard = text.find("if (!_started || generation != _generation) return;", publish_state)
+    state_event = text.find("StateChanged?.Invoke(this, result);", dispatcher_guard)
+    if min(publish, publish_lock, publish_current, publish_state, dispatcher_guard, state_event) < 0 or not (
+        publish < publish_lock < publish_current < publish_state < dispatcher_guard < state_event
+    ):
+        errors.append(
+            "Lifecycle publication must atomically reject stale generations before state mutation and revalidate generation before dispatcher delivery"
+        )
+
     schedule = text.find("internal async Task<UpdateCheckResult> ScheduleLatestAsync()")
     schedule_generation = text.find("var generation = CaptureGeneration();", schedule)
     await_check = text.find("await CheckAsync(false).ConfigureAwait(false);", schedule_generation)
@@ -91,9 +105,12 @@ else:
 
     for forbidden in (
         "if (_inFlight != null && !_inFlight.IsCompleted) return _inFlight;",
+        "if (!IsGenerationCurrent(generation)) return result;",
+        "if (IsGenerationCurrent(generation)) Publish(result, false);",
+        "private bool IsGenerationCurrent(int generation)",
     ):
         if forbidden in text:
-            errors.append("generation-blind updater single-flight reuse returned: " + forbidden)
+            errors.append("generation-blind or split lifecycle pattern returned: " + forbidden)
 
 if errors:
     print("Updater lifecycle preflight FAILED:")
@@ -101,4 +118,4 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Updater lifecycle preflight PASS: stopped coordinators refuse new manual checks before network launch, restart isolates single-flight work by generation, stale results remain publish-blocked, and detached scheduling stays bound to the active captured lifecycle.")
+print("Updater lifecycle preflight PASS: stopped coordinators refuse new manual checks before network launch, restart isolates single-flight work by generation, lifecycle state/event publication is generation-atomic, and detached scheduling stays bound to the active captured lifecycle.")
