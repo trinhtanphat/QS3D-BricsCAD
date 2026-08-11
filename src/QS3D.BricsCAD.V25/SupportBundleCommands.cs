@@ -23,7 +23,6 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
                 var dialog = new SaveFileDialog
                 {
                     Title = "Xuất QS3D Support Bundle (ẩn dữ liệu dự án)",
@@ -52,30 +51,54 @@ namespace QS3D.BricsCAD.V25
                     "td_assembly_version=" + AssemblyVersion(tdAssembly),
                     "process_64bit=" + Bool(Environment.Is64BitProcess),
                     "os_64bit=" + Bool(Environment.Is64BitOperatingSystem),
-                    "interactive=" + Bool(Environment.UserInteractive),
-                    "project_schema=" + project.SchemaVersion.ToString(CultureInfo.InvariantCulture),
-                    "zone_count=" + project.Zones.Count.ToString(CultureInfo.InvariantCulture),
-                    "floor_count=" + project.Floors.Count.ToString(CultureInfo.InvariantCulture),
-                    "family_count=" + project.Families.Count.ToString(CultureInfo.InvariantCulture),
-                    "element_count=" + project.Elements.Count.ToString(CultureInfo.InvariantCulture),
-                    "dirty_element_count=" + project.Elements.Count(x => x.Dirty != ElementDirtyFlags.None).ToString(CultureInfo.InvariantCulture),
-                    "has_drawing_fingerprint=" + Bool(!string.IsNullOrWhiteSpace(project.DrawingFingerprint))
+                    "interactive=" + Bool(Environment.UserInteractive)
                 };
 
-                foreach (var group in project.Elements
-                    .GroupBy(x => x.Category)
-                    .OrderBy(x => x.Key.ToString(), StringComparer.Ordinal))
+                if (ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 {
-                    lines.Add("category." + SafeToken(group.Key.ToString()) + "=" + group.Count().ToString(CultureInfo.InvariantCulture));
+                    lines.Add("project_available=true");
+                    lines.Add("project_schema=" + project.SchemaVersion.ToString(CultureInfo.InvariantCulture));
+                    lines.Add("zone_count=" + project.Zones.Count.ToString(CultureInfo.InvariantCulture));
+                    lines.Add("floor_count=" + project.Floors.Count.ToString(CultureInfo.InvariantCulture));
+                    lines.Add("family_count=" + project.Families.Count.ToString(CultureInfo.InvariantCulture));
+                    lines.Add("element_count=" + project.Elements.Count.ToString(CultureInfo.InvariantCulture));
+                    lines.Add("dirty_element_count=" + project.Elements.Count(x => x.Dirty != ElementDirtyFlags.None).ToString(CultureInfo.InvariantCulture));
+                    lines.Add("has_drawing_fingerprint=" + Bool(!string.IsNullOrWhiteSpace(project.DrawingFingerprint)));
+
+                    foreach (var group in project.Elements
+                        .GroupBy(x => x.Category)
+                        .OrderBy(x => x.Key.ToString(), StringComparer.Ordinal))
+                    {
+                        lines.Add("category." + SafeToken(group.Key.ToString()) + "=" + group.Count().ToString(CultureInfo.InvariantCulture));
+                    }
+                }
+                else
+                {
+                    lines.Add("project_available=false");
                 }
 
                 File.WriteAllLines(dialog.FileName, lines, new System.Text.UTF8Encoding(false));
-                document.Editor.WriteMessage("\nQS3D Support Bundle đã xuất: " + dialog.FileName);
+                FinalizeSupportBundleUi(document, dialog.FileName);
+            }
+            catch (System.Exception ex)
+            {
+                try { document.Editor.WriteMessage("\nQS3DSUPPORTBUNDLE error: " + ex.Message); }
+                catch { }
+            }
+        }
+
+        private static void FinalizeSupportBundleUi(Document document, string path)
+        {
+            try
+            {
+                PaletteCoordinator.SetStatus("Đã xuất Support Bundle: " + path);
+                document.Editor.WriteMessage("\nQS3D Support Bundle đã xuất: " + path);
                 document.Editor.WriteMessage("\nBundle không chứa DWG path, handles, semantic IDs, Family names, project metadata, user/machine name.");
             }
             catch (System.Exception ex)
             {
-                document.Editor.WriteMessage("\nQS3DSUPPORTBUNDLE error: " + ex.Message);
+                try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export Support Bundle: " + ex.Message); }
+                catch { }
             }
         }
 
