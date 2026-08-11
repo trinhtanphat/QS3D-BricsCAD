@@ -1,50 +1,53 @@
 # Work claim — Quantity Settings delete directed intersection rule UI
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-intersection-rule-delete-ui-20260812-0038`
 - Registered: `2026-08-12T00:38:00+07:00`
+- Completed: `2026-08-12T00:44:00+07:00`
 - Baseline main SHA: `2341c0903136acb1de9e4502e3c81024f80fe6de`
 - Priority: P1 — complete the owner-requested rule authoring workflow so a mistaken/custom directed A → B rule can be removed inside `QS3DSETUP` instead of requiring external JSON editing.
 
 ## Confirmed product gap
 
-The existing Intersection Rules browser now supports viewing/editing a present A → B rule and explicitly creating a missing A → B rule, but it has no removal action for an existing directed rule. Because missing rules are a supported semantic state (the runtime resolver does not synthesize/mirror absent rules), rule management is currently one-way inside the product: add/edit is possible, remove requires editing the JSON template outside QS3D.
+The existing Intersection Rules browser supported viewing/editing a present A → B rule and explicitly creating a missing A → B rule, but it had no removal action for an existing directed rule. Because missing rules are a supported semantic state and the runtime resolver does not synthesize/mirror absent rules, rule management was one-way inside the product: add/edit was possible, remove required external JSON editing.
 
-## Reserved scope
+## Actual implementation surfaces
 
-- add one contextual `Xóa luật A → B` action beside the existing create action;
-- action is visible/enabled only when the exact selected directed row exists and the window is writable;
-- re-check exact source/target and row identity at click time, ask explicit confirmation, then remove exactly that one in-memory directed rule;
-- never remove or mirror B → A, never remove Category Rules, never save automatically;
-- refresh the existing category/intersection browser after removal, preserving the existing Save-only persistence and unsaved-close guard.
+- `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.CategoryRuleCreation.cs` — the existing window Loaded callback initializes the isolated removal behavior.
+- `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.IntersectionRuleRemoval.cs` — new isolated partial-class behavior that creates the contextual action programmatically beside the existing create action and owns all removal state/confirmation logic.
+- `scripts/preflight-quantity-intersection-rule-delete-ui.py` — focused source contract guard.
+- this claim file for close-out.
 
-## Expected surfaces
+No XAML edit was ultimately required: the delete button is inserted into the existing `CreateSelectedRuleButton` action panel at runtime. This also avoided conflict with concurrent WPF/base-code-behind work while preserving the existing visual style inherited by `Button`.
 
-- `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.xaml`
-- `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.IntersectionRuleRemoval.cs` (new isolated partial)
-- `scripts/preflight-quantity-intersection-rule-delete-ui.py` (new focused source gate)
-- this claim file for close-out
+## Implementation evidence
 
-## Explicit exclusions / coordination
+- `26bbb8441bd73ceab0ba4d5a007c1871fa6a3d9a` — implementation commit on branch `agent/chatgpt-quantity-rule-delete-20260812-0038`.
+- PR #586 — `feat(quantity): remove selected directed intersection rule`.
+- `22f2297c9a8f0db3ba93d40efad79bd30f0b9281` — authoritative PR #586 squash merge commit on `main`.
 
-- Current ACTIVE Quantity Settings import-diagnostics claim owns `QuantitySettingsWindow.xaml.cs`; this lane does not edit that file or its preflight.
-- Current ACTIVE global WPF XAML event-contract claim owns only its new scanner/docs and explicitly excludes product XAML/partial-class changes; no file overlap.
-- Current ACTIVE Build3D claim owns `Build3DCommands.cs`; no geometry/build file is touched.
-- No Quantity Settings store/recovery/cardinality/health changes, Core arithmetic/rule resolver/matrix diagnostic changes, category-rule deletion, Ribbon/Start Center changes, CAD/project mutation, updater/release or GitHub Actions.
-- Licensed BricsCAD V25 WPF/runtime qualification remains LOCAL_ONLY.
+## Final behavior
 
-## Validation gates
+- Existing selected A → B row exposes `Xóa luật A → B`; missing row continues to expose the existing create action instead.
+- Future-schema read-only mode keeps removal disabled.
+- Delete click re-resolves the current source/target and exact matching `IntersectionRows` row before confirmation.
+- Confirmed deletion removes exactly one in-memory A → B row, then refreshes the existing browser.
+- The reverse B → A row and all `CategoryRows` remain untouched.
+- No `_store.Save`, Import/Export, direct file/JSON write or CAD/project mutation occurs in the removal handler; persistence remains the existing `Lưu Cài Đặt` action.
+- Existing `IntersectionRows.CollectionChanged` wiring refreshes the intersection-only Category Rule diagnostics, and the completed unsaved-close guard treats the removal as an unsaved edit until explicitly saved or discarded.
 
-- existing selected A → B row exposes delete; missing row exposes create, never both actions at once;
-- future-schema read-only mode disables deletion;
-- delete handler re-resolves exact selected pair and exact matching row before confirmation;
-- Yes removes exactly one `IntersectionRows` row, No/cancel path makes no mutation;
-- B → A row and CategoryRows remain untouched;
-- no `_store.Save`, Import/Export, file/JSON write or CAD/project lifecycle calls in the delete handler;
-- removal triggers existing collection/browser refresh and remains unsaved until `Lưu Cài Đặt`;
-- focused static preflight pins XAML/handler/source-only contract;
-- no GitHub Actions dispatch.
+## Validation actually performed
+
+- Refetched `main` after claim registration and branched from `951a049295e274164a56b9f5b0d13020b1e8230f`.
+- Compared that branch base against newer `main` before PR creation; concurrent changes touched `QuantitySettingsWindow.xaml.cs` and other lanes, but did not touch `QuantitySettingsWindow.CategoryRuleCreation.cs`, the new removal partial, or the new focused preflight.
+- Reviewed the exact implementation source/patch: read-only check → current source/target → `SingleOrDefault` exact row → explicit Yes/No confirmation → one `IntersectionRows.Remove(selected)` → browser refresh.
+- Reviewed the focused preflight source; it pins the exact-row/confirmation/remove ordering and forbids Save/Import/Export/file-write/CategoryRows removal in the delete handler. The preflight was not executed in a local checked-out repository in this remote session.
+- GitHub Actions were not dispatched and no licensed BricsCAD V25/WPF runtime PASS is claimed.
+
+## Coordination
+
+The concurrent Quantity Settings import-diagnostics lane owns `QuantitySettingsWindow.xaml.cs`; this implementation deliberately did not edit that file. The global WPF event-contract lane owns only its scanner/docs and explicitly excludes product UI behavior. The active Build3D lane remains untouched.
 
 ## Completion condition
 
-A user can explicitly remove an existing directed A → B intersection rule from `QS3DSETUP` without external JSON editing, with exact-direction confirmation, no auto-save or reverse/category mutation, read-only safety preserved, focused source coverage merged to `main`, and this claim marked `COMPLETED` with exact merge evidence.
+Completed: a user can explicitly remove an existing directed A → B intersection rule from `QS3DSETUP` without external JSON editing, with exact-direction confirmation, no auto-save or reverse/category mutation, read-only safety preserved, focused source coverage merged to `main`, and exact merge evidence recorded above.
