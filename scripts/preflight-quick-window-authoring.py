@@ -23,9 +23,9 @@ if SOURCE.is_file():
     for token in (
         'DrawWindowCore(promptParameters: false, operation: "QS3DDRAWWINDOW")',
         'DrawWindowCore(promptParameters: true, operation: "QS3DDRAWWINDOWADV")',
-        'FamilyWindowNumber(defaultsProject, "WindowHeightM", 1.2d, positive: true)',
-        'FamilyWindowNumber(defaultsProject, "WindowSillHeightM", 0.9d, positive: false)',
-        'FamilyWindowNumber(defaultsProject, "BooleanClearanceM", 0.01d, positive: false)',
+        'FamilyWindowNumber(defaultsProject!, "WindowHeightM", 1.2d, positive: true)',
+        'FamilyWindowNumber(defaultsProject!, "WindowSillHeightM", 0.9d, positive: false)',
+        'FamilyWindowNumber(defaultsProject!, "BooleanClearanceM", 0.01d, positive: false)',
         "if (promptParameters)",
         'PromptPositiveMeters(document.Editor, "Chiều cao Cửa Sổ (m)"',
         'PromptNonNegativeMeters(document.Editor, "Cao độ bậu Cửa Sổ so với đáy host (m)"',

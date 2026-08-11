@@ -44,16 +44,18 @@ namespace QS3D.BricsCAD.V25
                 if (reference == null) return;
 
                 EnsureActive(document, operation + " / parameters");
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var lengthM = reference.LengthM;
                 var thicknessM = hasDefaultsProject
-                    ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d)
+                    ? FamilyNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d)
                     : 0.2d;
                 var heightM = hasDefaultsProject
-                    ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "HeightM", 3.6d)
+                    ? FamilyNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "HeightM", 3.6d)
                     : 3.6d;
                 var bottomOffsetM = hasDefaultsProject
-                    ? FamilyFiniteNumber(defaultsProject, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d)
+                    ? FamilyFiniteNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d)
                     : 0d;
 
                 if (promptParameters)
@@ -87,7 +89,7 @@ namespace QS3D.BricsCAD.V25
 
                 var endpoints = reference.CreateCenteredEndpoints(document, lengthM);
                 EnsureActive(document, operation + " / execute boundary");
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = projectPreview.ResolveForMutation(document, operation);
                 Execute(
                     document,
                     project,

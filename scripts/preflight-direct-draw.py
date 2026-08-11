@@ -83,7 +83,7 @@ required = {
         'string.Equals(x, "Polyline"',
         "sourceTypes.Count > 1",
         "không build chung LINE và open POLYLINE",
-        "RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
+        ".RegenerateDirtySubset(project, regenerationScope)",
         "BuildCategory(document, project, category, sourceType)",
         'return element.Properties.TryGetValue("GeneratedSolidHandle"',
     ],

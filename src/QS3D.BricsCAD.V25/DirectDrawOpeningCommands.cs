@@ -53,18 +53,20 @@ namespace QS3D.BricsCAD.V25
                     label + "/plan width");
                 var widthM = CadGeometryGuard.Positive(CadGeometryGuard.ToMeters(document, widthDrawing, label + "/width"), label + "/WidthM");
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var heightDefault = hasDefaultsProject
-                    ? FamilyPositiveNumber(defaultsProject, category, "HeightM", 2.2d)
+                    ? FamilyPositiveNumber(defaultsProject!, category, "HeightM", 2.2d)
                     : 2.2d;
                 var bottomOffsetDefault = hasDefaultsProject
-                    ? FamilyNonNegativeNumber(defaultsProject, category, "BottomOffsetM", defaultSillM)
+                    ? FamilyNonNegativeNumber(defaultsProject!, category, "BottomOffsetM", defaultSillM)
                     : defaultSillM;
                 var sillDefault = hasDefaultsProject
-                    ? FamilyNonNegativeNumber(defaultsProject, category, "SillHeightM", bottomOffsetDefault)
+                    ? FamilyNonNegativeNumber(defaultsProject!, category, "SillHeightM", bottomOffsetDefault)
                     : bottomOffsetDefault;
                 var clearanceDefault = hasDefaultsProject
-                    ? FamilyNonNegativeNumber(defaultsProject, category, "BooleanClearanceM", 0.01d)
+                    ? FamilyNonNegativeNumber(defaultsProject!, category, "BooleanClearanceM", 0.01d)
                     : 0.01d;
 
                 var heightM = heightDefault;
@@ -95,7 +97,7 @@ namespace QS3D.BricsCAD.V25
                         " khi cần nhập tham số riêng.");
                 }
 
-                Execute(document, category, label, points[0], points[1], widthM, heightM, sillM, clearanceM);
+                Execute(document, category, label, points[0], points[1], widthM, heightM, sillM, clearanceM, projectPreview);
             });
         }
 
@@ -108,10 +110,12 @@ namespace QS3D.BricsCAD.V25
             double widthM,
             double heightM,
             double sillM,
-            double clearanceM)
+            double clearanceM,
+            DirectDrawProjectPreviewContext projectPreview)
         {
-            EnsureActive(document, "Direct Draw " + label);
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var operation = "Direct Draw " + label;
+            EnsureActive(document, operation);
+            var project = projectPreview.ResolveForMutation(document, operation);
             var rollback = ProjectStateSnapshot.Capture(project);
             var sourceId = ObjectId.Null;
             ProjectElement? createdElement = null;

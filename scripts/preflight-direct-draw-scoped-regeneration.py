@@ -59,27 +59,27 @@ if not errors:
         for token in (
             "var promptUnit = CadUnitService.GetLengthUnit(document);",
             "var promptUcs = document.Editor.CurrentUserCoordinateSystem;",
-            "var expectedProjectId = hasProjectBeforePrompts ? defaultsProject.ProjectId : null;",
-            "var expectedProjectChangeVersion = hasProjectBeforePrompts ? (long?)defaultsProject.ChangeVersion : null;",
+            "var projectPreview = DirectDrawProjectPreviewContext.Capture(document);",
+            "var expectedProjectChangeVersion = hasProjectBeforePrompts ? (long?)defaultsProject!.ChangeVersion : null;",
             'EnsureActive(document, operation + " / prompt freshness")',
             "RequireModelSpace(document);",
             "CurrentUserCoordinateSystem.Equals(promptUcs)",
             "CadUnitService.GetLengthUnit(document) != promptUnit",
-            "BindProjectAfterPrompts(document, expectedProjectId, expectedProjectChangeVersion, operation)",
+            "BindProjectAfterPrompts(document, projectPreview, expectedProjectChangeVersion, operation)",
             "Execute(document, project,",
         ):
             if token not in draw:
                 errors.append("QS3DDRAWWINDOW freshness contract missing: " + token)
 
         capture_unit = draw.find("var promptUnit = CadUnitService.GetLengthUnit(document);")
-        capture_project = draw.find("var expectedProjectId = hasProjectBeforePrompts ? defaultsProject.ProjectId : null;")
+        capture_project = draw.find("var projectPreview = DirectDrawProjectPreviewContext.Capture(document);")
         point_prompt = draw.find("AcquireTwoPoints(document)")
         last_numeric_prompt = draw.find("PromptNonNegativeMeters(document.Editor, \"Khe hở boolean (m)\"")
         active = draw.find('EnsureActive(document, operation + " / prompt freshness")')
         space = draw.find("RequireModelSpace(document);", active)
         ucs = draw.find("CurrentUserCoordinateSystem.Equals(promptUcs)", space)
         unit = draw.find("CadUnitService.GetLengthUnit(document) != promptUnit", ucs)
-        bind = draw.find("BindProjectAfterPrompts(document, expectedProjectId, expectedProjectChangeVersion, operation)", unit)
+        bind = draw.find("BindProjectAfterPrompts(document, projectPreview, expectedProjectChangeVersion, operation)", unit)
         dispatch = draw.find("Execute(document, project,", bind)
         if min(capture_unit, capture_project, point_prompt, last_numeric_prompt, active, space, ucs, unit, bind, dispatch) < 0 or not (
             capture_unit < point_prompt and capture_project < point_prompt < last_numeric_prompt < active < space < ucs < unit < bind < dispatch

@@ -72,12 +72,14 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquirePath(document, "Tường tùy chỉnh", minimumPoints: 2, close: false);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Tường (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d) : 0.2d);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Tường (m)", hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d) : 0.2d);
                 if (!thicknessM.HasValue) return;
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Tường (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "HeightM", 3.6d) : 3.6d);
+                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Tường (m)", hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d) : 0d);
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 ExecuteDirect(
@@ -89,7 +91,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -139,12 +142,14 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquireFixedPath(document, "Dầm tùy chỉnh", 2);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var widthM = PromptPositiveMeters(document.Editor, "Bề rộng Dầm (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Beam, "WidthM", 0.3d) : 0.3d);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var widthM = PromptPositiveMeters(document.Editor, "Bề rộng Dầm (m)", hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.Beam, "WidthM", 0.3d) : 0.3d);
                 if (!widthM.HasValue) return;
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Dầm (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Beam, "HeightM", 0.5d) : 0.5d);
+                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Dầm (m)", hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.Beam, "HeightM", 0.5d) : 0.5d);
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Dầm so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Beam, "BottomOffsetM", 0d) : 0d);
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Dầm so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Beam, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 ExecuteDirect(
@@ -156,7 +161,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("WidthM", widthM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -203,10 +209,12 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquirePath(document, "Sàn tùy chỉnh", minimumPoints: 3, close: true);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Sàn (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Slab, "ThicknessM", 0.12d) : 0.12d);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Sàn (m)", hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.Slab, "ThicknessM", 0.12d) : 0.12d);
                 if (!thicknessM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Sàn so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Slab, "BottomOffsetM", 0d) : 0d);
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Sàn so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Slab, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 ExecuteDirect(
@@ -217,7 +225,8 @@ namespace QS3D.BricsCAD.V25
                     {
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -270,14 +279,16 @@ namespace QS3D.BricsCAD.V25
                 var centerResult = document.Editor.GetPoint(new PromptPointOptions("\nChọn tâm Cột tùy chỉnh: "));
                 if (centerResult.Status != PromptStatus.OK) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var widthM = PromptPositiveMeters(document.Editor, "Bề rộng Cột (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Column, "WidthM", 0.4d) : 0.4d);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var widthM = PromptPositiveMeters(document.Editor, "Bề rộng Cột (m)", hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.Column, "WidthM", 0.4d) : 0.4d);
                 if (!widthM.HasValue) return;
-                var depthM = PromptPositiveMeters(document.Editor, "Bề sâu Cột (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Column, "DepthM", 0.4d) : 0.4d);
+                var depthM = PromptPositiveMeters(document.Editor, "Bề sâu Cột (m)", hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.Column, "DepthM", 0.4d) : 0.4d);
                 if (!depthM.HasValue) return;
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Cột (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Column, "HeightM", 3.6d) : 3.6d);
+                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Cột (m)", hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.Column, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Cột so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Column, "BottomOffsetM", 0d) : 0d);
+                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Cột so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Column, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 ExecuteDirect(
@@ -290,7 +301,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("DepthM", depthM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -298,10 +310,14 @@ namespace QS3D.BricsCAD.V25
             Document document,
             ElementCategory category,
             Func<ObjectId> createSource,
-            Action<ProjectElement>? configureElement = null)
+            Action<ProjectElement>? configureElement = null,
+            DirectDrawProjectPreviewContext? projectPreview = null)
         {
-            EnsureActive(document, "Direct Draw " + category);
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var operation = "Direct Draw " + category;
+            EnsureActive(document, operation);
+            var project = projectPreview != null
+                ? projectPreview.ResolveForMutation(document, operation)
+                : ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
             var sourceId = ObjectId.Null;
             var sourceHandle = string.Empty;
