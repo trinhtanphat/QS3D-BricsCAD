@@ -1,30 +1,37 @@
 # Agent Work Claim
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETE`
+- State: `COMPLETE`
 - Agent: `chatgpt-web-gpt56sol-20260811-quantity-locate-stale-selection-clear`
 - Started (UTC): `2026-08-11T15:14:30Z`
-- Last Updated (UTC): `2026-08-11T15:27:00Z`
-- Expected Completion: `same session after follow-up implementation and repository-verifiable checks`
+- Last Updated (UTC): `2026-08-11T15:46:00Z`
+- Expected Completion: `completed source-side; licensed BricsCAD V25 interaction remains in the existing LOCAL_ONLY qualification queue`
 - Task Key: `UI-QUANTITY-LOCATE-STALE-SELECTION-CLEAR`
 - Intended Work: Harden quantity locate failure behavior so every failed/zero-target locate clears any previous CAD implied selection instead of leaving an unrelated earlier quantity row highlighted. Preserve multi-object selection, stale-handle tolerance, document affinity, read-only project behavior and zoom-only-after-positive-selection invariants.
-- Scope: `src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs`; `src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs`; `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs`; `scripts/preflight-quantity-locate-stale-selection-clear.py`; this claim/plan documentation.
-- Implementation Contract: `CadHandleService.Select(...)` is the explicit replace-selection API and always calls `Editor.SetImpliedSelection(...)`, including with an empty resolved ID set. `SelectIfAny(...)` remains the preserve-on-empty API. Quantity locate surfaces must route both zero-live-handle and zero-candidate-handle outcomes through explicit replacement semantics before returning/falling back, so no previous PICKFIRST/implied selection survives a failed target.
-- Out of Scope: Quantity/reporting formulas or grouping; semantic identity rules; project persistence/mutation; Excel semantics; `SelectIfAny` behavior; viewport camera algorithms; `Commands.cs` changes; native V25 runtime claims.
-- Coordination: The earlier quantity-description-3d-locate and quantity-insight-single-click-reveal claims are complete. `Commands.cs` is intentionally excluded from this follow-up because it is under high concurrent churn; `QuantitySummaryWindow` will clear an empty target before invoking its existing callback, so the callback cannot preserve an older highlight. Current WPF edits are restricted to the two locate methods only.
-- Verification Plan: Focused static/preflight contract proving `Select` resolves then unconditionally replaces implied selection, `SelectIfAny` retains its no-op-on-empty semantics, both Quantity surfaces explicitly clear on zero-candidate paths, multi-object resolve/dedup remains unchanged, and zoom remains gated on positive selected count. Re-fetch merged files and inspect current-main concurrency. Native mouse/PICKFIRST behavior remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under the existing local qualification queue.
+- Final Scope: `src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs`; `src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs`; `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs`; `scripts/preflight-quantity-locate-stale-selection-clear.py`; this claim/plan documentation.
+- Out of Scope Preserved: Quantity/reporting formulas or grouping; semantic identity rules; project persistence/mutation; Excel semantics; `SelectIfAny` behavior; viewport camera algorithms; `Commands.cs`; native V25 runtime claims.
+- Planning: `docs/QUANTITY-LOCATE-STALE-SELECTION-CLEAR-PLAN-2026-08-11.md` — final source-side status `IMPLEMENTED_SOURCE_SIDE`.
 - Completion Evidence:
-  - Initial claim commit: `70bb570e0c3881ecfbb3d6c39c48a8d90e3bb3d2`
-  - Initial planning commit: `1a9b4a2c83d764eef34c4e27921afab1bcaaeb4c`
-  - First scope-refinement commit: `d55f86c085640a991dd5aa11ccdb59913ee93ae5`
-  - First plan-refinement commit: `55de29154fa9ecab4551911d70cd4b50afb97f45`
-  - Explicit Select implementation: `e9df086f6a4cdcb66edd8fa0d7a12717e4bf5308`
-  - Initial focused gate: `ad52d6b2a27ab102cc87f20711a031d975665440`
-  - Zero-candidate scope expansion: pending
-  - Follow-up implementation/gate: pending
-  - Qualifier verdict: pending
+  - Initial claim: `70bb570e0c3881ecfbb3d6c39c48a8d90e3bb3d2`.
+  - Initial planning: `1a9b4a2c83d764eef34c4e27921afab1bcaaeb4c`.
+  - First scope refinement before source: `d55f86c085640a991dd5aa11ccdb59913ee93ae5`; corresponding plan refinement `55de29154fa9ecab4551911d70cd4b50afb97f45`.
+  - Explicit replacement API: `e9df086f6a4cdcb66edd8fa0d7a12717e4bf5308` — `CadHandleService.Select(...)` always replaces implied selection, including an empty resolved ID set. `SelectIfAny(...)` remains preserve-on-empty.
+  - Initial focused gate: `ad52d6b2a27ab102cc87f20711a031d975665440`.
+  - Zero-candidate scope expansion before follow-up source: `64a78875be70a93091f4a4dcdd2446c219b68ab3`; follow-up plan expansion `3137c534462e9c2b8781e329300b1d9c9a55f225`.
+  - Follow-up branch source: `4ba20d17898edc6647c799544562e12e23f33f2e` (Summary clears empty `liveHandles` before callback fallback), `c2c312fa59d46cff31b1fb5de630142c68af392b` (Insight clears zero semantic handles before return), `96c93e028a47367f98d701a0c093199c467ab71d` (focused gate extension).
+  - Final follow-up merge: PR #506 -> `8f25c5223f298baa94673604a0f6dffb39f03187`. GitHub reported the PR clean/rebaseable before high-frequency base churn; rebase and direct fast-forward attempts were safely rejected as main moved, then GitHub's atomic merge operation succeeded with the expected head SHA. No force-push was used.
+  - Merge-SHA blobs: `CadHandleService.cs` `11c0ef8ceae29d3bb1f8870e7917fada90176eb9`; `QuantitySummaryWindow.xaml.cs` `2c715b976280dd1aff9aa503e187500368956206`; `QuantityInsightPanel.xaml.cs` `1bfa9f2bc0c398752687a9039f17d78949f3e10a`; focused gate `717c8712cc904c8afd713236792d4c992680d4c8`.
+  - Source qualifier: merge-SHA re-fetch confirms Summary clears the zero-candidate implied selection before `_locate`, Insight clears inside `handles.Count == 0` before status/return, `Select` always calls `SetImpliedSelection`, and `SelectIfAny` retains its zero-count early return.
+  - Regression qualifier: focused gate AST parse PASS (162 lines); independent source-order contract checks PASS for explicit `Select`, preserved `SelectIfAny`, both zero-candidate paths, and positive-count-only zoom.
+  - Concurrency qualifier: ten commits landed after `8f25c5223f298baa94673604a0f6dffb39f03187`; comparison to then-current main `521e07a5f670daa2e3fd59b936c3ad29a52a59dc` showed none modifying `CadHandleService.cs`, either quantity locate file, or the focused gate.
+  - GitHub checks: no combined status checks and no workflow runs were registered for the merge SHA; absence recorded, not treated as CI PASS.
+  - Native V25 disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`. The existing `docs/LOCAL-AGENT-INBOX.md` already owns the broader exact-V25 BQ/modeless/interactive qualification matrix, so no duplicate local item was created.
+- Qualifier Verdict: `REMOTE_PASS` for repository/source behavior; licensed BricsCAD V25 interactive behavior intentionally remains unclaimed remotely.
+- Requirement Smoke Verdict: source contracts + gate syntax/order `PASS`; native UI runtime `PENDING_LOCAL`.
 - Change Log:
-  - `2026-08-11T15:14:30Z` — Registered claim before planning/source edits after confirming `SelectIfAny` could preserve the prior quantity row's implied selection when no native object survived.
-  - `2026-08-11T15:18:00Z` — Refined implementation before source edits: preserve `SelectIfAny`; make explicit `Select` perform replacement semantics.
-  - `2026-08-11T15:24:59Z` — Rebased and merged explicit `Select` replacement semantics plus the first focused gate through PR #501; merged commits `e9df086f6a4cdcb66edd8fa0d7a12717e4bf5308` and `ad52d6b2a27ab102cc87f20711a031d975665440`.
-  - `2026-08-11T15:27:00Z` — Qualification found a residual zero-candidate path: Quantity Insight returns before `Select` when semantic resolution yields no handles, while Quantity Summary can reach its callback with zero `SourceHandles`; both can still preserve an older highlight. Expanded this claim before follow-up source edits and explicitly kept `Commands.cs` out of scope to avoid concurrent collision.
+  - `2026-08-11T15:14:30Z` — Registered claim before planning/source edits after confirming an all-stale target could preserve the previous quantity row's implied selection.
+  - `2026-08-11T15:18:00Z` — Refined the API contract before source edits: explicit `Select` replaces even empty; `SelectIfAny` remains preserve-on-empty.
+  - `2026-08-11T15:24:59Z` — Merged the explicit `Select` fix and first focused gate through PR #501.
+  - `2026-08-11T15:27:00Z` — Qualification found zero-candidate branches that bypassed `Select`; expanded claim/plan before follow-up WPF edits and kept `Commands.cs` out of scope for concurrency safety.
+  - `2026-08-11T15:43:00Z` — PR #506 atomically merged the two zero-candidate UI clears plus extended focused gate after repeated safe non-force retries against a rapidly moving main.
+  - `2026-08-11T15:46:00Z` — Re-fetched merge-SHA source/gate, recorded AST/source-order PASS, checked post-merge concurrency and GitHub status/workflow absence, updated plan, and closed source-side claim as `COMPLETE`.
