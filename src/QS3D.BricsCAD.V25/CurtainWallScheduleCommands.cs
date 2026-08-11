@@ -4,6 +4,7 @@ using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Export;
+using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
 using Teigha.Runtime;
@@ -31,10 +32,11 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
-                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                     throw new InvalidOperationException("Curtain XLSX cần một QS3D project hiện hữu; lệnh export không tạo project mới.");
-                new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                var rows = CurtainWallScheduleBuilder.Build(project);
+                var snapshot = ProjectStateSnapshot.CreateDetachedCopy(project);
+                new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(snapshot);
+                var rows = CurtainWallScheduleBuilder.Build(snapshot);
                 if (rows.Count == 0)
                 {
                     const string empty = "Curtain XLSX: chưa có Vách Kính semantic để xuất.";
