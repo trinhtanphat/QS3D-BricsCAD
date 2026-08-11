@@ -138,7 +138,7 @@ namespace QS3D.BricsCAD.V25.Services
             if (document == null) throw new ArgumentNullException(nameof(document));
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
             var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var project = ExistingProjectMutationContext.Require(document, "Room finish generation");
             var rollback = ProjectStateSnapshot.Capture(project);
             try
             {
