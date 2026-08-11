@@ -25,8 +25,8 @@ namespace QS3D.Core.Domain
         public static void ClearIfMissing(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (!project.Metadata.TryGetValue("ActiveFamilyId", out var current) || string.IsNullOrWhiteSpace(current)) return;
-            if (project.FindFamily(current.Trim()) != null) return;
+            if (!project.Metadata.TryGetValue("ActiveFamilyId", out var current)) return;
+            if (!string.IsNullOrWhiteSpace(current) && project.FindFamily(current.Trim()) != null) return;
             project.Touch();
             project.Metadata.Remove("ActiveFamilyId");
         }
