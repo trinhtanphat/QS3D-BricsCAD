@@ -93,9 +93,9 @@ The source-side install/update path is hardened, but a production release should
 - uninstall file removal always requires canonical QS3D V25 metadata plus matching plugin/Core assembly and ProductVersion identity; `-Force` only authorizes an intentional verified custom path outside the default QS3D LocalAppData scope and never bypasses ownership validation;
 - if a replacement fails, the installer restores the previous files/registration; if a first install fails, partial new state is removed;
 - signed-package finalization requires a `.zip` output outside `PackageDirectory`, then revalidates `QS3D / BricsCAD V25 x64`, metadata AssemblyVersion/productVersion and exact plugin/Core managed identities after executable signature verification and before mutating metadata, regenerating hashes, deleting any prior output ZIP or rebuilding the release ZIP;
-- signed update-manifest generation requires an external `.json` output that is outside signed staging and distinct from the package ZIP before signer/ZIP verification or manifest writing, so manifest publication cannot overwrite an artifact it just verified;
+- signed update-manifest generation requires an external `.json` output that is outside signed staging and distinct from the package ZIP, and binds metadata AssemblyVersion/productVersion exactly to both signed plugin/Core managed identities before ZIP/staging verification or manifest writing;
 - the updater accepts only the intended HTTPS/package-host path and verifies archive/path/size limits, SHA-256 and Authenticode signer expectations;
-- update manifests use schema 2 and bind `productVersion` to package metadata and the signed plugin ProductVersion, while AssemblyVersion remains an independent binary/package check;
+- update manifests use schema 2 and carry the already-verified signed plugin product/assembly version after plugin/Core identity equality has been established;
 - product SemVer must advance monotonically; equal-AssemblyVersion prerelease upgrades are allowed only when product SemVer is strictly newer, and replay/downgrade is rejected;
 - expected-version mismatch, package substitution or replay/relabel conditions must fail before install;
 - installer/updater must never lower BricsCAD `SECURELOAD`.
