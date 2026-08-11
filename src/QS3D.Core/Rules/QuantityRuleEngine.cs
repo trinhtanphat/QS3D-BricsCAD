@@ -44,7 +44,7 @@ namespace QS3D.Core.Rules
 
             var result = _evaluator.Evaluate(rule.Expression, variables);
             element.SetQuantity(rule.OutputName, result);
-            element.Properties[ProvenancePrefix + rule.OutputName] = rule.Id + "@" + rule.Version;
+            SetProvenance(element, rule.OutputName, rule.Id + "@" + rule.Version);
         }
 
         public int ApplyMatching(ProjectState project, ProjectElement element)
@@ -107,7 +107,7 @@ namespace QS3D.Core.Rules
             foreach (var item in staged)
             {
                 element.SetQuantity(item.Key.OutputName, item.Value);
-                element.Properties[ProvenancePrefix + item.Key.OutputName] = item.Key.Id + "@" + item.Key.Version;
+                SetProvenance(element, item.Key.OutputName, item.Key.Id + "@" + item.Key.Version);
             }
             return rules.Count + staleOutputs.Count;
         }
@@ -143,13 +143,23 @@ namespace QS3D.Core.Rules
             return result;
         }
 
+        private static void SetProvenance(ProjectElement element, string output, string provenance)
+        {
+            var key = ProvenancePrefix + output;
+            if (element.Properties.TryGetValue(key, out var existing) && string.Equals(existing, provenance, StringComparison.Ordinal)) return;
+            element.Properties[key] = provenance;
+            element.TouchPersistenceState();
+        }
+
         private static void CleanupStaleOutputs(ProjectElement element, IEnumerable<string> staleOutputs)
         {
+            var changed = false;
             foreach (var output in staleOutputs)
             {
-                element.Quantities.Remove(output);
-                element.Properties.Remove(ProvenancePrefix + output);
+                changed |= element.Quantities.Remove(output);
+                changed |= element.Properties.Remove(ProvenancePrefix + output);
             }
+            if (changed) element.TouchPersistenceState();
         }
 
         private static Dictionary<string, double> BuildVariables(ProjectState project, ProjectElement element)
