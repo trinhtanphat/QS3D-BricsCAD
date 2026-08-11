@@ -12,7 +12,7 @@ namespace QS3D.Core.Geometry
 
             double total = 0d;
             for (var i = 1; i < points.Count; i++) total = AddFinite(total, points[i - 1].DistanceTo(points[i]));
-            if (closed && points.Count > 2) total = AddFinite(total, points[points.Count - 1].DistanceTo(points[0]));
+            if (closed) total = AddFinite(total, points[points.Count - 1].DistanceTo(points[0]));
             return total;
         }
 

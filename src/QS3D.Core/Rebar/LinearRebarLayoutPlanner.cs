@@ -40,7 +40,8 @@ namespace QS3D.Core.Rebar
             if (input.Count.HasValue == input.SpacingMm.HasValue)
                 throw new InvalidOperationException("Specify exactly one of Count or SpacingMm for a linear rebar layout.");
 
-            var radiusM = RebarMath.Divide(diameterMm, 2000d, "linear rebar radius");
+            var diameterM = RebarMath.Divide(diameterMm, 1000d, "linear rebar diameter");
+            var radiusM = RebarMath.Divide(diameterM, 2d, "linear rebar radius");
             var edgeClearanceM = RebarMath.Add(coverM, radiusM, "linear rebar edge clearance");
             var twoEdgeClearanceM = RebarMath.Multiply(edgeClearanceM, 2d, "linear rebar two-side clearance");
             var usableSpanM = spanM - twoEdgeClearanceM;
@@ -71,6 +72,8 @@ namespace QS3D.Core.Rebar
             if (!(usableSpanM > 0d)) throw new InvalidOperationException("Multiple linear rebars require a positive usable span.");
 
             var actualSpacingM = RebarMath.Divide(usableSpanM, count - 1d, "linear rebar actual spacing");
+            if (actualSpacingM + 1e-12d < diameterM)
+                throw new InvalidOperationException("Linear rebar centers are closer than one bar diameter.");
             var halfSpanM = RebarMath.Divide(usableSpanM, 2d, "linear rebar half span");
             var offsets = new List<double>(count);
             for (var index = 0; index < count; index++)

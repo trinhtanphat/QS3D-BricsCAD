@@ -140,8 +140,6 @@ namespace QS3D.Core.Navigation
             if (root == null) throw new ArgumentNullException(nameof(root));
             var result = new Dictionary<string, ProjectBrowserNode>(StringComparer.Ordinal);
             IndexNode(root, string.Empty, 0, result);
-            if (result.Count > MaxNodes)
-                throw new InvalidOperationException("Project browser virtualization supports at most " + MaxNodes + " tree nodes.");
             return result;
         }
 
@@ -152,6 +150,9 @@ namespace QS3D.Core.Navigation
             IDictionary<string, ProjectBrowserNode> index)
         {
             ValidateNode(node, depth);
+            if (index.Count >= MaxNodes)
+                throw new InvalidOperationException("Project browser virtualization supports at most " + MaxNodes + " tree nodes.");
+
             var path = parentPath.Length == 0 ? Segment(node.Key) : parentPath + "/" + Segment(node.Key);
             if (index.ContainsKey(path))
                 throw new InvalidOperationException("Project browser virtualization found duplicate node path: " + path + ".");

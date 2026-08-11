@@ -1,16 +1,18 @@
 # Work claim — EntitySnapshot proxy type canonicalization
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-entity-snapshot-proxy-type-canonicalization`
 - Registered: `2026-08-11T22:22:00+07:00`
+- Completed: `2026-08-11T22:24:00+07:00`
 - Baseline main SHA: `adb8bd419871cdc64aedfde9b5431b76ec06b7f4`
+- Reservation commit: `4a76a8623cc3b526d32b7d8d5006561537e31e37`
 - Priority: prevent padded CAD entity-type text from bypassing ProxyEntity capture safety.
 
-## Confirmed defect
+## Defect fixed
 
-`EntitySnapshot` rejects blank `entityType` values but currently stores the original nonblank string unchanged. `EntitySnapshotCaptureEligibility.IsReady(...)` intentionally applies stricter metric requirements when `snapshot.EntityType` equals `ProxyEntity`, using an ordinal-ignore-case comparison without trimming.
+`EntitySnapshot` previously rejected blank `entityType` values but stored nonblank values unchanged. `EntitySnapshotCaptureEligibility.IsReady(...)` applies stricter metric requirements to `ProxyEntity` using a case-insensitive comparison, so surrounding whitespace could cause a metricless proxy to be treated as an ordinary entity.
 
-A snapshot constructed with `entityType = " ProxyEntity "` therefore passes constructor validation but is treated as a normal non-proxy entity by the capture-eligibility gate. A metricless proxy can consequently bypass the review-only/capture-blocking safety contract solely because of surrounding whitespace.
+`EntitySnapshot` now trims `EntityType` at the model boundary. Padded/case-varied proxy type text therefore reaches the existing `ProxyEntity` safety gate in canonical form.
 
 ## Reserved scope
 
@@ -18,12 +20,25 @@ A snapshot constructed with `entityType = " ProxyEntity "` therefore passes cons
 - `tests/QS3D.Core.SmokeTests/ProxyCaptureEligibilitySmoke.cs`
 - this claim file
 
-## Intended contract
+## Delivered contract
 
 - `EntitySnapshot.EntityType` is canonicalized to its trimmed nonblank representation at construction.
 - Padded/case-varied `ProxyEntity` values remain subject to the same finite positive primary-metric capture gate as canonical `ProxyEntity`.
-- Existing entity-type compatibility behavior and normal non-proxy recognition remain unchanged.
-- Do not modify `RecognitionEngine.cs` or other currently active recognition workstreams.
+- Existing measured-proxy and normal non-proxy paths remain unchanged.
+- `RecognitionEngine.cs` and other active recognition workstreams were not modified.
+
+## Published commits
+
+- `b843af2662d5dace1a362dd951e7ebc7c927da37` — trim `EntitySnapshot.EntityType` at construction.
+- `e29035176df16ecef94012982123f6b547273010` — add padded/case-varied metricless ProxyEntity regression coverage.
+
+## Validation notes
+
+- Exact source diff is one constructor assignment change; exact regression diff adds only the padded proxy case to the already-registered proxy safety smoke.
+- The regression asserts canonicalized type text, review-only recognition, zero auto-accept and `EnsureReady` rejection for an unmeasured padded/case-varied proxy.
+- The current execution environment has no `dotnet`, so the smoke executable was not run locally in this session.
+- GitHub Actions were not dispatched; repository CI remains manual-only.
+- No force-push was used.
 
 ## Exclusions
 
@@ -31,19 +46,7 @@ A snapshot constructed with `entityType = " ProxyEntity "` therefore passes cons
 - No recognition scoring/rules/category-policy changes.
 - No B4D/quantity/unit policy changes.
 - No BricsCAD V25 runtime qualification.
-- No shared smoke registry edit; `ProxyCaptureEligibilitySmoke` is already registered.
-- No GitHub Actions dispatch.
-
-## Validation plan
-
-- Extend the existing proxy capture smoke with padded/case-varied `ProxyEntity` input and prove it remains review-only and `EnsureReady` rejects it without a primary metric.
-- Preserve measured proxy and non-proxy success paths.
-- Re-fetch reserved blobs immediately before writes and refuse stale overwrite/force-push.
-
-## Coordination
-
-Recent recognition-category work reserves separate recognition-engine surfaces. This claim deliberately limits implementation to the model constructor boundary and the already-registered proxy safety regression.
 
 ## Completion condition
 
-Padded ProxyEntity type text can no longer bypass capture eligibility, focused regression source is merged, and this claim is closed with exact implementation SHAs and truthful validation scope.
+Satisfied for the source/static contract. Executable Core/V25 qualification remains a separate exact-SHA gate.
