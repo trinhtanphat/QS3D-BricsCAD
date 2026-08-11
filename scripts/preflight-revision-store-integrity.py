@@ -19,7 +19,7 @@ if STORE.is_file():
         "ValidateUtcTimestamp(snapshot.CreatedUtc",
         'snapshot.CreatedUtc.ToString("O", CultureInfo.InvariantCulture)',
         "DateTimeOffset.TryParse",
-        "HasExplicitUtcOffset(raw)",
+        "HasExplicitUtcOffset(value)",
         "return result.UtcDateTime;",
         "Enum.IsDefined(typeof(ElementCategory), category)",
         "ValidateCanonicalCategory(element.Category)",
