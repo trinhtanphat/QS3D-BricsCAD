@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             PlanClassifiesReplacementAndNativeCleanup();
             ImportRejectsMissingNativeCleanupWithoutMutation();
             ImportReplacesInPlaceAndInvalidatesAffectedTargetElements();
+            StaleNativeCleanupAuthorizationFailsBeforeMutation();
             SemanticOnlyReplacementNeedsNoNativeAuthorization();
             ConflictsFailBeforeMutation();
         }
@@ -108,7 +109,7 @@ namespace QS3D.Core.SmokeTests
 
             var json = ProjectInterchangeJsonExporter.Build(SourceProject());
             var plan = ProjectInterchangeUseSourceSemanticImporter.Plan(target, json);
-            var authorization = ProjectInterchangeNativeCleanupAuthorization.ForElementIds(plan.TargetElementIdsRequiringNativeCleanup);
+            var authorization = ProjectInterchangeNativeCleanupAuthorization.ForPlan(target, plan);
             var result = ProjectInterchangeUseSourceSemanticImporter.Import(target, json, authorization);
 
             Equal("SOURCE-P", result.SourceProjectId);
@@ -181,6 +182,34 @@ namespace QS3D.Core.SmokeTests
             Equal("2", target.Metadata[ProjectInterchangeUseSourceSemanticImporter.LastNativeCleanupElementsKey]);
             Equal("3", target.Metadata[ProjectInterchangeUseSourceSemanticImporter.LastTargetGeneratedHandlesCleanedKey]);
             Equal("ImportInterchangeUseSourceSemantic", target.AuditEvents.Last().Action);
+        }
+
+        private static void StaleNativeCleanupAuthorizationFailsBeforeMutation()
+        {
+            var target = TargetProject(includeGeneratedOwnership: true);
+            var json = ProjectInterchangeJsonExporter.Build(SourceProject());
+            var plan = ProjectInterchangeUseSourceSemanticImporter.Plan(target, json);
+            var authorization = ProjectInterchangeNativeCleanupAuthorization.ForPlan(target, plan);
+            var element = target.FindElement("E1") ?? throw new Exception("Target element missing.");
+            var targetOnly = target.FindElement("E3") ?? throw new Exception("Target-only element missing.");
+            var changeVersion = target.ChangeVersion;
+            var metadata = target.Metadata.Count;
+            var audits = target.AuditEvents.Count;
+
+            element.Properties["GeneratedSolidHandle"] = "BB22";
+            Equal(changeVersion, target.ChangeVersion);
+
+            Throws<InvalidOperationException>(() =>
+                ProjectInterchangeUseSourceSemanticImporter.Import(target, json, authorization));
+
+            Equal("TARGET-B-01", element.Properties["Mark"]);
+            Equal("BB22", element.Properties["GeneratedSolidHandle"]);
+            Equal("EE22;FF33", targetOnly.Properties["GeneratedRebarHandles"]);
+            Equal("10A0", element.SourceHandles.Single());
+            Equal("target-fingerprint", element.DrawingFingerprint);
+            Equal(2, target.Elements.Count);
+            Equal(metadata, target.Metadata.Count);
+            Equal(audits, target.AuditEvents.Count);
         }
 
         private static void SemanticOnlyReplacementNeedsNoNativeAuthorization()
