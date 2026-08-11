@@ -11,34 +11,52 @@ if not WINDOW.is_file():
 else:
     text = WINDOW.read_text(encoding="utf-8")
     required = (
+        "using QS3D.Core.Persistence;",
         "private IReadOnlyList<DoorOpeningScheduleRow> BuildCurrentRows(out int regenerated)",
         "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
-        "RegenerateDirty(project)",
-        "DoorOpeningScheduleBuilder.Build(project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(snapshot)",
+        "DoorOpeningScheduleBuilder.Build(snapshot)",
         "var current = BuildCurrentRows(out var regenerated);",
         "DoorOpeningXlsxExporter.Export(dialog.FileName, current);",
     )
     for token in required:
         if token not in text:
-            errors.append("Door/Opening schedule missing freshness token: " + token)
-    if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
-        errors.append("Door/Opening modeless schedule must not create/cache replacement project state")
+            errors.append("Door/Opening schedule missing detached freshness token: " + token)
 
-    export_pos = text.find("private void OnExportClick")
-    refresh_pos = text.find("private void RefreshRows", export_pos)
-    body = text[export_pos:refresh_pos] if export_pos >= 0 and refresh_pos > export_pos else ""
-    dialog_pos = body.find("dialog.ShowDialog() != true")
-    build_pos = body.find("BuildCurrentRows(out var regenerated)")
-    exporter_pos = body.find("DoorOpeningXlsxExporter.Export(dialog.FileName, current)")
-    stale_export_pos = body.find("DoorOpeningXlsxExporter.Export(dialog.FileName, _rows)")
-    if min(dialog_pos, build_pos, exporter_pos) < 0 or not dialog_pos < build_pos < exporter_pos:
-        errors.append("Door/Opening export must wait for Save confirmation before rebuilding current rows and exporting them")
-    if stale_export_pos >= 0:
-        errors.append("Door/Opening export must not export cached _rows after project reload/change")
+    build_start = text.find("private IReadOnlyList<DoorOpeningScheduleRow> BuildCurrentRows")
+    build_end = text.find("private void ApplyFilter", build_start)
+    body = text[build_start:build_end] if build_start >= 0 and build_end > build_start else ""
+    for forbidden in (
+        "ExistingProjectMutationContext",
+        "ProjectContextCoordinator.GetOrCreate(_document)",
+        "RegenerateDirty(project)",
+        "DoorOpeningScheduleBuilder.Build(project)",
+    ):
+        if forbidden in body:
+            errors.append("Door/Opening read-only refresh must not mutate/bind live project state: " + forbidden)
+
+    lookup = body.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)")
+    snapshot = body.find("ProjectStateSnapshot.CreateDetachedCopy(project)")
+    regen = body.find("RegenerateDirty(snapshot)")
+    build = body.find("DoorOpeningScheduleBuilder.Build(snapshot)")
+    if min(lookup, snapshot, regen, build) < 0 or not lookup < snapshot < regen < build:
+        errors.append("Door/Opening refresh order must be read-only lookup -> detached copy -> regenerate -> schedule build")
+
+    export_start = text.find("private void OnExportClick")
+    refresh_start = text.find("private void RefreshRows", export_start)
+    export_body = text[export_start:refresh_start] if export_start >= 0 and refresh_start > export_start else ""
+    dialog = export_body.find("dialog.ShowDialog() != true")
+    current = export_body.find("BuildCurrentRows(out var regenerated)")
+    exporter = export_body.find("DoorOpeningXlsxExporter.Export(dialog.FileName, current)")
+    if min(dialog, current, exporter) < 0 or not dialog < current < exporter:
+        errors.append("Door/Opening export must confirm Save before detached fresh-row build and export")
+    if "DoorOpeningXlsxExporter.Export(dialog.FileName, _rows)" in export_body:
+        errors.append("Door/Opening export must not export stale cached _rows")
 
 if errors:
     for error in errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Door/Opening XLSX export re-resolves existing project state after Save confirmation and never exports stale cached schedule data")
+print("[PASS] Door/Opening modeless refresh/export regenerates only a detached read-only snapshot and never mutates/binds live project state")
