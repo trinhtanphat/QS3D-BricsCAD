@@ -247,19 +247,7 @@ namespace QS3D.Core.Geometry
 
         private static double SignedAreaRelative(IReadOnlyList<Point2> polygon)
         {
-            var origin = polygon[0];
-            var twice = 0d;
-            for (var i = 1; i < polygon.Count - 1; i++)
-            {
-                var ax = polygon[i].X - origin.X;
-                var ay = polygon[i].Y - origin.Y;
-                var bx = polygon[i + 1].X - origin.X;
-                var by = polygon[i + 1].Y - origin.Y;
-                var cross = ax * by - ay * bx;
-                if (!Finite(cross)) throw new OverflowException("wall footprint area overflowed.");
-                twice = CheckedAdd(twice, cross, "wall footprint area");
-            }
-            return twice / 2d;
+            return PolylineMetrics.SignedArea(polygon);
         }
 
         private static double ClosedPerimeter(IReadOnlyList<Point2> polygon)
