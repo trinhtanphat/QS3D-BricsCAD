@@ -28,6 +28,7 @@ namespace QS3D.Core.SmokeTests
             SemanticOverflowSmoke.Run();
             FormulaFiniteSafetySmoke.Run();
             FormulaVariableCaseSmoke.Run();
+            FormulaVariableNameNormalizationSmoke.Run();
             RoomBoundaryRegressionSmoke.Run();
             GeometryCompletionSmoke.Run();
             AutoRoomLifecycleSmoke.Run();
