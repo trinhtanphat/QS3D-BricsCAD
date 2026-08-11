@@ -2,19 +2,23 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12T00:28:00+07:00
-- Status: `ACTIVE`
+- Status: `DONE`
 - Baseline main SHA: `665390681226ec48c2e71b267ee580bb51d16287`
 - Scope: make `DependencyGraph` fail closed on malformed in-memory `ProjectElement.DependsOn` entries instead of silently trimming/skipping/deduplicating them.
-- Evidence: current `Rebuild(...)` uses `DependsOn.Where(...).Trim()` and a `HashSet`, while `TopologicalDirtyOrder(...)` also trims each dependency. Recent revision-capture hardening now rejects blank, padded and case-insensitive duplicate dependencies, so graph-based mutation/regeneration paths should not accept a weaker relation contract.
-- Files reserved:
+- Evidence: `Rebuild(...)` previously used `DependsOn.Where(...).Trim()` and a `HashSet`, while `TopologicalDirtyOrder(...)` also trimmed each dependency. Revision-capture hardening already rejects blank, padded and case-insensitive duplicate dependencies, so graph-based mutation/regeneration paths now use the same canonical relation contract.
+- Files reserved during work:
   - `src/QS3D.Core/Services/DependencyGraph.cs`
   - `tests/QS3D.Core.SmokeTests/DependencyGraphCanonicalRelationSmoke.cs`
   - this claim file for close-out
-- Plan:
-  1. Validate every dependency entry encountered by graph rebuild/order as nonblank and already trim-canonical.
-  2. Reject case-insensitive duplicate dependency IDs on the same semantic element rather than silently collapsing them.
-  3. Preserve canonical dependency graph semantics, deterministic dependent ordering and cycle detection.
-  4. Add CAD-independent smoke coverage for canonical success plus blank/padded/duplicate rejection in both rebuild and topological ordering, with no project mutation.
-  5. Refresh current `main`, verify reachability/current source, then release the reservation.
-- Non-overlap: no revision-capture implementation, no HostLink/Room mutation canonicalization, no DependencyImpactPlanner, no adapter/native CAD code and no active runtime/feature claim.
-- Validation boundary: source/smoke contract review only; no GitHub Actions dispatch and no licensed BricsCAD V25/V26 runtime PASS.
+- Implemented:
+  1. Added shared dependency validation requiring every entry to be nonblank and already trim-canonical.
+  2. Case-insensitive duplicate dependency IDs on one semantic element are now rejected instead of collapsed.
+  3. `Rebuild(...)` uses validated canonical dependency text directly; `TopologicalDirtyOrder(...)` validates before ordering and no longer silently normalizes malformed entries.
+  4. Existing deterministic dependent ordering and cycle detection remain intact for canonical input.
+  5. Added CAD-independent smoke coverage for canonical ordering, blank/padded/duplicate rejection in both graph paths, read-only behavior, and preservation of the previous graph when a later rebuild fails.
+- Implementation commit: `6f5a820010a3aa25b4bafee3fe9ef87d6a166d7a` (`fix(dependency): reject malformed relation entries`).
+- Regression commit: `ca3aef380b3a841d5867b6528f8799b31b4b5d68` (`test(dependency): guard canonical relation entries`).
+- Integration verification: at verification time `main` pointed at regression commit `ca3aef3...`; the implementation and regression are sequential on current main and the reserved source was not overwritten between them.
+- Non-overlap: no revision-capture implementation, HostLink/Room mutation canonicalization, DependencyImpactPlanner or adapter/native CAD code was modified.
+- Validation boundary: source/smoke contract reviewed remotely. GitHub Actions were not dispatched; the smoke executable was not claimed as run in this session; no licensed BricsCAD V25/V26 runtime PASS is claimed.
+- Reservation released: this claim is complete and no longer reserves the listed files.
