@@ -14,27 +14,38 @@ else:
     required = (
         "workflow_dispatch:",
         "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
+        "BRICSCAD_V25_PUBLIC_MSI_URL:",
         "BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}",
         "[string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256) -or $env:BRICSCAD_V25_MSI_SHA256 -notmatch '^[0-9A-Fa-f]{64}$'",
         "Repository variable BRICSCAD_V25_MSI_SHA256 is required",
         "$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash",
         "[string]::Equals($actual, $env:BRICSCAD_V25_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)",
         "BricsCAD V25 MSI SHA-256 mismatch.",
+        "$signature = Get-AuthenticodeSignature -FilePath $msi",
+        "$signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid",
+        "BricsCAD V25 MSI Authenticode signature is not valid",
         "([string]$metadata.productVersion).Trim()",
         "PACKAGE-METADATA productVersion must match source product version.",
         "PACKAGE-METADATA assembly version is missing.",
     )
     for token in required:
         if token not in text:
-            errors.append("cloud V25 workflow missing pinning/version/manual-release token: " + token)
+            errors.append("cloud V25 workflow missing pinning/signature/version/manual-release token: " + token)
 
-    if "if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256))" in text:
-        errors.append("cloud V25 workflow must not make MSI SHA-256 verification optional")
+    optional_hash_patterns = (
+        "if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256))",
+        "if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256) -and",
+    )
+    for token in optional_hash_patterns:
+        if token in text:
+            errors.append("cloud V25 workflow must not make MSI SHA-256 verification optional: " + token)
 
     hash_index = text.find("$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash")
+    compare_index = text.find("[string]::Equals($actual, $env:BRICSCAD_V25_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)")
+    signature_index = text.find("$signature = Get-AuthenticodeSignature -FilePath $msi")
     extract_index = text.find("$process = Start-Process -FilePath msiexec.exe")
-    if hash_index < 0 or extract_index < 0 or hash_index > extract_index:
-        errors.append("cloud V25 workflow must verify the pinned MSI digest before administrative extraction")
+    if min(hash_index, compare_index, signature_index, extract_index) < 0 or not hash_index < compare_index < signature_index < extract_index:
+        errors.append("cloud V25 workflow must verify mandatory SHA-256 and valid Authenticode before administrative extraction")
 
     tag_check = text.find("Release tag must exactly match source product version.")
     product_check = text.find("PACKAGE-METADATA productVersion must match source product version.")
@@ -51,9 +62,10 @@ else:
         "`BRICSCAD_V25_MSI_SHA256`: **required**",
         "fails closed if the digest is missing/malformed",
         "verify the downloaded MSI against the required pinned SHA-256",
+        "verify the MSI Authenticode signature",
     ):
         if token not in doc:
-            errors.append("cloud V25 release documentation missing required-digest statement: " + token)
+            errors.append("cloud V25 release documentation missing integrity statement: " + token)
 
 print("QS3D cloud V25 preview release preflight")
 if errors:
@@ -62,4 +74,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cloud V25 preview release remains manual-only, pins the installer, and binds PACKAGE-METADATA productVersion to source before publication.")
+print("PASS: cloud V25 preview release remains manual-only, requires SHA-256 plus Authenticode before extraction, and binds PACKAGE-METADATA productVersion to source before publication.")
