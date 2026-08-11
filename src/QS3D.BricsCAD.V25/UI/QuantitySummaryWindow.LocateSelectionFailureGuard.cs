@@ -10,9 +10,12 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class QuantitySummaryWindow
     {
-        private static readonly bool LocateSelectionFailureGuardRegistered = RegisterLocateSelectionFailureGuard();
+        static QuantitySummaryWindow()
+        {
+            RegisterLocateSelectionFailureGuard();
+        }
 
-        private static bool RegisterLocateSelectionFailureGuard()
+        private static void RegisterLocateSelectionFailureGuard()
         {
             EventManager.RegisterClassHandler(
                 typeof(Button),
@@ -29,7 +32,6 @@ namespace QS3D.BricsCAD.V25.UI
                 Control.MouseDoubleClickEvent,
                 new MouseButtonEventHandler(OnSummaryLocateDoubleClickClass),
                 true);
-            return true;
         }
 
         private static void OnSummaryLocateButtonClassClick(object sender, RoutedEventArgs e)
