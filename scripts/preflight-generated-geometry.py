@@ -60,8 +60,22 @@ if invalidator.is_file():
     for needle in (
         "CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix",
         "ClearGeneratedGeometryStale",
+        "EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership);",
+        "ParseExpectedHandles", "CadHandleService.NormalizeHexHandle",
+        "ResolveCompleteSet", "ids.Count != expected.Count",
+        "Refusing destructive invalidation before any generated geometry is erased.",
+        "Refusing partial destructive invalidation.",
     ):
         if needle not in text: errors.append("dependent generated-geometry invalidation missing: " + needle)
+
+    strict_index = text.find("EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership);")
+    mutation_index = text.find("GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);")
+    if strict_index < 0 or mutation_index < 0 or strict_index >= mutation_index:
+        errors.append("dependent generated-geometry invalidation must validate every expected live handle set before the first destructive replacement")
+
+    for fail_open in ("if (ids.Count == 0) continue;", "if (ids.Count == 0) return;"):
+        if fail_open in text:
+            errors.append("dependent generated-geometry invalidation still silently skips missing CAD handles: " + fail_open)
 
 ownership = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
 if ownership.is_file():
@@ -109,4 +123,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: stale snapshots, auto-resolution, five generated output kinds, destructive invalidation, cross-set ownership, UI mutation path, health command and regression coverage are present.")
+print("PASS: stale snapshots, exact live-handle prevalidation before destructive invalidation, auto-resolution, five generated output kinds, cross-set ownership, UI mutation path, health command and regression coverage are present.")
