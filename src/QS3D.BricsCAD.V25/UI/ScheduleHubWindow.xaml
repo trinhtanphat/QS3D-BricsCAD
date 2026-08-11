@@ -122,6 +122,10 @@
                                 <Button Content="Refresh Semantic DWG Table" Tag="QS3DELEMENTTABLEREFRESH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Kiểm tra Semantic DWG Table" Tag="QS3DELEMENTTABLEHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Xóa Semantic DWG Table" Tag="QS3DELEMENTTABLEREMOVE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Tạo/Cập nhật Custom Schedule DWG Table" Tag="QS3DSCHEDULETABLE" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"/>
+                                <Button Content="Refresh Custom Schedule DWG Table" Tag="QS3DSCHEDULETABLEREFRESH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Kiểm tra Custom Schedule DWG Table" Tag="QS3DSCHEDULETABLEHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Xóa Custom Schedule DWG Table" Tag="QS3DSCHEDULETABLEREMOVE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                                 <Button Content="Làm mới quantity" Tag="QS3DREGEN" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
@@ -184,7 +188,7 @@
                     </StackPanel>
                 </Grid>
 
-                <TextBlock Text="Native DWG Table có vòng đời Create/Refresh/Health/Remove riêng, dùng project-level QS3DDOC ownership. Health/Release chỉ đọc project hiện có và không tạo project state mới. Hub khóa theo bản vẽ đã mở; khi chuyển sang DWG khác, snapshot cũ được giữ và command bị từ chối cho tới khi kích hoạt lại đúng bản vẽ."
+                <TextBlock Text="Native DWG Table có vòng đời Create/Refresh/Health/Remove riêng, dùng project-level QS3DDOC ownership. Custom semantic schedule có owner slot riêng theo stable schedule ID nên nhiều schedule có thể cùng tồn tại mà không chiếm Semantic DWG Table cố định. Health/Release chỉ đọc project hiện có và không tạo project state mới. Hub khóa theo bản vẽ đã mở; khi chuyển sang DWG khác, snapshot cũ được giữ và command bị từ chối cho tới khi kích hoạt lại đúng bản vẽ."
                            Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="3,10,3,0"/>
             </StackPanel>
         </ScrollViewer>

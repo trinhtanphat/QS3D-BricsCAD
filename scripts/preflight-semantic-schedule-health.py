@@ -72,7 +72,7 @@ for token in (
     "SEMANTIC_SCHEDULE_",
     "zero-match",
     "read-only",
-    "native BricsCAD Table",
+    "Native BricsCAD Table",
 ):
     if token not in doc:
         errors.append("semantic schedule docs missing health/boundary token: " + token)

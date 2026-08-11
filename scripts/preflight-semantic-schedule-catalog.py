@@ -118,7 +118,7 @@ for token in (
     "canonical ElementCategory names",
     "exactly one canonical",
     "portable interchange",
-    "native BricsCAD Table",
+    "Native BricsCAD Table",
 ):
     if token not in doc:
         errors.append("semantic schedule documentation missing boundary token: " + token)

@@ -66,6 +66,7 @@ namespace QS3D.BricsCAD.V25
                 combined.AddRange(new GeneratedSemanticTagHealthService().Inspect(project));
                 combined.AddRange(GeneratedSemanticTagRuntimeHealthService.Inspect(document, project));
                 combined.AddRange(GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project));
+                combined.AddRange(SemanticScheduleNativeTableBuilder.Inspect(document, project));
                 combined.AddRange(BbsNativeTableBuilder.Inspect(document, project));
                 combined.AddRange(BqNativeTableBuilder.Inspect(document, project));
                 combined.AddRange(DoorOpeningNativeTableBuilder.Inspect(document, project));
@@ -149,6 +150,8 @@ namespace QS3D.BricsCAD.V25
         private static IEnumerable<string> LocateProjectArtifactHandles(ProjectState project, string code)
         {
             var normalized = (code ?? string.Empty).ToUpperInvariant();
+            if (normalized.StartsWith("CUSTOM_SCHEDULE_TABLE_", StringComparison.Ordinal))
+                return SemanticScheduleNativeTableBuilder.PersistedHandles(project);
             if (normalized.StartsWith("SEMANTIC_ELEMENT_TABLE_", StringComparison.Ordinal))
                 return MetadataHandle(project, SemanticElementTableBuilder.HandleKey);
             if (normalized.StartsWith("BBS_", StringComparison.Ordinal))
