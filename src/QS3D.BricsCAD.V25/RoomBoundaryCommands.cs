@@ -1,23 +1,22 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
-using QS3D.BricsCAD.V25.Services;
-using QS3D.Core.Audit;
+using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
-using QS3D.Core.Persistence;
-using QS3D.Core.Services;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
 {
     public sealed class RoomBoundaryCommands
     {
+        private const double DefaultSnapToleranceM = 0.005d;
+        private const double DefaultArcSagittaM = 0.002d;
+        private const double DefaultPlanarityToleranceM = 0.005d;
+        private const double DefaultSplineChordM = 0.02d;
+        private const double DefaultMinimumAreaM2 = 0.01d;
+
         [CommandMethod("QS3DROOMAUTO", CommandFlags.UsePickSet)]
         public void DiscoverRooms()
         {
@@ -25,154 +24,74 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var tolerance = MetadataNumber(project, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d);
-                var arcSagitta = MetadataNumber(project, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d);
-                var splineChord = MetadataNumber(project, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d);
-                var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance, splineChord);
+                ProjectState? previewProject = null;
+                string? expectedProjectId = null;
+                if (ProjectContextCoordinator.TryGetReadOnly(document, out var existingPreview))
+                {
+                    previewProject = existingPreview;
+                    expectedProjectId = existingPreview.ProjectId;
+                }
+
+                var snapTolerance = previewProject == null
+                    ? DefaultSnapToleranceM
+                    : MetadataNumber(previewProject, "RoomBoundarySnapToleranceM", DefaultSnapToleranceM, 0d);
+                var sagitta = previewProject == null
+                    ? DefaultArcSagittaM
+                    : MetadataNumber(previewProject, "RoomBoundaryArcSagittaM", DefaultArcSagittaM, 0d);
+                var planarityTolerance = previewProject == null
+                    ? DefaultPlanarityToleranceM
+                    : MetadataNumber(previewProject, "RoomBoundaryPlanarityToleranceM", DefaultPlanarityToleranceM, 0d);
+                var splineChord = previewProject == null
+                    ? DefaultSplineChordM
+                    : MetadataNumber(previewProject, "RoomBoundarySplineChordM", DefaultSplineChordM, 0d);
+
+                var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, sagitta, planarityTolerance, splineChord);
                 if (segments.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chọn LINE, POLYLINE, ARC hoặc SPLINE plan-view tạo biên phòng.");
+                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chọn LINE/ARC/SPLINE/POLYLINE boundary đồng phẳng tạo vùng kín.");
                     return;
                 }
 
-                var minimumArea = MetadataNonNegative(project, "RoomBoundaryMinimumAreaM2", 0.5d);
-                var boundaries = new RoomBoundaryEngine().Discover(segments, tolerance, minimumArea);
+                var minimumArea = previewProject == null
+                    ? DefaultMinimumAreaM2
+                    : MetadataNumber(previewProject, "RoomBoundaryMinimumAreaM2", DefaultMinimumAreaM2, 0d);
+                var boundaries = RoomBoundaryDiscovery.Discover(segments, snapTolerance, minimumArea);
                 if (boundaries.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chưa phát hiện face kín hợp lệ trong selection.");
+                    document.Editor.WriteMessage("\nQS3DROOMAUTO: không phát hiện closed boundary hợp lệ trong selection.");
                     return;
                 }
 
-                var signatureCounts = boundaries
-                    .Select(x => AutoRoomLifecycle.NormalizeSourceHandles(x.SourceIds))
-                    .GroupBy(x => x, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(x => x.Key, x => x.Count(), StringComparer.OrdinalIgnoreCase);
-
-                var rollback = ProjectStateSnapshot.Capture(project);
-                try
+                ProjectState project;
+                if (expectedProjectId != null)
                 {
-                    var family = ResolveRoomFamily(project);
-                    var audit = AuditTrail.ForProject(project);
-                    var activeRoomIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    var selectedSourceHandles = new HashSet<string>(segments.Where(x => !string.IsNullOrWhiteSpace(x.SourceId)).Select(x => x.SourceId.Trim()), StringComparer.OrdinalIgnoreCase);
-                    var created = 0;
-                    var updated = 0;
-                    var refreshedFinishes = 0;
-
-                    foreach (var boundary in boundaries)
-                    {
-                        var sourceSignature = AutoRoomLifecycle.NormalizeSourceHandles(boundary.SourceIds);
-                        var expectedId = "ROOMAUTO-" + StableToken(IdentitySeed(project.ActiveFloorId, project.ActiveZoneId, boundary.Key));
-                        var legacyId = "ROOMAUTO-" + StableToken(boundary.Key);
-                        var element = project.FindElement(expectedId);
-                        var resolvedById = element != null;
-
-                        if (element == null && !string.Equals(legacyId, expectedId, StringComparison.OrdinalIgnoreCase))
-                        {
-                            var legacy = project.FindElement(legacyId);
-                            if (legacy != null &&
-                                string.Equals(legacy.FloorId, project.ActiveFloorId, StringComparison.OrdinalIgnoreCase) &&
-                                string.Equals(legacy.ZoneId, project.ActiveZoneId, StringComparison.OrdinalIgnoreCase))
-                            {
-                                element = legacy;
-                                resolvedById = true;
-                            }
-                        }
-
-                        if (element == null && sourceSignature.Length > 0 && signatureCounts.TryGetValue(sourceSignature, out var signatureCount) && signatureCount == 1)
-                            element = AutoRoomLifecycle.FindBySourceSignature(project, sourceSignature, project.ActiveFloorId, project.ActiveZoneId);
-
-                        var isNew = element == null;
-                        if (element == null)
-                        {
-                            element = new ProjectElement(expectedId, ElementCategory.Room, family.Id, project.ActiveFloorId, project.ActiveZoneId);
-                            project.Elements.Add(element);
-                            created++;
-                        }
-                        else
-                        {
-                            if (element.Category != ElementCategory.Room || !AutoRoomLifecycle.IsAutoRoom(element))
-                                throw new InvalidOperationException("Boundary id/provenance collision with non-auto Room element: " + element.Id);
-                            if (resolvedById && element.Properties.TryGetValue("BoundaryKey", out var existingBoundaryKey) &&
-                                !string.IsNullOrWhiteSpace(existingBoundaryKey) &&
-                                !string.Equals(existingBoundaryKey, boundary.Key, StringComparison.Ordinal))
-                                throw new InvalidOperationException("Auto-room id hash collision detected: " + element.Id);
-                            updated++;
-                        }
-
-                        if (!activeRoomIds.Add(element.Id))
-                            throw new InvalidOperationException("Multiple discovered boundaries resolved to the same auto Room: " + element.Id);
-
-                        element.Category = ElementCategory.Room;
-                        element.FloorId = project.ActiveFloorId;
-                        element.ZoneId = project.ActiveZoneId;
-                        element.DrawingFingerprint = project.DrawingFingerprint;
-                        element.Properties[AutoRoomLifecycle.BoundaryModeKey] = AutoRoomLifecycle.BoundaryModeAutoNetwork;
-                        AutoRoomLifecycle.MarkActive(element, sourceSignature);
-                        AutoRoomLifecycle.SyncFamilyDefaults(project, element, family);
-                        element.Properties["BoundaryKey"] = boundary.Key;
-                        element.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = sourceSignature;
-                        element.Properties["BoundaryVertexCount"] = boundary.Vertices.Count.ToString(CultureInfo.InvariantCulture);
-                        element.Properties["BoundaryArcSagittaM"] = arcSagitta.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BoundarySplineChordM"] = splineChord.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["AreaM2"] = boundary.Area.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["PerimeterM"] = boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkDirty(ElementDirtyFlags.All);
-                        refreshedFinishes += SemanticCaptureService.SyncExistingRoomFinishes(project, element);
-                        audit.Record(isNew ? "RoomBoundaryCreate" : "RoomBoundaryUpdate", element.Id,
-                            "area=" + boundary.Area.ToString("R", CultureInfo.InvariantCulture) +
-                            ";perimeter=" + boundary.Perimeter.ToString("R", CultureInfo.InvariantCulture) +
-                            ";sources=" + boundary.SourceIds.Count.ToString(CultureInfo.InvariantCulture) +
-                            ";arcSagitta=" + arcSagitta.ToString("R", CultureInfo.InvariantCulture) +
-                            ";splineChord=" + splineChord.ToString("R", CultureInfo.InvariantCulture));
-                    }
-
-                    var staleRooms = AutoRoomLifecycle.MarkStaleForSelection(project, activeRoomIds, selectedSourceHandles, project.ActiveFloorId, project.ActiveZoneId, DateTime.UtcNow);
-                    foreach (var stale in staleRooms)
-                        audit.Record("RoomBoundaryStale", stale.Id, "topology changed within the selected boundary source set");
-
-                    var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                    project.Touch();
-                    PaletteCoordinator.RefreshProject();
-                    var message = "Room Auto: " + boundaries.Count + " face • mới " + created + " • cập nhật " + updated + " • stale " + staleRooms.Count + " • sync finish " + refreshedFinishes + " • regenerate " + regenerated + ".";
-                    PaletteCoordinator.SetStatus(message);
-                    document.Editor.WriteMessage("\nQS3D " + message);
+                    project = ExistingProjectMutationContext.Require(document, "Room Auto");
+                    if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("QS3D project đã thay đổi trong lúc đọc Room boundary. Hãy chạy lại lệnh.");
                 }
-                catch (System.Exception operationError)
+                else
                 {
-                    try
-                    {
-                        rollback.Restore(project);
-                        PaletteCoordinator.RefreshProject();
-                    }
-                    catch (System.Exception restoreError)
-                    {
-                        throw new InvalidOperationException("QS3DROOMAUTO failed and project rollback also failed.", new AggregateException(operationError, restoreError));
-                    }
-                    throw;
+                    // QS3DROOMAUTO is creation-capable only after the user supplied usable CAD
+                    // boundaries and at least one closed face was discovered. Cancel/empty/no-face
+                    // paths above must never bootstrap a blank project.
+                    project = ProjectContextCoordinator.GetOrCreate(document);
                 }
-            }
-            catch (System.Exception ex)
-            {
-                document.Editor.WriteMessage("\nQS3DROOMAUTO error: " + ex.Message);
-                PaletteCoordinator.SetStatus("QS3DROOMAUTO lỗi: " + ex.Message);
-            }
-        }
 
-        private static ProjectFamily ResolveRoomFamily(ProjectState project)
-        {
-            if (project.Metadata.TryGetValue("ActiveFamilyId", out var activeId))
-            {
-                var active = project.FindFamily(activeId);
-                if (active != null && active.Category == ElementCategory.Room) return active;
+                var result = RoomBoundaryMaterializer.Materialize(document, project, boundaries);
+                PaletteCoordinator.RefreshProject();
+                document.Editor.Regen();
+                var summary = "Room Auto: " + boundaries.Count + " boundary • " + result.RoomCount + " Room • " + result.FloorCount + " floor • " + result.WallCount + " wall";
+                PaletteCoordinator.SetStatus(summary);
+                document.Editor.WriteMessage("\nQS3D " + summary + ".");
+                if (result.RoomCount == 0)
+                    document.Editor.WriteMessage("\nQS3DROOMAUTO: tất cả boundary bị bỏ qua hoặc đã có RoomFingerprint hiện hữu.");
             }
-            var existing = project.Families.FirstOrDefault(x => x.Category == ElementCategory.Room);
-            if (existing != null) return existing;
-            var created = new ProjectFamily("room-auto-boundary", "Phòng Auto Boundary", ElementCategory.Room);
-            created.Properties["HeightM"] = "3.6";
-            project.Families.Add(created);
-            return created;
+            catch (Exception ex)
+            {
+                var message = "QS3DROOMAUTO lỗi: " + ex.Message;
+                PaletteCoordinator.SetStatus(message);
+                document.Editor.WriteMessage("\n" + message);
+            }
         }
 
         private static double MetadataNumber(ProjectState project, string key, double fallback, double minimumExclusive)
@@ -181,28 +100,6 @@ namespace QS3D.BricsCAD.V25
             if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value <= minimumExclusive)
                 throw new InvalidOperationException(key + " không hợp lệ: " + raw);
             return value;
-        }
-
-        private static double MetadataNonNegative(ProjectState project, string key, double fallback)
-        {
-            if (!project.Metadata.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return fallback;
-            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
-                throw new InvalidOperationException(key + " không hợp lệ: " + raw);
-            return value;
-        }
-
-        private static string IdentitySeed(string floorId, string zoneId, string boundaryKey)
-            => (floorId ?? string.Empty).Trim().ToUpperInvariant() + "|" +
-               (zoneId ?? string.Empty).Trim().ToUpperInvariant() + "|" +
-               (boundaryKey ?? string.Empty);
-
-        private static string StableToken(string value)
-        {
-            using (var sha = SHA256.Create())
-            {
-                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty));
-                return BitConverter.ToString(hash, 0, 8).Replace("-", string.Empty);
-            }
         }
     }
 }
