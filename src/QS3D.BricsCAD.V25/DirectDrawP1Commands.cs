@@ -71,21 +71,23 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquirePath(document, "Vách Kính", 2, false);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var thicknessM = PromptPositiveMeters(
                     document.Editor,
                     "Bề dày Vách Kính (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "ThicknessM", 0.012d) : 0.012d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.GlassWall, "ThicknessM", 0.012d) : 0.012d);
                 if (!thicknessM.HasValue) return;
                 var heightM = PromptPositiveMeters(
                     document.Editor,
                     "Chiều cao Vách Kính (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "HeightM", 3.6d) : 3.6d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.GlassWall, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(
                     document.Editor,
                     "Offset đáy Vách Kính so với Z source (m)",
-                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d);
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 Execute(
@@ -97,7 +99,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -149,21 +152,23 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquireFixedPath(document, "Trụ Tường", 2);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var thicknessM = PromptPositiveMeters(
                     document.Editor,
                     "Bề dày Trụ Tường (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "ThicknessM", 0.2d) : 0.2d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.WallPier, "ThicknessM", 0.2d) : 0.2d);
                 if (!thicknessM.HasValue) return;
                 var heightM = PromptPositiveMeters(
                     document.Editor,
                     "Chiều cao Trụ Tường (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "HeightM", 3.6d) : 3.6d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.WallPier, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(
                     document.Editor,
                     "Offset đáy Trụ Tường so với Z source (m)",
-                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d);
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 Execute(
@@ -175,7 +180,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -225,21 +231,23 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquireFixedPath(document, "Vách BTCT", 2);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var thicknessM = PromptPositiveMeters(
                     document.Editor,
                     "Bề dày Vách BTCT (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "ThicknessM", 0.2d) : 0.2d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.StructuralWall, "ThicknessM", 0.2d) : 0.2d);
                 if (!thicknessM.HasValue) return;
                 var heightM = PromptPositiveMeters(
                     document.Editor,
                     "Chiều cao Vách BTCT (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "HeightM", 3.6d) : 3.6d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.StructuralWall, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(
                     document.Editor,
                     "Offset đáy Vách BTCT so với Z source (m)",
-                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d);
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 Execute(
@@ -251,7 +259,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -298,16 +307,18 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquirePath(document, "Móng", 3, true);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var thicknessM = PromptPositiveMeters(
                     document.Editor,
                     "Bề dày Móng (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Foundation, "ThicknessM", 0.5d) : 0.5d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.Foundation, "ThicknessM", 0.5d) : 0.5d);
                 if (!thicknessM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(
                     document.Editor,
                     "Offset đáy Móng so với Z source (m)",
-                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d);
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
                 Execute(
@@ -318,14 +329,23 @@ namespace QS3D.BricsCAD.V25
                     {
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
-        private static void Execute(Document document, ElementCategory category, Func<ObjectId> createSource, Action<ProjectElement> configureElement)
+        private static void Execute(
+            Document document,
+            ElementCategory category,
+            Func<ObjectId> createSource,
+            Action<ProjectElement> configureElement,
+            DirectDrawProjectPreviewContext? projectPreview = null)
         {
-            EnsureActive(document, "Direct Draw P1 " + category);
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var operation = "Direct Draw P1 " + category;
+            EnsureActive(document, operation);
+            var project = projectPreview != null
+                ? projectPreview.ResolveForMutation(document, operation)
+                : ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
             var sourceId = ObjectId.Null;
             var sourceHandle = string.Empty;
@@ -350,10 +370,10 @@ namespace QS3D.BricsCAD.V25
 
                 // QS3DBUILD3D resolves the active document internally. Re-check immediately before
                 // delegating so a document switch can never redirect this P1 operation to another DWG.
-                EnsureActive(document, "Direct Draw P1 " + category + " / QS3DBUILD3D");
+                EnsureActive(document, operation + " / QS3DBUILD3D");
                 document.Editor.SetImpliedSelection(new[] { sourceId });
                 new Build3DCommands().Build3D();
-                EnsureActive(document, "Direct Draw P1 " + category + " / post QS3DBUILD3D");
+                EnsureActive(document, operation + " / post QS3DBUILD3D");
 
                 // QS3DBUILD3D may restore its own ProjectState snapshot and report the failure at its
                 // command surface instead of throwing to this wrapper. A restore replaces element

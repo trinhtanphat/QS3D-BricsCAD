@@ -49,10 +49,12 @@ namespace QS3D.BricsCAD.V25
                     CadGeometryGuard.ToMeters(document, widthDrawing, "Cửa Sổ/width"),
                     "Cửa Sổ/WidthM");
 
-                var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var heightDefault = hasProject ? FamilyWindowNumber(defaultsProject, "WindowHeightM", 1.2d, positive: true) : 1.2d;
-                var sillDefault = hasProject ? FamilyWindowNumber(defaultsProject, "WindowSillHeightM", 0.9d, positive: false) : 0.9d;
-                var clearanceDefault = hasProject ? FamilyWindowNumber(defaultsProject, "BooleanClearanceM", 0.01d, positive: false) : 0.01d;
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasProject = projectPreview.HasProject;
+                var heightDefault = hasProject ? FamilyWindowNumber(defaultsProject!, "WindowHeightM", 1.2d, positive: true) : 1.2d;
+                var sillDefault = hasProject ? FamilyWindowNumber(defaultsProject!, "WindowSillHeightM", 0.9d, positive: false) : 0.9d;
+                var clearanceDefault = hasProject ? FamilyWindowNumber(defaultsProject!, "BooleanClearanceM", 0.01d, positive: false) : 0.01d;
 
                 var heightM = heightDefault;
                 var sillM = sillDefault;
@@ -79,14 +81,15 @@ namespace QS3D.BricsCAD.V25
                         " m). Dùng QS3DDRAWWINDOWADV khi cần nhập tham số riêng.");
                 }
 
-                Execute(document, points[0], points[1], widthM, heightM, sillM, clearanceM);
+                Execute(document, points[0], points[1], widthM, heightM, sillM, clearanceM, projectPreview);
             });
         }
 
-        private static void Execute(Document document, Point3d start, Point3d end, double widthM, double heightM, double sillM, double clearanceM)
+        private static void Execute(Document document, Point3d start, Point3d end, double widthM, double heightM, double sillM, double clearanceM, DirectDrawProjectPreviewContext projectPreview)
         {
-            EnsureActive(document, "Direct Draw Cửa Sổ");
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            const string operation = "Direct Draw Cửa Sổ";
+            EnsureActive(document, operation);
+            var project = projectPreview.ResolveForMutation(document, operation);
             var rollback = ProjectStateSnapshot.Capture(project);
             var sourceId = ObjectId.Null;
             ProjectElement? createdElement = null;
