@@ -22,7 +22,16 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            ProjectState project;
+            try
+            {
+                project = ExistingProjectMutationContext.Require(document, "Grid Renumber");
+            }
+            catch (Exception ex)
+            {
+                ReportOperationFailure(document, "QS3DGRIDNUMBER lỗi: " + ex.Message);
+                return;
+            }
 
             IReadOnlyList<string>? orderedIds;
             GridNamingOptions? options;
