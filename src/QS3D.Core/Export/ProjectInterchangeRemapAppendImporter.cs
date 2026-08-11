@@ -10,21 +10,35 @@ using QS3D.Core.Services;
 
 namespace QS3D.Core.Export
 {
+    public sealed class ProjectInterchangeRemapCompatibilityBlocker
+    {
+        public string OwnerKind { get; set; } = string.Empty;
+        public string OwnerSourceId { get; set; } = string.Empty;
+        public string Field { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+
     public sealed class ProjectInterchangeRemapAppendPlan
     {
-        internal ProjectInterchangeRemapAppendPlan(ProjectInterchangeRemapPlan remap, int ownershipPropertiesToDiscard)
+        internal ProjectInterchangeRemapAppendPlan(
+            ProjectInterchangeRemapPlan remap,
+            int ownershipPropertiesToDiscard,
+            IReadOnlyList<ProjectInterchangeRemapCompatibilityBlocker> compatibilityBlockers)
         {
             Remap = remap ?? throw new ArgumentNullException(nameof(remap));
             OwnershipPropertiesToDiscard = ownershipPropertiesToDiscard;
+            CompatibilityBlockers = compatibilityBlockers ?? throw new ArgumentNullException(nameof(compatibilityBlockers));
         }
 
         public ProjectInterchangeRemapPlan Remap { get; }
         public int OwnershipPropertiesToDiscard { get; }
+        public IReadOnlyList<ProjectInterchangeRemapCompatibilityBlocker> CompatibilityBlockers { get; }
         public int IdRemapCount => Remap.IdRemapCount;
         public int NameRemapCount => Remap.NameRemapCount;
         public int ReferenceRewriteCount => Remap.ReferenceRewrites.Count;
         public int SourceHandleCount { get; internal set; }
-        public bool CanImport => Remap.CanAppendAsNew;
+        public int BlockerCount => checked(Remap.OpaqueReferenceWarnings.Count + CompatibilityBlockers.Count);
+        public bool CanImport => Remap.CanAppendAsNew && CompatibilityBlockers.Count == 0;
     }
 
     public sealed class ProjectInterchangeRemapAppendResult
@@ -46,6 +60,11 @@ namespace QS3D.Core.Export
     /// </summary>
     public static class ProjectInterchangeRemapAppendImporter
     {
+        private const int MaxZones = 2000;
+        private const int MaxFloors = 2000;
+        private const int MaxFamilies = 10000;
+        private const int FamilyMaxPropertyKeyLength = 120;
+        private const int FamilyMaxPropertyValueLength = 1000;
         private const string ImportMode = "RemapAppendAsNew";
         private const string HostWallIdKey = "HostWallId";
         private const string LastModeKey = "Interchange.LastImport.Mode";
@@ -65,7 +84,8 @@ namespace QS3D.Core.Export
             var ownershipProperties = checked(
                 source.Families.Sum(x => x.Properties.Count(p => IsImportedOwnershipMetadata(p.Key))) +
                 source.Elements.Sum(x => x.Properties.Count(p => IsImportedOwnershipMetadata(p.Key))));
-            return new ProjectInterchangeRemapAppendPlan(remap, ownershipProperties)
+            var compatibilityBlockers = EvaluateCompatibility(target, source);
+            return new ProjectInterchangeRemapAppendPlan(remap, ownershipProperties, compatibilityBlockers)
             {
                 SourceHandleCount = CountSourceHandles(source)
             };
@@ -113,6 +133,7 @@ namespace QS3D.Core.Export
                             ownershipDiscarded = checked(ownershipDiscarded + 1);
                             continue;
                         }
+                        EnsureFamilyPropertyRuntimeCompatible(snapshot.Id, property.Key, property.Value);
                         if (LooksLikeUnregisteredSemanticReference(property.Key, property.Value))
                             throw new InvalidOperationException(
                                 "Import As New found unregistered ID/ref-like Family property " + property.Key +
@@ -241,10 +262,97 @@ namespace QS3D.Core.Export
             }
         }
 
+        private static IReadOnlyList<ProjectInterchangeRemapCompatibilityBlocker> EvaluateCompatibility(
+            ProjectState target,
+            ProjectInterchangeValidatedSnapshot source)
+        {
+            var blockers = new List<ProjectInterchangeRemapCompatibilityBlocker>();
+            AddCapacityBlocker(blockers, "Zone", target.Zones.Count, source.Zones.Count, MaxZones);
+            AddCapacityBlocker(blockers, "Floor", target.Floors.Count, source.Floors.Count, MaxFloors);
+            AddCapacityBlocker(blockers, "Family", target.Families.Count, source.Families.Count, MaxFamilies);
+
+            foreach (var family in source.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (IsImportedOwnershipMetadata(property.Key)) continue;
+                    var keyLength = (property.Key ?? string.Empty).Trim().Length;
+                    var valueLength = (property.Value ?? string.Empty).Length;
+                    if (keyLength > FamilyMaxPropertyKeyLength)
+                    {
+                        blockers.Add(new ProjectInterchangeRemapCompatibilityBlocker
+                        {
+                            OwnerKind = "Family",
+                            OwnerSourceId = family.Id,
+                            Field = property.Key ?? string.Empty,
+                            Reason = "Family property key length " + keyLength.ToString(CultureInfo.InvariantCulture) +
+                                     " exceeds target runtime limit " + FamilyMaxPropertyKeyLength.ToString(CultureInfo.InvariantCulture) + "."
+                        });
+                    }
+                    if (valueLength > FamilyMaxPropertyValueLength)
+                    {
+                        blockers.Add(new ProjectInterchangeRemapCompatibilityBlocker
+                        {
+                            OwnerKind = "Family",
+                            OwnerSourceId = family.Id,
+                            Field = property.Key ?? string.Empty,
+                            Reason = "Family property value length " + valueLength.ToString(CultureInfo.InvariantCulture) +
+                                     " exceeds target runtime limit " + FamilyMaxPropertyValueLength.ToString(CultureInfo.InvariantCulture) + "; Import As New will not truncate semantic data."
+                        });
+                    }
+                }
+            }
+
+            return blockers
+                .OrderBy(x => x.OwnerKind, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.OwnerSourceId, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Field, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Reason, StringComparer.Ordinal)
+                .ToList()
+                .AsReadOnly();
+        }
+
+        private static void AddCapacityBlocker(
+            ICollection<ProjectInterchangeRemapCompatibilityBlocker> blockers,
+            string kind,
+            int targetCount,
+            int sourceCount,
+            int maxCount)
+        {
+            var combined = checked(targetCount + sourceCount);
+            if (combined <= maxCount) return;
+            blockers.Add(new ProjectInterchangeRemapCompatibilityBlocker
+            {
+                OwnerKind = "Project",
+                OwnerSourceId = string.Empty,
+                Field = kind + "Count",
+                Reason = "Import As New would produce " + combined.ToString(CultureInfo.InvariantCulture) + " " + kind +
+                         " identities, exceeding target runtime limit " + maxCount.ToString(CultureInfo.InvariantCulture) + "."
+            });
+        }
+
+        private static void EnsureFamilyPropertyRuntimeCompatible(string familyId, string key, string value)
+        {
+            var keyLength = (key ?? string.Empty).Trim().Length;
+            var valueLength = (value ?? string.Empty).Length;
+            if (keyLength > FamilyMaxPropertyKeyLength)
+                throw new InvalidOperationException(
+                    "Import As New Family property key exceeds target runtime limit on source Family " + familyId + ": " + key + ".");
+            if (valueLength > FamilyMaxPropertyValueLength)
+                throw new InvalidOperationException(
+                    "Import As New Family property value exceeds target runtime limit on source Family " + familyId + " / " + key + ".");
+        }
+
         private static void ValidateExecutionSafety(ProjectInterchangeValidatedSnapshot source, ProjectInterchangeRemapAppendPlan plan)
         {
             if (!plan.CanImport)
             {
+                var compatibility = plan.CompatibilityBlockers.FirstOrDefault();
+                if (compatibility != null)
+                    throw new InvalidOperationException(
+                        "Import As New is blocked by target runtime compatibility: " + compatibility.OwnerKind + " " +
+                        compatibility.OwnerSourceId + " / " + compatibility.Field + ": " + compatibility.Reason);
+
                 var first = plan.Remap.OpaqueReferenceWarnings.FirstOrDefault();
                 throw new InvalidOperationException(
                     "Import As New is blocked by unresolved property-carried reference policy" +
@@ -256,6 +364,7 @@ namespace QS3D.Core.Export
                 foreach (var property in family.Properties)
                 {
                     if (IsImportedOwnershipMetadata(property.Key)) continue;
+                    EnsureFamilyPropertyRuntimeCompatible(family.Id, property.Key, property.Value);
                     if (!LooksLikeUnregisteredSemanticReference(property.Key, property.Value)) continue;
                     throw new InvalidOperationException(
                         "Import As New is fail-closed because Family property " + property.Key + " on source Family " + family.Id +
