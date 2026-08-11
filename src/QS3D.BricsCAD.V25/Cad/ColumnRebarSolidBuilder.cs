@@ -130,7 +130,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var centerY = CadGeometryGuard.Midpoint(p0.Y, p2.Y, element.Id + "/center Y");
                         var baseZ = CadGeometryGuard.Add(polyline.Elevation, bottom, element.Id + "/rebar base Z");
 
-                        ErasePrevious(document, transaction, element, ownership);
+                        ErasePrevious(document, transaction, project, element, ownership);
                         var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, CoverM = coverM };
                         foreach (var local in layout.BarCenters)
                         {
@@ -152,6 +152,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                 bar.Layer = polyline.Layer;
                                 modelSpace.AppendEntity(bar);
                                 transaction.AddNewlyCreatedDBObject(bar, true);
+                                GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, bar, project, element, "GeneratedRebarHandles");
                                 update.Handles.Add(bar.Handle.ToString());
                                 bar = null!;
                             }
@@ -243,7 +244,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return value;
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue("GeneratedRebarHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -256,6 +257,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (entity == null || entity.IsErased) continue;
                 var solid = entity as Solid3d;
                 if (solid == null) throw new InvalidOperationException("Generated rebar handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
+                GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(solid, project, element, "GeneratedRebarHandles", "erase generated column rebar " + handle);
                 solid.Erase();
             }
         }
