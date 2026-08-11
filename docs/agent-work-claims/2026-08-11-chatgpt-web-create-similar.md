@@ -1,6 +1,6 @@
 # Work claim — Direct Draw Create Similar
 
-- Status: `ACTIVE`
+- Status: `BLOCKED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-11T19:31:00+07:00`
 - Baseline main SHA: `0296f6f31e28a598474875805b934edc26c98e60`
@@ -12,13 +12,13 @@ Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane:
 
 ## Expected surfaces
 
-- `src/QS3D.BricsCAD.V25/CreateSimilarCommands.cs` (new command surface, exact name may be adjusted only if an existing canonical command file is discovered during source orientation)
-- `src/QS3D.BricsCAD.V25/ActiveFamilyQuickDrawCommands.cs` only for one shared read-only support predicate so Create Similar can reject unsupported categories before changing Active Family instead of duplicating the dispatcher category list
-- `src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs` only for one stable/idempotent **Vẽ Tương Tự** primary action; Advanced remains command-driven to avoid Ribbon duplication
-- existing semantic ownership / Family activation services only if a small reusable helper is required; no new parallel ownership model
+- `src/QS3D.BricsCAD.V25/CreateSimilarCommands.cs`
+- `src/QS3D.BricsCAD.V25/ActiveFamilyQuickDrawCommands.cs` only for one shared read-only support predicate
+- `src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs` only for one stable/idempotent **Vẽ Tương Tự** primary action
+- existing semantic ownership / Family activation services only as canonical dependencies; no parallel ownership model
 - `scripts/preflight-create-similar.py`
 - `docs/DIRECT-DRAW-CREATE-SIMILAR-2026-08-11.md`
-- `docs/LOCAL-AGENT-INBOX.md` — extend existing `LOCAL-008`; do not create a second local queue item
+- `docs/LOCAL-AGENT-INBOX.md` — existing `LOCAL-008` still needs the command-specific runtime delta
 - this claim file for close-out status
 
 ## Excluded scope
@@ -29,17 +29,40 @@ Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane:
 - No GitHub Actions dispatch, release operation, signing, installer, or live BricsCAD V25 qualification.
 - No competing changes to the agent-registration protocol claim.
 
-## Validation plan
+## Source implementation already pushed
 
-- Static source review against current `main` for semantic-source and generated-output ownership resolution, stale-project handling, Family existence/category checks, command dispatch and Ribbon idempotence.
-- Add an auto-discovered preflight that fails if Create Similar bypasses canonical ownership/Family activation, directly invokes geometry builders instead of delegating to Active Family Quick Draw, or loses the stable Ribbon action.
-- Re-fetch latest `main` before implementation merge and preserve concurrent commits.
-- Extend `LOCAL-008` with exact Create Similar selection/cancel/stale-project/generated-owner/document-switch/Ribbon qualification; do not claim those interactive checks remotely.
+- `9ddf194482632d0200ff80bfe2aade341a87521f` — shared `ActiveFamilyQuickDrawCommands.SupportsFamily(...)` guard, reused by the existing dispatcher.
+- `32916a602d2436435cd024ebae2896e4e671a7c0` — `QS3DCREATESIMILAR` / `QS3DCREATESIMILARADV` with selection-first non-creating preview, immutable project/owner/Family snapshot, canonical existing-project rebind, source/generated owner re-resolution, exact Family activation and synchronous Active-Family delegation.
+- `80be0a78f41c5785c32ab996219850986b9e1994` + `8a6fbd195028250482b24ccde8cc35ef6b93f33c` — source/runtime contract documentation including the exact LOCAL-008 matrix and Ribbon qualification delta.
+- `466f19f7291fdd7a71258fba165dbb0725e8bac8`, `214c276d0d0d3c743e5efdd09f69274c6971eb7d`, `c71d9a2589007bbbd02be5fb6c6066d63841f6ca` — auto-discovered static gate, route-support parity check and Ribbon contract guard.
+- `ec9868a2139776b628479cfe2c042d4fd3e838db` — stable/idempotent `Vẽ Tương Tự` Quick Workflow Ribbon action mapped to `QS3DCREATESIMILAR`.
+
+The source lane deliberately does not duplicate Direct Draw category dispatch, generated-handle parsing, geometry builders, project bootstrap, semantic capture or regeneration logic.
+
+## Current blocker
+
+The remaining close-out edit is the canonical `docs/LOCAL-AGENT-INBOX.md` update under existing `LOCAL-008`. In this connector session that file is large and actively changing, while the available GitHub write action replaces the entire file rather than applying a bounded line patch. Replacing the whole inbox from a partial/truncated remote read would risk deleting concurrent local evidence and violates the repository's no-overwrite rule.
+
+The exact Create Similar V25 qualification delta is already recorded in `docs/DIRECT-DRAW-CREATE-SIMILAR-2026-08-11.md`, but that supporting document is **not** treated as a second queue and does not substitute for the required canonical inbox edit. This claim therefore remains `BLOCKED` rather than falsely `COMPLETED`.
+
+## Required unblock / successor action
+
+A patch-capable writer or local agent should update only `LOCAL-008` on the newest intended SHA, preserving all current evidence, to add:
+
+- `QS3DCREATESIMILAR` / `QS3DCREATESIMILARADV` sample-picker cancel with no project bootstrap/cache/Family mutation;
+- live semantic-source and generated-output owner resolution;
+- ambiguity/non-semantic/missing-Family/category-mismatch/unsupported-Family refusal before Active Family changes;
+- project reload/replacement, owner remap, source/generated ownership drift and active-DWG switch refusal;
+- Quick/Advanced delegated cancel/no-residue behavior while intentional sampled Family activation may remain;
+- exact one-button Ribbon idempotence/active-document routing;
+- sanitized evidence only, with no private path/raw Handle list.
+
+After that bounded inbox change is pushed, this same claim can be marked `COMPLETED`; exact V25 execution remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until real evidence exists.
 
 ## Coordination
 
-The repository-wide registration-protocol bootstrap explicitly excludes QS3D product source changes, the generated-native source-recognition lane explicitly excludes Create Similar command-side ownership, and the Workspace multi-selection policy lane is complete. This lane does not overlap those scopes. If a new overlapping Direct Draw, Ribbon, or selection-ownership claim appears after this reservation is pushed, stop and re-scope before implementation.
+The generated-native source-recognition lane explicitly excludes Create Similar command-side ownership. The Workspace multi-selection policy lane is complete. Other concurrent claims should not modify the Create Similar command/route/Ribbon surfaces while this blocker remains reserved unless the split is coordinated in both claims.
 
 ## Completion condition
 
-Create Similar Quick/Advanced commands plus the primary Ribbon entry are merged to current `main` with static contract coverage and handoff documentation, `LOCAL-008` carries the exact interactive qualification delta, this claim is marked `COMPLETED` with the implementation SHA(s), and all live BricsCAD V25-only evidence remains explicitly unclaimed/LOCAL_ONLY.
+`LOCAL-008` carries the exact Create Similar interactive qualification delta on current `main`, this claim is marked `COMPLETED`, and all live BricsCAD V25-only evidence remains explicitly unclaimed/LOCAL_ONLY.
