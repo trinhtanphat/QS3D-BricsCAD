@@ -250,7 +250,9 @@ namespace QS3D.Core.Geometry
         private static void ValidateExtent(double min, double max, double tolerance, string label)
         {
             if (!Finite(min) || !Finite(max)) throw new ArgumentOutOfRangeException(label + "Extent", "Rectangular Grid extents must be finite.");
-            if (max - min <= tolerance) throw new InvalidOperationException("Rectangular Grid " + label + " extent must have positive span above tolerance.");
+            var span = max - min;
+            if (!Finite(span)) throw new OverflowException("Rectangular Grid " + label + " extent span exceeds the supported numeric range.");
+            if (span <= tolerance) throw new InvalidOperationException("Rectangular Grid " + label + " extent must have positive span above tolerance.");
         }
 
         private static Point2 Scale(Point2 value, double scalar)
