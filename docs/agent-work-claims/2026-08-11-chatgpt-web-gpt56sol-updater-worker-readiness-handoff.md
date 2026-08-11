@@ -4,6 +4,7 @@
 - Owner: `ChatGPT Web / GPT-5.6 Sol`
 - Status: `ACTIVE`
 - Registered: `2026-08-11T22:00:00+07:00`
+- Updated: `2026-08-11T22:02:00+07:00`
 - Baseline main SHA: `1e06451bd10b6439055d5274e8f9374b3d73c517`
 - Parent lane: `UPDATER-CROSS-PROCESS-SINGLEFLIGHT-20260811` (`RELEASED`)
 
@@ -14,8 +15,13 @@ The cross-process named mutex prevents competing BricsCAD processes once the det
 ## Reserved scope
 
 - `src/QS3D.BricsCAD.V25/Updates/SecureUpdateLauncher.cs`
+- `scripts/preflight-update-cross-process-singleflight.py` (narrow reconciliation: allow only the explicitly scoped detached-worker timeout kill)
 - `scripts/preflight-update-worker-readiness.py` (new)
 - this claim file
+
+## Scope-extension reason
+
+The existing cross-process regression gate intentionally rejects every `.Kill(` token. The readiness contract must terminate a detached PowerShell worker that fails to acknowledge handoff while the parent still owns the update mutex; otherwise a timed-out child could survive after the UI reports scheduling failure. The existing gate is therefore explicitly reserved before modification so it can allow exactly `updater.Kill()` in this pre-handoff failure path while continuing to reject BricsCAD/current-process kills, `Stop-Process`, `taskkill`, and any other generic process termination.
 
 ## Intended contract
 
@@ -28,7 +34,8 @@ The cross-process named mutex prevents competing BricsCAD processes once the det
 ## Validation / release conditions
 
 - Add a focused auto-discovered gate requiring worker-open-mutex -> ready-signal ordering, parent readiness wait before scheduling success, timeout cleanup, and explicit proof that any `Kill()` is scoped only to the detached updater `Process` variable before host close.
-- Re-fetch current launcher/gate and verify ancestry.
+- Reconcile the existing cross-process gate so it permits only that exact detached-worker cleanup and continues to reject host/process kill regressions.
+- Re-fetch current launcher/gates and verify ancestry.
 - No Actions/release dispatch.
 - Native timing behavior remains local qualification; no runtime PASS claimed remotely.
-- Release claim only after source + gate land on `main`.
+- Release claim only after source + gates land on `main`.

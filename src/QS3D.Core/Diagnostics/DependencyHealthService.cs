@@ -22,6 +22,7 @@ namespace QS3D.Core.Diagnostics
             var uniqueIds = new HashSet<string>(counts.Where(x => x.Value == 1).Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
             var graph = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
             var selfReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var blankTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var ambiguousTargets = new List<KeyValuePair<string, string>>();
             var missingTargets = new List<KeyValuePair<string, string>>();
 
@@ -33,7 +34,12 @@ namespace QS3D.Core.Diagnostics
                 foreach (var raw in element.DependsOn)
                 {
                     var dependencyId = (raw ?? string.Empty).Trim();
-                    if (dependencyId.Length == 0 || !seen.Add(dependencyId)) continue;
+                    if (dependencyId.Length == 0)
+                    {
+                        blankTargets.Add(element.Id);
+                        continue;
+                    }
+                    if (!seen.Add(dependencyId)) continue;
                     if (string.Equals(dependencyId, element.Id, StringComparison.OrdinalIgnoreCase))
                     {
                         selfReferences.Add(element.Id);
@@ -67,6 +73,13 @@ namespace QS3D.Core.Diagnostics
                     "Dependency trỏ tới mã semantic element bị trùng: " + pair.Value + ". Không thể xác định cạnh graph an toàn.",
                     pair.Key));
             }
+
+            foreach (var elementId in blankTargets.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                issues.Add(new ModelHealthIssue(
+                    "DEPENDENCY_TARGET_BLANK",
+                    HealthSeverity.Error,
+                    "Element chứa dependency ID rỗng; cần sửa dependency trước khi regenerate/release.",
+                    elementId));
 
             foreach (var pair in missingTargets
                 .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
