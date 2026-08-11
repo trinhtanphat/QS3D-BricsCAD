@@ -41,6 +41,7 @@ namespace QS3D.BricsCAD.V25
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
                 var project = ProjectContextCoordinator.GetOrCreate(document);
+                var previewChangeVersion = project.ChangeVersion;
                 var preview = ProjectInterchangeImportPreview.Plan(project, json);
                 if (!preview.Validation.IsValid)
                     throw new InvalidDataException("Snapshot không vượt qua strict validation/import preview.");
@@ -48,7 +49,7 @@ namespace QS3D.BricsCAD.V25
                 var keepPlan = ProjectInterchangeKeepTargetImporter.Plan(project, json);
                 if (preview.CollisionCount == 0)
                 {
-                    RunAppendOnly(document, project, json);
+                    RunAppendOnly(document, project, previewChangeVersion, json);
                     return;
                 }
 
@@ -101,10 +102,16 @@ namespace QS3D.BricsCAD.V25
                     allBlock);
                 if (!choice.HasValue) return;
 
+                var confirmedProject = InterchangeConfirmationGuard.RequireFresh(
+                    document,
+                    project,
+                    previewChangeVersion,
+                    "Interchange Import policy");
+
                 switch (choice.Value)
                 {
                     case CollisionPolicyChoice.KeepTarget:
-                        RunKeepTarget(document, project, json);
+                        RunKeepTarget(document, confirmedProject, json);
                         return;
                     case CollisionPolicyChoice.UseSourceElement:
                         RunUseSourceElement(document, json);
@@ -290,7 +297,11 @@ namespace QS3D.BricsCAD.V25
         private static string BlockText(string label, string reason) =>
             string.IsNullOrWhiteSpace(reason) ? string.Empty : "\n\n" + label + " bị chặn: " + reason;
 
-        private static void RunAppendOnly(Document document, QS3D.Core.Domain.ProjectState project, string json)
+        private static void RunAppendOnly(
+            Document document,
+            QS3D.Core.Domain.ProjectState project,
+            long reviewedChangeVersion,
+            string json)
         {
             var appendPlan = ProjectInterchangeAppendOnlyImporter.Plan(project, json);
             var appendConfirm =
@@ -305,8 +316,12 @@ namespace QS3D.BricsCAD.V25
                     System.Windows.MessageBoxButton.YesNo,
                     System.Windows.MessageBoxImage.Question) != System.Windows.MessageBoxResult.Yes) return;
 
-            EnsureActive(document, "Interchange append-only import");
-            var result = ProjectInterchangeAppendOnlyImporter.Import(project, json);
+            var currentProject = InterchangeConfirmationGuard.RequireFresh(
+                document,
+                project,
+                reviewedChangeVersion,
+                "Interchange Import / Append-only");
+            var result = ProjectInterchangeAppendOnlyImporter.Import(currentProject, json);
             FinishSemanticOnlyImport(
                 document,
                 "Interchange Import / Append-only: semantic +" +

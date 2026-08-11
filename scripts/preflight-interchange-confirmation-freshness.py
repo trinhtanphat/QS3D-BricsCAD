@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 APPEND = ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeCommands.cs"
 REMAP = ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeRemapAppendCommands.cs"
+UNIFIED = ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeImportCommands.cs"
 USE_SOURCE = [
     ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeUseSourceCommands.cs",
     ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeUseSourceCatalogCommands.cs",
@@ -13,7 +14,7 @@ USE_SOURCE = [
 GUARD = ROOT / "src/QS3D.BricsCAD.V25/Services/InterchangeConfirmationGuard.cs"
 
 errors = []
-for path in [APPEND, REMAP] + USE_SOURCE + [GUARD]:
+for path in [APPEND, REMAP, UNIFIED] + USE_SOURCE + [GUARD]:
     if not path.is_file():
         errors.append("missing source: " + str(path.relative_to(ROOT)))
 
@@ -48,6 +49,25 @@ for path in USE_SOURCE:
         if token not in text:
             errors.append(str(path.relative_to(ROOT)) + " missing UseSource freshness guard token: " + token)
 
+if UNIFIED.is_file():
+    unified = UNIFIED.read_text(encoding="utf-8")
+    for token in [
+        "previewChangeVersion = project.ChangeVersion",
+        "RunAppendOnly(document, project, previewChangeVersion, json)",
+        "var confirmedProject = InterchangeConfirmationGuard.RequireFresh(",
+        '"Interchange Import policy"',
+        "RunKeepTarget(document, confirmedProject, json)",
+        "long reviewedChangeVersion",
+        '"Interchange Import / Append-only"',
+        "ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)",
+    ]:
+        if token not in unified:
+            errors.append("unified import missing confirmation freshness token: " + token)
+    if "RunKeepTarget(document, project, json)" in unified:
+        errors.append("unified KeepTarget must use the freshness-verified project instance")
+    if "ProjectInterchangeAppendOnlyImporter.Import(project, json)" in unified:
+        errors.append("unified append-only must not mutate the stale preview project reference")
+
 if GUARD.is_file():
     guard = GUARD.read_text(encoding="utf-8")
     for token in [
@@ -66,4 +86,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: mutating Append, Remap Append and standalone UseSource confirmations are bound to the exact reviewed document/project/change version.")
+print("PASS: all mutating interchange confirmation paths are bound to the exact reviewed document/project/change version before mutation.")
