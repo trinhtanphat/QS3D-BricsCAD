@@ -50,8 +50,9 @@ namespace QS3D.Core.Services
         public DependencyImpactPlan Plan(ProjectState project, IEnumerable<string> sourceElementIds)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var requestedRoots = CanonicalRoots(sourceElementIds, project.Elements.Count);
             var sourceChangeVersion = project.ChangeVersion;
+            var sourceElementCount = project.Elements.Count;
+            var requestedRoots = CanonicalRoots(sourceElementIds, sourceElementCount);
 
             var graph = new DependencyGraph();
             graph.Rebuild(project.Elements);
