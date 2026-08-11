@@ -1,82 +1,57 @@
 # Work claim — Floor/Zone mutation canonicality and target integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-11T23:53:00+07:00`
+- Completed: `2026-08-12T00:00:03+07:00`
 - Baseline main SHA observed: `e7f718ff50569b20c42ba2b894d12cdb06b36746`
+- Claim commit: `52ee71a169e743578468edd04e9703ff6c03d80a`
+- PR: `#545`
+- Squash merge on `main`: `a19e4033ccdc2deaa3f947dd486260fe59d17d95`
 - Priority: P1 — deterministic Core mutation correctness, no native BricsCAD dependency.
 
-## Confirmed defects
+## Defects closed
 
-`ProjectFloorService` and `ProjectZoneService` already canonicalize mutable Floor/Zone references in read/delete safety paths, but several mutation paths still use weaker raw identity or silently shrink caller target sets:
+1. `ProjectFloorService.SetActive()` and `ProjectZoneService.SetActive()` previously compared mutable stored active ids raw against resolved canonical ids, causing padded/case-varied same-item requests to touch and rewrite project state unnecessarily.
+2. Floor/Zone `Assign()` previously compared mutable element relation ids raw against resolved canonical ids, so semantically identical padded/case-varied relations could be rewritten, dirtied and counted as changes.
+3. Floor/Zone object-target assignment previously silently skipped caller-supplied null targets, allowing an incomplete requested batch to proceed rather than failing closed before mutation.
 
-1. `SetActive()` compares raw `ActiveFloorId` / `ActiveZoneId` with the canonical resolved id. Padded/case-varied semantic identity therefore performs an unnecessary `ProjectState.Touch()` and rewrites the stored active id even though the active item has not changed.
-2. `Assign()` compares raw `ProjectElement.FloorId` / `ZoneId` with the canonical resolved id. A padded/case-varied reference to the same Floor/Zone is reported as a change, touches persistence state, rewrites the relation, timestamps the element and marks it dirty.
-3. Object-target assignment silently executes `continue` for a caller-supplied null element. A requested batch such as `[ownedElement, null]` can therefore mutate the valid element and report success instead of rejecting the incomplete requested target set atomically.
+## Implemented
 
-These behaviors are inconsistent with the repository's current canonical lookup/reference semantics and with the recently hardened Family assignment/bulk target integrity contracts.
+- `ProjectFloorService.SetActive()` now compares trimmed stored active identity before `Touch()`.
+- `ProjectZoneService.SetActive()` now compares trimmed stored active identity before `Touch()`.
+- `ProjectFloorService.Assign()` now treats trimmed/case-varied same-Floor relation identity as a true no-op.
+- `ProjectZoneService.Assign()` now treats trimmed/case-varied same-Zone relation identity as a true no-op.
+- Floor shared owned-target resolution now rejects null before ownership dereference; because the resolver is shared, Floor vertical-level and clear-level mutations inherit the same fail-closed target-set integrity.
+- Zone assignment now rejects null inline before any semantic write.
+- Added `ProjectFloorZoneMutationIntegritySmoke` with six deterministic regressions and isolated module registration.
+- Added `scripts/preflight-project-floor-zone-mutation-integrity.py`.
+- Added detailed plan `docs/plans/2026-08-11-floor-zone-mutation-integrity.md`.
 
-## Reserved scope
+## Regression contract
 
-- `src/QS3D.Core/Domain/ProjectFloorService.cs`
-- `src/QS3D.Core/Domain/ProjectZoneService.cs`
-- `tests/QS3D.Core.SmokeTests/ProjectFloorZoneMutationIntegritySmoke.cs` (new)
-- `tests/QS3D.Core.SmokeTests/ProjectFloorZoneMutationIntegritySmokeRegistration.cs` (new)
-- `scripts/preflight-project-floor-zone-mutation-integrity.py` (new)
-- `docs/plans/2026-08-11-floor-zone-mutation-integrity.md` (new detailed implementation plan)
-- this claim file for close-out
+- Padded/case-varied active Floor/Zone identity is a no-op: no `ChangeVersion` churn and raw stored identity is preserved.
+- Padded/case-varied element Floor/Zone assignment to the same semantic target returns `0`, preserves raw relation identity, dirty flags, `UpdatedUtc`, and project version.
+- `[ownedElement, null]` Floor/Zone assignment batches throw before mutation and leave relation, dirty flags, timestamp and project version unchanged.
+- Existing exact-instance ownership, duplicate-id validation, vertical-level semantics and real-assignment dirty flags remain unchanged.
 
-## Detailed implementation plan
+## Moving-main safety
 
-### Phase 1 — prove and preserve boundaries
+- Source was re-fetched after claim at `04c2b48dd420a3a635612876926c64080816f8e1` before writes.
+- Before PR creation, `main` had advanced 47 commits from that branch point; compare showed no overlap with this lane.
+- Four additional commits landed before PR metadata stabilized; again no overlap.
+- Eighteen more commits landed before merge; compare again showed no overlap with the six PR files.
+- PR #545 was squash-merged with expected head `e3e0a419c4f7d51e09a6330264cf2d6222d454bd`; no force update was used.
 
-- Re-fetch exact current `main` and the two service blobs before any source write.
-- Re-check recent claims/commits for Floor/Zone source overlap.
-- Preserve the completed Floor/Zone canonical-reference safety work, vertical Bottom/Top Level semantics, duplicate-id fail-closed behavior, exact project-instance ownership and existing dirty flags.
+## Validation
 
-### Phase 2 — canonical no-op semantics
+- PR #545 changed exactly six expected files: two Core services plus the new smoke, module registration, focused preflight and detailed plan.
+- GitHub reported the final PR head mergeable before merge.
+- Source/diff review caught and corrected an initial preflight bug before merge: the Floor null guard lives in shared `ResolveOwnedElements()`, not directly inside `Assign()`; the final gate validates resolver-before-`Touch()` ordering and null-before-ownership-dereference ordering correctly.
+- A direct container checkout/test attempt was made, but the execution environment could not resolve `github.com`; therefore no smoke/preflight runtime execution is claimed.
+- No GitHub Actions workflow was dispatched, in accordance with repository manual-only policy.
+- No BricsCAD V25 runtime PASS is claimed; this lane is pure Core semantic logic and introduces no native CAD surface.
 
-- In `SetActive()`, compare trimmed stored active id against the resolved canonical id case-insensitively before touching the project.
-- In `Assign()`, compare trimmed current element Floor/Zone id against the resolved canonical id case-insensitively.
-- Treat a semantic same-target assignment as a true no-op: zero changed count, no `Touch()`, no relation rewrite, no dirty/timestamp mutation.
-- Do not normalize unrelated data or introduce a persistence migration.
+## Completion evidence
 
-### Phase 3 — fail-closed target validation
-
-- Reject any null caller-supplied object target before semantic mutation instead of silently skipping it.
-- Preserve same-project exact-instance ownership checks and case-insensitive target deduplication.
-- Ensure a batch containing an owned target plus a null target leaves all semantic and persistence state unchanged.
-
-### Phase 4 — deterministic regression coverage
-
-- Add Floor active canonical no-op regression.
-- Add Zone active canonical no-op regression.
-- Add Floor assignment canonical no-op regression preserving stored padded identity and element/project state.
-- Add Zone assignment canonical no-op regression with the same guarantees.
-- Add Floor null-containing assignment batch atomicity regression.
-- Add Zone null-containing assignment batch atomicity regression.
-- Module-register the smoke without editing the shared registration hotspot.
-
-### Phase 5 — static guard and moving-main integration
-
-- Add an auto-discovered focused preflight requiring trimmed canonical no-op comparisons and explicit null rejection, and forbidding the legacy silent null skip in the reserved assignment paths.
-- Implement on an isolated agent branch, compare moving `main` before merge, and rebuild/rebase only if target files have not changed concurrently.
-- Squash/merge to `main` using expected head SHA; never force-update `main`.
-- Close this claim with exact commit/PR/main SHAs.
-
-## Exclusions
-
-- No WPF/Workspace/native CAD changes.
-- No project schema or persistence-format migration.
-- No Floor vertical-level policy changes.
-- No quantity/reporting/Room/updater/release changes.
-- No GitHub Actions dispatch.
-- No BricsCAD V25 runtime PASS claim.
-
-## Validation level
-
-Source/static review plus committed CAD-independent Core regression coverage and focused preflight. Native BricsCAD runtime qualification is not required for this pure Core lane; no Actions will be run without separate explicit authorization.
-
-## Completion condition
-
-Floor/Zone assignment and activation use canonical semantic identity for no-op decisions, null-containing object-target batches fail closed before mutation, deterministic regression/preflight coverage is on `main`, and this claim is marked `COMPLETED` with exact evidence.
+PR #545 is merged on `main` as `a19e4033ccdc2deaa3f947dd486260fe59d17d95`. Floor/Zone activation and assignment now use canonical semantic identity for no-op decisions, and null-containing object-target batches fail closed before mutation with committed deterministic regression and static-gate coverage.
