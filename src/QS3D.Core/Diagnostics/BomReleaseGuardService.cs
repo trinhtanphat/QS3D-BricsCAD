@@ -59,6 +59,11 @@ namespace QS3D.Core.Diagnostics
                 if (element.Quantities.Count == 0)
                     issues.Add(new ModelHealthIssue("BOM_QUANTITY_EMPTY", HealthSeverity.Warning, "Cấu kiện chưa có quantity đã tính để đưa vào bảng khối lượng.", element.Id));
 
+                foreach (var property in element.Properties)
+                    if (string.IsNullOrWhiteSpace(property.Key) ||
+                        !string.Equals(property.Key, property.Key.Trim(), StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("BOM_PROPERTY_KEY_INVALID", HealthSeverity.Error, "Property key phải là tên canonical, không rỗng và không có khoảng trắng bao quanh.", element.Id));
+
                 foreach (var quantity in element.Quantities)
                 {
                     if (string.IsNullOrWhiteSpace(quantity.Key) ||
