@@ -1,6 +1,6 @@
 # Work claim — Rebar shape path point aliasing
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-11T22:36:00+07:00`
 - Baseline main SHA: `87413e90b991d6f224d832af2315ca937a5bcb40`
@@ -8,7 +8,7 @@
 
 ## Reason
 
-`RebarShapePath` exposes `Points` as an `IReadOnlyList<RebarShapePoint>` and enforces at construction that the path contains at least two points, but the constructor stores the caller-supplied list reference directly. A caller can therefore pass a mutable `List`, construct a valid path, then mutate/clear the original list and silently change the supposedly read-only path after validation, including violating the `>= 2 points` invariant.
+`RebarShapePath` exposed `Points` as an `IReadOnlyList<RebarShapePoint>` and enforced at construction that the path contained at least two points, but the constructor stored the caller-supplied list reference directly. A caller could therefore pass a mutable `List`, construct a valid path, then mutate/clear the original list and silently change the supposedly read-only path after validation, including violating the `>= 2 points` invariant.
 
 ## Reserved scope
 
@@ -37,6 +37,20 @@ Snapshot constructor input into an owned read-only point collection so later cal
 
 Recent shape-rebar commits focus on native ownership/atomic replacement and are not active claims on the Core `RebarShapePath` constructor. No current claim or recent commit was found for point-list aliasing or constructor ownership.
 
+## Completion
+
+- Implementation commits:
+  - `a9adbb248a3eb032971c0dfc065ab1c776537063` — copy caller-provided shape points into an owned list, validate the owned snapshot, and expose it read-only.
+  - `a666eb92eb8ef288395de9f35858d60648ec8123` — add aliasing regression coverage plus the existing L-shape builder geometry check.
+- Final observed `main` before claim close: `2839e2d5233e1142a3bcb7d2fa79a52b4dcec4bd`.
+- Validation actually performed:
+  - re-fetched the constructor from current `main` and confirmed validation applies to the copied snapshot rather than the caller collection;
+  - re-fetched the new smoke and confirmed it mutates then clears the source `List` while requiring the path to retain the original two points;
+  - confirmed builder-created L-shape coordinates remain covered within the existing numeric tolerance;
+  - did not execute repository `dotnet` tests because this hosted session has no usable .NET SDK checkout;
+  - did not dispatch or rerun GitHub Actions.
+- BricsCAD V25 local gate impact: none; this is CAD-independent Core value-object ownership hardening.
+
 ## Completion condition
 
-Current `main` owns an immutable snapshot of shape-path points, includes focused regression coverage, and this claim is marked `COMPLETED`.
+Satisfied: current `main` owns an immutable snapshot of shape-path points, includes focused regression coverage, and this claim is released as `COMPLETED`.
