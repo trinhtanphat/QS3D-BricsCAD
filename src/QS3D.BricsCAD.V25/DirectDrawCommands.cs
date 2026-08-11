@@ -34,7 +34,43 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWWALL", () =>
             {
                 RequireModelSpace(document);
-                var points = AcquirePath(document, "Tường", minimumPoints: 2, close: false);
+                var points = AcquireFixedPath(document, "Tường nhanh", 2);
+                if (points == null) return;
+
+                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d) : 0.2d;
+                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.ArchitecturalWall, "HeightM", 3.6d) : 3.6d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d) : 0d;
+
+                document.Editor.WriteMessage(
+                    "\nQS3D Tường nhanh: dùng Family hiện tại (dày " + thicknessM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, cao " + heightM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, offset " + bottomOffsetM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m). Dùng QS3DDRAWWALLADV khi cần vẽ chuỗi hoặc nhập tham số riêng.");
+
+                ExecuteDirect(
+                    document,
+                    ElementCategory.ArchitecturalWall,
+                    () => CreateLine(document, points[0], points[1]),
+                    element =>
+                    {
+                        element.Properties["ThicknessM"] = thicknessM.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["HeightM"] = heightM.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["BottomOffsetM"] = bottomOffsetM.ToString("R", CultureInfo.InvariantCulture);
+                        element.MarkDirty(ElementDirtyFlags.Properties);
+                    });
+            });
+        }
+
+        [CommandMethod("QS3DDRAWWALLADV", CommandFlags.Modal)]
+        public void DrawWallAdvanced()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWWALLADV", () =>
+            {
+                RequireModelSpace(document);
+                var points = AcquirePath(document, "Tường tùy chỉnh", minimumPoints: 2, close: false);
                 if (points == null) return;
 
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
