@@ -186,7 +186,7 @@ namespace QS3D.Core.Export
                     CanonicalRequired(x.SourceRefScope, "sourceRefScope"),
                     Strings(x.SourceHandles, "sourceHandles"),
                     Strings(x.Dependencies, "dependencies"),
-                    StringMap(x.Properties, "element properties"),
+                    ElementStringMap(x.Properties, "element properties"),
                     NumberMap(x.Quantities, "element quantities"));
             }).ToList().AsReadOnly();
 
@@ -299,6 +299,14 @@ namespace QS3D.Core.Export
                 copy[key] = pair.Value ?? string.Empty;
             }
             return new ReadOnlyDictionary<string, string>(copy);
+        }
+        private static IReadOnlyDictionary<string, string> ElementStringMap(IDictionary<string, string>? source, string label)
+        {
+            var parsed = StringMap(source, label);
+            var portable = parsed
+                .Where(x => ProjectInterchangeElementPropertyPolicy.IsPortable(x.Key))
+                .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+            return new ReadOnlyDictionary<string, string>(portable);
         }
         private static bool IsGeneratedOwnershipProperty(string key)
         {
