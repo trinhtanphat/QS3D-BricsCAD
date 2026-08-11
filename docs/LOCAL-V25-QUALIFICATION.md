@@ -178,6 +178,7 @@ No agent may infer engineering reinforcement, hook, lap, anchorage or fabricatio
 
 ### H. Project lifecycle
 
+- Run `scripts/test-bricscad-v25-project-lifecycle.ps1` first against the exact clean SHA and the repository-generated `samples/generated/QS3D-Sample.dwg`. Its four disposable copies provide a repeatable baseline for DWG `SaveComplete` sidecar persistence, cold-cache canonical binding, A/B project isolation, absent-sidecar non-creation and corrupt-sidecar fail-closed behavior. This automation is only the baseline below; it does not replace the interactive/modeless scenarios.
 - save `.qsdb`;
 - close/reopen DWG;
 - Save As and verify drawing identity synchronization;
