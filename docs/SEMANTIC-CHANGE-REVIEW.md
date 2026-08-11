@@ -18,24 +18,33 @@ Each grouped semantic element records:
 - semantic category resolved from the after snapshot when present, otherwise the before snapshot;
 - element change state (`Added`, `Removed`, `Changed`);
 - deterministic visible field rows;
-- count of source-reference/handle changes deliberately omitted from portable review content.
+- count of source-reference/native-property changes deliberately omitted from portable review content.
 
 Visible field rows are classified as:
 
 - `Identity`: `Category`, `FamilyId`, `FloorId`, `ZoneId`;
-- `Property`: fields with the `Property:` prefix;
+- `Property`: portable fields with the `Property:` prefix;
 - `Quantity`: fields with the `Quantity:` prefix;
 - `Other`: any future `RevisionService` field not yet given a dedicated presentation category.
 
 The review summary exposes added/removed/changed element counts plus identity/property/quantity/other field counts.
 
-## Authority boundaries
+## Authority and portability boundaries
 
 This class does **not** duplicate `RevisionService.Compare` and does not reimplement quantity arithmetic. `QuantityRevisionReport` remains the dedicated quantity revision report.
 
-`RevisionService` can detect a `SourceHandles` change because that can matter to semantic lifecycle diagnostics. `SemanticChangeReviewBuilder` intentionally does not expose the raw before/after handle values in its portable review fields. Instead it increments `OmittedSourceReferenceChangeCount` so reviewers know a source-reference change occurred without promoting native handles into stable cross-machine/project authority.
+`RevisionService` intentionally retains local revision authority, including `SourceHandles` and all element properties, because drawing-local provenance can matter to lifecycle diagnostics. Portable review presentation has a narrower contract: it must not surface raw native references as if they were stable cross-machine/project identity.
 
-Added or removed elements remain visible even when they have no field rows. A changed element whose only revision delta is `SourceHandles` also remains visible with an omitted-reference count.
+`SemanticChangeReviewBuilder` therefore:
+
+- omits the explicit `SourceHandles` delta;
+- for `Property:*` deltas, reuses `ProjectInterchangeElementPropertyPolicy.IsPortable(...)` rather than maintaining a second native-property heuristic;
+- consequently omits generated owner-slot/handle properties, `Generated*` and `QS3D.Generated*` metadata, `PhysicalOpeningCut*` drawing-local state, Room `BoundarySourceHandles`, and other handle-bearing property keys rejected by the shared portability policy;
+- increments `OmittedSourceReferenceChangeCount` for every omitted delta so a reviewer still sees that drawing-local provenance changed without receiving the raw value.
+
+This reuse is intentional: Interchange export/import and semantic revision review should agree on which `ProjectElement.Properties` are portable semantic data. The review layer does not alter or redact the underlying `RevisionSnapshot`; only its presentation rows are filtered.
+
+Added or removed elements remain visible even when they have no field rows. A changed element whose only revision deltas are drawing-local references also remains visible with an omitted-reference count.
 
 ## Determinism and validation
 
@@ -54,11 +63,13 @@ The builder:
 
 - added/removed/changed grouping;
 - identity/property/quantity classification;
-- source-handle change omission without losing the changed semantic element;
+- explicit `SourceHandles` omission;
+- generated handle, Room boundary-source handle, generated stale-snapshot and physical-opening native-reference property omission through the shared Interchange portability policy;
+- preservation of the changed semantic element and omitted-reference count when native references change;
 - deterministic ordering under different input ordering;
 - padded/duplicate semantic ID fail-closed behavior.
 
-`scripts/preflight-semantic-change-review.py` protects the presentation/authority boundary and is automatically discovered by `scripts/preflight-all.py`.
+`scripts/preflight-semantic-change-review.py` protects the presentation/authority boundary, verifies reuse of `ProjectInterchangeElementPropertyPolicy`, and is automatically discovered by `scripts/preflight-all.py`.
 
 ## Not claimed by this source batch
 
@@ -70,4 +81,4 @@ This does not qualify:
 - exact-SHA NETLOAD, multi-document, Save/SaveAs/reopen behavior;
 - signed installer/release readiness.
 
-Those remain under the repository's existing local exact-SHA qualification gates.
+Those remain under the repository's existing local exact-SHA qualification gates. The source privacy fix itself is fully exercised at Core/presentation level and does not create a new native mutation scenario.
