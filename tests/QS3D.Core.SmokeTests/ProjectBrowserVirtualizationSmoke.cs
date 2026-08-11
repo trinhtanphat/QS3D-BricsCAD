@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Navigation;
 
@@ -14,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             ElementIdsArePagedDeterministically();
             InvalidExpansionFailsClosed();
             ViewportCollectionsAreImmutable();
+            NodeCapFailsBeforeIndexMutation();
         }
 
         private static void ExpansionControlsVisibleRows()
@@ -84,6 +87,30 @@ namespace QS3D.Core.SmokeTests
             Throws<NotSupportedException>(() => ((IList<string>)elements.ElementIds).Clear());
         }
 
+        private static void NodeCapFailsBeforeIndexMutation()
+        {
+            var indexNode = typeof(ProjectBrowserVirtualizationPlanner).GetMethod(
+                "IndexNode",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            if (indexNode == null) throw new Exception("Could not locate ProjectBrowserVirtualizationPlanner.IndexNode.");
+
+            try
+            {
+                indexNode.Invoke(null, new object[] { BuildRoot(), string.Empty, 0, new AtCapacityIndex() });
+            }
+            catch (TargetInvocationException ex)
+            {
+                var inner = ex.InnerException;
+                if (inner is InvalidOperationException invalid &&
+                    invalid.Message.IndexOf("at most 500000 tree nodes", StringComparison.Ordinal) >= 0)
+                    return;
+
+                throw new Exception("Node-cap guard did not fail before touching the saturated index.", inner ?? ex);
+            }
+
+            throw new Exception("Expected saturated Project Browser index to fail closed before mutation.");
+        }
+
         private static ProjectBrowserNode BuildRoot()
         {
             var project = new ProjectState("P-VIRTUAL", "Virtual Browser");
@@ -111,6 +138,34 @@ namespace QS3D.Core.SmokeTests
         {
             try { action(); } catch (T) { return; }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private sealed class AtCapacityIndex : IDictionary<string, ProjectBrowserNode>
+        {
+            public int Count => 500000;
+            public bool IsReadOnly => false;
+            public ICollection<string> Keys => throw Touched();
+            public ICollection<ProjectBrowserNode> Values => throw Touched();
+            public ProjectBrowserNode this[string key]
+            {
+                get => throw Touched();
+                set => throw Touched();
+            }
+
+            public void Add(string key, ProjectBrowserNode value) => throw Touched();
+            public bool ContainsKey(string key) => throw Touched();
+            public bool Remove(string key) => throw Touched();
+            public bool TryGetValue(string key, out ProjectBrowserNode value) => throw Touched();
+            public void Add(KeyValuePair<string, ProjectBrowserNode> item) => throw Touched();
+            public void Clear() => throw Touched();
+            public bool Contains(KeyValuePair<string, ProjectBrowserNode> item) => throw Touched();
+            public void CopyTo(KeyValuePair<string, ProjectBrowserNode>[] array, int arrayIndex) => throw Touched();
+            public bool Remove(KeyValuePair<string, ProjectBrowserNode> item) => throw Touched();
+            public IEnumerator<KeyValuePair<string, ProjectBrowserNode>> GetEnumerator() => throw Touched();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private static Exception Touched() =>
+                new Exception("Saturated Project Browser index was touched before the node-cap guard fired.");
         }
     }
 }
