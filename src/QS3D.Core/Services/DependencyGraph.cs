@@ -42,6 +42,14 @@ namespace QS3D.Core.Services
                 }
             }
 
+            foreach (var entry in next)
+            {
+                if (nextElements.ContainsKey(entry.Key)) continue;
+                var dependent = entry.Value.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).First();
+                throw new InvalidOperationException(
+                    "Semantic element " + dependent + " depends on missing semantic element: " + entry.Key + ". Repair semantic relations before graph evaluation.");
+            }
+
             _dependents.Clear();
             foreach (var entry in next)
                 _dependents[entry.Key] = entry.Value;
