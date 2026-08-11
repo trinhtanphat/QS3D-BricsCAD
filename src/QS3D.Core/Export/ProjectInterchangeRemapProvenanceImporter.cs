@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using QS3D.Core.Audit;
@@ -66,16 +67,16 @@ namespace QS3D.Core.Export
             foreach (var element in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 var targetId = semanticPlan.Remap.MapId(InterchangeRemapIdentityKind.Element, element.Id);
-                if (!map.TryAdd(element.Id, targetId))
+                if (map.ContainsKey(element.Id))
                     throw new InvalidOperationException("Import As New provenance contains duplicate source Element mapping for " + element.Id + ".");
+                map.Add(element.Id, targetId);
             }
             if (map.Values.Distinct(StringComparer.OrdinalIgnoreCase).Count() != map.Count)
                 throw new InvalidOperationException("Import As New provenance target mapping is not one-to-one.");
 
-            return new ProjectInterchangeRemapProvenancePlan(
-                semanticPlan,
-                provenancePlan,
+            var immutableMap = new ReadOnlyDictionary<string, string>(
                 new Dictionary<string, string>(map, StringComparer.OrdinalIgnoreCase));
+            return new ProjectInterchangeRemapProvenancePlan(semanticPlan, provenancePlan, immutableMap);
         }
 
         public static ProjectInterchangeRemapProvenanceResult Import(ProjectState target, string json)
