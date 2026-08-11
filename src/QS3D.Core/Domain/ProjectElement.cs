@@ -206,6 +206,7 @@ namespace QS3D.Core.Domain
 
         public void ClearGeneratedGeometryStale()
         {
+            var propertyCount = Properties.Count;
             Remove(GeneratedSolidStateKey);
             Remove(GeneratedSolidStaleSnapshotKey);
             Remove(GeneratedRebarStateKey);
@@ -228,6 +229,7 @@ namespace QS3D.Core.Domain
             Remove(GeneratedCurtainPanelStaleSnapshotKey);
             Remove(GeneratedGeometryStateKey);
             Remove(GeneratedGeometryStaleReasonKey);
+            if (Properties.Count != propertyCount) UpdatedUtc = DateTime.UtcNow;
         }
 
         internal void RestorePersistenceState(ElementDirtyFlags dirty, DateTime updatedUtc)
@@ -319,7 +321,9 @@ namespace QS3D.Core.Domain
 
         private void ClearGeneratedOutputStale(string stateKey, string snapshotKey)
         {
+            var propertyCount = Properties.Count;
             Remove(stateKey); Remove(snapshotKey); ClearAggregateStaleIfResolved();
+            if (Properties.Count != propertyCount) UpdatedUtc = DateTime.UtcNow;
         }
 
         private void ClearAggregateStaleIfResolved()
