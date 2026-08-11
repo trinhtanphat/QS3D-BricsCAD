@@ -161,7 +161,7 @@ namespace QS3D.BricsCAD.V25.Services
                 normalized = full;
                 return true;
             }
-            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException || ex is System.Security.SecurityException)
             {
                 return false;
             }
@@ -172,7 +172,7 @@ namespace QS3D.BricsCAD.V25.Services
             var state = new StartCenterUserStateSnapshot();
             try
             {
-                var path = SettingsPath();
+                if (!TrySettingsPath(out var path)) return state;
                 if (!File.Exists(path)) return state;
                 var info = new FileInfo(path);
                 if (info.Length < 0 || info.Length > MaxFileBytes) return state;
@@ -213,6 +213,7 @@ namespace QS3D.BricsCAD.V25.Services
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
             catch (ArgumentException) { }
+            catch (System.Security.SecurityException) { }
 
             return Normalize(state);
         }
@@ -261,7 +262,7 @@ namespace QS3D.BricsCAD.V25.Services
             string? temp = null;
             try
             {
-                var path = SettingsPath();
+                if (!TrySettingsPath(out var path)) return;
                 var directory = System.IO.Path.GetDirectoryName(path);
                 if (string.IsNullOrWhiteSpace(directory)) return;
                 Directory.CreateDirectory(directory);
@@ -295,6 +296,7 @@ namespace QS3D.BricsCAD.V25.Services
             catch (UnauthorizedAccessException) { }
             catch (NotSupportedException) { }
             catch (ArgumentException) { }
+            catch (System.Security.SecurityException) { }
             finally
             {
                 if (!string.IsNullOrWhiteSpace(temp)) TryDelete(temp!);
@@ -320,11 +322,21 @@ namespace QS3D.BricsCAD.V25.Services
             return builder.ToString();
         }
 
-        private static string SettingsPath()
+        private static bool TrySettingsPath(out string path)
         {
-            var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("LocalApplicationData is unavailable.");
-            return System.IO.Path.Combine(root, "QS3D", "BricsCAD-V25", "start-center-v1.txt");
+            path = string.Empty;
+            try
+            {
+                var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (string.IsNullOrWhiteSpace(root)) return false;
+                path = System.IO.Path.Combine(root, "QS3D", "BricsCAD-V25", "start-center-v1.txt");
+                return true;
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is System.Security.SecurityException)
+            {
+                path = string.Empty;
+                return false;
+            }
         }
 
         private static string Encode(string value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
@@ -377,6 +389,7 @@ namespace QS3D.BricsCAD.V25.Services
             try { if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) File.Delete(path); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+            catch (System.Security.SecurityException) { }
         }
     }
 }
