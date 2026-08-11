@@ -51,6 +51,11 @@ namespace QS3D.Core.Domain
 
         private ElementCategory _category;
 
+        public ProjectElement(string id, ElementCategory category)
+            : this(id, category, string.Empty, string.Empty, string.Empty)
+        {
+        }
+
         public ProjectElement(string id, ElementCategory category, string familyId, string floorId, string zoneId)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Element id is required.", nameof(id));
