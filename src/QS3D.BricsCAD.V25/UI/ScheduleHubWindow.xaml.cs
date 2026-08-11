@@ -49,7 +49,13 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                {
+                    ClearSnapshotCounts();
+                    SetStatus("QS3D project hiện hành không còn khả dụng. Schedule Hub không tạo project mới; hãy nạp project rồi Refresh.");
+                    return;
+                }
+
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
                 var bqRows = ProjectQuantityReportBuilder.Group(project);
@@ -67,6 +73,15 @@ namespace QS3D.BricsCAD.V25.UI
                 SetStatus("Schedule snapshot đã đồng bộ từ dữ liệu schedule hợp lệ" + (regenerated > 0 ? " • regen " + regenerated + " cấu kiện dirty." : "."));
             }
             catch (Exception ex) { SetStatus("Đọc Schedule Hub lỗi: " + ex.Message); }
+        }
+
+        private void ClearSnapshotCounts()
+        {
+            ElementCountText.Text = "0";
+            FinishCountText.Text = "0";
+            DoorCountText.Text = "0";
+            CurtainCountText.Text = "0";
+            MaterialCountText.Text = "0";
         }
 
         private static int CountBqElements(System.Collections.Generic.IEnumerable<QuantityReportRow> rows)
