@@ -8,7 +8,8 @@
 - Exact scope: Harden `CurtainWallOpeningFramePlanner` against non-finite geometry produced when finite `clearanceM` overflows expanded-opening arithmetic; add regression coverage. Touch the panel planner only if directly required for propagation/regression.
 - Expected surfaces:
   - `src/QS3D.Core/Geometry/CurtainWallOpeningFramePlanner.cs`
-  - `tests/QS3D.Core.SmokeTests/Program.cs`
+  - `tests/QS3D.Core.SmokeTests/CurtainWallOpeningFramePlannerSmoke.cs`
+  - `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs`
 - Excluded scope:
   - BricsCAD/native/runtime/UI behavior
   - curtain-wall layout semantics unrelated to opening-clearance overflow
@@ -20,5 +21,6 @@
 - Coordination:
   - checked the current claim registry immediately before registration; no Curtain scope was reserved
   - known ACTIVE core mutation atomicity work is outside this lane
+  - changed regression surface from shared `Program.cs` to a dedicated smoke module plus registration to reduce concurrent-agent collision risk
   - re-check latest `main` and target blobs immediately before the implementation commit
 - Completion condition: Overflowed expanded-opening geometry fails closed with regression coverage; implementation is committed/pushed on the latest compatible `main`; this claim is then marked COMPLETED.
