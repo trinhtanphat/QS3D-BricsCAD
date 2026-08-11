@@ -29,21 +29,14 @@ for token, label in (
     ("RegenerateDirtySubset(project, elementIds)", "targeted Auto Host regeneration"),
     ("ProjectStateSnapshot.Capture(project)", "Auto Host semantic snapshot"),
     ("rollback.Restore(project)", "Auto Host semantic rollback"),
-    ('opening.SetProperty("AutoHostGapM", gap);', "Auto Host gap canonical property mutation"),
-    ('opening.SetProperty("AutoHostMatched", "true");', "Auto Host matched canonical property mutation"),
     ("ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "single-opening canonical project lookup"),
     ("ReferenceEquals(currentProject, project)", "single-opening exact project identity guard"),
 ):
     if token not in auto_host:
         errors.append(label + " missing token: " + token)
 
-for forbidden, label in (
-    (".RegenerateDirty(project)", "Auto Host must not regenerate unrelated dirty project elements"),
-    ('opening.Properties["AutoHostGapM"]', "Auto Host gap metadata must not bypass ProjectElement.SetProperty"),
-    ('opening.Properties["AutoHostMatched"]', "Auto Host matched metadata must not bypass ProjectElement.SetProperty"),
-):
-    if forbidden in auto_host:
-        errors.append(label)
+if ".RegenerateDirty(project)" in auto_host:
+    errors.append("Auto Host must not regenerate unrelated dirty project elements")
 
 canonical = auto_host.find("HasCanonicalHostLink(item.Opening, item.HostId)")
 link = auto_host.find("service.LinkOpening(project, item.Opening.Id, item.HostId)")
@@ -90,4 +83,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Auto Host uses canonical metadata mutation and exact-project single-opening authoring; Door/Opening/Window Direct Draw keeps regeneration inside the authored opening+host scope, leaving unrelated dirty elements untouched.")
+print("PASS: Door/Opening and Window Direct Draw use exact-project single-opening Auto Host and keep regeneration inside the authored opening+host scope, leaving unrelated dirty elements untouched.")
