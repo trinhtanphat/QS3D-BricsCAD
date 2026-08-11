@@ -39,6 +39,15 @@ else:
     text = filter_code.read_text(encoding="utf-8")
     for token in (
         "private void OnWorkspaceDataContextChanged",
+        "PreviewKeyDown -= OnPropertyFilterShortcut;",
+        "PreviewKeyDown += OnPropertyFilterShortcut;",
+        "private void OnPropertyFilterShortcut",
+        "modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.F",
+        "PropertySearch?.Focus();",
+        "PropertySearch?.SelectAll();",
+        "e.Key == Key.Escape",
+        "PropertySearch.IsKeyboardFocusWithin",
+        "PropertySearch.Clear();",
         "private void OnPropertySearchChanged",
         "private void OnClearPropertySearchClick",
         "private void ApplyPropertyFilter()",
@@ -50,7 +59,7 @@ else:
         "StringComparison.CurrentCultureIgnoreCase",
     ):
         if token not in text:
-            errors.append("Workspace property filter missing: " + token)
+            errors.append("Workspace property filter/search shortcut missing: " + token)
     for forbidden in (
         "GetOrCreate(",
         "ExistingProjectMutationContext",
@@ -69,4 +78,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace exposes a denser BLT-style Family/property palette with property search, source/override state cues, counts and wider editors; filtering remains presentation-only.")
+print("PASS: Workspace exposes a denser BLT-style Family/property palette with property search, Ctrl+Shift+F/Escape keyboard UX, source/override state cues, counts and wider editors; filtering remains presentation-only.")
