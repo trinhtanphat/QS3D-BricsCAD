@@ -87,6 +87,12 @@ Reserve only the following behavior-preserving gate reconciliation needed to pro
 
 Do not broaden this expansion into updater policy, Workspace/Right Panel design, quantity arithmetic, XLSX format changes, generated ownership semantics or reporting redesign. Re-run full Core smoke and installed-V25 `Release|x64` after these exact repairs. If a further unrelated blocker appears, diagnose it first and update the published claim again before editing any additional surface.
 
+## 2026-08-12 quantity revision smoke reconciliation expansion
+
+Baseline audited before this expansion: `origin/main@93aacb0e`. The full Core smoke now reaches one stale assertion in `tests/QS3D.Core.SmokeTests/QuantityReportRevisionReviewSmoke.cs`: it attempts to capture `-double.MaxValue` and then exercise subtraction overflow, but the completed reporting integrity contract now rejects every negative physical quantity during capture. With two valid finite non-negative snapshots, their signed difference cannot overflow.
+
+Reserve only that smoke file to replace the unreachable overflow setup with a direct fail-closed negative-quantity capture assertion while retaining the existing non-finite assertion. Do not edit `QuantityReportRevisionService`, `RevisionService`, `RevisionMath`, production quantity validation or comparison semantics. The concurrent ACTIVE revision-ID and dependency-canonicalization claims remain fully excluded. Re-run the complete Core smoke after this narrow reconciliation.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
