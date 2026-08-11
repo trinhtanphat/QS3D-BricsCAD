@@ -73,7 +73,8 @@ namespace QS3D.BricsCAD.V25.UI
                 var dialog = new SaveFileDialog { Title = "Xuất BBS QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = _defaultFileName, AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
                 if (dialog.ShowDialog(this) != true) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                    throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng bảng BBS và mở lại trước khi xuất.");
                 new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 _rows = ProjectRebarScheduleBuilder.Build(project);
                 BindRows();
