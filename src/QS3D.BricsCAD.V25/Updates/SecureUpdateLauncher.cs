@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Principal;
 using System.Text;
 using System.Threading;
 
@@ -17,7 +18,9 @@ namespace QS3D.BricsCAD.V25.Updates
         private const uint WtdChoiceFile = 1;
         private const uint WtdStateActionVerify = 1;
         private const uint WtdStateActionClose = 2;
+        private const string UpdateMutexPrefix = "Global\\QS3D-BricsCAD-V25-Update-";
         private static int _scheduled;
+        private static Mutex? _crossProcessReservation;
 
         internal static bool IsScheduled => Volatile.Read(ref _scheduled) != 0;
 
@@ -78,6 +81,12 @@ namespace QS3D.BricsCAD.V25.Updates
                 return false;
             }
 
+            if (!TryAcquireCrossProcessReservation(out var mutexName, out error))
+            {
+                Interlocked.Exchange(ref _scheduled, 0);
+                return false;
+            }
+
             try
             {
                 var pluginPath = Assembly.GetExecutingAssembly().Location;
@@ -109,7 +118,8 @@ namespace QS3D.BricsCAD.V25.Updates
                     signerThumbprint,
                     installDirectory,
                     bricscadPath,
-                    logDirectory);
+                    logDirectory,
+                    mutexName);
                 var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(worker));
 
                 var startInfo = new ProcessStartInfo
@@ -129,6 +139,7 @@ namespace QS3D.BricsCAD.V25.Updates
             }
             catch (Exception ex)
             {
+                ReleaseCrossProcessReservation();
                 Interlocked.Exchange(ref _scheduled, 0);
                 error = ex.Message;
                 return false;
@@ -152,6 +163,52 @@ namespace QS3D.BricsCAD.V25.Updates
                 error = "Không gửi được yêu cầu đóng BricsCAD: " + ex.Message + " Hãy đóng BricsCAD bình thường; updater sẽ tiếp tục chờ.";
                 return false;
             }
+        }
+
+        private static bool TryAcquireCrossProcessReservation(out string mutexName, out string error)
+        {
+            mutexName = string.Empty;
+            error = string.Empty;
+            try
+            {
+                string? sid;
+                using (var identity = WindowsIdentity.GetCurrent())
+                {
+                    sid = identity.User?.Value;
+                }
+                if (string.IsNullOrWhiteSpace(sid))
+                {
+                    error = "Không xác định được Windows user SID để khóa updater liên tiến trình.";
+                    return false;
+                }
+
+                mutexName = UpdateMutexPrefix + sid;
+                var reservation = new Mutex(true, mutexName, out var createdNew);
+                if (!createdNew)
+                {
+                    reservation.Dispose();
+                    error = "Một tiến trình QS3D updater khác của Windows user này đã được lên lịch hoặc đang chạy. Hãy hoàn tất lần cập nhật đó trước.";
+                    return false;
+                }
+
+                _crossProcessReservation = reservation;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = "Không tạo được khóa updater liên tiến trình: " + ex.Message;
+                return false;
+            }
+        }
+
+        private static void ReleaseCrossProcessReservation()
+        {
+            var reservation = _crossProcessReservation;
+            _crossProcessReservation = null;
+            if (reservation == null) return;
+            try { reservation.ReleaseMutex(); }
+            catch (ApplicationException) { }
+            finally { reservation.Dispose(); }
         }
 
         private static bool TryVerifyAuthenticode(string filePath, out string reason)
@@ -209,7 +266,14 @@ namespace QS3D.BricsCAD.V25.Updates
             }
         }
 
-        private static string BuildWorkerScript(string updaterPath, string manifestUri, string signerThumbprint, string installDirectory, string bricscadPath, string logDirectory)
+        private static string BuildWorkerScript(
+            string updaterPath,
+            string manifestUri,
+            string signerThumbprint,
+            string installDirectory,
+            string bricscadPath,
+            string logDirectory,
+            string mutexName)
         {
             var script = new StringBuilder();
             script.AppendLine("$ErrorActionPreference = 'Stop'");
@@ -219,10 +283,17 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("$install = " + PsLiteral(installDirectory));
             script.AppendLine("$bricscad = " + PsLiteral(bricscadPath));
             script.AppendLine("$logDirectory = " + PsLiteral(logDirectory));
+            script.AppendLine("$mutexName = " + PsLiteral(mutexName));
             script.AppendLine("New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null");
             script.AppendLine("$log = Join-Path $logDirectory ('update-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '.log')");
             script.AppendLine("Start-Transcript -Path $log -Force | Out-Null");
+            script.AppendLine("$updateMutex = $null");
+            script.AppendLine("$ownsUpdateMutex = $false");
             script.AppendLine("try {");
+            script.AppendLine("  $updateMutex = New-Object System.Threading.Mutex($false, $mutexName)");
+            script.AppendLine("  try { $ownsUpdateMutex = $updateMutex.WaitOne() }");
+            script.AppendLine("  catch [System.Threading.AbandonedMutexException] { $ownsUpdateMutex = $true }");
+            script.AppendLine("  if (-not $ownsUpdateMutex) { throw 'Could not acquire the QS3D cross-process update reservation.' }");
             script.AppendLine("  while (Get-Process -Name bricscad -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 2 }");
             script.AppendLine("  if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) { throw 'Installed QS3D updater script is missing.' }");
             script.AppendLine("  $signature = Get-AuthenticodeSignature -LiteralPath $updater");
@@ -239,6 +310,10 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("  Write-Error $_");
             script.AppendLine("  try { Stop-Transcript | Out-Null } catch { }");
             script.AppendLine("  exit 1");
+            script.AppendLine("}");
+            script.AppendLine("finally {");
+            script.AppendLine("  if ($ownsUpdateMutex -and $updateMutex) { try { $updateMutex.ReleaseMutex() } catch { } }");
+            script.AppendLine("  if ($updateMutex) { $updateMutex.Dispose() }");
             script.AppendLine("}");
             return script.ToString();
         }
