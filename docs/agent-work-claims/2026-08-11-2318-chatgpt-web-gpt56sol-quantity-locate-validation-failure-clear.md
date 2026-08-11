@@ -1,16 +1,37 @@
 # Agent Work Claim
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETE`
+- State: `COMPLETE`
 - Agent: `chatgpt-web-gpt56sol-20260811-quantity-locate-validation-failure-clear`
 - Started (UTC): `2026-08-11T16:18:00Z`
-- Last Updated (UTC): `2026-08-11T16:18:00Z`
-- Expected Completion: `same session after source-safe implementation and repository-verifiable qualification`
+- Last Updated (UTC): `2026-08-11T16:40:00Z`
+- Expected Completion: `completed source-side; licensed BricsCAD V25 interaction remains in the existing LOCAL_ONLY qualification queue`
 - Task Key: `UI-QUANTITY-LOCATE-VALIDATION-FAILURE-CLEAR`
 - Intended Work: Close the residual quantity-locate selection-staleness path where stale-row/project validation can fail before the explicit selection-replacement call, leaving a previous CAD implied selection highlighted.
-- Scope: `src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs`; `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs`; one focused auto-discovered preflight; this claim and planning documentation.
-- Implementation Contract: A failed locate that is still bound to the same active DWG must best-effort clear implied selection before surfacing the stale/validation failure. Never clear a different active document. Preserve the existing explicit `CadHandleService.Select(...)` zero-live/zero-candidate behavior, document/project affinity checks, read-only project semantics, multi-object handling, statuses and positive-count-only zoom.
-- Out of Scope: `CadHandleService` API semantics; reporting/grouping/math; project mutation/persistence; `Commands.cs`; viewport camera algorithms; cross-DWG selection mutation; native BricsCAD V25 runtime claims.
-- Coordination: The prior `quantity-locate-stale-selection-clear` claim is `COMPLETE`. Recent Quantity commits concern revisions/rules and no newer Quantity-locate claim was found. This is a new residual lane rather than reopening completed work.
-- Verification Plan: Register plan before source edit; verify exact active-document gating; require Summary catch/validation failures and Insight same-DWG project/row validation failures to clear best-effort before returning/reporting; preserve wrong-DWG fail-closed behavior; add focused source preflight; compare concurrent main changes before merge; re-fetch merged source and record GitHub check/workflow status honestly.
-- Native V25 Disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under the existing local interactive qualification queue.
+- Final Scope: `src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.LocateSelectionFailureGuard.cs`; `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.LocateSelectionFailureGuard.cs`; `scripts/preflight-quantity-locate-validation-failure-clear.py`; claim/plan documentation. Canonical Quantity code-behind/XAML were intentionally not rewritten.
+- Implementation Contract: Actual locate triggers pre-clear only the exact bound document when it is still `MdiActiveDocument`, before canonical validation runs. A successful locate then selects the revalidated target; a stale validation failure cannot preserve an unrelated prior highlight. Wrong-DWG surfaces remain non-clearing. Guards are best-effort and never mask the canonical locate error.
+- Out of Scope Preserved: `CadHandleService` API semantics; reporting/grouping/math; project mutation/persistence; `Commands.cs`; viewport camera algorithms; cross-DWG selection mutation; native BricsCAD V25 runtime claims.
+- Planning: `docs/QUANTITY-LOCATE-VALIDATION-FAILURE-CLEAR-PLAN-2026-08-11.md` — final source-side status `IMPLEMENTED_SOURCE_SIDE`.
+- Completion Evidence:
+  - Claim registration before source: `0affeed6f5bc1133ca6a7598936d20b85ad18573`.
+  - Initial plan before source: `07f56571314e63d606b3c1348fd611ee01426abd`.
+  - Implementation refinement before integration: `17113d91de92150103be3f01e52e8d12b400ae0d`.
+  - Summary guard: `771687906b5e3e1273e34d9458f3bd734de99f8e`; explicit-static-constructor refinement `b46218feab812673f0b383fcb38bd18a1a7a3255`.
+  - Insight guard: `9a23645dd36d8615a175aa03e459e93aa792a277`; explicit-static-constructor refinement `451c1875969c742f2dd0c95079e914731be30bcc`.
+  - Focused gate: `539909f45db2dd755b518b803b6819ba5fcf5410`; final deterministic-registration gate/head `521f2b7b7f80dffaea526ee5c7537f97bc725245`.
+  - Branch diff at qualification: exactly three new files, 330 additions / 0 deletions.
+  - PR #532 raw GitHub state before merge: `mergeable=true`, `rebaseable=true`, `mergeable_state=clean`.
+  - Final merge: PR #532 -> `17a798fabb5bcce06b27d0fd4d011af79481f94c`, merged with expected head SHA; no force update used.
+  - Merge-SHA blobs: Summary guard `74290de93b7dbe169effc19189a040506857bc49`; Insight guard `922c8ac786249f443faa9ae87df5fb0420d8355c`; focused gate `8ecd932935ab99e92cf96f4a8ca72c2f25392d7c`.
+  - Focused gate source AST parse: `PASS` (153 lines). Merge-SHA source inspection confirms deterministic explicit static constructors, exact WPF trigger/owner filtering, active-document affinity before `Select(empty)`, no project mutation/bootstrap/touch/zoom in guards, and unchanged canonical target-selection/zoom contract.
+  - Concurrency qualification: 171 commits from the prior Quantity merge to checkpoint plus another 105 commits from branch base to pre-merge main had no overlap on the protected Quantity locate surfaces/guard/gate paths. Eight commits landed immediately after merge and none overwrote this lane.
+  - GitHub checks: no combined status checks and no workflow runs registered for merge SHA; absence recorded, not treated as CI PASS.
+  - Native V25 disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under the existing local interactive qualification queue; no duplicate local inbox item created.
+- Qualifier Verdict: `REMOTE_PASS` for repository/source behavior; licensed BricsCAD V25 interactive behavior remains intentionally unclaimed remotely.
+- Requirement Smoke Verdict: source contracts + focused gate syntax/order `PASS`; native UI runtime `PENDING_LOCAL`.
+- Change Log:
+  - `2026-08-11T16:18:00Z` — Registered new residual claim after completing the earlier zero-live/zero-candidate selection lane.
+  - `2026-08-11T16:20:32Z` — Committed initial plan before source work.
+  - `2026-08-11T16:33:00Z` — Refined implementation to source-stable partial WPF class handlers with explicit static constructors, avoiding canonical code-behind rewrites during heavy concurrent activity.
+  - `2026-08-11T16:37:00Z` — PR #532 merged the three-file implementation atomically with expected head SHA.
+  - `2026-08-11T16:40:00Z` — Re-fetched merge-SHA source/gate, recorded AST/source-order qualification, checked post-merge concurrency and GitHub check/workflow absence, updated plan, and closed claim `COMPLETE`.

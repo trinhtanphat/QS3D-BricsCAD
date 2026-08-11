@@ -12,10 +12,13 @@ namespace QS3D.Core.Export
 {
     public static class MaterialUsageXlsxExporter
     {
+        private const int MaxDataRows = 1048575;
+
         public static void Export(string path, IReadOnlyList<MaterialUsageRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            if (rows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Material XLSX export supports at most " + MaxDataRows + " data rows.");
             for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
                 if (rows[rowIndex] == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));

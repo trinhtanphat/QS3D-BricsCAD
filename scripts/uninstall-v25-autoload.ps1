@@ -73,6 +73,97 @@ function Assert-InstallDirectorySafeToRemove {
     return $installFull
 }
 
+function Get-RegistryTreeSnapshot {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    $key = Get-Item -LiteralPath $Path
+    try {
+        $values = @()
+        foreach ($name in $key.GetValueNames()) {
+            $values += [pscustomobject]@{
+                Name = [string]$name
+                Value = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                Kind = $key.GetValueKind($name).ToString()
+            }
+        }
+        $childNames = @($key.GetSubKeyNames())
+    }
+    finally {
+        $key.Close()
+    }
+
+    $children = @()
+    foreach ($childName in $childNames) {
+        $child = Get-RegistryTreeSnapshot -Path (Join-Path $Path $childName)
+        if ($null -ne $child) { $children += $child }
+    }
+
+    return [pscustomobject]@{
+        Path = $Path
+        Values = @($values)
+        Children = @($children)
+    }
+}
+
+function Restore-RegistryTreeSnapshot {
+    param($Snapshot)
+
+    if ($null -eq $Snapshot) { return }
+    $path = [string]$Snapshot.Path
+    if (Test-Path -LiteralPath $path) {
+        Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+    }
+    New-Item -Path $path -Force | Out-Null
+
+    $key = Get-Item -LiteralPath $path
+    try {
+        foreach ($value in @($Snapshot.Values)) {
+            $kind = [Microsoft.Win32.RegistryValueKind][Enum]::Parse(
+                [Microsoft.Win32.RegistryValueKind],
+                [string]$value.Kind)
+            $key.SetValue([string]$value.Name, $value.Value, $kind)
+        }
+    }
+    finally {
+        $key.Close()
+    }
+
+    foreach ($child in @($Snapshot.Children)) {
+        Restore-RegistryTreeSnapshot -Snapshot $child
+    }
+}
+
+function Get-DemandLoadTargets {
+    param([string[]]$RequestedVersions, [string[]]$RequestedLanguages)
+
+    $root = 'HKCU:\Software\Bricsys\BricsCAD'
+    if (-not (Test-Path -LiteralPath $root)) { return @() }
+
+    $targets = @()
+    $versions = @(Get-ChildItem -LiteralPath $root | Where-Object { $_.PSChildName -match '^V25' })
+    if ($RequestedVersions -and $RequestedVersions.Count -gt 0) {
+        $versions = @($versions | Where-Object { $RequestedVersions -contains $_.PSChildName })
+    }
+    foreach ($version in $versions) {
+        $languages = @(Get-ChildItem -LiteralPath $version.PSPath | Where-Object { $_.PSChildName -match '^[A-Za-z]{2}_[A-Za-z]{2}$' })
+        if ($RequestedLanguages -and $RequestedLanguages.Count -gt 0) {
+            $languages = @($languages | Where-Object { $RequestedLanguages -contains $_.PSChildName })
+        }
+        foreach ($language in $languages) {
+            $appKey = Join-Path $language.PSPath 'Applications\QS3D'
+            if (Test-Path -LiteralPath $appKey) {
+                $targets += [pscustomobject]@{
+                    Version = $version.PSChildName
+                    Language = $language.PSChildName
+                    AppKey = $appKey
+                }
+            }
+        }
+    }
+    return @($targets)
+}
+
 if (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {
     throw 'Close all BricsCAD processes before uninstalling QS3D.'
 }
@@ -84,25 +175,81 @@ try {
         $installFull = Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory -ForceDelete:$Force
     }
 
-    $root = 'HKCU:\Software\Bricsys\BricsCAD'
-    if (Test-Path -LiteralPath $root) {
-        $versions = @(Get-ChildItem -LiteralPath $root | Where-Object { $_.PSChildName -match '^V25' })
-        if ($VersionKeys -and $VersionKeys.Count -gt 0) { $versions = @($versions | Where-Object { $VersionKeys -contains $_.PSChildName }) }
-        foreach ($version in $versions) {
-            $languages = @(Get-ChildItem -LiteralPath $version.PSPath | Where-Object { $_.PSChildName -match '^[A-Za-z]{2}_[A-Za-z]{2}$' })
-            if ($LanguageKeys -and $LanguageKeys.Count -gt 0) { $languages = @($languages | Where-Object { $LanguageKeys -contains $_.PSChildName }) }
-            foreach ($language in $languages) {
-                $appKey = Join-Path $language.PSPath 'Applications\QS3D'
-                if ((Test-Path -LiteralPath $appKey) -and $PSCmdlet.ShouldProcess("$($version.PSChildName)/$($language.PSChildName)", 'Remove QS3D DemandLoad registration')) {
-                    Remove-Item -LiteralPath $appKey -Recurse -Force
+    $registryPlan = @()
+    foreach ($target in @(Get-DemandLoadTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)) {
+        if ($PSCmdlet.ShouldProcess("$($target.Version)/$($target.Language)", 'Remove QS3D DemandLoad registration')) {
+            $snapshot = Get-RegistryTreeSnapshot -Path $target.AppKey
+            if ($null -ne $snapshot) {
+                $registryPlan += [pscustomobject]@{
+                    Target = $target
+                    Snapshot = $snapshot
                 }
             }
         }
     }
 
-    if (-not $KeepFiles -and (Test-Path -LiteralPath $installFull)) {
-        if ($PSCmdlet.ShouldProcess($installFull, 'Remove QS3D installed files')) {
-            Remove-Item -LiteralPath $installFull -Recurse -Force
+    $stageFiles = $false
+    if (-not $KeepFiles -and -not [string]::IsNullOrWhiteSpace($installFull) -and (Test-Path -LiteralPath $installFull -PathType Container)) {
+        $stageFiles = $PSCmdlet.ShouldProcess($installFull, 'Remove QS3D installed files')
+    }
+
+    $quarantine = $null
+    $removedSnapshots = @()
+    try {
+        if ($stageFiles) {
+            $parent = Split-Path -Parent $installFull
+            if ([string]::IsNullOrWhiteSpace($parent)) { throw 'InstallDirectory must have a parent directory for rollback-safe uninstall.' }
+            $quarantine = Join-Path $parent ('.qs3d-uninstall-' + [Guid]::NewGuid().ToString('N'))
+            Move-Item -LiteralPath $installFull -Destination $quarantine -ErrorAction Stop
+        }
+
+        foreach ($entry in $registryPlan) {
+            $removedSnapshots += $entry.Snapshot
+            Remove-Item -LiteralPath $entry.Target.AppKey -Recurse -Force -ErrorAction Stop
+        }
+    }
+    catch {
+        $originalError = $_
+        $rollbackFailures = @()
+        $filesRestored = $true
+
+        if ($quarantine -and (Test-Path -LiteralPath $quarantine)) {
+            try {
+                if (Test-Path -LiteralPath $installFull) {
+                    throw "Canonical install path unexpectedly exists during uninstall rollback: $installFull"
+                }
+                Move-Item -LiteralPath $quarantine -Destination $installFull -ErrorAction Stop
+            }
+            catch {
+                $filesRestored = $false
+                $rollbackFailures += ('files: ' + $_.Exception.Message)
+            }
+        }
+
+        if ($filesRestored -or -not $quarantine) {
+            for ($index = $removedSnapshots.Count - 1; $index -ge 0; $index--) {
+                try { Restore-RegistryTreeSnapshot -Snapshot $removedSnapshots[$index] }
+                catch { $rollbackFailures += ('registry: ' + $_.Exception.Message) }
+            }
+        }
+        else {
+            $rollbackFailures += 'registry: skipped restore because the canonical install directory could not be restored.'
+        }
+
+        if ($rollbackFailures.Count -gt 0) {
+            Write-Warning ('QS3D uninstall rollback encountered error(s): ' + ($rollbackFailures -join ' | '))
+        }
+        throw $originalError
+    }
+
+    if ($quarantine -and (Test-Path -LiteralPath $quarantine)) {
+        try {
+            Remove-Item -LiteralPath $quarantine -Recurse -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Warning (
+                "QS3D uninstall committed, but cleanup of quarantine '$quarantine' failed: $($_.Exception.Message). " +
+                'DemandLoad is removed and the canonical install path is no longer active; delete the quarantine directory manually after checking file locks.')
         }
     }
 

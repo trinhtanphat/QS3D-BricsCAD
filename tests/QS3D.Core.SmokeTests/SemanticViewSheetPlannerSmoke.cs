@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             DuplicateProjectElementIdsFailClosed();
             ViewCatalogDoesNotOverEnumeratePastBound();
             SheetCompositionIsDeterministic();
+            SheetCatalogDoesNotOverEnumeratePastBound();
             SheetOverlapFailsClosed();
             SheetBoundsFailClosed();
             DuplicateViewIdentityFailsClosed();
@@ -107,6 +108,26 @@ namespace QS3D.Core.SmokeTests
             Equal("VIEW-B", plan.Placements[0].ViewId);
             Equal("VIEW-C", plan.Placements[1].ViewId);
             Equal("A-101", plan.Number);
+        }
+
+        private static void SheetCatalogDoesNotOverEnumeratePastBound()
+        {
+            MustFail(
+                () => SemanticSheetPlanner.BuildCatalog(OverBoundedSheetDefinitions(), Array.Empty<SemanticViewPlan>()),
+                "Semantic sheet catalog must stop enumeration as soon as its configured sheet bound is exceeded.");
+        }
+
+        private static IEnumerable<SemanticSheetDefinition> OverBoundedSheetDefinitions()
+        {
+            for (var i = 0; i <= 10000; i++)
+                yield return new SemanticSheetDefinition(
+                    "S-" + i,
+                    "A-" + i,
+                    "Sheet " + i,
+                    420d,
+                    297d,
+                    Array.Empty<SemanticSheetPlacementDefinition>());
+            throw new ApplicationException("Semantic sheet catalog enumerated beyond the first over-bound definition.");
         }
 
         private static void SheetOverlapFailsClosed()

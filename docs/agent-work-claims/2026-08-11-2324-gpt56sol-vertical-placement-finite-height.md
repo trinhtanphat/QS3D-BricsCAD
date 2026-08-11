@@ -1,42 +1,32 @@
 # Work claim — vertical placement finite-height integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-vertical-placement-finite-height-20260811-2324`
 - Registered: `2026-08-11T23:24:00+07:00`
 - Baseline main SHA: `b15b3a367fb543ccb2cb39b0d0ef5ad4281a0853`
+- Integrated main SHA: `45cbf973c7f75bf9c6bb9e377df06968f2b25dac`
+- PR: `#529`
 - Priority: evidence-driven Core invariant hardening during owner-requested `continue all`
 
-## Reserved scope
+## Completed scope
 
-Harden `ElementVerticalPlacement` / `ElementVerticalPlacementService.ResolveEffectiveHeight` so every returned effective height is finite and strictly positive, including legacy/no-Level paths and extreme finite elevation spans.
+Hardened `ElementVerticalPlacement` / `ElementVerticalPlacementService.ResolveEffectiveHeight` so returned effective heights preserve a finite, strictly-positive contract on the legacy/no-Level path and finite endpoint spans cannot expose an infinite computed `HeightM`.
 
-## Expected surfaces
+## Changes
 
-- `src/QS3D.Core/Domain/ElementVerticalPlacementService.cs`
-- `tests/QS3D.Core.SmokeTests/VerticalPlacementFiniteHeightSmoke.cs`
-- `tests/QS3D.Core.SmokeTests/VerticalPlacementFiniteHeightSmokeRegistration.cs`
-- this claim file for close-out
+- Legacy/no-Level `ResolveEffectiveHeight` now routes through the existing `Positive(...)` validation instead of returning an unchecked height.
+- `ElementVerticalPlacement` materializes its height in the constructor and rejects overflow/non-finite spans before the object becomes observable.
+- Added dedicated focused smoke coverage plus `ModuleInitializer` registration; no shared smoke-runner edits.
 
-## Concrete defects
+## Validation actually performed
 
-1. `ResolveEffectiveHeight()` currently returns `legacyHeightM` directly when no Level metadata is configured, bypassing the same finite/positive validation used by `Resolve()`. `NaN`, infinity, zero or negative height can therefore escape through one public path but not the other.
-2. `ElementVerticalPlacement` validates both endpoint elevations as finite and ordered, but `TopElevationM - BottomElevationM` can still overflow to infinity for extreme finite endpoints. The object can therefore expose a non-finite `HeightM` despite accepting only finite endpoint inputs.
+- Reviewed the source diff on PR #529.
+- Regression covers NaN, positive infinity, zero and negative legacy heights, a normal positive legacy height, an extreme finite endpoint span that overflows during subtraction, and a normal finite placement height.
+- Re-read `src/QS3D.Core/Domain/ElementVerticalPlacementService.cs` and `tests/QS3D.Core.SmokeTests/VerticalPlacementFiniteHeightSmoke.cs` from remote `main` after merge.
+- Compared concurrent main changes before refresh/merge; no overlap with the reserved vertical-placement scope was found.
+- No GitHub Actions were dispatched.
+- No local .NET compile, licensed BricsCAD V25 runtime, native Level/Grid behavior, or LOCAL_PASS is claimed from this environment.
 
-## Explicit exclusions
+## Integration
 
-- No native BricsCAD Level/Grid materialization or V25 runtime changes.
-- No floor/level identity schema changes.
-- No hosted-opening relation policy changes beyond preserving the existing finite-height invariant.
-- No UI, updater/licensing, interchange, rebar, Actions, release, or LOCAL_PASS work.
-
-## Validation plan
-
-- Legacy/no-Level `ResolveEffectiveHeight` rejects NaN, infinity, zero and negative heights.
-- A normal positive legacy height is returned unchanged.
-- `ElementVerticalPlacement` rejects an extreme finite endpoint span whose computed height overflows.
-- A normal finite positive placement still exposes the expected height.
-- Re-fetch/compare `main`, publish atomically via temporary branch/PR, and re-read remote `main` after integration.
-
-## Completion condition
-
-Every public effective-height path preserves finite positive height, focused regression is integrated on current `main`, and this claim is marked `COMPLETED` with exact integration SHA and validation actually performed.
+PR #529 was refreshed on current `main` without force-push and squash-merged as `45cbf973c7f75bf9c6bb9e377df06968f2b25dac`.

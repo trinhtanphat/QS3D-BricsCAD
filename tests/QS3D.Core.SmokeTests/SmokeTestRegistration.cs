@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
             XlsxScheduleNullRowSmoke.Run();
             XlsxQuantityNullRowSmoke.Run();
             XlsxHandleReaderCoordinateSmoke.Run();
+            XlsxExporterRowBoundSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
             PersistenceHardeningSmoke.Run();
             LicenseVerifierSmoke.Run();

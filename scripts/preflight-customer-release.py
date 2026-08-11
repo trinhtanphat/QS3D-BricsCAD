@@ -36,6 +36,10 @@ def is_strict_semver(value):
     return True
 
 
+def exact_release_identity(product_version, core_version, release_tag):
+    return product_version == core_version and release_tag == "v" + product_version
+
+
 for value in ("0.0.0", "1.2.3", "1.2.3-rc.1", "1.2.3-rc.1+build.4", "1.2.3+001"):
     if not is_strict_semver(value):
         errors.append("strict SemVer regression unexpectedly rejected valid value: " + value)
@@ -53,6 +57,15 @@ for value in (
 ):
     if is_strict_semver(value):
         errors.append("strict SemVer regression unexpectedly accepted invalid value: " + value)
+
+if not exact_release_identity("1.2.3-preview.2", "1.2.3-preview.2", "v1.2.3-preview.2"):
+    errors.append("exact release identity regression must accept identical product/core/tag versions")
+for product, core, tag in (
+    ("1.2.3-preview.2", "1.2.3-PREVIEW.2", "v1.2.3-preview.2"),
+    ("1.2.3-preview.2", "1.2.3-preview.2", "v1.2.3-PREVIEW.2"),
+):
+    if exact_release_identity(product, core, tag):
+        errors.append("exact release identity regression must reject case-only version differences")
 
 for path in (runtime, package, finalize, plugin_project, core_project) + release_workflows:
     if not path.is_file():
@@ -82,6 +95,8 @@ if package.is_file():
         "numeric prerelease identifier with a leading zero",
         "Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject)",
         "Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject)",
+        "[string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)",
+        "[string]::Equals($env:RELEASE_TAG.Trim(), $expectedTag, [StringComparison]::Ordinal)",
         "QS3D plugin/Core product versions differ",
         "$expectedTag = 'v' + $productVersion",
         "RELEASE_TAG must exactly match the source product version",
@@ -89,7 +104,9 @@ if package.is_file():
         "QS3DRUNTIMECHECK",
     ):
         if needle not in text:
-            errors.append("package-v25.ps1 missing strict-version/customer contract: " + needle)
+            errors.append("package-v25.ps1 missing strict/exact-version customer contract: " + needle)
+    if "[StringComparison]::OrdinalIgnoreCase" in text:
+        errors.append("package-v25.ps1 must not use case-insensitive comparison for exact release identity")
 
 if finalize.is_file():
     text = finalize.read_text(encoding="utf-8")
@@ -114,8 +131,8 @@ for label, path in (("plugin", plugin_project), ("core", core_project)):
             versions[label] = version
             if not is_strict_semver(version):
                 errors.append(label + " project <Version> is not strict SemVer: " + repr(version))
-if len(versions) == 2 and versions["plugin"].lower() != versions["core"].lower():
-    errors.append("plugin/Core <Version> values differ: " + repr(versions))
+if len(versions) == 2 and versions["plugin"] != versions["core"]:
+    errors.append("plugin/Core <Version> values differ exactly: " + repr(versions))
 
 for workflow in release_workflows:
     if not workflow.is_file():
@@ -144,7 +161,7 @@ if errors:
 
 print(
     "PASS: customer diagnostics are registered, V25/x64 is checked in-product, "
-    "plugin/Core product versions are strict SemVer and aligned, RELEASE_TAG is exact-version-bound, "
+    "plugin/Core product versions are strict SemVer and exact-case aligned, RELEASE_TAG is exact-case/version-bound, "
     "release workflows execute the strict package boundary before publication, "
     "and finalized signed metadata records the verified publisher."
 )

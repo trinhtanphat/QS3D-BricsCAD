@@ -47,13 +47,14 @@ def main() -> int:
     update_cad = update.find("if (Get-Process -Name bricscad -ErrorAction SilentlyContinue)")
     update_lock = update.find("$updateMutex = Enter-Qs3dUpdateMutex")
     update_manifest = update.find("$manifestAddress = Convert-ToSafeHttpsUri")
-    update_network = update.find("Invoke-WebRequest -Uri $manifestAddress.AbsoluteUri")
+    update_network = update.find("Invoke-BoundedHttpsDownload -Address $manifestAddress")
+    update_package = update.find("Invoke-BoundedHttpsDownload -Address $packageAddress")
     update_installer = update.find("& $installer @arguments")
     update_release = update.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
-    if min(update_cad, update_lock, update_manifest, update_network, update_installer, update_release) < 0 or not (
-        update_cad < update_lock < update_manifest < update_network < update_installer < update_release
+    if min(update_cad, update_lock, update_manifest, update_network, update_package, update_installer, update_release) < 0 or not (
+        update_cad < update_lock < update_manifest < update_network < update_package < update_installer < update_release
     ):
-        raise AssertionError("secure updater must refuse live CAD, acquire cross-entry lock, then hold it through manifest/package preparation and nested installer")
+        raise AssertionError("secure updater must refuse live CAD, acquire cross-entry lock, then hold it through bounded manifest/package preparation and nested installer")
 
     install_cad = install.find("$runningBricsCAD = @(Get-RunningBricsCADProcessDetails)")
     install_lock = install.find("$updateMutex = Enter-Qs3dUpdateMutex")
@@ -71,18 +72,20 @@ def main() -> int:
     uninstall_cad = uninstall.find("if (Get-Process -Name bricscad -ErrorAction SilentlyContinue)")
     uninstall_lock = uninstall.find("$updateMutex = Enter-Qs3dUpdateMutex")
     uninstall_identity = uninstall.find("Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory")
-    uninstall_registry = uninstall.find("$root = 'HKCU:\\Software\\Bricsys\\BricsCAD'")
-    uninstall_registry_remove = uninstall.find("Remove-Item -LiteralPath $appKey -Recurse -Force")
-    uninstall_file_remove = uninstall.find("Remove-Item -LiteralPath $installFull -Recurse -Force")
+    uninstall_plan = uninstall.find("$registryPlan = @()")
+    uninstall_stage = uninstall.find("Move-Item -LiteralPath $installFull -Destination $quarantine -ErrorAction Stop")
+    uninstall_registry_remove = uninstall.find("Remove-Item -LiteralPath $entry.Target.AppKey -Recurse -Force -ErrorAction Stop")
+    uninstall_cleanup = uninstall.find("Remove-Item -LiteralPath $quarantine -Recurse -Force -ErrorAction Stop")
     uninstall_release = uninstall.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
-    if min(uninstall_cad, uninstall_lock, uninstall_identity, uninstall_registry, uninstall_registry_remove, uninstall_file_remove, uninstall_release) < 0 or not (
-        uninstall_cad < uninstall_lock < uninstall_identity < uninstall_registry < uninstall_registry_remove < uninstall_file_remove < uninstall_release
+    if min(uninstall_cad, uninstall_lock, uninstall_identity, uninstall_plan, uninstall_stage, uninstall_registry_remove, uninstall_cleanup, uninstall_release) < 0 or not (
+        uninstall_cad < uninstall_lock < uninstall_identity < uninstall_plan < uninstall_stage < uninstall_registry_remove < uninstall_cleanup < uninstall_release
     ):
-        raise AssertionError("uninstaller must refuse live CAD, acquire cross-entry lock before identity/registry inspection, and hold it through registry/file removal")
+        raise AssertionError("uninstaller must refuse live CAD, acquire cross-entry lock, plan/snapshot state, quarantine files, remove registry state, and hold ownership through cleanup")
 
     for text, label in ((update, "secure updater"), (install, "installer"), (uninstall, "uninstaller")):
         if "Stop-Process" in text or "taskkill" in text or ".Kill(" in text:
             raise AssertionError(f"{label} must never force-terminate BricsCAD/processes")
+    require(update, "function Invoke-BoundedHttpsDownload", "secure updater bounded transfer helper")
     require(update, "Assert-SafeArchive", "secure updater archive gate")
     require(update, "ExpectedSignerThumbprint = $expectedSigner", "secure updater signed installer handoff")
     require(update, "Installed QS3D productVersion changed during update preparation", "secure updater stale-state recheck")
@@ -96,10 +99,12 @@ def main() -> int:
     require(uninstall, "PACKAGE-METADATA.json is not a valid QS3D V25 identity marker", "uninstaller package identity guard")
     require(uninstall, "$PSCmdlet.ShouldProcess", "uninstaller ShouldProcess boundary")
     require(uninstall, "if (-not $KeepFiles", "uninstaller KeepFiles behavior")
+    require(uninstall, "Restore-RegistryTreeSnapshot", "uninstaller registry rollback")
+    require(uninstall, "throw $originalError", "uninstaller original failure propagation")
 
     print(
-        "PASS: detached/manual secure update, direct install, and direct uninstall share the same per-user Windows mutex; "
-        "all direct mutation entry points fail fast on contention and hold ownership through update/install/rollback/removal completion."
+        "PASS: detached/manual secure update, direct install, and rollback-safe direct uninstall share the same per-user Windows mutex; "
+        "all direct mutation entry points fail fast on contention and hold ownership through bounded update/install/rollback/removal completion."
     )
     return 0
 

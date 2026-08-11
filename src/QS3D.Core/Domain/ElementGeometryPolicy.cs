@@ -22,6 +22,7 @@ namespace QS3D.Core.Domain
 
         public static bool RequiresGeneratedGeometry(ElementCategory category)
         {
+            RequireDefinedCategory(category);
             return category == ElementCategory.ArchitecturalWall ||
                    category == ElementCategory.GlassWall ||
                    category == ElementCategory.WallPier ||
@@ -54,6 +55,12 @@ namespace QS3D.Core.Domain
             var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;
             if (!RequiresGeneratedGeometry(category)) flags |= ElementDirtyFlags.Geometry;
             return flags;
+        }
+
+        private static void RequireDefinedCategory(ElementCategory category)
+        {
+            if (!Enum.IsDefined(typeof(ElementCategory), category))
+                throw new ArgumentOutOfRangeException(nameof(category), category, "Geometry policy requires a defined ElementCategory.");
         }
     }
 }
