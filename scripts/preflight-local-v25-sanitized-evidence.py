@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPORTER = ROOT / "scripts/export-local-v25-sanitized-summary.py"
+RUNNER = ROOT / "scripts/run-local-v25-qualification.ps1"
 TEMPLATE = ROOT / "docs/LOCAL-V25-RESULT-TEMPLATE.md"
 errors = []
 
 if not EXPORTER.is_file():
     errors.append("missing scripts/export-local-v25-sanitized-summary.py")
+    text = ""
 else:
     text = EXPORTER.read_text(encoding="utf-8")
     for needle in (
@@ -25,9 +28,23 @@ else:
         "NOT PROVED BY THIS SUMMARY",
         "private DWG names/content",
         "raw error messages",
+        "SAFE_STEP_NAMES",
+        "sanitized_step_name",
+        "(redacted label)",
     ):
         if needle not in text:
             errors.append("sanitized evidence exporter missing contract token: " + needle)
+
+if not RUNNER.is_file():
+    errors.append("missing scripts/run-local-v25-qualification.ps1")
+elif text:
+    runner_text = RUNNER.read_text(encoding="utf-8")
+    runner_step_names = re.findall(r'Invoke-QualificationStep\s+"([^"]+)"', runner_text)
+    if not runner_step_names:
+        errors.append("local V25 qualification runner has no discoverable fixed step names")
+    for step_name in runner_step_names:
+        if json.dumps(step_name) not in text:
+            errors.append("sanitized evidence exporter allowlist missing canonical runner step: " + step_name)
 
 if not TEMPLATE.is_file():
     errors.append("missing docs/LOCAL-V25-RESULT-TEMPLATE.md")
@@ -79,6 +96,14 @@ if not errors:
                 "status": "SKIPPED",
                 "error": "PRIVATE_STEP_ERROR_SENTINEL",
             },
+            {
+                "name": r"PRIVATE_STEP_NAME_SENTINEL C:\\Customer\\Acme\\secret-step.dwg",
+                "status": "FAIL",
+            },
+            {
+                "name": "![PRIVATE_MARKDOWN_STEP_SENTINEL](file:///home/private/customer.dwg)",
+                "status": "FAIL",
+            },
         ],
         "error": r"PRIVATE_FATAL_SENTINEL C:\\Customer\\Acme\\secret.dwg",
     }
@@ -108,9 +133,14 @@ if not errors:
                 "PRIVATE_RUNTIME_SENTINEL",
                 "PRIVATE_ERROR_SENTINEL",
                 "PRIVATE_STEP_ERROR_SENTINEL",
+                "PRIVATE_STEP_NAME_SENTINEL",
+                "PRIVATE_MARKDOWN_STEP_SENTINEL",
                 "PRIVATE_FATAL_SENTINEL",
                 "secret.dwg",
+                "secret-step.dwg",
                 "C:\\Customer",
+                "/home/private",
+                "file:///",
                 "bricsCadDir",
                 "pluginDll",
                 "runtimeMetadata",
@@ -130,6 +160,9 @@ if not errors:
                 "Runtime skipped: **YES**",
                 "This result cannot qualify a customer release",
                 "Core deterministic smoke suite",
+                "Licensed V25 NETLOAD / Ribbon / Palette runtime probe",
+                "Step 3 (redacted label)",
+                "Step 4 (redacted label)",
                 "Manual/private-DWG checklist: **NOT PROVED BY THIS SUMMARY**",
                 "Known blockers: `SANITIZED TEXT ONLY`",
             ):
@@ -143,4 +176,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: local V25 qualification evidence can be exported to a deterministic Markdown handoff without carrying machine/user/path/private-DWG/raw-error fields, preserves scoped schema-v2 gate states, and keeps runtime-skip visibly non-release-qualified.")
+print("PASS: local V25 qualification evidence can be exported to a deterministic Markdown handoff without carrying machine/user/path/private-DWG/raw-error or untrusted step-label fields, preserves canonical runner step labels and scoped schema-v2 gate states, and keeps runtime-skip visibly non-release-qualified.")
