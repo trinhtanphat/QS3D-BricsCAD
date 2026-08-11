@@ -63,6 +63,16 @@ namespace QS3D.Core.Documentation
             IEnumerable<string> orderedElementIds,
             IEnumerable<SemanticDocumentationColumn> columns)
         {
+            return Build(project, title, orderedElementIds, columns, allowEmpty: false);
+        }
+
+        public static SemanticDocumentationTable Build(
+            ProjectState project,
+            string title,
+            IEnumerable<string> orderedElementIds,
+            IEnumerable<SemanticDocumentationColumn> columns,
+            bool allowEmpty)
+        {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (orderedElementIds == null) throw new ArgumentNullException(nameof(orderedElementIds));
             if (columns == null) throw new ArgumentNullException(nameof(columns));
@@ -72,7 +82,8 @@ namespace QS3D.Core.Documentation
             var ids = rawIds
                 .Select((value, index) => Required(value, "orderedElementIds[" + index + "]", MaxElementIdLength))
                 .ToList();
-            if (ids.Count == 0) throw new InvalidOperationException("Documentation table requires at least one semantic element.");
+            if (ids.Count == 0 && !allowEmpty)
+                throw new InvalidOperationException("Documentation table requires at least one semantic element.");
             if (ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count)
                 throw new InvalidOperationException("Documentation table input contains duplicate semantic element ids.");
 
