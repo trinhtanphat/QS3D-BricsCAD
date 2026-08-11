@@ -59,6 +59,7 @@ The complete shared Level Z-chain is integrated on current `main`, deterministic
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
 - Implemented: geometry-driving Level-key invalidation, transitive dependent stale propagation, pure effective-span preparation, and the first wall/structural native host adapter wave.
 - Safety boundary: native mutation and production quantity regeneration reject configured Level references through `LevelReferenceNativeIntegrationPolicy.EnsureQualified(...)`; the policy still qualifies no category.
-- Validation pending exact commit: Core build/smoke, BricsCAD V25 x64 Release build and aggregate preflight.
+- Automated exact-SHA evidence: `36c170dcaf75e0018e3370a42978e63849530602` passed 453/453 aggregate gates, Core Release/smoke, adapter V25 x64 Release, offline WPF, and licensed V25 NETLOAD/Ribbon/Palette runtime. Plugin SHA-256: `762e28dafb1ac9427602efdf032f2fd6cc6e7511e2869f4861c9d52b30d1bcc7`.
+- Qualification boundary: `FULL INTERACTIVE/PRIVATE-DWG PRODUCT MATRIX = NOT_RUN`; customer release qualification remains false. This automated baseline does not qualify Level Z geometry.
 - Remaining: straight/curved opening cutters, AutoHost, Curtain LINE/path frame/panel/live fingerprints, generated rebar/mesh/shape families, UI, and the complete mm/m V25 runtime matrix.
 - Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL`.

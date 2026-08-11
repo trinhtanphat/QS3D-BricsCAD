@@ -77,7 +77,7 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Priority: P0
 - Status: OPEN
 - Area: Structural / Wall / Opening / Rebar vertical placement
-- Source-side status: PARTIAL. Core effective-span/invalidation preparation and the first wall/structural host adapter wave are source-reviewed, but configured Level references remain fail-closed for native mutation and production quantity regeneration. Opening/Curtain/rebar integration and exact-V25 proof remain `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`.
+- Source-side status: PARTIAL. Core effective-span/invalidation preparation and the first wall/structural host adapter wave are source-reviewed, but configured Level references remain fail-closed for native mutation and production quantity regeneration. Automated exact-SHA `36c170dcaf75e0018e3370a42978e63849530602` passed source/build/WPF and licensed V25 NETLOAD/Ribbon/Palette smoke (plugin SHA-256 `762e28dafb1ac9427602efdf032f2fd6cc6e7511e2869f4861c9d52b30d1bcc7`). The full interactive Level geometry matrix was NOT RUN; opening/Curtain/rebar integration remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`.
 - Why local: Correctness depends on native V25 geometry, cutters, generated rebar alignment, and save/reopen behavior after Level edits.
 - Scenario: Qualify the shared `ElementVerticalPlacementService` chain across wall families, Beam/Column/Slab/Foundation, Door/WallOpening, Curtain frames/panels, and generated reinforcement. Cover legacy/no-Level, Bottom-only, Bottom+Top, Top-only fail-closed, deleted/renamed Level, and dependent invalidation.
 - Evidence required: Exact SHA; before/after Z measurements; host-opening-rebar alignment; health/release blocker behavior; save/reopen and Level-edit invalidation results.
