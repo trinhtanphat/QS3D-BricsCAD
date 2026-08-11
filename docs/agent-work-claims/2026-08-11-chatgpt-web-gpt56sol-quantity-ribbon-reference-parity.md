@@ -8,33 +8,41 @@
 
 ## Reserved scope
 
-- `src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs`
+- `src/QS3D.BricsCAD.V25/Ribbon/QuantityReferenceRibbonAugmenter.cs` (new isolated augmenter)
+- `src/QS3D.BricsCAD.V25/PluginEntry.cs` (initialization/reset hook only)
 - `scripts/preflight-ribbon-quantity-reference-parity.py`
 - this claim file
+- `src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs` is now **audit-only / no edit planned** so concurrent bootstrap/reconciliation winners remain untouched.
 
 ## Goal
 
 Bring the existing `ĐỊNH LƯỢNG` Ribbon closer to the supplied BLT3D reference without inventing decorative controls. Surface the already-implemented QS3D calculation settings, regeneration/takeoff, ED2 export, quantity review/explanation, wall takeoff, Excel reverse-locate and old/new revision comparison workflows using clear Vietnamese labels.
 
+## Implementation shape
+
+Use a dedicated reconciliation-safe augmenter, following the repo's existing `ProjectRibbonAugmenter`, `ReferenceWallRibbonAugmenter` and `QuickWorkflowRibbonAugmenter` pattern. It locates the already-created `QS3D_QTY` tab, finds-or-creates one uniquely identified reference panel, and finds-or-creates buttons by stable IDs while always reconciling current text/command/handler. `PluginEntry` only invokes `TryInitialize()` after `RibbonBootstrapper` and resets the augmenter during termination.
+
 ## Functional contract
 
-- Keep every existing `QS3D_QTY` panel/button and all previously registered command bindings; this lane is additive so already-loaded Ribbon reconciliation does not strand legacy button IDs.
+- Keep every existing `QS3D_QTY` bootstrap panel/button and all previously registered command bindings; this lane is additive and does not rewrite/remove existing bootstrap panels.
 - Add one reference-oriented panel whose buttons dispatch real existing commands only:
   - `Cài đặt tính toán` -> `QS3DQUANTITYSETTINGS`
   - `Tính khối lượng` -> `QS3DREGEN`
   - `Xuất ED2` -> `QS3DED2`
   - `Xem khối lượng` -> `QS3DBQ`
-  - `Diễn giải` -> current full `QS3DBQ` workflow (which exposes summary/detail modes); a later dedicated detail command may replace the command parameter under the same button ID without changing this UI slot
+  - `Diễn giải` -> current full `QS3DBQ` workflow (which exposes summary/detail modes); a later dedicated detail command may replace the command parameter under the same stable button ID without changing this UI slot
   - `Khối lượng tường` -> `QS3DWALLQTY`
   - `Excel → CAD` -> `QS3DEXCELLOCATE`
   - `Đối chiếu Cũ/Mới` -> `QS3DREVDIFF`
-- Preserve Ribbon reconciliation semantics: do not clear panels/items, do not remove augmenter/user controls, and keep native click-time command dispatch through `RibbonCommandHandler`.
+- Preserve Ribbon reconciliation semantics: do not clear panels/items, do not remove bootstrap/augmenter/user controls, and keep click-time active-document command dispatch.
+- If the base `QS3D_QTY` tab is not available yet, the augmenter fails closed/returns false rather than creating a competing tab.
 - Do not modify Quantity Settings implementation/store, Wall Quantity implementation, Commands.cs, Core quantity arithmetic, Direct Draw, updater/release work or GitHub Actions.
 
 ## Validation plan
 
-- Re-fetch latest `main` and Ribbon source immediately before the write; preserve concurrent winners.
-- Add an auto-discovered focused static preflight requiring the new panel/title/labels/commands exactly once while guarding all pre-existing quantity panels and the no-clear/reconciliation contract.
+- Re-fetch latest `main`, `PluginEntry` and Ribbon sources immediately before the write; preserve concurrent winners.
+- Add an auto-discovered focused static preflight requiring the new panel/title/stable button IDs/labels/commands exactly once, find-or-create reconciliation, plugin initialization/reset hooks, command registration evidence, and no collection clear/removal behavior.
+- Continue to require the pre-existing `QS3D_QTY` bootstrap panels so the augmenter cannot silently replace the canonical Ribbon information architecture.
 - Re-fetch final source and ancestry. Do not dispatch GitHub Actions.
 
 ## Completion condition
