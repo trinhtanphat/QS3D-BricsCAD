@@ -80,17 +80,17 @@ namespace QS3D.Core.Services
             var effectiveJournal = journal ?? new ProjectSemanticMutationJournal();
             var rollback = ProjectStateSnapshot.Capture(project);
 
-            effectiveJournal.Record(operation, ProjectSemanticMutationPhase.Planned, "ProjectState snapshot captured.");
+            TryRecord(effectiveJournal, operation, ProjectSemanticMutationPhase.Planned, "ProjectState snapshot captured.");
             try
             {
-                effectiveJournal.Record(operation, ProjectSemanticMutationPhase.Running, "Semantic mutation started.");
+                TryRecord(effectiveJournal, operation, ProjectSemanticMutationPhase.Running, "Semantic mutation started.");
                 var result = mutation();
                 if (preCommitValidation != null)
                 {
-                    effectiveJournal.Record(operation, ProjectSemanticMutationPhase.Validating, "Pre-commit validation started.");
+                    TryRecord(effectiveJournal, operation, ProjectSemanticMutationPhase.Validating, "Pre-commit validation started.");
                     preCommitValidation();
                 }
-                effectiveJournal.Record(operation, ProjectSemanticMutationPhase.Committed, "Semantic mutation committed.");
+                TryRecord(effectiveJournal, operation, ProjectSemanticMutationPhase.Committed, "Semantic mutation committed.");
                 return result;
             }
             catch (Exception operationError)
