@@ -20,10 +20,10 @@ namespace QS3D.BricsCAD.V25
             {
                 RequireModelSpace(document);
                 RequireSupportedUcs(document);
+                var project = RequireExistingProject(document, "Door/Opening Table");
                 var point = document.Editor.GetPoint("\nChọn điểm đặt QS3D Door / Opening Schedule Table: ");
                 if (point.Status != PromptStatus.OK) return;
                 var world = point.Value.TransformBy(document.Editor.CurrentUserCoordinateSystem);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
                 var handle = DoorOpeningNativeTableBuilder.Build(document, project, world);
                 FinalizeUi(document, "Door/Opening Table: đã tạo/cập nhật native Table " + handle + ".");
             }
@@ -38,7 +38,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 RequireModelSpace(document);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = RequireExistingProject(document, "Door/Opening Table refresh");
                 var handle = DoorOpeningNativeTableBuilder.Build(document, project, DoorOpeningNativeTableBuilder.StoredPosition(project));
                 FinalizeUi(document, "Door/Opening Table: đã refresh native Table " + handle + " tại WCS position đã lưu.");
             }
@@ -52,7 +52,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = RequireExistingProject(document, "Door/Opening Table remove");
                 DoorOpeningNativeTableBuilder.Remove(document, project);
                 FinalizeUi(document, "Door/Opening Table: đã xóa owned native Table/metadata (nếu có).");
             }
@@ -84,6 +84,13 @@ namespace QS3D.BricsCAD.V25
                 Report(document, "Door/Opening Table health: " + issues.Count + " issue(s).\n- " + string.Join("\n- ", visible) + suffix);
             }
             catch (Exception ex) { Report(document, "QS3DDOOROPENINGTABLEHEALTH lỗi: " + ex.Message); }
+        }
+
+        private static QS3D.Core.Domain.ProjectState RequireExistingProject(Document document, string operation)
+        {
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                throw new InvalidOperationException(operation + " cần một QS3D project hiện hữu; native schedule table không tạo project mới.");
+            return project;
         }
 
         private static void RequireModelSpace(Document document)
