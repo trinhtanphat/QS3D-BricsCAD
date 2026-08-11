@@ -1,36 +1,34 @@
 # Work claim — rebar XLSX XML sanitization
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-rebar-xlsx-xml-sanitization-20260812-0130`
 - Registered: `2026-08-12T01:30:00+07:00`
 - Baseline main SHA: `45991a9b38e3968f047bcd83b38f7ba6625ed186`
+- Integrated main SHA: `ec9fb8b064d586a7f284385dad0ed7787d2aea73`
+- PR: `#605`
 - Priority: evidence-driven remote-safe XLSX integrity hardening during owner-requested `continue all`
 
-## Reserved scope
+## Completed scope
 
-Route all BBS/Rebar XLSX inline-string cell text through the repository's XML 1.0 sanitizer so invalid control characters and malformed surrogate sequences cannot produce invalid worksheet XML.
+BBS/Rebar XLSX inline-string cells now use the repository's XML 1.0 sanitizer so invalid control characters and malformed surrogate sequences cannot produce invalid worksheet XML while valid supplementary Unicode remains intact.
 
-## Expected surfaces
+## Changes
 
-- `src/QS3D.Core/Export/XlsxRebarScheduleExporter.cs`
-- focused Core smoke coverage under `tests/QS3D.Core.SmokeTests/`
+- Replaced direct `SecurityElement.Escape` use in `XlsxRebarScheduleExporter.AppendText()` with shared `XlsxXmlText.Escape()`.
+- Removed the now-unused `System.Security` import.
+- Preserved existing BBS worksheet row-limit, numeric serialization, package validation, and reporting behavior.
+- Added dedicated module-initializer smoke coverage that writes a real workbook, reads `xl/worksheets/sheet1.xml`, parses it with `XmlDocument`, and verifies replacement/escaping/supplementary-Unicode round-trip behavior.
 
-## Excluded scope
+## Validation actually performed
 
-- Existing completed BBS worksheet row-limit behavior.
-- XLSX cell-length limits, CSV export, rebar schedule/reporting business logic, or ownership guards.
-- Active `XlsxQuantityExporter` structural-limit claim and all Quantity XLSX work.
-- Shared `XlsxXmlText` implementation unless a regression proves it defective.
-- BricsCAD V25/Windows/native runtime qualification and GitHub Actions.
+- Reviewed exact PR #605 patch: production behavior is one escaping substitution plus the unused import removal; the only other file is focused smoke coverage.
+- Re-read moving `main` immediately before PR publication; `XlsxRebarScheduleExporter.cs` remained at original blob `6f1ad91276782d673642a48090f6797867592cab`, so no concurrent source overlap was present.
+- Confirmed no workflow runs were associated with exact PR head `71c1d945f17ccfb99bc6694b36e08caa1729397b`.
+- Squash-merged PR #605 with exact head SHA `71c1d945f17ccfb99bc6694b36e08caa1729397b` into `main` as `ec9fb8b064d586a7f284385dad0ed7787d2aea73`.
+- Re-read the merged exporter and dedicated smoke from remote `main` after integration.
+- No GitHub Actions were dispatched.
+- No local .NET compile/build, licensed BricsCAD V25/Windows runtime, native entity/UI/geometry execution, or `LOCAL_PASS` is claimed from this environment.
 
-## Validation plan
+## Integration
 
-- Preserve ordinary BBS XLSX output and valid Unicode/supplementary characters.
-- Cover XML 1.0-invalid control text (for example U+0001) being replaced rather than emitted raw.
-- Cover malformed lone surrogate replacement.
-- Parse the generated worksheet XML from the XLSX package to prove well-formed output.
-- Re-read exact PR diff and moving `main` before integration; do not dispatch Actions.
-
-## Completion condition
-
-Exporter + focused regression are merged to current `main`, remote source is re-read, and this claim is marked `COMPLETED` with exact integration SHA and validation boundaries.
+PR #605 was squash-merged into `main` as `ec9fb8b064d586a7f284385dad0ed7787d2aea73` without force-push.
