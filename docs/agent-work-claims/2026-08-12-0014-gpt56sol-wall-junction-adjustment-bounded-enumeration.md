@@ -1,36 +1,39 @@
 # Work claim — Wall junction adjustment bounded enumeration
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-wall-junction-adjustment-bounded-enumeration-20260812-0014`
 - Registered: `2026-08-12T00:14:00+07:00`
+- Completed: `2026-08-12T00:17:00+07:00`
 - Baseline main SHA: `fbc4ae81f7867bfc7eaf78adbaa0e918a5ca3715`
 - Priority: evidence-driven Core resource-bound hardening during owner-requested `continue all`
 
-## Reserved scope
+## Completed scope
 
-Make `WallJunctionAdjustmentPlanner.Plan` preserve the same 10,000 wall-segment safety boundary as `WallJunctionPlanner.Plan` before materializing its `IEnumerable<WallAxisSegment>` source.
+`WallJunctionAdjustmentPlanner.Plan` now preserves the same 10,000 wall-segment safety boundary as `WallJunctionPlanner.Plan` before materializing its `IEnumerable<WallAxisSegment>` source.
 
-## Expected surfaces
+## Changed surfaces
 
 - `src/QS3D.Core/Geometry/WallJunctionAdjustmentPlanner.cs`
-- isolated focused Core smoke regression
-- this claim file for close-out
+- `tests/QS3D.Core.SmokeTests/WallJunctionAdjustmentEnumerationCapSmoke.cs`
+- this claim file
 
-## Concrete defect
+## Concrete defect fixed
 
-`WallJunctionAdjustmentPlanner.Plan` currently calls `source.ToList()` and only then delegates the materialized list to the bounded `WallJunctionPlanner`. The adapter therefore defeats the planner's 10,000-segment enumeration guard: a huge or non-terminating source can be consumed without limit before junction planning ever receives it.
+The adjustment adapter called `source.ToList()` before delegating to the bounded junction planner. A huge or non-terminating source could therefore be consumed without limit before the downstream 10,000-segment guard was reached.
 
-## Explicit exclusions
+## Validation performed
 
-- No junction detection, endpoint movement, collapse/ambiguity checks, tolerance, ordering, command/native V25, UI, Actions, release, or LOCAL_PASS semantics changes.
+- Re-read remote source after implementation: adjustment input is capped with `Take(MaxSegments + 1)` and rejected at 10,001 items before calling `WallJunctionPlanner` or constructing adjustment indexes.
+- Added isolated `ModuleInitializer` regression coverage with a non-terminating valid wall-segment source that throws if item 10,002 is requested; adjustment planning rejects after exactly 10,001 yielded segments.
+- Re-read source and regression blobs from remote `main`; intended changes remain present.
+- No junction detection, endpoint movement, collapse/ambiguity, tolerance or ordering behavior was intentionally changed.
+- No GitHub Actions were run or dispatched. No local .NET/BricsCAD runtime PASS is claimed from this environment.
 
-## Validation plan
+## Implementation commits
 
-- Preserve all existing adjustment behavior for bounded inputs.
-- Add a non-terminating valid segment enumerable that throws if item 10,002 is requested; verify adjustment planning rejects after exactly 10,001 yields before junction detection/adjustment work.
-- Re-fetch current source before implementation and do not overwrite concurrent edits.
-- No GitHub Actions will be dispatched and no BricsCAD runtime PASS will be claimed from this web session.
+- `007c1205e3f081239f2fb443874b41ebf3cfcdf0` — `fix(wall): bound junction adjustment enumeration`
+- `42077b2742aedfe2cad3cf41d91123e88a879b20` — `test(wall): guard adjustment enumeration cap`
 
-## Completion condition
+## Result
 
-The adjustment adapter can no longer bypass the Wall junction planner's 10,000-segment resource boundary, focused regression is integrated on current `main`, and this claim is marked `COMPLETED` with exact implementation SHA(s) and validation performed.
+The Wall junction adjustment adapter no longer bypasses the planner's 10,000-segment resource boundary before junction detection and endpoint-adjustment work.
