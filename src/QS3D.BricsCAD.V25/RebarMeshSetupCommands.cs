@@ -21,7 +21,7 @@ namespace QS3D.BricsCAD.V25
                 var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
                 if (snapshots.Count == 0) return;
                 var selectedHandles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Rebar Mesh Setup");
                 var matches = project.Elements
                     .Where(x => (x.Category == ElementCategory.Slab || x.Category == ElementCategory.StructuralWall || x.Category == ElementCategory.Foundation) && x.SourceHandles.Any(selectedHandles.Contains))
                     .Take(3)
@@ -33,10 +33,11 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 var element = matches[0];
+                var elementId = element.Id;
                 var window = new RebarMeshSetupWindow(document, project, element, () =>
                 {
                     PaletteCoordinator.RefreshProject();
-                    PaletteCoordinator.SetStatus("Đã lưu mesh input cho " + element.Id + ". Rebuild 3D để cập nhật generated bars.");
+                    PaletteCoordinator.SetStatus("Đã lưu mesh input cho " + elementId + ". Rebuild 3D để cập nhật generated bars.");
                 });
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
             }
