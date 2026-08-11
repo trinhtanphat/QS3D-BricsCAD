@@ -110,12 +110,12 @@ namespace QS3D.BricsCAD.V25
                             var existing = item.Opening.Properties.TryGetValue("HostWallId", out var hostId) ? hostId : string.Empty;
                             if (string.Equals(existing?.Trim(), item.HostId, StringComparison.OrdinalIgnoreCase))
                             {
+                                if (UpdateAutoHostMetadata(item.Opening, item.GapM)) project.Touch();
                                 unchanged++;
                                 continue;
                             }
                             service.LinkOpening(project, item.Opening.Id, item.HostId);
-                            item.Opening.Properties["AutoHostGapM"] = item.GapM.ToString("R", CultureInfo.InvariantCulture);
-                            item.Opening.Properties["AutoHostMatched"] = "true";
+                            if (UpdateAutoHostMetadata(item.Opening, item.GapM)) project.Touch();
                             linked++;
                         }
 
@@ -249,6 +249,20 @@ namespace QS3D.BricsCAD.V25
             category == ElementCategory.GlassWall ||
             category == ElementCategory.WallPier ||
             category == ElementCategory.StructuralWall;
+
+        private static bool UpdateAutoHostMetadata(ProjectElement opening, double gapM)
+        {
+            var gap = gapM.ToString("R", CultureInfo.InvariantCulture);
+            var gapChanged = !opening.Properties.TryGetValue("AutoHostGapM", out var existingGap) ||
+                !string.Equals(existingGap, gap, StringComparison.Ordinal);
+            var matchedChanged = !opening.Properties.TryGetValue("AutoHostMatched", out var existingMatched) ||
+                !string.Equals(existingMatched, "true", StringComparison.OrdinalIgnoreCase);
+            if (!gapChanged && !matchedChanged) return false;
+
+            opening.Properties["AutoHostGapM"] = gap;
+            opening.Properties["AutoHostMatched"] = "true";
+            return true;
+        }
 
         private static double MetadataNumber(ProjectState project, string key, double fallback, bool allowZero)
         {
