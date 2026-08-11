@@ -95,15 +95,16 @@ namespace QS3D.BricsCAD.V25.Updates
 
         internal async Task<UpdateCheckResult> ScheduleLatestAsync()
         {
+            var generation = CaptureGeneration();
             var fresh = await CheckAsync(false).ConfigureAwait(false);
             var release = fresh.Release;
             if (!fresh.CanAutoInstall || release == null)
                 return fresh;
 
-            if (!SecureUpdateLauncher.TrySchedule(release, out var error))
+            if (!TryScheduleCurrentGeneration(generation, release, out var lifecycleCurrent, out var error))
             {
                 var failed = new UpdateCheckResult(UpdateState.Error, fresh.CurrentVersion, release, "Không thể lên lịch cập nhật.", error);
-                Publish(failed, false);
+                if (lifecycleCurrent) Publish(failed, false);
                 return failed;
             }
 
@@ -113,8 +114,27 @@ namespace QS3D.BricsCAD.V25.Updates
                 release,
                 "Đã lên lịch cập nhật.",
                 "QS3D sẽ yêu cầu BricsCAD đóng theo cơ chế cửa sổ bình thường để giữ nguyên các nhắc lưu bản vẽ. Nếu bạn hủy đóng, updater chỉ tiếp tục chờ; khi mọi BricsCAD đã thoát, nó mới xác minh chữ ký, cập nhật và mở lại sau khi thành công.");
-            Publish(scheduled, false);
+            if (IsGenerationCurrent(generation)) Publish(scheduled, false);
             return scheduled;
+        }
+
+        private int CaptureGeneration()
+        {
+            lock (_sync) return _generation;
+        }
+
+        private bool TryScheduleCurrentGeneration(int generation, UpdateReleaseInfo release, out bool lifecycleCurrent, out string error)
+        {
+            lock (_sync)
+            {
+                lifecycleCurrent = _started && generation == _generation;
+                if (!lifecycleCurrent)
+                {
+                    error = "Phiên cập nhật đã thay đổi hoặc đã dừng trước khi lên lịch. Mở lại Update Center và thử lại.";
+                    return false;
+                }
+                return SecureUpdateLauncher.TrySchedule(release, out error);
+            }
         }
 
         private Task<UpdateCheckResult> CheckAsync(bool automatic)
