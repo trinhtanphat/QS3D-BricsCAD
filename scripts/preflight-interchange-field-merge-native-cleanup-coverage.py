@@ -43,6 +43,7 @@ def main():
     require(guard, '"GeneratedCurtainFrameHandles"', "native cleanup coverage guard", failures)
     require(guard, '"GeneratedCurtainPanelHandles"', "native cleanup coverage guard", failures)
     require(guard, "GridAnnotationBuilder.HandlesKey", "native cleanup coverage guard", failures)
+    require(guard, "GeneratedSemanticTagHealthService.HandlesKey", "semantic tag cleanup coverage guard", failures)
     require(guard, "has no BricsCAD native cleanup handler", "native cleanup coverage guard", failures)
     require(guard, "EnsurePhysicalOpeningAliasMatchesHostSolid", "native cleanup coverage guard", failures)
     require(guard, "does not match", "physical-opening alias guard", failures)
@@ -105,6 +106,16 @@ def main():
     require(invalidator, "EraseGridAnnotations", "native invalidator", failures)
     require(invalidator, "GeneratedGeometryService.PrepareReplacement", "native invalidator", failures)
 
+    # Semantic MText tags are generated dependents too. Coverage must include an explicit
+    # complete-set liveness/type/ownership validation path, an erase path and metadata sweep.
+    require(invalidator, "EnsureSemanticTagsLive", "semantic tag native invalidator", failures)
+    require(invalidator, "EraseSemanticTags", "semantic tag native invalidator", failures)
+    require(invalidator, "EnsureSemanticTagOwned", "semantic tag ownership guard", failures)
+    require(invalidator, "GeneratedSemanticTagHealthService.HandlesKey", "semantic tag owner slot", failures)
+    require(invalidator, "if (!(entity is MText))", "semantic tag MText type guard", failures)
+    require(invalidator, 'RemoveByPrefix(element, "GeneratedSemanticTag")', "semantic tag metadata cleanup", failures)
+    require(invalidator, "GeneratedGeometryService.RequireMatchingOwnership(entity, project, element", "semantic tag native ownership check", failures)
+
     if failures:
         print("QS3D Interchange FieldMerge native cleanup coverage preflight FAILED")
         for failure in failures:
@@ -117,6 +128,7 @@ def main():
     print("PASS: sidecar authority is rechecked before native cleanup, before Core apply, and before CAD commit.")
     print("PASS: physical-opening owner aliases must identify the same generated host Solid3d handle.")
     print("PASS: known native cleanup handlers remain present for solid/rebar/curtain/grid ownership slots.")
+    print("PASS: generated semantic MText tags have complete-set validation, ownership/type checks, erase coverage and metadata cleanup.")
     return 0
 
 
