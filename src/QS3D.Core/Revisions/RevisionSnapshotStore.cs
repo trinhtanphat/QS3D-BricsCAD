@@ -259,10 +259,9 @@ namespace QS3D.Core.Revisions
         private static double Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value) ? value : throw new InvalidDataException("Revision quantity must be finite.");
         private static DateTime Date(string? value)
         {
-            if (value == null) throw new InvalidDataException("Invalid revision timestamp.");
-            var raw = value.Trim();
-            if (raw.Length == 0) throw new InvalidDataException("Invalid revision timestamp.");
-            if (!HasExplicitUtcOffset(raw) || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result))
+            if (value == null || value.Length == 0 || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid revision timestamp.");
+            if (!HasExplicitUtcOffset(value) || !DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result))
                 throw new InvalidDataException("Invalid revision timestamp.");
             return result.UtcDateTime;
         }
