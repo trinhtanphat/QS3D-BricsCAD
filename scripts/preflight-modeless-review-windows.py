@@ -40,10 +40,14 @@ if bq.is_file():
         errors.append("BQ EnsureCurrentProject must verify the bound DWG before existing-project inspection")
     export = text.find("private void OnExportClick")
     export_guard = text.find('EnsureCurrentProject("xuất BQ XLSX")', export)
-    recalc = text.find("_rows = _recalculate()", export)
+    refresh = text.find("RefreshRowsForCurrentMode(false);", export)
     exporter = text.find("XlsxQuantityExporter.Export", export)
-    if export < 0 or export_guard < 0 or recalc < 0 or exporter < 0 or not (export_guard < recalc < exporter):
+    refresh_helper = text.find("private void RefreshRowsForCurrentMode(bool requireLiveSummarySource)")
+    refresh_assign = text.find("_rows = RecalculateRowsForCurrentMode(requireLiveSummarySource);", refresh_helper)
+    if export < 0 or export_guard < 0 or refresh < 0 or exporter < 0 or not (export_guard < refresh < exporter):
         errors.append("BQ XLSX export must bind to the source DWG/current project and recalculate before writing cached rows")
+    if refresh_helper < 0 or refresh_assign < 0:
+        errors.append("BQ refresh helper must rebuild rows for the active Summary/Detail mode")
 
 recognition = windows["Recognition"]
 if recognition.is_file():

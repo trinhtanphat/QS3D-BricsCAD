@@ -32,7 +32,9 @@ for token in (
     'Panel("STATE", "Trạng thái"',
     'Panel("TEMPLATE", "Template"',
     'Panel("WORKSPACE", "Phạm vi"',
-    'SetProperty(source, "Id", tabSpec.Id + "_" + panelSpec.Id + "_PANEL_SOURCE")',
+    'SetProperty(source, "Id", PanelSourceId(tabSpec, panelSpec));',
+    'private static string PanelSourceId(RibbonTabSpec tabSpec, RibbonPanelSpec panelSpec)',
+    'tabSpec.Id + "_" + panelSpec.Id + "_PANEL_SOURCE";',
 ):
     if token not in bootstrap:
         errors.append("grouped RibbonBootstrapper contract missing: " + token)
