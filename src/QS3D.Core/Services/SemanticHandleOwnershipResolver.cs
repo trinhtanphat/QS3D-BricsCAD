@@ -8,6 +8,8 @@ namespace QS3D.Core.Services
 {
     public static class SemanticHandleOwnershipResolver
     {
+        private const int MaxSelectedHandleInputCount = 10000;
+
         public static ProjectElement? ResolveUniqueSourceOwner(ProjectState project, string sourceHandle)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -81,9 +83,7 @@ namespace QS3D.Core.Services
             if (selectedHandles == null) throw new ArgumentNullException(nameof(selectedHandles));
             EnsureUniqueElementIds(project);
 
-            var selected = new HashSet<string>(
-                selectedHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
-                StringComparer.OrdinalIgnoreCase);
+            var selected = MaterializeSelectedHandles(selectedHandles);
             if (selected.Count == 0) return Array.Empty<ProjectElement>();
 
             var owners = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
@@ -119,6 +119,26 @@ namespace QS3D.Core.Services
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList()
                 .AsReadOnly();
+        }
+
+        private static HashSet<string> MaterializeSelectedHandles(IEnumerable<string> selectedHandles)
+        {
+            if (selectedHandles is ICollection<string> collection && collection.Count > MaxSelectedHandleInputCount)
+                throw new InvalidOperationException("Semantic handle selection cannot exceed " + MaxSelectedHandleInputCount + " input entries.");
+            if (selectedHandles is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaxSelectedHandleInputCount)
+                throw new InvalidOperationException("Semantic handle selection cannot exceed " + MaxSelectedHandleInputCount + " input entries.");
+
+            var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var inputCount = 0;
+            foreach (var rawHandle in selectedHandles)
+            {
+                if (inputCount >= MaxSelectedHandleInputCount)
+                    throw new InvalidOperationException("Semantic handle selection cannot exceed " + MaxSelectedHandleInputCount + " input entries.");
+                inputCount++;
+                if (string.IsNullOrWhiteSpace(rawHandle)) continue;
+                selected.Add(rawHandle.Trim());
+            }
+            return selected;
         }
 
         private static void EnsureUniqueElementIds(ProjectState project)
