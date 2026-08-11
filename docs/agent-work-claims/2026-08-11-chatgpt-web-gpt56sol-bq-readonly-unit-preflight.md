@@ -1,0 +1,21 @@
+# Agent work claim — BQ read-only unit preflight
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `ACTIVE`
+- Scope: make `QS3DBQ` genuinely read-only/non-creating during drawing-unit preparation.
+- Files reserved:
+  - `src/QS3D.BricsCAD.V25/Commands.cs`
+  - `src/QS3D.BricsCAD.V25/Services/DrawingUnitWorkflow.cs`
+  - `scripts/preflight-bq-readonly-unit-preparation.py`
+  - this claim file for close-out
+- Problem: `QS3DBQ` calls `DrawingUnitWorkflow.EnsureResolved` before requiring an existing project. For non-ED2 operations, undefined/unsupported drawing units can enter `PromptAndPersist`, which calls `ProjectContextCoordinator.GetOrCreate` and saves state. Even when the unit is already resolvable, legacy binding migration may persist state. This contradicts BQ's own read-only/non-replacement-project contract.
+- Intended contract:
+  - `QS3DBQ` requires an existing project before any unit workflow;
+  - BQ unit preparation is read-only like ED2: never calls legacy-binding persistence and never prompts/persists a unit override;
+  - if unit policy is unresolved, BQ tells the user to run `QS3DUNITS` explicitly and returns without creating/mutating project state;
+  - valid existing-project BQ detached preview/grouping/selection-locate behavior remains unchanged.
+- Coordination: active Core unit-enum claims explicitly exclude BricsCAD adapter/QS3DUNITS lifecycle; active quantity-locate claim reserves CadHandleService/Quantity UI, not these files.
+- Non-overlap: excludes Core unit enum validation, Quantity UI locate semantics, Ribbon, updater, native V25 runtime.
+- Validation: exact source diff/current-source review plus focused static preflight; no GitHub Actions under `continue all`.
+- Completion condition: BQ cannot create or persist project/unit state during read-only preparation and claim closes with exact SHAs.
