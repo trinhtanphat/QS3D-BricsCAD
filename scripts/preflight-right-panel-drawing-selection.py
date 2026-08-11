@@ -92,6 +92,25 @@ else:
         if stale in body:
             errors.append("RightPanel must not leave stale implied Xref selection when MODEL/null is selected")
 
+    for method, action, status in (
+        ("OnReloadXrefClick", "XrefService.Reload(doc, item.Name);", '_viewModel.Status = "Đã nạp lại Xref " + item.Name;'),
+        ("OnDeleteDrawingClick", "XrefService.Detach(doc, item.Name);", '_viewModel.Status = "Đã gỡ Xref " + item.Name;'),
+    ):
+        method_match = re.search(
+            r"private void " + re.escape(method) + r"\(object sender, RoutedEventArgs e\)\s*\{(?P<body>.*?)\n        \}",
+            text,
+            re.DOTALL,
+        )
+        if not method_match:
+            errors.append("missing bounded " + method + " handler")
+            continue
+        body = method_match.group("body")
+        action_at = body.find(action)
+        refresh_at = body.find("Refresh();", action_at)
+        status_at = body.find(status, refresh_at)
+        if action_at < 0 or refresh_at < action_at or status_at < refresh_at:
+            errors.append(method + " must mutate, refresh live drawing/layer state, then restore the user-facing success status")
+
 print("QS3D RightPanel drawing-selection preflight")
 if errors:
     for error in errors:
@@ -99,4 +118,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: RightPanel clears stale prior-document state when no DWG is active, explicit clear avoids duplicate selection callbacks, Xrefs map to live CAD instances, and MODEL/null selection removes stale implied Xref selection.")
+print("PASS: RightPanel clears stale prior-document state, drawing selection maps cleanly to CAD state, explicit clear avoids duplicate callbacks, and Xref reload/detach keep their success feedback after live refresh.")
