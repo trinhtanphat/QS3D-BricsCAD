@@ -137,6 +137,18 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related docs: `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
 - Updated: 2026-08-11
 
+## LOCAL-011 — staged native rollback and post-commit UI isolation
+
+- Priority: P1
+- Status: OPEN
+- Area: Fault injection / rollback / modeless UI
+- Why local: Core can prove semantic `ProjectStateSnapshot` restoration remotely, but native transaction abort/compensation, DocumentLock and multi-DWG behavior, generated-object cleanup, and post-commit WPF/modeless failures require interactive licensed BricsCAD V25.
+- Scenario: Starting from the Core staged matrix in `docs/PROJECT-ROLLBACK-FAILURE-MATRIX.md`, inject failures before native commit, during native cleanup/materialization, immediately after native commit, and during post-commit palette/modeless refresh. Verify semantic/native state ownership remains coherent, committed native work is not falsely rolled back by UI failure, another DWG is never mutated, and stale modeless callbacks fail closed.
+- Evidence required: Exact SHA; failure stage and exception; before/after semantic snapshot summary; native object/owner counts; transaction/Undo result; active-DWG identity; post-commit UI result; save/reopen result; sanitized screenshots/logs where useful.
+- Evidence: PENDING_LOCAL
+- Related docs: `docs/PROJECT-ROLLBACK-FAILURE-MATRIX.md`; `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
+- Updated: 2026-08-11
+
 ## Close-out rule
 
 Closing all `OPEN` P0/P1 items does not automatically mean the product is commercially released. Release publication still follows `CI_POLICY.md` and requires the owner's separate explicit release authorization. This inbox only records local engineering qualification truth.
