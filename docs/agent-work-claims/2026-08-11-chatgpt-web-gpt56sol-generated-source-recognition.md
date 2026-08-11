@@ -1,8 +1,9 @@
 # Work claim — generated native source-recognition ownership audit
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-generated-source-recognition-20260811-1944`
 - Registered: `2026-08-11T19:44:33+07:00`
+- Completed: `2026-08-11T20:09:00+07:00`
 - Baseline main SHA: `315b26440c35bbe1af244254aa3e68a7ed4c7b45`
 - Priority: continue the source-safe BLT/B4D recognition hardening after native generated-output XData exclusion landed; prevent QS3D-generated CAD artifacts from being recaptured as authoritative semantic sources while avoiding false exclusion of legitimate source entities
 
@@ -26,18 +27,34 @@ Audit and, only where current source proves a defect, harden the generated-nativ
 - No Workspace multi-selection policy, Room Finish mutation/regeneration, modeless viewer project identity, Material Catalog product behavior, or LOCAL-003 Level Z-chain work.
 - No broad recognition redesign, new semantic model, geometry-builder rewrite, BricsCAD V25 runtime qualification, GitHub Actions dispatch, release, signing or installer work.
 
-## Validation plan
+## Validation performed
 
-- Re-fetch current `main` and claims before every implementation write.
-- Enumerate current native generated-output ownership RegApp writers and compare them against `GeneratedNativeSourceGuard` rather than guessing from feature names.
-- Trace all current semantic-recognition snapshot capture paths to ensure generated ownership classification reaches `EntitySnapshotCaptureEligibility` before capture.
-- Add a focused static/smoke regression only for a confirmed source gap; preserve fail-closed behavior for malformed/legacy generated markers.
-- Inspect pushed diffs/full files and remote ancestry; do not claim V25 runtime or GitHub Actions execution.
+- Re-fetched current `main` and this claim before close-out; no product write was needed.
+- Enumerated the current native generated-output ownership RegApp writers from the current CAD source inventory and compared them with `GeneratedNativeSourceGuard`.
+- Confirmed the guard recognizes all current generated ownership families:
+  - `QS3D` — `GeneratedGeometryService`; generated grid annotations and semantic tags are marked through this service.
+  - `QS3D_REBAR` — `GeneratedRebarNativeOwnershipService`.
+  - `QS3D_CURTAIN_FRAME` — `GeneratedCurtainFrameNativeOwnershipService`.
+  - `QS3D_CURTAIN_PANEL` — `GeneratedCurtainPanelNativeOwnershipService`.
+  - `QS3DDOC` — `ProjectOwnedNativeTableArtifactService` and `SemanticElementTableBuilder`.
+- Traced all current `EntitySnapshotReader` entry points (`ReadCurrentSpace`, `ReadHandles`, implied/current selection) through the shared `AddSnapshot` path. That path sets `EntitySnapshot.HasQs3dGeneratedOwnershipMarker` using `GeneratedNativeSourceGuard.HasKnownOwnershipMarker(entity)`.
+- Confirmed `EntitySnapshotCaptureEligibility.IsReady` rejects `HasQs3dGeneratedOwnershipMarker` before proxy/metric eligibility, so generated artifacts cannot proceed into semantic source capture through the current recognition boundary.
+- The guard intentionally treats marker presence as sufficient even when marker payload or sidecar state is legacy/malformed, preserving the existing fail-closed generated-source behavior.
+- No source defect was proven, so no product-source or smoke/preflight change was added merely for churn.
 
-## Coordination
+## Audit outcome
 
-Current neighboring claims reserve Create Similar, Core mutation atomicity, Workspace multi-policy, Room Finish mutation safety, modeless viewer identity and LOCAL-003 Level Z-chain. This lane is limited to generated-output classification in the recognition input boundary and does not take command-side semantic selection/activation ownership.
+Current source already has a single consistent generated-output ownership boundary: writer RegApps -> `GeneratedNativeSourceGuard` -> `EntitySnapshotReader` snapshot flag -> Core `EntitySnapshotCaptureEligibility` rejection. No missing current RegApp family or alternate snapshot path was found in the audited source inventory, and no second ownership model was introduced.
+
+GitHub code-search indexing did not provide a reliable exhaustive RegApp grep during this lane, so the coverage conclusion is based on the current CAD source tree inventory plus direct inspection of each generated ownership writer/builder and the recognition reader/eligibility path rather than on search-index hit counts.
+
+## Runtime / handoff boundary
+
+- This was a source/static ownership-boundary audit. BricsCAD V25 runtime/DWG qualification was not executed from the GitHub connector and is not claimed here.
+- No GitHub Actions workflow was dispatched from this lane.
+- No new LOCAL_ONLY item is required from this audit because no runtime-only defect was identified; existing V25 qualification remains governed by the canonical local inbox.
+- This reservation is released. Other agents may claim these paths normally after re-reading current `main` and active claims.
 
 ## Completion condition
 
-All current generated ownership families and recognition snapshot paths are either proven covered with no product-source change, or focused source/test/preflight fixes are pushed to current `main`; the exact audited outcome is recorded here and this claim is marked `COMPLETED` or `RELEASED` with any V25-only residual explicitly unclaimed.
+Satisfied: all current generated ownership families and current recognition snapshot paths were proven covered on current source, no product-source change was required, and the V25-only runtime boundary is recorded without being falsely reported as remote proof.
