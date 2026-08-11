@@ -1,16 +1,18 @@
 # Work claim — HostLinkService audit-owned project revision
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-host-link-audit-owned-revision`
 - Registered: `2026-08-11T23:31:00+07:00`
+- Completed: `2026-08-11T23:33:00+07:00`
 - Baseline main SHA: `d77510f2c65074916c0c8c4b041a2124ee8e7353`
+- Reservation commit: `07ae74b40ead94a93066d9cab0a7f9956a9b0f4a`
 - Priority: P1 — one logical audited host-link mutation should advance project revision once.
 
-## Confirmed defect
+## Defect fixed
 
-`HostLinkService` performs semantic changes inside `ProjectSemanticMutationExecutor`, then calls `project.Touch()` immediately before `AuditTrail.ForProject(project).Record(...)`. A project-bound `AuditTrail.Record(...)` already calls `ProjectState.Touch()` before appending the audit event. Link, unlink, and stale AutoHost-provenance cleanup therefore advance `ProjectState.ChangeVersion` twice for one logical audited mutation.
+`HostLinkService` performed semantic changes inside `ProjectSemanticMutationExecutor`, called `project.Touch()`, and then called `AuditTrail.ForProject(project).Record(...)`. A project-bound `AuditTrail.Record(...)` already advances `ProjectState.ChangeVersion`, so link, unlink, and stale AutoHost-provenance cleanup advanced project revision twice for one audited mutation.
 
-This is inconsistent with the repository's current audit-owned revision pattern used by other semantic operations and makes stale-plan/persistence checks observe artificial extra revisions.
+The redundant explicit touches were removed. The audit record remains inside the rollback-protected semantic mutation scope and is now the single project revision owner for these operations.
 
 ## Reserved scope
 
@@ -18,27 +20,32 @@ This is inconsistent with the repository's current audit-owned revision pattern 
 - `tests/QS3D.Core.SmokeTests/HostLinkCanonicalizationSmoke.cs`
 - this claim file
 
-## Intended contract
+## Published commits
 
-- A real `LinkOpening(...)` mutation records one audit event and advances project `ChangeVersion` exactly once.
-- A real `UnlinkOpening(...)` mutation records one audit event and advances project `ChangeVersion` exactly once.
-- Clearing stale AutoHost provenance without `HostWallId` remains one audited mutation and advances once.
+- `c4f894ff142702609e0a8e54e24ebf34c35c6d17` — remove redundant project touches from audited host link/unlink/provenance-clear mutations.
+- `98061aae1eaa884d1b9a8784cef3de85a42fcc0d` — assert one revision + one audit for link/unlink and stale AutoHost cleanup.
+
+## Delivered contract
+
+- Real link and unlink operations each advance project `ChangeVersion` exactly once and append exactly one audit event.
+- Clearing stale AutoHost provenance without `HostWallId` advances once and records one audit event.
 - Canonical no-op link/unlink behavior remains side-effect free.
-- Existing element dirty-state updates and semantic rollback protection remain unchanged.
+- Element dirty-state updates and `ProjectSemanticMutationExecutor` rollback protection are unchanged.
+
+## Validation notes
+
+- Exact post-publication source diff removes only the three redundant `project.Touch()` calls immediately before project-bound audit records.
+- Exact regression diff adds focused revision/audit count checks to the already-registered host-link smoke.
+- No force-push was used; writes were SHA-guarded.
+- GitHub Actions were not dispatched.
+- This remote environment does not provide the exact BricsCAD V25/.NET qualification toolchain, so executable/native runtime PASS is not claimed.
 
 ## Excluded scope
 
 - No Direct Draw/AutoHost command changes.
 - No native DWG/regeneration/UI changes.
-- No audit contract redesign; `AuditTrail` remains the revision owner for audited semantic operations.
-- No GitHub Actions dispatch.
-
-## Validation plan
-
-- Extend the already-registered host-link Core smoke with exact `ChangeVersion` and audit-count assertions for link/unlink, plus stale provenance cleanup when practical.
-- Re-fetch source/test blobs immediately before writes and reject stale overwrites.
-- Fetch exact commit diffs after publication and verify claim close remains reachable from current `main` without force-push.
+- No audit contract redesign.
 
 ## Completion condition
 
-Host-link audited mutations produce exactly one project revision each, focused regression is pushed, and this claim is closed with exact SHAs and truthful source-only validation notes.
+Satisfied for the source/static Core contract. Exact runtime/native qualification remains separate.

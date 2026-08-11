@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             ErrorBlocksHealthAndRelease();
             InfoOnlyIsReleaseReady();
             NullIssueEntriesAreIgnored();
+            UndefinedSeverityFailsClosed();
         }
 
         private static void WarningIsHealthyButNotReleaseReady()
@@ -55,6 +56,21 @@ namespace QS3D.Core.SmokeTests
             });
             Require(summary.Issues.Count == 1, "Null issue entries should not poison a read summary.");
             Require(summary.IsReleaseReady, "Ignoring a null issue entry should preserve the valid info-only readiness result.");
+        }
+
+        private static void UndefinedSeverityFailsClosed()
+        {
+            var corruptIssue = new ModelHealthIssue("CORRUPT", (HealthSeverity)999, "corrupt severity");
+            try
+            {
+                _ = new HealthSummary(new[] { corruptIssue });
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            throw new Exception("Undefined health severity must fail closed before readiness is calculated.");
         }
 
         private static void Require(bool value, string message)

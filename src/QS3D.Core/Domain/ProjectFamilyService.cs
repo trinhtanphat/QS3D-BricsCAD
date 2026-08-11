@@ -129,8 +129,8 @@ namespace QS3D.Core.Domain
 
             foreach (var element in owned)
             {
-                if (string.Equals(element.FamilyId, target.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
+                if (string.Equals(previousFamilyId, target.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 IReadOnlyList<KeyValuePair<string, string>> previousProperties = Array.Empty<KeyValuePair<string, string>>();
                 if (previousFamilyId.Length > 0)
                 {

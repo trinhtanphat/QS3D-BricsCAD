@@ -1,8 +1,9 @@
 # Agent Work Claim
 
-- Status: ACTIVE
+- Status: COMPLETED
 - Agent: chatgpt-gpt56sol-health-severity-integrity-20260811-2332
 - Timestamp: 2026-08-11T23:32:00+07:00
+- Completed: 2026-08-11T23:34:00+07:00
 - Baseline `main` SHA: `874ccc3f7cbf37bf988d599e6848c4afd42ba423`
 - Priority: P1 diagnostic/readiness fail-closed integrity
 - Exact scope: Make `HealthSummary` reject undefined `HealthSeverity` values before computing counters/readiness so corrupt/out-of-range severities cannot be silently excluded and accidentally report healthy/release-ready state. Preserve Info/Warning/Error semantics and null-summary-entry behavior.
@@ -14,13 +15,17 @@
   - `ModelHealthIssue` constructor changes or broader model-health inspection semantics
   - BricsCAD/native/runtime/UI behavior
   - GitHub Actions
-- Validation plan:
-  - focused smoke proving a deliberately corrupted `(HealthSeverity)999` issue fails when entering `HealthSummary`
-  - preserve warning/error/info readiness semantics and existing null-entry summary behavior
-  - re-read current `main` target blobs before every write
-  - no local `dotnet` or BricsCAD runtime is available in this environment
+- Validation performed:
+  - re-read current `main` implementation after write: `HealthSummary` materializes non-null issues once, rejects any severity not defined by `HealthSeverity`, and only then exposes the immutable issue collection used by counters/readiness
+  - existing Info/Warning/Error counters and readiness semantics remain unchanged; null issue entries remain ignored as before
+  - added focused regression constructing a deliberately out-of-range `(HealthSeverity)999` issue and requiring `HealthSummary` to throw `InvalidOperationException`
+  - audited implementation and regression commit payloads; each changed only its claimed surface
+  - implementation scope was narrowed before code edits from the large connector-truncated `ModelHealthService.cs` construction boundary to the small summary/readiness boundary to avoid unsafe full-file replacement
+  - no local `dotnet` or BricsCAD runtime is available in this environment; no GitHub Actions were run
 - Coordination:
   - checked current claim registry and recent commit history immediately before registration; no HealthSeverity/HealthSummary integrity claim was present
-  - narrowed implementation from the large `ModelHealthService.cs` construction boundary to the small summary/readiness boundary before any substantive code edit, avoiding unsafe replacement of connector-truncated source
-  - no GitHub Actions will be dispatched
-- Completion condition: undefined severity values fail closed before readiness is calculated; focused regression is present; this claim is marked COMPLETED.
+  - no GitHub Actions were dispatched
+- Implementation commits:
+  - `74c8191516939e2185d846bb4f64a620f713433f` — `fix(health): reject undefined summary severity`
+  - `515d498f6be1e02178060370f33bd5d3710c734e` — `test(health): cover undefined summary severity`
+- Result: corrupt undefined severities can no longer disappear from health counters and produce a false healthy/release-ready summary.

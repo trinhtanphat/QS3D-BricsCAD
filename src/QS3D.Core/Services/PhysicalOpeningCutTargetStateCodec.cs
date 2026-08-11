@@ -33,24 +33,30 @@ namespace QS3D.Core.Services
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var token in tokens)
             {
-                var encoded = (token ?? string.Empty).Trim();
-                if (encoded.Length == 0)
-                    throw new InvalidOperationException("Host " + host.Id + " has malformed physical opening target-state.");
+                var encoded = token ?? string.Empty;
+                if (encoded.Length == 0 || !string.Equals(encoded, encoded.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Host " + host.Id + " has malformed or non-canonical physical opening target-state.");
                 if (encoded.Length > MaxEncodedIdLength)
                     throw new InvalidOperationException("Host " + host.Id + " has an encoded physical opening target id above the safety limit.");
 
                 string id;
                 try
                 {
-                    id = StrictUtf8.GetString(Convert.FromBase64String(encoded)).Trim();
+                    var bytes = Convert.FromBase64String(encoded);
+                    if (!string.Equals(Convert.ToBase64String(bytes), encoded, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Host " + host.Id + " has non-canonical Base64 physical opening target-state.");
+                    id = StrictUtf8.GetString(bytes);
                 }
                 catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
                 {
                     throw new InvalidOperationException("Host " + host.Id + " has undecodable physical opening target-state.", ex);
                 }
 
-                if (id.Length == 0 || id.Length > MaxElementIdLength || !seen.Add(id))
-                    throw new InvalidOperationException("Host " + host.Id + " physical opening target-state contains an empty, overlong or duplicate id.");
+                if (id.Length == 0 ||
+                    id.Length > MaxElementIdLength ||
+                    !string.Equals(id, id.Trim(), StringComparison.Ordinal) ||
+                    !seen.Add(id))
+                    throw new InvalidOperationException("Host " + host.Id + " physical opening target-state contains an empty, overlong, non-canonical or duplicate id.");
                 parsed.Add(id);
             }
 
