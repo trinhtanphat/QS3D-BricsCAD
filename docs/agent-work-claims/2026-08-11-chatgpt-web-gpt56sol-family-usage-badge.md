@@ -1,43 +1,31 @@
 # Work claim — Family usage badge parity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-family-usage-badge`
 - Registered: `2026-08-11T22:20:00+07:00`
+- Completed: `2026-08-11T22:28:00+07:00`
 - Baseline main SHA: `25fe5508dc49089fd29112c4fa4e998def3d6444`
 - Priority: P1 screenshot/reference parity
 
-## Goal
+## Implemented
 
-Make the `FAMILY / TYPE` list show the screenshot-style semantic usage count (`N cấu kiện`) instead of the current property-definition count. Keep the existing Family objects/selection behavior unchanged and compute the badge read-only from the current canonical project.
+- `69478a0e1e9f8371746647a137c700718ec68226` — added `FamilyUsageTextConverter`, a read-only WPF `IMultiValueConverter` that receives the current row `ProjectFamily`, obtains only the existing active project through `ProjectContextCoordinator.TryGetReadOnly(...)`, verifies that the Family object is the current project's canonical Family, counts semantic `ProjectElement` rows by `FamilyId`, and returns `N cấu kiện`. Missing/stale project/family state returns `—`.
+- `192c2501e41585f9678c7cb61b68ab538a0fc786` — added isolated `WorkspacePanel.FamilyUsageBadge.cs`. It registers a class-level Loaded hook, hooks only `FamilyList` container/layout generation, walks generated Family row visuals, identifies the original `Properties.Count` TextBlock binding, and replaces that one badge with a `MultiBinding` using the converter plus Workspace `Status` as a passive invalidation signal.
+- Upgraded Family row TextBlocks are marked through an attached property so repeated load/layout events remain idempotent. Property-panel count badges and unrelated TextBlocks are not modified.
+- `WorkspacePanel.xaml`, `WorkspaceViewModel.cs`, `WorkspacePanel.xaml.cs`, Core Family/domain and persistence files were deliberately left unchanged, preserving concurrent Workspace and semantic-model winners.
+- `591105bae02209712e61f147c7a59928d32aef53` plus token correction `333a79921ba80237de09682c0ae4e3d0594d917f` — added/fixed `scripts/preflight-family-usage-badge.py`, covering read-only project acquisition, canonical Family ownership, semantic element count, idempotent FamilyList-only binding upgrade, MultiBinding invalidation, preserved Family actions/search/selection and preserved property-panel count.
 
-## Reserved scope
+## Source validation
 
-- `src/QS3D.BricsCAD.V25/UI/FamilyUsageTextConverter.cs` (new)
-- `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilyUsageBadge.cs` (new isolated partial)
-- `scripts/preflight-family-usage-badge.py`
-- this claim file
-- `WorkspacePanel.xaml`, `WorkspaceViewModel.cs`, `WorkspacePanel.xaml.cs`, Core Family/domain and persistence code are **audit-only/no-edit** surfaces. The partial upgrades only the existing generated Family badge binding at runtime, so concurrent XAML/Workspace winners remain untouched.
+- Re-fetched the converter, Family usage partial and current Workspace XAML/VM contracts from `main`. The Family list still binds canonical `ProjectFamily` rows, still exposes Add/Delete/Bóc chọn/Vẽ 3D/search/selection behavior, and the original property-count badge remains the uniquely targeted source binding for runtime upgrade.
+- `compare_commits` from `69478a0e1e9f8371746647a137c700718ec68226` to current `main` reports `behind_by: 0` with that implementation as merge base while preserving 58 concurrent commits. No force push/reset was used.
+- GitHub exposes no combined status checks for `333a79921ba80237de09682c0ae4e3d0594d917f`; no GitHub Actions were dispatched.
+- Remote validation is source/preflight inspection only. No licensed BricsCAD runtime PASS is claimed.
 
-## Implementation shape
+## LOCAL_ONLY disposition
 
-- `FamilyUsageTextConverter` is a read-only `IMultiValueConverter`. Value 0 is the row `ProjectFamily`; value 1 is Workspace `Status`, used only as an invalidation signal so counts refresh after ordinary Workspace actions/status changes.
-- `WorkspacePanel.FamilyUsageBadge.cs` registers a class-level Loaded handler, hooks `FamilyList.ItemContainerGenerator.StatusChanged` and `FamilyList.LayoutUpdated` once, walks only generated `FamilyList` item visuals, finds the existing TextBlock whose original binding is `Properties.Count`, and replaces that one binding with a `MultiBinding` using the converter.
-- Each upgraded TextBlock is marked through an attached property so repeated layout/load events remain idempotent and do not touch unrelated property-count badges elsewhere in the Workspace.
+- Physical FamilyList virtualization/recycling, click selection and live badge refresh in licensed BricsCAD V25 remain within the existing Workspace/palette runtime qualification boundary. No duplicate local inbox item was added.
 
-## Functional contract
+## Completion evidence
 
-- Converter obtains only an existing current project through `ProjectContextCoordinator.TryGetReadOnly(...)`; it never creates/replaces/mutates a project.
-- Verify the displayed Family belongs to the current project, then count current semantic `ProjectElement` rows whose `FamilyId` matches that Family ID case-insensitively.
-- Return `N cấu kiện`; return `—` when no active document/project or the Family is stale/not owned by the current project.
-- Runtime binding upgrade targets only generated items under `FamilyList` and only the original `Properties.Count` badge; Family name/category, property-panel counts, selection, search and Add/Delete/Capture/Vẽ 3D handlers remain intact.
-- No command dispatch, CAD mutation, QSDB write or Core model change.
-
-## Validation plan
-
-- Re-fetch latest `main` and audit current `WorkspacePanel.xaml` before source write; preserve concurrent winners.
-- Add focused auto-discovered static preflight for read-only project acquisition, ownership/count logic, idempotent FamilyList-only visual binding upgrade, MultiBinding invalidation and preservation of existing XAML Family actions/property-panel count.
-- Re-fetch final source/ancestry/status. Do not dispatch GitHub Actions.
-
-## Completion condition
-
-Family rows show actual semantic usage counts in the screenshot-style badge with no change to Family selection/mutation semantics, and this claim is marked `COMPLETED` with exact SHAs.
+The screenshot-style Family badge now reports actual semantic usage (`N cấu kiện`) rather than the number of Family property definitions, without changing Family objects, selection semantics or project/CAD state.
