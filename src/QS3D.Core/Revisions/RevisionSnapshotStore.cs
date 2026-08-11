@@ -92,6 +92,13 @@ namespace QS3D.Core.Revisions
                         throw new InvalidDataException("Duplicate revision source handle: " + value);
                     item.SourceHandles.Add(value);
                 }
+                foreach (var dependency in node.Element("dependencies")?.Elements("d") ?? Enumerable.Empty<XElement>())
+                {
+                    var value = CanonicalRequired(dependency, "value", "revision dependency");
+                    if (item.Dependencies.Contains(value, StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidDataException("Duplicate revision dependency: " + value);
+                    item.Dependencies.Add(value);
+                }
                 snapshot.Elements.Add(item);
             }
             if (snapshot.Elements.GroupBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).Any(x => x.Count() > 1)) throw new InvalidDataException("Revision contains duplicate element ids.");
@@ -131,7 +138,8 @@ namespace QS3D.Core.Revisions
                         new XAttribute("floorId", x.FloorId ?? string.Empty), new XAttribute("zoneId", x.ZoneId ?? string.Empty),
                         new XElement("properties", x.Properties.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase).Select(p => new XElement("p", new XAttribute("name", p.Key), new XAttribute("value", p.Value ?? string.Empty)))),
                         new XElement("quantities", x.Quantities.OrderBy(q => q.Key, StringComparer.OrdinalIgnoreCase).Select(q => new XElement("q", new XAttribute("name", q.Key), new XAttribute("value", Finite(q.Value).ToString("R", CultureInfo.InvariantCulture))))),
-                        new XElement("sourceHandles", x.SourceHandles.OrderBy(h => h, StringComparer.OrdinalIgnoreCase).Select(h => new XElement("h", new XAttribute("value", h)))))))));
+                        new XElement("sourceHandles", x.SourceHandles.OrderBy(h => h, StringComparer.OrdinalIgnoreCase).Select(h => new XElement("h", new XAttribute("value", h)))),
+                        new XElement("dependencies", x.Dependencies.OrderBy(d => d, StringComparer.OrdinalIgnoreCase).Select(d => new XElement("d", new XAttribute("value", d)))))))));
 
         private static void ValidateSnapshot(RevisionSnapshot snapshot)
         {
@@ -151,6 +159,7 @@ namespace QS3D.Core.Revisions
                 ValidateStringMap(element.Properties, "revision element " + element.ElementId + " properties");
                 ValidateNumberMap(element.Quantities, "revision element " + element.ElementId + " quantities");
                 ValidateCanonicalStringList(element.SourceHandles, "revision element " + element.ElementId + " source handles");
+                ValidateCanonicalStringList(element.Dependencies, "revision element " + element.ElementId + " dependencies");
             }
         }
 

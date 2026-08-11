@@ -16,6 +16,7 @@ namespace QS3D.Core.Revisions
         public IDictionary<string, string> Properties { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public IDictionary<string, double> Quantities { get; } = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         public IList<string> SourceHandles { get; } = new List<string>();
+        public IList<string> Dependencies { get; } = new List<string>();
     }
 
     public sealed class RevisionSnapshot
@@ -62,6 +63,7 @@ namespace QS3D.Core.Revisions
                 foreach (var quantity in element.Quantities)
                     item.Quantities[quantity.Key] = RevisionMath.Finite(quantity.Value, element.Id + "/" + quantity.Key);
                 foreach (var handle in CanonicalSourceHandles(element)) item.SourceHandles.Add(handle);
+                foreach (var dependency in CanonicalDependencies(element.DependsOn)) item.Dependencies.Add(dependency);
                 snapshot.Elements.Add(item);
             }
             return snapshot;
@@ -90,6 +92,7 @@ namespace QS3D.Core.Revisions
                 Add(delta, "FloorId", a.FloorId, b.FloorId);
                 Add(delta, "ZoneId", a.ZoneId, b.ZoneId);
                 Add(delta, "SourceHandles", string.Join(",", a.SourceHandles), string.Join(",", b.SourceHandles));
+                CompareDependencies(delta, a.Dependencies, b.Dependencies);
                 CompareProperties(delta, a.Properties, b.Properties);
                 CompareQuantities(delta, a.Quantities, b.Quantities, id);
                 if (delta.Fields.Count > 0) result.Add(delta);
@@ -114,6 +117,33 @@ namespace QS3D.Core.Revisions
             }
             result.Sort(StringComparer.OrdinalIgnoreCase);
             return result.AsReadOnly();
+        }
+
+        private static IReadOnlyList<string> CanonicalDependencies(IEnumerable<string> dependencies)
+        {
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in dependencies ?? Enumerable.Empty<string>())
+            {
+                var value = (raw ?? string.Empty).Trim();
+                if (value.Length == 0 || !seen.Add(value)) continue;
+                result.Add(value);
+            }
+            result.Sort(StringComparer.OrdinalIgnoreCase);
+            return result.AsReadOnly();
+        }
+
+        private static void CompareDependencies(RevisionDelta delta, IEnumerable<string> before, IEnumerable<string> after)
+        {
+            var left = CanonicalDependencies(before);
+            var right = CanonicalDependencies(after);
+            if (left.SequenceEqual(right, StringComparer.OrdinalIgnoreCase)) return;
+            delta.Fields.Add(new RevisionFieldDelta
+            {
+                Field = "Dependencies",
+                Before = string.Join(",", left),
+                After = string.Join(",", right)
+            });
         }
 
         private static Dictionary<string, RevisionElementSnapshot> Index(RevisionSnapshot snapshot, string label)
