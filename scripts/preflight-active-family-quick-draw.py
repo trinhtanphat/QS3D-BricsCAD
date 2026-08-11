@@ -22,9 +22,18 @@ if SOURCE.is_file():
     for token in (
         'DrawActiveFamilyCore(advanced: false, operation: "QS3DDRAWACTIVE")',
         'DrawActiveFamilyCore(advanced: true, operation: "QS3DDRAWACTIVEADV")',
+        "using QS3D.Core.Persistence;",
         "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
         "ProjectFamilyActivationService.GetActive(project)",
-        "Dispatch(document, family, advanced, operation)",
+        "RequireCurrentDispatchSnapshot(document, project, family, operation)",
+        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
+        "currentProject.ChangeVersion != presentedProject.ChangeVersion",
+        "ProjectFamilyActivationService.GetActive(currentProject)",
+        "!string.Equals(currentFamily.Id, presentedFamily.Id, StringComparison.OrdinalIgnoreCase)",
+        "currentFamily.Category != presentedFamily.Category",
+        "IsWindowFamily(currentFamily) != IsWindowFamily(presentedFamily)",
+        "Dispatch(document, dispatchFamily, advanced, operation)",
         "new DirectDrawCommands().DrawWall()",
         "new DirectDrawCommands().DrawBeam()",
         "new DirectDrawCommands().DrawColumn()",
@@ -54,9 +63,17 @@ if SOURCE.is_file():
         if token not in text:
             errors.append("active-family draw missing: " + token)
 
+    first_read = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
+    family_read = text.find("ProjectFamilyActivationService.GetActive(project)", first_read)
+    revalidate = text.find("RequireCurrentDispatchSnapshot(document, project, family, operation)", family_read)
+    dispatch = text.find("Dispatch(document, dispatchFamily, advanced, operation)", revalidate)
+    if min(first_read, family_read, revalidate, dispatch) < 0 or not (first_read < family_read < revalidate < dispatch):
+        errors.append("active-family dispatcher must read, revalidate the project/Family snapshot, then dispatch")
+
     for forbidden in (
         "ProjectContextCoordinator.GetOrCreate(document)",
         "ExistingProjectMutationContext.Require(document",
+        "ExistingProjectMutationContext.TryGet(document",
         "SemanticCaptureService.Capture",
         "RegenerationEngine",
         "WallSolidBuilder",
@@ -79,6 +96,8 @@ if DOC.is_file():
         "Family / Type",
         "non-creating",
         "OpeningUsage=Window",
+        "dispatch freshness",
+        "ChangeVersion",
         "LOCAL-008",
         "Ctrl+Shift+D",
     ):
@@ -91,4 +110,4 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Active-family draw preflight PASS")
+print("Active-family draw preflight PASS: project/Family routing is revalidated read-only immediately before Quick/Advanced delegation.")
