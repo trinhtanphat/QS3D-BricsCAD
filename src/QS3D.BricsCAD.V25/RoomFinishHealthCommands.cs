@@ -19,18 +19,23 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    Report(document, "HT_Phòng Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.");
+                    return;
+                }
+
                 var issues = new RoomFinishHealthService().Inspect(project).ToList();
                 var summary = new HealthSummary(issues);
                 var status = "HT_Phòng Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
+                Report(document, status);
 
                 if (issues.Count == 0) return;
                 var window = new ModelHealthWindow(document, issues, issue =>
                 {
                     if (string.IsNullOrWhiteSpace(issue.ElementId)) return;
-                    var handles = SourceHandleResolver.Resolve(project, new[] { issue.ElementId });
+                    if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+                    var handles = SourceHandleResolver.Resolve(currentProject, new[] { issue.ElementId });
                     var count = CadHandleService.Select(document, handles);
                     PaletteCoordinator.SetStatus("HT_Phòng Health Locate " + issue.ElementId + " • " + count + " CAD object");
                     if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
@@ -39,10 +44,14 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
-                var status = "QS3DROOMFINISHHEALTH lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\n" + status);
+                Report(document, "QS3DROOMFINISHHEALTH lỗi: " + ex.Message);
             }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
     }
 }
