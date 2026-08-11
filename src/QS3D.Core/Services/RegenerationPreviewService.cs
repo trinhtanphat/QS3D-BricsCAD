@@ -61,8 +61,9 @@ namespace QS3D.Core.Services
 
         public RegenerationPreview PreviewSubset(ProjectState project, IEnumerable<string> elementIds)
         {
+            if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            var targets = CanonicalPreviewTargets(elementIds);
+            var targets = CanonicalPreviewTargets(elementIds, project.Elements.Count);
             if (targets.Count == 0) throw new ArgumentException("Subset regeneration preview requires at least one target element id.", nameof(elementIds));
             return PreviewInternal(project, targets);
         }
@@ -137,7 +138,7 @@ namespace QS3D.Core.Services
                 health.Compare(beforeHealth, afterHealth));
         }
 
-        private static IReadOnlyList<string> CanonicalPreviewTargets(IEnumerable<string> elementIds)
+        private static IReadOnlyList<string> CanonicalPreviewTargets(IEnumerable<string> elementIds, int maxCount)
         {
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -149,8 +150,11 @@ namespace QS3D.Core.Services
                     throw new ArgumentException("Regeneration preview target cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                     throw new ArgumentException("Regeneration preview target must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
-                if (!seen.Add(raw))
+                if (seen.Contains(raw))
                     throw new ArgumentException("Duplicate regeneration preview target: " + raw + ".", nameof(elementIds));
+                if (result.Count >= maxCount)
+                    throw new ArgumentException("Regeneration preview target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                seen.Add(raw);
                 result.Add(raw);
                 index++;
             }
