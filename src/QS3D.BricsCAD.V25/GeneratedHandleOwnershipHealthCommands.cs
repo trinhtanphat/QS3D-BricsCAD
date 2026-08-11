@@ -15,15 +15,20 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    Report(document, "Handle Ownership Health: BLOCKED • chưa có QS3D project state/sidecar; health check không tạo project mới.");
+                    return;
+                }
+
                 var issues = new GeneratedHandleOwnershipHealthService().Inspect(project);
                 var summary = new HealthSummary(issues);
                 var message = "Handle Ownership Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                Report(document, message);
                 Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue =>
                 {
-                    var element = project.FindElement(issue.ElementId);
+                    if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+                    var element = currentProject.FindElement(issue.ElementId);
                     if (element == null) return;
                     var count = Cad.CadHandleService.Select(document, Services.SemanticReferenceHandles.Get(element));
                     PaletteCoordinator.SetStatus("Handle Health Định vị " + element.Id + " • " + count + " semantic source/generated reference(s)");
@@ -32,10 +37,14 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
-                var message = "QS3DHANDLEHEALTH lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                Report(document, "QS3DHANDLEHEALTH lỗi: " + ex.Message);
             }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
         }
     }
 }
