@@ -1,8 +1,9 @@
 # Work claim — Quantity Insight detached preview regeneration parity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-insight-preview-regeneration`
 - Registered: `2026-08-11T21:03:30+07:00`
+- Completed: `2026-08-11T21:09:00+07:00`
 - Baseline main SHA: `56f4eac65f2730fc85e59e339701f0df9775c530`
 - Priority: P1
 
@@ -13,34 +14,30 @@
 - Preserve the completed document/project affinity guards, selection highlighting, Handle-based native selection and `QS3DZOOMSELECTED` behavior.
 - Update the existing affinity preflight only as needed so it guards the same stale-row/document contract after live grouped-row construction is routed through the new detached preview helper.
 
-## Expected files
+## Implemented
 
-- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs`
-- `scripts/preflight-quantity-insight-preview-regeneration.py`
-- `scripts/preflight-quantity-insight-affinity.py` (compatibility update for the new helper path; no weakening of affinity checks)
-- this claim file for close-out
+- `1c5513b403cef7fd1463960f4714018f2ac2e666` — `QuantityInsightPanel` now builds its tree/totals through `BuildPreviewRows(...)`: detached `ProjectStateSnapshot` copy -> semantic `RegenerationEngine.RegenerateDirty(previewProject)` -> grouped quantity rows from the detached preview only. The UI reports how many preview regeneration passes were applied without committing them to the live project.
+- The same helper is now used by `ResolveCurrentRow(...)`, so locate compares the displayed row against the same regenerated read model before resolving current Handles.
+- Existing document/ProjectId/drawing-fingerprint affinity, full row/provenance equality, CAD selection and `QS3DZOOMSELECTED` behavior remain intact.
+- `cc38e41349bcb113367670feafbd17238220586c` updated the existing affinity guard to follow `BuildPreviewRows(...)` rather than requiring a direct live `Group(project)` call.
+- `0d0874f6bb7fefde6464389b041097e9c34b096e` added `scripts/preflight-quantity-insight-preview-regeneration.py` to guard detached-copy -> regenerate -> group ordering for both refresh and locate revalidation and to forbid live-project create/mutation/regeneration/grouping.
+- A concurrent follow-up preserved and strengthened the affinity preflight further on current `main`, explicitly requiring detached preview construction before stale-row matching.
 
-## Excluded scope
+## Source validation
 
-- Core quantity formulas, quantity settings schema/rules, `QuantitySettingsWindow*`, Wall Takeoff UI, Ribbon/Start Center/Workspace presentation, persistence mutation, updater/release work.
-- No native BricsCAD V25 runtime PASS claim from the remote connector environment.
+- Re-fetched current `main` after implementation and concurrent integration. `QuantityInsightPanel.xaml.cs` still contains `ProjectStateSnapshot.CreateDetachedCopy(project)`, `RegenerateDirty(previewProject)`, `ProjectQuantityReportBuilder.Group(previewProject)`, refresh through `BuildPreviewRows(project, out var regenerated)`, and locate revalidation through `BuildPreviewRows(project, out _)`.
+- Re-fetched both focused preflights on current `main`; both require the detached preview path and retain the cross-DWG/project/current-row fail-closed contract.
+- No `ProjectContextCoordinator.GetOrCreate`, `ExistingProjectMutationContext.Require`, direct `RegenerateDirty(project)`, or direct `ProjectQuantityReportBuilder.Group(project)` path is present in the Quantity Insight read workflow.
+- The implementation/test commits are ancestors of current `main`; concurrent commits were preserved and no force push was used.
+- GitHub exposes no combined status checks for `0d0874f6bb7fefde6464389b041097e9c34b096e`; no GitHub Actions were dispatched in this lane.
 
-## Functional contract
+## LOCAL_ONLY disposition
 
-- `RefreshQuantityInsights()` must obtain the existing canonical project read-only, create a detached `ProjectStateSnapshot` copy, regenerate dirty semantics on that detached copy, and build grouped rows/totals from the detached copy only.
-- `ResolveCurrentRow(...)` must rebuild current rows through the same detached regenerated pipeline before comparing semantic identity/value/provenance.
-- The live canonical project must not be mutated merely by opening, refreshing, highlighting or locating from the Quantity Insight palette.
-- Cross-DWG/project and stale-row fail-closed checks from the completed affinity lane must remain intact.
-- Existing affinity regression coverage must continue to require DWG -> project -> live-row -> Handle -> native selection ordering, even though the live row is now produced by `BuildPreviewRows(...)` rather than a direct `ProjectQuantityReportBuilder.Group(project)` call.
+- Native BricsCAD V25 palette mouse interaction, implied-selection behavior and viewport zoom remain covered by the existing local interactive qualification queue. This source change adds no distinct new local-only scenario, so no duplicate inbox item was created.
+- No remote native runtime PASS is claimed.
 
-## Validation plan
+## Completion evidence
 
-- Re-fetch current `main` immediately before source writes and preserve concurrent winners.
-- Add an auto-discovered static preflight that requires detached-copy -> regenerate -> grouped-report ordering for both refresh and locate revalidation, while forbidding direct regeneration of the live project and any creating/mutating project bind.
-- Keep the prior affinity preflight strict by replacing only its direct-group construction token with the detached-preview helper token/order.
-- Re-fetch the implementation after commit and verify ancestry/status without dispatching GitHub Actions.
-
-## Completion condition
-
-- Dirty project state can be previewed accurately in Quantity Insight without mutating the live project, and locate revalidation compares against the same regenerated read model used for display.
-- Both focused preflights are consistent with the new read path, and this claim is marked `COMPLETED` with exact implementation/test SHAs.
+- Quantity Insight can now preview dirty semantic quantity state accurately without mutating the canonical live project.
+- Stale-row locate revalidation uses the same detached regenerated read model as display, preventing false stale mismatches caused only by preview regeneration while retaining fail-closed behavior for real data/provenance changes.
+- Implementation: `1c5513b403cef7fd1463960f4714018f2ac2e666`; focused preview guard: `0d0874f6bb7fefde6464389b041097e9c34b096e`.
