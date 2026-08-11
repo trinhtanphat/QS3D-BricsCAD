@@ -88,9 +88,9 @@ namespace QS3D.Core.Revisions
                 var a = left[id];
                 var b = right[id];
                 Add(delta, "Category", a.Category, b.Category);
-                Add(delta, "FamilyId", a.FamilyId, b.FamilyId);
-                Add(delta, "FloorId", a.FloorId, b.FloorId);
-                Add(delta, "ZoneId", a.ZoneId, b.ZoneId);
+                AddIdentity(delta, "FamilyId", a.FamilyId, b.FamilyId);
+                AddIdentity(delta, "FloorId", a.FloorId, b.FloorId);
+                AddIdentity(delta, "ZoneId", a.ZoneId, b.ZoneId);
                 CompareSourceHandles(delta, a.SourceHandles, b.SourceHandles, id);
                 CompareDependencies(delta, a.Dependencies, b.Dependencies);
                 CompareProperties(delta, a.Properties, b.Properties);
@@ -201,6 +201,12 @@ namespace QS3D.Core.Revisions
                 if (hasA && hasB && Math.Abs(RevisionMath.Subtract(a, b, elementId + "/" + key)) <= QuantityTolerance) continue;
                 Add(delta, "Quantity:" + key, hasA ? F(a, elementId + "/" + key + "/before") : string.Empty, hasB ? F(b, elementId + "/" + key + "/after") : string.Empty);
             }
+        }
+
+        private static void AddIdentity(RevisionDelta delta, string field, string before, string after)
+        {
+            if (string.Equals(before ?? string.Empty, after ?? string.Empty, StringComparison.OrdinalIgnoreCase)) return;
+            delta.Fields.Add(new RevisionFieldDelta { Field = field, Before = before ?? string.Empty, After = after ?? string.Empty });
         }
 
         private static void Add(RevisionDelta delta, string field, string before, string after)
