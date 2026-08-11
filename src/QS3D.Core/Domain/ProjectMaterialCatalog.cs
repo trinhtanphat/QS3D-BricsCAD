@@ -7,6 +7,8 @@ namespace QS3D.Core.Domain
 {
     public sealed class ProjectMaterial
     {
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+
         public ProjectMaterial(string id, string name, string unit, string description, bool builtIn)
         {
             Id = Required(id, nameof(id), 64);
@@ -26,6 +28,7 @@ namespace QS3D.Core.Domain
         {
             var text = (value ?? string.Empty).Trim();
             if (text.Length == 0 || text.Length > max) throw new ArgumentException(name + " must contain 1.." + max + " characters.", name);
+            RequireWellFormedUnicode(text, name);
             return text;
         }
 
@@ -33,7 +36,20 @@ namespace QS3D.Core.Domain
         {
             var text = (value ?? string.Empty).Trim();
             if (text.Length > max) throw new ArgumentException(name + " must contain at most " + max + " characters.", name);
+            RequireWellFormedUnicode(text, name);
             return text;
+        }
+
+        private static void RequireWellFormedUnicode(string text, string name)
+        {
+            try
+            {
+                StrictUtf8.GetByteCount(text);
+            }
+            catch (EncoderFallbackException)
+            {
+                throw new ArgumentException(name + " must contain well-formed Unicode text.", name);
+            }
         }
     }
 
