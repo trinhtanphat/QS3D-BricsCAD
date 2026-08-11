@@ -1,0 +1,22 @@
+# Agent Work Claim
+
+- Status: `ACTIVE`
+- State: `ACTIVE`
+- Agent: `chatgpt-web-gpt56sol-20260811-quantity-description-3d-locate`
+- Started (UTC): `2026-08-11T13:28:30Z`
+- Last Updated (UTC): `2026-08-11T13:28:30Z`
+- Expected Completion: `same session after implementation and repository-verifiable checks`
+- Task Key: `UI-QUANTITY-DESCRIPTION-3D-LOCATE`
+- Intended Work: Add a quantity/schedule explanation interaction so selecting or activating a reporting/detail row can resolve its stable semantic/CAD entity identity, select/highlight the corresponding BricsCAD object(s), and frame/zoom them in the 3D view. Keep the interaction modeless-safe, fail closed for missing/stale/deleted entities, preserve multi-entity rows where applicable, and add focused tests/documentation for the mapping and locate behavior.
+- Out of Scope: Core schedule/reporting identity stabilization currently owned by `CORE-SCHEDULE-REPORTING-IDENTITY-STABILIZATION`; schedule-engine internals; BOQ quantity formulas/grouping semantics; Excel COM synchronization/locate behavior; unrelated Direct Draw/Create Similar/Room Auto/persistence work; release/signing/deployment; claims of native BricsCAD V25 runtime verification when unavailable.
+- Planned Branch Workflow: Register this claim on `main`, verify it is visible on `origin/main`, then add a planning document on `main`. Implement only non-overlapping UI/modeless/BricsCAD locate surfaces on current `main`, preserving concurrent changes. If a Core reporting-identity change becomes necessary, update this claim and coordinate before touching that scope.
+- Dependencies: Existing quantity/schedule row identity data and BricsCAD selection/zoom helpers. Active Core reporting identity claim is a coordination boundary, not a dependency to modify.
+- Verification Plan: Focused source/smoke tests for row-to-entity mapping, empty/stale/multi-entity behavior and modeless dispatch; relevant project build/test where connector-accessible; repository `scripts/verify.ps1 -Configuration Release` when executable in the available environment; final diff/commit/status review against current `main`. Native BricsCAD UI behavior that cannot be executed remotely will be recorded as a local-agent item instead of being falsely claimed as verified.
+- Completion Evidence:
+  - Branch + commit SHA: pending
+  - Independent qualifier: pending
+  - Qualifier verdict: pending
+  - Requirement smoke-run verdict: pending
+  - Commands: pending
+- Change Log:
+  - `2026-08-11T13:28:30Z` — Registered `ACTIVE` claim before planning or implementation; explicitly excluded the concurrently owned Core reporting-identity lane.
