@@ -32,8 +32,12 @@ def fail(message: str) -> None:
 
 
 def field(section: str, name: str) -> str | None:
-    match = re.search(rf"^- {re.escape(name)}:\s*(.*?)\s*$", section, re.MULTILINE)
-    return match.group(1).strip() if match else None
+    aliases = (name, "Related source/docs") if name == "Related docs" else (name,)
+    for candidate in aliases:
+        match = re.search(rf"^- {re.escape(candidate)}:\s*(.*?)\s*$", section, re.MULTILINE)
+        if match:
+            return match.group(1).strip()
+    return None
 
 
 def main() -> int:
