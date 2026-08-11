@@ -238,8 +238,11 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWCOLUMN", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var centerResult = document.Editor.GetPoint(new PromptPointOptions("\nChọn tâm Cột nhanh: "));
                 if (centerResult.Status != PromptStatus.OK) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWCOLUMN");
 
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
                 var widthM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Column, "WidthM", 0.4d) : 0.4d;
@@ -276,8 +279,11 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWCOLUMNADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var centerResult = document.Editor.GetPoint(new PromptPointOptions("\nChọn tâm Cột tùy chỉnh: "));
                 if (centerResult.Status != PromptStatus.OK) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWCOLUMNADV");
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
                 var defaultsProject = projectPreview.DefaultsProject;
@@ -406,6 +412,8 @@ namespace QS3D.BricsCAD.V25
         private static IReadOnlyList<Point3d>? AcquireFixedPath(Document document, string label, int count)
         {
             var editor = document.Editor;
+            var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+            var promptUcs = editor.CurrentUserCoordinateSystem;
             var points = new List<Point3d>(count);
             for (var index = 0; index < count; index++)
             {
@@ -421,6 +429,7 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException(label + " có hai điểm trùng nhau.");
                 points.Add(result.Value);
             }
+            RequirePromptContextUnchanged(document, promptUnit, promptUcs, label);
             ValidatePlanView(document, points, label);
             return points;
         }
@@ -428,6 +437,8 @@ namespace QS3D.BricsCAD.V25
         private static IReadOnlyList<Point3d>? AcquirePath(Document document, string label, int minimumPoints, bool close)
         {
             var editor = document.Editor;
+            var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+            var promptUcs = editor.CurrentUserCoordinateSystem;
             var points = new List<Point3d>();
             while (true)
             {
@@ -451,6 +462,7 @@ namespace QS3D.BricsCAD.V25
             if (close && points.Count >= 3 && points[0].DistanceTo(points[points.Count - 1]) <= 1e-9d)
                 points.RemoveAt(points.Count - 1);
             if (points.Count < minimumPoints) return null;
+            RequirePromptContextUnchanged(document, promptUnit, promptUcs, label);
             ValidatePlanView(document, points, label);
             return points;
         }
@@ -595,6 +607,16 @@ namespace QS3D.BricsCAD.V25
                 if (active != null && active.Category == category) return active;
             }
             return project.Families.FirstOrDefault(x => x.Category == category);
+        }
+
+        private static void RequirePromptContextUnchanged(Document document, object promptUnit, Matrix3d promptUcs, string operation)
+        {
+            EnsureActive(document, operation + " / geometry prompt freshness");
+            RequireModelSpace(document);
+            if (!Equals(CadUnitService.GetLengthUnit(document), promptUnit))
+                throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc chọn geometry cho " + operation + ". Hãy chạy lại lệnh.");
+            if (!document.Editor.CurrentUserCoordinateSystem.Equals(promptUcs))
+                throw new InvalidOperationException("Current UCS đã thay đổi trong lúc chọn geometry cho " + operation + ". Hãy chạy lại lệnh.");
         }
 
         private static void RequireModelSpace(Document document)
