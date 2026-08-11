@@ -20,16 +20,24 @@ namespace QS3D.Core.SmokeTests
             var before = new RevisionSnapshot { Id = "R-BEFORE", CreatedUtc = DateTime.UtcNow.AddMinutes(-1) };
             var a = Element("A", "Beam", "F1", "L1", "Z1");
             a.Properties["Mark"] = "B-01";
+            a.Properties["GeneratedSolidHandle"] = "GEN-HANDLE-BEFORE";
+            a.Properties["BoundarySourceHandles"] = "ROOM-HANDLE-BEFORE";
+            a.Properties["QS3D.GeneratedSolid.StaleSnapshot"] = "STALE-HANDLE-BEFORE";
+            a.Properties["PhysicalOpeningCutHostHandle"] = "CUT-HANDLE-BEFORE";
             a.Quantities["NetVolumeM3"] = 1d;
-            a.SourceHandles.Add("HANDLE-BEFORE");
+            a.SourceHandles.Add("SOURCE-HANDLE-BEFORE");
             before.Elements.Add(a);
             before.Elements.Add(Element("B", "Column", "C1", "L1", "Z1"));
 
             var after = new RevisionSnapshot { Id = "R-AFTER", CreatedUtc = DateTime.UtcNow };
             var changed = Element("A", "Beam", "F2", "L1", "Z1");
             changed.Properties["Mark"] = "B-02";
+            changed.Properties["GeneratedSolidHandle"] = "GEN-HANDLE-AFTER";
+            changed.Properties["BoundarySourceHandles"] = "ROOM-HANDLE-AFTER";
+            changed.Properties["QS3D.GeneratedSolid.StaleSnapshot"] = "STALE-HANDLE-AFTER";
+            changed.Properties["PhysicalOpeningCutHostHandle"] = "CUT-HANDLE-AFTER";
             changed.Quantities["NetVolumeM3"] = 1.5d;
-            changed.SourceHandles.Add("HANDLE-AFTER");
+            changed.SourceHandles.Add("SOURCE-HANDLE-AFTER");
             after.Elements.Add(changed);
             after.Elements.Add(Element("C", "Room", "R1", "L1", "Z2"));
 
@@ -44,7 +52,7 @@ namespace QS3D.Core.SmokeTests
             Equal(1, review.Summary.IdentityChangeCount);
             Equal(1, review.Summary.PropertyChangeCount);
             Equal(1, review.Summary.QuantityChangeCount);
-            Equal(1, review.Summary.OmittedSourceReferenceChangeCount);
+            Equal(5, review.Summary.OmittedSourceReferenceChangeCount);
 
             var item = review.Elements.Single(x => x.ElementId == "A");
             Equal("Beam", item.Category);
@@ -53,9 +61,13 @@ namespace QS3D.Core.SmokeTests
             Equal(SemanticChangeFieldKind.Identity, item.Fields.Single(x => x.Field == "FamilyId").Kind);
             Equal(SemanticChangeFieldKind.Property, item.Fields.Single(x => x.Field == "Property:Mark").Kind);
             Equal(SemanticChangeFieldKind.Quantity, item.Fields.Single(x => x.Field == "Quantity:NetVolumeM3").Kind);
-            Equal(1, item.OmittedSourceReferenceChangeCount);
+            Equal(5, item.OmittedSourceReferenceChangeCount);
             True(item.Fields.All(x => x.Field.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) < 0));
-            True(item.Fields.All(x => x.Before != "HANDLE-BEFORE" && x.After != "HANDLE-AFTER"));
+            True(item.Fields.All(x => x.Field.IndexOf("Generated", StringComparison.OrdinalIgnoreCase) < 0));
+            True(item.Fields.All(x => x.Field.IndexOf("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase) < 0));
+            True(item.Fields.All(x =>
+                x.Before.IndexOf("HANDLE-", StringComparison.OrdinalIgnoreCase) < 0 &&
+                x.After.IndexOf("HANDLE-", StringComparison.OrdinalIgnoreCase) < 0));
         }
 
         private static void ReviewOrderingIsDeterministic()
