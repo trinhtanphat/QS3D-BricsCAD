@@ -18,25 +18,33 @@ else:
         body = text[start:end]
         confirm = body.find("if (dialog.ShowDialog(this) != true) return;")
         project = body.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)")
-        regenerate = body.find("RegenerateDirty(project)")
-        build = body.find("_rows = ProjectRebarScheduleBuilder.Build(project);")
+        snapshot = body.find("ProjectStateSnapshot.CreateDetachedCopy(project)")
+        regenerate = body.find("RegenerateDirty(snapshot)")
+        build = body.find("_rows = ProjectRebarScheduleBuilder.Build(snapshot);")
         bind = body.find("BindRows();", build + 1)
         export = body.find("XlsxRebarScheduleExporter.Export(dialog.FileName, _rows)")
-        if min(confirm, project, regenerate, build, bind, export) < 0:
-            errors.append("BBS review export missing save/read-only-project/regenerate/build/rebind/export contract token")
-        elif not confirm < project < regenerate < build < bind < export:
-            errors.append("BBS review XLSX must confirm Save before existing-project regeneration, fresh build, UI rebind, and export")
+        if min(confirm, project, snapshot, regenerate, build, bind, export) < 0:
+            errors.append("BBS review export missing save/read-only-project/detached-regenerate/build/rebind/export contract token")
+        elif not confirm < project < snapshot < regenerate < build < bind < export:
+            errors.append("BBS review XLSX must confirm Save before existing-project lookup, detached regeneration, fresh build, UI rebind, and export")
 
         before_confirm = body[:confirm if confirm >= 0 else 0]
         for forbidden in (
             "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
-            "RegenerateDirty(project)",
-            "ProjectRebarScheduleBuilder.Build(project)",
+            "ProjectStateSnapshot.CreateDetachedCopy(project)",
+            "RegenerateDirty(snapshot)",
+            "ProjectRebarScheduleBuilder.Build(snapshot)",
         ):
             if forbidden in before_confirm:
                 errors.append("BBS review Cancel path must not execute before Save confirmation: " + forbidden)
-        if "ProjectContextCoordinator.GetOrCreate(_document)" in body:
-            errors.append("BBS review export must not create/cache a replacement project while exporting modeless data")
+        for forbidden in (
+            "ProjectContextCoordinator.GetOrCreate(_document)",
+            "ExistingProjectMutationContext",
+            "RegenerateDirty(project)",
+            "ProjectRebarScheduleBuilder.Build(project)",
+        ):
+            if forbidden in body:
+                errors.append("BBS review export must not create/bind/regenerate live project state: " + forbidden)
 
     for token in (
         "private IReadOnlyList<RebarScheduleRow> _rows;",
@@ -53,4 +61,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BBS review export confirms Save, re-resolves the existing current project read-only, refreshes visible totals, and exports fresh rows.")
+print("PASS: BBS review export confirms Save, re-resolves existing state read-only, regenerates a detached snapshot, refreshes visible totals, and exports fresh rows.")
