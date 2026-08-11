@@ -134,8 +134,13 @@ if commands.exists():
 review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
 if review.exists():
     text = review.read_text(encoding="utf-8")
-    if text.count("SemanticReferenceHandles.Get(element)") + text.count("SourceHandleResolver.Resolve") < 2:
-        errors.append("BBS/revision locate must resolve semantic/dependency reference handles")
+    for needle in (
+        'LocateCurrentElement(doc, row.ElementId, "BBS Locate")',
+        'LocateCurrentElement(doc, row.ElementId, "Revision Locate")',
+        'SourceHandleResolver.Resolve(currentProject, new[] { element.Id })',
+    ):
+        if needle not in text:
+            errors.append("BBS/revision shared locate must resolve current semantic/dependency reference handles: " + needle)
 
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/AutoRoomLifecycleSmoke.cs"
 if smoke.exists():
@@ -180,4 +185,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: auto-room input/identity, Room->finish resynchronization, stale/orphan quantity exclusion, lazy BQ fallbacks, rollback, semantic locate and large-coordinate geometry guards are present.")
+print("PASS: auto-room input/identity, Room->finish resynchronization, stale/orphan quantity exclusion, lazy BQ fallbacks, rollback, shared current-project semantic locate and large-coordinate geometry guards are present.")
