@@ -112,8 +112,33 @@ namespace QS3D.Core.Reporting
                 throw new InvalidOperationException("Diagnostic snapshot path must have a parent directory.");
             Directory.CreateDirectory(directory);
 
-            using (var stream = File.Open(fullPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                Write(stream, snapshot);
+            var temp = Path.Combine(
+                directory,
+                "." + Path.GetFileName(fullPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                using (var stream = File.Open(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    Write(stream, snapshot);
+                    stream.Flush(true);
+                }
+
+                if (File.Exists(fullPath))
+                    File.Replace(temp, fullPath, null, true);
+                else
+                    File.Move(temp, fullPath);
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(temp)) File.Delete(temp);
+                }
+                catch
+                {
+                    // Diagnostic temp cleanup is best-effort and must not mask the publish failure.
+                }
+            }
         }
 
         public static void Write(Stream stream, QuantityCalculationMatrixDiagnosticSnapshot snapshot)

@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             SnapshotPreservesExactDirectedDiagnostics();
             JsonExportIsPortableAndSanitized();
+            SavePublishesAndReplacesPortableJson();
             SnapshotCreationDoesNotMutateCaller();
         }
 
@@ -59,6 +60,32 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void SavePublishesAndReplacesPortableJson()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-quantity-health-" + Guid.NewGuid().ToString("N"));
+            var path = Path.Combine(directory, "health.json");
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var first = QuantityCalculationMatrixDiagnosticSnapshot.Create(Settings(10));
+                QuantityCalculationMatrixDiagnosticSnapshotExporter.Save(path, first);
+                True(File.Exists(path));
+                var firstJson = File.ReadAllText(path);
+                Contains(firstJson, "\"observedCategoryCodes\":[10]");
+
+                var second = QuantityCalculationMatrixDiagnosticSnapshot.Create(Settings(20));
+                QuantityCalculationMatrixDiagnosticSnapshotExporter.Save(path, second);
+                var secondJson = File.ReadAllText(path);
+                Contains(secondJson, "\"observedCategoryCodes\":[20]");
+                NotContains(secondJson, "\"observedCategoryCodes\":[10]");
+                Equal(1, Directory.GetFiles(directory).Length);
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
         private static void SnapshotCreationDoesNotMutateCaller()
         {
             var settings = Settings(20, 10);
@@ -100,6 +127,7 @@ namespace QS3D.Core.SmokeTests
         private static void Contains(string text, string value) { if (text.IndexOf(value, StringComparison.Ordinal) < 0) throw new Exception("Expected JSON token " + value + "."); }
         private static void NotContains(string text, string value) { if (text.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0) throw new Exception("Unexpected JSON token " + value + "."); }
         private static void Equal<T>(T expected, T actual) { if (!Equals(expected, actual)) throw new Exception("Expected " + expected + ", got " + actual); }
+        private static void True(bool value) { if (!value) throw new Exception("Expected true."); }
         private static void False(bool value) { if (value) throw new Exception("Expected false."); }
     }
 }
