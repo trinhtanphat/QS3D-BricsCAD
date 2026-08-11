@@ -386,7 +386,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     issues.Add(Issue("CUSTOM_SCHEDULE_TABLE_OWNERSHIP_MISMATCH", HealthSeverity.Error, "QS3DDOC ownership does not match project/schedule/fingerprint metadata.", scheduleId));
                     transaction.Commit();
-                    return issues.AsReadOnly();
+                    return;
                 }
 
                 InspectPosition(project, keys, table, scheduleId, issues);
@@ -438,6 +438,7 @@ namespace QS3D.BricsCAD.V25.Cad
             issues.Add(Issue("CUSTOM_SCHEDULE_TABLE_CAD_TEXT_DRIFT", HealthSeverity.Warning, "Live Table cell differs from semantic snapshot at " + label + ".", scheduleId));
             details++;
         }
+
         private static void InspectPosition(ProjectState project, StateKeys keys, Table table, string scheduleId, ICollection<ModelHealthIssue> issues)
         {
             if (!TryFinite(project.Metadata, keys.PositionX, out var x) ||
