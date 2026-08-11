@@ -248,7 +248,7 @@ namespace QS3D.Core.Export
                 target.Metadata[LastAffectedTargetElementsKey] = plan.AffectedTargetElementIds.Count.ToString(CultureInfo.InvariantCulture);
                 target.Metadata[LastNativeCleanupElementsKey] = plan.NativeCleanupRequirements.Count.ToString(CultureInfo.InvariantCulture);
                 target.Metadata[LastNativeCleanupHandlesRequiredKey] = plan.TargetGeneratedHandlesToClean.ToString(CultureInfo.InvariantCulture);
-                target.Metadata.Remove(LastTargetGeneratedHandlesCleanedKey);
+                target.Metadata.Remove("Interchange.LastImport.TargetGeneratedHandlesCleaned");
 
                 ValidateCombinedTarget(target);
                 AuditTrail.ForProject(target).Record(
