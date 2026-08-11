@@ -42,7 +42,7 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\nQS3DAUTOLINKHOSTS: chọn Cửa/Lỗ Mở đã được QS3D capture.");
                     return;
                 }
-                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                if (!ExistingProjectMutationContext.TryGet(document, out var project))
                 {
                     document.Editor.WriteMessage("\nQS3DAUTOLINKHOSTS: cần một QS3D project hiện hữu; Auto Host không tạo project mới.");
                     return;
