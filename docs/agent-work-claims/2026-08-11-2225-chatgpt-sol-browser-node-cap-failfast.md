@@ -1,8 +1,9 @@
 # Agent Work Claim
 
-- Status: ACTIVE
+- Status: COMPLETED
 - Agent: chatgpt-gpt56sol-browser-node-cap-20260811-2225
 - Timestamp: 2026-08-11T22:25:00+07:00
+- Completed: 2026-08-11T22:28:00+07:00
 - Baseline `main` SHA: `e0b70a8dd62138719b35945a8a9d243637710e09`
 - Priority: P1 resource safety / deterministic fail-closed behavior
 - Exact scope: Make `ProjectBrowserVirtualizationPlanner` enforce its `MaxNodes` cap while indexing, before an over-limit node is added/traversed, instead of checking only after the complete tree has already been materialized in the index. Preserve existing paging/expansion semantics.
@@ -14,12 +15,17 @@
   - BricsCAD/native/WPF/runtime behavior
   - persistence outside this planner
   - GitHub Actions
-- Validation plan:
-  - focused source-level regression for the node-cap boundary without constructing an over-limit production-sized tree
-  - re-read current `main` target blobs before every write
-  - static inspection only where local `dotnet` is unavailable
+- Validation performed:
+  - re-read the current `main` planner after implementation; `index.Count >= MaxNodes` now fires inside `IndexNode` before path construction, duplicate lookup, index mutation, and child traversal
+  - added focused smoke coverage using a saturated `IDictionary` sentinel whose every operation except `Count` throws; the expected node-cap exception therefore proves the guard fires before `ContainsKey`/`Add` without constructing 500001 nodes
+  - re-read the focused smoke from current `main`
+  - audited both commit payloads; implementation changed only the claimed planner and regression changed only the claimed smoke file
+  - no local `dotnet` runtime is available in this environment; no GitHub Actions or BricsCAD runtime validation was run
 - Coordination:
   - checked the current claim registry immediately before registration; no virtualization/node-cap claim was present
-  - existing Project Browser XML namespace claim is COMPLETED and explicitly excludes virtualization semantics
-  - no GitHub Actions will be dispatched
-- Completion condition: node indexing rejects the `(MaxNodes + 1)`th node before mutating the index or descending further; focused regression is present; claim is marked COMPLETED.
+  - existing Project Browser XML namespace claim was COMPLETED and explicitly excluded virtualization semantics
+  - no GitHub Actions were dispatched
+- Implementation commits:
+  - `0d622766a9281b91b8a12a81529d1082c471637b` — `fix(browser): enforce node cap while indexing`
+  - `17ee3af38c4467c8bbfefffc062fb23540f489c5` — `test(browser): cover node cap fail-fast boundary`
+- Result: Project Browser virtualization now rejects the `(MaxNodes + 1)`th node before mutating the index or descending further, turning the existing node limit into a real fail-fast resource guard while preserving normal paging and expansion semantics.
