@@ -182,7 +182,8 @@ $metadataPath = Join-Path $ArtifactDir "project-lifecycle-metadata.json"
 
 $environmentNames = @(
     "QS3D_LIFECYCLE_RESULT", "QS3D_LIFECYCLE_STATE", "QS3D_LIFECYCLE_NONCE", "QS3D_LIFECYCLE_ROLE",
-    "QS3D_LIFECYCLE_DWG_A", "QS3D_LIFECYCLE_DWG_B", "QS3D_LIFECYCLE_DWG_C", "QS3D_LIFECYCLE_DWG_D"
+    "QS3D_LIFECYCLE_DWG_A", "QS3D_LIFECYCLE_DWG_B", "QS3D_LIFECYCLE_DWG_C", "QS3D_LIFECYCLE_DWG_D",
+    "QS3D_LIFECYCLE_PHASE"
 )
 $oldEnvironment = @{}
 foreach ($name in $environmentNames) { $oldEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, "Process") }
@@ -227,6 +228,42 @@ try {
         -not [int]::TryParse([string]$multi["document_count"], [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$documentCount) -or
         $documentCount -lt 4) { throw "Project-lifecycle probe did not observe all four documents." }
 
+    $commandPhases = [ordered]@{
+        "REGEN_EXISTING" = "QS3DREGEN"
+        "REFRESH_EXISTING" = "QS3DREFRESH"
+        "FINISH_EXISTING" = "QS3DFINISH"
+        "REGEN_ABSENT" = "QS3DREGEN"
+        "REFRESH_ABSENT" = "QS3DREFRESH"
+        "FINISH_ABSENT" = "QS3DFINISH"
+    }
+    foreach ($entry in $commandPhases.GetEnumerator()) {
+        $phase = [string]$entry.Key
+        $command = [string]$entry.Value
+        $env:QS3D_LIFECYCLE_PHASE = $phase
+        $phaseFile = "project-lifecycle-" + $phase.ToLowerInvariant().Replace('_', '-') + ".txt"
+        $phaseResult = Join-Path $ArtifactDir $phaseFile
+        $phaseDrawing = if ($phase.EndsWith("_EXISTING", [StringComparison]::Ordinal)) { $drawingA } else { $drawingC }
+        $phaseMarker = Invoke-Qs3dScript -Drawing $phaseDrawing -ScriptPath (Join-Path $ArtifactDir ($phaseFile + ".scr")) -ResultPath $phaseResult -Lines @(
+            "FILEDIA", "0", "CMDECHO", "1", "NETLOAD", ('"' + $PluginDll + '"'),
+            "QS3DLIFECYCLECOMMANDPREP", $command, "QS3DLIFECYCLECOMMANDVERIFY"
+        )
+        Require-Qs3dValue -Marker $phaseMarker -Key "nonce" -Expected $nonce
+        Require-Qs3dValue -Marker $phaseMarker -Key "phase" -Expected $phase
+        if ($phase.EndsWith("_EXISTING", [StringComparison]::Ordinal)) {
+            foreach ($key in @("existing_project_bound", "canonical_project_identity_matched", "pending_semantic_mutation")) {
+                Require-Qs3dValue -Marker $phaseMarker -Key $key -Expected "true"
+            }
+            $isFinish = $phase.StartsWith("FINISH_", [StringComparison]::Ordinal)
+            Require-Qs3dValue -Marker $phaseMarker -Key "semantic_regenerated" -Expected $(if ($isFinish) { "false" } else { "true" })
+            Require-Qs3dValue -Marker $phaseMarker -Key "room_finishes_generated" -Expected $(if ($isFinish) { "true" } else { "false" })
+        }
+        else {
+            foreach ($key in @("absent_sidecar_noncreating", "no_cached_project", "no_pending_project_state", "semantic_mutation_not_applied")) {
+                Require-Qs3dValue -Marker $phaseMarker -Key $key -Expected "true"
+            }
+        }
+    }
+
     $sidecarA = [IO.Path]::ChangeExtension($drawingA, ".qsdb")
     $sidecarB = [IO.Path]::ChangeExtension($drawingB, ".qsdb")
     $sidecarC = [IO.Path]::ChangeExtension($drawingC, ".qsdb")
@@ -246,7 +283,7 @@ try {
     }
 
     $metadata = [ordered]@{
-        schema = 1
+        schema = 2
         status = "PASS"
         exactSha = $exactSha
         bricscadVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($bricscadExe).FileVersion
@@ -264,6 +301,13 @@ try {
         absentSidecarNoncreating = $true
         corruptSidecarFailClosed = $true
         corruptSidecarUnchanged = $true
+        commandLifecyclePhaseCount = $commandPhases.Count
+        regenExistingCanonical = $true
+        refreshExistingCanonical = $true
+        finishExistingCanonical = $true
+        regenAbsentNoncreating = $true
+        refreshAbsentNoncreating = $true
+        finishAbsentNoncreating = $true
         startedUtc = $startedAt.ToString("O")
         completedUtc = [DateTime]::UtcNow.ToString("O")
     }

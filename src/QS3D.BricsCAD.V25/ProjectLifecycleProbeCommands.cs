@@ -7,6 +7,8 @@ using System.Security.Cryptography;
 using System.Text;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Audit;
+using QS3D.Core.Domain;
+using QS3D.Core.Services;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -26,10 +28,14 @@ namespace QS3D.BricsCAD.V25
         private const string DrawingBVariable = "QS3D_LIFECYCLE_DWG_B";
         private const string DrawingCVariable = "QS3D_LIFECYCLE_DWG_C";
         private const string DrawingDVariable = "QS3D_LIFECYCLE_DWG_D";
+        private const string PhaseVariable = "QS3D_LIFECYCLE_PHASE";
         private const string StateFileName = "project-lifecycle-state.txt";
         private const string FinalResultFileName = "project-lifecycle-result.txt";
         private const string RoleMetadataKey = "QS3D.LifecycleProbe.Role";
         private const string MutationMetadataKey = "QS3D.LifecycleProbe.MultiDwgMutation";
+        private const string CommandPhaseMetadataKey = "QS3D.LifecycleProbe.CommandPhase";
+        private const string ProbeRoomFamilyId = "LIFECYCLE-ROOM-FAMILY";
+        private const string ProbeRoomElementId = "LIFECYCLE-ROOM";
 
         [CommandMethod("QS3DLIFECYCLESEED", CommandFlags.Modal)]
         public void Seed()
@@ -215,7 +221,269 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void EnsureProject(QS3D.Core.Domain.ProjectState project, string role, string digest, string nonce)
+        [CommandMethod("QS3DLIFECYCLECOMMANDPREP", CommandFlags.Modal)]
+        public void PrepareCommandLifecycle()
+        {
+            var resultPath = Environment.GetEnvironmentVariable(ResultVariable);
+            if (SkipOutsideAutomation(resultPath)) return;
+            try
+            {
+                var nonce = RequiredNonce();
+                var phase = RequiredPhase();
+                var statePath = RequiredStatePath(nonce);
+                var existing = IsExistingPhase(phase);
+                var expectedDrawing = RequiredDrawingPath(existing ? DrawingAVariable : DrawingCVariable);
+                var result = RequiredOutputPath(resultPath, CommandResultFileName(phase), "command lifecycle result");
+                EnsureProbeScope(statePath, result, expectedDrawing);
+
+                var document = Application.DocumentManager.MdiActiveDocument
+                    ?? throw new InvalidOperationException("No active document is available for command lifecycle preparation.");
+                if (!SamePath(document.Name, expectedDrawing))
+                    throw new InvalidOperationException("The command lifecycle active drawing does not match its phase.");
+
+                if (existing) PrepareExistingCommandPhase(document, phase, nonce, statePath);
+                else PrepareAbsentCommandPhase(document, phase);
+                document.Editor.WriteMessage("\nQS3D command lifecycle phase prepared.");
+            }
+            catch (System.Exception)
+            {
+                TryWriteCommandFailure(resultPath, "COMMAND_PREP_FAILED");
+                throw;
+            }
+        }
+
+        [CommandMethod("QS3DLIFECYCLECOMMANDVERIFY", CommandFlags.Modal)]
+        public void VerifyCommandLifecycle()
+        {
+            var resultPath = Environment.GetEnvironmentVariable(ResultVariable);
+            if (SkipOutsideAutomation(resultPath)) return;
+            try
+            {
+                var nonce = RequiredNonce();
+                var phase = RequiredPhase();
+                var statePath = RequiredStatePath(nonce);
+                var existing = IsExistingPhase(phase);
+                var expectedDrawing = RequiredDrawingPath(existing ? DrawingAVariable : DrawingCVariable);
+                var result = RequiredOutputPath(resultPath, CommandResultFileName(phase), "command lifecycle result");
+                EnsureProbeScope(statePath, result, expectedDrawing);
+                if (File.Exists(result)) throw new IOException("The command lifecycle result already exists.");
+
+                var document = Application.DocumentManager.MdiActiveDocument
+                    ?? throw new InvalidOperationException("No active document is available for command lifecycle verification.");
+                if (!SamePath(document.Name, expectedDrawing))
+                    throw new InvalidOperationException("The command lifecycle verification drawing does not match its phase.");
+
+                var marker = existing
+                    ? VerifyExistingCommandPhase(document, phase, nonce, statePath)
+                    : VerifyAbsentCommandPhase(document, phase);
+                WriteMarkerAtomic(result, marker);
+                document.Editor.WriteMessage("\nQS3D command lifecycle phase PASS.");
+            }
+            catch (System.Exception)
+            {
+                TryWriteCommandFailure(resultPath, "COMMAND_VERIFY_FAILED");
+                throw;
+            }
+        }
+
+        private static void PrepareExistingCommandPhase(Document document, string phase, string nonce, string statePath)
+        {
+            var state = ReadState(statePath, nonce);
+            var expectedA = RequiredDigest(state, "a");
+            ProjectContextCoordinator.Forget(document);
+            if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                throw new InvalidOperationException("The existing-project command phase could not bind its saved sidecar.");
+            EnsureProject(project, "A", expectedA, nonce);
+
+            var room = EnsureProbeRoom(document, project);
+            if (phase == "FINISH_EXISTING") room.MarkClean(ElementDirtyFlags.All);
+            else room.MarkDirty(ElementDirtyFlags.All);
+            project.Metadata[CommandPhaseMetadataKey] = phase;
+            project.Touch();
+            ProjectContextCoordinator.Save(document);
+            if (ProjectContextCoordinator.HasPendingChanges(document))
+                throw new InvalidOperationException("Command lifecycle preparation did not persist a clean baseline.");
+
+            var roomHandle = room.SourceHandles.Single();
+            ProjectContextCoordinator.Forget(document);
+            if (phase == "FINISH_EXISTING" && Cad.CadHandleService.SelectIfAny(document, new[] { roomHandle }) != 1)
+                throw new InvalidOperationException("The room source could not be selected for QS3DFINISH.");
+        }
+
+        private static void PrepareAbsentCommandPhase(Document document, string phase)
+        {
+            var path = ProjectContextCoordinator.GetProjectPath(document);
+            if (File.Exists(path) || File.Exists(path + ".bak"))
+                throw new InvalidOperationException("The absent-project command phase unexpectedly has a sidecar.");
+            ProjectContextCoordinator.Forget(document);
+            if (ProjectContextCoordinator.TryGetReadOnly(document, out _) || ProjectContextCoordinator.HasPendingChanges(document))
+                throw new InvalidOperationException("The absent-project command phase began with cached project state.");
+            if (phase == "FINISH_ABSENT")
+            {
+                var sourceHandle = FirstLiveSourceHandle(document);
+                if (Cad.CadHandleService.SelectIfAny(document, new[] { sourceHandle }) != 1)
+                    throw new InvalidOperationException("The absent-project fixture source could not be selected for QS3DFINISH.");
+            }
+        }
+
+        private static IReadOnlyList<string> VerifyExistingCommandPhase(Document document, string phase, string nonce, string statePath)
+        {
+            var state = ReadState(statePath, nonce);
+            var expectedA = RequiredDigest(state, "a");
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                throw new InvalidOperationException("The tested command lost its existing project.");
+            EnsureProject(project, "A", expectedA, nonce);
+            if (!project.Metadata.TryGetValue(CommandPhaseMetadataKey, out var storedPhase) ||
+                !string.Equals(storedPhase, phase, StringComparison.Ordinal))
+                throw new InvalidOperationException("The tested command rebound a stale or replacement project.");
+            if (!ProjectContextCoordinator.HasPendingChanges(document))
+                throw new InvalidOperationException("The tested command did not retain its semantic mutation on the canonical project.");
+
+            var room = project.FindElement(ProbeRoomElementId)
+                ?? throw new InvalidOperationException("The command lifecycle Room is missing after command execution.");
+            var semanticDirty = room.Dirty & (ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+            var finishesGenerated = false;
+            if (phase == "FINISH_EXISTING")
+            {
+                foreach (var category in RoomFinishSynchronizationService.Categories)
+                {
+                    var finish = RoomFinishIdentityService.FindExisting(project, room, category)
+                        ?? throw new InvalidOperationException("QS3DFINISH did not create every canonical Room Finish category.");
+                    if (!finish.DependsOn.Any(x => string.Equals(x, room.Id, StringComparison.OrdinalIgnoreCase)))
+                        throw new InvalidOperationException("A generated Room Finish lost its Room dependency.");
+                    if ((finish.Dirty & (ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity)) != ElementDirtyFlags.None)
+                        throw new InvalidOperationException("A generated Room Finish remains semantically dirty.");
+                }
+                finishesGenerated = true;
+            }
+            else if (semanticDirty != ElementDirtyFlags.None)
+            {
+                throw new InvalidOperationException("QS3DREGEN/QS3DREFRESH left the probe Room semantically dirty.");
+            }
+
+            return new[]
+            {
+                "status=PASS",
+                "command=QS3DLIFECYCLECOMMANDVERIFY",
+                "schema=QS3D_PROJECT_COMMAND_LIFECYCLE_V1",
+                "nonce=" + nonce,
+                "phase=" + phase,
+                "existing_project_bound=true",
+                "canonical_project_identity_matched=true",
+                "pending_semantic_mutation=true",
+                "semantic_regenerated=" + (phase == "FINISH_EXISTING" ? "false" : "true"),
+                "room_finishes_generated=" + (finishesGenerated ? "true" : "false")
+            };
+        }
+
+        private static IReadOnlyList<string> VerifyAbsentCommandPhase(Document document, string phase)
+        {
+            if (ProjectContextCoordinator.TryGetReadOnly(document, out _) || ProjectContextCoordinator.HasPendingChanges(document))
+                throw new InvalidOperationException("A no-project command created or cached replacement project state.");
+            var path = ProjectContextCoordinator.GetProjectPath(document);
+            if (File.Exists(path) || File.Exists(path + ".bak"))
+                throw new InvalidOperationException("A no-project command created a replacement sidecar.");
+            return new[]
+            {
+                "status=PASS",
+                "command=QS3DLIFECYCLECOMMANDVERIFY",
+                "schema=QS3D_PROJECT_COMMAND_LIFECYCLE_V1",
+                "nonce=" + RequiredNonce(),
+                "phase=" + phase,
+                "absent_sidecar_noncreating=true",
+                "no_cached_project=true",
+                "no_pending_project_state=true",
+                "semantic_mutation_not_applied=true"
+            };
+        }
+
+        private static ProjectElement EnsureProbeRoom(Document document, ProjectState project)
+        {
+            var family = project.FindFamily(ProbeRoomFamilyId);
+            if (family == null)
+            {
+                family = new ProjectFamily(ProbeRoomFamilyId, "Lifecycle Room", ElementCategory.Room);
+                project.Families.Add(family);
+            }
+            else if (family.Category != ElementCategory.Room)
+            {
+                throw new InvalidOperationException("The lifecycle Room Family id collides with another category.");
+            }
+
+            var room = project.FindElement(ProbeRoomElementId);
+            if (room == null)
+            {
+                room = new ProjectElement(ProbeRoomElementId, ElementCategory.Room, family.Id, string.Empty, string.Empty);
+                project.Elements.Add(room);
+            }
+            else if (room.Category != ElementCategory.Room || !string.Equals(room.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The lifecycle Room id collides with incompatible semantic state.");
+            }
+
+            var sourceHandle = FirstLiveSourceHandle(document);
+            room.SourceHandles.Clear();
+            room.SourceHandles.Add(sourceHandle);
+            room.SetProperty("AreaM2", "25");
+            room.SetProperty("PerimeterM", "20");
+            room.SetProperty("HeightM", "3");
+            return room;
+        }
+
+        private static string FirstLiveSourceHandle(Document document)
+        {
+            var handle = Cad.EntitySnapshotReader.ReadCurrentSpace(document)
+                .Select(x => Cad.CadHandleService.NormalizeHexHandle(x.Handle))
+                .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+            return handle ?? throw new InvalidOperationException("The synthetic lifecycle fixture has no live selectable entity.");
+        }
+
+        private static string RequiredPhase()
+        {
+            var phase = (Environment.GetEnvironmentVariable(PhaseVariable) ?? string.Empty).Trim().ToUpperInvariant();
+            switch (phase)
+            {
+                case "REGEN_EXISTING":
+                case "REFRESH_EXISTING":
+                case "FINISH_EXISTING":
+                case "REGEN_ABSENT":
+                case "REFRESH_ABSENT":
+                case "FINISH_ABSENT":
+                    return phase;
+                default:
+                    throw new InvalidOperationException("The lifecycle command phase is invalid.");
+            }
+        }
+
+        private static bool IsExistingPhase(string phase) => phase.EndsWith("_EXISTING", StringComparison.Ordinal);
+
+        private static string CommandResultFileName(string phase) =>
+            "project-lifecycle-" + phase.ToLowerInvariant().Replace('_', '-') + ".txt";
+
+        private static void TryWriteCommandFailure(string? resultPath, string errorCode)
+        {
+            try
+            {
+                var nonce = RequiredNonce();
+                var phase = RequiredPhase();
+                var normalized = RequiredOutputPath(resultPath, CommandResultFileName(phase), "command lifecycle result");
+                var statePath = RequiredStatePath(nonce);
+                var drawing = RequiredDrawingPath(IsExistingPhase(phase) ? DrawingAVariable : DrawingCVariable);
+                EnsureProbeScope(statePath, normalized, drawing);
+                if (File.Exists(normalized)) return;
+                WriteMarkerAtomic(normalized, new[]
+                {
+                    "status=FAIL",
+                    "command=QS3DLIFECYCLECOMMANDVERIFY",
+                    "nonce=" + nonce,
+                    "phase=" + phase,
+                    "error_code=" + errorCode
+                });
+            }
+            catch { }
+        }
+
+        private static void EnsureProject(ProjectState project, string role, string digest, string nonce)
         {
             if (!string.Equals(ProjectDigest(project.ProjectId, nonce), digest, StringComparison.Ordinal))
                 throw new InvalidOperationException("A reopened project identity did not match its saved seed.");
