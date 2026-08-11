@@ -24,6 +24,7 @@ else:
     required = (
         "using QS3D.Core.Persistence;",
         "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
+        "ExistingProjectMutationContext.TryGet(_document, out var project)",
         "ProjectStateSnapshot.Capture(project)",
         "project.Metadata[TemplateProfileStore.VisibleBqColumnsKey] = string.Join(\"|\", visible);",
         "rollback.Restore(project);",
@@ -32,21 +33,23 @@ else:
     )
     for token in required:
         if token not in text:
-            errors.append("QuantitySummaryWindow missing reload-safe existing-project preference token: " + token)
+            errors.append("QuantitySummaryWindow missing reload-safe project preference token: " + token)
 
     persist_pos = text.find("private void PersistColumnPreferences()")
     next_pos = text.find("private IEnumerable<CheckBox>", persist_pos)
     body = text[persist_pos:next_pos] if persist_pos >= 0 and next_pos > persist_pos else ""
-    resolve_pos = body.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)")
+    resolve_pos = body.find("ExistingProjectMutationContext.TryGet(_document, out var project)")
     snapshot_pos = body.find("ProjectStateSnapshot.Capture(project)")
     metadata_pos = body.find("project.Metadata[TemplateProfileStore.VisibleBqColumnsKey]")
     touch_pos = body.find("project.Touch();")
     if min(resolve_pos, snapshot_pos, metadata_pos, touch_pos) < 0 or not resolve_pos < snapshot_pos < metadata_pos < touch_pos:
-        errors.append("BQ column preference write must re-resolve the existing current project, snapshot it, then mutate metadata/timestamp")
+        errors.append("BQ column preference write must bind the canonical existing current project, snapshot it, then mutate metadata/timestamp")
+    if "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)" in body:
+        errors.append("BQ column preference mutation must not write through a detached read-only project")
 
 if errors:
     for error in errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] BQ column preferences rebind read-only to the existing current DWG project after reload and persist through an explicit rollback boundary")
+print("[PASS] BQ column preferences load read-only but bind the canonical existing current DWG project before rollback-protected metadata mutation")
