@@ -1,44 +1,35 @@
 # Work claim — updater manifest v2 compatibility
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-updater-manifest-v2-compat`
 - Registered: `2026-08-11T21:26:00+07:00`
+- Completed: `2026-08-11T21:29:00+07:00`
 - Baseline main SHA: `f373d932fd90faf7355283234da7e711633339d8`
-- Priority: P0 functional/security compatibility blocker in the newly released updater source lane.
+- Result: `SUPERSEDED / NO IMPLEMENTATION REQUIRED`
 
-## Verified defect
+## Initial observation
 
-`new-v25-update-manifest.ps1` currently emits `schemaVersion = 2` and a signed-plugin-derived `productVersion`, while `update-v25.ps1` still rejects every manifest whose `schemaVersion` is not `1`. A correctly generated current release manifest therefore fails before package download/install.
+An earlier connector snapshot of `update-v25.ps1` showed schema-1-only consumption while `new-v25-update-manifest.ps1` emitted schema 2. Before making any substantive edit, the latest source was re-fetched as required by the repository coordination policy.
 
-## Reserved scope
+## Current-source reconciliation
 
-Make the updater consume the current manifest schema without weakening existing v1 compatibility or signed-package version/signer checks. Bind schema-v2 `productVersion` to the Authenticode-validated QS3D plugin payload so same-AssemblyVersion prerelease updates cannot silently accept the wrong signed prerelease package.
+The latest source already contained the stronger intended fix from a neighboring agent:
 
-## Expected surfaces
+- `d3b574602525c0e2345a42f787d17a86a7101262` — `update-v25.ps1` requires schema 2, parses strict `productVersion`, enforces monotonic product SemVer, binds downloaded metadata to the Authenticode-validated plugin ProductVersion, and rechecks installed state against concurrent/stale update preparation.
+- `95ac79d29c3ffd87934a441cc88e3b0b2783da51` — auto-discovered `scripts/preflight-update-product-version-binding.py` locks generator schema 2/productVersion emission to updater schema 2/productVersion consumption and rejects legacy assembly-only manifest generation.
 
-- `scripts/update-v25.ps1`
-- `scripts/preflight-auto-update.py`
-- `scripts/new-v25-update-manifest.ps1` only if a source mismatch requires a narrow generator correction
-- this claim file
+Those commits predate this claim. No updater implementation or preflight edit was made by this claim, because doing so would duplicate or weaken already-merged work.
 
-## Excluded scope
+## Important correction
 
-- in-plugin updater UI/coordinator/Ribbon behavior
-- GitHub release selection/SemVer ordering
-- release workflow dispatch/publication
-- unrelated installer/package behavior
-- Quantity, Workspace, Direct Draw, reporting, Core mutation and other active lanes
-- native/local signed-update qualification already delegated to `LOCAL-009`
+The initial claim text proposed preserving schema-v1 read compatibility. Current source intentionally fails closed on legacy schema 1 because schema 2 adds the signed `productVersion` binding needed to distinguish newer prereleases that may share an AssemblyVersion. Restoring schema-1 acceptance would weaken that security invariant and was therefore not done.
 
-## Validation plan
+## Validation evidence
 
-- re-read latest updater/generator sources before writing
-- preserve schema-v1 read compatibility while accepting schema v2
-- require and validate strict SemVer `productVersion` for schema v2
-- after package Authenticode verification, compare manifest productVersion with signed plugin ProductVersion before install
-- strengthen auto-update preflight against generator/updater schema drift
-- inspect commit/status evidence; do not dispatch manual Actions
+- Re-read current `scripts/update-v25.ps1`: it enforces `schemaVersion -ne 2` rejection, requires manifest `productVersion`, compares product SemVer against installed state, verifies downloaded signed plugin/package identity, and rejects replay/downgrade.
+- Re-read commit `95ac79d...`: the regression gate explicitly requires generator `schemaVersion = 2`, updater schema-2 enforcement, productVersion binding, signed-DLL identity and monotonicity.
+- No manual GitHub Actions workflow was dispatched and no release was published.
 
-## Completion condition
+## Coordination result
 
-Current generated manifests are consumable by current updater source, v2 productVersion is cryptographically anchored through the validated plugin payload, regression coverage prevents schema drift, and the claim is marked `COMPLETED`.
+The stale-snapshot observation was reconciled before any overlapping source change. This claim is closed as superseded/no-op so there is no dangling ACTIVE reservation and no duplicate implementation attributed to this agent.
