@@ -3,75 +3,86 @@
 Date: 2026-08-11
 Owner: ChatGPT Web / GPT-5.6 Sol
 Claim: `docs/agent-work-claims/2026-08-11-chatgpt-web-gpt56sol-quantity-locate-stale-selection-clear.md`
-Status: `IMPLEMENTATION_PENDING`
+Status: `FOLLOWUP_IMPLEMENTATION_PENDING`
 
 ## Goal
 
-Ensure every explicit quantity locate attempt replaces the CAD implied selection with the target row's currently live objects. If no target object survives, the implied selection must become empty so the previous row cannot remain highlighted and be mistaken for the failed target.
+Ensure every explicit quantity locate attempt replaces the CAD implied selection with the target row's currently live objects. If no target object survives—or no candidate handle can be resolved at all—the implied selection must become empty so the previous row cannot remain highlighted and be mistaken for the failed target.
 
-## Verified defect
+## Verified defect and first fix
 
-`CadHandleService.Select(...)` currently delegates directly to `SelectIfAny(...)`. `SelectIfAny(...)` resolves candidate handles and returns `0` immediately when none are live, so it intentionally does not call `Editor.SetImpliedSelection(...)` in the empty case. Both `QuantitySummaryWindow` and `QuantityInsightPanel` use `CadHandleService.Select(...)` for viewport locate. Therefore a successful locate of row A followed by a locate of row B whose handles are all stale/erased can leave row A visibly selected even though row B reports zero selected objects.
+The initial defect was that `CadHandleService.Select(...)` delegated to `SelectIfAny(...)`, whose zero-live-ID branch preserves the existing implied selection. This was fixed in `e9df086f6a4cdcb66edd8fa0d7a12717e4bf5308`: explicit `Select(...)` now resolves the handles and always calls `Editor.SetImpliedSelection(...)`, including with an empty resolved ObjectId set. `SelectIfAny(...)` intentionally retains its preserve-on-empty semantics. The initial focused gate was merged as `ad52d6b2a27ab102cc87f20711a031d975665440`.
 
-This is a selection-contract defect, not a reporting defect. Grouped rows already union all `ElementIds` and `SourceHandles`, and `CadHandleService.Resolve(...)` already preserves all surviving multi-object IDs while skipping invalid/erased handles individually.
+Qualification then exposed a second branch that bypasses the corrected API entirely:
+
+- `QuantityInsightPanel.LocateSelected()` returns immediately when `SourceHandleResolver.Resolve(...)` yields zero candidate handles.
+- `QuantitySummaryWindow.LocateCurrent()` reaches its fallback callback when the revalidated row has zero `SourceHandles`; that callback can also return before selection replacement.
+
+Both branches can therefore leave an earlier quantity row highlighted even though the new target is not locatable.
 
 ## Coordination boundary
 
-The completed `quantity-description-3d-locate` and `quantity-insight-single-click-reveal` lanes remain authoritative for their existing UX and stale-row revalidation. The implementation refinement deliberately avoids editing those high-churn WPF files: both already call the explicit `Select(...)` API. No change is made to `SelectIfAny(...)`, which remains the preserve-existing-selection-on-empty primitive for callers that request that behavior.
+The completed quantity-description and Quantity Insight reveal lanes remain authoritative for stale-row validation, source-handle fallback, auto-reveal and viewport behavior. `Commands.cs` is deliberately not modified in this follow-up because it is under active/high-frequency concurrent changes. Clearing the selection in `QuantitySummaryWindow` before invoking the existing callback closes the visual-staleness defect without touching that shared command surface.
 
 ## Implementation
 
-### 1. Correct explicit `Select(...)` semantics
+### 1. Explicit `Select(...)` replacement semantics — already merged
 
-In `CadHandleService`:
+Keep the current `CadHandleService` contract:
 
-- keep `Resolve(...)` unchanged;
-- change `Select(...)` from an alias of `SelectIfAny(...)` into an explicit replacement operation;
-- resolve all handles using the existing `Resolve(...)` logic;
-- always call `document.Editor.SetImpliedSelection(...)`, including when the resolved ID list is empty;
-- return the number of live selected IDs;
-- keep `SelectIfAny(...)` byte-for-byte behaviorally equivalent: resolve, return zero without touching implied selection when empty, otherwise set the live IDs;
-- keep `GetLiveHandles(...)` and `GetLiveSolidHandles(...)` unchanged.
+- `Select(...)`: resolve all live IDs, always replace implied selection, return live count.
+- `SelectIfAny(...)`: return zero without changing selection when none survive; otherwise replace.
+- `Resolve(...)`: keep case-insensitive normalized-handle deduplication and independent stale/erased filtering.
 
-This gives the two API names distinct, predictable contracts: `Select` replaces the implied selection; `SelectIfAny` replaces only when at least one target survives.
+### 2. Quantity Summary zero-candidate path
 
-### 2. Quantity surfaces remain source-stable
+In `QuantitySummaryWindow.LocateCurrent()`:
 
-`QuantitySummaryWindow.LocateCurrent()` and `QuantityInsightPanel.LocateSelected()` already call `CadHandleService.Select(...)`. Do not rewrite those files unless current `main` removes that call before merge. Their existing zero-count status and positive-count-only `QS3DZOOMSELECTED` guards then inherit the corrected replacement behavior automatically.
+- retain the existing positive-`liveHandles` flow unchanged;
+- on the branch reached only when `liveHandles.Length == 0`, call `Cad.CadHandleService.Select(_document, liveHandles)` before invoking `_locate` or reporting no handle;
+- because `liveHandles` is empty on this branch, the explicit `Select(...)` call clears any previous implied selection;
+- keep the existing callback available for compatibility; if it finds another target it can select anew, otherwise the cleared state remains authoritative;
+- do not alter semantic-first/source-handle row revalidation, statuses, partial-selection behavior or zoom ordering.
 
-### 3. Focused regression gate
+### 3. Quantity Insight zero-candidate path
 
-Add `scripts/preflight-quantity-locate-stale-selection-clear.py` verifying:
+In `QuantityInsightPanel.LocateSelected()`:
 
-- `CadHandleService.Select(...)` calls `Resolve(...)` and then `SetImpliedSelection(...)` unconditionally;
-- `Select(...)` contains no zero-count early return before selection replacement;
-- `SelectIfAny(...)` still contains `if (ids.Count == 0) return 0;` before `SetImpliedSelection(...)`;
-- `QuantitySummaryWindow` and `QuantityInsightPanel` still call `Cad.CadHandleService.Select(...)` / `CadHandleService.Select(...)` in their locate flows;
-- both quantity paths keep `QS3DZOOMSELECTED` after positive-selection guards;
-- the service still deduplicates normalized handles and filters invalid/erased entities through the existing `Resolve(...)` path;
-- no project mutation/bootstrap behavior is introduced.
+- when `SourceHandleResolver.Resolve(...)` returns zero handles, call `Cad.CadHandleService.Select(document, handles)` before setting the existing non-locatable status and returning;
+- keep the normal positive-candidate `Select(...)` path and positive-count-only `QS3DZOOMSELECTED` behavior unchanged;
+- keep bound-DWG/project identity and detached-preview row validation unchanged.
+
+### 4. Extend focused regression gate
+
+Update `scripts/preflight-quantity-locate-stale-selection-clear.py` to verify:
+
+- explicit `Select` remains unconditional and `SelectIfAny` remains preserve-on-empty;
+- `QuantitySummaryWindow.LocateCurrent()` contains two explicit `Select(...)` calls: one for positive live handles and one on the zero-candidate branch before `_locate` fallback;
+- `QuantityInsightPanel.LocateSelected()` contains an explicit `Select(...)` inside the `handles.Count == 0` branch before status/return, plus the normal selection call afterward;
+- both paths retain positive-selection-only zoom;
+- no project mutation/bootstrap calls are introduced into either locate method;
+- `Resolve(...)` multi-object dedup and stale/erased filtering remain intact.
 
 ## Verification
 
 Remote/source checks:
 
-1. Re-fetch `CadHandleService.cs` and both Quantity locate source files from merged `main`.
-2. Parse the focused Python gate for syntax and inspect its source contracts.
-3. Confirm the implementation diff changes only `CadHandleService.cs` plus the focused gate/docs; no reporting/persistence semantics.
-4. Check current-main concurrency between implementation/gate commits and final qualification.
-5. Inspect GitHub status/workflow records; absence is recorded, not treated as CI PASS.
+1. Re-fetch each modified WPF file and the gate from merged `main`.
+2. Parse the focused Python gate for syntax and inspect ordering contracts.
+3. Confirm the follow-up diff touches only the two registered WPF locate surfaces plus focused gate/docs; no reporting/persistence or `Commands.cs` changes.
+4. Check current-main concurrency immediately before merge and again after qualification; do not force-push over concurrent work.
+5. Inspect GitHub status/workflow records; absence is recorded rather than treated as CI PASS.
 
 Native V25 qualification:
 
-- locate valid quantity row A;
-- delete/erase all CAD objects represented by target row B without leaving valid handles, then activate B and verify A is no longer PICKFIRST-highlighted;
-- test a partially stale grouped row and verify surviving objects replace the previous selection, status reports partial/selected count as implemented, and zoom frames only survivors;
+- locate a valid row A, then activate a row B with no semantic/source handle candidate and verify A's PICKFIRST highlight clears;
+- repeat when candidate handle strings exist but all native objects are stale/erased;
+- test a partially stale grouped row and verify surviving objects replace the previous selection and zoom frames only survivors;
 - repeat in Quantity Insight with auto-reveal enabled;
-- confirm a deliberate `SelectIfAny(...)` caller still preserves the old implied selection when given no live target;
 - confirm multi-DWG stale panel/window protection remains fail-closed.
 
-This licensed interactive proof remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under the existing local qualification queue; no duplicate local inbox item is required unless current source changes make the existing queue insufficient.
+Licensed interactive proof remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under the existing local qualification queue; no duplicate local inbox item is needed.
 
 ## Completion criteria
 
-Source-side work is complete when explicit `Select(...)` replaces rather than preserves the prior implied selection, empty-target quantity locate visibly clears stale CAD highlight, `SelectIfAny(...)` preserves its original contract, partial/multi-object behavior remains intact, focused regression coverage is committed, and the work claim records exact merged evidence.
+Source-side work is complete when both zero-live-ID and zero-candidate quantity locate outcomes clear any previous implied selection, partial/multi-object behavior remains intact, `SelectIfAny(...)` preserves its original contract, focused regression coverage is updated, and the claim records exact merged evidence.
