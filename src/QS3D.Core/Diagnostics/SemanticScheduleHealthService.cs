@@ -181,7 +181,9 @@ namespace QS3D.Core.Diagnostics
                 .ThenBy(x => x, StringComparer.Ordinal)
                 .ToArray();
             var shown = string.Join(", ", ordered.Take(MaxExamples));
-            return ordered.Length > MaxExamples ? shown + " (+'" + (ordered.Length - MaxExamples) + "')" : shown;
+            return ordered.Length > MaxExamples
+                ? shown + " (+" + (ordered.Length - MaxExamples) + " mục khác)"
+                : shown;
         }
 
         private static bool IsCatalogDataFailure(Exception ex)
