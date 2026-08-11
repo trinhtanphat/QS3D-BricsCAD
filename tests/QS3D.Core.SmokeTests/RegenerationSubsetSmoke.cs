@@ -46,13 +46,14 @@ namespace QS3D.Core.SmokeTests
             var selected = new ProjectElement("Selected", ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
             selected.SetProperty("LengthM", "4");
             project.Elements.Add(selected);
+            var dirtyBefore = selected.Dirty;
 
             var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
             Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { " Selected " }));
             Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { "Selected", "selected" }));
             Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, new[] { string.Empty }));
 
-            Equal(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity, selected.Dirty);
+            Equal(dirtyBefore, selected.Dirty);
             True(!selected.Quantities.ContainsKey("Count"));
         }
 
