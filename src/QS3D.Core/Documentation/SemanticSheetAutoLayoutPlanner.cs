@@ -169,8 +169,12 @@ namespace QS3D.Core.Documentation
         private static Dictionary<string, SemanticViewPlan> BuildViewIndex(IEnumerable<SemanticViewPlan> availableViews)
         {
             var result = new Dictionary<string, SemanticViewPlan>(StringComparer.OrdinalIgnoreCase);
+            var count = 0;
             foreach (var view in availableViews)
             {
+                count++;
+                if (count > MaxItems)
+                    throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " available views.");
                 if (view == null) throw new ArgumentException("Available semantic view cannot be null.", nameof(availableViews));
                 var id = Required(view.Id, "availableViews.Id");
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Available semantic views contain duplicate id: " + id + ".");
