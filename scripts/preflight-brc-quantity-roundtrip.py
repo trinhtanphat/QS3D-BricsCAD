@@ -5,6 +5,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMAND = ROOT / "src/QS3D.BricsCAD.V25/BrcQuantityRoundTripProbeCommands.cs"
+SERVICE = ROOT / "src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs"
+PUBLIC_COMMAND = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
 RUNNER = ROOT / "scripts/test-bricscad-v25-brc-quantity-roundtrip.ps1"
 WINDOW_INTEROP = ROOT / "scripts/bricscad-runner-window-interop.ps1"
 errors = []
@@ -16,12 +18,14 @@ def require(text, tokens, label):
             errors.append(label + " missing contract token: " + token)
 
 
-for path in (COMMAND, RUNNER, WINDOW_INTEROP):
+for path in (COMMAND, SERVICE, PUBLIC_COMMAND, RUNNER, WINDOW_INTEROP):
     if not path.is_file():
         errors.append("missing BRC quantity round-trip file: " + str(path.relative_to(ROOT)))
 
 command = COMMAND.read_text(encoding="utf-8") if COMMAND.is_file() else ""
 runner = RUNNER.read_text(encoding="utf-8") if RUNNER.is_file() else ""
+service = SERVICE.read_text(encoding="utf-8") if SERVICE.is_file() else ""
+public_command = PUBLIC_COMMAND.read_text(encoding="utf-8") if PUBLIC_COMMAND.is_file() else ""
 
 require(command, (
     '[CommandMethod("QS3DBRCROUNDTRIPPROBE", CommandFlags.Modal)]',
@@ -42,17 +46,50 @@ require(command, (
     'CadHandleService.Resolve(document, exportHandles)',
     'XlsxQuantityExporter.ExportEd2(workbookPath, detailRows, summaryRows)',
     'XlsxHandleReader.ReadHandleLookup(workbookPath, 2)',
-    'lookup.IsModernSchema',
-    'lookup.IsEd2Detail',
-    'SourceHandleResolver.Resolve(project, lookup.ElementIds)',
-    'projectHandles.SequenceEqual(workbookHandles',
+    'ExcelLocateResolutionService.ResolveModern(document, project, lookup)',
+    'ExcelLocateFailureCode.FingerprintMismatch',
+    'ExcelLocateFailureCode.UnknownElementId',
+    'ExcelLocateFailureCode.NoLiveHandles',
+    'ExcelLocateFailureCode.PartialResolution',
+    'negativeAttempts != 4',
+    'negativePickfirstPreserved != 4',
+    'semanticUnchanged != 4',
+    'SameObjectIds(baselineSelection, afterSelection)',
+    'authoritativeStamp.RequireUnchanged(authoritativeProject)',
+    'var positive = ExcelLocateResolutionService.ResolveModern(document, project, lookup)',
+    'var workbookHandles = positive.Handles',
+    'var locatedIds = positive.ObjectIds',
     'document.Editor.SetImpliedSelection(locatedIds.ToArray())',
-    '"schema=QS3D_BRC_QUANTITY_ROUNDTRIP_V1"',
+    '"schema=QS3D_BRC_QUANTITY_ROUNDTRIP_V2"',
+    '"negative_attempt_count="',
+    '"negative_refusal_count="',
+    '"negative_pickfirst_preserved_count="',
+    '"semantic_unchanged_case_count="',
     '"proxy_capture_ready_count="',
     '"proxy_autoaccepted_count="',
     '"proxy_captured_owner_count="',
     '"element_handle_provenance_matched=true"',
 ), "BrcQuantityRoundTripProbeCommands.cs")
+
+require(service, (
+    'internal enum ExcelLocateFailureCode',
+    'FingerprintMismatch',
+    'UnknownElementId',
+    'ProvenanceMismatch',
+    'NoLiveHandles',
+    'PartialResolution',
+    'ResolveModern(',
+    'ResolveModernRow(',
+    'CadHandleService.Resolve(document, projectHandles)',
+    'resolved.Count == 0',
+    'resolved.Count != projectHandles.Count',
+), "ExcelLocateResolutionService.cs")
+if "SetImpliedSelection" in service or "SendStringToExecute" in service:
+    errors.append("ExcelLocateResolutionService must validate/resolve without mutating selection or dispatching Zoom")
+require(public_command, (
+    'ExcelLocateResolutionService.ResolveModern(doc, project, lookup)',
+    'doc.Editor.SetImpliedSelection(resolved.ToArray())',
+), "Commands.cs")
 
 require(runner, (
     'Set-StrictMode -Version Latest',
@@ -79,6 +116,12 @@ require(runner, (
     'drawing_copy_sha256_before',
     'drawing_copy_sha256_after',
     'workbook_sha256',
+    'Require-Qs3dValue -Marker $marker -Key "schema" -Expected "QS3D_BRC_QUANTITY_ROUNDTRIP_V2"',
+    'Require-Qs3dValue -Marker $marker -Key "wrong_fingerprint_refused" -Expected "true"',
+    '$negativeAttemptCount -ne 4',
+    '$negativeRefusalCount -ne 4',
+    '$negativePickfirstPreservedCount -ne 4',
+    '$semanticUnchangedCaseCount -ne 4',
     'proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed',
 ), "test-bricscad-v25-brc-quantity-roundtrip.ps1")
 
@@ -98,6 +141,10 @@ if command:
         "status", "command", "process", "nonce", "error_code", "schema", "is_64bit",
         "modern_ed2_schema", "detail_sheet_resolved", "drawing_fingerprint_matched",
         "element_handle_provenance_matched",
+        "wrong_fingerprint_refused", "wrong_fingerprint_pickfirst_preserved",
+        "unknown_element_refused", "unknown_element_pickfirst_preserved",
+        "stale_handle_refused", "stale_handle_pickfirst_preserved",
+        "partial_resolution_refused", "partial_resolution_pickfirst_preserved",
     }
     for key in sorted(set(re.findall(r'"([a-z][a-z0-9_]*)=', command))):
         if key not in allowed_non_count_keys and not key.endswith("_count"):

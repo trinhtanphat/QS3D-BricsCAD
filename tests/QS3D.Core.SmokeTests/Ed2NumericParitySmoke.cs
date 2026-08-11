@@ -15,6 +15,28 @@ namespace QS3D.Core.SmokeTests
             CanonicalNumericParityPublishes();
             NumericDriftPreservesExistingDestination();
             NullDensityAndMassRulesRemainExplicit();
+            SummaryHandleSwapsFailClosed();
+        }
+
+        private static void SummaryHandleSwapsFailClosed()
+        {
+            var directory = TempDirectory("ed2-summary-handle-swap");
+            try
+            {
+                var first = Detail("S1", "D1", 1d, 2400d, 2400d);
+                var second = Detail("S2", "D2", 2d, 2400d, 4800d);
+                var firstSummary = Aggregate(first);
+                var secondSummary = Aggregate(second);
+                firstSummary.SourceHandles.Clear();
+                firstSummary.SourceHandles.Add("D2");
+                secondSummary.SourceHandles.Clear();
+                secondSummary.SourceHandles.Add("D1");
+                Throws<InvalidDataException>(() => XlsxQuantityExporter.ExportEd2(
+                    Path.Combine(directory, "swapped-summary-handles.xlsx"),
+                    new[] { first, second },
+                    new[] { firstSummary, secondSummary }));
+            }
+            finally { DeleteDirectory(directory); }
         }
 
         private static void CanonicalNumericParityPublishes()

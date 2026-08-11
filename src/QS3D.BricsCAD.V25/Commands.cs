@@ -17,6 +17,7 @@ using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
+using Teigha.DatabaseServices;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -445,12 +446,15 @@ namespace QS3D.BricsCAD.V25
                 var lookup = XlsxHandleReader.ReadHandleLookup(dialog.FileName, row.Value);
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
                     throw new InvalidOperationException("Excel Locate cần một QS3D project hiện hữu; lệnh định vị không tạo project mới.");
-                if (!string.IsNullOrWhiteSpace(lookup.DrawingFingerprint) &&
-                    !string.Equals(lookup.DrawingFingerprint, project.DrawingFingerprint, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException(
-                        "Excel drawing fingerprint does not match the active DWG. Workbook=" + lookup.DrawingFingerprint +
-                        ", current=" + project.DrawingFingerprint + ".");
-                if (string.IsNullOrWhiteSpace(lookup.DrawingFingerprint))
+                IReadOnlyList<string> handles;
+                IReadOnlyList<ObjectId> resolved;
+                if (lookup.IsModernSchema)
+                {
+                    var modern = ExcelLocateResolutionService.ResolveModern(doc, project, lookup);
+                    handles = modern.Handles;
+                    resolved = modern.ObjectIds;
+                }
+                else
                 {
                     if (!lookup.UsesLegacyDecimalHandles)
                         throw new InvalidOperationException("Only a legacy BLT $decimal Handle row may omit the DWG fingerprint.");
@@ -461,35 +465,14 @@ namespace QS3D.BricsCAD.V25
                         doc.Editor.WriteMessage("\nQS3D Excel Locate cancelled; no CAD selection was changed.");
                         return;
                     }
+                    handles = lookup.Handles;
+                    if (handles.Count == 0) { doc.Editor.WriteMessage("\nQS3D: dòng Excel không có CAD Handle hợp lệ."); return; }
+                    resolved = Cad.CadHandleService.Resolve(doc, handles);
+                    if (resolved.Count != handles.Count)
+                        throw new InvalidOperationException(
+                            "Excel Locate resolved only " + resolved.Count + "/" + handles.Count +
+                            " Handle(s). Selection was not changed; repair stale/missing CAD provenance first.");
                 }
-
-                IReadOnlyList<string> handles = lookup.Handles;
-                if (lookup.ElementIds.Count > 0)
-                {
-                    foreach (var elementId in lookup.ElementIds)
-                        if (project.FindElement(elementId) == null)
-                            throw new InvalidOperationException("Excel references unknown QS3D Element ID: " + elementId + ".");
-                    var projectHandles = SourceHandleResolver.Resolve(project, lookup.ElementIds)
-                        .Select(x => Cad.CadHandleService.NormalizeHexHandle(x) ?? throw new InvalidOperationException("QS3D project contains an invalid CAD Handle: " + x + "."))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-                    var excelHandles = lookup.Handles
-                        .Select(x => Cad.CadHandleService.NormalizeHexHandle(x) ?? throw new InvalidOperationException("Excel contains an invalid CAD Handle: " + x + "."))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-                    if (!excelHandles.SequenceEqual(projectHandles, StringComparer.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("Excel Element ID ↔ CAD Handle provenance does not match the active QS3D project.");
-                    handles = projectHandles;
-                }
-                if (handles.Count == 0) { doc.Editor.WriteMessage("\nQS3D: dòng Excel không có Element ID/CAD Handle hợp lệ."); return; }
-
-                var resolved = Cad.CadHandleService.Resolve(doc, handles);
-                if (resolved.Count != handles.Count)
-                    throw new InvalidOperationException(
-                        "Excel Locate resolved only " + resolved.Count + "/" + handles.Count +
-                        " Handle(s). Selection was not changed; repair stale/missing CAD provenance first.");
                 doc.Editor.SetImpliedSelection(resolved.ToArray());
                 var count = resolved.Count;
                 PaletteCoordinator.SetStatus("Excel dòng " + row.Value + ": " + handles.Count + " Handle • " + count + " đối tượng CAD");

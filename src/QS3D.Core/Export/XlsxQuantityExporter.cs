@@ -89,6 +89,7 @@ namespace QS3D.Core.Export
                     throw new InvalidDataException("ED2 TONG_HOP contains a summary row without CHI_TIET elements.");
 
                 foreach (var detail in group) ValidateEd2SummaryIdentity(summary, detail);
+                ValidateEd2SummaryHandleParity(summary, group);
                 if (summary.Count != group.Count)
                     throw NumericParityError("Count");
 
@@ -107,6 +108,20 @@ namespace QS3D.Core.Export
                 RequireDensityParity(summary, group);
                 RequireMassParity(summary, group);
             }
+        }
+
+        private static void ValidateEd2SummaryHandleParity(
+            QuantityReportRow summary,
+            IReadOnlyList<QuantityReportRow> group)
+        {
+            var expected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var detail in group)
+                foreach (var handle in detail.SourceHandles)
+                    expected.Add(ValidHandle(handle, Required(detail.ElementIds[0], "ED2 CHI_TIET Element ID")));
+            var actual = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var handle in summary.SourceHandles) actual.Add(ValidHandle(handle, "TONG_HOP"));
+            if (!actual.SetEquals(expected))
+                throw new InvalidDataException("ED2 TONG_HOP CAD Handle provenance does not match its CHI_TIET elements.");
         }
 
         private static void ValidateEd2SummaryIdentity(QuantityReportRow summary, QuantityReportRow detail)

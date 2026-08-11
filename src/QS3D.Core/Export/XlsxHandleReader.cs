@@ -98,6 +98,8 @@ namespace QS3D.Core.Export
                     }
 
                 var isModernSchema = elementIdColumns.Count > 0 || fingerprintColumns.Count > 0;
+                if (worksheet.IsEd2Detail && !isModernSchema)
+                    throw new InvalidDataException("ED2 CHI_TIET is missing its modern QS3D identity headers and cannot be treated as a legacy BLT sheet.");
                 if (isModernSchema && (elementIdColumns.Count != 1 || handleColumns.Count != 1 || fingerprintColumns.Count != 1))
                     throw new InvalidDataException("QS3D Excel schema must contain exactly one Element ID, CAD Handle, and drawing fingerprint column.");
 

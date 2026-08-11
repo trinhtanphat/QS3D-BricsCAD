@@ -171,7 +171,7 @@ try {
     Require-Qs3dValue -Marker $marker -Key "command" -Expected "QS3DBRCROUNDTRIPPROBE"
     Require-Qs3dValue -Marker $marker -Key "process" -Expected "bricscad"
     Require-Qs3dValue -Marker $marker -Key "nonce" -Expected $nonce
-    Require-Qs3dValue -Marker $marker -Key "schema" -Expected "QS3D_BRC_QUANTITY_ROUNDTRIP_V1"
+    Require-Qs3dValue -Marker $marker -Key "schema" -Expected "QS3D_BRC_QUANTITY_ROUNDTRIP_V2"
     Require-Qs3dValue -Marker $marker -Key "is_64bit" -Expected "true"
     Require-Qs3dValue -Marker $marker -Key "modern_ed2_schema" -Expected "true"
     Require-Qs3dValue -Marker $marker -Key "detail_sheet_resolved" -Expected "true"
@@ -180,17 +180,42 @@ try {
     Require-Qs3dValue -Marker $marker -Key "proxy_capture_ready_count" -Expected "0"
     Require-Qs3dValue -Marker $marker -Key "proxy_autoaccepted_count" -Expected "0"
     Require-Qs3dValue -Marker $marker -Key "proxy_captured_owner_count" -Expected "0"
+    Require-Qs3dValue -Marker $marker -Key "wrong_fingerprint_refused" -Expected "true"
+    Require-Qs3dValue -Marker $marker -Key "wrong_fingerprint_pickfirst_preserved" -Expected "true"
+    Require-Qs3dValue -Marker $marker -Key "unknown_element_refused" -Expected "true"
+    Require-Qs3dValue -Marker $marker -Key "unknown_element_pickfirst_preserved" -Expected "true"
+    Require-Qs3dValue -Marker $marker -Key "stale_handle_refused" -Expected "true"
+    Require-Qs3dValue -Marker $marker -Key "stale_handle_pickfirst_preserved" -Expected "true"
+    Require-Qs3dValue -Marker $marker -Key "partial_resolution_refused" -Expected "true"
+    Require-Qs3dValue -Marker $marker -Key "partial_resolution_pickfirst_preserved" -Expected "true"
 
     $projectElementCount = Read-NonNegativeMarkerInt -Marker $marker -Key "project_element_count"
     $detailRowCount = Read-NonNegativeMarkerInt -Marker $marker -Key "detail_row_count"
     $summaryRowCount = Read-NonNegativeMarkerInt -Marker $marker -Key "summary_row_count"
     $locatedHandleCount = Read-NonNegativeMarkerInt -Marker $marker -Key "located_handle_count"
     $selectedObjectCount = Read-NonNegativeMarkerInt -Marker $marker -Key "selected_object_count"
+    $priorPickfirstCount = Read-NonNegativeMarkerInt -Marker $marker -Key "prior_pickfirst_count"
+    $negativeAttemptCount = Read-NonNegativeMarkerInt -Marker $marker -Key "negative_attempt_count"
+    $negativeRefusalCount = Read-NonNegativeMarkerInt -Marker $marker -Key "negative_refusal_count"
+    $negativePickfirstPreservedCount = Read-NonNegativeMarkerInt -Marker $marker -Key "negative_pickfirst_preserved_count"
+    $semanticUnchangedCaseCount = Read-NonNegativeMarkerInt -Marker $marker -Key "semantic_unchanged_case_count"
+    $staleRequestedCount = Read-NonNegativeMarkerInt -Marker $marker -Key "stale_requested_handle_count"
+    $staleResolvedCount = Read-NonNegativeMarkerInt -Marker $marker -Key "stale_resolved_handle_count"
+    $partialRequestedCount = Read-NonNegativeMarkerInt -Marker $marker -Key "partial_requested_handle_count"
+    $partialResolvedCount = Read-NonNegativeMarkerInt -Marker $marker -Key "partial_resolved_handle_count"
     if ($projectElementCount -le 0 -or $detailRowCount -le 0 -or $summaryRowCount -le 0 -or $locatedHandleCount -le 0) {
         throw "The BRC quantity round-trip produced no usable semantic/export/locate result."
     }
     if ($selectedObjectCount -ne $locatedHandleCount) {
         throw "Excel Locate selected $selectedObjectCount objects but resolved $locatedHandleCount Handles."
+    }
+    if ($priorPickfirstCount -le 0 -or $negativeAttemptCount -ne 4 -or $negativeRefusalCount -ne 4 -or
+        $negativePickfirstPreservedCount -ne 4 -or $semanticUnchangedCaseCount -ne 4) {
+        throw "The Excel Locate negative refusal/PICKFIRST/semantic matrix is incomplete."
+    }
+    if ($staleRequestedCount -ne 1 -or $staleResolvedCount -ne 0 -or
+        $partialRequestedCount -lt 2 -or $partialResolvedCount -le 0 -or $partialResolvedCount -ge $partialRequestedCount) {
+        throw "The stale/partial Handle resolution controls did not exercise 0/N and partial-N refusal."
     }
     if (-not (Test-Path -LiteralPath $workbookPath -PathType Leaf)) {
         throw "The BRC quantity round-trip did not create its new ED2 workbook."

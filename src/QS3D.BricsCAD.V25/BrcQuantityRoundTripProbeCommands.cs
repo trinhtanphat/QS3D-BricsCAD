@@ -7,6 +7,8 @@ using System.Linq;
 using System.Text;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
+using QS3D.BricsCAD.V25.Services;
+using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Persistence;
 using QS3D.Core.Recognition;
@@ -88,28 +90,58 @@ namespace QS3D.BricsCAD.V25
 
                 XlsxQuantityExporter.ExportEd2(workbookPath, detailRows, summaryRows);
                 var lookup = XlsxHandleReader.ReadHandleLookup(workbookPath, 2);
-                if (!lookup.IsModernSchema || !lookup.IsEd2Detail ||
-                    !string.Equals(lookup.WorksheetName, "CHI_TIET", StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("The generated workbook did not expose the modern ED2 CHI_TIET schema.");
-                if (lookup.ElementIds.Count != 1)
-                    throw new InvalidDataException("The first ED2 CHI_TIET row must identify exactly one semantic element.");
-                if (!string.Equals(lookup.DrawingFingerprint, project.DrawingFingerprint, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("The generated ED2 workbook fingerprint does not match the active drawing.");
-                if (project.FindElement(lookup.ElementIds[0]) == null)
-                    throw new InvalidDataException("The generated ED2 workbook references an unknown semantic element.");
-
-                var projectHandles = CanonicalHandles(SourceHandleResolver.Resolve(project, lookup.ElementIds));
-                var workbookHandles = CanonicalHandles(lookup.Handles);
-                if (!projectHandles.SequenceEqual(workbookHandles, StringComparer.OrdinalIgnoreCase))
-                    throw new InvalidDataException("The generated ED2 Element ID and CAD Handle provenance do not round-trip.");
-                var locatedIds = CadHandleService.Resolve(document, projectHandles);
-                if (locatedIds.Count != projectHandles.Count)
-                    throw new InvalidOperationException("Excel Locate could not resolve every Handle without a partial selection.");
+                var positive = ExcelLocateResolutionService.ResolveModern(document, project, lookup);
+                var workbookHandles = positive.Handles;
+                var locatedIds = positive.ObjectIds;
                 document.Editor.SetImpliedSelection(locatedIds.ToArray());
-                var implied = document.Editor.SelectImplied();
-                var selectedCount = implied.Value?.Count ?? 0;
+                var baselineSelection = CurrentImpliedSelection(document);
+                var selectedCount = baselineSelection.Count;
                 if (selectedCount != locatedIds.Count)
                     throw new InvalidOperationException("Excel Locate did not establish the expected PICKFIRST selection.");
+
+                var projectStamp = ProjectReadOnlyStamp.Capture(project);
+                var missingHandle = FindMissingHandle(document, exportHandles);
+                var negativeAttempts = 0;
+                var negativeRefusals = 0;
+                var negativePickfirstPreserved = 0;
+                var semanticUnchanged = 0;
+
+                AssertNegative(
+                    document, project, projectStamp, baselineSelection,
+                    ExcelLocateFailureCode.FingerprintMismatch,
+                    () => ExcelLocateResolutionService.ResolveModernRow(
+                        document, project, lookup.ElementIds, lookup.Handles, "WRONG-" + nonce),
+                    ref negativeAttempts, ref negativeRefusals, ref negativePickfirstPreserved, ref semanticUnchanged);
+
+                AssertNegative(
+                    document, project, projectStamp, baselineSelection,
+                    ExcelLocateFailureCode.UnknownElementId,
+                    () => ExcelLocateResolutionService.ResolveModernRow(
+                        document, project, new[] { "UNKNOWN-" + nonce }, lookup.Handles, project.DrawingFingerprint),
+                    ref negativeAttempts, ref negativeRefusals, ref negativePickfirstPreserved, ref semanticUnchanged);
+
+                var staleProject = NegativeProject(project.DrawingFingerprint, "NEG-STALE", new[] { missingHandle });
+                AssertNegative(
+                    document, project, projectStamp, baselineSelection,
+                    ExcelLocateFailureCode.NoLiveHandles,
+                    () => ExcelLocateResolutionService.ResolveModernRow(
+                        document, staleProject, new[] { "NEG-STALE" }, new[] { missingHandle }, staleProject.DrawingFingerprint),
+                    ref negativeAttempts, ref negativeRefusals, ref negativePickfirstPreserved, ref semanticUnchanged);
+
+                var liveHandle = workbookHandles[0];
+                var partialProject = NegativeProject(project.DrawingFingerprint, "NEG-PARTIAL", new[] { liveHandle, missingHandle });
+                AssertNegative(
+                    document, project, projectStamp, baselineSelection,
+                    ExcelLocateFailureCode.PartialResolution,
+                    () => ExcelLocateResolutionService.ResolveModernRow(
+                        document, partialProject, new[] { "NEG-PARTIAL" }, new[] { liveHandle, missingHandle }, partialProject.DrawingFingerprint),
+                    ref negativeAttempts, ref negativeRefusals, ref negativePickfirstPreserved, ref semanticUnchanged);
+
+                var staleResolvedCount = CadHandleService.Resolve(document, new[] { missingHandle }).Count;
+                var partialResolvedCount = CadHandleService.Resolve(document, new[] { liveHandle, missingHandle }).Count;
+                if (negativeAttempts != 4 || negativeRefusals != 4 || negativePickfirstPreserved != 4 || semanticUnchanged != 4 ||
+                    staleResolvedCount != 0 || partialResolvedCount != 1)
+                    throw new InvalidOperationException("Excel Locate negative qualification matrix is incomplete.");
 
                 WriteMarkerAtomic(validatedResultPath, new[]
                 {
@@ -117,7 +149,7 @@ namespace QS3D.BricsCAD.V25
                     "command=QS3DBRCROUNDTRIPPROBE",
                     "process=" + OneLine(Process.GetCurrentProcess().ProcessName),
                     "nonce=" + nonce,
-                    "schema=QS3D_BRC_QUANTITY_ROUNDTRIP_V1",
+                    "schema=QS3D_BRC_QUANTITY_ROUNDTRIP_V2",
                     "is_64bit=" + (Environment.Is64BitProcess ? "true" : "false"),
                     "project_element_count=" + project.Elements.Count.ToString(CultureInfo.InvariantCulture),
                     "regenerated_count=" + regenerated.ToString(CultureInfo.InvariantCulture),
@@ -126,6 +158,25 @@ namespace QS3D.BricsCAD.V25
                     "live_export_handle_count=" + liveIds.Count.ToString(CultureInfo.InvariantCulture),
                     "located_handle_count=" + locatedIds.Count.ToString(CultureInfo.InvariantCulture),
                     "selected_object_count=" + selectedCount.ToString(CultureInfo.InvariantCulture),
+                    "prior_pickfirst_count=" + baselineSelection.Count.ToString(CultureInfo.InvariantCulture),
+                    "negative_attempt_count=" + negativeAttempts.ToString(CultureInfo.InvariantCulture),
+                    "negative_refusal_count=" + negativeRefusals.ToString(CultureInfo.InvariantCulture),
+                    "negative_pickfirst_preserved_count=" + negativePickfirstPreserved.ToString(CultureInfo.InvariantCulture),
+                    "semantic_unchanged_case_count=" + semanticUnchanged.ToString(CultureInfo.InvariantCulture),
+                    "stale_requested_handle_count=1",
+                    "stale_resolved_handle_count=" + staleResolvedCount.ToString(CultureInfo.InvariantCulture),
+                    "partial_requested_handle_count=2",
+                    "partial_resolved_handle_count=" + partialResolvedCount.ToString(CultureInfo.InvariantCulture),
+                    "eligible_cad_target_count=1",
+                    "proxy_locate_attempt_count=0",
+                    "wrong_fingerprint_refused=true",
+                    "wrong_fingerprint_pickfirst_preserved=true",
+                    "unknown_element_refused=true",
+                    "unknown_element_pickfirst_preserved=true",
+                    "stale_handle_refused=true",
+                    "stale_handle_pickfirst_preserved=true",
+                    "partial_resolution_refused=true",
+                    "partial_resolution_pickfirst_preserved=true",
                     "proxy_snapshot_count=" + proxySnapshots.Count.ToString(CultureInfo.InvariantCulture),
                     "proxy_capture_ready_count=" + proxyCaptureReadyCount.ToString(CultureInfo.InvariantCulture),
                     "proxy_autoaccepted_count=" + proxyAutoAcceptedCount.ToString(CultureInfo.InvariantCulture),
@@ -143,6 +194,133 @@ namespace QS3D.BricsCAD.V25
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D BRC quantity round-trip probe FAIL. See the local qualification result.");
                 throw;
+            }
+        }
+
+        private static void AssertNegative(
+            Document document,
+            ProjectState authoritativeProject,
+            ProjectReadOnlyStamp authoritativeStamp,
+            IReadOnlyList<Teigha.DatabaseServices.ObjectId> baselineSelection,
+            ExcelLocateFailureCode expectedCode,
+            Action action,
+            ref int attemptCount,
+            ref int refusalCount,
+            ref int selectionPreservedCount,
+            ref int semanticUnchangedCount)
+        {
+            attemptCount = checked(attemptCount + 1);
+            try
+            {
+                action();
+                throw new InvalidOperationException("Excel Locate negative case was accepted unexpectedly.");
+            }
+            catch (ExcelLocateResolutionException ex) when (ex.Code == expectedCode)
+            {
+                refusalCount = checked(refusalCount + 1);
+            }
+
+            var afterSelection = CurrentImpliedSelection(document);
+            if (!SameObjectIds(baselineSelection, afterSelection))
+                throw new InvalidOperationException("Excel Locate negative case changed PICKFIRST.");
+            selectionPreservedCount = checked(selectionPreservedCount + 1);
+            authoritativeStamp.RequireUnchanged(authoritativeProject);
+            semanticUnchangedCount = checked(semanticUnchangedCount + 1);
+        }
+
+        private static ProjectState NegativeProject(string drawingFingerprint, string elementId, IEnumerable<string> handles)
+        {
+            var project = new ProjectState(Guid.NewGuid().ToString("N"), "Excel Locate negative probe")
+            {
+                DrawingFingerprint = drawingFingerprint ?? string.Empty
+            };
+            var element = new ProjectElement(elementId, ElementCategory.Beam)
+            {
+                DrawingFingerprint = project.DrawingFingerprint
+            };
+            foreach (var handle in handles) element.SourceHandles.Add(handle);
+            project.Elements.Add(element);
+            return project;
+        }
+
+        private static string FindMissingHandle(Document document, IEnumerable<string> existing)
+        {
+            var used = new HashSet<string>(CanonicalHandles(existing), StringComparer.OrdinalIgnoreCase);
+            for (var value = long.MaxValue; value > long.MaxValue - 4096L; value--)
+            {
+                var candidate = value.ToString("X", CultureInfo.InvariantCulture);
+                if (used.Contains(candidate)) continue;
+                if (CadHandleService.Resolve(document, new[] { candidate }).Count == 0) return candidate;
+            }
+            throw new InvalidOperationException("Cannot allocate a missing CAD Handle for Excel Locate qualification.");
+        }
+
+        private static IReadOnlyList<Teigha.DatabaseServices.ObjectId> CurrentImpliedSelection(Document document)
+        {
+            var selection = document.Editor.SelectImplied();
+            return selection.Value?.GetObjectIds().ToList().AsReadOnly()
+                ?? new List<Teigha.DatabaseServices.ObjectId>().AsReadOnly();
+        }
+
+        private static bool SameObjectIds(
+            IEnumerable<Teigha.DatabaseServices.ObjectId> left,
+            IEnumerable<Teigha.DatabaseServices.ObjectId> right)
+        {
+            var a = left.OrderBy(x => x.Handle.ToString(), StringComparer.OrdinalIgnoreCase).ToList();
+            var b = right.OrderBy(x => x.Handle.ToString(), StringComparer.OrdinalIgnoreCase).ToList();
+            return a.SequenceEqual(b);
+        }
+
+        private sealed class ProjectReadOnlyStamp
+        {
+            private ProjectReadOnlyStamp(long changeVersion, DateTime updatedUtc, int elementCount, int auditCount, string elementState)
+            {
+                ChangeVersion = changeVersion;
+                UpdatedUtc = updatedUtc;
+                ElementCount = elementCount;
+                AuditCount = auditCount;
+                ElementState = elementState;
+            }
+
+            private long ChangeVersion { get; }
+            private DateTime UpdatedUtc { get; }
+            private int ElementCount { get; }
+            private int AuditCount { get; }
+            private string ElementState { get; }
+
+            public static ProjectReadOnlyStamp Capture(ProjectState project) => new ProjectReadOnlyStamp(
+                project.ChangeVersion,
+                project.UpdatedUtc,
+                project.Elements.Count,
+                project.AuditEvents.Count,
+                ElementDigest(project));
+
+            public void RequireUnchanged(ProjectState project)
+            {
+                if (project.ChangeVersion != ChangeVersion || project.UpdatedUtc != UpdatedUtc ||
+                    project.Elements.Count != ElementCount || project.AuditEvents.Count != AuditCount ||
+                    !string.Equals(ElementDigest(project), ElementState, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Excel Locate negative case mutated the authoritative semantic project.");
+            }
+
+            private static string ElementDigest(ProjectState project)
+            {
+                return string.Join("\u001e", project.Elements
+                    .OrderBy(element => element.Id, StringComparer.OrdinalIgnoreCase)
+                    .Select(element => string.Join("\u001f", new[]
+                    {
+                        element.Id,
+                        element.Category.ToString(),
+                        element.FamilyId,
+                        element.FloorId,
+                        element.ZoneId,
+                        element.DrawingFingerprint,
+                        element.Dirty.ToString(),
+                        element.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture),
+                        string.Join(";", element.SourceHandles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)),
+                        string.Join(";", element.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).Select(x => x.Key + "=" + x.Value)),
+                        string.Join(";", element.Quantities.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).Select(x => x.Key + "=" + x.Value.ToString("R", CultureInfo.InvariantCulture))),
+                    })));
             }
         }
 

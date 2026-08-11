@@ -12,6 +12,7 @@ files = {
     "row": ROOT / "src/QS3D.Core/Reporting/QuantityReportRow.cs",
     "exporter": ROOT / "src/QS3D.Core/Export/XlsxQuantityExporter.cs",
     "reader": ROOT / "src/QS3D.Core/Export/XlsxHandleReader.cs",
+    "locate_service": ROOT / "src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs",
     "window": ROOT / "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml",
     "window_code": ROOT / "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs",
     "hub": ROOT / "src/QS3D.BricsCAD.V25/UI/ScheduleHubWindow.xaml",
@@ -45,12 +46,21 @@ require("commands", (
     "ED2 export blocked:",
     "XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary)",
     '[CommandMethod("QS3DEXCELLOCATE", CommandFlags.Modal)]',
-    "lookup.ElementIds",
-    "!excelHandles.SequenceEqual(projectHandles, StringComparer.OrdinalIgnoreCase)",
+    "ExcelLocateResolutionService.ResolveModern(doc, project, lookup)",
     "if (!lookup.UsesLegacyDecimalHandles)",
-    "var resolved = Cad.CadHandleService.Resolve(doc, handles)",
+    "resolved = Cad.CadHandleService.Resolve(doc, handles)",
     "if (resolved.Count != handles.Count)",
     "doc.Editor.SetImpliedSelection(resolved.ToArray())",
+))
+require("locate_service", (
+    "lookup.IsModernSchema",
+    "lookup.IsEd2Detail",
+    'string.Equals(lookup.WorksheetName, "CHI_TIET"',
+    "lookup.ElementIds.Count != 1",
+    "project.FindElement(elementId) == null",
+    "excelHandles.SequenceEqual(projectHandles, StringComparer.OrdinalIgnoreCase)",
+    "CadHandleService.Resolve(document, projectHandles)",
+    "resolved.Count != projectHandles.Count",
 ))
 require("cad_handles", (
     "NormalizeHexHandle",
@@ -139,6 +149,7 @@ require("reader", (
     "QS3D Excel row is missing its CAD Handle provenance.",
     "QS3D Excel row is missing its drawing fingerprint.",
     "!isModernSchema && decimalHandles.Count > 0",
+    "worksheet.IsEd2Detail && !isModernSchema",
 ))
 require("window", ("OnEd2ExportClick", "OnExcelLocateClick", "BQ • 1 sheet",))
 require("window_code", ('SendStringToExecute("QS3DED2 "', 'SendStringToExecute("QS3DEXCELLOCATE "', '"Zone"',))
@@ -158,6 +169,8 @@ require("quantity_smoke", (
 ))
 require("excel_smoke", (
     "CreateReorderedEd2Workbook",
+    "CloneWorkbookReplacingText",
+    "ed2-header-downgrade.xlsx",
     "reordered.IsEd2Detail",
     "qs3d-blank-handle.xlsx",
     'workbook.Contains("CHI_TIET")',

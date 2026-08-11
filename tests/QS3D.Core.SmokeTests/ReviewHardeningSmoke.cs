@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -64,6 +65,7 @@ namespace QS3D.Core.SmokeTests
             var qs3dBlankHandlePath = Path.Combine(directory, "qs3d-blank-handle.xlsx");
             var invalidHandlePath = Path.Combine(directory, "qs3d-invalid-handle.xlsx");
             var ed2Path = Path.Combine(directory, "ed2.xlsx");
+            var downgradedEd2Path = Path.Combine(directory, "ed2-header-downgrade.xlsx");
             var reorderedEd2Path = Path.Combine(directory, "ed2-reordered.xlsx");
             var bltPath = Path.Combine(directory, "blt.xlsx");
             try
@@ -103,6 +105,7 @@ namespace QS3D.Core.SmokeTests
 
                 var secondDetail = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
                 secondDetail.ElementIds.Add("WF-2"); secondDetail.SourceHandles.Add("40AA");
+                row.Note = "$123";
                 var summary = new QuantityReportRow
                 {
                     Floor = "F", Zone = "Z", Category = "WallFinish", FamilyId = "finish-family",
@@ -149,6 +152,16 @@ namespace QS3D.Core.SmokeTests
                 var ed2Detail = XlsxHandleReader.ReadHandleLookup(ed2Path, 3);
                 Equal(1, ed2Detail.Handles.Count); Equal("40AA", ed2Detail.Handles[0]); Equal(1, ed2Detail.ElementIds.Count); Equal("WF-2", ed2Detail.ElementIds[0]); Equal("DWG-FINGERPRINT-1", ed2Detail.DrawingFingerprint);
                 Equal("CHI_TIET", ed2Detail.WorksheetName); True(ed2Detail.IsModernSchema); True(ed2Detail.IsEd2Detail);
+                CloneWorkbookReplacingText(
+                    ed2Path,
+                    downgradedEd2Path,
+                    "xl/worksheets/sheet1.xml",
+                    new[]
+                    {
+                        ("QS3D Element ID", "Removed Element Header"),
+                        ("QS3D Drawing Fingerprint", "Removed Fingerprint Header"),
+                    });
+                Throws<InvalidDataException>(() => XlsxHandleReader.ReadHandleLookup(downgradedEd2Path, 2));
                 summary.Count = 2;
                 Throws<InvalidDataException>(() => XlsxQuantityExporter.ExportEd2(ed2Path, new[] { summary }, new[] { summary }));
 
@@ -316,6 +329,39 @@ namespace QS3D.Core.SmokeTests
         private static void WriteEntry(ZipArchive archive, string path, string contents)
         {
             using (var writer = new StreamWriter(archive.CreateEntry(path).Open(), new UTF8Encoding(false))) writer.Write(contents);
+        }
+
+        private static void CloneWorkbookReplacingText(
+            string sourcePath,
+            string destinationPath,
+            string entryPath,
+            IReadOnlyList<(string From, string To)> replacements)
+        {
+            using (var source = ZipFile.OpenRead(sourcePath))
+            using (var destinationStream = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+            using (var destination = new ZipArchive(destinationStream, ZipArchiveMode.Create, false, Encoding.UTF8))
+            {
+                foreach (var entry in source.Entries)
+                {
+                    var output = destination.CreateEntry(entry.FullName, CompressionLevel.Optimal);
+                    using (var inputStream = entry.Open())
+                    using (var outputStream = output.Open())
+                    {
+                        if (!string.Equals(entry.FullName, entryPath, StringComparison.Ordinal))
+                        {
+                            inputStream.CopyTo(outputStream);
+                            continue;
+                        }
+                        using (var reader = new StreamReader(inputStream, Encoding.UTF8, true, 1024, true))
+                        using (var writer = new StreamWriter(outputStream, new UTF8Encoding(false), 1024, true))
+                        {
+                            var text = reader.ReadToEnd();
+                            foreach (var replacement in replacements) text = text.Replace(replacement.From, replacement.To);
+                            writer.Write(text);
+                        }
+                    }
+                }
+            }
         }
 
         private static string TempDirectory(string name)
