@@ -1,33 +1,28 @@
 # Agent work claim — recovery save stamp
 
-Status: ACTIVE
+Status: RELEASED
 
 Agent: ChatGPT Web / GPT-5.6 Sol
 Date: 2026-08-11 (UTC+7)
 Baseline main SHA observed before reservation: `4862b9d1bccef98d99858be1fb6ffb2cae71a302`
+Claim commit: `5ed731f70dd1d03948b689dc5a524411ff87ae02`
 
-## Scope
-
-Fix the CAD-independent persistence stamp contract so a project marked as recovered-from-backup is required to save once, but does not remain permanently pending after `ProjectPersistenceStamp.MarkSaved()` succeeds.
-
-Expected implementation surfaces:
+## Scope reviewed
 
 - `src/QS3D.Core/Persistence/ProjectPersistenceStamp.cs`
 - `tests/QS3D.Core.SmokeTests/ProjectPersistenceLifecycleSmoke.cs`
-- this claim file for completion status
+- actual save orchestration in `src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs`
 
-## Concrete defect
+## Review result
 
-`RequiresSave()` treats metadata `QS3D.RecoveredFromBackup=true` as a mandatory save condition. `MarkSaved()` currently updates only `_savedChangeVersion`, leaving the recovery marker unchanged, so the same stamp can still report `RequiresSave(project) == true` immediately after the project has explicitly been marked saved. This violates the stamp's own lifecycle contract and can keep a recovered project perpetually pending.
+No implementation change is required for this hypothesis.
 
-## Exclusions
+`ProjectContextCoordinator.Save()` captures recovery metadata, determines whether the project was loaded from backup, clears the recovery metadata **before** serializing the project, preserves the validated backup on the recovery-save path, restores the metadata if saving fails, and calls `ProjectPersistenceStamp.MarkSaved()` only after the sidecar commit succeeds. Therefore `ProjectPersistenceStamp.MarkSaved()` is not responsible for clearing the recovery marker in the real persistence lifecycle.
 
-- No BricsCAD V25/native runtime, UI, updater, quantity/rule, installer, or release changes.
-- No change to backup selection or file replacement logic.
-- No GitHub Actions dispatch.
+Changing `MarkSaved()` to mutate metadata would duplicate orchestration responsibility and could obscure the save/rollback contract. The claim is released without source/test changes.
 
-## Validation plan
+## Validation performed
 
-- Extend the deterministic persistence lifecycle smoke to prove a recovered project is pending before `MarkSaved()` and clean afterward.
-- Preserve ordinary semantic-change tracking and cross-project guard behavior.
-- Re-fetch current `main` and both target files before every write; never force-push.
+- Read current `ProjectPersistenceStamp` and existing persistence lifecycle smoke.
+- Traced the real `ProjectContextCoordinator.Save()` recovery path and verified clear-before-save / restore-on-failure / mark-after-commit ordering.
+- No GitHub Actions dispatched; no BricsCAD runtime qualification attempted.
