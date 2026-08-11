@@ -109,6 +109,7 @@ namespace QS3D.Core.Domain
         {
             if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
             if (flags == ElementDirtyFlags.None) return;
+            if ((Dirty & flags) == ElementDirtyFlags.None) return;
             Dirty &= ~flags;
             UpdatedUtc = DateTime.UtcNow;
         }
