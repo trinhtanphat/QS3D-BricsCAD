@@ -15,7 +15,7 @@ else:
         "using QS3D.Core.Persistence;",
         "ProjectStateSnapshot.Capture(project)",
         "var cadCommitted = false;",
-        "ErasePrevious(document, transaction, element, ownership)",
+        "ErasePrevious(document, transaction, project, element, ownership)",
         "foreach (var item in pending) CommitSemanticUpdate(project, item);",
         "if (pending.Count > 0) project.Touch();",
         "transaction.Commit();\n                    cadCommitted = true;",

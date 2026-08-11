@@ -36,9 +36,10 @@ def require(name, tokens):
 require("commands", (
     '[CommandMethod("QS3DED2", CommandFlags.UsePickSet)]',
     '"Selection Floor Zone All"',
-    "ResolveEd2Selection(project, snapshots)",
-    "ProjectQuantityReportBuilder.Detail(project, elementIds)",
-    "ProjectQuantityReportBuilder.Group(project, elementIds)",
+    "ResolveEd2Selection(project, selectionSnapshots ?? Array.Empty<EntitySnapshot>())",
+    "ProjectStateSnapshot.CreateDetachedCopy(project)",
+    "ProjectQuantityReportBuilder.Detail(previewProject, elementIds)",
+    "ProjectQuantityReportBuilder.Group(previewProject, elementIds)",
     "EnsureEd2HandlesAreLive(doc, details)",
     "ED2 export blocked:",
     "XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary)",
@@ -62,9 +63,30 @@ require("builder", (
     "public static IReadOnlyList<QuantityReportRow> Detail(ProjectState project, IEnumerable<string> elementIds)",
     "ResolveSelection(project, elementIds)",
     "element.ZoneId + \"\\u001f\" + category",
+    'FirstInstanceProperty(element, "Name", "TenCauKien")',
+    'Effective(element, family, "Material")',
+    "EffectiveDensity(element, family)",
+    'OptionalNonNegativeQuantity(element, "WeightKg", "MassKg")',
+    '"NetConcreteM3"',
+    '"NetVolumeM3"',
+    '"GrossConcreteM3"',
+    '"GrossVolumeM3"',
+    '"VolumeM3"',
+    '"MeasuredVolumeM3"',
+    'material + "\\u001f" + DensityKey(densityKgM3)',
+    "QuantityReportMath.Add(current.Value, value.Value, label)",
     "row.ElementIds.Add(elementId)",
 ))
-require("row", ("public string Zone { get; set; }",))
+require("row", (
+    "public string Zone { get; set; }",
+    "public string FamilyId { get; set; }",
+    "public string ElementName { get; set; }",
+    "public string Material { get; set; }",
+    "public string Note { get; set; }",
+    "public double? DensityKgM3 { get; set; }",
+    "public double? MassKg { get; set; }",
+    "public string FloorZoneText",
+))
 require("exporter", (
     "public static void ExportEd2",
     "ED2 CHI_TIET must contain exactly one semantic element per row.",
@@ -74,6 +96,23 @@ require("exporter", (
     'name=\\\"CHI_TIET\\\"',
     'name=\\\"TONG_HOP\\\"',
     '"xl/worksheets/sheet2.xml"',
+    "BuildEd2Sheet(rows)",
+    '"STT", "Tên cấu kiện", "Loại", "Vật liệu", "Family ID", "Tầng/Zone"',
+    '"Khối lượng riêng (kg/m³)"',
+    '"Khối lượng (kg)"',
+    '"Ghi chú"',
+    'var range = "A1:Y"',
+    "AppendNullableNumberCell",
+    "row.ElementName",
+    "row.Material",
+    "row.FamilyId",
+    "row.FloorZoneText",
+    "row.DensityKgM3",
+    "row.MassKg",
+    "row.Note",
+    "row.ElementIdText",
+    "row.SourceHandleText",
+    "row.DrawingFingerprint",
 ))
 require("reader", (
     "public IReadOnlyList<string> ElementIds { get; }",
@@ -92,8 +131,30 @@ require("window", ("OnEd2ExportClick", "OnExcelLocateClick", "BQ • 1 sheet",))
 require("window_code", ('SendStringToExecute("QS3DED2 "', 'SendStringToExecute("QS3DEXCELLOCATE "', '"Zone"',))
 require("hub", ('Tag="QS3DED2"', 'Tag="QS3DEXCELLOCATE"'))
 require("ribbon", ('new RibbonButtonSpec("ED2 • Excel ↔ CAD", "QS3DED2")', 'new RibbonButtonSpec("Excel → CAD", "QS3DEXCELLOCATE")'))
-require("quantity_smoke", ("DetailRowsPreserveOneElementProvenance", "same Floor/Family across different Zones", "Unknown ED2 element id must fail closed",))
-require("excel_smoke", ("CreateReorderedEd2Workbook", "reordered.IsEd2Detail", "qs3d-blank-handle.xlsx", 'workbook.Contains("CHI_TIET")', 'workbook.Contains("TONG_HOP")'))
+require("quantity_smoke", (
+    "DetailRowsPreserveOneElementProvenance",
+    "same Floor/Family across different Zones",
+    "Unknown ED2 element id must fail closed",
+    "Ed2MaterialDensityMassParity",
+    "Ed2DensityAndMassFailClosed",
+    "1.875 * 2400 = 4500",
+    "different effective material or density",
+    "leave density and mass blank",
+    "ExpectThrows<InvalidOperationException>",
+    "ExpectThrows<OverflowException>",
+))
+require("excel_smoke", (
+    "CreateReorderedEd2Workbook",
+    "reordered.IsEd2Detail",
+    "qs3d-blank-handle.xlsx",
+    'workbook.Contains("CHI_TIET")',
+    'workbook.Contains("TONG_HOP")',
+    'detailSheet.Contains("Tên cấu kiện")',
+    'detailSheet.Contains("Khối lượng riêng (kg/m³)")',
+    'detailSheet.Contains(">4500<")',
+    '!detailSheet.Contains("r=\\\"T3\\\"")',
+    '!detailSheet.Contains("r=\\\"U3\\\"")',
+))
 
 print("QS3D ED2 Excel round-trip preflight")
 if errors:
@@ -101,4 +162,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: ED2 scopes before aggregation, exports one-element CHI_TIET plus Zone-aware TONG_HOP, and Excel-to-CAD lookup fails closed on schema, provenance, fingerprint or live-Handle drift.")
+print("PASS: ED2 preserves semantic round-trip provenance, exports user-facing material/family/floor-zone/density/mass/note columns with blank nullable cells, groups only homogeneous material/density rows, and fails closed on invalid quantities or Excel/CAD drift.")

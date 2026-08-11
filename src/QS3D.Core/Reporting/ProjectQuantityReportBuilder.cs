@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -45,14 +46,46 @@ namespace QS3D.Core.Reporting
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
                 var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
                 var zone = zones.TryGetValue(element.ZoneId, out var zoneName) ? zoneName : element.ZoneId;
-                var familyName = families.TryGetValue(element.FamilyId, out var family) ? family.Name : element.FamilyId;
+                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                families.TryGetValue(familyId, out var family);
+                var familyName = family != null ? family.Name : familyId;
+                var elementName = FirstInstanceProperty(element, "Name", "TenCauKien");
+                if (elementName.Length == 0) elementName = familyName;
+                var material = Effective(element, family, "Material");
+                var note = Effective(element, family, "Note");
+                if (note.Length == 0) note = Effective(element, family, "GhiChu");
+                var densityKgM3 = EffectiveDensity(element, family);
+                var massKg = EffectiveMass(element, densityKgM3);
                 var category = element.Category.ToString();
-                var key = detail ? "ELEMENT\u001f" + elementId : element.FloorId + "\u001f" + element.ZoneId + "\u001f" + category + "\u001f" + element.FamilyId;
+                var key = detail
+                    ? "ELEMENT\u001f" + elementId
+                    : element.FloorId + "\u001f" + element.ZoneId + "\u001f" + category + "\u001f" + familyId +
+                      "\u001f" + material + "\u001f" + DensityKey(densityKgM3);
+                var created = false;
                 if (!rows.TryGetValue(key, out var row))
                 {
-                    row = new QuantityReportRow { Floor = floor, Zone = zone, Category = category, FamilyName = familyName, DrawingFingerprint = project.DrawingFingerprint };
+                    row = new QuantityReportRow
+                    {
+                        Floor = floor,
+                        Zone = zone,
+                        Category = category,
+                        FamilyId = familyId,
+                        FamilyName = familyName,
+                        ElementName = detail ? elementName : familyName,
+                        Material = material,
+                        Note = note,
+                        DensityKgM3 = densityKgM3,
+                        MassKg = massKg,
+                        DrawingFingerprint = project.DrawingFingerprint
+                    };
                     rows[key] = row;
                     order.Add(key);
+                    created = true;
+                }
+                else
+                {
+                    row.Note = MergeDistinctText(row.Note, note);
+                    row.MassKg = AddHomogeneousMass(row.MassKg, massKg, element.Id + "/MassKg");
                 }
 
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
@@ -84,6 +117,8 @@ namespace QS3D.Core.Reporting
                     element.Category == ElementCategory.CeilingFinish ? QFirst(element, "TopAreaM2", "AreaM2") : Q(element, "TopAreaM2"),
                     element.Id + "/TopAreaM2");
                 row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, QFirst(element, "OtherAreaM2", "MeasuredSurfaceAreaM2"), element.Id + "/OtherAreaM2");
+                if (created && row.MassKg.HasValue)
+                    row.MassKg = QuantityReportMath.Finite(row.MassKg.Value, element.Id + "/MassKg");
             }
 
             return order.Select(x => rows[x]).ToList();
@@ -107,6 +142,90 @@ namespace QS3D.Core.Reporting
         {
             foreach (var handle in source.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()))
                 if (!destination.Contains(handle, StringComparer.OrdinalIgnoreCase)) destination.Add(handle);
+        }
+
+        private static string FirstInstanceProperty(ProjectElement element, params string[] keys)
+        {
+            foreach (var key in keys)
+                if (element.Properties.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            return string.Empty;
+        }
+
+        private static string Effective(ProjectElement element, ProjectFamily? family, string key)
+        {
+            if (element.Properties.TryGetValue(key, out var instance) && !string.IsNullOrWhiteSpace(instance)) return instance.Trim();
+            if (family != null && family.Properties.TryGetValue(key, out var inherited) && !string.IsNullOrWhiteSpace(inherited)) return inherited.Trim();
+            return string.Empty;
+        }
+
+        private static double? EffectiveDensity(ProjectElement element, ProjectFamily? family)
+        {
+            if (element.Properties.TryGetValue("DensityKgM3", out var instance) && !string.IsNullOrWhiteSpace(instance))
+                return PositiveInvariant(instance, element.Id + "/DensityKgM3");
+            if (family != null && family.Properties.TryGetValue("DensityKgM3", out var inherited) && !string.IsNullOrWhiteSpace(inherited))
+                return PositiveInvariant(inherited, "Family " + family.Id + "/DensityKgM3");
+            return null;
+        }
+
+        private static double PositiveInvariant(string value, string label)
+        {
+            if (!double.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ||
+                double.IsNaN(parsed) || double.IsInfinity(parsed) || parsed <= 0d)
+                throw new InvalidOperationException(label + " must be an invariant finite number greater than zero.");
+            return parsed;
+        }
+
+        private static double? EffectiveMass(ProjectElement element, double? densityKgM3)
+        {
+            var explicitMass = OptionalNonNegativeQuantity(element, "WeightKg", "MassKg");
+            if (explicitMass.HasValue) return explicitMass;
+            if (!densityKgM3.HasValue) return null;
+
+            var volume = OptionalNonNegativeQuantity(
+                element,
+                "NetConcreteM3",
+                "NetVolumeM3",
+                "GrossConcreteM3",
+                "GrossVolumeM3",
+                "VolumeM3",
+                "MeasuredVolumeM3");
+            if (!volume.HasValue) return null;
+            var mass = checked(volume.Value * densityKgM3.Value);
+            if (double.IsNaN(mass) || double.IsInfinity(mass))
+                throw new OverflowException("Quantity report mass overflow: " + element.Id + "/volume*density.");
+            return mass;
+        }
+
+        private static double? OptionalNonNegativeQuantity(ProjectElement element, params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                if (!element.Quantities.ContainsKey(key)) continue;
+                var value = Q(element, key);
+                if (value < 0d) throw new InvalidOperationException(element.Id + "/" + key + " must be non-negative.");
+                return value;
+            }
+            return null;
+        }
+
+        private static string DensityKey(double? densityKgM3) => densityKgM3.HasValue
+            ? densityKgM3.Value.ToString("R", CultureInfo.InvariantCulture)
+            : "<none>";
+
+        private static double? AddHomogeneousMass(double? current, double? value, string label)
+        {
+            if (!current.HasValue || !value.HasValue) return null;
+            return QuantityReportMath.Add(current.Value, value.Value, label);
+        }
+
+        private static string MergeDistinctText(string current, string value)
+        {
+            var existing = (current ?? string.Empty).Trim();
+            var incoming = (value ?? string.Empty).Trim();
+            if (incoming.Length == 0 || string.Equals(existing, incoming, StringComparison.OrdinalIgnoreCase)) return existing;
+            if (existing.Length == 0) return incoming;
+            return existing + " | " + incoming;
         }
 
         private static double QFirst(ProjectElement element, params string[] keys)

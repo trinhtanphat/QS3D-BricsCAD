@@ -39,7 +39,7 @@ for token in [
     "polygonal Slab mesh hiện yêu cầu plan-view POLYLINE có normal +Z",
     "ProjectStateSnapshot.Capture(project)",
     "GeneratedRebarOwnershipGuard.Build(project)",
-    "ErasePrevious(document, transaction, element, ownership)",
+    "ErasePrevious(document, transaction, project, element, ownership)",
     "CommitSemanticUpdate(project, update)",
     "transaction.Commit()",
     "rollback.Restore(project)",

@@ -27,7 +27,8 @@ else:
         "ProjectStateSnapshot.Capture(project)",
         "new HostLinkService().LinkOpening(project, opening.Id, wall.Id)",
         "RegenerateProject(project)",
-        'opening.Properties.TryGetValue("HostWallId"',
+        "var currentOpening = project.FindElement(opening.Id)",
+        'currentOpening.Properties.TryGetValue("HostWallId"',
         "string.Equals(persistedHostId, wall.Id, StringComparison.OrdinalIgnoreCase)",
         "rollback.Restore(project)",
         "PaletteCoordinator.RefreshProject()",
@@ -53,14 +54,15 @@ else:
     capture = block.find("ProjectStateSnapshot.Capture(project)")
     link = block.find("new HostLinkService().LinkOpening")
     regen = block.find("RegenerateProject(project)")
-    verify = block.find('opening.Properties.TryGetValue("HostWallId"')
+    resolve = block.find("var currentOpening = project.FindElement(opening.Id)")
+    verify = block.find('currentOpening.Properties.TryGetValue("HostWallId"')
     restore = block.find("rollback.Restore(project)")
     refresh = block.find("PaletteCoordinator.RefreshProject()")
-    if min(capture, link, regen, verify, restore, refresh) < 0:
+    if min(capture, link, regen, resolve, verify, restore, refresh) < 0:
         pass
     else:
-        if not (capture < link < regen < verify):
-            errors.append("QS3DLINKHOST must snapshot before link, regenerate, then verify persisted HostWallId")
+        if not (capture < link < regen < resolve < verify):
+            errors.append("QS3DLINKHOST must snapshot before link, regenerate, re-resolve the opening, then verify persisted HostWallId")
         if refresh < verify:
             errors.append("QS3DLINKHOST UI refresh must occur only after semantic HostWallId verification")
 

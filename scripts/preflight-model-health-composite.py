@@ -59,7 +59,7 @@ if paths["command"].is_file():
         "var generatedTarget = ComprehensiveModelHealthService.TargetsGeneratedOutput(issue);",
         "GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element)",
         "if (count == 0 && generatedTarget)",
-        "SourceHandleResolver.Resolve(project, new[] { element.Id })",
+        "SourceHandleResolver.Resolve(currentProject, new[] { element.Id })",
         "usedSourceFallback = count > 0",
         'usedSourceFallback ? " • nguồn semantic" : string.Empty',
     ):
@@ -70,8 +70,8 @@ if paths["command"].is_file():
         errors.append("QS3DHEALTH locate still guesses generated issue ownership from the literal GENERATED substring.")
     first_select = health.find("var count = Cad.CadHandleService.Select(doc, locateHandles);")
     fallback_guard = health.find("if (count == 0 && generatedTarget)")
-    fallback_resolve = health.find("SourceHandleResolver.Resolve(project, new[] { element.Id })")
-    status = health.find('PaletteCoordinator.SetStatus("Health Định vị')
+    fallback_resolve = health.find("SourceHandleResolver.Resolve(currentProject, new[] { element.Id })")
+    status = health.find('PaletteCoordinator.SetStatus("Health ')
     if first_select < 0 or fallback_guard < first_select or fallback_resolve < fallback_guard or status < fallback_resolve:
         errors.append("QS3DHEALTH must try generated CAD first, fall back to semantic/source handles only on zero live generated matches, then report status.")
     if "ParseGeneratedRebarHandles" in text:

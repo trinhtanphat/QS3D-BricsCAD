@@ -19,32 +19,41 @@ else:
     else:
         ed2 = text[ed2_start:bbs_start]
         confirm = ed2.find("if (dialog.ShowDialog() != true) return;")
-        regenerate = ed2.find("var regenerated = RegenerateProject(project);")
-        details = ed2.find("ProjectQuantityReportBuilder.Detail(project)")
-        summary = ed2.find("ProjectQuantityReportBuilder.Group(project)")
+        project = ed2.find("ProjectContextCoordinator.TryGetReadOnly(doc, out var project)")
+        snapshot = ed2.find("ProjectStateSnapshot.CreateDetachedCopy(project)")
+        regenerate = ed2.find("var regenerated = RegenerateProject(previewProject);")
+        details = ed2.find("ProjectQuantityReportBuilder.Detail(previewProject)")
+        summary = ed2.find("ProjectQuantityReportBuilder.Group(previewProject)")
         live = ed2.find("EnsureEd2HandlesAreLive(doc, details);")
         export = ed2.find("XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);")
-        if min(confirm, regenerate, details, summary, live, export) < 0:
+        if min(confirm, project, snapshot, regenerate, details, summary, live, export) < 0:
             errors.append("ED2 export missing save/regenerate/build/live/export contract token")
-        elif not confirm < regenerate < details < summary < live < export:
-            errors.append("ED2 must confirm Save before regeneration/report build/live-handle validation/export")
-        if "RegenerateProject(project)" in ed2[:confirm if confirm >= 0 else 0]:
-            errors.append("ED2 Cancel path must not regenerate project state")
+        elif not confirm < project < snapshot < regenerate < details < summary < live < export:
+            errors.append("ED2 must confirm Save before read-only project lookup/detached regeneration/report build/live-handle validation/export")
+        for forbidden in ("ProjectContextCoordinator.TryGetReadOnly(doc, out var project)", "ProjectStateSnapshot.CreateDetachedCopy(project)", "RegenerateProject(previewProject)"):
+            if forbidden in ed2[:confirm if confirm >= 0 else 0]:
+                errors.append("ED2 Cancel path executes before Save confirmation: " + forbidden)
 
         bbs = text[bbs_start:regen_start]
         confirm = bbs.find("if (dialog.ShowDialog() != true) return;")
-        project = bbs.find("ProjectContextCoordinator.GetOrCreate(doc)")
-        regenerate = bbs.find("RegenerateProject(project);")
-        build = bbs.find("ProjectRebarScheduleBuilder.Build(project)")
+        project = bbs.find("ProjectContextCoordinator.TryGetReadOnly(doc, out var project)")
+        snapshot = bbs.find("ProjectStateSnapshot.CreateDetachedCopy(project)")
+        regenerate = bbs.find("RegenerateProject(previewProject);")
+        build = bbs.find("ProjectRebarScheduleBuilder.Build(previewProject)")
         aggregate = bbs.find('QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight")')
         export = bbs.find("XlsxRebarScheduleExporter.Export(dialog.FileName, rows);")
-        if min(confirm, project, regenerate, build, aggregate, export) < 0:
+        if min(confirm, project, snapshot, regenerate, build, aggregate, export) < 0:
             errors.append("BBS XLSX export missing save/project/regenerate/build/aggregate/export contract token")
-        elif not confirm < project < regenerate < build < aggregate < export:
-            errors.append("BBS XLSX must confirm Save before project lookup/regeneration/fresh build/aggregate/export")
-        for forbidden in ("ProjectContextCoordinator.GetOrCreate(doc)", "RegenerateProject(project);", "ProjectRebarScheduleBuilder.Build(project)"):
+        elif not confirm < project < snapshot < regenerate < build < aggregate < export:
+            errors.append("BBS XLSX must confirm Save before read-only project lookup/detached regeneration/fresh build/aggregate/export")
+        for forbidden in ("ProjectContextCoordinator.TryGetReadOnly(doc, out var project)", "ProjectStateSnapshot.CreateDetachedCopy(project)", "RegenerateProject(previewProject);", "ProjectRebarScheduleBuilder.Build(previewProject)"):
             if forbidden in bbs[:confirm if confirm >= 0 else 0]:
                 errors.append("BBS XLSX Cancel path executes before Save confirmation: " + forbidden)
+
+        if "ProjectContextCoordinator.GetOrCreate(doc)" in ed2 or "ProjectContextCoordinator.GetOrCreate(doc)" in bbs:
+            errors.append("ED2/BBS read-only exports must not create replacement project state")
+        if "RegenerateProject(project)" in ed2 or "RegenerateProject(project)" in bbs:
+            errors.append("ED2/BBS exports must not regenerate live project state")
 
 print("QS3D command XLSX export freshness preflight")
 if errors:

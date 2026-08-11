@@ -121,10 +121,10 @@ if foundation_builder.is_file():
             errors.append("Foundation mesh requires exactly one semantic replacement phase and one CAD commit/flag boundary")
         if "Editor.Regen(" in body:
             errors.append("Foundation native mesh builder must remain UI-free; viewport regen belongs to FoundationMeshCommands post-commit FinalizeUi")
-        if body.find("ReserveBatchBars(ref batchBars, layout.Count)") > body.find("ErasePrevious(document, transaction, element, ownership)"):
+        if body.find("ReserveBatchBars(ref batchBars, layout.Count)") > body.find("ErasePrevious(document, transaction, project, element, ownership)"):
             errors.append("Rectangle Foundation mesh must reserve the batch limit before destructive replacement")
         polygon_reserve = body.find("ReserveBatchBars(ref batchBars, polygonLayout.Count)")
-        polygon_erase = body.find("ErasePrevious(document, transaction, element, ownership)", polygon_reserve if polygon_reserve >= 0 else 0)
+        polygon_erase = body.find("ErasePrevious(document, transaction, project, element, ownership)", polygon_reserve if polygon_reserve >= 0 else 0)
         if polygon_reserve < 0 or polygon_erase < 0 or polygon_reserve > polygon_erase:
             errors.append("Polygon Foundation mesh must reserve the batch limit before destructive replacement")
 
