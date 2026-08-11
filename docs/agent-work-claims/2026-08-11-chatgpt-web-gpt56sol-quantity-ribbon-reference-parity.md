@@ -1,50 +1,43 @@
 # Work claim — ĐỊNH LƯỢNG Ribbon reference parity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-ribbon-reference-parity`
 - Registered: `2026-08-11T21:26:00+07:00`
+- Completed: `2026-08-11T21:37:00+07:00`
 - Baseline main SHA: `95649da0c5d423105cf66eaa4ab3282f5e22e685`
 - Priority: P1 screenshot/reference workflow parity
 
-## Reserved scope
+## Implemented
 
-- `src/QS3D.BricsCAD.V25/Ribbon/QuantityReferenceRibbonAugmenter.cs` (new isolated augmenter)
-- `src/QS3D.BricsCAD.V25/PluginEntry.cs` (initialization/reset hook only)
-- `scripts/preflight-ribbon-quantity-reference-parity.py`
-- this claim file
-- `src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs` is now **audit-only / no edit planned** so concurrent bootstrap/reconciliation winners remain untouched.
-
-## Goal
-
-Bring the existing `ĐỊNH LƯỢNG` Ribbon closer to the supplied BLT3D reference without inventing decorative controls. Surface the already-implemented QS3D calculation settings, regeneration/takeoff, ED2 export, quantity review/explanation, wall takeoff, Excel reverse-locate and old/new revision comparison workflows using clear Vietnamese labels.
-
-## Implementation shape
-
-Use a dedicated reconciliation-safe augmenter, following the repo's existing `ProjectRibbonAugmenter`, `ReferenceWallRibbonAugmenter` and `QuickWorkflowRibbonAugmenter` pattern. It locates the already-created `QS3D_QTY` tab, finds-or-creates one uniquely identified reference panel, and finds-or-creates buttons by stable IDs while always reconciling current text/command/handler. `PluginEntry` only invokes `TryInitialize()` after `RibbonBootstrapper` and resets the augmenter during termination.
-
-## Functional contract
-
-- Keep every existing `QS3D_QTY` bootstrap panel/button and all previously registered command bindings; this lane is additive and does not rewrite/remove existing bootstrap panels.
-- Add one reference-oriented panel whose buttons dispatch real existing commands only:
+- `311b20a7db5dcfcaf206cfc99f8c24bf80ddae3a` — added isolated `QuantityReferenceRibbonAugmenter` for the existing `QS3D_QTY` / `ĐỊNH LƯỢNG` tab. It finds-or-creates one stable panel `QS3D_QTY_REFERENCE_PANEL_SOURCE`, reconciles button state by stable IDs, and never clears/removes existing Ribbon panels/items.
+- The new reference-oriented `Tính khối lượng` panel exposes eight real existing workflows:
   - `Cài đặt tính toán` -> `QS3DQUANTITYSETTINGS`
   - `Tính khối lượng` -> `QS3DREGEN`
   - `Xuất ED2` -> `QS3DED2`
   - `Xem khối lượng` -> `QS3DBQ`
-  - `Diễn giải` -> current full `QS3DBQ` workflow (which exposes summary/detail modes); a later dedicated detail command may replace the command parameter under the same stable button ID without changing this UI slot
+  - `Diễn giải` -> `QS3DBQ` (current full summary/detail BQ workflow)
   - `Khối lượng tường` -> `QS3DWALLQTY`
   - `Excel → CAD` -> `QS3DEXCELLOCATE`
   - `Đối chiếu Cũ/Mới` -> `QS3DREVDIFF`
-- Preserve Ribbon reconciliation semantics: do not clear panels/items, do not remove bootstrap/augmenter/user controls, and keep click-time active-document command dispatch.
-- If the base `QS3D_QTY` tab is not available yet, the augmenter fails closed/returns false rather than creating a competing tab.
-- Do not modify Quantity Settings implementation/store, Wall Quantity implementation, Commands.cs, Core quantity arithmetic, Direct Draw, updater/release work or GitHub Actions.
+- `b191cb39bc334aa9351ee4f07afd9c90d97a8f16` — wired augmenter initialize/reset into `PluginEntry` after the canonical Ribbon bootstrap. Existing Project, Reference Wall and Quick Workflow augmenters remain present.
+- `669264e7f1acb6c8b04d5108926cd75789e57ad5` — added `scripts/preflight-ribbon-quantity-reference-parity.py`, checking stable IDs/labels/commands, find-or-create reconciliation, plugin lifecycle hooks, source-wide command registration, preservation of canonical `QS3D_QTY` bootstrap panels and absence of clear/remove behavior.
+- `RibbonBootstrapper.cs` was deliberately left unchanged in this lane so concurrent bootstrap/reconciliation winners remain intact.
 
-## Validation plan
+## Source validation
 
-- Re-fetch latest `main`, `PluginEntry` and Ribbon sources immediately before the write; preserve concurrent winners.
-- Add an auto-discovered focused static preflight requiring the new panel/title/stable button IDs/labels/commands exactly once, find-or-create reconciliation, plugin initialization/reset hooks, command registration evidence, and no collection clear/removal behavior.
-- Continue to require the pre-existing `QS3D_QTY` bootstrap panels so the augmenter cannot silently replace the canonical Ribbon information architecture.
-- Re-fetch final source and ancestry. Do not dispatch GitHub Actions.
+- Re-fetched current `main` after implementation. `QuantityReferenceRibbonAugmenter.cs` still contains all eight stable button specs, fails closed if `QS3D_QTY` is absent, reconciles current text/command/handler, and dispatches through the active BricsCAD document.
+- Re-fetched `PluginEntry.cs`; bootstrap remains first and `QuantityReferenceRibbonAugmenter.TryInitialize()` / `.Reset()` are present without removing other augmenters.
+- Re-fetched canonical `RibbonBootstrapper.cs`; the existing Quantity, Excel ↔ CAD, Cửa & lỗ mở, BBS, Cốt thép 3D and Health cốt thép panels remain present.
+- Confirmed dedicated command registrations for `QS3DQUANTITYSETTINGS`, `QS3DWALLQTY` and `QS3DREVDIFF`; the other referenced commands are existing canonical QS3D adapter commands already used by the base Ribbon/BQ workflows.
+- `311b20a7db5dcfcaf206cfc99f8c24bf80ddae3a` is an ancestor of current `main`; subsequent concurrent updater/quantity/formula/direct-draw work was preserved. No force push was used.
+- GitHub exposes no combined status checks for the focused preflight commit, and no GitHub Actions were dispatched.
+- A local container checkout could not be used because that runtime had no DNS route to GitHub; validation in this remote lane is therefore connector-based source/preflight review only, not a fabricated local execution result.
 
-## Completion condition
+## LOCAL_ONLY disposition
 
-The screenshot-level quantity workflows are directly discoverable from the `ĐỊNH LƯỢNG` Ribbon using real existing commands, with additive reconciliation-safe source and regression coverage, and this claim is marked `COMPLETED` with exact SHAs.
+- Physical BricsCAD V25 Ribbon rendering/click-through remains under the existing local Ribbon/runtime qualification boundary. No duplicate local inbox item was created.
+- No remote native runtime PASS is claimed.
+
+## Completion evidence
+
+The screenshot-oriented quantity workflows are now directly discoverable from the `ĐỊNH LƯỢNG` Ribbon through a reconciliation-safe additive panel while preserving the repo's existing Ribbon information architecture and real command implementations.
