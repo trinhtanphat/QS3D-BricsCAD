@@ -22,6 +22,7 @@ contracts = {
 
 commit_token = "transaction.Commit();\n                    cadCommitted = true;"
 semantic_token = "foreach (var update in pending) CommitSemanticUpdate(project, update);"
+touch_token = "if (pending.Count > 0) project.Touch();"
 
 for label, contract in contracts.items():
     path = ROOT / contract["path"]
@@ -46,6 +47,7 @@ for label, contract in contracts.items():
         "var cadCommitted = false;",
         "ErasePrevious(document, transaction, element, ownership)",
         semantic_token,
+        touch_token,
         commit_token,
         "catch (Exception operationError)",
         "if (!cadCommitted)",
@@ -56,12 +58,15 @@ for label, contract in contracts.items():
             errors.append(label + ": missing atomic frame replacement contract: " + token)
 
     semantic = body.find(semantic_token)
+    touch = body.find(touch_token)
     commit = body.find(commit_token)
     restore = body.find("rollback.Restore(project)")
-    if min(semantic, commit, restore) >= 0 and not semantic < commit < restore:
-        errors.append(label + ": semantic frame ownership must be committed while CAD is rollback-capable")
+    if min(semantic, touch, commit, restore) >= 0 and not semantic < touch < commit < restore:
+        errors.append(label + ": semantic ownership and project revision must commit while CAD remains rollback-capable")
     if commit >= 0 and semantic_token in body[commit + len(commit_token):]:
         errors.append(label + ": semantic frame ownership is still mutated after CAD commit")
+    if commit >= 0 and touch_token in body[commit + len(commit_token):]:
+        errors.append(label + ": project.Touch must not occur after CAD commit")
 
     helper = text[end:]
     for token in (
@@ -73,10 +78,6 @@ for label, contract in contracts.items():
     ):
         if token not in helper:
             errors.append(label + ": semantic commit helper missing metadata/audit contract: " + token)
-
-    touch = body.find("if (pending.Count > 0) project.Touch();")
-    if touch >= 0 and commit >= 0 and touch < commit:
-        errors.append(label + ": project.Touch must remain post-CAD-commit")
 
 live_state = ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameLiveStateService.cs"
 if not live_state.is_file():
@@ -116,4 +117,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: LINE and path curtain frame builders replace old owned frames and write handles/count/fingerprint/stale/audit state before CAD commit with deep snapshot rollback; post-commit live fingerprint stamping is best-effort and cannot misreport valid geometry as failed. Whole QS3DCURTAIN3D host+frame orchestration remains a separate transaction-boundary concern.")
+print("PASS: LINE/path frame ownership, audit and project revision commit before CAD commit inside the rollback boundary; live fingerprint stamping remains best-effort post-commit.")
