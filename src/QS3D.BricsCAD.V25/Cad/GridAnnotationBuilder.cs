@@ -44,6 +44,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (element.Category != ElementCategory.Grid) throw new InvalidOperationException("Grid annotation chỉ nhận ElementCategory.Grid: " + element.Id + ".");
                 if (!distinctIds.Add(element.Id)) throw new InvalidOperationException("Grid annotation batch chứa Grid trùng: " + element.Id + ".");
             }
+            RequireCanonicalElements(project, elements, "Grid annotation build");
 
             var rollback = ProjectStateSnapshot.Capture(project);
             try
@@ -86,8 +87,31 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw new InvalidOperationException("Grid annotation rebuild yêu cầu DWG đích vẫn là MdiActiveDocument.");
             if (element.Category != ElementCategory.Grid)
                 throw new InvalidOperationException("Grid annotation rebuild chỉ nhận ElementCategory.Grid: " + element.Id + ".");
+            RequireCanonicalElements(project, new[] { element }, "Grid annotation rebuild");
 
             ReplaceOne(document, transaction, project, element);
+        }
+
+        private static void RequireCanonicalElements(ProjectState project, IReadOnlyList<ProjectElement> elements, string operation)
+        {
+            var canonical = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var candidate in project.Elements)
+            {
+                if (candidate == null)
+                    throw new InvalidOperationException(operation + " refused a project containing a null semantic element.");
+                if (candidate.Category != ElementCategory.Grid) continue;
+                if (canonical.ContainsKey(candidate.Id))
+                    throw new InvalidOperationException(operation + " refused duplicate semantic Grid Id: " + candidate.Id + ".");
+                canonical.Add(candidate.Id, candidate);
+            }
+
+            foreach (var element in elements)
+            {
+                if (!canonical.TryGetValue(element.Id, out var current))
+                    throw new InvalidOperationException(operation + " target is no longer present in the current project: " + element.Id + ".");
+                if (!ReferenceEquals(current, element))
+                    throw new InvalidOperationException(operation + " refused a stale/detached Grid instance: " + element.Id + ". Re-resolve it from the current project and retry.");
+            }
         }
 
         private static void ReplaceOne(Document document, Transaction transaction, ProjectState project, ProjectElement element)
