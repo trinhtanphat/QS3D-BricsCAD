@@ -46,6 +46,7 @@ namespace QS3D.BricsCAD.V25.UI
             TuneModelTreeDensity();
             TuneActionDensityAndShortcuts();
             TuneSectionHierarchy();
+            TuneModelHeaderCollision();
         }
 
         private void TuneWorkspaceGrid()
@@ -171,6 +172,53 @@ namespace QS3D.BricsCAD.V25.UI
                 if (text.FontSize < 11)
                     text.FontSize = 11;
             }
+        }
+
+        private void TuneModelHeaderCollision()
+        {
+            var modelTitle = FindVisualChildren<TextBlock>(this)
+                .FirstOrDefault(text => string.Equals(text.Text, "MÔ HÌNH", StringComparison.OrdinalIgnoreCase));
+            var refreshButton = FindButton("Làm mới");
+            if (modelTitle == null || refreshButton == null)
+                return;
+
+            var titleStack = VisualTreeHelper.GetParent(modelTitle) as StackPanel;
+            var header = titleStack == null
+                ? null
+                : VisualTreeHelper.GetParent(titleStack) as DockPanel;
+            if (header == null || VisualTreeHelper.GetParent(refreshButton) != header)
+                return;
+
+            // The original DockPanel lets its last child fill the remaining width. At narrow palette
+            // widths that lets the refresh button paint into the title/caption area. Reserve the
+            // button at the right and constrain the title stack to the actual remaining width.
+            header.LastChildFill = false;
+            DockPanel.SetDock(titleStack, Dock.Left);
+            DockPanel.SetDock(refreshButton, Dock.Right);
+
+            titleStack.MinWidth = 0;
+            titleStack.Margin = new Thickness(0, 0, 7, 0);
+            refreshButton.HorizontalAlignment = HorizontalAlignment.Right;
+            refreshButton.VerticalAlignment = VerticalAlignment.Top;
+
+            foreach (var label in titleStack.Children.OfType<TextBlock>())
+            {
+                label.TextWrapping = TextWrapping.NoWrap;
+                label.TextTrimming = TextTrimming.CharacterEllipsis;
+            }
+
+            void UpdateAvailableTitleWidth()
+            {
+                if (header.ActualWidth <= 0)
+                    return;
+
+                var refreshWidth = Math.Max(refreshButton.ActualWidth, refreshButton.DesiredSize.Width);
+                titleStack.MaxWidth = Math.Max(48, header.ActualWidth - refreshWidth - 7);
+            }
+
+            UpdateAvailableTitleWidth();
+            header.SizeChanged += (_, __) => UpdateAvailableTitleWidth();
+            refreshButton.SizeChanged += (_, __) => UpdateAvailableTitleWidth();
         }
 
         private Button? FindButton(string content)
