@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
                 var project = ProjectContextCoordinator.GetOrCreate(document);
+                var previewChangeVersion = project.ChangeVersion;
                 var plan = InterchangeUseSourceCatalogImportService.Plan(project, json);
                 var replacements = plan.ZonesToReplace + plan.FloorsToReplace + plan.FamiliesToReplace;
                 if (replacements <= 0)
@@ -69,6 +70,11 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxButton.YesNo,
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
+                InterchangeConfirmationGuard.RequireFresh(
+                    document,
+                    project,
+                    previewChangeVersion,
+                    "Interchange UseSource Catalog");
                 var result = InterchangeUseSourceCatalogImportService.Import(document, json);
                 try { PaletteCoordinator.RefreshProject(); } catch { }
                 var status =

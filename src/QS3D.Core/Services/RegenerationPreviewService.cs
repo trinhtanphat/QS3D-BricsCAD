@@ -97,9 +97,16 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Regeneration introduced " + diff.NewErrorCount + " new Model Health error(s); project state was rolled back.");
                 return new RegenerationGuardedApplyResult(count, diff);
             }
-            catch
+            catch (Exception applyError)
             {
-                snapshot.Restore(project);
+                try
+                {
+                    snapshot.Restore(project);
+                }
+                catch (Exception rollbackError)
+                {
+                    throw new AggregateException("Regeneration preview apply failed and project rollback also failed.", applyError, rollbackError);
+                }
                 throw;
             }
         }

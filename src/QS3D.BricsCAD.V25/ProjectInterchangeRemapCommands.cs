@@ -34,7 +34,8 @@ namespace QS3D.BricsCAD.V25
                 var json = ReadGuardedSnapshotText(dialog.FileName);
                 EnsureActive(document, "Interchange remap dry-run");
                 var project = ProjectContextCoordinator.GetOrCreate(document);
-                var plan = ProjectInterchangeRemapPlanner.Plan(project, json);
+                var appendPlan = ProjectInterchangeRemapAppendImporter.Plan(project, json);
+                var plan = appendPlan.Remap;
 
                 document.Editor.WriteMessage(
                     "\nQS3D Interchange Remap PLAN ONLY — source=" + plan.SourceProjectId +
@@ -43,7 +44,8 @@ namespace QS3D.BricsCAD.V25
                     " • name remap=" + plan.NameRemapCount.ToString(CultureInfo.InvariantCulture) +
                     " • typed reference rewrites=" + plan.ReferenceRewrites.Count.ToString(CultureInfo.InvariantCulture) +
                     " • unresolved opaque refs=" + plan.OpaqueReferenceWarnings.Count.ToString(CultureInfo.InvariantCulture) +
-                    " • append-as-new=" + (plan.CanAppendAsNew ? "READY" : "BLOCKED") + ".");
+                    " • runtime compatibility blockers=" + appendPlan.CompatibilityBlockers.Count.ToString(CultureInfo.InvariantCulture) +
+                    " • append-as-new=" + (appendPlan.CanImport ? "READY" : "BLOCKED") + ".");
 
                 foreach (var item in plan.Items.Where(x => x.IdChanged || x.NameChanged).Take(40))
                 {
@@ -66,13 +68,18 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\n  ... typed reference rewrite list truncated in command line.");
 
                 foreach (var warning in plan.OpaqueReferenceWarnings.Take(20))
-                    document.Editor.WriteMessage("\n  BLOCK " + warning.OwnerElementSourceId + " / " + warning.PropertyKey + ": " + warning.Reason);
+                    document.Editor.WriteMessage("\n  BLOCK REF " + warning.OwnerElementSourceId + " / " + warning.PropertyKey + ": " + warning.Reason);
                 if (plan.OpaqueReferenceWarnings.Count > 20)
                     document.Editor.WriteMessage("\n  ... unresolved property-reference warning list truncated in command line.");
 
-                var status = plan.CanAppendAsNew
-                    ? "Interchange remap dry-run READY: candidate IDs/names + typed references đã resolve. Chưa mutate project; chưa import."
-                    : "Interchange remap dry-run BLOCKED: còn property-reference chưa có explicit rewrite policy. Chưa mutate project; chưa import.";
+                foreach (var blocker in appendPlan.CompatibilityBlockers.Take(20))
+                    document.Editor.WriteMessage("\n  BLOCK RUNTIME " + blocker.OwnerKind + " " + blocker.OwnerSourceId + " / " + blocker.Field + ": " + blocker.Reason);
+                if (appendPlan.CompatibilityBlockers.Count > 20)
+                    document.Editor.WriteMessage("\n  ... runtime compatibility blocker list truncated in command line.");
+
+                var status = appendPlan.CanImport
+                    ? "Interchange remap dry-run READY: candidate IDs/names + typed references + target runtime compatibility đã resolve. Chưa mutate project; chưa import."
+                    : "Interchange remap dry-run BLOCKED: còn property-reference hoặc target runtime compatibility blocker. Chưa mutate project; chưa import.";
                 try { PaletteCoordinator.SetStatus(status); } catch { }
                 document.Editor.WriteMessage("\nQS3D " + status);
             }

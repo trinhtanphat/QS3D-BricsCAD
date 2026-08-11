@@ -160,11 +160,20 @@ namespace QS3D.Core.Export
             var targetZoneNames = UniqueOwnerIndex(targetProject.Zones, x => x.Name, x => x.Id, "target Zone name");
             var targetFloorNames = UniqueOwnerIndex(targetProject.Floors, x => x.Name, x => x.Id, "target Floor name");
             var targetFamilyNames = UniqueOwnerIndex(targetProject.Families, x => FamilyNameKey(x.Category, x.Name), x => x.Id, "target same-category Family name");
+            var sourceDuplicateZoneNames = DuplicateOwnerKeys(source.Zones, x => x.Name, x => x.Id);
+            var sourceDuplicateFloorNames = DuplicateOwnerKeys(source.Floors, x => x.Name, x => x.Id);
+            var sourceDuplicateFamilyNames = DuplicateOwnerKeys(source.Families, x => FamilyNameKey(x.Category, x.Name), x => x.Id);
             var items = new List<InterchangeImportResolutionItem>();
 
             foreach (var zone in source.Zones)
             {
                 var exists = targetZones.ContainsKey(zone.Id);
+                if (sourceDuplicateZoneNames.Contains((zone.Name ?? string.Empty).Trim()) &&
+                    (!exists || policy.ZoneCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
+                {
+                    AddSourceBatchNameCollision(items, InterchangeIdentityKind.Zone, zone.Id, "Zone name", zone.Name);
+                    continue;
+                }
                 if (NameOwnedByDifferentIdentity(targetZoneNames, zone.Name, zone.Id) &&
                     (!exists || policy.ZoneCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
                 {
@@ -177,6 +186,12 @@ namespace QS3D.Core.Export
             foreach (var floor in source.Floors)
             {
                 var exists = targetFloors.ContainsKey(floor.Id);
+                if (sourceDuplicateFloorNames.Contains((floor.Name ?? string.Empty).Trim()) &&
+                    (!exists || policy.FloorCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
+                {
+                    AddSourceBatchNameCollision(items, InterchangeIdentityKind.Floor, floor.Id, "Floor name", floor.Name);
+                    continue;
+                }
                 if (NameOwnedByDifferentIdentity(targetFloorNames, floor.Name, floor.Id) &&
                     (!exists || policy.FloorCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
                 {
@@ -188,9 +203,17 @@ namespace QS3D.Core.Export
 
             foreach (var family in source.Families)
             {
-                if (!targetFamilies.TryGetValue(family.Id, out var existing))
+                var nameKey = FamilyNameKey(family.Category, family.Name);
+                var exists = targetFamilies.TryGetValue(family.Id, out var existing);
+                if (sourceDuplicateFamilyNames.Contains(nameKey) &&
+                    (!exists || policy.FamilyCollision == InterchangeExistingIdentityAction.UseSourceSemanticData))
                 {
-                    var nameKey = FamilyNameKey(family.Category, family.Name);
+                    AddSourceBatchNameCollision(items, InterchangeIdentityKind.Family, family.Id, family.Category + " Family name", family.Name);
+                    continue;
+                }
+
+                if (!exists)
+                {
                     if (NameOwnedByDifferentIdentity(targetFamilyNames, nameKey, family.Id))
                     {
                         AddNameCollision(items, InterchangeIdentityKind.Family, family.Id, family.Category + " Family name", family.Name);
@@ -218,7 +241,7 @@ namespace QS3D.Core.Export
                 }
 
                 if (policy.FamilyCollision == InterchangeExistingIdentityAction.UseSourceSemanticData &&
-                    NameOwnedByDifferentIdentity(targetFamilyNames, FamilyNameKey(family.Category, family.Name), family.Id))
+                    NameOwnedByDifferentIdentity(targetFamilyNames, nameKey, family.Id))
                 {
                     AddNameCollision(items, InterchangeIdentityKind.Family, family.Id, family.Category + " Family name", family.Name);
                     continue;
@@ -371,6 +394,21 @@ namespace QS3D.Core.Export
                 false));
         }
 
+        private static void AddSourceBatchNameCollision(
+            ICollection<InterchangeImportResolutionItem> items,
+            InterchangeIdentityKind kind,
+            string id,
+            string label,
+            string name)
+        {
+            Add(items, new InterchangeImportResolutionItem(
+                kind,
+                id,
+                InterchangeImportResolutionAction.BlockedIncompatible,
+                "Source " + label + " '" + (name ?? string.Empty).Trim() + "' is shared by multiple source semantic IDs; this import mode has no source-name remap policy.",
+                false));
+        }
+
         private static void Add(ICollection<InterchangeImportResolutionItem> items, InterchangeImportResolutionItem item)
         {
             if (items.Count >= MaxPlanItems)
@@ -399,6 +437,31 @@ namespace QS3D.Core.Export
             var normalizedKey = (key ?? string.Empty).Trim();
             if (!owners.TryGetValue(normalizedKey, out var ownerId)) return false;
             return !string.Equals(ownerId, (sourceId ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static HashSet<string> DuplicateOwnerKeys<T>(
+            IEnumerable<T> source,
+            Func<T, string> keySelector,
+            Func<T, string> idSelector) where T : class
+        {
+            var firstOwners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var duplicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in source)
+            {
+                if (item == null) continue;
+                var key = (keySelector(item) ?? string.Empty).Trim();
+                var id = (idSelector(item) ?? string.Empty).Trim();
+                if (key.Length == 0 || id.Length == 0) continue;
+                if (firstOwners.TryGetValue(key, out var existingId))
+                {
+                    if (!string.Equals(existingId, id, StringComparison.OrdinalIgnoreCase)) duplicates.Add(key);
+                }
+                else
+                {
+                    firstOwners[key] = id;
+                }
+            }
+            return duplicates;
         }
 
         private static Dictionary<string, string> UniqueOwnerIndex<T>(

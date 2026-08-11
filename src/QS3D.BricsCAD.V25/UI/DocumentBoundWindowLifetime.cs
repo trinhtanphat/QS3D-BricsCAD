@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using Bricscad.ApplicationServices;
 using BcadApplication = Bricscad.ApplicationServices.Application;
@@ -7,11 +8,14 @@ namespace QS3D.BricsCAD.V25.UI
 {
     internal static class DocumentBoundWindowLifetime
     {
+        private static readonly ConditionalWeakTable<Window, Registration> Registrations = new ConditionalWeakTable<Window, Registration>();
+
         public static void Attach(Window window, Document document)
         {
             if (window == null) throw new ArgumentNullException(nameof(window));
             if (document == null) throw new ArgumentNullException(nameof(document));
-            new Registration(window, document).Attach();
+            var registration = Registrations.GetValue(window, key => new Registration(key, document));
+            registration.Attach(document);
         }
 
         private sealed class Registration
@@ -26,8 +30,10 @@ namespace QS3D.BricsCAD.V25.UI
                 _document = document;
             }
 
-            public void Attach()
+            public void Attach(Document document)
             {
+                if (!ReferenceEquals(document, _document))
+                    throw new InvalidOperationException("A modeless QS3D window cannot be rebound to a different BricsCAD document.");
                 if (_attached) return;
                 BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
                 _window.Closed += OnWindowClosed;

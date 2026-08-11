@@ -104,8 +104,14 @@ namespace QS3D.BricsCAD.V25.UI
                 var count = 0;
                 try
                 {
+                    var dirtyStateChanged = false;
                     foreach (var element in project.Elements.Where(x => x.Category == ElementCategory.GlassWall))
+                    {
+                        var beforeDirty = element.Dirty;
                         element.MarkDirty(ElementDirtyFlags.Quantity);
+                        if (element.Dirty != beforeDirty) dirtyStateChanged = true;
+                    }
+                    if (dirtyStateChanged) project.Touch();
                     count = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 }
                 catch (Exception operationError)
