@@ -24,7 +24,7 @@ The workflow contains both the approved pinned HTTP mirror and the pinned offici
 
 If the public object requires a signed query URL in GitHub's network environment, optionally create repository secret:
 
-- `BRICSCAD_V25_MSI_URL`: signed HTTPS fallback for the **same pinned public MSI object**. The workflow rejects a fallback that does not start with the pinned official object URL.
+- `BRICSCAD_V25_MSI_URL`: signed HTTPS fallback for the **same pinned public MSI object**. Its scheme, host, effective port and path must exactly match the pinned official URL; only its query string may differ. Embedded credentials and URL fragments are rejected.
 
 Optional repository variable:
 
@@ -34,11 +34,11 @@ Do not put a BricsCAD license key in the workflow. The cloud preview workflow do
 
 ## Installer cache and integrity
 
-The workflow restores `.cache/bricscad/BricsCAD-V25.2.10-x64.msi` through `actions/cache/restore@v4` with a cache key that includes the exact pinned SHA-256. A cache hit is re-verified before use; the cache is never trusted merely because GitHub returned it.
+The workflow restores `.cache/bricscad/BricsCAD-V25.2.10-x64.msi` through `actions/cache/restore@v6` with a cache key that includes the exact pinned SHA-256. A cache hit is re-verified before use; the cache is never trusted merely because GitHub returned it.
 
 On a cache miss, the workflow downloads the installer, requires the exact pinned SHA-256, then verifies a mandatory valid Bricsys Authenticode signer. It also verifies that MSI ProductName identifies BricsCAD and that MSI ProductVersion must identify V25.2.10. Only after those checks may administrative extraction begin.
 
-After a successful verified acquisition, `actions/cache/save@v4` stores the exact MSI for future workflow runs. The extracted BricsCAD runtime directory is **not** cached and is not uploaded as a QS3D artifact; `BrxMgd.dll` and `TD_Mgd.dll` remain transient compile references only.
+After a successful verified acquisition, `actions/cache/save@v6` stores the exact MSI for future workflow runs. The extracted BricsCAD runtime directory is **not** cached and is not uploaded as a QS3D artifact; `BrxMgd.dll` and `TD_Mgd.dll` remain transient compile references only.
 
 The download has a finite download timeout and the MSI administrative extraction has a finite administrative extraction timeout with verbose MSI log tail output on failure. This prevents a hosted runner from waiting indefinitely at the installer step.
 
