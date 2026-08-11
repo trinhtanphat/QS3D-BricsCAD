@@ -29,7 +29,7 @@ Default output:
 artifacts/local-v25-qualification/qualification-summary.md
 ```
 
-The exporter intentionally carries only allow-listed result data (exact SHA, branch, safe hashes/tags and step statuses). It intentionally omits usernames, machine names, absolute paths, private DWG names/content, screenshots, credentials and raw error messages.
+The exporter intentionally carries only allow-listed result data (exact SHA, branch, safe hashes/tags, step statuses and the fixed canonical step labels declared by the qualification runner). It intentionally omits usernames, machine names, absolute paths, private DWG names/content, screenshots, credentials and raw error messages. An unknown or modified `steps[].name` is not echoed into the shareable Markdown; it is replaced with a deterministic `Step N (redacted label)` placeholder until that label is deliberately reviewed and allow-listed.
 
 Before sharing even the sanitized file, read it once and make sure any **manual text you added later** is also sanitized.
 
