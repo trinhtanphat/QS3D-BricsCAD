@@ -14,6 +14,7 @@ namespace QS3D.Core.Export
         private const int MaxWorksheetRows = 1048576;
         private const int HeaderRows = 1;
         private const int MaxDataRows = MaxWorksheetRows - HeaderRows;
+        private const int MaxCellTextLength = 32767;
 
         public static void Export(string path, IReadOnlyList<RebarScheduleRow> rows)
         {
@@ -56,12 +57,30 @@ namespace QS3D.Core.Export
 
             for (var index = 0; index < count; index++)
             {
-                if (rows[index] == null)
+                var row = rows[index];
+                if (row == null)
                     throw new ArgumentException(
                         "BBS row cannot be null. Invalid row index: " + index.ToString(CultureInfo.InvariantCulture) + ".",
                         nameof(rows));
+
+                ValidateCellText(row.ElementId, index, "Element");
+                ValidateCellText(row.BarMark, index, "Bar Mark");
+                ValidateCellText(row.ShapeCode, index, "Shape");
+                ValidateCellText(row.Notation, index, "Notation");
+                ValidateCellText(row.FabricationStatus, index, "Fabrication Status");
+                ValidateCellText(row.FabricationStandardCode, index, "Standard Code");
+                ValidateCellText(row.FabricationDetailingRevision, index, "Detailing Revision");
             }
             return count;
+        }
+
+        private static void ValidateCellText(string value, int rowIndex, string field)
+        {
+            if ((value ?? string.Empty).Length <= MaxCellTextLength) return;
+            throw new ArgumentOutOfRangeException(
+                "rows",
+                "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
+                " field '" + field + "' exceeds Excel's " + MaxCellTextLength.ToString(CultureInfo.InvariantCulture) + "-character cell text limit.");
         }
 
         private static string BuildSheet(IReadOnlyList<RebarScheduleRow> rows, int rowCount)
