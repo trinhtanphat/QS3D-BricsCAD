@@ -84,11 +84,14 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             var family = project.FindFamily(familyId) ?? throw new KeyNotFoundException("Unknown family: " + familyId);
-            var pending = new List<PendingFamilyAssignment>();
+            var targets = OwnedDistinctByIds(project, elementIds);
+            foreach (var element in targets)
+                if (element.Category != family.Category)
+                    throw new InvalidOperationException("Cannot assign family " + family.Id + " (" + family.Category + ") to element " + element.Id + " (" + element.Category + "). Bulk family assignment is all-or-nothing.");
 
-            foreach (var element in OwnedDistinctByIds(project, elementIds))
+            var pending = new List<PendingFamilyAssignment>();
+            foreach (var element in targets)
             {
-                if (element.Category != family.Category) continue;
                 if (string.Equals(element.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
 
                 var previousFamily = string.IsNullOrWhiteSpace(element.FamilyId) ? null : project.FindFamily(element.FamilyId);
@@ -121,18 +124,16 @@ namespace QS3D.Core.Services
         private static IReadOnlyList<ProjectElement> OwnedDistinctByIds(ProjectState project, IEnumerable<string> elementIds)
         {
             var resolved = new List<ProjectElement>();
+            var requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var id in elementIds)
             {
-                if (string.IsNullOrWhiteSpace(id)) continue;
+                if (string.IsNullOrWhiteSpace(id))
+                    throw new ArgumentException("Bulk edit target id is required.", nameof(elementIds));
                 var normalized = id.Trim();
-                ProjectElement? match = null;
-                foreach (var candidate in project.Elements)
-                {
-                    if (candidate == null || !string.Equals(candidate.Id, normalized, StringComparison.OrdinalIgnoreCase)) continue;
-                    match = candidate;
-                    break;
-                }
-                if (match != null) resolved.Add(match);
+                if (!requested.Add(normalized))
+                    throw new InvalidOperationException("Bulk edit target list contains duplicate semantic element id: " + normalized);
+                var match = project.FindElement(normalized) ?? throw new KeyNotFoundException("Unknown semantic element: " + normalized);
+                resolved.Add(match);
             }
             return OwnedDistinct(project, resolved);
         }
