@@ -82,28 +82,115 @@ namespace QS3D.Core.Export
     public sealed class ProjectInterchangeNativeCleanupAuthorization
     {
         private readonly HashSet<string> _elementIds;
+        private readonly HashSet<string> _ownerTokens;
 
-        private ProjectInterchangeNativeCleanupAuthorization(IEnumerable<string> elementIds)
+        private ProjectInterchangeNativeCleanupAuthorization(
+            string projectId,
+            long sourceChangeVersion,
+            IEnumerable<string> elementIds,
+            IEnumerable<string> ownerTokens,
+            bool stateBound)
         {
+            ProjectId = (projectId ?? string.Empty).Trim();
+            SourceChangeVersion = sourceChangeVersion;
+            IsStateBound = stateBound;
             _elementIds = new HashSet<string>(
                 (elementIds ?? Enumerable.Empty<string>())
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Select(x => x.Trim()),
                 StringComparer.OrdinalIgnoreCase);
+            _ownerTokens = new HashSet<string>(ownerTokens ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
             ElementIds = _elementIds.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
+        public string ProjectId { get; }
+        public long SourceChangeVersion { get; }
         public IReadOnlyList<string> ElementIds { get; }
+        internal bool IsStateBound { get; }
+
         public static ProjectInterchangeNativeCleanupAuthorization None { get; } =
-            new ProjectInterchangeNativeCleanupAuthorization(Array.Empty<string>());
+            new ProjectInterchangeNativeCleanupAuthorization(string.Empty, -1L, Array.Empty<string>(), Array.Empty<string>(), false);
 
         public static ProjectInterchangeNativeCleanupAuthorization ForElementIds(IEnumerable<string> elementIds)
         {
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            return new ProjectInterchangeNativeCleanupAuthorization(elementIds);
+            return new ProjectInterchangeNativeCleanupAuthorization(string.Empty, -1L, elementIds, Array.Empty<string>(), false);
         }
 
-        internal bool Allows(string elementId) => _elementIds.Contains((elementId ?? string.Empty).Trim());
+        public static ProjectInterchangeNativeCleanupAuthorization ForPlan(
+            ProjectState target,
+            ProjectInterchangeUseSourceSemanticPlan plan)
+        {
+            if (target == null) throw new ArgumentNullException(nameof(target));
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            if (!plan.RequiresNativeCleanup) return None;
+
+            var ownerTokens = CaptureOwnerTokens(target, plan.TargetElementIdsRequiringNativeCleanup, out var handleCount);
+            if (handleCount != plan.TargetGeneratedHandlesToClean)
+                throw new InvalidOperationException(
+                    "UseSource native cleanup plan is stale: expected " + plan.TargetGeneratedHandlesToClean.ToString(CultureInfo.InvariantCulture) +
+                    " generated handle(s), but current target ownership contains " + handleCount.ToString(CultureInfo.InvariantCulture) + ". Re-plan before authorizing cleanup.");
+
+            return new ProjectInterchangeNativeCleanupAuthorization(
+                target.ProjectId,
+                target.ChangeVersion,
+                plan.TargetElementIdsRequiringNativeCleanup,
+                ownerTokens,
+                true);
+        }
+
+        internal bool OwnerTokensSetEquals(IEnumerable<string> ownerTokens) =>
+            _ownerTokens.SetEquals(ownerTokens ?? Enumerable.Empty<string>());
+
+        internal bool ElementIdsSetEquals(IEnumerable<string> elementIds) =>
+            _elementIds.SetEquals((elementIds ?? Enumerable.Empty<string>()).Select(x => (x ?? string.Empty).Trim()));
+
+        internal static IReadOnlyList<string> CaptureOwnerTokens(
+            ProjectState target,
+            IEnumerable<string> elementIds,
+            out int distinctHandleCount)
+        {
+            if (target == null) throw new ArgumentNullException(nameof(target));
+            if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+
+            var tokens = new List<string>();
+            var handleTotal = 0;
+            foreach (var id in elementIds
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+            {
+                var element = target.FindElement(id) ??
+                    throw new InvalidOperationException("UseSource native cleanup authorization references missing target Element " + id + ". Re-plan before authorizing cleanup.");
+                var handles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var owner in GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element)
+                    .OrderBy(x => x.Value, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    var handle = (owner.Key ?? string.Empty).Trim();
+                    var slot = GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot(owner.Value);
+                    if (handle.Length == 0 || string.IsNullOrWhiteSpace(slot)) continue;
+                    handles.Add(handle);
+                    tokens.Add(OwnerToken(element.Id, slot, handle));
+                }
+                handleTotal = checked(handleTotal + handles.Count);
+            }
+
+            distinctHandleCount = handleTotal;
+            return tokens.Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList().AsReadOnly();
+        }
+
+        private static string OwnerToken(string elementId, string ownerSlot, string handle)
+        {
+            return TokenPart(elementId) + TokenPart(ownerSlot) + TokenPart(handle);
+        }
+
+        private static string TokenPart(string value)
+        {
+            var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+            return normalized.Length.ToString(CultureInfo.InvariantCulture) + ":" + normalized;
+        }
     }
 
     public sealed class ProjectInterchangeUseSourceSemanticResult
@@ -182,7 +269,7 @@ namespace QS3D.Core.Export
             if (nativeCleanupAuthorization == null) throw new ArgumentNullException(nameof(nativeCleanupAuthorization));
 
             var prepared = Prepare(target, json);
-            EnsureNativeCleanupAuthorized(prepared.Plan, nativeCleanupAuthorization);
+            EnsureNativeCleanupAuthorized(target, prepared.Plan, nativeCleanupAuthorization);
             var source = prepared.Source;
             var resolution = prepared.Resolution;
             var plan = prepared.Plan;
@@ -468,19 +555,29 @@ namespace QS3D.Core.Export
         }
 
         private static void EnsureNativeCleanupAuthorized(
+            ProjectState target,
             ProjectInterchangeUseSourceSemanticPlan plan,
             ProjectInterchangeNativeCleanupAuthorization authorization)
         {
-            var missing = plan.TargetElementIdsRequiringNativeCleanup
-                .Where(x => !authorization.Allows(x))
-                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                .Take(16)
-                .ToArray();
-            if (missing.Length == 0) return;
-            throw new InvalidOperationException(
-                "UseSource semantic import requires native cleanup authorization for target element(s): " +
-                string.Join(", ", missing) +
-                ". The Core importer does not erase BricsCAD entities; native cleanup must be completed by a guarded adapter transaction/recovery workflow first.");
+            if (!plan.RequiresNativeCleanup) return;
+            if (!authorization.IsStateBound)
+                throw new InvalidOperationException(
+                    "UseSource semantic import requires state-bound native cleanup authorization. Create authorization with ProjectInterchangeNativeCleanupAuthorization.ForPlan(target, plan) after reviewing the exact cleanup plan.");
+            if (!string.Equals(authorization.ProjectId, target.ProjectId, StringComparison.Ordinal))
+                throw new InvalidOperationException("UseSource native cleanup authorization belongs to a different target project. Re-plan and authorize cleanup again.");
+            if (authorization.SourceChangeVersion != target.ChangeVersion)
+                throw new InvalidOperationException("UseSource native cleanup authorization is stale because the target project changed after authorization. Re-plan and authorize cleanup again.");
+            if (!authorization.ElementIdsSetEquals(plan.TargetElementIdsRequiringNativeCleanup))
+                throw new InvalidOperationException("UseSource native cleanup authorization does not match the current cleanup Element set. Re-plan and authorize cleanup again.");
+
+            var ownerTokens = ProjectInterchangeNativeCleanupAuthorization.CaptureOwnerTokens(
+                target,
+                plan.TargetElementIdsRequiringNativeCleanup,
+                out var handleCount);
+            if (handleCount != plan.TargetGeneratedHandlesToClean)
+                throw new InvalidOperationException("UseSource native cleanup authorization is stale because the current generated handle count changed. Re-plan and authorize cleanup again.");
+            if (!authorization.OwnerTokensSetEquals(ownerTokens))
+                throw new InvalidOperationException("UseSource native cleanup authorization is stale because the current generated handle/owner-slot set changed. Re-plan and authorize cleanup again.");
         }
 
         private static void ApplySourceElementSemanticData(ProjectElement element, InterchangeElementSnapshot source)

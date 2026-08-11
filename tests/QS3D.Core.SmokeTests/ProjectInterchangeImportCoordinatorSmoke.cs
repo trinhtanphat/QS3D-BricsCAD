@@ -110,12 +110,14 @@ namespace QS3D.Core.SmokeTests
             Equal("TARGET", (target.FindElement("E1") ?? throw new Exception("Target missing.")).Properties["Mark"]);
             True((target.FindElement("E1") ?? throw new Exception("Target missing.")).Properties.ContainsKey("GeneratedSolidHandle"));
 
-            var plan = ProjectInterchangeImportCoordinator.Plan(target, json, request);
+            var coordinatorPlan = ProjectInterchangeImportCoordinator.Plan(target, json, request);
+            var semanticPlan = ProjectInterchangeUseSourceSemanticImporter.Plan(target, json);
+            Equal(coordinatorPlan.NativeCleanupElementIds.Count, semanticPlan.TargetElementIdsRequiringNativeCleanup.Count);
             var result = ProjectInterchangeImportCoordinator.Execute(
                 target,
                 json,
                 request,
-                ProjectInterchangeNativeCleanupAuthorization.ForElementIds(plan.NativeCleanupElementIds));
+                ProjectInterchangeNativeCleanupAuthorization.ForPlan(target, semanticPlan));
 
             Equal(ProjectInterchangeImportExecutionMode.UseSourceSemanticData, result.Mode);
             Equal(1, result.SemanticIdentitiesReplaced);
