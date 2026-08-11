@@ -6,10 +6,11 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/CreateSimilarCommands.cs"
 ACTIVE = ROOT / "src/QS3D.BricsCAD.V25/ActiveFamilyQuickDrawCommands.cs"
+RIBBON = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs"
 DOC = ROOT / "docs/DIRECT-DRAW-CREATE-SIMILAR-2026-08-11.md"
 errors = []
 
-for path in (SOURCE, ACTIVE, DOC):
+for path in (SOURCE, ACTIVE, RIBBON, DOC):
     if not path.is_file():
         errors.append("missing Create Similar dependency: " + str(path.relative_to(ROOT)))
 
@@ -119,6 +120,20 @@ if ACTIVE.is_file():
                 "Active Family support predicate drifted from dispatcher categories: supported=" +
                 ",".join(sorted(supported)) + " dispatched=" + ",".join(sorted(dispatched)))
 
+if RIBBON.is_file():
+    text = RIBBON.read_text(encoding="utf-8")
+    button = 'new ButtonSpec("QS3D_AUTHOR_CREATE_SIMILAR", "Vẽ Tương Tự", "QS3DCREATESIMILAR")'
+    if text.count(button) != 1:
+        errors.append("Quick Workflow Ribbon must contain exactly one stable Vẽ Tương Tự/Create Similar button")
+    for token in (
+        "if (CollectionContainsId(items, spec.Id)) continue;",
+        'SetProperty(button, "CommandParameter", spec.Command);',
+        'SetProperty(button, "CommandHandler", new CommandHandler());',
+        "Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + \" \", true, false, false);",
+    ):
+        if token not in text:
+            errors.append("Quick Workflow Ribbon lost its idempotent active-document command contract: " + token)
+
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
     for token in (
@@ -129,6 +144,8 @@ if DOC.is_file():
         "ProjectFamilyActivationService.SetActive",
         "QS3DDRAWACTIVE",
         "QS3DDRAWACTIVEADV",
+        "QS3D_AUTHOR_CREATE_SIMILAR",
+        "Vẽ Tương Tự",
         "LOCAL-008",
         "intentional user selection state",
     ):
@@ -141,4 +158,4 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Create Similar preflight PASS: sample selection is cancel-safe/non-creating, semantic/generated ownership is revalidated before canonical Family activation, unsupported categories are rejected before mutation, route support stays identical to the Active Family dispatcher, and authoring delegates to Active Family Quick/Advanced.")
+print("Create Similar preflight PASS: sample selection is cancel-safe/non-creating, semantic/generated ownership is revalidated before canonical Family activation, unsupported categories are rejected before mutation, route support stays identical to the Active Family dispatcher, authoring delegates to Active Family Quick/Advanced, and the primary Ribbon entry stays stable/idempotent on the active document.")
