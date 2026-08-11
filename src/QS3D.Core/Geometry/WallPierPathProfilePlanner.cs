@@ -239,17 +239,7 @@ namespace QS3D.Core.Geometry
         private static double PolygonArea(IReadOnlyList<Point2> polygon)
         {
             if (polygon == null || polygon.Count < 3) throw new InvalidOperationException("Wall-pier profile polygon is degenerate.");
-            var origin = polygon[0];
-            var twice = 0d;
-            for (var index = 1; index < polygon.Count - 1; index++)
-            {
-                var ax = polygon[index].X - origin.X;
-                var ay = polygon[index].Y - origin.Y;
-                var bx = polygon[index + 1].X - origin.X;
-                var by = polygon[index + 1].Y - origin.Y;
-                twice = Add(twice, Finite(ax * by - ay * bx, "wall-pier path area cross"), "wall-pier path area");
-            }
-            return Math.Abs(Finite(twice / 2d, "wall-pier path area"));
+            return PolylineMetrics.Area(polygon);
         }
 
         private static double ClosedPerimeter(IReadOnlyList<Point2> polygon)
