@@ -1,13 +1,14 @@
 # Agent Work Claim — XLSX XML character integrity
 
-- Status: `ACTIVE`
+- Status: `RELEASED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-11` (UTC+7)
+- Released: `2026-08-11` (UTC+7)
 - Baseline main SHA: `fbb7fae24e2fb2086715aba071aa8946e88e47ad`
 
 ## Confirmed defect
 
-Three Core XLSX exporters build worksheet XML manually and call `SecurityElement.Escape(...)` for inline-string values. XML escaping protects markup characters such as `&`, `<` and `>`, but it does not remove XML 1.0-forbidden control characters or isolated surrogate code units. A user/model value containing such a character can therefore make the generated worksheet part not well-formed. The package is subsequently parsed by the strict `XlsxPackageValidator`, so an otherwise valid export can fail because text was not normalized at the XML serialization boundary.
+Three Core XLSX exporters built worksheet XML manually and called `SecurityElement.Escape(...)` for inline-string values. XML escaping protected markup characters such as `&`, `<` and `>`, but did not remove XML 1.0-forbidden control characters or isolated surrogate code units. A user/model value containing such a character could therefore make the generated worksheet part not well-formed.
 
 Affected exporters:
 
@@ -15,32 +16,41 @@ Affected exporters:
 - `CurtainWallXlsxExporter`
 - `DoorOpeningXlsxExporter`
 
-## Reserved scope
+## Released scope
 
-- `src/QS3D.Core/Export/XlsxXmlText.cs` — shared XLSX XML 1.0 text sanitizer/escaper (new).
-- `src/QS3D.Core/Export/MaterialUsageXlsxExporter.cs` — string-cell escaping only.
-- `src/QS3D.Core/Export/CurtainWallXlsxExporter.cs` — string-cell escaping only.
-- `src/QS3D.Core/Export/DoorOpeningXlsxExporter.cs` — string-cell escaping only.
-- focused smoke coverage and registration under `tests/QS3D.Core.SmokeTests/`.
-- this claim file for close-out evidence.
+- `src/QS3D.Core/Export/XlsxXmlText.cs`
+- `src/QS3D.Core/Export/MaterialUsageXlsxExporter.cs`
+- `src/QS3D.Core/Export/CurtainWallXlsxExporter.cs`
+- `src/QS3D.Core/Export/DoorOpeningXlsxExporter.cs`
+- `tests/QS3D.Core.SmokeTests/XlsxXmlCharacterIntegritySmoke.cs`
+- `tests/QS3D.Core.SmokeTests/XlsxXmlCharacterIntegritySmokeRegistration.cs`
+- this claim file.
 
-## Intended contract
+## Completed changes
 
-- Preserve valid XML 1.0 text, including tab/CR/LF and valid supplementary Unicode represented by surrogate pairs.
-- Replace XML 1.0-forbidden controls, noncharacters `U+FFFE/U+FFFF`, and isolated surrogate code units with Unicode replacement character `U+FFFD` instead of failing or silently truncating the entire value.
-- Continue XML-escaping markup characters after character normalization.
-- Preserve existing XLSX workbook/worksheet structure, calculations, grouping, numeric serialization and `xml:space="preserve"` behavior.
+- Claim registered before implementation: `48a23082d5d45b8bd2d135e0695e0d8873ae30c3`.
+- Shared XML text boundary helper: `4c32ebdd98e1588b795ee6a6dd590ce913672f55`.
+  - preserves XML 1.0-valid BMP characters, tab/CR/LF and valid surrogate pairs;
+  - replaces forbidden controls, isolated surrogates and `U+FFFE/U+FFFF` with `U+FFFD`;
+  - applies XML escaping only after character normalization.
+- Material XLSX string cells switched to the helper: `a341906d4d320f72c137d8f5e7fe0af2772cd4f5`.
+- Curtain-wall XLSX string cells switched to the helper: `a6888d4edf25a8d97c2e6ae33d0f42151c5007d8`.
+- Door/opening XLSX string cells, including joined element/host IDs, switched to the helper: `fd243624d9d9f0312c9437e8789e4a562b8690e2`.
+- End-to-end smoke coverage added: `096438eaaed13852580a0151fbfd7b4266879072`.
+  - builds all three XLSX variants with text containing XML markup, `U+0001`, an isolated high surrogate and a valid emoji;
+  - requires forbidden controls to be absent, replacement characters to remain, valid supplementary Unicode to survive and markup to remain escaped;
+  - reparses generated worksheet XML with `XmlReader`.
+- Smoke registration added: `0cf30ea71611677c696fa16608333a49f1c794ca`.
 
-## Explicit non-overlap
+## Coordination / validation actually performed
 
-- No report aggregation/business-calculation changes.
-- No reporting reference-normalization changes.
-- No persistence/session, BricsCAD runtime, updater, installer, signing or release workflow changes.
-- No unrelated exporter refactor.
+- Exact exporter blobs were read from live `main` after the claim landed and used for conflict-safe updates.
+- The shared helper and focused smoke were re-read from current `main` after implementation and contain the intended character policy.
+- Current Export tree was re-read and confirms these are the three Core `*XlsxExporter.cs` surfaces in that directory and that the shared helper is present.
+- GitHub Actions were not dispatched.
+- A local validation attempt found `git` available but no `dotnet` SDK; network access from the shell also could not resolve GitHub, so the committed smoke executable/full solution could not be run locally in this session. No build/runtime PASS is claimed.
+- No native BricsCAD/Windows qualification, release or installer operation was performed.
 
-## Coordination / validation boundary
+## Result
 
-- Current claim-directory and exact filename searches showed no reservation for these exporter files before registration; GitHub code-search indexing reported incomplete results, so live `main` and exact target blobs will be re-read immediately before every source write.
-- Add deterministic Core smoke coverage for control characters, markup escaping, valid supplementary Unicode and invalid surrogate handling.
-- Do not dispatch GitHub Actions.
-- No native BricsCAD/Windows runtime PASS is claimed by this remote lane.
+All three Core XLSX exporters now sanitize XML 1.0-invalid text at the serialization boundary while preserving valid Unicode and normal XML escaping. Hostile or corrupted text values can no longer invalidate the worksheet XML through these string-cell writers.
