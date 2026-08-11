@@ -1,0 +1,20 @@
+# Agent work claim — Export preflight before Save dialog
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `ACTIVE`
+- Scope: source-safe low-click export lifecycle for `QS3DED2` and `QS3DBBS` so project/scope/data validation completes before asking the user to choose an output path.
+- Files reserved:
+  - `src/QS3D.BricsCAD.V25/Commands.cs`
+  - `scripts/preflight-export-before-save-dialog.py`
+  - this claim file for close-out
+- Problem: both exports currently open `SaveFileDialog` before proving that an existing QS3D project and exportable rows exist. A user can choose a file path and only afterward be told that the project/data/scope is invalid or empty.
+- Intended contract:
+  - ED2 requires existing non-empty project before scope interaction, resolves scope and builds/validates detached preview rows before Save dialog;
+  - BBS requires existing project and non-empty validated rebar schedule before Save dialog;
+  - no persistent project mutation is introduced; detached preview regeneration stays detached;
+  - actual XLSX write remains strictly after Save dialog confirmation;
+  - existing export UI finalization and Handle/live checks remain intact.
+- Non-overlap: excludes Ribbon, Quantity windows/settings, updater, Reference Wall/PICKFIRST, native V25 runtime and other export command files.
+- Validation: exact commit diff/current-source review plus auto-discovered static preflight. No GitHub Actions under `continue all`.
+- Completion condition: invalid/empty ED2/BBS exports fail before Save dialog, successful exports still write only after path confirmation, and claim closes with exact SHAs.
