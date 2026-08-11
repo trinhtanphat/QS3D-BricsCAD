@@ -360,7 +360,7 @@ namespace QS3D.Core.Export
 
         private static bool CatalogIdentityFitsRuntime(
             string sourceId,
-            string sourceName,
+            string? sourceName,
             bool existingTargetIdentity,
             int maxIdLength,
             int maxNameLength,
@@ -501,7 +501,7 @@ namespace QS3D.Core.Export
             InterchangeIdentityKind kind,
             string id,
             string label,
-            string name)
+            string? name)
         {
             Add(items, new InterchangeImportResolutionItem(
                 kind,
@@ -516,7 +516,7 @@ namespace QS3D.Core.Export
             InterchangeIdentityKind kind,
             string id,
             string label,
-            string name)
+            string? name)
         {
             Add(items, new InterchangeImportResolutionItem(
                 kind,
@@ -543,12 +543,12 @@ namespace QS3D.Core.Export
                 : InterchangeDrawingFingerprintRelation.Different;
         }
 
-        private static string FamilyNameKey(ElementCategory category, string name) =>
+        private static string FamilyNameKey(ElementCategory category, string? name) =>
             category + "\u001f" + (name ?? string.Empty).Trim();
 
         private static bool NameOwnedByDifferentIdentity(
             IReadOnlyDictionary<string, string> owners,
-            string key,
+            string? key,
             string sourceId)
         {
             var normalizedKey = (key ?? string.Empty).Trim();

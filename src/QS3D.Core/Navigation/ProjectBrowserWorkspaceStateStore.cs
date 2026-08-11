@@ -257,7 +257,7 @@ namespace QS3D.Core.Navigation
         private static XElement Collection(string containerName, string itemName, IEnumerable<string> values) =>
             new XElement(containerName, (values ?? Enumerable.Empty<string>()).Select(x => new XElement(itemName, x)));
 
-        private static IReadOnlyList<ElementCategory> ReadCategories(XElement container)
+        private static IReadOnlyList<ElementCategory> ReadCategories(XElement? container)
         {
             if (container == null) throw new InvalidDataException("Project browser workspace Categories element is missing.");
             ValidateCollectionShape(container, "Category");
@@ -272,7 +272,7 @@ namespace QS3D.Core.Navigation
             return result.AsReadOnly();
         }
 
-        private static IReadOnlyList<string> ReadValues(XElement container, string itemName)
+        private static IReadOnlyList<string> ReadValues(XElement? container, string itemName)
         {
             if (container == null) throw new InvalidDataException("Project browser workspace collection element is missing.");
             ValidateCollectionShape(container, itemName);

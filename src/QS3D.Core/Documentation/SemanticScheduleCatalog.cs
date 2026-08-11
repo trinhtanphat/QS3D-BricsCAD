@@ -59,8 +59,9 @@ namespace QS3D.Core.Documentation
             if (payload.Length > MaxPayloadChars) throw new InvalidDataException("Semantic schedule catalog exceeds the 1 MiB metadata limit.");
 
             var root = Parse(payload);
-            if (!string.Equals(root.Name.LocalName, "semanticSchedules", StringComparison.Ordinal) || (string)root.Attribute("version") != "1")
+            if (root.Name.NamespaceName.Length != 0 || !string.Equals(root.Name.LocalName, "semanticSchedules", StringComparison.Ordinal) || (string)root.Attribute("version") != "1")
                 throw new InvalidDataException("Semantic schedule catalog format/version is invalid.");
+            ValidateSchema(root);
             var definitions = root.Elements("schedule").Select(ReadDefinition).ToList();
             ValidateCatalog(definitions);
             return definitions.AsReadOnly();
@@ -191,7 +192,7 @@ namespace QS3D.Core.Documentation
 
         private static string Serialize(IEnumerable<SemanticScheduleDefinition> definitions)
         {
-            var schedules = definitions.Select(Normalize)
+            var root = new XElement("semanticSchedules", new XAttribute("version", "1"), definitions.Select(Normalize)
                 .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .Select(x => new XElement("schedule",
                     new XAttribute("id", x.Id), new XAttribute("name", x.Name), new XAttribute("title", x.Title),
@@ -199,9 +200,7 @@ namespace QS3D.Core.Documentation
                     new XElement("categories", x.Categories.Select(c => new XElement("category", new XAttribute("value", c)))),
                     new XElement("include", x.IncludeElementIds.Select(id => new XElement("id", new XAttribute("value", id)))),
                     new XElement("exclude", x.ExcludeElementIds.Select(id => new XElement("id", new XAttribute("value", id)))),
-                    new XElement("columns", x.Columns.Select(c => new XElement("column", new XAttribute("header", c.Header), new XAttribute("template", c.Template))))))
-                .ToArray();
-            var root = new XElement("semanticSchedules", new XAttribute("version", "1"), schedules);
+                    new XElement("columns", x.Columns.Select(c => new XElement("column", new XAttribute("header", c.Header), new XAttribute("template", c.Template)))))));
             return root.ToString(SaveOptions.DisableFormatting);
         }
 
@@ -219,6 +218,84 @@ namespace QS3D.Core.Documentation
             {
                 throw new InvalidDataException("Semantic schedule definition is malformed.", ex);
             }
+        }
+
+        private static void ValidateSchema(XElement root)
+        {
+            ValidateElement(root, "semanticSchedules", new[] { "version" }, new[] { "schedule" });
+            foreach (var schedule in root.Elements("schedule"))
+            {
+                ValidateElement(schedule, "schedule", new[] { "id", "name", "title", "floorId", "zoneId" }, new[] { "categories", "include", "exclude", "columns" });
+                EnsureAtMostOneChild(schedule, "categories");
+                EnsureAtMostOneChild(schedule, "include");
+                EnsureAtMostOneChild(schedule, "exclude");
+                EnsureAtMostOneChild(schedule, "columns");
+
+                var categories = schedule.Element("categories");
+                if (categories != null)
+                {
+                    ValidateElement(categories, "categories", Array.Empty<string>(), new[] { "category" });
+                    foreach (var category in categories.Elements("category"))
+                        ValidateElement(category, "category", new[] { "value" }, Array.Empty<string>());
+                }
+
+                var include = schedule.Element("include");
+                if (include != null)
+                {
+                    ValidateElement(include, "include", Array.Empty<string>(), new[] { "id" });
+                    foreach (var id in include.Elements("id"))
+                        ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+                }
+
+                var exclude = schedule.Element("exclude");
+                if (exclude != null)
+                {
+                    ValidateElement(exclude, "exclude", Array.Empty<string>(), new[] { "id" });
+                    foreach (var id in exclude.Elements("id"))
+                        ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+                }
+
+                var columns = schedule.Element("columns");
+                if (columns != null)
+                {
+                    ValidateElement(columns, "columns", Array.Empty<string>(), new[] { "column" });
+                    foreach (var column in columns.Elements("column"))
+                        ValidateElement(column, "column", new[] { "header", "template" }, Array.Empty<string>());
+                }
+            }
+        }
+
+        private static void ValidateElement(XElement element, string expectedName, IReadOnlyCollection<string> allowedAttributes, IReadOnlyCollection<string> allowedChildren)
+        {
+            if (element.Name.NamespaceName.Length != 0 || !string.Equals(element.Name.LocalName, expectedName, StringComparison.Ordinal))
+                throw new InvalidDataException("Semantic schedule catalog contains an unsupported XML element: " + element.Name + ".");
+
+            foreach (var attribute in element.Attributes())
+            {
+                if (attribute.Name.NamespaceName.Length != 0 || !allowedAttributes.Contains(attribute.Name.LocalName))
+                    throw new InvalidDataException("Semantic schedule catalog contains an unsupported attribute on " + expectedName + ": " + attribute.Name + ".");
+            }
+
+            foreach (var node in element.Nodes())
+            {
+                var child = node as XElement;
+                if (child != null)
+                {
+                    if (child.Name.NamespaceName.Length != 0 || !allowedChildren.Contains(child.Name.LocalName))
+                        throw new InvalidDataException("Semantic schedule catalog contains an unsupported child of " + expectedName + ": " + child.Name + ".");
+                    continue;
+                }
+
+                var text = node as XText;
+                if (text != null && string.IsNullOrWhiteSpace(text.Value)) continue;
+                throw new InvalidDataException("Semantic schedule catalog contains unsupported XML content in " + expectedName + ".");
+            }
+        }
+
+        private static void EnsureAtMostOneChild(XElement parent, string childName)
+        {
+            if (parent.Elements(childName).Skip(1).Any())
+                throw new InvalidDataException("Semantic schedule catalog contains duplicate " + childName + " containers.");
         }
 
         private static XElement Parse(string payload)

@@ -35,7 +35,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("lưu Zone");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Lưu Zone");
                 var rollback = ProjectStateSnapshot.Capture(project);
                 ZoneDefinition zone;
                 try
@@ -48,7 +48,7 @@ namespace QS3D.BricsCAD.V25.UI
                     else
                     {
                         var before = project.Zones.FirstOrDefault(x => string.Equals(x.Id, _editingId, StringComparison.OrdinalIgnoreCase))
-                            ?? throw new InvalidOperationException("Zone đang chỉnh không còn tồn tại.");
+                            ?? throw new InvalidOperationException("Zone đang chỉnh không còn tồn tại trong project hiện tại. Hãy Refresh rồi chọn lại Zone.");
                         var oldName = before.Name;
                         zone = ProjectZoneService.Update(project, before.Id, ZoneNameBox.Text);
                         if (!string.Equals(oldName, zone.Name, StringComparison.Ordinal))
@@ -75,7 +75,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("xóa Zone");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Xóa Zone");
                 var zone = RequireSelectedZone(project);
                 var rollback = ProjectStateSnapshot.Capture(project);
                 var deleted = false;
@@ -106,7 +106,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("đặt Zone active");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Đặt Zone active");
                 var zone = RequireSelectedZone(project);
                 var previous = project.ActiveZoneId;
                 var rollback = ProjectStateSnapshot.Capture(project);
@@ -135,7 +135,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("gán Zone cho selection");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Gán Zone cho selection");
                 var zone = RequireSelectedZone(project);
                 var elements = SemanticSelectionResolver.ResolveImplied(_document, project)
                     .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
@@ -174,10 +174,14 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("kiểm tra selection");
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                    throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Zone Manager không tạo replacement project khi chỉ kiểm tra selection.");
                 var elements = SemanticSelectionResolver.ResolveImplied(_document, project);
                 SelectionCountText.Text = elements.Count.ToString(CultureInfo.InvariantCulture);
-                var zones = elements.GroupBy(x => x.ZoneId, StringComparer.OrdinalIgnoreCase).Select(x => (project.Zones.FirstOrDefault(z => string.Equals(z.Id, x.Key, StringComparison.OrdinalIgnoreCase))?.Name ?? x.Key) + ": " + x.Count()).ToList();
+                var zones = elements
+                    .GroupBy(x => x.ZoneId, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => (project.Zones.FirstOrDefault(z => string.Equals(z.Id, x.Key, StringComparison.OrdinalIgnoreCase))?.Name ?? x.Key) + ": " + x.Count())
+                    .ToList();
                 SetStatus(elements.Count == 0 ? "Selection chưa resolve semantic element." : "Selection: " + string.Join(" • ", zones));
             }
             catch (Exception ex) { SetStatus("Kiểm tra selection lỗi: " + ex.Message); }
@@ -187,8 +191,23 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
                 var previous = string.IsNullOrWhiteSpace(preferredId) ? (ZoneList.SelectedItem as ZoneDefinition)?.Id : preferredId;
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                {
+                    _loading = true;
+                    try { ZoneList.ItemsSource = null; ZoneList.SelectedItem = null; }
+                    finally { _loading = false; }
+                    _editingId = string.Empty;
+                    ZoneNameBox.Text = string.Empty;
+                    ActiveZoneText.Text = "—";
+                    SelectedZoneText.Text = "—";
+                    ReferenceCountText.Text = "0";
+                    SelectionCountText.Text = "—";
+                    Title = "QS3D • Zone • " + DrawingLabel(_document);
+                    SetStatus("Chưa có QS3D project hiện hữu cho bản vẽ này. Zone Manager không tạo replacement project khi chỉ đọc.");
+                    return;
+                }
+
                 var zones = project.Zones.OrderBy(x => x.Name).ToList();
                 _loading = true;
                 try
@@ -217,21 +236,35 @@ namespace QS3D.BricsCAD.V25.UI
             if (!(ZoneList.SelectedItem is ZoneDefinition selected))
                 throw new InvalidOperationException("Chọn một Zone trước khi thực hiện thao tác.");
             return project.Zones.FirstOrDefault(x => string.Equals(x.Id, selected.Id, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Zone đã chọn không còn tồn tại trong project hiện tại.");
+                ?? throw new InvalidOperationException("Zone đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại.");
         }
 
         private void LoadEditor()
         {
-            if (!(ZoneList.SelectedItem is ZoneDefinition zone)) return;
+            if (!(ZoneList.SelectedItem is ZoneDefinition zone))
+            {
+                _editingId = string.Empty;
+                ZoneNameBox.Text = string.Empty;
+                return;
+            }
             _editingId = zone.Id;
             ZoneNameBox.Text = zone.Name;
         }
 
         private void RefreshLabels()
         {
-            var project = ProjectContextCoordinator.GetOrCreate(_document);
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+            {
+                ActiveZoneText.Text = "—";
+                SelectedZoneText.Text = "—";
+                ReferenceCountText.Text = "0";
+                SelectionCountText.Text = "—";
+                return;
+            }
+
             var active = project.Zones.FirstOrDefault(x => string.Equals(x.Id, project.ActiveZoneId, StringComparison.OrdinalIgnoreCase));
-            var selected = ZoneList.SelectedItem as ZoneDefinition;
+            var selectedId = (ZoneList.SelectedItem as ZoneDefinition)?.Id;
+            var selected = project.Zones.FirstOrDefault(x => string.Equals(x.Id, selectedId, StringComparison.OrdinalIgnoreCase));
             ActiveZoneText.Text = active?.Name ?? "—";
             SelectedZoneText.Text = selected?.Name ?? "—";
             ReferenceCountText.Text = selected == null ? "0" : ProjectZoneService.ReferenceCount(project, selected.Id).ToString(CultureInfo.InvariantCulture);

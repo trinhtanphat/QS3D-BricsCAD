@@ -155,7 +155,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var family = FindRequired(project, familyId);
-            var references = project.Elements.Count(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase));
+            var references = ResolveFamilyMembers(project, family.Id).Count;
             if (references > 0)
                 throw new InvalidOperationException("Family '" + family.Name + "' is referenced by " + references + " semantic element(s). Reassign them before deletion.");
             if (project.Metadata.TryGetValue("ActiveFamilyId", out var active) && string.Equals(active, family.Id, StringComparison.OrdinalIgnoreCase))
@@ -169,7 +169,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var family = FindRequired(project, familyId);
-            return project.Elements.Count(x => string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase));
+            return ResolveFamilyMembers(project, family.Id).Count;
         }
 
         private static IReadOnlyList<ProjectElement> ResolveFamilyMembers(ProjectState project, string familyId)

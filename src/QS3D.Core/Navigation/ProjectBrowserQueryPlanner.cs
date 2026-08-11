@@ -169,7 +169,7 @@ namespace QS3D.Core.Navigation
 
         private static bool Contains(string? value, string query)
         {
-            return value is string candidate && candidate.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+            return value != null && value.Length > 0 && value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static Dictionary<string, ProjectFamily> BuildUniqueFamilyIndex(ProjectState project)

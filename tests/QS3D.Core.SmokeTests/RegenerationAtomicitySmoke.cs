@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             FailedBatchRestoresWholeProjectSnapshot();
+            DuplicateCleanEntryBlocksFullRegenerationBeforeMutation();
         }
 
         private static void FailedBatchRestoresWholeProjectSnapshot()
@@ -37,6 +38,28 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Failed regeneration must restore project UpdatedUtc from before the batch.");
             if (project.Elements.Count != 2 || project.Elements.Select(x => x.Id).OrderBy(x => x).SequenceEqual(new[] { "A", "B" }) == false)
                 throw new Exception("Failed regeneration must restore the original semantic element set.");
+        }
+
+        private static void DuplicateCleanEntryBlocksFullRegenerationBeforeMutation()
+        {
+            var project = new ProjectState("regen-duplicate", "Duplicate regeneration identity");
+            var dirty = new ProjectElement("A", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            var cleanDuplicate = new ProjectElement("a", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            cleanDuplicate.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(dirty);
+            project.Elements.Add(cleanDuplicate);
+            var beforeUpdated = project.UpdatedUtc;
+            var beforeVersion = project.ChangeVersion;
+
+            var engine = new RegenerationEngine(new DependencyGraph(), new IElementRegenerator[] { new MutateThenFailRegenerator() });
+            Throws<InvalidOperationException>(() => engine.RegenerateDirty(project));
+
+            if (dirty.Properties.ContainsKey("Probe") || cleanDuplicate.Properties.ContainsKey("Probe") || project.Metadata.ContainsKey("Transient"))
+                throw new Exception("Full regeneration mutated a corrupt duplicate-ID project before failing closed.");
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Full regeneration touched project persistence state before duplicate-ID validation failed.");
+            if (project.Elements.Count != 2 || !ReferenceEquals(project.Elements[0], dirty) || !ReferenceEquals(project.Elements[1], cleanDuplicate))
+                throw new Exception("Full regeneration changed duplicate-ID project membership before failing closed.");
         }
 
         private sealed class MutateThenFailRegenerator : IElementRegenerator

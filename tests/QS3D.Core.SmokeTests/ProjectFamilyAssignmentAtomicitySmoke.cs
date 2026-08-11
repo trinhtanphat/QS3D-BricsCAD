@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             DuplicatePreviousFamilyBlocksWholeAssignmentBatch();
             DuplicatePreviousFamilyBlocksBulkEditBatch();
             CorruptProjectElementListBlocksPropertyPropagationBeforeMutation();
+            CorruptProjectElementListBlocksFamilyDeleteBeforeMutation();
             UndefinedProjectFamilyCategoryFailsClosed();
             UndefinedFamilyDefinitionCategoryFailsClosed();
         }
@@ -43,6 +44,24 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => ProjectFamilyService.SetProperty(project, family.Id, "WidthM", "0.3"));
             Equal("0.2", family.Properties["WidthM"], "Family property mutated before corrupt member list validation completed.");
+        }
+
+        private static void CorruptProjectElementListBlocksFamilyDeleteBeforeMutation()
+        {
+            var project = new ProjectState("family-delete-atomic", "Family delete atomicity");
+            var family = new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall);
+            project.Families.Add(family);
+            project.Elements.Add(new ProjectElement("E1", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty));
+            project.Elements.Add(new ProjectElement("e1", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty));
+            var beforeUpdated = project.UpdatedUtc;
+            var beforeVersion = project.ChangeVersion;
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Delete(project, family.Id));
+
+            if (project.Families.Count != 1 || !ReferenceEquals(project.Families[0], family))
+                throw new Exception("Family delete mutated catalog membership before corrupt semantic element validation completed.");
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Family delete touched project persistence state before corrupt semantic element validation completed.");
         }
 
         private static void UndefinedProjectFamilyCategoryFailsClosed()
