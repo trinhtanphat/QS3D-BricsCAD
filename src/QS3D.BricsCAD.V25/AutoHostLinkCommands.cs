@@ -330,8 +330,8 @@ namespace QS3D.BricsCAD.V25
                 !string.Equals(existingMatched, "true", StringComparison.OrdinalIgnoreCase);
             if (!gapChanged && !matchedChanged) return false;
 
-            opening.SetProperty("AutoHostGapM", gap);
-            opening.SetProperty("AutoHostMatched", "true");
+            opening.Properties["AutoHostGapM"] = gap;
+            opening.Properties["AutoHostMatched"] = "true";
             return true;
         }
 
