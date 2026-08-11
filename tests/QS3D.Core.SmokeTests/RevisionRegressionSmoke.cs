@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CaptureRejectsNonFiniteQuantities();
+            CaptureRejectsDuplicateElementIds();
             QuantityDiffRejectsOverflow();
             SummaryRejectsOverflow();
             DuplicateElementIdsAreRejected();
@@ -22,6 +23,14 @@ namespace QS3D.Core.SmokeTests
             element.Quantities["Bad"] = double.NaN;
             project.Elements.Add(element);
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "bad"));
+        }
+
+        private static void CaptureRejectsDuplicateElementIds()
+        {
+            var project = NewProject();
+            project.Elements.Add(new ProjectElement("E1", ElementCategory.Beam, string.Empty, "f", "z"));
+            project.Elements.Add(new ProjectElement("e1", ElementCategory.Beam, string.Empty, "f", "z"));
+            Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "duplicate-capture"));
         }
 
         private static void QuantityDiffRejectsOverflow()
