@@ -10,6 +10,7 @@ TARGETS = [
         "public static void Remove(Document document, ProjectState project)",
         "AuditTrail.ForProject(project).Record(\"BuildSemanticElementTable\"",
         "semantic element table build",
+        True,
     ),
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/SemanticElementTableBuilder.cs",
@@ -17,13 +18,15 @@ TARGETS = [
         "public static SemanticDocumentationTable BuildSnapshot",
         "AuditTrail.ForProject(project).Record(\"RemoveSemanticElementTable\"",
         "semantic element table remove",
+        False,
     ),
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/ProjectOwnedNativeTableArtifactService.cs",
         "public static string Build(",
         "public static void Remove(Document document, ProjectState project, ProjectOwnedNativeTableDefinition definition)",
-        "AuditTrail.ForProject(project).Record(\n                        \"documentation.table.replace\"",
+        "\"documentation.table.replace\"",
         "shared native table build",
+        True,
     ),
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/ProjectOwnedNativeTableArtifactService.cs",
@@ -31,12 +34,13 @@ TARGETS = [
         "public static Point3d StoredPosition",
         "AuditTrail.ForProject(project).Record(\"documentation.table.remove\"",
         "shared native table remove",
+        False,
     ),
 ]
 
 errors = []
 
-for path, start_token, end_token, audit_token, label in TARGETS:
+for path, start_token, end_token, audit_token, label, requires_model_space in TARGETS:
     if not path.is_file():
         errors.append("missing " + str(path.relative_to(ROOT)))
         continue
@@ -71,6 +75,12 @@ for path, start_token, end_token, audit_token, label in TARGETS:
         errors.append(path.name + ": " + label + " must not Touch project after CAD commit")
     if "if (!committed)" not in method and "if (!cadCommitted)" not in method:
         errors.append(path.name + ": " + label + " rollback must remain guarded by CAD commit state")
+    if "if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))" not in method:
+        errors.append(path.name + ": " + label + " must fail closed when the target DWG is no longer active")
+    if requires_model_space and "if (!document.Database.TileMode)" not in method:
+        errors.append(path.name + ": " + label + " must remain ModelSpace-only")
+    if "catch (Exception operationError)" not in method or "AggregateException(operationError, restoreError)" not in method:
+        errors.append(path.name + ": " + label + " must preserve both operation and rollback failures")
 
 print("QS3D native table transaction-boundary preflight")
 if errors:
@@ -79,4 +89,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: native table build/remove metadata, audit, and project revision commit before native CAD commit with snapshot rollback coverage.")
+print("PASS: native table build/remove stays document-bound, build stays ModelSpace-only, metadata/audit/revision commit before CAD, and rollback preserves compound failures.")
