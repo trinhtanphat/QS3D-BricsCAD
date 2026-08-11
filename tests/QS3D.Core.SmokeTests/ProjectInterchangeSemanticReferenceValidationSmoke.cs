@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             ExportRejectsMissingRegisteredReference();
+            ExportRejectsNullSemanticCollections();
             ValidatorRejectsNullSemanticElementBeforeOrdering();
             ValidatorAndTypedReaderRejectMissingRegisteredReference();
             ValidatorAndTypedReaderRejectInvalidLevelChain();
@@ -27,6 +28,21 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(opening);
 
             Throws<InvalidOperationException>(() => ProjectInterchangeJsonExporter.Build(project));
+        }
+
+        private static void ExportRejectsNullSemanticCollections()
+        {
+            var zoneProject = BaseProject("P-NULL-ZONE");
+            zoneProject.Zones.Add(null!);
+            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(zoneProject));
+
+            var floorProject = BaseProject("P-NULL-FLOOR");
+            floorProject.Floors.Add(null!);
+            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(floorProject));
+
+            var familyProject = BaseProject("P-NULL-FAMILY");
+            familyProject.Families.Add(null!);
+            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(familyProject));
         }
 
         private static void ValidatorRejectsNullSemanticElementBeforeOrdering()
