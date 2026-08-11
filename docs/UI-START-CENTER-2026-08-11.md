@@ -47,9 +47,11 @@ The catalogue includes the established Family/Type, Direct Draw Quick/Advanced, 
 
 Every launcher click resolves the **current** active document at execution time and calls only a catalogue item accepted by `StartCenterCommandCatalog.TryGet`. Arbitrary command strings are rejected.
 
-### Quick Workflow
+### Quick Workflow and featured actions
 
-The first screen promotes the shortest normal authoring route: Family / Type, Wall, Beam, Column, Slab, Door, Window, Create Similar, BQ and Model Health. The Start Center does not duplicate any of those workflows; it only launches their canonical commands. Quantity and support workflows remain discoverable through the same launcher instead of introducing a second implementation path.
+The first screen promotes the shortest normal authoring route: Family / Type, Wall, Beam, Column, Slab, Door, Window, Create Similar, BQ and Model Health. The Start Center does not duplicate any of those workflows; it only launches their canonical commands.
+
+To reduce command hunting further, the visible Quick Workflow row now also surfaces **Khối lượng Tường** (`QS3DWALLQTY`) and **Tham khảo** (`QS3DREFSEARCH`). The Review & Diagnostics card directly surfaces **Tạo Rule** (`QS3DRULECREATE`) and **Settings Health** (`QS3DQSETTINGSHEALTHEXPORT`) alongside Preview, Model Health, Diagnostic Summary and Release Check. These buttons use the same `OnAllowlistedCommandClick` path as the launcher; they are shortcuts, not alternate implementations.
 
 ### Favorites and recent commands
 
@@ -92,6 +94,7 @@ Project summary is read-only. Existing business commands keep ownership of their
 - shared Premium Dark theme usage;
 - Quick Workflow / Command Launcher / Favorites / Recent Projects / Review & Diagnostics surfaces;
 - hard-coded QS3D allowlisting and a representative command set;
+- visible featured shortcuts for `QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DRULECREATE` and `QS3DQSETTINGSHEALTHEXPORT` through the common allowlisted click path;
 - tokenized AND-semantics launcher search;
 - Unicode decomposition, combining-mark removal and `đ/Đ` folding for accent-insensitive Vietnamese lookup;
 - source registration for `QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DQSETTINGSHEALTHEXPORT` and `QS3DRULECREATE` before those commands may appear in the launcher;
@@ -123,6 +126,7 @@ Remote/source review is not BricsCAD runtime proof. Exact-candidate local qualif
 9. launcher queries `wall qty`, `model health`, `rebar mesh`, `tham khảo`, `tham khao`, `đối tượng` and `doi tuong` return only items matching every token after the documented fold, and launching the resulting `QS3DWALLQTY`, health/rebar and `QS3DREFSEARCH` entries follows the click-time active DWG;
 10. a disposable `start-center-v1.txt` containing one malformed Base64 line between valid favorite/recent/project records skips only the malformed line and preserves the later valid records after Start Center reload/restart;
 11. `QS3DQSETTINGSHEALTHEXPORT` launched from Start Center opens its normal guarded export flow rather than any Start Center-specific implementation;
-12. `QS3DRULECREATE` launched from Start Center enters the canonical command's existing prompt/validation/confirmation path and does not gain any Start Center-specific settings mutation path.
+12. `QS3DRULECREATE` launched from Start Center enters the canonical command's existing prompt/validation/confirmation path and does not gain any Start Center-specific settings mutation path;
+13. the four featured shortcuts (`QS3DWALLQTY`, `QS3DREFSEARCH`, `QS3DRULECREATE`, `QS3DQSETTINGSHEALTHEXPORT`) are visible at normal and HiDPI scales and dispatch through the same click-time active-DWG allowlisted path as launcher results.
 
 Keep private paths/screenshots and proprietary runtime material out of Git; only sanitized exact-SHA evidence belongs in the local qualification record. These runtime checks remain `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until executed on licensed BricsCAD V25.
