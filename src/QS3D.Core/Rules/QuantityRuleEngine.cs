@@ -167,6 +167,7 @@ namespace QS3D.Core.Rules
         {
             foreach (var item in source)
             {
+                if (string.IsNullOrWhiteSpace(item.Key)) continue;
                 if (double.TryParse(item.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && !double.IsNaN(value) && !double.IsInfinity(value))
                     target[item.Key] = value;
             }
