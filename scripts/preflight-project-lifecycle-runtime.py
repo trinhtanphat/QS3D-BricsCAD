@@ -35,9 +35,9 @@ if "ProjectContextCoordinator.GetOrCreate(document)" in ensure_body:
 refresh_start = workspace.find("public void RefreshProject()")
 refresh_end = workspace.find("public void SetStatus", refresh_start)
 refresh = workspace[refresh_start:refresh_end] if refresh_start >= 0 and refresh_end > refresh_start else ""
-require(refresh, "var project = ProjectContextCoordinator.GetOrCreate(doc);", "mutation-capable Workspace canonical project")
-if "ProjectContextCoordinator.TryGetReadOnly" in refresh:
-    errors.append("Workspace mutation view-model must not receive a detached read-only ProjectState")
+require(refresh, "ExistingProjectMutationContext.TryGet(doc, out var project)", "mutation-capable Workspace canonical project")
+if "ProjectContextCoordinator.TryGetReadOnly" in refresh or "ProjectContextCoordinator.GetOrCreate" in refresh:
+    errors.append("Workspace mutation view-model must bind an existing canonical ProjectState without cold-creating one")
 
 for token in (
     "EnsureUsable(existing);",

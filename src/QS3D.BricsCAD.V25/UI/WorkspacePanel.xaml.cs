@@ -181,7 +181,7 @@ namespace QS3D.BricsCAD.V25.UI
             _loadingContext = true;
             try
             {
-                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                if (!ExistingProjectMutationContext.TryGet(doc, out var project))
                 {
                     ClearProject("No QS3D project is available; Workspace remains read-only and non-creating.");
                     return;

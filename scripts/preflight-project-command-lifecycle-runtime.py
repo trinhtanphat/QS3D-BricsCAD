@@ -62,12 +62,12 @@ if refresh_start < 0 or refresh_end <= refresh_start:
     errors.append("cannot isolate WorkspacePanel.RefreshProject")
 else:
     refresh = workspace[refresh_start:refresh_end]
-    if "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)" not in refresh:
-        errors.append("Workspace refresh must probe project state read-only/non-creating")
+    if "ExistingProjectMutationContext.TryGet(doc, out var project)" not in refresh:
+        errors.append("Workspace refresh must bind only an existing canonical project")
     if "ClearProject(" not in refresh:
         errors.append("Workspace refresh must clear stale UI when no project exists")
-    if "ProjectContextCoordinator.GetOrCreate" in refresh or "ExistingProjectMutationContext" in refresh:
-        errors.append("passive Workspace refresh must not create or bind replacement project state")
+    if "ProjectContextCoordinator.GetOrCreate" in refresh or "ProjectContextCoordinator.TryGetReadOnly" in refresh:
+        errors.append("passive Workspace refresh must not cold-create or expose a detached project state")
 for token in (
     "git -C $repoRoot status --porcelain",
     "$exactSha = (& git -C $repoRoot rev-parse HEAD).Trim()",
