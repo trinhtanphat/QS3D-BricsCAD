@@ -37,6 +37,30 @@ else:
         if stale_return in body:
             errors.append("RightPanel.Refresh must clear stale drawings/layers instead of returning with prior-document UI")
 
+    refresh_drawings = re.search(
+        r"private void RefreshDrawingsOnly\(\)\s*\{(?P<body>.*?)\n        \}\n\n        private void RefreshAfterXrefMutation",
+        text,
+        re.DOTALL,
+    )
+    if not refresh_drawings:
+        errors.append("missing bounded RefreshDrawingsOnly")
+    else:
+        body = refresh_drawings.group("body")
+        for token in (
+            "var selectedDrawing = DrawingList?.SelectedItem as DrawingItemViewModel;",
+            "var restored = _viewModel.Drawings.FirstOrDefault",
+            "DrawingList.SelectedItem = restored;",
+            "if (selectedDrawing.IsXref && restored == null)",
+            "doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());",
+        ):
+            if token not in body:
+                errors.append("RightPanel drawing refresh selection cleanup missing: " + token)
+        restored_at = body.find("DrawingList.SelectedItem = restored;")
+        vanished_guard = body.find("if (selectedDrawing.IsXref && restored == null)")
+        cad_clear = body.find("doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());", vanished_guard)
+        if restored_at < 0 or vanished_guard < restored_at or cad_clear < vanished_guard:
+            errors.append("A previously selected Xref that disappears during refresh must clear its stale CAD implied selection")
+
     refresh_after_mutation = re.search(
         r"private void RefreshAfterXrefMutation\(string successStatus\)\s*\{(?P<body>.*?)\n        \}\n\n        private void OnRefreshClick",
         text,
@@ -139,4 +163,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: RightPanel clears stale prior-document state, drawing selection maps cleanly to CAD state, explicit clear avoids duplicate callbacks, and Xref reload/detach distinguish successful mutation from post-mutation panel refresh warnings.")
+print("PASS: RightPanel clears stale prior-document and vanished-Xref selection state, drawing selection maps cleanly to CAD state, explicit clear avoids duplicate callbacks, and Xref reload/detach distinguish successful mutation from post-mutation panel refresh warnings.")
