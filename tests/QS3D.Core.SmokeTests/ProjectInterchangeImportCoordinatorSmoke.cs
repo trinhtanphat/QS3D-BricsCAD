@@ -63,6 +63,8 @@ namespace QS3D.Core.SmokeTests
             Equal(1, plan.SemanticIdentitiesToAdd);
             True(plan.IdsToRemap > 0);
             Equal(1, plan.SourceHandleCount);
+            Equal(0, plan.NativeCleanupRequirements.Count);
+            Throws<InvalidOperationException>(() => plan.CreateNativeCleanupAuthorization());
             Equal(1, target.Elements.Count);
             Equal("TARGET", (target.FindElement("E1") ?? throw new Exception("Target missing.")).Properties["Mark"]);
         }
@@ -78,16 +80,25 @@ namespace QS3D.Core.SmokeTests
 
             True(plan.CanExecute);
             True(plan.RequiresNativeCleanup);
+            Equal(1, plan.NativeCleanupRequirements.Count);
+            Equal("E1", plan.NativeCleanupRequirements[0].ElementId);
+            Equal("AA11", plan.NativeCleanupRequirements[0].OwnerHandles.Single());
             Equal(1, plan.NativeCleanupElementIds.Count);
             Equal("E1", plan.NativeCleanupElementIds[0]);
             Equal(1, plan.SemanticIdentitiesToReplace);
             Equal(1, plan.SourceHandleCount);
+            True(plan.CreateNativeCleanupAuthorization().IsHandleBound);
         }
 
         private static void ExecuteRejectsCleanupAuthorityForOtherModes()
         {
             var target = new ProjectState("TARGET", "Target");
             var json = ProjectInterchangeJsonExporter.Build(SourceNewProject());
+            var appendPlan = ProjectInterchangeImportCoordinator.Plan(
+                target,
+                json,
+                Request(ProjectInterchangeImportExecutionMode.AppendOnly, false));
+            Throws<InvalidOperationException>(() => appendPlan.CreateNativeCleanupAuthorization());
             Throws<InvalidOperationException>(() => ProjectInterchangeImportCoordinator.Execute(
                 target,
                 json,
@@ -111,13 +122,11 @@ namespace QS3D.Core.SmokeTests
             True((target.FindElement("E1") ?? throw new Exception("Target missing.")).Properties.ContainsKey("GeneratedSolidHandle"));
 
             var coordinatorPlan = ProjectInterchangeImportCoordinator.Plan(target, json, request);
-            var semanticPlan = ProjectInterchangeUseSourceSemanticImporter.Plan(target, json);
-            Equal(string.Join("|", coordinatorPlan.NativeCleanupElementIds), string.Join("|", semanticPlan.TargetElementIdsRequiringNativeCleanup));
             var result = ProjectInterchangeImportCoordinator.Execute(
                 target,
                 json,
                 request,
-                ProjectInterchangeNativeCleanupAuthorization.ForPlan(semanticPlan));
+                coordinatorPlan.CreateNativeCleanupAuthorization());
 
             Equal(ProjectInterchangeImportExecutionMode.UseSourceSemanticData, result.Mode);
             Equal(1, result.SemanticIdentitiesReplaced);
