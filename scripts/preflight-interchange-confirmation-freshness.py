@@ -18,19 +18,27 @@ for path in [APPEND, REMAP, UNIFIED] + USE_SOURCE + [GUARD]:
     if not path.is_file():
         errors.append("missing source: " + str(path.relative_to(ROOT)))
 
-# Append-only still uses the shared exact reviewed-project/change-version guard.
+# Append-only captures the reviewed version, asks for confirmation, then delegates exact
+# reviewed-project/change-version validation to the shared non-creating confirmation guard.
 if APPEND.is_file():
     text = APPEND.read_text(encoding="utf-8")
     for token in [
         "previewChangeVersion = project.ChangeVersion",
         "ProjectContextCoordinator.GetOrCreate(document)",
-        "ReferenceEquals(currentProject, project)",
-        "currentProject.ChangeVersion != previewChangeVersion",
-        "changed after preview",
+        "var currentProject = InterchangeConfirmationGuard.RequireFresh(",
+        "project,\n                    previewChangeVersion",
+        '"Interchange Append"',
         "ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)",
     ]:
         if token not in text:
             errors.append(str(APPEND.relative_to(ROOT)) + " missing append freshness guard token: " + token)
+
+    preview = text.find("previewChangeVersion = project.ChangeVersion")
+    confirmation = text.find("System.Windows.MessageBoxButton.YesNo", preview)
+    freshness = text.find("var currentProject = InterchangeConfirmationGuard.RequireFresh(", confirmation)
+    mutation = text.find("ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)", freshness)
+    if min(preview, confirmation, freshness, mutation) < 0 or not preview < confirmation < freshness < mutation:
+        errors.append(str(APPEND.relative_to(ROOT)) + " append lifecycle must be preview-version capture -> confirmation -> shared freshness guard -> mutation")
 
 # Import-As-New preview is intentionally non-creating and freshness-binds to semantic stamps rather
 # than ProjectState object identity, so a cache replacement cannot make an old preview authoritative.
