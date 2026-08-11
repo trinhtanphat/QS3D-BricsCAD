@@ -49,11 +49,13 @@ namespace QS3D.Core.Domain
         private const string GeneratedFoundationMeshHandlesKey = "GeneratedFoundationMeshHandles";
         private const string GeneratedCurtainFrameHandlesKey = "GeneratedCurtainFrameHandles";
 
+        private ElementCategory _category;
+
         public ProjectElement(string id, ElementCategory category, string familyId, string floorId, string zoneId)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Element id is required.", nameof(id));
             Id = id.Trim();
-            Category = category;
+            _category = RequireCategory(category);
             FamilyId = familyId?.Trim() ?? string.Empty;
             FloorId = floorId?.Trim() ?? string.Empty;
             ZoneId = zoneId?.Trim() ?? string.Empty;
@@ -65,7 +67,16 @@ namespace QS3D.Core.Domain
         }
 
         public string Id { get; }
-        public ElementCategory Category { get; set; }
+        public ElementCategory Category
+        {
+            get => _category;
+            set
+            {
+                var next = RequireCategory(value);
+                if (_category == next) return;
+                _category = next;
+            }
+        }
         public string FamilyId { get; set; }
         public string FloorId { get; set; }
         public string ZoneId { get; set; }
@@ -204,6 +215,13 @@ namespace QS3D.Core.Domain
             if ((dirty & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(dirty));
             Dirty = dirty;
             UpdatedUtc = updatedUtc.Kind == DateTimeKind.Utc ? updatedUtc : updatedUtc.ToUniversalTime();
+        }
+
+        private static ElementCategory RequireCategory(ElementCategory value)
+        {
+            if (!Enum.IsDefined(typeof(ElementCategory), value))
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Element category must be a defined ElementCategory.");
+            return value;
         }
 
         private bool MarkGeneratedOutputStale(string outputKey, string stateKey, string snapshotKey)
