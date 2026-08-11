@@ -54,11 +54,18 @@ if "ProjectContextCoordinator.GetOrCreate" in refresh:
     errors.append("QS3DREFRESH must not create/cache a replacement project")
 
 probe = refresh.find("ProjectContextCoordinator.TryGetReadOnly(doc, out _)")
-bind = refresh.find('ExistingProjectMutationContext.Require(doc, "Refresh")')
-regenerate = refresh.find("RegenerateProject(project)")
+bind = refresh.find('ExistingProjectMutationContext.Require(doc, "Refresh")', probe)
+regenerate = refresh.find("RegenerateProject(project)", bind)
 refresh_ui = refresh.find("PaletteCoordinator.RefreshAll()", regenerate)
 if min(probe, bind, regenerate, refresh_ui) < 0 or not probe < bind < regenerate < refresh_ui:
     errors.append("QS3DREFRESH must probe read-only state, bind canonical state before mutation, then refresh UI")
+
+# The command intentionally has an earlier UI-only branch when there is no active document.
+# That branch must remain mutation-free and must not be mistaken for the post-regeneration RefreshAll.
+no_doc = refresh.find("if (doc == null) { PaletteCoordinator.RefreshAll(); return; }")
+guard = refresh.find('Guard(doc, "QS3DREFRESH"')
+if min(no_doc, guard) < 0 or not no_doc < guard:
+    errors.append("QS3DREFRESH must retain a UI-only no-active-document branch before project lifecycle work")
 
 for token, label in [
     ("LOCAL-001 — exact V25 build/load baseline", "canonical local baseline item"),
@@ -74,4 +81,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DREGEN binds canonical existing project state; QS3DREFRESH stays non-creating without a project and binds canonical state before optional regeneration; LOCAL-001 owns native V25 proof.")
+print("PASS: QS3DREGEN binds canonical existing project state; QS3DREFRESH keeps its no-document UI-only branch, stays non-creating without a project, and binds canonical state before optional regeneration; LOCAL-001 owns native V25 proof.")

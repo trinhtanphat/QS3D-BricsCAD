@@ -81,13 +81,15 @@ checks = {
         "MaxFramesPerElement = 4096",
         "MaxFramesPerBatch = 8192",
         "GeneratedCurtainFrameOwnershipGuard.Build(project)",
+        "ValidatePrevious(document, transaction, project, element, ownership)",
         "ownership.EnsureOwned(original, element)",
         "GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership",
+        "ErasePrevious(transaction, project, element, previous)",
+        'transaction.GetObject(item.Value, OpenMode.ForWrite, false)',
+        "Refusing destructive replacement before any frame is erased",
         'GeneratedCurtainFrameMode"] = update.OpeningCount > 0 ? OpeningAwareMode : Mode',
         "ClearGeneratedCurtainFrameStale",
         "CreateBox",
-        "GetObject(item.Value, OpenMode.ForWrite",
-        "Refusing destructive replacement before any frame is erased",
     ],
     "src/QS3D.BricsCAD.V25/CurtainWallFrameCommands.cs": [
         'CommandMethod("QS3DCURTAINFRAMES3D"', "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls"
@@ -132,4 +134,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: curtain layout/detail, opening interruption, linked-opening stale lifecycle, opening-aware native frame fragments, ownership/health, canonical host Build3D wiring and dedicated curtain-frame orchestration are present.")
+print("PASS: curtain layout/detail, opening interruption, linked-opening stale lifecycle, exact-set opening-aware native frame replacement/ownership, health, canonical host Build3D wiring and dedicated curtain-frame orchestration are present.")
