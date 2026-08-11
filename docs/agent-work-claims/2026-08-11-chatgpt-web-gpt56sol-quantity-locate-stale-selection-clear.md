@@ -4,19 +4,22 @@
 - State: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-20260811-quantity-locate-stale-selection-clear`
 - Started (UTC): `2026-08-11T15:14:30Z`
-- Last Updated (UTC): `2026-08-11T15:14:30Z`
+- Last Updated (UTC): `2026-08-11T15:18:00Z`
 - Expected Completion: `same session after implementation and repository-verifiable checks`
 - Task Key: `UI-QUANTITY-LOCATE-STALE-SELECTION-CLEAR`
-- Intended Work: Harden quantity locate failure behavior so a failed/zero-live-handle locate cannot leave the previous CAD implied selection highlighted. Cover both QS3DBQ/QuantitySummaryWindow and Quantity Insight locate paths through an explicit replace-selection primitive that can set an empty implied selection, while preserving multi-object selection, stale-handle tolerance, document affinity, read-only project behavior and zoom-only-after-positive-selection invariants.
-- Scope: `src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs`; `src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs`; `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs`; one focused preflight; this claim/plan documentation.
-- Out of Scope: Quantity/reporting formulas or grouping; semantic identity rules; project persistence/mutation; Excel locate; generic changes to existing `Select`/`SelectIfAny` behavior for unrelated callers; viewport camera algorithms; native V25 runtime claims.
-- Coordination: The earlier quantity-description-3D-locate and quantity-insight-single-click-reveal claims are complete. No claims-directory match was found for `CadHandleService` or this stale-selection-clear task before registration. Existing completed behavior will be extended, not rewritten.
-- Verification Plan: Focused static/preflight contract proving the quantity paths use replacement selection, replacement selection calls `SetImpliedSelection` even for an empty resolved set, multi-object resolution/dedup remains unchanged, and zoom remains gated on positive selected count. Re-fetch merged files and inspect current-main concurrency. Native mouse/PICKFIRST behavior remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under the existing local qualification queue.
+- Intended Work: Harden quantity locate failure behavior so a failed/zero-live-handle locate cannot leave the previous CAD implied selection highlighted. Preserve multi-object selection, stale-handle tolerance, document affinity, read-only project behavior and zoom-only-after-positive-selection invariants.
+- Scope: `src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs`; verification that existing `QuantitySummaryWindow.xaml.cs` and `QuantityInsightPanel.xaml.cs` continue to call the explicit `Select(...)` API; one focused preflight; this claim/plan documentation.
+- Implementation Contract: `CadHandleService.Select(...)` is the explicit replace-selection API and must always call `Editor.SetImpliedSelection(...)`, including with an empty resolved ID set. `SelectIfAny(...)` remains the preserve-on-empty API and keeps its existing early-return behavior. This corrects the currently collapsed semantics where `Select` is only an alias of `SelectIfAny` without requiring edits to the two concurrently active WPF source files.
+- Out of Scope: Quantity/reporting formulas or grouping; semantic identity rules; project persistence/mutation; Excel semantics; `SelectIfAny` behavior; viewport camera algorithms; native V25 runtime claims.
+- Coordination: The earlier quantity-description-3D-locate and quantity-insight-single-click-reveal claims are complete. No claims-directory match was found for `CadHandleService` or this stale-selection-clear task before registration. Existing completed behavior will be extended, not rewritten. The post-plan implementation refinement was recorded before source edits to minimize collision risk on WPF surfaces.
+- Verification Plan: Focused static/preflight contract proving `Select` resolves then unconditionally replaces implied selection, `SelectIfAny` retains its no-op-on-empty semantics, both Quantity surfaces still call `Select`, multi-object resolve/dedup remains unchanged, and zoom remains gated on positive selected count. Re-fetch merged files and inspect current-main concurrency. Native mouse/PICKFIRST behavior remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under the existing local qualification queue.
 - Completion Evidence:
-  - Claim commit: pending
-  - Planning commit: pending
+  - Claim commit: `70bb570e0c3881ecfbb3d6c39c48a8d90e3bb3d2`
+  - Planning commit: `1a9b4a2c83d764eef34c4e27921afab1bcaaeb4c`
+  - Scope-refinement commit: pending
   - Implementation commit: pending
   - Focused gate: pending
   - Qualifier verdict: pending
 - Change Log:
   - `2026-08-11T15:14:30Z` — Registered claim before planning/source edits after confirming the defect: `SelectIfAny` returns zero without replacing the implied selection, allowing the prior quantity row's CAD highlight to remain visible after a zero-live-target locate.
+  - `2026-08-11T15:18:00Z` — Refined implementation before source edits: preserve `SelectIfAny` exactly; make the already-explicit `Select` API perform replacement semantics. Both completed Quantity locate paths already use `Select`, so no WPF rewrite is necessary and concurrent UI collision risk is reduced.
