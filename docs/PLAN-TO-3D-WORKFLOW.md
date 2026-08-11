@@ -67,9 +67,9 @@ Mỗi wall mới chỉ được semantic-regenerate bằng `RegenerateDirtySubse
 
 Nếu batch mới bị lỗi giữa chừng, command tìm generated CAD bằng ownership metadata, xóa các Solid3d thuộc chính batch đó rồi restore `ProjectStateSnapshot`. Source 2D của người dùng không nằm trong rollback-delete set. Compensation này vẫn là whole-batch safety boundary hiện hữu; freshness hardening không tạo transaction engine thứ hai.
 
-Static lifecycle contract được khóa bởi `scripts/preflight-plan-to-3d-project-lifecycle.py`; scoped regeneration được khóa bởi `scripts/preflight-plan-to-3d-scoped-regeneration.py`; quick-vs-advanced interaction contract được khóa bởi `scripts/preflight-plan-to-3d-quick-authoring.py`.
+Static lifecycle contract được khóa bởi `scripts/preflight-plan-to-3d-project-lifecycle.py`; same-ObjectId geometry freshness được khóa bởi `scripts/preflight-plan-to-3d-source-geometry-freshness.py`; scoped regeneration được khóa bởi `scripts/preflight-plan-to-3d-scoped-regeneration.py`; quick-vs-advanced interaction contract được khóa bởi `scripts/preflight-plan-to-3d-quick-authoring.py`.
 
-Exact BricsCAD V25 proof cho project xuất hiện/thay project, Model Space/UCS thay đổi, source bị sửa/xóa/chuyển loại, quick no-prompt defaults, advanced prompt cancellation và ownership-scoped compensation nằm trong **LOCAL-008** của `docs/LOCAL-AGENT-INBOX.md`; source review không được coi là `LOCAL_PASS`.
+Exact BricsCAD V25 proof cho toàn bộ Plan-to-3D command contract — quick no-prompt defaults của `QS3DCONVERT2D` / `QS3DPLAN2WALLS`, advanced prompt cancellation của `QS3DCONVERT2DADV`, preview-to-commit freshness, scoped regeneration và ownership-scoped compensation — nằm trong **LOCAL-014** của `docs/LOCAL-AGENT-INBOX.md`. Runtime proof cho `QS3DDRAWWINDOW`, các quick-workflow Ribbon entry, Auto Host và explicit `QS3DCUTSELECTEDOPENINGS` handoff nằm trong **LOCAL-008**. Cả hai vẫn là `PENDING_LOCAL`; source review không được coi là `LOCAL_PASS` và không xác nhận các source gap chưa được sửa.
 
 ## Bước 3 — Hoàn thiện mô hình
 

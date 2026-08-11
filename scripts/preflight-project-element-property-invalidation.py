@@ -29,9 +29,10 @@ if not errors:
         body = set_property.group("body")
         for token in (
             "ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key)",
+            "ElementGeometryPolicy.AffectsGeneratedOutput(Category, key)",
             "ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity",
             "if (affectsGeneratedGeometry) flags |= ElementDirtyFlags.Geometry",
-            "MarkDirtyCore(flags, affectsGeneratedGeometry)",
+            "MarkDirtyCore(flags, affectsGeneratedOutput)",
         ):
             if token not in body:
                 errors.append("SetProperty missing property-specific invalidation token: " + token)
@@ -67,7 +68,10 @@ if not errors:
 
     for token in (
         '"WidthM"',
+        '"Material"',
+        '"CurtainFrameMaterial"',
         "AffectsGeneratedGeometry",
+        "AffectsGeneratedOutput",
         "RequiresGeneratedGeometry(category)",
     ):
         if token not in policy:

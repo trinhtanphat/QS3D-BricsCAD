@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
@@ -181,11 +182,14 @@ namespace QS3D.Core.SmokeTests
         {
             var target = NewProject("target", ElementCategory.Beam, "TARGET-FAM", "Target Family", "TARGET-ELEM");
             var source = NewProject("source", ElementCategory.Beam, "SOURCE-FAM", "Source Family", "SOURCE-ELEM");
-            source.Elements.Single().Properties[ProjectFloorService.BottomLevelIdKey] = "MISSING-LEVEL";
-            var plan = ProjectInterchangeRemapPlanner.Plan(target, ProjectInterchangeJsonExporter.Build(source));
-            False(plan.CanAppendAsNew);
-            var warning = plan.OpaqueReferenceWarnings.Single(x => x.PropertyKey == ProjectFloorService.BottomLevelIdKey);
-            True(warning.Reason.IndexOf("does not resolve inside the source snapshot", StringComparison.OrdinalIgnoreCase) >= 0);
+            source.Elements.Single().Properties[ProjectFloorService.BottomLevelIdKey] = "source-floor";
+            var validJson = ProjectInterchangeJsonExporter.Build(source);
+            var invalidJson = validJson.Replace(
+                "\"BottomLevelId\":\"source-floor\"",
+                "\"BottomLevelId\":\"MISSING-LEVEL\"",
+                StringComparison.Ordinal);
+            True(!string.Equals(validJson, invalidJson, StringComparison.Ordinal));
+            Throws<InvalidDataException>(() => ProjectInterchangeRemapPlanner.Plan(target, invalidJson));
         }
 
         private static ProjectState NewProject(string id, ElementCategory category, string familyId, string familyName, string elementId)

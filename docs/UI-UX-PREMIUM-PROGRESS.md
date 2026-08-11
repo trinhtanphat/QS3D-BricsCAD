@@ -1,6 +1,6 @@
 # QS3D Premium UI/UX Progress
 
-**Updated:** 2026-08-11 (UTC+7)  
+**Updated:** 2026-08-11 (UTC+7)
 **Scope:** BricsCAD V25 hosted WPF palettes and modeless windows.
 
 ## Current direction
@@ -31,8 +31,9 @@ The root contrast regression from the reference screenshot is guarded in `Theme.
 - Selected-object inspector keeps `Focus`, isolate/unisolate, locate and top-view workflows while adding a clear `CAD + SEMANTIC` marker.
 - Persistent bottom navigation remains tied to the native BricsCAD viewport.
 - Layout structure remains compatible with `WorkspacePanel.LayoutPersistence.cs`: root row 1 still exposes the 5-column main grid; Family remains column 2 and selected/room remains column 4 with split rows.
-- Property editing now commits on Enter as well as the existing focus-loss path, with a static regression guard (`27639b3bed1c46eb705d5bf0c222d74faf554335`, `ded166bdf77d0cf5d8033d927dbc08f697e30c0a`).
-- Palette minimum sizes are centralized and enforced from layout policy, avoiding drift between persisted layout and host palette constraints (`560f17d84b8b8120b9fb45a90b95e4b98cae6eed`, `03b263e0f1f6c30cd9e1cc5a1d0cd31decf1dd5d`, `3f49426e44a82feb220e4245811760d0cddf22df`).
+- Compact host sizing is separate from content sizing: BricsCAD may dock/restore the Workspace at `460 x 420`, while the three-column surface retains its `560`-DIP design width behind an explicit horizontal overflow viewport. The vertical axis stays constrained by the host so TreeView/ListView virtualization and native scrolling are preserved.
+- Property editing commits on Enter as well as the existing focus-loss path, with a static regression guard.
+- Palette minimum sizes are centralized and enforced from layout policy, avoiding drift between persisted layout and host palette constraints.
 
 ### P2 — Drawing / Xref / Layer palette
 

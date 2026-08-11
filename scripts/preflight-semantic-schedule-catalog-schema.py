@@ -19,7 +19,9 @@ def main():
     require(text, 'ValidateElement(schedule, "schedule", new[] { "id", "name", "title", "floorId", "zoneId" }, new[] { "categories", "include", "exclude", "columns" });', "schedule schema allowlist")
 
     for child in ("categories", "include", "exclude", "columns"):
-        require(text, 'EnsureAtMostOneChild(schedule, "' + child + '");', "duplicate singleton container guard for " + child)
+        require(text, 'var ' + child + ' = RequireExactlyOneChild(schedule, "' + child + '");', "exactly-one singleton container guard for " + child)
+
+    require(text, "if (children.Length != 1)", "exactly-one container cardinality check")
 
     require(text, 'ValidateElement(categories, "categories", Array.Empty<string>(), new[] { "category" });', "categories schema allowlist")
     require(text, 'ValidateElement(category, "category", new[] { "value" }, Array.Empty<string>());', "category schema allowlist")

@@ -135,7 +135,7 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex) { Report(document, "QS3DSCHEDULETABLEHEALTH lỗi: " + ex.Message); }
         }
 
-        private static SemanticScheduleDefinition PromptDefinition(Document document, ProjectState project)
+        private static SemanticScheduleDefinition? PromptDefinition(Document document, ProjectState project)
         {
             var definitions = SemanticScheduleCatalog.Load(project);
             if (definitions.Count == 0)
@@ -161,7 +161,7 @@ namespace QS3D.BricsCAD.V25
             return matches[0];
         }
 
-        private static string PromptRemovableScheduleId(Document document, ProjectState project)
+        private static string? PromptRemovableScheduleId(Document document, ProjectState project)
         {
             var definitions = SemanticScheduleCatalog.Load(project);
             var persisted = SemanticScheduleNativeTableBuilder.PersistedScheduleIds(project);

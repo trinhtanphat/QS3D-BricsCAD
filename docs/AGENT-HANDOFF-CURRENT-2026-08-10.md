@@ -89,9 +89,9 @@ This is **source-implemented / statically guarded**, not runtime-certified. Worl
 Do not overclaim these paths:
 
 - GlassWall Direct Draw builds/captures the backing GlassWall host. Curtain frame/panel behavior remains governed by `QS3DCURTAIN3D` / Curtain Hub and its dedicated source/runtime contracts.
-- **Curtain path-frame support is source-implemented** for guarded horizontal LINE and open/bulged WCS-XY POLYLINE paths using bounded tessellation/station mapping, generated ownership and live-fingerprint checks. This is not licensed-runtime proof and does not create panel-by-panel backing glass solids. Read `docs/CURTAIN-PATH-FRAMES.md`.
-- Canonical GlassWall host replacements and individual LINE/path Curtain frame replacements are cross-layer atomic inside their own native transaction families, but **`QS3DCURTAIN3D` is still a multi-transaction orchestration**, not an all-or-nothing command. If a later phase fails after an earlier host/frame phase committed, the command reports `Curtain 3D PARTIAL COMMIT` with committed phase counts and recovery via `QS3DCURTAINFRAMEHEALTH` / `QS3DHEALTHALL`; do not hide that state behind a generic error.
-- Do **not** add a command-level `ProjectStateSnapshot` to pretend whole-Curtain rollback. A semantic snapshot cannot resurrect Solid3d already committed by an earlier builder transaction. Whole host+frame atomicity requires an explicit shared native transaction/journal design.
+- **Curtain path-frame/panel support is source-implemented** for guarded horizontal LINE and open/bulged WCS-XY POLYLINE paths using bounded tessellation/station mapping, opening clipping, separate generated ownership and live-fingerprint checks. This is not licensed-runtime proof. Read `docs/CURTAIN-PATH-FRAMES.md` and `docs/CURTAIN-NATIVE-PANELS.md`.
+- `QS3DCURTAIN3D` captures a command-level `ProjectStateSnapshot` and encloses the canonical LINE/path host, frame and panel builders in one outer native transaction. A pre-commit phase failure aborts the outer transaction and restores the semantic snapshot; live-fingerprint/UI work stays post-commit and warning-only. `scripts/preflight-curtain-orchestration-boundary.py` and `scripts/preflight-curtain-native-panels.py` guard that source structure.
+- This outer/nested transaction contract is **source-implemented, not V25-runtime-qualified**. Do not restore obsolete `PARTIAL COMMIT` wording, and do not promote it to `LOCAL_PASS` until LOCAL-002 injects failures at every phase on the exact final SHA. Panel ownership/runtime status is tracked separately in `docs/CURTAIN-NATIVE-PANELS.md`.
 - WallPier P1 is deliberately two-point LINE-only so native dispatch stays on the specialized profile builder. Do not claim arbitrary multi-segment/freeform profile parity.
 - StructuralWall P1 uses the existing supported LINE structural path.
 - Foundation P1 uses the existing supported closed-POLYLINE structural path.
@@ -140,11 +140,11 @@ Still required before production claims:
 - successful and forced-failure rollback tests;
 - representative private-DWG save/reopen/multi-DWG regression;
 - GlassWall/Curtain, WallPier, StructuralWall and Foundation native geometry checks;
-- Curtain phase-failure regression proving truthful `PARTIAL COMMIT` reporting/recovery when a later host/frame phase fails after an earlier native phase committed;
+- Curtain phase-failure regression proving the outer transaction leaves no host/frame partial commit and restores semantic state for every pre-commit failure; post-commit fingerprint/UI failure must remain a truthful warning;
 - Door/Opening valid-host/no-host/ambiguous-host behavior, Floor/Zone/elevation/gap gates and sill/clearance persistence;
 - `QS3DCUTSELECTEDOPENINGS` with one/multiple selected openings, multiple hosts, mixed unrelated CAD selection, stale hosts, same-fingerprint rerun and different-fingerprint fail-closed behavior;
 - legacy `QS3DCUTOPENINGS` compatibility;
-- guarded LINE/open/bulged Curtain path-frame generation in real V25;
+- guarded LINE/open/bulged Curtain host/frame/panel generation, opening clipping and six-phase rollback in real V25;
 - representative testing against a private copy of owner-provided `MB MONG.dwg` without committing that file;
 - Unicode/HiDPI visual tests and large-model performance.
 

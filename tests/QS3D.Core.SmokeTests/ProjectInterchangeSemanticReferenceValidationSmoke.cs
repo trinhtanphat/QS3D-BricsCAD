@@ -31,7 +31,7 @@ namespace QS3D.Core.SmokeTests
         private static void ValidatorAndTypedReaderRejectMissingRegisteredReference()
         {
             var project = BaseProject("P-READ-REF");
-            var wall = new ProjectElement("E-WALL", ElementCategory.Wall, string.Empty, "A", string.Empty);
+            var wall = new ProjectElement("E-WALL", ElementCategory.ArchitecturalWall, string.Empty, "A", string.Empty);
             project.Elements.Add(wall);
             var opening = new ProjectElement("E-OPEN", ElementCategory.WallOpening, string.Empty, "A", string.Empty);
             opening.Properties[ProjectInterchangeSemanticReferencePolicy.HostWallIdKey] = wall.Id;

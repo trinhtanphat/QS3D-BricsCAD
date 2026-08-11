@@ -38,6 +38,7 @@ namespace QS3D.BricsCAD.V25
                     "No mutation was applied; reload the intended project and retry.");
             }
 
+            ProjectContextCoordinator.RequireBackingStoreUnchanged(document, canonical, "QS3D existing-project mutation");
             project = canonical;
             return true;
         }

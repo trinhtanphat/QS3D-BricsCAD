@@ -55,9 +55,10 @@ else:
     text = element.read_text(encoding="utf-8")
     for token in (
         "var affectsGeneratedGeometry = ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key);",
+        "var affectsGeneratedOutput = ElementGeometryPolicy.AffectsGeneratedOutput(Category, key);",
         "var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;",
         "if (affectsGeneratedGeometry) flags |= ElementDirtyFlags.Geometry;",
-        "MarkDirtyCore(flags, affectsGeneratedGeometry);",
+        "MarkDirtyCore(flags, affectsGeneratedOutput);",
     ):
         if token not in text:
             errors.append("ProjectElement property-specific dirty/stale policy missing: " + token)

@@ -15,6 +15,7 @@ namespace QS3D.Core.Diagnostics
             "WALL_MESH",
             "FOUNDATION_MESH",
             "CURTAIN_FRAME",
+            "CURTAIN_PANEL",
             "GRID_ANNOTATION",
             "SEMANTIC_TAG"
         };
@@ -49,6 +50,7 @@ namespace QS3D.Core.Diagnostics
             AddSafely(issues, seen, "GeneratedWallMeshHealthService", () => new GeneratedWallMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
             AddSafely(issues, seen, "GeneratedFoundationMeshHealthService", () => new GeneratedFoundationMeshHealthService().Inspect(project, liveGeneratedSolidHandles));
             AddSafely(issues, seen, "GeneratedCurtainFrameHealthService", () => new GeneratedCurtainFrameHealthService().Inspect(project, liveGeneratedSolidHandles));
+            AddSafely(issues, seen, "GeneratedCurtainPanelHealthService", () => new GeneratedCurtainPanelHealthService().Inspect(project, liveGeneratedSolidHandles));
 
             return issues.AsReadOnly();
         }

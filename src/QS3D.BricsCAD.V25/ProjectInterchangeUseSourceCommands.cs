@@ -32,6 +32,11 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
+                var validation = ProjectInterchangeJsonValidator.Validate(json);
+                if (!validation.IsValid)
+                    throw new InvalidDataException("Snapshot is not valid QS3D semantic interchange JSON.");
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                    throw new InvalidOperationException("Interchange UseSource stopped because the active DWG changed after file selection.");
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 {
                     const string blocked = "Interchange UseSource: target drawing chưa có QS3D project để replace. Dùng QS3DINTERCHANGEIMPORT để import vào target mới/trống.";
@@ -74,12 +79,12 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxButton.YesNo,
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
-                InterchangeConfirmationGuard.RequireFresh(
+                var confirmedProject = InterchangeConfirmationGuard.RequireFresh(
                     document,
                     project,
                     previewChangeVersion,
                     "Interchange UseSource Element");
-                var result = InterchangeUseSourceElementImportService.Import(document, json);
+                var result = InterchangeUseSourceElementImportService.Import(document, confirmedProject, json);
                 try { PaletteCoordinator.RefreshProject(); } catch { }
 
                 var status =

@@ -107,6 +107,7 @@ if GUARD.is_file():
         "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
         "ReferenceEquals(currentProject, reviewedProject)",
         "currentProject.ChangeVersion != reviewedChangeVersion",
+        "ProjectContextCoordinator.RequireBackingStoreUnchanged(document, currentProject, operation)",
         "changed after preview",
     ]:
         if token not in guard:

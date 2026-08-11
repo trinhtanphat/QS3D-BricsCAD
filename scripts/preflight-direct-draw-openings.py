@@ -30,11 +30,11 @@ else:
         "CadHandleService.GetLiveHandles(document, new[] { handle })",
         "PlanarityToleranceM = 0.005d",
         "CadGeometryGuard.ToMeters(document, widthDrawing",
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject)",
-        "FamilyPositiveNumber(defaultsProject, category, \"HeightM\"",
-        "FamilyNonNegativeNumber(defaultsProject, category, \"BottomOffsetM\"",
-        "FamilyNonNegativeNumber(defaultsProject, category, \"SillHeightM\"",
-        "FamilyNonNegativeNumber(defaultsProject, category, \"BooleanClearanceM\"",
+        "DirectDrawProjectPreviewContext.Capture(document)",
+        "FamilyPositiveNumber(defaultsProject!, category, \"HeightM\"",
+        "FamilyNonNegativeNumber(defaultsProject!, category, \"BottomOffsetM\"",
+        "FamilyNonNegativeNumber(defaultsProject!, category, \"SillHeightM\"",
+        "FamilyNonNegativeNumber(defaultsProject!, category, \"BooleanClearanceM\"",
         "FamilyConfiguredNumber",
         "PreferredFamily(project, category)",
         "Sửa Family trước khi Direct Draw.",
@@ -64,8 +64,12 @@ else:
         errors.append("Door/Opening Direct Draw must not invoke the global physical-cut path")
     if "SendStringToExecute(\"QS3DCUTOPENINGS" in text:
         errors.append("Door/Opening Direct Draw must not queue global QS3DCUTOPENINGS")
-    if text.count("new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)") < 2:
-        errors.append("Door/Opening Direct Draw must validate semantic state both before and after Auto Host")
+    first_subset = '.RegenerateDirtySubset(project, new[] { createdElementId });'
+    second_subset = '.RegenerateDirtySubset(project, new[] { createdElementId, hostId });'
+    if first_subset not in text or second_subset not in text or text.find(first_subset) >= text.find(second_subset):
+        errors.append("Door/Opening Direct Draw must validate only the authored opening, then the opening+host closure after Auto Host")
+    if ".RegenerateDirty(project)" in text:
+        errors.append("Door/Opening Direct Draw must not clean unrelated dirty semantic elements")
     if text.count("Sửa Family trước khi Direct Draw.") < 3:
         errors.append("Configured positive/non-negative Door/Opening Family values must fail closed with a repair message")
 

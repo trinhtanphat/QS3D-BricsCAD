@@ -23,16 +23,16 @@ if SOURCE.is_file():
     for token in (
         'DrawWindowCore(promptParameters: false, operation: "QS3DDRAWWINDOW")',
         'DrawWindowCore(promptParameters: true, operation: "QS3DDRAWWINDOWADV")',
-        'FamilyWindowNumber(defaultsProject, "WindowHeightM", 1.2d, positive: true)',
-        'FamilyWindowNumber(defaultsProject, "WindowSillHeightM", 0.9d, positive: false)',
-        'FamilyWindowNumber(defaultsProject, "BooleanClearanceM", 0.01d, positive: false)',
+        'FamilyWindowNumber(defaultsProject!, "WindowHeightM", 1.2d, positive: true)',
+        'FamilyWindowNumber(defaultsProject!, "WindowSillHeightM", 0.9d, positive: false)',
+        'FamilyWindowNumber(defaultsProject!, "BooleanClearanceM", 0.01d, positive: false)',
         "if (promptParameters)",
         'PromptPositiveMeters(document.Editor, "Chiều cao Cửa Sổ (m)"',
         'PromptNonNegativeMeters(document.Editor, "Cao độ bậu Cửa Sổ so với đáy host (m)"',
         'PromptNonNegativeMeters(document.Editor, "Khe hở boolean (m)"',
         "QS3DDRAWWINDOWADV",
         'createdElement.SetProperty("OpeningUsage", "Window")',
-        "new AutoHostLinkCommands().AutoLinkHosts()",
+        "AutoHostLinkCommands.LinkSingleOpening(document, project, createdElement.Id)",
         'createdElement.Properties.TryGetValue("HostWallId"',
         "ProjectStateSnapshot.Capture(project)",
         "EraseSource(document, sourceId)",
@@ -44,7 +44,7 @@ if SOURCE.is_file():
     defaults = text.find("var heightDefault = hasProject")
     gate = text.find("if (promptParameters)")
     else_pos = text.find("else", gate)
-    execute = text.find("Execute(document, points[0], points[1], widthM, heightM, sillM, clearanceM)", else_pos)
+    execute = text.find("Execute(document, project, points[0], points[1], widthM, heightM, sillM, clearanceM)", else_pos)
     if min(defaults, gate, else_pos, execute) < 0 or not (defaults < gate < else_pos < execute):
         errors.append("Window must resolve defaults -> optional advanced prompts -> canonical Execute")
     else:

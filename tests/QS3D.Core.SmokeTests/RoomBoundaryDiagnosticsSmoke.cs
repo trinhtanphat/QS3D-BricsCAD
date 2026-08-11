@@ -66,7 +66,7 @@ namespace QS3D.Core.SmokeTests
         {
             var service = new RoomBoundaryDiagnosticService();
             var first = service.Analyze(Square(), minimumArea: 0.5d);
-            var second = service.Analyze(Square().Reverse(), minimumArea: 0.5d);
+            var second = service.Analyze(Square().AsEnumerable().Reverse(), minimumArea: 0.5d);
             var firstReport = first.Report;
             var secondReport = second.Report;
 

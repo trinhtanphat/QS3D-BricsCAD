@@ -34,9 +34,6 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
-            Finite(sourceBaseElevationM, nameof(sourceBaseElevationM));
-            Positive(legacyHeightM, nameof(legacyHeightM));
-            Finite(legacyBottomOffsetM, nameof(legacyBottomOffsetM));
 
             var bottomLevelId = Property(element, ProjectFloorService.BottomLevelIdKey);
             var topLevelId = Property(element, ProjectFloorService.TopLevelIdKey);
@@ -46,6 +43,9 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("TopLevelId requires BottomLevelId on element " + element.Id + ".");
                 if (HasConfiguredProperty(element, ProjectFloorService.BottomLevelOffsetKey) || HasConfiguredProperty(element, ProjectFloorService.TopLevelOffsetKey))
                     throw new InvalidOperationException("Level offset requires its level reference on element " + element.Id + ".");
+                Finite(sourceBaseElevationM, nameof(sourceBaseElevationM));
+                Positive(legacyHeightM, nameof(legacyHeightM));
+                Finite(legacyBottomOffsetM, nameof(legacyBottomOffsetM));
                 var bottom = Add(sourceBaseElevationM, legacyBottomOffsetM, element.Id + "/legacy bottom elevation");
                 var top = Add(bottom, legacyHeightM, element.Id + "/legacy top elevation");
                 return new ElementVerticalPlacement(false, false, bottom, top);
@@ -59,6 +59,7 @@ namespace QS3D.Core.Domain
             {
                 if (HasConfiguredProperty(element, ProjectFloorService.TopLevelOffsetKey))
                     throw new InvalidOperationException("TopLevelOffsetM requires TopLevelId on element " + element.Id + ".");
+                Positive(legacyHeightM, nameof(legacyHeightM));
                 var top = Add(bottomElevation, legacyHeightM, element.Id + "/top elevation");
                 return new ElementVerticalPlacement(true, false, bottomElevation, top);
             }

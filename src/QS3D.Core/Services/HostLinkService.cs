@@ -156,7 +156,10 @@ namespace QS3D.Core.Services
             if (host == null) return;
             host.MarkDirty(ElementDirtyFlags.Quantity);
             if (host.Category == ElementCategory.GlassWall)
+            {
                 host.MarkGeneratedCurtainFrameStale("Linked opening " + openingId + " was " + action + ".");
+                host.MarkGeneratedCurtainPanelStale("Linked opening " + openingId + " was " + action + ".");
+            }
         }
 
         private static void EnsureOpening(ProjectElement element, string id)

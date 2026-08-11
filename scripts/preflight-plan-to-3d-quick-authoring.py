@@ -5,16 +5,30 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/PlanTo3DCommands.cs"
 DOC = ROOT / "docs/PLAN-TO-3D-WORKFLOW.md"
+INBOX = ROOT / "docs/LOCAL-AGENT-INBOX.md"
 errors = []
 
 if not SOURCE.is_file():
     errors.append("missing PlanTo3DCommands.cs")
 if not DOC.is_file():
     errors.append("missing PLAN-TO-3D-WORKFLOW.md")
+if not INBOX.is_file():
+    errors.append("missing LOCAL-AGENT-INBOX.md")
+
+
+def local_section(text, heading):
+    start = text.find(heading)
+    if start < 0:
+        errors.append("missing local handoff section: " + heading)
+        return ""
+    end = text.find("\n## ", start + len(heading))
+    return text[start:] if end < 0 else text[start:end]
 
 if not errors:
     source = SOURCE.read_text(encoding="utf-8")
     doc = DOC.read_text(encoding="utf-8")
+    inbox = INBOX.read_text(encoding="utf-8")
+    local014 = local_section(inbox, "## LOCAL-014")
 
     for token in (
         '[CommandMethod("QS3DCONVERT2D", CommandFlags.Modal)]',
@@ -49,10 +63,28 @@ if not errors:
         "BottomOffsetM=0 m",
         "RegenerateDirtySubset",
         "quick/no-prompt path",
-        "LOCAL-008",
+        "LOCAL-014",
     ):
         if token not in doc:
             errors.append("PlanTo3D docs missing quick-authoring token: " + token)
+
+    for token in (
+        "QS3DCONVERT2D",
+        "QS3DPLAN2WALLS",
+        "QS3DCONVERT2DADV",
+        "no Thickness/Height/BottomOffset prompt",
+        "deterministic same-ObjectId LINE/open-POLYLINE geometry fingerprints",
+        "PENDING_LOCAL",
+        "preflight-plan-to-3d-source-geometry-freshness.py",
+        "preflight-plan-to-3d-quick-authoring.py",
+        "preflight-plan-to-3d-scoped-regeneration.py",
+    ):
+        if token not in local014:
+            errors.append("LOCAL-014 quick-authoring handoff missing: " + token)
+
+    for misplaced in ("QS3DDRAWWINDOW", "QuickWorkflowRibbonAugmenter", "QS3DCUTSELECTEDOPENINGS"):
+        if misplaced in local014:
+            errors.append("LOCAL-014 must not absorb Direct Draw Window/Ribbon/cut runtime scope: " + misplaced)
 
 if errors:
     for error in errors:
@@ -60,4 +92,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: 2D-plan wall conversion defaults to active/preferred Family values without three repeated numeric prompts, preserves an explicit ADV override path, and retains freshness/scoped-regeneration safety.")
+print("PASS: Plan-to-3D quick/advanced source tokens are present and their exact runtime/default/cancel/scoped-regeneration proof is assigned to LOCAL-014 without absorbing Direct Draw Window scope.")

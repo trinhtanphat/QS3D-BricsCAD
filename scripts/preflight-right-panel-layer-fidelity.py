@@ -37,7 +37,9 @@ checks = {
     "code": [
         "private bool _refreshingLayers", "_refreshingLayers = true", "_refreshingLayers = false",
         "if (_refreshingLayers) return", "Color.FromRgb(item.Red, item.Green, item.Blue)", "brush.Freeze()",
-        "SetSelectedLayerLocks", "LayerVisibilityService.SetLocked", "RefreshLayers();",
+        "private void ReloadLayers()", "foreach (var item in DrawingCatalogReader.ReadLayers(doc))",
+        "CollectionViewSource.GetDefaultView(_viewModel.Layers)",
+        "private void ApplyLayerFilter()", "SetSelectedLayerLocks", "LayerVisibilityService.SetLocked", "ReloadLayers();",
     ],
 }
 
@@ -57,12 +59,42 @@ if files["xaml"].is_file():
 
 if files["code"].is_file():
     code = files["code"].read_text(encoding="utf-8")
-    refresh_start = code.find("private void RefreshLayers()")
+    refresh_start = code.find("private void ReloadLayers()")
+    filter_start = code.find("private void ApplyLayerFilter()", refresh_start)
     checkbox_start = code.find("private void SetLayerFromCheckBox")
-    if refresh_start < 0 or checkbox_start < 0:
-        errors.append("RightPanel refresh/checkbox methods are missing")
-    elif "_refreshingLayers" not in code[refresh_start:checkbox_start + 300]:
-        errors.append("RightPanel does not guard layer checkbox mutation during refresh")
+    bulk_visibility_start = code.find("private void SetSelectedLayers", checkbox_start)
+    bulk_lock_start = code.find("private void SetSelectedLayerLocks", bulk_visibility_start)
+    next_method = code.find("private void OnAttachXrefClick", bulk_lock_start)
+    if min(refresh_start, filter_start, checkbox_start, bulk_visibility_start, bulk_lock_start, next_method) < 0:
+        errors.append("RightPanel live reload/filter/checkbox/bulk layer methods are missing")
+    elif not (refresh_start < filter_start < checkbox_start < bulk_visibility_start < bulk_lock_start < next_method):
+        errors.append("RightPanel live reload, cached filter and native mutation methods must remain structurally separate")
+    else:
+        reload_body = code[refresh_start:filter_start]
+        filter_body = code[filter_start:checkbox_start]
+        checkbox_body = code[checkbox_start:bulk_visibility_start]
+        bulk_visibility_body = code[bulk_visibility_start:bulk_lock_start]
+        bulk_lock_body = code[bulk_lock_start:next_method]
+        for token in ("DrawingCatalogReader.ReadLayers(doc)", "ApplyLayerFilter();"):
+            if token not in reload_body:
+                errors.append("RightPanel ReloadLayers must re-read live CAD then rebuild the filtered view: " + token)
+        if "DrawingCatalogReader.ReadLayers" in filter_body:
+            errors.append("RightPanel ApplyLayerFilter must remain presentation-only over cached live snapshots")
+        for token in ("view.Filter =", "view.Refresh();", "_viewModel.SetLayerCounts"):
+            if token not in filter_body:
+                errors.append("RightPanel cached collection-view filter contract missing: " + token)
+        for forbidden in ("_refreshingLayers", "_viewModel.Layers.Clear", "new SolidColorBrush", "LayerVisibilityService"):
+            if forbidden in filter_body:
+                errors.append("RightPanel presentation-only filter must not rebuild rows or mutate CAD: " + forbidden)
+        for label, body, service in (
+            ("checkbox", checkbox_body, "LayerVisibilityService.SetVisible"),
+            ("bulk visibility", bulk_visibility_body, "LayerVisibilityService.SetVisible"),
+            ("bulk lock", bulk_lock_body, "LayerVisibilityService.SetLocked"),
+        ):
+            if service not in body or "ReloadLayers();" not in body:
+                errors.append("RightPanel " + label + " mutation must write native state then reload live layer snapshots")
+        if "if (_refreshingLayers) return" not in checkbox_body:
+            errors.append("RightPanel checkbox mutation must ignore events raised while rebuilding the cached view")
 
 print("QS3D RightPanel layer-fidelity preflight")
 if errors:

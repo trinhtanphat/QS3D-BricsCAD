@@ -69,7 +69,7 @@ checks = {
     "build_command": [
         "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines",
         "PolylineWallSolidBuilder.BuildSelected", "open/bulged POLYLINE WCS-XY", "RegenerateDirty(project)",
-        "FinalizeUi(document, hostSolids, frameSolids, stamped, regenerated, stampWarning)", '" UI sync warning: " + ex.Message',
+        "FinalizeUi(document, hostSolids, frameSolids, panelSolids, checked(stamped + panelsStamped), regenerated, stampWarning)", '" UI sync warning: " + ex.Message',
     ],
     "planner_smoke": [
         "ModuleInitializer", "BentPathSplitsFrameAtCorner", "ProjectionUsesNearestPathStation",

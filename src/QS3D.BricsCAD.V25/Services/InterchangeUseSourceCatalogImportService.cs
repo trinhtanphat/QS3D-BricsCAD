@@ -66,12 +66,16 @@ namespace QS3D.BricsCAD.V25.Services
             return Prepare(target, json).Plan;
         }
 
-        public static InterchangeUseSourceCatalogImportResult Import(Document document, string json)
+        public static InterchangeUseSourceCatalogImportResult Import(
+            Document document,
+            ProjectState authorizedProject,
+            string json)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            EnsureActive(document, "Interchange source-catalog import");
-
-            var project = ExistingProjectMutationContext.Require(document, "Interchange source-catalog import");
+            var project = InterchangeMutationTargetGuard.RequireExact(
+                document,
+                authorizedProject,
+                "Interchange source-catalog import");
             var prepared = Prepare(project, json);
             EnsureActive(document, "Interchange source-catalog import / mutation");
 

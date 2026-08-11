@@ -24,7 +24,7 @@ required = {
         "CadHandleService.GetLiveHandles(document, new[] { generatedHandle })",
         "EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles)",
         "rollback.Restore(project)",
-        "EnsureActive(document, \"Direct Draw P1 \" + category + \" / QS3DBUILD3D\")",
+        "EnsureActive(document, operation + \" / QS3DBUILD3D\")",
         "FinalizeUi(document, createdElement!, sourceId, generatedHandle)",
         "PlanarityToleranceM = 0.005d",
         "RequireModelSpace(document)",
@@ -166,7 +166,7 @@ if source.is_file():
 
     create = text.find("sourceId = createSource();")
     capture = text.find("SemanticCaptureService.Capture(document, category)")
-    active_check = text.find('EnsureActive(document, "Direct Draw P1 " + category + " / QS3DBUILD3D")')
+    active_check = text.find('EnsureActive(document, operation + " / QS3DBUILD3D")')
     build = text.find("new Build3DCommands().Build3D()")
     verify = text.find('createdElement.Properties.TryGetValue("GeneratedSolidHandle"')
     discover = text.find("GeneratedGeometryService.FindMatchingOwnedHandles")

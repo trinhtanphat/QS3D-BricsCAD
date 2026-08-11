@@ -16,7 +16,10 @@ namespace QS3D.Core.SmokeTests
 
         private static void PlanIncludesVerticalLevelReferencesAndNativeCleanup()
         {
-            var target = new ProjectState("TARGET-P", "Target");
+            var target = new ProjectState("TARGET-P", "Target")
+            {
+                DrawingFingerprint = "TARGET-VERTICAL-LEVEL-DWG"
+            };
             target.Floors.Add(new FloorDefinition("F1", "Target Level", 0d));
 
             var element = new ProjectElement("E1", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);

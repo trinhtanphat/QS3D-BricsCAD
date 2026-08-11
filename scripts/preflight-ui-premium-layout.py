@@ -3,6 +3,9 @@ from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="backslashreplace")
+
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI"
 errors = []
@@ -79,7 +82,7 @@ if right.is_file():
     text = right.read_text(encoding="utf-8")
     required = (
         'x:Key="RightBadge"', 'x:Key="RightToolbarBand"',
-        'Drawings.Count, StringFormat={}{0} bản vẽ', 'Layers.Count, StringFormat={}{0} lớp',
+        'Drawings.Count, StringFormat={}{0} bản vẽ', 'Text="{Binding LayerCountText}"',
         'Text="Xref / Drawing"', 'Text="Hiện / Ẩn / Khóa / Màu native"', 'Text="Tìm lớp"',
         'Background="{Binding ColorBrush}"', 'IsChecked="{Binding IsLocked}"',
         'Click="OnLockLayersClick"', 'Click="OnUnlockLayersClick"',

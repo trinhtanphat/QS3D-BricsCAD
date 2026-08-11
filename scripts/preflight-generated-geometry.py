@@ -61,7 +61,7 @@ if invalidator.is_file():
     for needle in (
         "CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix",
         "ClearGeneratedGeometryStale",
-        "EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership);",
+        "EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership, curtainPanelOwnership);",
         "ParseExpectedHandles", "CadHandleService.NormalizeHexHandle",
         "ResolveCompleteSet", "ids.Count != expected.Count",
         "Refusing destructive invalidation before any generated geometry is erased.",
@@ -69,7 +69,7 @@ if invalidator.is_file():
     ):
         if needle not in text: errors.append("dependent generated-geometry invalidation missing: " + needle)
 
-    strict_index = text.find("EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership);")
+    strict_index = text.find("EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership, curtainPanelOwnership);")
     mutation_index = text.find("GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);")
     if strict_index < 0 or mutation_index < 0 or strict_index >= mutation_index:
         errors.append("dependent generated-geometry invalidation must validate every expected live handle set before the first destructive replacement")
@@ -115,8 +115,10 @@ if ownership.is_file():
 workspace = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs"
 if workspace.is_file():
     text = workspace.read_text(encoding="utf-8")
-    for needle in ("element.SetProperty(key, next)", "element.MarkDirty(ElementDirtyFlags.All)"):
+    for needle in ("element.SetProperty(key, next)",):
         if needle not in text: errors.append("Workspace semantic edit must flow through stale-aware element mutation: " + needle)
+    if "element.MarkDirty(ElementDirtyFlags.All)" in text:
+        errors.append("Workspace must preserve ProjectElement.SetProperty property-specific dirty/geometry invalidation")
 
 wall_snap = ROOT / "src/QS3D.BricsCAD.V25/WallJunctionSnapCommands.cs"
 if wall_snap.is_file():

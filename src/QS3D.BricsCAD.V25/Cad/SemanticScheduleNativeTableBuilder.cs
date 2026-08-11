@@ -356,7 +356,7 @@ namespace QS3D.BricsCAD.V25.Cad
             ProjectState project,
             StateKeys keys,
             string scheduleId,
-            SemanticDocumentationTable expected,
+            SemanticDocumentationTable? expected,
             ICollection<ModelHealthIssue> issues)
         {
             var rawHandle = project.Metadata[keys.Handle].Trim();

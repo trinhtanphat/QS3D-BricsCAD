@@ -11,6 +11,11 @@ namespace QS3D.Core.Domain
             "BottomOffsetM", "TopOffsetM", "ProfileWidthM", "AreaM2", "PerimeterM"
         };
 
+        private static readonly ISet<string> GeneratedOutputProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Material", "CurtainFrameMaterial"
+        };
+
         public static bool RequiresGeneratedGeometry(ElementCategory category)
         {
             return category == ElementCategory.ArchitecturalWall ||
@@ -31,6 +36,13 @@ namespace QS3D.Core.Domain
             return RequiresGeneratedGeometry(category) &&
                    !string.IsNullOrWhiteSpace(propertyName) &&
                    GeometryProperties.Contains(propertyName!.Trim());
+        }
+
+        public static bool AffectsGeneratedOutput(ElementCategory category, string? propertyName)
+        {
+            return RequiresGeneratedGeometry(category) &&
+                   !string.IsNullOrWhiteSpace(propertyName) &&
+                   (GeometryProperties.Contains(propertyName!.Trim()) || GeneratedOutputProperties.Contains(propertyName.Trim()));
         }
 
         public static ElementDirtyFlags SemanticCleanFlags(ElementCategory category)

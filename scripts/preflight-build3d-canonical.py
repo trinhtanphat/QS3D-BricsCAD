@@ -44,7 +44,7 @@ else:
         "NativeBuildCapability.Supports(x.Category)",
         "NativeBuildCapability.IsWallCategory(category)",
         "ValidateWallSourceBatch(selectedElements, sourceSnapshots, category",
-        "RegenerateDirty(project)",
+        ".RegenerateDirtySubset(project, regenerationScope)",
         "BuildCategory(document, project, category, sourceType)",
         "if (sourceTypes.Count == 0)",
         "FinalizeUi(document, elementIds, sourceHandles, built, regenerated, category, project)",

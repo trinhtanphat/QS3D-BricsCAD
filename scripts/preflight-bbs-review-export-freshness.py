@@ -18,14 +18,15 @@ else:
     else:
         body = text[export_start:export_end]
         confirm = body.find("if (dialog.ShowDialog(this) != true) return;")
-        build = body.find("_rows = BuildCurrentRows();", confirm + 1)
+        active = body.find("EnsureActive(", confirm + 1)
+        build = body.find("_rows = BuildCurrentRows();")
         bind = body.find("BindRows();", build + 1)
         nonempty = body.find("if (_rows.Count == 0)", bind + 1)
         export = body.find("XlsxRebarScheduleExporter.Export(dialog.FileName, _rows)", nonempty + 1)
-        if min(confirm, build, bind, nonempty, export) < 0:
-            errors.append("BBS review export missing save/live-build/rebind/nonempty/export contract token")
-        elif not confirm < build < bind < nonempty < export:
-            errors.append("BBS review XLSX must confirm Save before live detached build, UI rebind, nonempty validation, and export")
+        if min(confirm, active, build, bind, nonempty, export) < 0:
+            errors.append("BBS review export missing save/active-DWG/live-build/rebind/nonempty/export contract token")
+        elif not confirm < active < build < bind < nonempty < export:
+            errors.append("BBS review XLSX must confirm Save before active-DWG recheck, live detached build, UI rebind, nonempty validation, and export")
 
         before_confirm = body[:confirm if confirm >= 0 else 0]
         for forbidden in (

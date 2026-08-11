@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.BricsCAD.V25.Cad;
@@ -36,6 +38,7 @@ namespace QS3D.BricsCAD.V25
             public ObjectId Id { get; set; }
             public string Handle { get; set; } = string.Empty;
             public SourceKind Kind { get; set; }
+            public string GeometryFingerprint { get; set; } = string.Empty;
         }
 
         [CommandMethod("QS3DCONVERT2D", CommandFlags.Modal)]
@@ -209,7 +212,13 @@ namespace QS3D.BricsCAD.V25
                         var deltaM = Math.Abs(CadGeometryGuard.ToMeters(document, dz, "2D plan LINE/delta Z"));
                         if (deltaM > PlanarityToleranceM)
                             throw new InvalidOperationException("LINE wall phải gần ngang |ΔZ| <= 0.005 m: " + line.Handle + ".");
-                        result.Add(new SourceCandidate { Id = id, Handle = line.Handle.ToString(), Kind = SourceKind.Line });
+                        result.Add(new SourceCandidate
+                        {
+                            Id = id,
+                            Handle = line.Handle.ToString(),
+                            Kind = SourceKind.Line,
+                            GeometryFingerprint = BuildLineGeometryFingerprint(line)
+                        });
                         continue;
                     }
 
@@ -221,7 +230,13 @@ namespace QS3D.BricsCAD.V25
                         if (polyline.NumberOfVertices < 2)
                             throw new InvalidOperationException("Open POLYLINE cần ít nhất 2 đỉnh: " + polyline.Handle + ".");
                         RequireWorldPlanNormal(polyline);
-                        result.Add(new SourceCandidate { Id = id, Handle = polyline.Handle.ToString(), Kind = SourceKind.OpenPolyline });
+                        result.Add(new SourceCandidate
+                        {
+                            Id = id,
+                            Handle = polyline.Handle.ToString(),
+                            Kind = SourceKind.OpenPolyline,
+                            GeometryFingerprint = BuildOpenPolylineGeometryFingerprint(polyline)
+                        });
                         continue;
                     }
 
@@ -245,8 +260,73 @@ namespace QS3D.BricsCAD.V25
                 var right = after[index];
                 if (!left.Id.Equals(right.Id) ||
                     left.Kind != right.Kind ||
-                    !string.Equals(left.Handle, right.Handle, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(left.Handle, right.Handle, StringComparison.OrdinalIgnoreCase) ||
+                    string.IsNullOrWhiteSpace(left.GeometryFingerprint) ||
+                    string.IsNullOrWhiteSpace(right.GeometryFingerprint) ||
+                    !string.Equals(left.GeometryFingerprint, right.GeometryFingerprint, StringComparison.Ordinal))
                     throw new InvalidOperationException("Source 2D -> 3D đã thay đổi trong lúc xác nhận. Hãy chạy lại lệnh.");
+            }
+        }
+
+        private static string BuildLineGeometryFingerprint(Line line)
+        {
+            if (line == null) throw new ArgumentNullException(nameof(line));
+            var start = line.StartPoint;
+            var end = line.EndPoint;
+            var normal = line.Normal;
+            var canonical = new StringBuilder("QS3D_PLAN_SOURCE_V1|kind=LINE|start=");
+            AppendPoint3d(canonical, start.X, start.Y, start.Z, "LINE start");
+            canonical.Append("|end=");
+            AppendPoint3d(canonical, end.X, end.Y, end.Z, "LINE end");
+            canonical.Append("|normal=");
+            AppendPoint3d(canonical, normal.X, normal.Y, normal.Z, "LINE normal");
+            canonical.Append("|thickness=").Append(CanonicalGeometryNumber(line.Thickness, "LINE thickness"));
+            return HashGeometrySnapshot(canonical);
+        }
+
+        private static string BuildOpenPolylineGeometryFingerprint(Polyline polyline)
+        {
+            if (polyline == null) throw new ArgumentNullException(nameof(polyline));
+            var normal = polyline.Normal;
+            var canonical = new StringBuilder("QS3D_PLAN_SOURCE_V1|kind=OPEN_POLYLINE|closed=")
+                .Append(polyline.Closed ? "1" : "0")
+                .Append("|elevation=").Append(CanonicalGeometryNumber(polyline.Elevation, "POLYLINE elevation"))
+                .Append("|normal=");
+            AppendPoint3d(canonical, normal.X, normal.Y, normal.Z, "POLYLINE normal");
+            canonical.Append("|vertices=").Append(polyline.NumberOfVertices.ToString(CultureInfo.InvariantCulture));
+
+            for (var index = 0; index < polyline.NumberOfVertices; index++)
+            {
+                var point = polyline.GetPoint2dAt(index);
+                var bulge = polyline.GetBulgeAt(index);
+                canonical.Append('|').Append(index.ToString(CultureInfo.InvariantCulture)).Append(':')
+                    .Append(CanonicalGeometryNumber(point.X, "POLYLINE vertex X")).Append(',')
+                    .Append(CanonicalGeometryNumber(point.Y, "POLYLINE vertex Y")).Append(',')
+                    .Append(CanonicalGeometryNumber(bulge, "POLYLINE bulge"));
+            }
+
+            return HashGeometrySnapshot(canonical);
+        }
+
+        private static void AppendPoint3d(StringBuilder canonical, double x, double y, double z, string label)
+        {
+            canonical.Append(CanonicalGeometryNumber(x, label + " X")).Append(',')
+                .Append(CanonicalGeometryNumber(y, label + " Y")).Append(',')
+                .Append(CanonicalGeometryNumber(z, label + " Z"));
+        }
+
+        private static string CanonicalGeometryNumber(double value, string label) =>
+            CadGeometryGuard.Finite(value, label).ToString("R", CultureInfo.InvariantCulture);
+
+        private static string HashGeometrySnapshot(StringBuilder canonical)
+        {
+            if (canonical == null) throw new ArgumentNullException(nameof(canonical));
+            using (var sha = SHA256.Create())
+            {
+                var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(canonical.ToString()));
+                var output = new StringBuilder(bytes.Length * 2);
+                foreach (var value in bytes) output.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+                return output.ToString();
             }
         }
 

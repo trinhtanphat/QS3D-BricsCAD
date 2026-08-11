@@ -38,13 +38,13 @@ for token in (
         errors.append("RevisionWindow XAML missing semantic review token: " + token)
 
 for token in (
-    "new SemanticChangeReviewBuilder().Build(before, after)",
+    "new SemanticChangeReviewBuilder().Build(before, _afterSnapshot)",
     "SemanticGrid.ItemsSource = _semanticReview.Elements",
     "DocumentBoundWindowLifetime.Attach(this, _document)",
     "if (_rows.Count == 0 && _semanticReview.HasChanges) Tabs.SelectedIndex = 1",
     "SemanticGrid.SelectedItem is SemanticChangeReviewElement row",
     "new QuantityRevisionRow { ElementId = row.ElementId",
-    "EnsureActive();",
+    "EnsureActiveAndCurrent();",
     "OmittedSourceReferenceChangeCount",
 ):
     if token not in code:

@@ -33,7 +33,7 @@ if SOURCE.is_file():
 
     defaults = text.find("var heightDefault = hasDefaultsProject")
     prompt_gate = text.find("if (promptParameters)")
-    execute = text.find("Execute(document, category, label, points[0], points[1], widthM, heightM, sillM, clearanceM);")
+    execute = text.find("Execute(document, category, label, points[0], points[1], widthM, heightM, sillM, clearanceM, projectPreview);")
     if min(defaults, prompt_gate, execute) < 0 or not (defaults < prompt_gate < execute):
         errors.append("Door/Opening must resolve defaults -> optional advanced prompts -> canonical Execute")
 
@@ -56,10 +56,10 @@ if SOURCE.is_file():
             errors.append("quick Door/Opening status must advertise advanced command: " + token)
 
     for token in (
-        'FamilyPositiveNumber(defaultsProject, category, "HeightM", 2.2d)',
-        'FamilyNonNegativeNumber(defaultsProject, category, "BottomOffsetM", defaultSillM)',
-        'FamilyNonNegativeNumber(defaultsProject, category, "SillHeightM", bottomOffsetDefault)',
-        'FamilyNonNegativeNumber(defaultsProject, category, "BooleanClearanceM", 0.01d)',
+        'FamilyPositiveNumber(defaultsProject!, category, "HeightM", 2.2d)',
+        'FamilyNonNegativeNumber(defaultsProject!, category, "BottomOffsetM", defaultSillM)',
+        'FamilyNonNegativeNumber(defaultsProject!, category, "SillHeightM", bottomOffsetDefault)',
+        'FamilyNonNegativeNumber(defaultsProject!, category, "BooleanClearanceM", 0.01d)',
         "new AutoHostLinkCommands().AutoLinkHosts()",
         'createdElement.Properties.TryGetValue("HostWallId"',
         'createdElement.SetProperty("WidthM"',

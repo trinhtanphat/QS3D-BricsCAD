@@ -132,8 +132,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static bool Contains(string? value, string text)
         {
-            return !string.IsNullOrEmpty(value) &&
-                   value.IndexOf(text, StringComparison.CurrentCultureIgnoreCase) >= 0;
+            if (value == null || value.Length == 0) return false;
+            return value.IndexOf(text, StringComparison.CurrentCultureIgnoreCase) >= 0;
         }
     }
 }

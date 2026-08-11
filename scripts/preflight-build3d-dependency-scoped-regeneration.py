@@ -63,11 +63,12 @@ else:
 
 if "public int RegenerateDirtySubset(ProjectState project, IEnumerable<string> elementIds)" not in engine:
     errors.append("Core RegenerationEngine no longer exposes targeted regeneration")
-if "if (!candidateMap.ContainsKey(dependency)) continue;" not in graph:
+if "!byId.TryGetValue(dependencyId, out var dependency)" not in graph:
     errors.append("DependencyGraph candidate ordering contract changed; review Build3D closure logic")
 for token in (
-    'dependent.DependsOn.RemoveAll(x => string.Equals(x, host.Id, StringComparison.OrdinalIgnoreCase));',
-    "dependent.DependsOn.Add(host.Id);",
+    "RemoveDependencies(opening, wall.Id);",
+    "opening.DependsOn.Add(wall.Id);",
+    "DependencyMatches(opening.DependsOn[i], hostId)",
 ):
     if token not in host:
         errors.append("HostLinkService no longer mirrors canonical host dependency in DependsOn: " + token)

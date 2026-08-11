@@ -8,6 +8,7 @@ using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Services;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
@@ -38,6 +39,13 @@ namespace QS3D.BricsCAD.V25
             {
                 EnsureActive(document, operation);
                 RequireModelSpace(document);
+                var promptUnit = CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasProjectBeforePrompts = projectPreview.HasProject;
+                var expectedProjectChangeVersion = hasProjectBeforePrompts ? (long?)defaultsProject!.ChangeVersion : null;
+
                 var points = AcquireTwoPoints(document);
                 if (points == null) return;
 
@@ -49,12 +57,9 @@ namespace QS3D.BricsCAD.V25
                     CadGeometryGuard.ToMeters(document, widthDrawing, "Cửa Sổ/width"),
                     "Cửa Sổ/WidthM");
 
-                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
-                var defaultsProject = projectPreview.DefaultsProject;
-                var hasProject = projectPreview.HasProject;
-                var heightDefault = hasProject ? FamilyWindowNumber(defaultsProject!, "WindowHeightM", 1.2d, positive: true) : 1.2d;
-                var sillDefault = hasProject ? FamilyWindowNumber(defaultsProject!, "WindowSillHeightM", 0.9d, positive: false) : 0.9d;
-                var clearanceDefault = hasProject ? FamilyWindowNumber(defaultsProject!, "BooleanClearanceM", 0.01d, positive: false) : 0.01d;
+                var heightDefault = hasProjectBeforePrompts ? FamilyWindowNumber(defaultsProject!, "WindowHeightM", 1.2d, positive: true) : 1.2d;
+                var sillDefault = hasProjectBeforePrompts ? FamilyWindowNumber(defaultsProject!, "WindowSillHeightM", 0.9d, positive: false) : 0.9d;
+                var clearanceDefault = hasProjectBeforePrompts ? FamilyWindowNumber(defaultsProject!, "BooleanClearanceM", 0.01d, positive: false) : 0.01d;
 
                 var heightM = heightDefault;
                 var sillM = sillDefault;
@@ -81,15 +86,22 @@ namespace QS3D.BricsCAD.V25
                         " m). Dùng QS3DDRAWWINDOWADV khi cần nhập tham số riêng.");
                 }
 
-                Execute(document, points[0], points[1], widthM, heightM, sillM, clearanceM, projectPreview);
+                EnsureActive(document, operation + " / prompt freshness");
+                RequireModelSpace(document);
+                if (!document.Editor.CurrentUserCoordinateSystem.Equals(promptUcs))
+                    throw new InvalidOperationException("Current UCS đã thay đổi trong lúc nhập Cửa Sổ. Hãy chạy lại lệnh.");
+                if (CadUnitService.GetLengthUnit(document) != promptUnit)
+                    throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc nhập Cửa Sổ. Hãy chạy lại lệnh.");
+
+                var project = BindProjectAfterPrompts(document, projectPreview, expectedProjectChangeVersion, operation);
+                Execute(document, project, points[0], points[1], widthM, heightM, sillM, clearanceM);
             });
         }
 
-        private static void Execute(Document document, Point3d start, Point3d end, double widthM, double heightM, double sillM, double clearanceM, DirectDrawProjectPreviewContext projectPreview)
+        private static void Execute(Document document, ProjectState project, Point3d start, Point3d end, double widthM, double heightM, double sillM, double clearanceM)
         {
-            const string operation = "Direct Draw Cửa Sổ";
-            EnsureActive(document, operation);
-            var project = projectPreview.ResolveForMutation(document, operation);
+            EnsureActive(document, "Direct Draw Cửa Sổ");
+            RequireExactProject(document, project, "Direct Draw Cửa Sổ");
             var rollback = ProjectStateSnapshot.Capture(project);
             var sourceId = ObjectId.Null;
             ProjectElement? createdElement = null;
@@ -122,23 +134,27 @@ namespace QS3D.BricsCAD.V25
                 createdElement.SetProperty("BottomOffsetM", sillM.ToString("R", CultureInfo.InvariantCulture));
                 createdElement.SetProperty("BooleanClearanceM", clearanceM.ToString("R", CultureInfo.InvariantCulture));
 
-                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
-                    .RegenerateDirtySubset(project, new[] { createdElementId });
+                var regenerator = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
+                regenerated += regenerator.RegenerateDirtySubset(project, new[] { createdElement.Id });
 
                 EnsureActive(document, "Direct Draw Cửa Sổ / Auto Host");
-                document.Editor.SetImpliedSelection(new[] { sourceId });
-                new AutoHostLinkCommands().AutoLinkHosts();
+                RequireExactProject(document, project, "Direct Draw Cửa Sổ / Auto Host");
+                hostId = AutoHostLinkCommands.LinkSingleOpening(document, project, createdElement.Id);
                 EnsureActive(document, "Direct Draw Cửa Sổ / post Auto Host");
+                RequireExactProject(document, project, "Direct Draw Cửa Sổ / post Auto Host");
 
                 createdElement = project.Elements.SingleOrDefault(x =>
                     string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase));
                 if (createdElement == null)
                     throw new InvalidOperationException("Cửa Sổ vừa tạo không còn tồn tại sau Auto Host; operation được rollback.");
-                if (!createdElement.Properties.TryGetValue("HostWallId", out hostId) || string.IsNullOrWhiteSpace(hostId))
+                if (!createdElement.Properties.TryGetValue("HostWallId", out var recordedHostId) ||
+                    string.IsNullOrWhiteSpace(recordedHostId) ||
+                    !string.Equals(recordedHostId.Trim(), hostId, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Cửa Sổ chưa tìm được host duy nhất; operation được rollback để không tạo opening mồ côi.");
+                var host = project.FindElement(hostId) ??
+                    throw new InvalidOperationException("Host Cửa Sổ vừa liên kết không còn tồn tại: " + hostId + ".");
 
-                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
-                    .RegenerateDirtySubset(project, new[] { createdElementId, hostId });
+                regenerated += regenerator.RegenerateDirtySubset(project, new[] { createdElement.Id, host.Id });
                 project.Touch();
             }
             catch (Exception operationError)
@@ -165,6 +181,32 @@ namespace QS3D.BricsCAD.V25
             }
 
             FinalizeUi(document, sourceId, widthM, hostId, regenerated);
+        }
+
+        private static ProjectState BindProjectAfterPrompts(
+            Document document,
+            DirectDrawProjectPreviewContext projectPreview,
+            long? expectedProjectChangeVersion,
+            string operation)
+        {
+            EnsureActive(document, operation + " / project freshness");
+            var project = projectPreview.ResolveForMutation(document, operation);
+            if (projectPreview.HasProject)
+            {
+                if (!expectedProjectChangeVersion.HasValue ||
+                    project.ChangeVersion != expectedProjectChangeVersion.Value)
+                    throw new InvalidOperationException(
+                        "QS3D project đã bị thay thế hoặc thay đổi trong lúc nhập Cửa Sổ. Hãy chạy lại lệnh để dùng đúng project defaults.");
+            }
+            return project;
+        }
+
+        private static void RequireExactProject(Document document, ProjectState expectedProject, string operation)
+        {
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) ||
+                !ReferenceEquals(currentProject, expectedProject))
+                throw new InvalidOperationException(
+                    operation + " requires the exact canonical QS3D project authorized after prompts; project state was replaced.");
         }
 
         private static IReadOnlyList<Point3d>? AcquireTwoPoints(Document document)

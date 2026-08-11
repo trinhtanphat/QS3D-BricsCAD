@@ -28,7 +28,9 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 LayerSearchBox.Clear();
                 e.Handled = true;
+                return;
             }
+
         }
     }
 }

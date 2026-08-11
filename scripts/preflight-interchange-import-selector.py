@@ -18,6 +18,8 @@ if not errors:
 
     required = [
         '[CommandMethod("QS3DINTERCHANGEIMPORT", CommandFlags.Modal)]',
+        "ProjectInterchangeValidatedSnapshotReader.Read(json)",
+        'EnsureActive(document, "Interchange Import / preview")',
         "ProjectInterchangeImportPreview.Plan(project, json)",
         "if (preview.CollisionCount == 0)",
         "ProjectInterchangeAppendOnlyImporter.Plan(project, json)",
@@ -26,11 +28,11 @@ if not errors:
         "ProjectInterchangeKeepTargetImporter.Plan(project, json)",
         "ProjectInterchangeKeepTargetImporter.Import(project, json)",
         "InterchangeUseSourceElementImportService.Plan(project, json)",
-        "InterchangeUseSourceElementImportService.Import(document, json)",
+        "InterchangeUseSourceElementImportService.Import(document, confirmedProject, json)",
         "InterchangeUseSourceCatalogImportService.Plan(project, json)",
-        "InterchangeUseSourceCatalogImportService.Import(document, json)",
+        "InterchangeUseSourceCatalogImportService.Import(document, confirmedProject, json)",
         "InterchangeUseSourceAllImportService.Plan(project, json)",
-        "InterchangeUseSourceAllImportService.Import(document, json)",
+        "InterchangeUseSourceAllImportService.Import(document, confirmedProject, json)",
         "CollisionPolicyChoice.UseSourceElement",
         "CollisionPolicyChoice.UseSourceCatalog",
         "CollisionPolicyChoice.UseSourceAll",
@@ -56,6 +58,32 @@ if not errors:
 
     if c.index("ProjectInterchangeImportPreview.Plan(project, json)") > c.index("if (preview.CollisionCount == 0)"):
         errors.append("import preview must run before append-vs-collision policy routing")
+
+    guarded_read = c.find("var json = ReadGuardedSnapshotText(dialog.FileName);")
+    validation_token = "ProjectInterchangeValidatedSnapshotReader.Read(json)"
+    validation = c.find(validation_token, guarded_read)
+    active_check = c.find('EnsureActive(document, "Interchange Import / preview")', validation)
+    bootstrap = c.find("var project = ProjectContextCoordinator.GetOrCreate(document);", active_check)
+    preview = c.find("ProjectInterchangeImportPreview.Plan(project, json)", bootstrap)
+    if min(guarded_read, validation, active_check, bootstrap, preview) < 0 or not guarded_read < validation < active_check < bootstrap < preview:
+        errors.append("generic import must guarded-read -> strict validated-snapshot read -> verify active DWG -> bootstrap -> preview")
+    if c.count(validation_token) != 1:
+        errors.append("generic import must perform exactly one strict validated-snapshot read before target bootstrap")
+    if "ProjectInterchangeJsonValidator.Validate(json)" in c:
+        errors.append("generic import must not repeat the obsolete direct JSON validator after canonical validated-snapshot prevalidation")
+    if 0 <= bootstrap < validation:
+        errors.append("generic import must not bootstrap the target project before strict snapshot validation")
+
+    for stale_call in (
+        "RunUseSourceElement(document, json)",
+        "RunUseSourceCatalog(document, json)",
+        "RunUseSourceAll(document, json)",
+        "InterchangeUseSourceElementImportService.Import(document, json)",
+        "InterchangeUseSourceCatalogImportService.Import(document, json)",
+        "InterchangeUseSourceAllImportService.Import(document, json)",
+    ):
+        if stale_call in c:
+            errors.append("generic import must not discard its exact freshness-authorized project: " + stale_call)
 
     forbidden = [
         "GeneratedDependentGeometryInvalidator.Prepare",
@@ -116,4 +144,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-import-selector: PASS")
-print("Generic import routes to one policy only; append-only revalidates project freshness before mutation and all lower-layer mutation boundaries remain delegated.")
+print("Generic import validates before bootstrap and routes exactly one policy through the freshness-authorized project; lower-layer mutation remains delegated.")

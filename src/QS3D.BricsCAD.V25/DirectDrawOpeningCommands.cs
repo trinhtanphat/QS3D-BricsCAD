@@ -274,7 +274,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (double.IsNaN(defaultValue) || double.IsInfinity(defaultValue) || defaultValue <= 0d)
                 throw new InvalidOperationException(label + " default phải là số hữu hạn > 0.");
-            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = false,
                 AllowZero = false,
@@ -294,7 +294,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (double.IsNaN(defaultValue) || double.IsInfinity(defaultValue) || defaultValue < 0d)
                 throw new InvalidOperationException(label + " default phải là số hữu hạn >= 0.");
-            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = false,
                 AllowZero = true,

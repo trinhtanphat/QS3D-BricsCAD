@@ -56,6 +56,8 @@ checks = {
         'element.SetProperty("LengthM"',
         'element.SetProperty("AreaM2"',
         'element.SetProperty("PerimeterM"',
+        '.Where(x => x.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase))',
+        "element.Properties.Remove(key);",
         "element.SetProperty(MeasuredSolidQuantityPolicy.SurfaceAreaProperty",
         "element.SetProperty(MeasuredSolidQuantityPolicy.VolumeProperty",
         'element.SetProperty("CAD.SolidMetricSource", "Solid3d.MassProperties")',
@@ -214,6 +216,16 @@ if service.is_file():
 
     if "GeneratedHandleOwnershipLookupStatus" in text:
         errors.append("GeneratedHandleOwnershipLookupStatus is not part of the current Core ownership API")
+
+    refresh_start = text.find("private static void RefreshSourceDerivedState")
+    refresh_end = text.find("private static void UpdateOptionalCadMetadata", refresh_start)
+    refresh_body = text[refresh_start:refresh_end] if refresh_start >= 0 and refresh_end > refresh_start else ""
+    clear_cad = refresh_body.find('.Where(x => x.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase))')
+    set_entity_type = refresh_body.find('element.SetProperty("CAD.EntityType"')
+    apply_snapshot_metadata = refresh_body.find("foreach (var pair in snapshot.Metadata)")
+    if min(clear_cad, set_entity_type, apply_snapshot_metadata) < 0 or not (clear_cad < set_entity_type < apply_snapshot_metadata):
+        errors.append("Source reconcile must clear the replace-on-capture CAD.* namespace before applying current source identity and optional snapshot metadata")
+
     if "engine.RegenerateDirty(project)" in text:
         errors.append("Source reconcile must regenerate only the affected semantic closure, not unrelated dirty project elements")
     if "new Build3DCommands" in text or "QS3DBUILD3D" in text or "SendStringToExecute" in text:

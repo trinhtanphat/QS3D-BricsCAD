@@ -172,7 +172,7 @@ checks = {
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs": [
         "FamilyScope", "InstanceScope", "PropertyScopes", "SelectedPropertyScope", "SetSelectedElement", "LoadInstanceProperties", "ApplyInstanceProperty",
         "DisplayNameFor", "GroupFor", "IsNumericProperty", "Bề dày", "CỐT THÉP", "EditorKindFor", "ChoicesFor", "IsBooleanProperty",
-        "ProjectFamilyService.SetProperty", "InheritedInstancesUpdated", "OverridesPreserved", "instance override", "row.CanReset", "Đã đưa", "element.MarkDirty(ElementDirtyFlags.All)",
+        "ProjectFamilyService.SetProperty", "InheritedInstancesUpdated", "OverridesPreserved", "instance override", "row.CanReset", "Đã đưa", "element.SetProperty(key, next)",
         "string.Equals(previous, next, StringComparison.Ordinal)", "ProjectFamilyService.Rename", "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance"
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [

@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             LegacyPlacementRemainsSourceRelative();
             BottomAndTopLevelsResolveAbsolutePlacement();
+            LevelReferencesValidateOnlyConsumedLegacyInputs();
             TopAssignmentRequiresBottomAndValidRange();
             DuplicateLevelIdsFailClosedDuringPlacement();
             FloorMutationTracksAllReferenceKinds();
@@ -68,6 +69,46 @@ namespace QS3D.Core.SmokeTests
             Equal(1, ProjectFloorService.AssignBottomLevel(project, "L2", new[] { invalidRange }));
             Throws<InvalidOperationException>(() => ProjectFloorService.AssignTopLevel(project, "L1", new[] { invalidRange }));
             True(!invalidRange.Properties.ContainsKey(ProjectFloorService.TopLevelIdKey));
+        }
+
+        private static void LevelReferencesValidateOnlyConsumedLegacyInputs()
+        {
+            var project = NewProject();
+
+            var bottomOnly = NewElement(project, "bottom-ignores-source-legacy");
+            Equal(1, ProjectFloorService.AssignBottomLevel(project, "L1", new[] { bottomOnly }));
+            var bottomPlacement = ElementVerticalPlacementService.Resolve(
+                project,
+                bottomOnly,
+                double.NaN,
+                2.5d,
+                double.PositiveInfinity);
+            Near(3d, bottomPlacement.BottomElevationM);
+            Near(5.5d, bottomPlacement.TopElevationM);
+            Throws<ArgumentOutOfRangeException>(() => ElementVerticalPlacementService.Resolve(
+                project,
+                bottomOnly,
+                double.NaN,
+                0d,
+                double.PositiveInfinity));
+
+            var bounded = NewElement(project, "bounded-ignores-all-legacy");
+            Equal(1, ProjectFloorService.AssignBottomLevel(project, "L1", new[] { bounded }));
+            Equal(1, ProjectFloorService.AssignTopLevel(project, "L2", new[] { bounded }));
+            var boundedPlacement = ElementVerticalPlacementService.Resolve(
+                project,
+                bounded,
+                double.NaN,
+                double.NaN,
+                double.NegativeInfinity);
+            Near(3d, boundedPlacement.BottomElevationM);
+            Near(7d, boundedPlacement.TopElevationM);
+            Near(4d, boundedPlacement.HeightM);
+
+            var legacy = NewElement(project, "legacy-validates-all-inputs");
+            Throws<ArgumentOutOfRangeException>(() => ElementVerticalPlacementService.Resolve(project, legacy, double.NaN, 3d, 0d));
+            Throws<ArgumentOutOfRangeException>(() => ElementVerticalPlacementService.Resolve(project, legacy, 0d, 0d, 0d));
+            Throws<ArgumentOutOfRangeException>(() => ElementVerticalPlacementService.Resolve(project, legacy, 0d, 3d, double.PositiveInfinity));
         }
 
         private static void DuplicateLevelIdsFailClosedDuringPlacement()

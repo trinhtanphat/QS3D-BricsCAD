@@ -24,7 +24,7 @@ required = {
         "rollback.Restore(project)",
         "FinalizeUi(document, createdElement!",
         "EnsureActive(document",
-        "RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
+        ".RegenerateDirtySubset(project, new[] { createdElement.Id })",
         "WallSolidBuilder.BuildSelectedLineWalls",
         "PolylineWallSolidBuilder.BuildSelected",
         "StructuralSolidBuilder.BuildSelected",
@@ -41,11 +41,11 @@ required = {
         "Offset đáy Dầm so với Z source (m)",
         "Offset đáy Sàn so với Z source (m)",
         "Offset đáy Cột so với Z source (m)",
-        'element.Properties["ThicknessM"]',
-        'element.Properties["WidthM"]',
-        'element.Properties["DepthM"]',
-        'element.Properties["HeightM"]',
-        'element.Properties["BottomOffsetM"]',
+        'element.SetProperty("ThicknessM"',
+        'element.SetProperty("WidthM"',
+        'element.SetProperty("DepthM"',
+        'element.SetProperty("HeightM"',
+        'element.SetProperty("BottomOffsetM"',
         "AllowNone = points.Count >= minimumPoints",
         "PlanarityToleranceM = 0.005d",
         "CadGeometryGuard.ToMeters(document, deltaDrawingUnits",
@@ -83,7 +83,7 @@ required = {
         'string.Equals(x, "Polyline"',
         "sourceTypes.Count > 1",
         "không build chung LINE và open POLYLINE",
-        "RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
+        ".RegenerateDirtySubset(project, regenerationScope)",
         "BuildCategory(document, project, category, sourceType)",
         'return element.Properties.TryGetValue("GeneratedSolidHandle"',
     ],
@@ -225,7 +225,7 @@ if source.is_file():
 
     if text.count("RequireModelSpace(document);") < 4:
         errors.append("Every P0 Direct Draw command must fail closed outside Model Space")
-    if text.count('element.Properties["BottomOffsetM"]') < 4:
+    if text.count('element.SetProperty("BottomOffsetM"') < 8:
         errors.append("All P0 Direct Draw commands must persist the prompted source-relative bottom offset")
     if text.count("PromptPositiveMeters(document.Editor") < 7:
         errors.append("P0 Direct Draw must prompt key positive dimensions instead of silently using all Family defaults")

@@ -20,8 +20,8 @@ namespace QS3D.BricsCAD.V25.Services
 
     internal static class UserUiLayoutStore
     {
-        internal const int WorkspacePaletteMinWidth = 560;
-        internal const int WorkspacePaletteMinHeight = 540;
+        internal const int WorkspacePaletteMinWidth = 460;
+        internal const int WorkspacePaletteMinHeight = 420;
         internal const int RightPaletteMinWidth = 255;
         internal const int RightPaletteMinHeight = 480;
 

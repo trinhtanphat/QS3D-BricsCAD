@@ -372,7 +372,8 @@ namespace QS3D.Core.Export
         {
             foreach (var property in family.Properties)
             {
-                if ((property.Key ?? string.Empty).Trim().Length == 0 || property.Key.Trim().Length > 120)
+                var propertyKey = (property.Key ?? string.Empty).Trim();
+                if (propertyKey.Length == 0 || propertyKey.Length > 120)
                 {
                     reason = "target Family contains a property key outside the canonical 1..120 character runtime contract.";
                     return false;

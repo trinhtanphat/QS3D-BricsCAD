@@ -2,6 +2,9 @@
 from pathlib import Path
 import sys
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "src" / "QS3D.BricsCAD.V25" / "DirectDrawReferenceWallCommands.cs"
 errors = []
@@ -15,13 +18,13 @@ else:
         'AcquireReferenceLine(document)',
         'Chọn LINE tham chiếu cho Tường KT',
         'transaction.GetObject(result.ObjectId, OpenMode.ForRead) as Line',
-        'PromptPositiveMeters(document.Editor, "Chiều dài Tường (m)", reference.LengthM)',
+        'PromptPositiveMeters(document.Editor, "Chiều dài Tường (m)", lengthM)',
         '"Bề dày Tường (m)"',
         '"Chiều cao Tường (m)"',
-        'reference.CreateCenteredEndpoints(document, lengthM.Value)',
+        'reference.CreateCenteredEndpoints(document, lengthM)',
         'CreateWcsLine(document, endpoints.Start, endpoints.End)',
         'SemanticCaptureService.Capture(document, ElementCategory.ArchitecturalWall)',
-        'RegenerateDirty(project)',
+        '.RegenerateDirtySubset(project, new[] { createdElementId })',
         'WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall)',
         'GeneratedSolidHandle',
         'ProjectStateSnapshot.Capture(project)',
@@ -36,12 +39,12 @@ else:
             errors.append("missing reference-wall contract token: " + needle)
 
     reference_index = text.find('AcquireReferenceLine(document)')
-    length_index = text.find('PromptPositiveMeters(document.Editor, "Chiều dài Tường (m)", reference.LengthM)')
+    length_index = text.find('PromptPositiveMeters(document.Editor, "Chiều dài Tường (m)", lengthM)')
     thickness_index = text.find('"Bề dày Tường (m)"')
     height_index = text.find('"Chiều cao Tường (m)"')
     create_index = text.find('CreateWcsLine(document, endpoints.Start, endpoints.End)')
     capture_index = text.find('SemanticCaptureService.Capture(document, ElementCategory.ArchitecturalWall)')
-    regen_index = text.find('RegenerateDirty(project)')
+    regen_index = text.find('.RegenerateDirtySubset(project, new[] { createdElementId })')
     build_index = text.find('WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall)')
     if min(reference_index, length_index, thickness_index, height_index, create_index, capture_index, regen_index, build_index) < 0:
         errors.append("cannot verify reference -> dimensions -> source -> capture -> regenerate -> build ordering")

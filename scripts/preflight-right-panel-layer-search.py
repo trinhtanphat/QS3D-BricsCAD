@@ -151,6 +151,16 @@ else:
         if forbidden in text:
             errors.append("RightPanel keyboard shortcuts must not duplicate CAD internals or double-register the XAML key handler: " + forbidden)
 
+right_panel_code = "\n".join(
+    path.read_text(encoding="utf-8")
+    for path in sorted((ROOT / "src/QS3D.BricsCAD.V25/UI").glob("RightPanel*.cs"))
+)
+handler_signature = "private void OnRightPanelPreviewKeyDown(object sender, KeyEventArgs e)"
+if right_panel_code.count(handler_signature) != 1:
+    errors.append("RightPanel must define exactly one XAML PreviewKeyDown handler across all partial class files")
+if right_panel_code.count("e.Key == Key.F5") != 1:
+    errors.append("RightPanel must preserve exactly one F5 refresh shortcut implementation")
+
 print("QS3D RightPanel layer-search preflight")
 if errors:
     for error in errors:

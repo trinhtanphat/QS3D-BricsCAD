@@ -53,7 +53,7 @@ families = {
     "DirectDrawWindowCommands.cs": {
         "advanced": ["QS3DDRAWWINDOWADV"],
         "captures": 1,
-        "resolver": "projectPreview.ResolveForMutation(document, operation)",
+        "resolver": "BindProjectAfterPrompts(document, projectPreview, expectedProjectChangeVersion, operation)",
         "snapshot": "ProjectStateSnapshot.Capture(project)",
     },
     "DirectDrawReferenceWallCommands.cs": {
@@ -97,6 +97,8 @@ for text, filename in ((opening, "DirectDrawOpeningCommands.cs"), (window, "Dire
         errors.append(filename + ": shared quick/ADV executor must not bypass preview project resolver")
 if "var project = ProjectContextCoordinator.GetOrCreate(document);" in reference:
     errors.append("DirectDrawReferenceWallCommands.cs: reference-wall commit must not bypass preview project resolver")
+if "var project = projectPreview.ResolveForMutation(document, operation);" not in window:
+    errors.append("DirectDrawWindowCommands.cs: freshness helper must resolve the shared preview project before returning the mutation target")
 
 for token in (
     "same-ProjectId",

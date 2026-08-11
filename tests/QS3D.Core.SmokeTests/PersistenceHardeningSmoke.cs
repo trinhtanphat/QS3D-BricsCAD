@@ -17,6 +17,8 @@ namespace QS3D.Core.SmokeTests
         {
             V1Migration();
             BackupRecovery();
+            RecoverySavePreservesValidatedBackup();
+            PublishNewRejectsExistingPair();
             MissingPrimaryBackupRecovery();
             DuplicateIdRejected();
             InvalidNumericRejected();
@@ -24,6 +26,41 @@ namespace QS3D.Core.SmokeTests
             StableIdQuantityGrouping();
             ExportHeadersAndWorksheetUx();
             HealthRecoveryStates();
+        }
+
+        private static void RecoverySavePreservesValidatedBackup()
+        {
+            var path = Temp("recovery-heal", ".qsdb");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(NewProject("p", "Known Good"), path);
+                store.Save(NewProject("p", "Newer"), path);
+                File.WriteAllText(path, "<broken", Encoding.UTF8);
+                var recovered = store.LoadWithBackupFallback(path);
+                Require(recovered.RecoveredFromBackup, "Recovery-safe save test did not load the backup generation.");
+
+                store.SavePreservingValidatedBackup(recovered.Project, path);
+                Require(store.Load(path).Name == "Known Good", "Recovery-safe save did not heal the primary from the validated project.");
+                Require(store.Load(path + ".bak").Name == "Known Good", "Recovery-safe save replaced the validated backup with the corrupt primary.");
+            }
+            finally { Delete(path); Delete(path + ".bak"); }
+        }
+
+        private static void PublishNewRejectsExistingPair()
+        {
+            var path = Temp("publish-new", ".qsdb");
+            try
+            {
+                File.WriteAllText(path + ".bak", "external-backup", Encoding.UTF8);
+                var rejected = false;
+                try { new QsdbProjectStore().SaveNew(NewProject("p", "New"), path); }
+                catch (IOException) { rejected = true; }
+                Require(rejected, "Create-new QSDB publication accepted an existing backup.");
+                Require(!File.Exists(path), "Rejected create-new QSDB publication left a primary behind.");
+                Require(File.ReadAllText(path + ".bak", Encoding.UTF8) == "external-backup", "Rejected create-new QSDB publication changed the existing backup.");
+            }
+            finally { Delete(path); Delete(path + ".bak"); }
         }
 
         private static void V1Migration()

@@ -43,7 +43,10 @@ workspace = files["workspace"]
 if workspace.is_file():
     text = workspace.read_text(encoding="utf-8")
     for needle in (
-        'MinWidth="485"', 'MinHeight="520"', 'ResourceDictionary Source="Theme.xaml"',
+        'MinWidth="0"', 'MinHeight="0"', '<Grid MinWidth="560" Background="{StaticResource Bg0Brush}">',
+        'HorizontalScrollBarVisibility="Auto"', 'VerticalScrollBarVisibility="Disabled"',
+        'Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType={x:Type ScrollViewer}}}"',
+        'ResourceDictionary Source="Theme.xaml"',
         'TextTrimming="CharacterEllipsis"', 'ToolTip="{Binding Status}"',
         'ToolTip="Reset override về giá trị Family"', 'VIEWPORT BRICSCAD',
     ):

@@ -72,10 +72,10 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureActive("xuất BBS XLSX");
                 var dialog = new SaveFileDialog { Title = "Xuất BBS QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = _defaultFileName, AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
                 if (dialog.ShowDialog(this) != true) return;
 
+                EnsureActive("xuất BBS XLSX");
                 _rows = BuildCurrentRows();
                 BindRows();
                 if (_rows.Count == 0) throw new InvalidOperationException("BBS hiện chưa có dòng để xuất.");

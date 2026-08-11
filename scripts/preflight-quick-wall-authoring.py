@@ -34,9 +34,9 @@ if SOURCE.is_file():
             'FamilyFiniteNumber(defaultsProject, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d)',
             '() => CreateLine(document, points[0], points[1])',
             'ExecuteDirect(',
-            'element.Properties["ThicknessM"]',
-            'element.Properties["HeightM"]',
-            'element.Properties["BottomOffsetM"]',
+            'element.SetProperty("ThicknessM"',
+            'element.SetProperty("HeightM"',
+            'element.SetProperty("BottomOffsetM"',
             'QS3DDRAWWALLADV',
         ):
             if token not in quick:

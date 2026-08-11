@@ -78,4 +78,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DLINKHOST guards empty selection before existing-project bind, requires exactly one opening and host, snapshots before mutation, regenerates and re-resolves canonical HostWallId before post-commit UI, and never creates replacement project state or invokes physical cutting.")
+print("PASS: QS3DLINKHOST guards empty selection before existing-project bind, requires exactly one opening and compatible host, snapshots before mutation, regenerates and re-resolves canonical HostWallId before post-commit UI, rolls back semantic failure, and never creates replacement project state or invokes physical cutting.")
