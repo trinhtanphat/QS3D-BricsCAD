@@ -10,7 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RejectsMissingCurrentRootTimestamp();
-            RejectsMissingCurrentChangeVersion();
+            RejectsBlankCurrentChangeVersion();
             RejectsMissingCurrentRootSection();
             RejectsDuplicateCurrentRootSection();
             RejectsMissingCurrentFloorElevation();
@@ -29,10 +29,10 @@ namespace QS3D.Core.SmokeTests
                 path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
         }
 
-        private static void RejectsMissingCurrentChangeVersion()
+        private static void RejectsBlankCurrentChangeVersion()
         {
             WithProjectFile(
-                "<qs3d schema=\"3\" projectId=\"P9\" name=\"Missing change version\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\"><metadata/><zones/><floors/><families/><rules/><elements/><audit/></qs3d>",
+                "<qs3d schema=\"3\" projectId=\"P9\" name=\"Blank change version\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"\"><metadata/><zones/><floors/><families/><rules/><elements/><audit/></qs3d>",
                 path => Throws<InvalidDataException>(() => new QsdbProjectStore().Load(path)));
         }
 
