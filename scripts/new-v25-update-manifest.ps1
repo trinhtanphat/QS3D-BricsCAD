@@ -70,26 +70,26 @@ function Assert-AuthenticodeSigner {
     if ($actualSigner -ne $ExpectedSigner) { throw "$Label signer mismatch. Expected $ExpectedSigner, got $actualSigner." }
 }
 
-function Read-PluginAssemblyVersion {
-    param([string]$Path)
+function Read-ManagedAssemblyVersion {
+    param([string]$Path, [string]$Label)
     try {
         $version = [Reflection.AssemblyName]::GetAssemblyName($Path).Version
         if (-not $version) { throw 'assembly version is missing' }
         return $version
     }
     catch {
-        throw "QS3D plugin assembly version is unreadable: $($_.Exception.Message)"
+        throw "$Label assembly version is unreadable: $($_.Exception.Message)"
     }
 }
 
-function Read-PluginProductVersion {
-    param([string]$Path)
+function Read-ManagedProductVersion {
+    param([string]$Path, [string]$Label)
     try {
         $productVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($Path).ProductVersion
-        return Convert-ToStrictSemVerText -Value ([string]$productVersion) -Label 'Signed QS3D plugin product version'
+        return Convert-ToStrictSemVerText -Value ([string]$productVersion) -Label ("$Label product version")
     }
     catch {
-        throw "QS3D plugin product version is unreadable: $($_.Exception.Message)"
+        throw "$Label product version is unreadable: $($_.Exception.Message)"
     }
 }
 
@@ -218,15 +218,25 @@ $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
 foreach ($name in $SignedPayloadNames) {
     Assert-AuthenticodeSigner -Path (Join-Path $package $name) -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name)
 }
-$pluginPath = Join-Path $package 'QS3D.BricsCAD.V25.dll'
-$signedPluginVersion = Read-PluginAssemblyVersion -Path $pluginPath
-if ($version -ne $signedPluginVersion) {
-    throw "PACKAGE-METADATA version $version does not match signed QS3D plugin assembly version $signedPluginVersion."
+$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
+$managedIdentities = @{}
+foreach ($name in $managedIdentityNames) {
+    $path = Join-Path $package $name
+    $assemblyVersion = Read-ManagedAssemblyVersion -Path $path -Label $name
+    if ($version -ne $assemblyVersion) {
+        throw "PACKAGE-METADATA version $version does not match signed $name assembly version $assemblyVersion."
+    }
+    $managedProductVersion = Read-ManagedProductVersion -Path $path -Label $name
+    if (-not [string]::Equals($productVersion, $managedProductVersion, [StringComparison]::Ordinal)) {
+        throw "PACKAGE-METADATA productVersion $productVersion does not match signed $name product version $managedProductVersion."
+    }
+    $managedIdentities[$name] = [pscustomobject]@{
+        AssemblyVersion = $assemblyVersion
+        ProductVersion = $managedProductVersion
+    }
 }
-$signedPluginProductVersion = Read-PluginProductVersion -Path $pluginPath
-if (-not [string]::Equals($productVersion, $signedPluginProductVersion, [StringComparison]::Ordinal)) {
-    throw "PACKAGE-METADATA productVersion $productVersion does not match signed QS3D plugin product version $signedPluginProductVersion."
-}
+$signedPluginVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].AssemblyVersion
+$signedPluginProductVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].ProductVersion
 Assert-ZipPayloadMatchesSignedStaging -ZipPath $zip -PackageRoot $package -ExpectedSigner $expectedSigner
 
 $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()
