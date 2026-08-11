@@ -8,6 +8,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CreateUpdateAssignAndDelete();
+            ActiveIdCanonicalizationRepairsAliases();
             AssignmentMarksGeneratedGeometryStale();
             AssignmentRejectsSpoofedSameIdElement();
             DeleteGuardsActiveAndReferencedZones();
@@ -33,6 +34,12 @@ namespace QS3D.Core.SmokeTests
             ProjectZoneService.Update(project, z2.Id, "Khu kỹ thuật");
             if (z2.Name != "Khu kỹ thuật") throw new Exception("Zone update failed.");
             if (!ProjectZoneService.Delete(project, z2.Id)) throw new Exception("Unused non-active zone delete failed.");
+        }
+
+        private static void ActiveIdCanonicalizationRepairsAliases()
+        {
+            var project = new ProjectState("p-active-canonical", "Active zone canonicality");
+            var zone = ProjectZoneService.Create(project, "zone-a", "Khu A", );
         }
 
         private static void AssignmentMarksGeneratedGeometryStale()
