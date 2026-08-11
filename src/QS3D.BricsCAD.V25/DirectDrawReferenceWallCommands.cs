@@ -26,10 +26,10 @@ namespace QS3D.BricsCAD.V25
     {
         private const double PlanarityToleranceM = 0.005d;
 
-        [CommandMethod("QS3DDRAWWALLREF", CommandFlags.Modal)]
+        [CommandMethod("QS3DDRAWWALLREF", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void DrawWallFromReference() => DrawWallFromReferenceCore(promptParameters: false, operation: "QS3DDRAWWALLREF");
 
-        [CommandMethod("QS3DDRAWWALLREFADV", CommandFlags.Modal)]
+        [CommandMethod("QS3DDRAWWALLREFADV", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void DrawWallFromReferenceAdvanced() => DrawWallFromReferenceCore(promptParameters: true, operation: "QS3DDRAWWALLREFADV");
 
         private static void DrawWallFromReferenceCore(bool promptParameters, string operation)
@@ -107,17 +107,48 @@ namespace QS3D.BricsCAD.V25
         private static ReferenceLinePlan? AcquireReferenceLine(Document document)
         {
             EnsureActive(document, "QS3DDRAWWALLREF / reference");
+
+            var implied = document.Editor.SelectImplied();
+            if (implied.Status == PromptStatus.OK)
+            {
+                var objectIds = implied.Value.GetObjectIds();
+                if (objectIds.Length == 1)
+                {
+                    var impliedReference = ReadReferenceLine(document, objectIds[0], failIfNotLine: false);
+                    if (impliedReference != null)
+                    {
+                        document.Editor.WriteMessage("\nQS3D Tường theo tham chiếu: dùng LINE đã chọn sẵn.");
+                        return impliedReference;
+                    }
+                }
+            }
+
             var options = new PromptEntityOptions("\nChọn LINE tham chiếu cho Tường KT: ");
             var result = document.Editor.GetEntity(options);
             if (result.Status != PromptStatus.OK) return null;
+            return ReadReferenceLine(document, result.ObjectId, failIfNotLine: true);
+        }
+
+        private static ReferenceLinePlan? ReadReferenceLine(Document document, ObjectId objectId, bool failIfNotLine)
+        {
+            if (objectId.IsNull || !objectId.IsValid)
+            {
+                if (failIfNotLine)
+                    throw new InvalidOperationException("Tham chiếu Tường KT không còn là CAD object hợp lệ.");
+                return null;
+            }
 
             Point3d start;
             Point3d end;
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
-                var line = transaction.GetObject(result.ObjectId, OpenMode.ForRead) as Line;
+                var line = transaction.GetObject(objectId, OpenMode.ForRead) as Line;
                 if (line == null)
-                    throw new InvalidOperationException("Tham chiếu Tường KT phải là LINE. POLYLINE/ARC chưa được dùng làm reference cho lệnh này.");
+                {
+                    if (failIfNotLine)
+                        throw new InvalidOperationException("Tham chiếu Tường KT phải là LINE. POLYLINE/ARC chưa được dùng làm reference cho lệnh này.");
+                    return null;
+                }
                 start = line.StartPoint;
                 end = line.EndPoint;
                 transaction.Commit();
