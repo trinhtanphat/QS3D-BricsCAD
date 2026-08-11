@@ -69,6 +69,9 @@ def main():
     require(window, "projects = projects.Where(x => x.Exists);", "recent-DWG availability filtering")
     require(window, "projects = projects.Where(x => !x.Exists);", "recent-DWG missing filtering")
     require(window, 'RecentProjectCountText.Text = filtered.Count + " / " + state.RecentProjects.Count;', "recent-DWG filtered count")
+    require(window, "e.Key == Key.Enter && (CommandList.IsKeyboardFocusWithin || SearchBox.IsKeyboardFocusWithin)", "search-box Enter execution")
+    require(window, "e.Key == Key.Down && SearchBox.IsKeyboardFocusWithin && CommandList.Items.Count > 0", "search-box Down navigation")
+    require(window, "CommandList.ScrollIntoView(CommandList.SelectedItem);", "keyboard result visibility")
     forbid(window, "ProjectContextCoordinator.GetOrCreate", "Start Center read-only dashboard")
     forbid(window, "System.Diagnostics.Process", "Start Center window")
     forbid(window, "Ribbon", "Start Center reserved scope")
@@ -104,7 +107,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, accent-insensitive, featured, recent-filtered, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, accent-insensitive, featured, recent-filtered, keyboard-complete, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
