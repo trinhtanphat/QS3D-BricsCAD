@@ -33,6 +33,10 @@ if COMMAND.is_file():
         errors.append("QS3DAUDIT must pass the source drawing into the modeless Audit Log")
     if "new AuditLogWindow(project)" in text:
         errors.append("QS3DAUDIT must not construct Audit Log from a captured ProjectState")
+    if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in text:
+        errors.append("QS3DAUDIT must inspect existing audit state through the read-only project lookup")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append("QS3DAUDIT is read-only and must not create/cache project state just to open Audit Log")
 
 if errors:
     for error in errors:
