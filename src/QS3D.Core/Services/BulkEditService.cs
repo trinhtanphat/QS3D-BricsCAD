@@ -135,7 +135,7 @@ namespace QS3D.Core.Services
                             element.Properties[property.Key] = property.Value ?? string.Empty;
 
                     element.FamilyId = family.Id;
-                    var dirty = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
+                    var dirty = ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;
                     if (ElementGeometryPolicy.RequiresGeneratedGeometry(element.Category)) dirty |= ElementDirtyFlags.Geometry;
                     element.MarkDirty(dirty);
                 }
