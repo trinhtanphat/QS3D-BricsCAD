@@ -2,20 +2,26 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: source-safe low-click export lifecycle for `QS3DED2`, `QS3DBBS`, and `QS3DBBSCSV` so project/scope/data validation completes before asking the user to choose an output path.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/Commands.cs`
   - `src/QS3D.BricsCAD.V25/BbsCsvCommands.cs`
   - `scripts/preflight-export-before-save-dialog.py`
-  - this claim file for close-out
-- Problem: these exports currently open `SaveFileDialog` before proving that an existing QS3D project and exportable rows exist. A user can choose a file path and only afterward be told that the project/data/scope is invalid or empty.
-- Intended contract:
-  - ED2 requires existing non-empty project before scope interaction, resolves scope and builds/validates detached preview rows before Save dialog;
-  - BBS XLSX/CSV require existing project and non-empty validated rebar schedule before Save dialog;
-  - no persistent project mutation is introduced; detached preview regeneration stays detached;
-  - actual XLSX/CSV write remains strictly after Save dialog confirmation;
-  - existing export UI finalization and Handle/live checks remain intact.
-- Non-overlap: excludes Ribbon, Quantity windows/settings, updater, Reference Wall/PICKFIRST, native V25 runtime and unrelated export command files.
-- Validation: exact commit diff/current-source review plus auto-discovered static preflight. No GitHub Actions under `continue all`.
-- Completion condition: invalid/empty ED2/BBS exports fail before Save dialog, successful exports still write only after path confirmation, and claim closes with exact SHAs.
+  - this claim file
+- Completed source commits:
+  - `f0d51a65a6aa8fefe61dd5de6e0a63746cd6085f` — BBS CSV validates project/detached schedule/weight before Save dialog.
+  - `94c2b5f84a1d6184e921fb7d686a0abfdef8022f` — ED2 and BBS XLSX validate exportability before Save dialog while keeping actual writes after confirmation.
+  - `45038141a1c5340be3d1997e084a4f2d295ab8ed` — auto-discovered static ordering guard for ED2/BBS XLSX/CSV.
+- Rebase safety:
+  - an initial Contents API write to `Commands.cs` was rejected with HTTP 409 after concurrent unrelated `main` movement; no source was overwritten;
+  - source was re-fetched and the intended change was then committed against the current blob;
+  - temporary `.export-preflight-rebase-lock` was removed in `4d38744b6a3548785587051e6cb85fe07ba64a38`.
+- Verified source contract:
+  - ED2 requires existing non-empty project before unit/scope interaction, resolves scope, detached-regenerates, builds rows, rejects empty rows, and validates live Handles before Save dialog;
+  - BBS XLSX/CSV require existing project and non-empty detached schedule before Save dialog;
+  - successful XLSX/CSV exporters remain strictly after `ShowDialog() == true`;
+  - no persistent project mutation was added; ED2 `DrawingUnitWorkflow.EnsureResolved` is explicitly read-only preparation for `QS3DED2`.
+- Validation performed: exact commit diff + current-source review + regression-script source review. The new preflight was not executed in this web session and no GitHub Actions were dispatched.
+- Runtime boundary: no BricsCAD V25 runtime PASS claimed.
+- Reservation: released.
