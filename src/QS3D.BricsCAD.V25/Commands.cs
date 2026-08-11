@@ -13,6 +13,7 @@ using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Model;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
@@ -48,20 +49,23 @@ namespace QS3D.BricsCAD.V25
                 if (!DrawingUnitWorkflow.EnsureResolved(doc, "QS3DBQ")) return;
                 Func<IReadOnlyList<QuantityReportRow>> recalculate = () =>
                 {
-                    var project = ProjectContextCoordinator.GetOrCreate(doc);
-                    var regenerated = RegenerateProject(project);
-                    if (regenerated > 0) PaletteCoordinator.SetStatus("BQ: đã regenerate " + regenerated + " lượt cấu kiện trước khi tổng hợp.");
-                    if (project.Elements.Count > 0) return ProjectQuantityReportBuilder.Group(project);
+                    if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var currentProject))
+                        throw new InvalidOperationException("BQ cần một QS3D project hiện hữu; bảng tổng hợp không tạo replacement project khi chỉ đọc.");
+                    var previewProject = ProjectStateSnapshot.CreateDetachedCopy(currentProject);
+                    var regenerated = RegenerateProject(previewProject);
+                    if (regenerated > 0) PaletteCoordinator.SetStatus("BQ: đã preview-regenerate " + regenerated + " lượt cấu kiện trên snapshot tách rời trước khi tổng hợp.");
+                    if (previewProject.Elements.Count > 0) return ProjectQuantityReportBuilder.Group(previewProject);
                     var unit = Cad.CadUnitService.GetDrawingUnit(doc);
                     var snapshotRows = SnapshotQuantityAdapter.Build(Cad.EntitySnapshotReader.ReadCurrentSelection(doc), unit);
-                    foreach (var snapshotRow in snapshotRows) snapshotRow.DrawingFingerprint = project.DrawingFingerprint;
+                    foreach (var snapshotRow in snapshotRows) snapshotRow.DrawingFingerprint = previewProject.DrawingFingerprint;
                     return snapshotRows;
                 };
 
                 Action<QuantityReportRow> locate = row =>
                 {
-                    var project = ProjectContextCoordinator.GetOrCreate(doc);
-                    var handles = SourceHandleResolver.Resolve(project, row.ElementIds);
+                    if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var currentProject))
+                        throw new InvalidOperationException("BQ Định vị: QS3D project hiện hành không còn khả dụng. Đóng bảng và mở lại BQ.");
+                    var handles = SourceHandleResolver.Resolve(currentProject, row.ElementIds);
                     if (handles.Count == 0) { PaletteCoordinator.SetStatus("BQ Định vị: dòng này chưa có semantic handle để chọn trong CAD."); return; }
                     var count = Cad.CadHandleService.Select(doc, handles);
                     PaletteCoordinator.SetStatus("BQ Định vị: " + count + " đối tượng CAD");
@@ -80,9 +84,6 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DED2", () =>
             {
                 if (!DrawingUnitWorkflow.EnsureResolved(doc, "QS3DED2")) return;
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
-                if (project.Elements.Count == 0)
-                    throw new InvalidOperationException("ED2 chưa có semantic element để xuất. Chạy QS3DB4D/capture trước.");
 
                 var implied = Cad.EntitySnapshotReader.ReadImpliedSelection(doc);
                 var defaultScope = implied.Count > 0 ? "Selection" : "All";
@@ -91,12 +92,35 @@ namespace QS3D.BricsCAD.V25
                     "Selection Floor Zone All");
                 if (scopePrompt.Status != PromptStatus.OK && scopePrompt.Status != PromptStatus.None) return;
                 var scope = scopePrompt.Status == PromptStatus.None ? defaultScope : scopePrompt.StringResult;
+                IReadOnlyList<EntitySnapshot>? selectionSnapshots = null;
+                if (string.Equals(scope, "Selection", StringComparison.OrdinalIgnoreCase))
+                    selectionSnapshots = implied.Count > 0 ? implied : Cad.EntitySnapshotReader.ReadCurrentSelection(doc);
+                else if (!string.Equals(scope, "Floor", StringComparison.OrdinalIgnoreCase) &&
+                         !string.Equals(scope, "Zone", StringComparison.OrdinalIgnoreCase) &&
+                         !string.Equals(scope, "All", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("ED2 scope không được hỗ trợ: " + scope + ".");
+
+                var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
+                var dialog = new SaveFileDialog
+                {
+                    Title = "ED2 • Xuất CHI_TIET / TONG_HOP",
+                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
+                    DefaultExt = ".xlsx",
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                    FileName = drawingName + "-ED2.xlsx"
+                };
+                if (dialog.ShowDialog() != true) return;
+
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                    throw new InvalidOperationException("ED2 cần một QS3D project hiện hữu; export không tạo project mới.");
+                if (project.Elements.Count == 0)
+                    throw new InvalidOperationException("ED2 chưa có semantic element để xuất. Chạy QS3DB4D/capture trước.");
 
                 IReadOnlyList<string>? elementIds = null;
                 if (string.Equals(scope, "Selection", StringComparison.OrdinalIgnoreCase))
                 {
-                    var snapshots = implied.Count > 0 ? implied : Cad.EntitySnapshotReader.ReadCurrentSelection(doc);
-                    elementIds = ResolveEd2Selection(project, snapshots);
+                    elementIds = ResolveEd2Selection(project, selectionSnapshots ?? Array.Empty<EntitySnapshot>());
                 }
                 else if (string.Equals(scope, "Floor", StringComparison.OrdinalIgnoreCase))
                 {
@@ -114,30 +138,15 @@ namespace QS3D.BricsCAD.V25
                         .Select(x => x.Id)
                         .ToList();
                 }
-                else if (!string.Equals(scope, "All", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException("ED2 scope không được hỗ trợ: " + scope + ".");
-                }
 
-                var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
-                var dialog = new SaveFileDialog
-                {
-                    Title = "ED2 • Xuất CHI_TIET / TONG_HOP",
-                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-                    DefaultExt = ".xlsx",
-                    AddExtension = true,
-                    OverwritePrompt = true,
-                    FileName = drawingName + "-ED2.xlsx"
-                };
-                if (dialog.ShowDialog() != true) return;
-
-                var regenerated = RegenerateProject(project);
+                var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);
+                var regenerated = RegenerateProject(previewProject);
                 var details = elementIds == null
-                    ? ProjectQuantityReportBuilder.Detail(project)
-                    : ProjectQuantityReportBuilder.Detail(project, elementIds);
+                    ? ProjectQuantityReportBuilder.Detail(previewProject)
+                    : ProjectQuantityReportBuilder.Detail(previewProject, elementIds);
                 var summary = elementIds == null
-                    ? ProjectQuantityReportBuilder.Group(project)
-                    : ProjectQuantityReportBuilder.Group(project, elementIds);
+                    ? ProjectQuantityReportBuilder.Group(previewProject)
+                    : ProjectQuantityReportBuilder.Group(previewProject, elementIds);
                 if (details.Count == 0)
                     throw new InvalidOperationException("ED2 scope " + scope + " không có cấu kiện hợp lệ để xuất.");
 
@@ -145,7 +154,7 @@ namespace QS3D.BricsCAD.V25
                 XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);
 
                 var status = "ED2 " + scope + ": " + details.Count + " CHI_TIET • " + summary.Count +
-                             " TONG_HOP • regenerate " + regenerated + " • " + dialog.FileName;
+                             " TONG_HOP • preview-regenerate " + regenerated + " • " + dialog.FileName;
                 FinalizeExportUi(
                     doc,
                     status,
@@ -163,9 +172,11 @@ namespace QS3D.BricsCAD.V25
                 var dialog = new SaveFileDialog { Title = "Xuất Bar Bending Schedule", Filter = "Excel Workbook (*.xlsx)|*.xlsx", DefaultExt = ".xlsx", AddExtension = true, OverwritePrompt = true, FileName = drawingName + "-BBS.xlsx" };
                 if (dialog.ShowDialog() != true) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
-                RegenerateProject(project);
-                var rows = ProjectRebarScheduleBuilder.Build(project);
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                    throw new InvalidOperationException("BBS cần một QS3D project hiện hữu; export không tạo project mới.");
+                var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);
+                RegenerateProject(previewProject);
+                var rows = ProjectRebarScheduleBuilder.Build(previewProject);
                 if (rows.Count == 0) { doc.Editor.WriteMessage("\nQS3D BBS: chưa có cấu kiện nào khai báo RebarNotation."); return; }
                 var totalWeight = 0d;
                 foreach (var row in rows)
@@ -248,7 +259,7 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DLINKHOST", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var project = ExistingProjectMutationContext.Require(doc, "Link opening host");
                 var selectedHandles = new HashSet<string>(
                     Cad.EntitySnapshotReader.ReadCurrentSelection(doc).Select(x => x.Handle),
                     StringComparer.OrdinalIgnoreCase);
@@ -276,13 +287,15 @@ namespace QS3D.BricsCAD.V25
 
                 var opening = openings[0];
                 var wall = hosts[0];
-                var rollback = QS3D.Core.Persistence.ProjectStateSnapshot.Capture(project);
+                var rollback = ProjectStateSnapshot.Capture(project);
                 var regenerated = 0;
                 try
                 {
                     new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
                     regenerated = RegenerateProject(project);
-                    if (!opening.Properties.TryGetValue("HostWallId", out var persistedHostId) ||
+                    var currentOpening = project.FindElement(opening.Id)
+                        ?? throw new InvalidOperationException("QS3DLINKHOST: opening " + opening.Id + " không còn tồn tại sau regeneration.");
+                    if (!currentOpening.Properties.TryGetValue("HostWallId", out var persistedHostId) ||
                         !string.Equals(persistedHostId, wall.Id, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException("QS3DLINKHOST không lưu đúng HostWallId cho opening " + opening.Id + ".");
                     project.Touch();
@@ -328,7 +341,8 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DHEALTH", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                    throw new InvalidOperationException("Model Health cần một QS3D project hiện hữu; lệnh kiểm tra không tạo project mới.");
                 var sourceHandles = project.Elements
                     .SelectMany(x => x.SourceHandles)
                     .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -344,7 +358,8 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(text); doc.Editor.WriteMessage("\nQS3D " + text);
                 var window = new ModelHealthWindow(doc, issues, issue =>
                 {
-                    var element = project.FindElement(issue.ElementId); if (element == null) return;
+                    if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var currentProject)) return;
+                    var element = currentProject.FindElement(issue.ElementId); if (element == null) return;
                     var generatedTarget = ComprehensiveModelHealthService.TargetsGeneratedOutput(issue);
                     IEnumerable<string> locateHandles = SemanticReferenceHandles.Get(element);
                     if (generatedTarget)
@@ -359,7 +374,7 @@ namespace QS3D.BricsCAD.V25
                     var usedSourceFallback = false;
                     if (count == 0 && generatedTarget)
                     {
-                        count = Cad.CadHandleService.Select(doc, SourceHandleResolver.Resolve(project, new[] { element.Id }));
+                        count = Cad.CadHandleService.Select(doc, SourceHandleResolver.Resolve(currentProject, new[] { element.Id }));
                         usedSourceFallback = count > 0;
                     }
                     PaletteCoordinator.SetStatus("Health Định vị " + element.Id + " • " + count + " đối tượng CAD" + (usedSourceFallback ? " • nguồn semantic" : string.Empty));
@@ -377,7 +392,8 @@ namespace QS3D.BricsCAD.V25
             var result = doc.Editor.GetString(options); if (result.Status != PromptStatus.OK) return;
             Guard(doc, "QS3DLOCATE", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                    throw new InvalidOperationException("QS3D Locate cần một project hiện hữu; lệnh định vị không tạo project mới.");
                 var element = project.FindElement(result.StringResult);
                 if (element == null) { doc.Editor.WriteMessage("\nKhông tìm thấy QS3D element."); return; }
                 var count = Cad.CadHandleService.Select(doc, SourceHandleResolver.Resolve(project, new[] { element.Id }));
@@ -404,7 +420,8 @@ namespace QS3D.BricsCAD.V25
                 var prompt = new PromptIntegerOptions("\nNhập số dòng Excel cần định vị: ") { AllowNone = false, LowerLimit = 1, UseDefaultValue = true, DefaultValue = 2 };
                 var row = doc.Editor.GetInteger(prompt); if (row.Status != PromptStatus.OK) return;
                 var lookup = XlsxHandleReader.ReadHandleLookup(dialog.FileName, row.Value);
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                    throw new InvalidOperationException("Excel Locate cần một QS3D project hiện hữu; lệnh định vị không tạo project mới.");
                 if (!string.IsNullOrWhiteSpace(lookup.DrawingFingerprint) &&
                     !string.Equals(lookup.DrawingFingerprint, project.DrawingFingerprint, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(
