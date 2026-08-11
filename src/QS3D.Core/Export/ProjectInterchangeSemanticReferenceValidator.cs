@@ -58,7 +58,7 @@ namespace QS3D.Core.Export
 
         private static void ValidateRegisteredReferences(
             string elementId,
-            IReadOnlyDictionary<string, string> properties,
+            IEnumerable<KeyValuePair<string, string>> properties,
             Func<string, bool> zoneExists,
             Func<string, bool> floorExists,
             Func<string, bool> familyExists,
@@ -86,7 +86,7 @@ namespace QS3D.Core.Export
 
         private static void ValidateLevelConsistency(
             string elementId,
-            IReadOnlyDictionary<string, string> properties,
+            IEnumerable<KeyValuePair<string, string>> properties,
             Func<string, double?> floorElevation)
         {
             var bottomId = Property(properties, ProjectFloorService.BottomLevelIdKey);
@@ -121,7 +121,7 @@ namespace QS3D.Core.Export
                 throw new InvalidOperationException("Element " + elementId + " top level elevation must be above bottom level elevation.");
         }
 
-        private static double Offset(IReadOnlyDictionary<string, string> properties, string key)
+        private static double Offset(IEnumerable<KeyValuePair<string, string>> properties, string key)
         {
             if (!TryProperty(properties, key, out var raw) || string.IsNullOrWhiteSpace(raw)) return 0d;
             if (!double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value))
@@ -137,13 +137,13 @@ namespace QS3D.Core.Export
             return value;
         }
 
-        private static bool HasConfiguredProperty(IReadOnlyDictionary<string, string> properties, string key) =>
+        private static bool HasConfiguredProperty(IEnumerable<KeyValuePair<string, string>> properties, string key) =>
             TryProperty(properties, key, out var raw) && !string.IsNullOrWhiteSpace(raw);
 
-        private static string Property(IReadOnlyDictionary<string, string> properties, string key) =>
+        private static string Property(IEnumerable<KeyValuePair<string, string>> properties, string key) =>
             TryProperty(properties, key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
 
-        private static bool TryProperty(IReadOnlyDictionary<string, string> properties, string key, out string value)
+        private static bool TryProperty(IEnumerable<KeyValuePair<string, string>> properties, string key, out string value)
         {
             foreach (var pair in properties)
             {
