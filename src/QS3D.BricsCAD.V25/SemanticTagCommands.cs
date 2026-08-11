@@ -21,7 +21,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Semantic Tag");
                 var element = PromptSourceElement(document, project);
                 if (element == null) return;
                 var placement = PromptPlacement(document);
@@ -43,7 +43,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Semantic Tag refresh");
                 var element = PromptSourceElement(document, project);
                 if (element == null) return;
                 if (!element.Properties.TryGetValue(GeneratedSemanticTagHealthService.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw))
