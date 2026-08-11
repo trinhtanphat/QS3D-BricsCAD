@@ -19,7 +19,8 @@ checks = {
         'Header="Loại hoàn thiện"', 'Header="Room IDs"',
     ],
     required[1]: [
-        "private readonly Document _document", "RoomFinishScheduleWindow(Document document)", "RoomFinishScheduleBuilder.Build(project)",
+        "private readonly Document _document", "RoomFinishScheduleWindow(Document document)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)", "RegenerateDirty(snapshot)", "RoomFinishScheduleBuilder.Build(snapshot)",
         "RoomFinishXlsxExporter.Export", "RegenerationEngine", "SearchText.Contains(query)", "DrawingLabel(_document)",
         "EnsureActive", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
         'EnsureActive("đọc HT_Phòng Schedule hiện hành")', 'EnsureActive("xuất HT_Phòng XLSX")',
@@ -32,6 +33,12 @@ for relative, needles in checks.items():
     text = path.read_text(encoding="utf-8")
     for needle in needles:
         if needle not in text: errors.append(relative + " missing room-finish UI guard/token: " + needle)
+window_source = ROOT / required[1]
+if window_source.is_file():
+    text = window_source.read_text(encoding="utf-8")
+    if "RegenerateDirty(project)" in text or "RoomFinishScheduleBuilder.Build(project)" in text:
+        errors.append(required[1] + " must not mutate or build from the live project")
+
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
     commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', path.read_text(encoding="utf-8"))

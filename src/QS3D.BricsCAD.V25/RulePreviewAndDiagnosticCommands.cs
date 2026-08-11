@@ -123,11 +123,10 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                if (!TryGetReadOnlyProject(document, "Rule Preview Export", out var project)) return;
-
                 var dialog = CreateReviewDialog(document, "rule-review");
                 if (dialog.ShowDialog() != true) return;
 
+                if (!TryGetReadOnlyProject(document, "Rule Preview Export", out var project)) return;
                 var preview = new QuantityRulePreviewService().PreviewProject(project);
                 var snapshot = new PreviewReviewSnapshotService().Create(SnapshotName(dialog.FileName, "Rule Review"), preview);
                 new PreviewReviewSnapshotStore().Save(snapshot, dialog.FileName);
@@ -146,11 +145,10 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                if (!TryGetReadOnlyProject(document, "Regen Preview Export", out var project)) return;
-
                 var dialog = CreateReviewDialog(document, "regen-review");
                 if (dialog.ShowDialog() != true) return;
 
+                if (!TryGetReadOnlyProject(document, "Regen Preview Export", out var project)) return;
                 var preview = new RegenerationPreviewService().Preview(project);
                 var snapshot = new PreviewReviewSnapshotService().Create(SnapshotName(dialog.FileName, "Regen Review"), preview);
                 new PreviewReviewSnapshotStore().Save(snapshot, dialog.FileName);
@@ -169,6 +167,9 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var dialog = CreateReviewDialog(document, "regen-selection-review");
+                if (dialog.ShowDialog() != true) return;
+
                 if (!TryGetReadOnlyProject(document, "Regen Selection Review Export", out var project)) return;
                 var elementIds = ResolveSelectedSemanticIds(document, project);
                 if (elementIds.Count == 0)
@@ -176,9 +177,6 @@ namespace QS3D.BricsCAD.V25
                     Report(document, "Regen Review Selection: chưa có semantic selection hợp lệ; chưa tạo file.");
                     return;
                 }
-
-                var dialog = CreateReviewDialog(document, "regen-selection-review");
-                if (dialog.ShowDialog() != true) return;
 
                 var preview = new RegenerationPreviewService().PreviewSubset(project, elementIds);
                 var snapshot = new PreviewReviewSnapshotService().Create(SnapshotName(dialog.FileName, "Regen Selection Review"), preview);
@@ -198,8 +196,6 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                if (!TryGetReadOnlyProject(document, "Diagnostic Summary", out var project)) return;
-
                 var drawingName = string.IsNullOrWhiteSpace(document.Name)
                     ? "QS3D"
                     : Path.GetFileNameWithoutExtension(document.Name);
@@ -214,6 +210,7 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
+                if (!TryGetReadOnlyProject(document, "Diagnostic Summary", out var project)) return;
                 var issues = new ComprehensiveModelHealthService().Inspect(project);
                 ProjectDiagnosticSummaryExporter.Export(dialog.FileName, project, issues);
                 FinalizeExportUi(document, "Diagnostic Summary: " + issues.Count + " health issue • " + Path.GetFileName(dialog.FileName));

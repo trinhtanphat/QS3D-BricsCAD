@@ -32,7 +32,8 @@ checks = {
         "Cửa - Lỗ mở", "DT mở (m²)", "SL host", "Element IDs", "Host IDs", "<autoFilter ref=", "Validate(tempPath)",
     ],
     required[2]: [
-        'CommandMethod("QS3DDOORXLSX"', "RegenerationEngine", "DoorOpeningScheduleBuilder.Build(project)",
+        'CommandMethod("QS3DDOORXLSX"', "RegenerationEngine", "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)", "RegenerateDirty(snapshot)", "DoorOpeningScheduleBuilder.Build(snapshot)",
         "DoorOpeningXlsxExporter.Export", "SaveFileDialog", "Cua-Lo-Mo.xlsx", "QuantityReportMath.AddCount", "QuantityReportMath.Add",
     ],
     required[3]: ['CommandMethod("QS3DDOORSCHEDULE"', "new DoorOpeningScheduleWindow(document)", "ShowModelessWindow"],
@@ -42,7 +43,8 @@ checks = {
         'Header="Host IDs"',
     ],
     required[5]: [
-        "private readonly Document _document", "DoorOpeningScheduleWindow(Document document)", "DoorOpeningScheduleBuilder.Build(project)",
+        "private readonly Document _document", "DoorOpeningScheduleWindow(Document document)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)", "RegenerateDirty(snapshot)", "DoorOpeningScheduleBuilder.Build(snapshot)",
         "DoorOpeningXlsxExporter.Export", "RegenerationEngine", "SearchText.Contains(query)", "Distinct(StringComparer.OrdinalIgnoreCase)",
         "DrawingLabel(_document)", "EnsureActive", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
         'EnsureActive("đọc Door/Opening Schedule hiện hành")', 'EnsureActive("xuất Door/Opening XLSX")',
@@ -69,8 +71,12 @@ for relative, needles in checks.items():
 
 for relative in (required[2], required[5]):
     path = ROOT / relative
-    if path.is_file() and ".Sum(" in path.read_text(encoding="utf-8"):
-        errors.append(relative + " must not use unchecked LINQ Sum for schedule totals")
+    if path.is_file():
+        text = path.read_text(encoding="utf-8")
+        if ".Sum(" in text:
+            errors.append(relative + " must not use unchecked LINQ Sum for schedule totals")
+        if "RegenerateDirty(project)" in text or "DoorOpeningScheduleBuilder.Build(project)" in text:
+            errors.append(relative + " must not mutate or build from the live project")
 
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):

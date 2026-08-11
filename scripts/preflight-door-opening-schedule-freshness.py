@@ -13,8 +13,9 @@ else:
     required = (
         "private IReadOnlyList<DoorOpeningScheduleRow> BuildCurrentRows(out int regenerated)",
         "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
-        "RegenerateDirty(project)",
-        "DoorOpeningScheduleBuilder.Build(project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(snapshot)",
+        "DoorOpeningScheduleBuilder.Build(snapshot)",
         "var current = BuildCurrentRows(out var regenerated);",
         "DoorOpeningXlsxExporter.Export(dialog.FileName, current);",
     )
@@ -23,6 +24,8 @@ else:
             errors.append("Door/Opening schedule missing freshness token: " + token)
     if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
         errors.append("Door/Opening modeless schedule must not create/cache replacement project state")
+    if "RegenerateDirty(project)" in text or "DoorOpeningScheduleBuilder.Build(project)" in text:
+        errors.append("Door/Opening modeless schedule must not mutate or build from the live project")
 
     export_pos = text.find("private void OnExportClick")
     refresh_pos = text.find("private void RefreshRows", export_pos)

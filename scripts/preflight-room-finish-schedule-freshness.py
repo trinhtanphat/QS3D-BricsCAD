@@ -13,8 +13,9 @@ else:
     required = (
         "private IReadOnlyList<RoomFinishScheduleRow> BuildCurrentRows(out int regenerated)",
         "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
-        "RegenerateDirty(project)",
-        "RoomFinishScheduleBuilder.Build(project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(snapshot)",
+        "RoomFinishScheduleBuilder.Build(snapshot)",
         "var current = BuildCurrentRows(out var regenerated);",
         "RoomFinishXlsxExporter.Export(dialog.FileName, current);",
     )
@@ -23,6 +24,9 @@ else:
             errors.append("HT_PHÒNG schedule missing freshness token: " + token)
     if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
         errors.append("HT_PHÒNG modeless schedule must not create/cache replacement project state")
+
+    if "RegenerateDirty(project)" in text or "RoomFinishScheduleBuilder.Build(project)" in text:
+        errors.append("Room Finish modeless schedule must not mutate or build from the live project")
 
     export_pos = text.find("private void OnExportClick")
     refresh_pos = text.find("private void RefreshRows", export_pos)

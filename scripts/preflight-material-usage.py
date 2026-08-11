@@ -47,7 +47,8 @@ checks = {
         "PrimaryQuantity", "<autoFilter ref=", "Validate(tempPath)", "Vật liệu", "inlineStr",
     ],
     required[2]: [
-        'CommandMethod("QS3DMATERIALXLSX"', "RegenerationEngine", "MaterialUsageScheduleBuilder.Build(project)",
+        'CommandMethod("QS3DMATERIALXLSX"', "RegenerationEngine", "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)", "RegenerateDirty(snapshot)", "MaterialUsageScheduleBuilder.Build(snapshot)",
         "MaterialUsageXlsxExporter.Export", "SaveFileDialog", "Vat-Lieu.xlsx", "QuantityReportMath.AddCount",
     ],
     required[3]: ['Content="Xuất bảng vật liệu"', 'Click="OnExportClick"', "material usage XLSX"],
@@ -72,6 +73,12 @@ for relative, needles in checks.items():
     text = path.read_text(encoding="utf-8")
     for needle in needles:
         if needle not in text: errors.append(relative + " missing material usage guard/token: " + needle)
+
+commands_source = ROOT / required[2]
+if commands_source.is_file():
+    text = commands_source.read_text(encoding="utf-8")
+    for forbidden in ("ProjectContextCoordinator.GetOrCreate(document)", "RegenerateDirty(project)", "MaterialUsageScheduleBuilder.Build(project)"):
+        if forbidden in text: errors.append(required[2] + " must not mutate or build from the live project: " + forbidden)
 
 schedule = ROOT / required[0]
 if schedule.is_file():

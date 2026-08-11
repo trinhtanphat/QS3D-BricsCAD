@@ -19,8 +19,17 @@ if WINDOW.is_file():
         errors.append("HT_Phòng modeless schedule must not create/cache replacement project state")
     if "DocumentBoundWindowLifetime.Attach(this, _document);" not in text:
         errors.append("HT_Phòng modeless schedule must remain source-DWG bound")
-    if "RoomFinishScheduleBuilder.Build(project)" not in text:
+    if "RoomFinishScheduleBuilder.Build(snapshot)" not in text:
         errors.append("HT_Phòng modeless schedule must use the authoritative builder")
+
+    for token in (
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(snapshot)",
+    ):
+        if token not in text:
+            errors.append("HT_Phong modeless schedule missing detached read-only token: " + token)
+    if "RegenerateDirty(project)" in text or "RoomFinishScheduleBuilder.Build(project)" in text:
+        errors.append("HT_Phong modeless schedule must not mutate or build from the live project")
 
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")

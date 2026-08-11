@@ -34,11 +34,13 @@ checks = {
         "HT Phòng", "Loại hoàn thiện", "KL chính", "Element IDs", "Room IDs", "<autoFilter ref=", "Validate(tempPath)",
     ],
     required[2]: [
-        'CommandMethod("QS3DFINISHXLSX"', "RegenerationEngine", "RoomFinishScheduleBuilder.Build(project)",
+        'CommandMethod("QS3DFINISHXLSX"', "RegenerationEngine", "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)", "RegenerateDirty(snapshot)", "RoomFinishScheduleBuilder.Build(snapshot)",
         "RoomFinishXlsxExporter.Export", "SaveFileDialog", "HT-Phong.xlsx", "QuantityReportMath.AddCount", "QuantityReportMath.Add",
     ],
     required[3]: [
-        "private readonly Document _document", "RoomFinishScheduleBuilder.Build(project)", "EnsureActive",
+        "private readonly Document _document", "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(snapshot)", "RoomFinishScheduleBuilder.Build(snapshot)", "EnsureActive",
         "QuantityReportMath.AddCount", "QuantityReportMath.Add", '"HT_Phòng visible length"', '"HT_Phòng visible area"',
     ],
     required[4]: [
@@ -62,8 +64,12 @@ for relative, needles in checks.items():
 
 for relative in (required[2], required[3]):
     path = ROOT / relative
-    if path.is_file() and ".Sum(" in path.read_text(encoding="utf-8"):
-        errors.append(relative + " must not use unchecked LINQ Sum for schedule totals")
+    if path.is_file():
+        text = path.read_text(encoding="utf-8")
+        if ".Sum(" in text:
+            errors.append(relative + " must not use unchecked LINQ Sum for schedule totals")
+        if "RegenerateDirty(project)" in text or "RoomFinishScheduleBuilder.Build(project)" in text:
+            errors.append(relative + " must not mutate or build from the live project")
 
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):

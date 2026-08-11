@@ -16,8 +16,14 @@ else:
         errors.append("BBS export must re-resolve an existing project without creating one")
     if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
         errors.append("BBS modeless callbacks must not create/cache a replacement project")
-    if "ProjectRebarScheduleBuilder.Build(project)" not in text:
+    if "ProjectStateSnapshot.CreateDetachedCopy(project)" not in text:
+        errors.append("BBS export must regenerate a detached project snapshot")
+    if "RegenerateDirty(snapshot)" not in text:
+        errors.append("BBS export must regenerate only the detached project snapshot")
+    if "ProjectRebarScheduleBuilder.Build(snapshot)" not in text:
         errors.append("BBS export must continue using the authoritative schedule builder")
+    if "RegenerateDirty(project)" in text:
+        errors.append("BBS modeless export must not regenerate the live project")
     if "EnsureActive(\"xuất BBS XLSX\")" not in text:
         errors.append("BBS export must verify the active source DWG before resolving project state")
 
