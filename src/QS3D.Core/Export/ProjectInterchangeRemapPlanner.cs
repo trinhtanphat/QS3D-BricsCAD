@@ -70,8 +70,13 @@ namespace QS3D.Core.Export
     /// </summary>
     public static class ProjectInterchangeRemapPlanner
     {
-        private const int MaxIdLength = 128;
-        private const int MaxNameLength = 512;
+        private const int ZoneMaxIdLength = 64;
+        private const int ZoneMaxNameLength = 120;
+        private const int FloorMaxIdLength = 64;
+        private const int FloorMaxNameLength = 120;
+        private const int FamilyMaxIdLength = 80;
+        private const int FamilyMaxNameLength = 160;
+        private const int ElementMaxIdLength = 128;
         private const string HostWallIdKey = "HostWallId";
 
         public static ProjectInterchangeRemapPlan Plan(ProjectState target, string json)
@@ -83,15 +88,21 @@ namespace QS3D.Core.Export
             items.AddRange(PlanNamedIdentities(
                 InterchangeRemapIdentityKind.Zone,
                 source.Zones.Select(x => new NamedIdentity(x.Id, x.Name)),
-                target.Zones.Select(x => new NamedIdentity(x.Id, x.Name))));
+                target.Zones.Select(x => new NamedIdentity(x.Id, x.Name)),
+                ZoneMaxIdLength,
+                ZoneMaxNameLength));
             items.AddRange(PlanNamedIdentities(
                 InterchangeRemapIdentityKind.Floor,
                 source.Floors.Select(x => new NamedIdentity(x.Id, x.Name)),
-                target.Floors.Select(x => new NamedIdentity(x.Id, x.Name))));
+                target.Floors.Select(x => new NamedIdentity(x.Id, x.Name)),
+                FloorMaxIdLength,
+                FloorMaxNameLength));
             items.AddRange(PlanNamedIdentities(
                 InterchangeRemapIdentityKind.Family,
                 source.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString())),
-                target.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString()))));
+                target.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString())),
+                FamilyMaxIdLength,
+                FamilyMaxNameLength));
             items.AddRange(PlanElements(source, target));
 
             var zoneMap = BuildMap(items, InterchangeRemapIdentityKind.Zone);
@@ -188,25 +199,43 @@ namespace QS3D.Core.Export
         private static IEnumerable<ProjectInterchangeRemapItem> PlanNamedIdentities(
             InterchangeRemapIdentityKind kind,
             IEnumerable<NamedIdentity> source,
-            IEnumerable<NamedIdentity> target)
+            IEnumerable<NamedIdentity> target,
+            int maxIdLength,
+            int maxNameLength)
         {
             var incoming = source.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList();
             var existing = target.ToList();
             var occupiedIds = new HashSet<string>(existing.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
-            foreach (var item in incoming) occupiedIds.Add(item.Id);
+            foreach (var item in incoming)
+                if (item.Id.Trim().Length <= maxIdLength) occupiedIds.Add(item.Id.Trim());
             var occupiedNames = new HashSet<string>(existing.Select(x => NameKey(x.NameScope, x.Name)), StringComparer.OrdinalIgnoreCase);
-            foreach (var item in incoming) occupiedNames.Add(NameKey(item.NameScope, item.Name));
+            foreach (var item in incoming)
+                if (item.Name.Trim().Length <= maxNameLength) occupiedNames.Add(NameKey(item.NameScope, item.Name));
+
+            var assignedIds = new HashSet<string>(existing.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+            var assignedNames = new HashSet<string>(existing.Select(x => NameKey(x.NameScope, x.Name)), StringComparer.OrdinalIgnoreCase);
 
             foreach (var sourceItem in incoming)
             {
-                var idCollision = existing.Any(x => string.Equals(x.Id, sourceItem.Id, StringComparison.OrdinalIgnoreCase));
-                var nameCollision = existing.Any(x =>
-                    string.Equals(x.NameScope, sourceItem.NameScope, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(x.Name, sourceItem.Name, StringComparison.OrdinalIgnoreCase));
-                var targetId = idCollision ? NextId(sourceItem.Id, occupiedIds) : sourceItem.Id;
-                var targetName = nameCollision ? NextName(sourceItem.Name, sourceItem.NameScope, occupiedNames) : sourceItem.Name;
+                var sourceId = sourceItem.Id.Trim();
+                var sourceName = sourceItem.Name.Trim();
+                var sourceNameKey = NameKey(sourceItem.NameScope, sourceName);
+                var idCollision = assignedIds.Contains(sourceId);
+                var nameCollision = assignedNames.Contains(sourceNameKey);
+                var idOverLimit = sourceId.Length > maxIdLength;
+                var nameOverLimit = sourceName.Length > maxNameLength;
+                var targetId = idCollision || idOverLimit
+                    ? NextId(sourceId, occupiedIds, maxIdLength)
+                    : sourceId;
+                var targetName = nameCollision || nameOverLimit
+                    ? NextName(sourceName, sourceItem.NameScope, occupiedNames, maxNameLength)
+                    : sourceName;
+
                 occupiedIds.Add(targetId);
-                occupiedNames.Add(NameKey(sourceItem.NameScope, targetName));
+                assignedIds.Add(targetId);
+                var targetNameKey = NameKey(sourceItem.NameScope, targetName);
+                occupiedNames.Add(targetNameKey);
+                assignedNames.Add(targetNameKey);
 
                 yield return new ProjectInterchangeRemapItem
                 {
@@ -215,9 +244,9 @@ namespace QS3D.Core.Export
                     TargetId = targetId,
                     SourceName = sourceItem.Name,
                     TargetName = targetName,
-                    IdChanged = !string.Equals(sourceItem.Id, targetId, StringComparison.Ordinal),
-                    NameChanged = !string.Equals(sourceItem.Name, targetName, StringComparison.Ordinal),
-                    Reason = Reason(idCollision, nameCollision)
+                    IdChanged = !string.Equals(sourceId, targetId, StringComparison.Ordinal),
+                    NameChanged = !string.Equals(sourceName, targetName, StringComparison.Ordinal),
+                    Reason = Reason(idCollision, nameCollision, idOverLimit, nameOverLimit, maxIdLength, maxNameLength)
                 };
             }
         }
@@ -230,7 +259,7 @@ namespace QS3D.Core.Export
             foreach (var element in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 var collision = target.FindElement(element.Id) != null;
-                var targetId = collision ? NextId(element.Id, occupiedIds) : element.Id;
+                var targetId = collision ? NextId(element.Id, occupiedIds, ElementMaxIdLength) : element.Id;
                 occupiedIds.Add(targetId);
                 yield return new ProjectInterchangeRemapItem
                 {
@@ -293,23 +322,23 @@ namespace QS3D.Core.Export
             return k.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private static string NextId(string sourceId, ISet<string> occupied)
+        private static string NextId(string sourceId, ISet<string> occupied, int maxLength)
         {
             for (var suffix = 1; suffix < 1000000; suffix++)
             {
                 var marker = suffix == 1 ? "-import" : "-import-" + suffix;
-                var candidate = AppendBounded(sourceId, marker, MaxIdLength);
+                var candidate = AppendBounded(sourceId, marker, maxLength);
                 if (!occupied.Contains(candidate)) return candidate;
             }
             throw new InvalidOperationException("Unable to allocate a collision-free semantic import ID for " + sourceId + ".");
         }
 
-        private static string NextName(string sourceName, string nameScope, ISet<string> occupied)
+        private static string NextName(string sourceName, string nameScope, ISet<string> occupied, int maxLength)
         {
             for (var suffix = 1; suffix < 1000000; suffix++)
             {
                 var marker = suffix == 1 ? " (Imported)" : " (Imported " + suffix + ")";
-                var candidate = AppendBounded(sourceName, marker, MaxNameLength);
+                var candidate = AppendBounded(sourceName, marker, maxLength);
                 if (!occupied.Contains(NameKey(nameScope, candidate))) return candidate;
             }
             throw new InvalidOperationException("Unable to allocate a collision-free semantic import name for " + sourceName + ".");
@@ -326,12 +355,21 @@ namespace QS3D.Core.Export
             return source.Substring(0, keep).TrimEnd() + suffix;
         }
 
-        private static string Reason(bool idCollision, bool nameCollision)
+        private static string Reason(
+            bool idCollision,
+            bool nameCollision,
+            bool idOverLimit,
+            bool nameOverLimit,
+            int maxIdLength,
+            int maxNameLength)
         {
-            if (idCollision && nameCollision) return "Target already owns both this semantic ID and display name; import-as-new remaps both.";
-            if (idCollision) return "Target already owns this semantic ID; import-as-new remaps ID and preserves the non-conflicting display name.";
-            if (nameCollision) return "Target already owns this display name on another identity; import-as-new preserves ID and renames the incoming display name.";
-            return "No target ID/name collision.";
+            var reasons = new List<string>();
+            if (idCollision) reasons.Add("semantic ID collides with target/earlier incoming identity");
+            if (nameCollision) reasons.Add("display name is already owned in the same semantic name scope");
+            if (idOverLimit) reasons.Add("source ID exceeds target runtime limit " + maxIdLength);
+            if (nameOverLimit) reasons.Add("source display name exceeds target runtime limit " + maxNameLength);
+            if (reasons.Count == 0) return "No target ID/name collision or runtime-bound remap is required.";
+            return "Import-as-new remap required: " + string.Join("; ", reasons) + ".";
         }
 
         private sealed class NamedIdentity
