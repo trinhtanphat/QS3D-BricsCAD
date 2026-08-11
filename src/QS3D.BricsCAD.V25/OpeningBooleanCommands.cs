@@ -28,7 +28,6 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
                 var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
                 if (snapshots.Count == 0)
                 {
@@ -36,6 +35,7 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
+                var project = ExistingProjectMutationContext.Require(document, "Selected physical opening cut");
                 var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
                 var openingIds = project.Elements
                     .Where(IsOpening)
@@ -62,7 +62,7 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, label);
                 if (openingIds == null)
                     OpeningBooleanCutGuard.RequireFreshGeneratedHosts(project, null);
                 else
