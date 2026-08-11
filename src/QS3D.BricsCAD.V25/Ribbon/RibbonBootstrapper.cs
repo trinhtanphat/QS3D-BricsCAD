@@ -98,13 +98,13 @@ namespace QS3D.BricsCAD.V25.Ribbon
             var panels = GetProperty(tab!, "Panels")
                          ?? throw new InvalidOperationException("RibbonTab.Panels was not available.");
 
-            // Older QS3D versions used exactly one <TAB>_PANEL_SOURCE per tab. Remove only that
-            // known QS3D-owned legacy panel so a hot reload converges to the grouped architecture;
-            // dedicated/unknown augmenter panels are intentionally preserved.
-            RemoveLegacyFlatPanel(panels, tabSpec.Id + "_PANEL_SOURCE");
-
             foreach (var panelSpec in tabSpec.Panels)
                 EnsurePanel(tabSpec, panelSpec, panels);
+
+            // Older QS3D versions used exactly one <TAB>_PANEL_SOURCE per tab. Retire that
+            // working fallback only after every grouped panel/button has reconciled successfully;
+            // dedicated/unknown augmenter panels are intentionally preserved.
+            RemoveLegacyFlatPanel(panels, tabSpec.Id + "_PANEL_SOURCE");
 
             if (created)
                 Add(tabs, tab!);
