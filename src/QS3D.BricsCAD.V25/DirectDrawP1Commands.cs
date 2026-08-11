@@ -37,14 +37,25 @@ namespace QS3D.BricsCAD.V25
                 if (points == null) return;
 
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Vách Kính (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "ThicknessM", 0.012d) : 0.012d);
+                var thicknessM = PromptPositiveMeters(
+                    document.Editor,
+                    "Bề dày Vách Kính (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "ThicknessM", 0.012d) : 0.012d);
                 if (!thicknessM.HasValue) return;
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Vách Kính (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "HeightM", 3.6d) : 3.6d);
+                var heightM = PromptPositiveMeters(
+                    document.Editor,
+                    "Chiều cao Vách Kính (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Vách Kính so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d);
+                var bottomOffsetM = PromptFiniteMeters(
+                    document.Editor,
+                    "Offset đáy Vách Kính so với Z source (m)",
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
-                Execute(document, ElementCategory.GlassWall,
+                Execute(
+                    document,
+                    ElementCategory.GlassWall,
                     () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
                     element =>
                     {
@@ -63,18 +74,30 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWWALLPIER", () =>
             {
                 RequireModelSpace(document);
+                // WallPier stays LINE-only so QS3DBUILD3D reaches the specialized profile builder.
                 var points = AcquireFixedPath(document, "Trụ Tường", 2);
                 if (points == null) return;
 
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Trụ Tường (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "ThicknessM", 0.2d) : 0.2d);
+                var thicknessM = PromptPositiveMeters(
+                    document.Editor,
+                    "Bề dày Trụ Tường (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "ThicknessM", 0.2d) : 0.2d);
                 if (!thicknessM.HasValue) return;
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Trụ Tường (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "HeightM", 3.6d) : 3.6d);
+                var heightM = PromptPositiveMeters(
+                    document.Editor,
+                    "Chiều cao Trụ Tường (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Trụ Tường so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d);
+                var bottomOffsetM = PromptFiniteMeters(
+                    document.Editor,
+                    "Offset đáy Trụ Tường so với Z source (m)",
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
-                Execute(document, ElementCategory.WallPier,
+                Execute(
+                    document,
+                    ElementCategory.WallPier,
                     () => CreateLine(document, points[0], points[1]),
                     element =>
                     {
@@ -97,14 +120,25 @@ namespace QS3D.BricsCAD.V25
                 if (points == null) return;
 
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Vách BTCT (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "ThicknessM", 0.2d) : 0.2d);
+                var thicknessM = PromptPositiveMeters(
+                    document.Editor,
+                    "Bề dày Vách BTCT (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "ThicknessM", 0.2d) : 0.2d);
                 if (!thicknessM.HasValue) return;
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao Vách BTCT (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "HeightM", 3.6d) : 3.6d);
+                var heightM = PromptPositiveMeters(
+                    document.Editor,
+                    "Chiều cao Vách BTCT (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Vách BTCT so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d);
+                var bottomOffsetM = PromptFiniteMeters(
+                    document.Editor,
+                    "Offset đáy Vách BTCT so với Z source (m)",
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
-                Execute(document, ElementCategory.StructuralWall,
+                Execute(
+                    document,
+                    ElementCategory.StructuralWall,
                     () => CreateLine(document, points[0], points[1]),
                     element =>
                     {
@@ -127,12 +161,20 @@ namespace QS3D.BricsCAD.V25
                 if (points == null) return;
 
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var thicknessM = PromptPositiveMeters(document.Editor, "Bề dày Móng (m)", hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Foundation, "ThicknessM", 0.5d) : 0.5d);
+                var thicknessM = PromptPositiveMeters(
+                    document.Editor,
+                    "Bề dày Móng (m)",
+                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Foundation, "ThicknessM", 0.5d) : 0.5d);
                 if (!thicknessM.HasValue) return;
-                var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Móng so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d);
+                var bottomOffsetM = PromptFiniteMeters(
+                    document.Editor,
+                    "Offset đáy Móng so với Z source (m)",
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
-                Execute(document, ElementCategory.Foundation,
+                Execute(
+                    document,
+                    ElementCategory.Foundation,
                     () => CreatePolyline(document, points, true),
                     element =>
                     {
@@ -168,12 +210,18 @@ namespace QS3D.BricsCAD.V25
                 var createdElementId = createdElement.Id;
                 configureElement(createdElement);
 
+                // QS3DBUILD3D resolves the active document internally. Re-check immediately before
+                // delegating so a document switch can never redirect this P1 operation to another DWG.
                 EnsureActive(document, "Direct Draw P1 " + category + " / QS3DBUILD3D");
                 document.Editor.SetImpliedSelection(new[] { sourceId });
                 new Build3DCommands().Build3D();
                 EnsureActive(document, "Direct Draw P1 " + category + " / post QS3DBUILD3D");
 
-                createdElement = project.Elements.SingleOrDefault(x => string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase));
+                // QS3DBUILD3D may restore its own ProjectState snapshot and report the failure at its
+                // command surface instead of throwing to this wrapper. A restore replaces element
+                // instances, so the pre-build reference is never authoritative after the nested call.
+                createdElement = project.Elements.SingleOrDefault(x =>
+                    string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase));
                 if (createdElement == null)
                     throw new InvalidOperationException("Semantic element Direct Draw P1 không còn tồn tại sau QS3DBUILD3D; operation được rollback.");
 
@@ -252,9 +300,15 @@ namespace QS3D.BricsCAD.V25
             var points = new List<Point3d>();
             while (true)
             {
-                var prompt = points.Count == 0 ? "\n" + label + " - chọn điểm đầu: " : "\n" + label + " - chọn điểm tiếp theo" + (points.Count >= minimumPoints ? " hoặc Enter để kết thúc" : string.Empty) + ": ";
+                var prompt = points.Count == 0
+                    ? "\n" + label + " - chọn điểm đầu: "
+                    : "\n" + label + " - chọn điểm tiếp theo" + (points.Count >= minimumPoints ? " hoặc Enter để kết thúc" : string.Empty) + ": ";
                 var options = new PromptPointOptions(prompt) { AllowNone = points.Count >= minimumPoints };
-                if (points.Count > 0) { options.UseBasePoint = true; options.BasePoint = points[points.Count - 1]; }
+                if (points.Count > 0)
+                {
+                    options.UseBasePoint = true;
+                    options.BasePoint = points[points.Count - 1];
+                }
                 var result = editor.GetPoint(options);
                 if (result.Status == PromptStatus.None && points.Count >= minimumPoints) break;
                 if (result.Status != PromptStatus.OK) return null;
@@ -275,7 +329,8 @@ namespace QS3D.BricsCAD.V25
             {
                 var deltaDrawing = Math.Abs(CadGeometryGuard.Subtract(points[index].Z, z, label + "/delta Z"));
                 var deltaM = Math.Abs(CadGeometryGuard.ToMeters(document, deltaDrawing, label + "/delta Z"));
-                if (deltaM > PlanarityToleranceM) throw new InvalidOperationException(label + " Direct Draw yêu cầu plan-view |ΔZ| <= 0.005 m.");
+                if (deltaM > PlanarityToleranceM)
+                    throw new InvalidOperationException(label + " Direct Draw yêu cầu plan-view |ΔZ| <= 0.005 m.");
             }
         }
 
@@ -328,7 +383,14 @@ namespace QS3D.BricsCAD.V25
 
         private static double? PromptPositiveMeters(Editor editor, string label, double defaultValue)
         {
-            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ") { AllowNegative = false, AllowZero = false, AllowNone = true, DefaultValue = defaultValue, UseDefaultValue = true };
+            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            {
+                AllowNegative = false,
+                AllowZero = false,
+                AllowNone = true,
+                DefaultValue = defaultValue,
+                UseDefaultValue = true
+            };
             var result = editor.GetDouble(options);
             if (result.Status == PromptStatus.Cancel) return null;
             if (result.Status != PromptStatus.OK && result.Status != PromptStatus.None) return null;
@@ -339,7 +401,14 @@ namespace QS3D.BricsCAD.V25
 
         private static double? PromptFiniteMeters(Editor editor, string label, double defaultValue)
         {
-            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ") { AllowNegative = true, AllowZero = true, AllowNone = true, DefaultValue = defaultValue, UseDefaultValue = true };
+            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            {
+                AllowNegative = true,
+                AllowZero = true,
+                AllowNone = true,
+                DefaultValue = defaultValue,
+                UseDefaultValue = true
+            };
             var result = editor.GetDouble(options);
             if (result.Status == PromptStatus.Cancel) return null;
             if (result.Status != PromptStatus.OK && result.Status != PromptStatus.None) return null;
@@ -351,7 +420,8 @@ namespace QS3D.BricsCAD.V25
         private static double FamilyNumber(ProjectState project, ElementCategory category, string key, double fallback)
         {
             var value = FamilyFiniteNumber(project, category, key, fallback);
-            if (!(value > 0d)) throw new InvalidOperationException("Family " + category + "/" + key + " phải là số hữu hạn > 0 trước khi Direct Draw.");
+            if (!(value > 0d))
+                throw new InvalidOperationException("Family " + category + "/" + key + " phải là số hữu hạn > 0 trước khi Direct Draw.");
             return value;
         }
 
@@ -359,7 +429,9 @@ namespace QS3D.BricsCAD.V25
         {
             var family = PreferredFamily(project, category);
             if (family == null || !family.Properties.TryGetValue(key, out var raw)) return fallback;
-            if (string.IsNullOrWhiteSpace(raw) || !double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value))
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsNaN(value) || double.IsInfinity(value))
                 throw new InvalidOperationException("Family '" + family.Name + "' (" + category + ") có " + key + " không hợp lệ: '" + (raw ?? string.Empty) + "'. Sửa Family trước khi Direct Draw.");
             return value;
         }
@@ -379,7 +451,8 @@ namespace QS3D.BricsCAD.V25
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                if (!document.Database.CurrentSpaceId.Equals(blockTable[BlockTableRecord.ModelSpace])) throw new InvalidOperationException("Direct Draw P1 hiện chỉ hỗ trợ Model Space. Chuyển sang tab Model trước khi vẽ.");
+                if (!document.Database.CurrentSpaceId.Equals(blockTable[BlockTableRecord.ModelSpace]))
+                    throw new InvalidOperationException("Direct Draw P1 hiện chỉ hỗ trợ Model Space. Chuyển sang tab Model trước khi vẽ.");
                 transaction.Commit();
             }
             RequireSupportedUcs(document);
@@ -391,7 +464,9 @@ namespace QS3D.BricsCAD.V25
             var coordinateSystem = document.Editor.CurrentUserCoordinateSystem.CoordinateSystem3d;
             var zAxis = coordinateSystem.Zaxis;
             var length = zAxis.Length;
-            if (double.IsNaN(length) || double.IsInfinity(length) || !(length > 0d)) throw new InvalidOperationException("Current UCS có Z axis không hợp lệ.");
+            if (double.IsNaN(length) || double.IsInfinity(length) || !(length > 0d))
+                throw new InvalidOperationException("Current UCS có Z axis không hợp lệ.");
+
             var x = zAxis.X / length;
             var y = zAxis.Y / length;
             var z = zAxis.Z / length;
@@ -403,9 +478,13 @@ namespace QS3D.BricsCAD.V25
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var normalized = new HashSet<string>((generatedHandles ?? Array.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
-            if (normalized.Count > 0 && createdElement == null) throw new InvalidOperationException("Direct Draw P1 rollback found generated CAD without the newly-created semantic owner.");
+            var normalized = new HashSet<string>(
+                (generatedHandles ?? Array.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            if (normalized.Count > 0 && createdElement == null)
+                throw new InvalidOperationException("Direct Draw P1 rollback found generated CAD without the newly-created semantic owner.");
             var ids = CadHandleService.Resolve(document, normalized);
+
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
@@ -414,6 +493,7 @@ namespace QS3D.BricsCAD.V25
                     var source = transaction.GetObject(sourceId, OpenMode.ForWrite, true) as Entity;
                     if (source != null && !source.IsErased) source.Erase(true);
                 }
+
                 foreach (var id in ids)
                 {
                     if (id.IsNull || !id.IsValid || id == sourceId) continue;
@@ -425,12 +505,15 @@ namespace QS3D.BricsCAD.V25
                 }
                 transaction.Commit();
             }
+
             var remainingGenerated = CadHandleService.GetLiveHandles(document, normalized);
-            if (remainingGenerated.Count > 0) throw new InvalidOperationException("Direct Draw P1 rollback còn generated CAD handle chưa xóa: " + string.Join(", ", remainingGenerated.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)) + ".");
+            if (remainingGenerated.Count > 0)
+                throw new InvalidOperationException("Direct Draw P1 rollback còn generated CAD handle chưa xóa: " + string.Join(", ", remainingGenerated.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)) + ".");
             if (!sourceId.IsNull && sourceId.IsValid)
             {
                 var remainingSource = CadHandleService.GetLiveHandles(document, new[] { sourceId.Handle.ToString() });
-                if (remainingSource.Count > 0) throw new InvalidOperationException("Direct Draw P1 rollback còn source CAD chưa xóa: " + sourceId.Handle + ".");
+                if (remainingSource.Count > 0)
+                    throw new InvalidOperationException("Direct Draw P1 rollback còn source CAD chưa xóa: " + sourceId.Handle + ".");
             }
         }
 
@@ -448,13 +531,15 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                try { document.Editor.WriteMessage("\nQS3D " + status + " UI sync warning: " + ex.Message); } catch { }
+                try { document.Editor.WriteMessage("\nQS3D " + status + " UI sync warning: " + ex.Message); }
+                catch { }
             }
         }
 
         private static void EnsureActive(Document document, string operation)
         {
-            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) throw new InvalidOperationException(operation + " yêu cầu đúng DWG đã bắt đầu lệnh vẫn là bản vẽ active.");
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(operation + " yêu cầu đúng DWG đã bắt đầu lệnh vẫn là bản vẽ active.");
         }
 
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
