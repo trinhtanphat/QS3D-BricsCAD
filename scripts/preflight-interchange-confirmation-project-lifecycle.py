@@ -15,6 +15,7 @@ else:
         "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
         "ReferenceEquals(currentProject, reviewedProject)",
         "currentProject.ChangeVersion != reviewedChangeVersion",
+        "ProjectContextCoordinator.RequireBackingStoreUnchanged(document, currentProject, operation)",
     ):
         if token not in text:
             errors.append("interchange confirmation freshness missing token: " + token)

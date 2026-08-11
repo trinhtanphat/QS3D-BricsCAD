@@ -32,6 +32,7 @@ def main():
             "canonical.ProjectId",
             "expectedProjectId",
             "ProjectContextCoordinator.Forget(document)",
+            'ProjectContextCoordinator.RequireBackingStoreUnchanged(document, canonical, "QS3D existing-project mutation")',
         ):
             require(context, token, "mutation context")
 

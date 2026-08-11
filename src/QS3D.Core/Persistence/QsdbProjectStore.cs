@@ -16,6 +16,29 @@ namespace QS3D.Core.Persistence
 
         public void Save(ProjectState project, string path)
         {
+            SaveCore(project, path, SaveMode.ReplaceWithBackup);
+        }
+
+        public void SaveNew(ProjectState project, string path)
+        {
+            SaveCore(project, path, SaveMode.PublishNew);
+        }
+
+        public void SavePreservingValidatedBackup(ProjectState project, string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
+            var fullPath = Path.GetFullPath(path);
+            var backupPath = fullPath + ".bak";
+            if (!File.Exists(backupPath))
+                throw new FileNotFoundException("A validated QSDB backup is required for recovery-safe publication.", backupPath);
+            Load(backupPath);
+            SaveCore(project, fullPath, SaveMode.ReplacePrimaryOnly);
+            Load(fullPath);
+            Load(backupPath);
+        }
+
+        private void SaveCore(ProjectState project, string path, SaveMode mode)
+        {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
 
@@ -37,7 +60,12 @@ namespace QS3D.Core.Persistence
                 var document = Serialize(project);
                 document.Save(tempPath, SaveOptions.DisableFormatting);
                 ValidateSerializedFile(tempPath);
-                AtomicFileCommit.ReplaceWithBackup(tempPath, fullPath, backupPath);
+                if (mode == SaveMode.PublishNew)
+                    AtomicFileCommit.PublishNew(tempPath, fullPath, backupPath);
+                else if (mode == SaveMode.ReplacePrimaryOnly)
+                    AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
+                else
+                    AtomicFileCommit.ReplaceWithBackup(tempPath, fullPath, backupPath);
                 committed = true;
             }
             finally
@@ -49,6 +77,13 @@ namespace QS3D.Core.Persistence
                 }
                 AtomicFileCommit.TryDelete(tempPath);
             }
+        }
+
+        private enum SaveMode
+        {
+            ReplaceWithBackup,
+            PublishNew,
+            ReplacePrimaryOnly
         }
 
         public ProjectState Load(string path)

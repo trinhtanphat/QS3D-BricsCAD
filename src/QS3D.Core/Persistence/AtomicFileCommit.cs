@@ -56,6 +56,29 @@ namespace QS3D.Core.Persistence
             }
         }
 
+        public static void PublishNew(string tempPath, string destinationPath, string backupPath)
+        {
+            Validate(tempPath, destinationPath);
+            if (string.IsNullOrWhiteSpace(backupPath)) throw new ArgumentException("Backup path is required.", nameof(backupPath));
+            var destination = Path.GetFullPath(destinationPath);
+            var backup = Path.GetFullPath(backupPath);
+            if (File.Exists(destination) || Directory.Exists(destination) || File.Exists(backup) || Directory.Exists(backup))
+                throw new IOException("QS3D refused to publish a new project over an existing sidecar pair.");
+
+            // File.Move is the create-new conditional commit for the primary. The
+            // caller holds ProjectFileLock, so cooperating QS3D writers cannot pass
+            // an absence check and then overwrite one another.
+            File.Move(tempPath, destination);
+            if (!File.Exists(backup) && !Directory.Exists(backup)) return;
+
+            try { File.Delete(destination); }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                throw new IOException("A QS3D backup appeared during create-new publication and the new primary could not be rolled back.", ex);
+            }
+            throw new IOException("A QS3D backup appeared during create-new publication; the new primary was rolled back.");
+        }
+
         public static void TryDelete(string? path)
         {
             try { if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) File.Delete(path); }

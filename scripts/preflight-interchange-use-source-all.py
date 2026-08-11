@@ -95,7 +95,7 @@ if not errors:
         errors.append("QS3DINTERCHANGEUSESOURCEALL must be registered exactly once in command source")
     for needle in [
         "InterchangeUseSourceAllImportService.Plan(project, json)",
-        "InterchangeUseSourceAllImportService.Import(document, json)",
+        "InterchangeUseSourceAllImportService.Import(document, confirmedProject, json)",
         "ProjectInterchangeJsonValidator.MaxFileBytes",
         "new UTF8Encoding(false, true)",
         "MessageBoxButton.YesNo",

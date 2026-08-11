@@ -89,6 +89,7 @@ namespace QS3D.Core.SmokeTests
             ProjectInterchangeValidationSmoke.Run();
             QsdbSaveAtomicitySmoke.Run();
             ProjectPersistenceLifecycleSmoke.Run();
+            ProjectSidecarRevisionStampSmoke.Run();
             QsdbCanonicalPersistenceSmoke.Run();
             AuditTrailSnapshotSmoke.Run();
             DrawingUnitResolutionSmoke.Run();

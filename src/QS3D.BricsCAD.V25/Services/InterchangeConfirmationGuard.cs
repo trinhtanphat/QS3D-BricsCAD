@@ -25,6 +25,7 @@ namespace QS3D.BricsCAD.V25.Services
                 throw new InvalidOperationException(
                     operation + " target semantic project changed after preview. Run the command again to review a fresh plan.");
 
+            QS3D.BricsCAD.V25.ProjectContextCoordinator.RequireBackingStoreUnchanged(document, currentProject, operation);
             return currentProject;
         }
     }

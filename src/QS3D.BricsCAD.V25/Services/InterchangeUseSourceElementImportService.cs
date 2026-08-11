@@ -57,12 +57,16 @@ namespace QS3D.BricsCAD.V25.Services
             return Prepare(target, json).Plan;
         }
 
-        public static InterchangeUseSourceElementImportResult Import(Document document, string json)
+        public static InterchangeUseSourceElementImportResult Import(
+            Document document,
+            ProjectState authorizedProject,
+            string json)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            EnsureActive(document, "Interchange source-element import");
-
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var project = InterchangeMutationTargetGuard.RequireExact(
+                document,
+                authorizedProject,
+                "Interchange source-element import");
             var prepared = Prepare(project, json);
             EnsureActive(document, "Interchange source-element import / mutation");
 

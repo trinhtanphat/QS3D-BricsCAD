@@ -32,6 +32,11 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
+                var validation = ProjectInterchangeJsonValidator.Validate(json);
+                if (!validation.IsValid)
+                    throw new InvalidDataException("Snapshot is not valid QS3D semantic interchange JSON.");
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                    throw new InvalidOperationException("Interchange UseSource Catalog stopped because the active DWG changed after file selection.");
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var previewChangeVersion = project.ChangeVersion;
                 var plan = InterchangeUseSourceCatalogImportService.Plan(project, json);
@@ -70,12 +75,12 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxButton.YesNo,
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
-                InterchangeConfirmationGuard.RequireFresh(
+                var confirmedProject = InterchangeConfirmationGuard.RequireFresh(
                     document,
                     project,
                     previewChangeVersion,
                     "Interchange UseSource Catalog");
-                var result = InterchangeUseSourceCatalogImportService.Import(document, json);
+                var result = InterchangeUseSourceCatalogImportService.Import(document, confirmedProject, json);
                 try { PaletteCoordinator.RefreshProject(); } catch { }
                 var status =
                     "Interchange UseSource Catalog: Zone " + result.ZonesReplaced.ToString(CultureInfo.InvariantCulture) +
