@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             PlanClassifiesReplacementAndNativeCleanup();
             ImportRejectsMissingNativeCleanupWithoutMutation();
+            ImportRejectsStaleNativeCleanupHandleAuthorizationWithoutMutation();
             ImportReplacesInPlaceAndInvalidatesAffectedTargetElements();
             SemanticOnlyReplacementNeedsNoNativeAuthorization();
             ConflictsFailBeforeMutation();
@@ -45,6 +46,9 @@ namespace QS3D.Core.SmokeTests
             True(plan.AffectedTargetElementIds.Contains("E1", StringComparer.OrdinalIgnoreCase));
             True(plan.AffectedTargetElementIds.Contains("E3", StringComparer.OrdinalIgnoreCase));
             Equal(2, plan.TargetElementIdsRequiringNativeCleanup.Count);
+            Equal(2, plan.NativeCleanupRequirements.Count);
+            Equal("AA11", string.Join("|", plan.NativeCleanupRequirements.Single(x => x.ElementId == "E1").OwnerHandles));
+            Equal("EE22|FF33", string.Join("|", plan.NativeCleanupRequirements.Single(x => x.ElementId == "E3").OwnerHandles));
             Equal(3, plan.TargetGeneratedHandlesToClean);
             True(plan.RequiresNativeCleanup);
             Equal(metadata, target.Metadata.Count);
@@ -88,6 +92,29 @@ namespace QS3D.Core.SmokeTests
             Equal(updated, target.UpdatedUtc);
         }
 
+        private static void ImportRejectsStaleNativeCleanupHandleAuthorizationWithoutMutation()
+        {
+            var target = TargetProject(includeGeneratedOwnership: true);
+            var json = ProjectInterchangeJsonExporter.Build(SourceProject());
+            var plan = ProjectInterchangeUseSourceSemanticImporter.Plan(target, json);
+            var authorization = ProjectInterchangeNativeCleanupAuthorization.ForPlan(plan);
+            var element = target.FindElement("E1") ?? throw new Exception("Target element missing.");
+            element.Properties["GeneratedSolidHandle"] = "BB22";
+            var updated = new DateTime(2026, 8, 11, 0, 22, 0, DateTimeKind.Utc);
+            target.UpdatedUtc = updated;
+            var metadata = target.Metadata.Count;
+            var audits = target.AuditEvents.Count;
+
+            Throws<InvalidOperationException>(() =>
+                ProjectInterchangeUseSourceSemanticImporter.Import(target, json, authorization));
+
+            Equal("TARGET-B-01", element.Properties["Mark"]);
+            Equal("BB22", element.Properties["GeneratedSolidHandle"]);
+            Equal(metadata, target.Metadata.Count);
+            Equal(audits, target.AuditEvents.Count);
+            Equal(updated, target.UpdatedUtc);
+        }
+
         private static void ImportReplacesInPlaceAndInvalidatesAffectedTargetElements()
         {
             var target = TargetProject(includeGeneratedOwnership: true);
@@ -108,7 +135,8 @@ namespace QS3D.Core.SmokeTests
 
             var json = ProjectInterchangeJsonExporter.Build(SourceProject());
             var plan = ProjectInterchangeUseSourceSemanticImporter.Plan(target, json);
-            var authorization = ProjectInterchangeNativeCleanupAuthorization.ForElementIds(plan.TargetElementIdsRequiringNativeCleanup);
+            var authorization = ProjectInterchangeNativeCleanupAuthorization.ForPlan(plan);
+            True(authorization.IsHandleBound);
             var result = ProjectInterchangeUseSourceSemanticImporter.Import(target, json, authorization);
 
             Equal("SOURCE-P", result.SourceProjectId);

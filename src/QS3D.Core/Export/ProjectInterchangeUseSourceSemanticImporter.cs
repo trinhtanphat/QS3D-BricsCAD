@@ -9,6 +9,26 @@ using QS3D.Core.Persistence;
 
 namespace QS3D.Core.Export
 {
+    public sealed class ProjectInterchangeNativeCleanupRequirement
+    {
+        internal ProjectInterchangeNativeCleanupRequirement(string elementId, IEnumerable<string> ownerHandles)
+        {
+            ElementId = (elementId ?? string.Empty).Trim();
+            if (ElementId.Length == 0) throw new ArgumentException("Native cleanup element id is required.", nameof(elementId));
+            OwnerHandles = (ownerHandles ?? Enumerable.Empty<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+                .AsReadOnly();
+            if (OwnerHandles.Count == 0) throw new ArgumentException("Native cleanup owner handles are required.", nameof(ownerHandles));
+        }
+
+        public string ElementId { get; }
+        public IReadOnlyList<string> OwnerHandles { get; }
+    }
+
     public sealed class ProjectInterchangeUseSourceSemanticPlan
     {
         internal ProjectInterchangeUseSourceSemanticPlan(
@@ -26,8 +46,7 @@ namespace QS3D.Core.Export
             int sourceHandlesToDiscard,
             int validationWarnings,
             IEnumerable<string> affectedTargetElementIds,
-            IEnumerable<string> targetElementIdsRequiringNativeCleanup,
-            int targetGeneratedHandlesToClean)
+            IEnumerable<ProjectInterchangeNativeCleanupRequirement> nativeCleanupRequirements)
         {
             SourceProjectId = sourceProjectId ?? string.Empty;
             SourceSchemaVersion = sourceSchemaVersion;
@@ -43,8 +62,12 @@ namespace QS3D.Core.Export
             SourceHandlesToDiscard = sourceHandlesToDiscard;
             ValidationWarnings = validationWarnings;
             AffectedTargetElementIds = ReadOnlyIds(affectedTargetElementIds);
-            TargetElementIdsRequiringNativeCleanup = ReadOnlyIds(targetElementIdsRequiringNativeCleanup);
-            TargetGeneratedHandlesToClean = targetGeneratedHandlesToClean;
+            NativeCleanupRequirements = ReadOnlyRequirements(nativeCleanupRequirements);
+            TargetElementIdsRequiringNativeCleanup = NativeCleanupRequirements
+                .Select(x => x.ElementId)
+                .ToList()
+                .AsReadOnly();
+            TargetGeneratedHandlesToClean = NativeCleanupRequirements.Sum(x => x.OwnerHandles.Count);
         }
 
         public string SourceProjectId { get; }
@@ -61,11 +84,12 @@ namespace QS3D.Core.Export
         public int SourceHandlesToDiscard { get; }
         public int ValidationWarnings { get; }
         public IReadOnlyList<string> AffectedTargetElementIds { get; }
+        public IReadOnlyList<ProjectInterchangeNativeCleanupRequirement> NativeCleanupRequirements { get; }
         public IReadOnlyList<string> TargetElementIdsRequiringNativeCleanup { get; }
         public int TargetGeneratedHandlesToClean { get; }
         public int TotalSemanticIdentitiesToAdd => checked(checked(ZonesToAdd + FloorsToAdd) + checked(FamiliesToAdd + ElementsToAdd));
         public int TotalSemanticIdentitiesToReplace => checked(checked(ZonesToReplace + FloorsToReplace) + checked(FamiliesToReplace + ElementsToReplace));
-        public bool RequiresNativeCleanup => TargetElementIdsRequiringNativeCleanup.Count > 0;
+        public bool RequiresNativeCleanup => NativeCleanupRequirements.Count > 0;
 
         private static IReadOnlyList<string> ReadOnlyIds(IEnumerable<string> source)
         {
@@ -77,33 +101,91 @@ namespace QS3D.Core.Export
                 .ToList()
                 .AsReadOnly();
         }
+
+        private static IReadOnlyList<ProjectInterchangeNativeCleanupRequirement> ReadOnlyRequirements(
+            IEnumerable<ProjectInterchangeNativeCleanupRequirement> source)
+        {
+            var result = (source ?? Enumerable.Empty<ProjectInterchangeNativeCleanupRequirement>())
+                .Where(x => x != null)
+                .OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var duplicate = result
+                .GroupBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(x => x.Count() > 1);
+            if (duplicate != null)
+                throw new InvalidOperationException("Duplicate native cleanup requirement for target element: " + duplicate.Key);
+            return result.AsReadOnly();
+        }
     }
 
     public sealed class ProjectInterchangeNativeCleanupAuthorization
     {
         private readonly HashSet<string> _elementIds;
+        private readonly Dictionary<string, HashSet<string>> _ownerHandlesByElementId;
+        private readonly bool _handleBound;
 
-        private ProjectInterchangeNativeCleanupAuthorization(IEnumerable<string> elementIds)
+        private ProjectInterchangeNativeCleanupAuthorization(
+            IEnumerable<string> elementIds,
+            IEnumerable<ProjectInterchangeNativeCleanupRequirement> requirements,
+            bool handleBound)
         {
             _elementIds = new HashSet<string>(
                 (elementIds ?? Enumerable.Empty<string>())
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Select(x => x.Trim()),
                 StringComparer.OrdinalIgnoreCase);
+            _ownerHandlesByElementId = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var requirement in requirements ?? Enumerable.Empty<ProjectInterchangeNativeCleanupRequirement>())
+            {
+                if (requirement == null) continue;
+                _ownerHandlesByElementId[requirement.ElementId] = new HashSet<string>(requirement.OwnerHandles, StringComparer.OrdinalIgnoreCase);
+            }
+            _handleBound = handleBound;
             ElementIds = _elementIds.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
         public IReadOnlyList<string> ElementIds { get; }
+        public bool IsHandleBound => _handleBound;
         public static ProjectInterchangeNativeCleanupAuthorization None { get; } =
-            new ProjectInterchangeNativeCleanupAuthorization(Array.Empty<string>());
+            new ProjectInterchangeNativeCleanupAuthorization(
+                Array.Empty<string>(),
+                Array.Empty<ProjectInterchangeNativeCleanupRequirement>(),
+                handleBound: true);
 
         public static ProjectInterchangeNativeCleanupAuthorization ForElementIds(IEnumerable<string> elementIds)
         {
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            return new ProjectInterchangeNativeCleanupAuthorization(elementIds);
+            return new ProjectInterchangeNativeCleanupAuthorization(
+                elementIds,
+                Array.Empty<ProjectInterchangeNativeCleanupRequirement>(),
+                handleBound: false);
         }
 
-        internal bool Allows(string elementId) => _elementIds.Contains((elementId ?? string.Empty).Trim());
+        public static ProjectInterchangeNativeCleanupAuthorization ForPlan(ProjectInterchangeUseSourceSemanticPlan plan)
+        {
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            return new ProjectInterchangeNativeCleanupAuthorization(
+                plan.TargetElementIdsRequiringNativeCleanup,
+                plan.NativeCleanupRequirements,
+                handleBound: true);
+        }
+
+        internal bool MatchesExactly(IReadOnlyList<ProjectInterchangeNativeCleanupRequirement> requirements)
+        {
+            requirements = requirements ?? Array.Empty<ProjectInterchangeNativeCleanupRequirement>();
+            if (requirements.Count == 0) return _elementIds.Count == 0;
+            if (!_handleBound || _elementIds.Count != requirements.Count || _ownerHandlesByElementId.Count != requirements.Count)
+                return false;
+
+            foreach (var requirement in requirements)
+            {
+                if (requirement == null || !_elementIds.Contains(requirement.ElementId)) return false;
+                if (!_ownerHandlesByElementId.TryGetValue(requirement.ElementId, out var authorizedHandles)) return false;
+                if (authorizedHandles.Count != requirement.OwnerHandles.Count) return false;
+                if (requirement.OwnerHandles.Any(x => !authorizedHandles.Contains(x))) return false;
+            }
+            return true;
+        }
     }
 
     public sealed class ProjectInterchangeUseSourceSemanticResult
@@ -355,8 +437,7 @@ namespace QS3D.Core.Export
 
             var sourceHandlesToDiscard = source.Elements.Sum(x => x.SourceHandles.Count);
             var affected = BuildAffectedTargetElementIds(target, source, resolution);
-            var cleanup = new List<string>();
-            var generatedHandleCount = 0;
+            var cleanup = new List<ProjectInterchangeNativeCleanupRequirement>();
             foreach (var id in affected)
             {
                 var element = target.FindElement(id);
@@ -364,10 +445,10 @@ namespace QS3D.Core.Export
                 var handles = GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)
                     .Select(x => x.Key)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 if (handles.Length == 0) continue;
-                cleanup.Add(element.Id);
-                generatedHandleCount = checked(generatedHandleCount + handles.Length);
+                cleanup.Add(new ProjectInterchangeNativeCleanupRequirement(element.Id, handles));
             }
 
             var plan = new ProjectInterchangeUseSourceSemanticPlan(
@@ -385,8 +466,7 @@ namespace QS3D.Core.Export
                 sourceHandlesToDiscard,
                 source.Validation.WarningCount,
                 affected,
-                cleanup,
-                generatedHandleCount);
+                cleanup);
 
             var sourceIdentityCount = checked(checked(source.Zones.Count + source.Floors.Count) + checked(source.Families.Count + source.Elements.Count));
             if (checked(plan.TotalSemanticIdentitiesToAdd + plan.TotalSemanticIdentitiesToReplace) != sourceIdentityCount)
@@ -489,16 +569,15 @@ namespace QS3D.Core.Export
             ProjectInterchangeUseSourceSemanticPlan plan,
             ProjectInterchangeNativeCleanupAuthorization authorization)
         {
-            var missing = plan.TargetElementIdsRequiringNativeCleanup
-                .Where(x => !authorization.Allows(x))
+            if (authorization.MatchesExactly(plan.NativeCleanupRequirements)) return;
+            var required = plan.TargetElementIdsRequiringNativeCleanup
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .Take(16)
                 .ToArray();
-            if (missing.Length == 0) return;
             throw new InvalidOperationException(
-                "UseSource semantic import requires native cleanup authorization for target element(s): " +
-                string.Join(", ", missing) +
-                ". The Core importer does not erase BricsCAD entities; native cleanup must be completed by a guarded adapter transaction/recovery workflow first.");
+                "UseSource semantic import requires native cleanup authorization bound to the exact generated-handle set for target element(s): " +
+                string.Join(", ", required) +
+                ". The Core importer re-plans before mutation and rejects stale or element-id-only cleanup authorization; native cleanup must be completed by a guarded adapter transaction/recovery workflow first.");
         }
 
         private static void ApplySourceElementSemanticData(ProjectElement element, InterchangeElementSnapshot source)

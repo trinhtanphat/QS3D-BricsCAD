@@ -43,7 +43,7 @@ namespace QS3D.Core.SmokeTests
             var result = ProjectInterchangeUseSourceSemanticImporter.Import(
                 target,
                 json,
-                ProjectInterchangeNativeCleanupAuthorization.ForElementIds(plan.TargetElementIdsRequiringNativeCleanup));
+                ProjectInterchangeNativeCleanupAuthorization.ForPlan(plan));
 
             Equal("Source Zone", target.FindZone("Z1")?.Name);
             True(!element.Properties.ContainsKey("GeneratedSolidHandle"));

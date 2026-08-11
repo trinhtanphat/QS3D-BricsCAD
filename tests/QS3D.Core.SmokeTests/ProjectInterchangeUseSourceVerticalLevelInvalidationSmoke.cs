@@ -44,7 +44,7 @@ namespace QS3D.Core.SmokeTests
             Near(0d, target.FindFloor("F1")?.ElevationM ?? double.NaN);
             Equal("AA11", element.Properties["GeneratedSolidHandle"]);
 
-            var authorization = ProjectInterchangeNativeCleanupAuthorization.ForElementIds(plan.TargetElementIdsRequiringNativeCleanup);
+            var authorization = ProjectInterchangeNativeCleanupAuthorization.ForPlan(plan);
             var result = ProjectInterchangeUseSourceSemanticImporter.Import(target, json, authorization);
 
             Near(5d, target.FindFloor("F1")?.ElevationM ?? double.NaN);
