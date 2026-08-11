@@ -17,6 +17,8 @@ namespace QS3D.Core.Reporting
             RequireUniqueIds(project.Families, x => x.Id, "family", reportName);
         }
 
+        internal static string NormalizeReferenceId(string? value) => (value ?? string.Empty).Trim();
+
         private static void RequireUniqueIds<T>(IEnumerable<T> items, Func<T, string> idSelector, string identityName, string reportName) where T : class
         {
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

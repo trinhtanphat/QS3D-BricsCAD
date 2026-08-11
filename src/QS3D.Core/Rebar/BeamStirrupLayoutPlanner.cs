@@ -119,6 +119,9 @@ namespace QS3D.Core.Rebar
                 SpacingMm = input.SpacingMm,
                 Count = input.Count
             });
+            var diameterM = RebarMath.Divide(diameterMm, 1000d, "beam stirrup diameter");
+            if (stations.Count > 1 && stations.ActualSpacingM + 1e-12d < diameterM)
+                throw new InvalidOperationException("Beam stirrup centers are closer than one stirrup diameter.");
 
             var radiusM = RebarMath.Divide(diameterMm, 2000d, "beam stirrup radius");
             var centerCoverM = RebarMath.Add(sectionCoverM, radiusM, "beam stirrup center cover");
