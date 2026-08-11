@@ -103,7 +103,7 @@ else:
         "OnChanged(nameof(IsEditable));",
         "var next = !_isReadOnly && value;",
         "if (_canReset == next) return;",
-        "if (string.Equals(_value, requested, StringComparison.Ordinal)) return;",
+        "if ((IsReadOnly || Apply == null) && string.Equals(_value, requested, StringComparison.Ordinal)) return;",
         "var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;",
         "bool.TryParse(text, out var parsed)",
         'text.Equals("yes", StringComparison.OrdinalIgnoreCase)',
@@ -111,11 +111,13 @@ else:
         'text.Equals("bật", StringComparison.CurrentCultureIgnoreCase)',
     ):
         if token not in text:
-            errors.append("Property row reactive/no-op/boolean safety missing: " + token)
-    no_op = text.find("if (string.Equals(_value, requested, StringComparison.Ordinal)) return;")
+            errors.append("Property row reactive/revalidation/boolean safety missing: " + token)
+    if "if (string.Equals(_value, requested, StringComparison.Ordinal)) return;" in text:
+        errors.append("Editable PropertyRow values must not skip Apply solely because the displayed text is unchanged; live semantic state may have changed modelessly")
+    guarded_no_op = text.find("if ((IsReadOnly || Apply == null) && string.Equals(_value, requested, StringComparison.Ordinal)) return;")
     apply = text.find("var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;")
-    if no_op < 0 or apply < 0 or no_op > apply:
-        errors.append("PropertyRowViewModel must reject exact display-value no-ops before invoking Apply")
+    if guarded_no_op < 0 or apply < 0 or guarded_no_op > apply:
+        errors.append("Only read-only/unbound display no-ops may short-circuit before Apply")
 
 print("QS3D Workspace property safety preflight")
 if errors:
@@ -123,4 +125,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Workspace property rows keep property-specific dirty/geometry invalidation, read-only rows can never retain or regain reset state, exact editor no-ops avoid mutation callbacks, Instance reset resolves live Family state, selection scope fails closed, and numeric/boolean editors stay validated.")
+print("PASS: Workspace property rows keep property-specific dirty/geometry invalidation, read-only rows cannot retain reset state, editable same-text commits still revalidate live modeless semantic state, Instance reset resolves live Family state, selection scope fails closed, and numeric/boolean editors stay validated.")
