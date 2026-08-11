@@ -70,6 +70,7 @@ namespace QS3D.Core.Persistence
 
         private static void MigrateV2ToV3(XElement root)
         {
+            if (root.Attribute("changeVersion") == null) root.SetAttributeValue("changeVersion", "0");
             if (root.Element("rules") == null) root.Add(new XElement("rules"));
             if (root.Element("audit") == null) root.Add(new XElement("audit"));
             SetMigrationOrigin(root, "2");
