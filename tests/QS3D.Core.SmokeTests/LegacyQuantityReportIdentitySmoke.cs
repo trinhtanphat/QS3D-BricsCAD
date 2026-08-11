@@ -19,9 +19,14 @@ namespace QS3D.Core.SmokeTests
             ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(new[] { first, sameIdentityDifferentCase }));
 
             var second = new ElementInstance("Legacy-B", family, "Floor") { LengthM = 3d, GrossConcreteM3 = 2d };
+            second.SourceHandles.Add(" aa ");
+            second.SourceHandles.Add(" ");
+            second.SourceHandles.Add("Bb");
             var valid = QuantityReportBuilder.Group(new[] { first, second }).Single();
             if (valid.Count != 2 || Math.Abs(valid.LengthM - 5d) > 1e-12 || Math.Abs(valid.GrossConcreteM3 - 3d) > 1e-12)
                 throw new Exception("Legacy quantity grouping must remain unchanged for distinct element identities.");
+            if (valid.SourceHandles.Count != 2 || valid.SourceHandles[0] != "AA" || valid.SourceHandles[1] != "Bb")
+                throw new Exception("Legacy quantity source handles must be trimmed and case-insensitively deduplicated in first-seen order.");
         }
 
         private static void ExpectThrows<T>(Action action) where T : Exception
