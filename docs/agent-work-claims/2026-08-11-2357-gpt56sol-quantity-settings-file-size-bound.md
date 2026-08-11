@@ -19,7 +19,7 @@
 
 ## Contract
 
-- Add one explicit generous maximum Quantity Settings JSON byte size, currently 8 MiB, far above current/default and 28-code full-matrix templates.
+- Add one explicit generous maximum Quantity Settings JSON byte size, currently 32 MiB. This is intentionally above a worst-case serialized payload at the already-valid 65,536 directed-rule ceiling, so the store must not reject a settings object merely because its valid maximum matrix serializes larger than an 8 MiB convenience estimate.
 - Check the exact opened file stream length before constructing/using `DataContractJsonSerializer.ReadObject(...)`.
 - Oversized primary settings are ordinary invalid data: existing `Load()` backup fallback remains available; a valid `.bak` can recover.
 - Oversized imported templates fail without mutating machine settings.
@@ -35,7 +35,7 @@
 ## Validation plan
 
 - Extend recovery preflight to pin `File.Open -> stream.Length guard -> serializer/ReadObject -> future-schema check -> NormalizeAndValidate` ordering.
-- Add focused size preflight requiring the explicit 8 MiB ceiling, early stream-length refusal, backup fallback compatibility and no `ReadAllBytes`/`ReadToEnd`/MemoryStream pre-read.
+- Add focused size preflight requiring the explicit 32 MiB ceiling, early stream-length refusal, backup fallback compatibility and no `ReadAllBytes`/`ReadToEnd`/MemoryStream pre-read.
 - Re-fetch current `main` before implementation/merge and preserve concurrent winners without force push.
 - Source/static review only; no GitHub Actions dispatch and no native V25 runtime PASS claim.
 
