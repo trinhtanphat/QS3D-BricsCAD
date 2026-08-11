@@ -13,6 +13,13 @@ TARGETS = (
         ),
     ),
     (
+        ROOT / "src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs",
+        (
+            ("PromptPositiveMeters", "defaultValue"),
+            ("PromptNonNegativeMeters", "defaultValue"),
+        ),
+    ),
+    (
         ROOT / "src/QS3D.BricsCAD.V25/DirectDrawWindowCommands.cs",
         (
             ("PromptPositiveMeters", "defaultValue"),
@@ -72,4 +79,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Direct Draw wall/structural/window/reference numeric prompts delegate default rendering to BricsCAD and do not duplicate <default> text.")
+print("PASS: Direct Draw wall/structural/door-opening/window/reference numeric prompts delegate default rendering to BricsCAD and do not duplicate <default> text.")
