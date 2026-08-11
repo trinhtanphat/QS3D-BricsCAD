@@ -53,7 +53,7 @@ namespace QS3D.BricsCAD.V25
                                   "QS3D sẽ regenerate thử trước khi chấp nhận thay đổi. File .qsdb sẽ chưa tự lưu.";
                 if (System.Windows.MessageBox.Show(confirmText, "QS3D — Nạp Template", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var project = ExistingProjectMutationContext.Require(doc, "Template Import");
                 var rollback = ProjectStateSnapshot.Capture(project);
                 TemplateApplyResult result;
                 int regenerated;
