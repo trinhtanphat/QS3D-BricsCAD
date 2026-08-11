@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using QS3D.Core.Reporting;
 
 namespace QS3D.Core.SmokeTests
@@ -7,6 +8,8 @@ namespace QS3D.Core.SmokeTests
     {
         private const string NullCategoryRuleMessage = "CategoryRules cannot contain null entries.";
         private const string NullIntersectionRuleMessage = "IntersectionRules cannot contain null entries.";
+        private const string CategoryLimitMessage = "CategoryRules cannot contain more than " + QuantityCalculationSettings.MaxObservedCategoryCodeCount + " entries.";
+        private const string IntersectionLimitMessage = "IntersectionRules cannot contain more than " + QuantityCalculationSettings.MaxDirectedIntersectionRuleCount + " entries.";
 
         public static void Run()
         {
@@ -14,6 +17,8 @@ namespace QS3D.Core.SmokeTests
             NullCollectionsRetainEmptyCloneBehavior();
             NullCategoryEntriesFailExplicitly();
             NullIntersectionEntriesFailExplicitly();
+            OversizedCategoryCollectionFailsBeforeEntryClone();
+            OversizedIntersectionCollectionFailsBeforeEntryClone();
         }
 
         private static void ValidRulesAreDeepCloned()
@@ -63,6 +68,33 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsInvalid(() => settings.Clone(), NullIntersectionRuleMessage);
             ThrowsInvalid(() => new QuantityCalculationRuleSet(settings), NullIntersectionRuleMessage);
+        }
+
+        private static void OversizedCategoryCollectionFailsBeforeEntryClone()
+        {
+            var settings = QuantityCalculationSettings.CreateDefault();
+            settings.CategoryRules = new List<QuantityCategoryRuleSetting>(QuantityCalculationSettings.MaxObservedCategoryCodeCount + 1)
+            {
+                null!
+            };
+            for (var i = 1; i <= QuantityCalculationSettings.MaxObservedCategoryCodeCount; i++)
+                settings.CategoryRules.Add(new QuantityCategoryRuleSetting { Category = 10000 + i, FaceAngleThresholdDeg = 30d });
+
+            ThrowsInvalid(() => settings.Clone(), CategoryLimitMessage);
+        }
+
+        private static void OversizedIntersectionCollectionFailsBeforeEntryClone()
+        {
+            var settings = QuantityCalculationSettings.CreateDefault();
+            settings.IntersectionRules = new List<QuantityIntersectionRuleSetting>(QuantityCalculationSettings.MaxDirectedIntersectionRuleCount + 1)
+            {
+                null!
+            };
+            var repeated = new QuantityIntersectionRuleSetting { Source = 1, Target = 1 };
+            for (var i = 1; i <= QuantityCalculationSettings.MaxDirectedIntersectionRuleCount; i++)
+                settings.IntersectionRules.Add(repeated);
+
+            ThrowsInvalid(() => settings.Clone(), IntersectionLimitMessage);
         }
 
         private static void ThrowsInvalid(Action action, string expectedMessage)
