@@ -107,9 +107,18 @@ for name, (path, health_marker, commands) in TABLES.items():
     if "không tạo project mới" not in health:
         errors.append(name + " native Table health must explain BLOCKED no-project behavior")
 
-    build_or_refresh_mutation = text.count("ProjectContextCoordinator.GetOrCreate(document)")
-    if build_or_refresh_mutation < 3:
-        errors.append(name + " native Table Build/Refresh/Remove must keep explicit project mutation path")
+    existing = method_body(text, "private static QS3D.Core.Domain.ProjectState RequireExistingProject(")
+    if not existing:
+        errors.append(name + " native Table must expose an existing-project guard for Build/Refresh/Remove")
+    else:
+        if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in existing:
+            errors.append(name + " native Table existing-project guard must use TryGetReadOnly")
+        if "không tạo project mới" not in existing:
+            errors.append(name + " native Table existing-project guard must explain no replacement-project behavior")
+    if text.count("RequireExistingProject(document,") < 3:
+        errors.append(name + " native Table Build/Refresh/Remove must each require the existing project explicitly")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append(name + " native Table lifecycle must not create/cache replacement project state")
 
 if HUB.is_file():
     text = HUB.read_text(encoding="utf-8")
@@ -130,4 +139,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Release Check, Health All and all five native Table health commands inspect existing QS3D state without creating/touching project identity; Build/Refresh/Remove retain explicit mutation paths and Schedule Hub exposes each native Table lifecycle command exactly once.")
+print("PASS: Release Check, Health All and native Table health inspect existing QS3D state read-only; Build/Refresh/Remove explicitly require the existing project without creating replacement state, and Schedule Hub exposes each lifecycle command exactly once.")
