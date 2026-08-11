@@ -19,7 +19,14 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    var blocked = "HT_Phòng Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.";
+                    PaletteCoordinator.SetStatus(blocked);
+                    document.Editor.WriteMessage("\nQS3D " + blocked);
+                    return;
+                }
+
                 var issues = new RoomFinishHealthService().Inspect(project).ToList();
                 var summary = new HealthSummary(issues);
                 var status = "HT_Phòng Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
@@ -30,7 +37,8 @@ namespace QS3D.BricsCAD.V25
                 var window = new ModelHealthWindow(document, issues, issue =>
                 {
                     if (string.IsNullOrWhiteSpace(issue.ElementId)) return;
-                    var handles = SourceHandleResolver.Resolve(project, new[] { issue.ElementId });
+                    if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+                    var handles = SourceHandleResolver.Resolve(currentProject, new[] { issue.ElementId });
                     var count = CadHandleService.Select(document, handles);
                     PaletteCoordinator.SetStatus("HT_Phòng Health Locate " + issue.ElementId + " • " + count + " CAD object");
                     if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
