@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             ProvenanceOnlyStaleOutputIsRemoved();
             StaleElementPreviewFailsBeforeMutation();
             ChangeVersionInvalidatesEquivalentPreview();
+            ChangedElementApplyAdvancesProjectRevisionOnce();
+            NoChangeElementApplyIsSideEffectFree();
             ProjectPreviewAppliesAtomicallyFromFreshState();
             HealthGuardedProjectApplyReturnsRegressionDiff();
             ForeignElementInstanceFailsClosed();
@@ -83,6 +85,43 @@ namespace QS3D.Core.SmokeTests
             True(!project.FindElement("E1")!.Quantities.ContainsKey("Cost"));
         }
 
+        private static void ChangedElementApplyAdvancesProjectRevisionOnce()
+        {
+            var project = Fixture();
+            var element = project.FindElement("E1")!;
+            var service = new QuantityRulePreviewService();
+            var preview = service.PreviewElement(project, element);
+            var beforeVersion = project.ChangeVersion;
+
+            var applied = service.ApplyElement(project, element, preview);
+
+            True(applied >= 1);
+            Equal(beforeVersion + 1L, project.ChangeVersion);
+            Near(6d, element.Quantities["Cost"]);
+            Equal("cost@1", element.Properties["Rule:Cost"]);
+        }
+
+        private static void NoChangeElementApplyIsSideEffectFree()
+        {
+            var project = Fixture();
+            var element = project.FindElement("E1")!;
+            element.Quantities["Cost"] = 6d;
+            element.Properties["Rule:Cost"] = "cost@1";
+            var service = new QuantityRulePreviewService();
+            var preview = service.PreviewElement(project, element);
+            True(!preview.HasChanges);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = element.UpdatedUtc;
+
+            var applied = service.ApplyElement(project, element, preview);
+
+            Equal(0, applied);
+            Equal(beforeVersion, project.ChangeVersion);
+            Equal(beforeUpdated, element.UpdatedUtc);
+            Near(6d, element.Quantities["Cost"]);
+            Equal("cost@1", element.Properties["Rule:Cost"]);
+        }
+
         private static void ProjectPreviewAppliesAtomicallyFromFreshState()
         {
             var project = Fixture();
@@ -95,9 +134,11 @@ namespace QS3D.Core.SmokeTests
             var preview = service.PreviewProject(project);
             Equal(2, preview.ChangedElementCount);
             Equal(2, preview.ChangeCount);
+            var beforeVersion = project.ChangeVersion;
 
             var applied = service.ApplyProject(project, preview);
             True(applied >= 2);
+            Equal(beforeVersion + 1L, project.ChangeVersion);
             Near(6d, project.FindElement("E1")!.Quantities["Cost"]);
             Near(12d, project.FindElement("E2")!.Quantities["Cost"]);
             Equal("cost@1", project.FindElement("E1")!.Properties["Rule:Cost"]);
@@ -109,8 +150,10 @@ namespace QS3D.Core.SmokeTests
             var project = Fixture();
             var service = new QuantityRulePreviewService();
             var preview = service.PreviewProject(project);
+            var beforeVersion = project.ChangeVersion;
             var result = service.ApplyProjectWithHealthGuard(project, preview);
             True(result.AppliedOperationCount >= 1);
+            Equal(beforeVersion + 1L, project.ChangeVersion);
             Equal(0, result.HealthDiff.NewErrorCount);
             Near(6d, project.FindElement("E1")!.Quantities["Cost"]);
         }
