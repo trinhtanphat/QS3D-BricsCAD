@@ -3,7 +3,8 @@
 - Agent: `chatgpt-web-gpt56sol-model-health-review-2049`
 - Registered: `2026-08-11T20:49:00+07:00`
 - Status: `ACTIVE`
-- Baseline main SHA: `15613ad6854189406bb3f4a6ea8cfa29eff333ca`
+- Baseline main SHA: `072b622e6c4dc26139de0448181a995004a557b6`
+- Registration commit: `7146a361f2edcdfede7ce5830542100a4d3dc336`
 - Priority: continue the owner-requested professional UI/UX wave by making Model Health usable on larger issue sets without changing any diagnostic rule or CAD ownership behavior.
 
 ## Reserved scope
@@ -38,6 +39,10 @@ Enhance the existing document-bound `ModelHealthWindow` with read-only triage co
 - Preserve project identity/fingerprint/change-version freshness checks exactly.
 - Add static coverage for search/severity/count wiring, in-memory source ownership, stale lockout and unchanged locate guard.
 - Inspect final current-main ancestry/status metadata; native keyboard/focus/HiDPI rendering remains LOCAL_ONLY.
+
+## Coordination note
+
+The initial claim write raced concurrent `main`; GitHub attached registration commit `7146a361...` to actual parent `072b622e...`. This claim-only correction records the actual reservation baseline before any substantive Model Health source was changed.
 
 ## Completion condition
 
