@@ -34,6 +34,11 @@ def main():
     require(planner, "new Dictionary<string, SemanticScheduleDefinition>(StringComparer.OrdinalIgnoreCase)", "case-insensitive schedule catalog", failures)
     require(planner, "new HashSet<string>(StringComparer.OrdinalIgnoreCase)", "case-insensitive request uniqueness", failures)
     require(planner, "private const int MaxItems = 128;", "bounded schedule count", failures)
+    require(planner, "if (count > MaxItems)", "bounded available schedule enumeration", failures)
+    require(planner, "var materialized = MaterializeItems(items);", "bounded placement-item materialization", failures)
+    require(planner, "if (result.Count >= MaxItems)", "bounded placement-item enumeration", failures)
+    if "items.ToList()" in planner:
+        failures.append("bounded placement-item enumeration regressed to unbounded items.ToList()")
     require(planner, "PositiveFinite(item.WidthMm", "finite positive width guard", failures)
     require(planner, "PositiveFinite(item.HeightMm", "finite positive height guard", failures)
     require(planner, "placement.Xmm + placement.WidthMm > sheet.WidthMm", "existing view paper-bound guard", failures)
@@ -53,6 +58,8 @@ def main():
     require(smoke, "MissingScheduleFailsClosed", "missing schedule smoke", failures)
     require(smoke, "DuplicateRequestedScheduleFailsClosed", "duplicate request smoke", failures)
     require(smoke, "DuplicateAvailableScheduleFailsClosed", "duplicate catalog smoke", failures)
+    require(smoke, "TooManyAvailableSchedulesFailClosed", "available schedule cardinality smoke", failures)
+    require(smoke, "TooManyPlacementItemsFailClosed", "placement-item cardinality smoke", failures)
     require(smoke, "OversizedScheduleFailsClosed", "oversized schedule smoke", failures)
     require(smoke, "InvalidGeometryFailsClosed", "non-finite geometry smoke", failures)
     require(registration, "SemanticSchedulePlacementSmoke.Run();", "smoke registration", failures)
@@ -65,6 +72,7 @@ def main():
 
     print("PASS: Semantic Schedule Placement remains pure-Core and native-handle free.")
     print("PASS: persisted SemanticScheduleDefinition.Id is the stable placement identity.")
+    print("PASS: available schedules and placement items fail closed beyond 128 entries.")
     print("PASS: deterministic bounded packing avoids existing views and reserved paper regions.")
     print("PASS: missing/duplicate IDs, invalid geometry and unplaceable schedules fail closed.")
     return 0
