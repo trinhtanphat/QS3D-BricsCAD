@@ -79,6 +79,7 @@ namespace QS3D.BricsCAD.V25
                 var validation = ProjectInterchangeJsonValidator.Validate(json);
                 if (!validation.IsValid)
                     throw new InvalidDataException("Snapshot không hợp lệ: " + validation.ErrorCount.ToString(CultureInfo.InvariantCulture) + " error(s). Chạy QS3DINTERCHANGEVALIDATE để xem chi tiết.");
+                ProjectInterchangeValidatedSnapshotReader.Read(json);
 
                 EnsureActive(document, "Interchange Append / preview");
                 var project = ProjectContextCoordinator.GetOrCreate(document);

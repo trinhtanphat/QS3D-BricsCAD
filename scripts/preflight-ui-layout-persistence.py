@@ -11,8 +11,9 @@ palette = ROOT / "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs"
 splitter = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.LayoutPersistence.cs"
 workspace = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 runtime = ROOT / "scripts/test-wpf-palettes-runtime.ps1"
+right_panel = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml"
 
-for path in (store, palette, splitter, workspace, runtime):
+for path in (store, palette, splitter, workspace, right_panel, runtime):
     if not path.is_file(): errors.append("missing UI layout persistence file: " + str(path.relative_to(ROOT)))
 
 if store.is_file():
@@ -21,12 +22,19 @@ if store.is_file():
         "Environment.SpecialFolder.LocalApplicationData",
         'Path.Combine(root, "QS3D", "BricsCAD-V25", "ui-layout-v1.txt")',
         "MaxFileBytes = 16 * 1024",
+        "internal const int WorkspacePaletteMinWidth = 460;",
+        "internal const int WorkspacePaletteMinHeight = 420;",
+        "internal const int RightPaletteMinWidth = 255;",
+        "internal const int RightPaletteMinHeight = 480;",
         "public int WorkspacePaletteWidth { get; set; } = 640;",
         "public double ModelColumnWidth { get; set; } = 160d;",
         "public double FamilyColumnWidth { get; set; } = 245d;",
         "public double FamilyTopHeight { get; set; } = 250d;",
         "public double RoomTopHeight { get; set; } = 218d;",
-        "layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, 460, 1600);",
+        "layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, WorkspacePaletteMinWidth, 1600);",
+        "layout.WorkspacePaletteHeight = Clamp(layout.WorkspacePaletteHeight, WorkspacePaletteMinHeight, 2000);",
+        "layout.RightPaletteWidth = Clamp(layout.RightPaletteWidth, RightPaletteMinWidth, 1200);",
+        "layout.RightPaletteHeight = Clamp(layout.RightPaletteHeight, RightPaletteMinHeight, 2000);",
         "layout.ModelColumnWidth = Clamp(layout.ModelColumnWidth, 135d, 500d, 160d);",
         "layout.FamilyColumnWidth = Clamp(layout.FamilyColumnWidth, 220d, 700d, 245d);",
         "layout.FamilyTopHeight = Clamp(layout.FamilyTopHeight, 160d, 900d, 250d);",
@@ -39,7 +47,7 @@ if store.is_file():
         "catch (UnauthorizedAccessException)",
         "TryDelete(temp!)",
     ):
-        if needle not in text: errors.append("UserUiLayoutStore missing fail-safe/atomic/upgraded-layout/no-op contract: " + needle)
+        if needle not in text: errors.append("UserUiLayoutStore missing fail-safe/atomic/upgraded-layout/minimum/no-op contract: " + needle)
     for forbidden in (".qsdb", "ProjectContextCoordinator", "ProjectState", "project.Metadata"):
         if forbidden in text: errors.append("per-user UI layout must not mutate project/QSDB state: " + forbidden)
 
@@ -93,18 +101,29 @@ if workspace.is_file():
     except ET.ParseError as exc:
         errors.append("WorkspacePanel.xaml is not well-formed: " + str(exc))
 
+if right_panel.is_file():
+    text = right_panel.read_text(encoding="utf-8")
+    if 'MinWidth="255" MinHeight="480"' not in text:
+        errors.append("RightPanel minimum layout contract missing: MinWidth=255 MinHeight=480")
+
 if palette.is_file():
     text = palette.read_text(encoding="utf-8")
     for needle in (
         "using WpfSize = System.Windows.Size;",
         "var layout = UserUiLayoutStore.Get();",
+        "MinimumSize = new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight)",
+        "MinimumSize = new DrawingSize(UserUiLayoutStore.RightPaletteMinWidth, UserUiLayoutStore.RightPaletteMinHeight)",
         "_workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);",
         "_right.DeviceIndependentSize = new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight);",
         "PersistPaletteLayout();",
-        "MinimumSize = new DrawingSize(460, 420)",
         "UserUiLayoutStore.Update(layout =>",
     ):
-        if needle not in text: errors.append("PaletteCoordinator missing per-user dimension persistence: " + needle)
+        if needle not in text: errors.append("PaletteCoordinator missing per-user dimension/minimum persistence: " + needle)
+    for stale in (
+        "MinimumSize = new DrawingSize(460, 420)",
+        "MinimumSize = new DrawingSize(255, 420)",
+    ):
+        if stale in text: errors.append("PaletteCoordinator retains stale palette minimum: " + stale)
     if "_workspace.Size =" in text or "_right.Size =" in text:
         errors.append("PaletteCoordinator must not regress to obsolete PaletteSet.Size for layout persistence")
 
@@ -148,4 +167,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: the Workspace host restores down to 460x420 while its 560-DIP three-column content overflows horizontally without clipping; layout/splitter preferences persist per user outside QSDB, skip identical no-op writes, write atomically/best-effort, and save splitters only on DragCompleted.")
+print("PASS: centralized palette minimums preserve a compact 460x420 Workspace host while its 560-DIP content overflows horizontally; RightPanel keeps its 255x480 floor, identical writes are skipped, and layout persistence remains atomic/best-effort.")

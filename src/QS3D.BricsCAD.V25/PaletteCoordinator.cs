@@ -35,7 +35,7 @@ namespace QS3D.BricsCAD.V25
                 Dock = DockSides.Left,
                 Visible = false,
                 KeepFocus = false,
-                MinimumSize = new DrawingSize(460, 420)
+                MinimumSize = new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight)
             };
             _workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);
             _workspace.AddVisual("Mô hình", _workspacePanel, true);
@@ -46,7 +46,7 @@ namespace QS3D.BricsCAD.V25
                 Dock = DockSides.Right,
                 Visible = false,
                 KeepFocus = false,
-                MinimumSize = new DrawingSize(255, 420)
+                MinimumSize = new DrawingSize(UserUiLayoutStore.RightPaletteMinWidth, UserUiLayoutStore.RightPaletteMinHeight)
             };
             _right.DeviceIndependentSize = new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight);
             _right.AddVisual("Quản lý", _rightPanel, true);

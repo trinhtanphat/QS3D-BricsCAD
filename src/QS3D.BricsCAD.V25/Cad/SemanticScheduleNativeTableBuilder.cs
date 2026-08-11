@@ -31,6 +31,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             public StateKeys(string token)
             {
+                Token = token;
                 Prefix = MetadataPrefix + token + ".";
                 Handle = Prefix + "Handle";
                 ScheduleId = Prefix + "ScheduleId";
@@ -45,6 +46,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 All = new[] { Handle, ScheduleId, OwnerProjectId, Version, Fingerprint, PositionX, PositionY, PositionZ, RowCount, ColumnCount };
             }
 
+            public string Token { get; }
             public string Prefix { get; }
             public string Handle { get; }
             public string ScheduleId { get; }
@@ -461,7 +463,7 @@ namespace QS3D.BricsCAD.V25.Cad
             foreach (var key in keys.All)
                 if (string.IsNullOrWhiteSpace(project.Metadata[key])) throw new InvalidOperationException(key + " is empty.");
             var storedScheduleId = project.Metadata[keys.ScheduleId].Trim();
-            if (!string.Equals(storedScheduleId, scheduleId, StringComparison.OrdinalIgnoreCase) || !string.Equals(Token(storedScheduleId), Token(scheduleId), StringComparison.Ordinal))
+            if (!string.Equals(storedScheduleId, scheduleId, StringComparison.OrdinalIgnoreCase) || !string.Equals(keys.Token, Token(storedScheduleId), StringComparison.Ordinal))
                 throw new InvalidOperationException("Generated custom schedule Table schedule identity does not match its owner slot.");
             if (!string.Equals(project.Metadata[keys.OwnerProjectId].Trim(), project.ProjectId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Generated custom schedule Table owner project does not match the active project.");

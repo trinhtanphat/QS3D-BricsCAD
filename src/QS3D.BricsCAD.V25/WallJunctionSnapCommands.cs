@@ -80,6 +80,7 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 var project = RequireFreshMutationProject(document, "Wall Snap Preview", expectedProjectId, expectedChangeVersion);
+                RequireTouchHeadroom(project, 2, "Wall Snap Preview");
                 project.Metadata[PreviewPlanHashKey] = plan.PlanHash;
                 project.Metadata[PreviewSourceFingerprintKey] = plan.SourceFingerprint;
                 project.Metadata[PreviewCountKey] = plan.Edits.Count.ToString(CultureInfo.InvariantCulture);
@@ -134,6 +135,7 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Preview không còn khớp selection/geometry hiện tại. Chạy QS3DWALLSNAPPREVIEW lại trước khi apply.");
                 if (project.Metadata.TryGetValue(PreviewCountKey, out var countText) && int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var previewCount) && previewCount != plan.Edits.Count)
                     throw new InvalidOperationException("Số endpoint cần chỉnh đã thay đổi từ preview. Chạy preview lại.");
+                RequireTouchHeadroom(project, plan.Edits.Count == 0 ? 1 : 2, "Wall Snap Apply");
                 if (plan.Edits.Count == 0)
                 {
                     if (ClearPreview(project)) project.Touch();
@@ -453,7 +455,15 @@ namespace QS3D.BricsCAD.V25
             return project;
         }
 
-        private static long NextChangeVersion(long current) => current == long.MaxValue ? 1L : current + 1L;
+        private static void RequireTouchHeadroom(ProjectState project, int requiredTouches, string operation)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (requiredTouches <= 0) throw new ArgumentOutOfRangeException(nameof(requiredTouches));
+            if (project.ChangeVersion > long.MaxValue - requiredTouches)
+                throw new InvalidOperationException(operation + ": project ChangeVersion is exhausted; refusing partial preview/apply mutation.");
+        }
+
+        private static long NextChangeVersion(long current) => checked(current + 1L);
 
         private static bool ClearPreview(ProjectState project)
         {
