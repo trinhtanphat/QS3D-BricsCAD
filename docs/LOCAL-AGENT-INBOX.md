@@ -151,6 +151,18 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related docs: `docs/PROJECT-ROLLBACK-FAILURE-MATRIX.md`; `docs/EXISTING-PROJECT-MUTATION-CONTEXT.md`; `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
 - Updated: 2026-08-11
 
+## LOCAL-012 — Project Browser native workspace and CAD selection bridge
+
+- Priority: P1
+- Status: OPEN
+- Area: Project Browser / Workspace / modeless selection
+- Why local: Core query/grouping/virtualization/selection/workspace-state coordination is source-safe, but final integration depends on real BricsCAD Editor implied selection, live ObjectId/handle resolution, modeless WPF palette lifecycle, document switching, focus/zoom behavior and Unicode/HiDPI rendering.
+- Scenario: Starting from the exact SHA containing `ProjectBrowserWorkspaceCoordinator`, wire/qualify the native Workspace/Project Browser adapter without persisting CAD ObjectIds/handles in Core state. CAD selection must re-resolve to stable semantic IDs, reveal/expand the correct Browser paths and update the multi-selection inspector. Browser node/element selection must re-resolve the current canonical project and live CAD handles at action time, select/zoom only the bound active DWG, and fail closed for stale/deleted/ambiguous IDs. Keep the modeless UI open while switching DWGs, forgetting/reloading project cache, deleting selected semantics, changing grouping/filter/query, paging large nodes, saving/reopening, and cancelling operations. Verify presentation-only browser state never increments semantic `ChangeVersion` or invalidates quantity/regeneration previews.
+- Evidence required: Exact QS3D SHA; Windows and BricsCAD V25 build; CAD→Browser and Browser→CAD selection matrix; single/multi-selection; stale/deleted/ambiguous ID refusal; active-DWG/document-affinity result; cache reload result; paging/filter/grouping state result; before/after semantic `ChangeVersion`; save/reopen; 100/125/150/200% DPI screenshots or sanitized notes; no cross-DWG mutation.
+- Evidence: PENDING_LOCAL
+- Related source/docs: `src/QS3D.Core/Navigation/ProjectBrowserWorkspaceCoordinator.cs`; `src/QS3D.Core/Navigation/ProjectBrowserSelectionPlanner.cs`; `src/QS3D.Core/Navigation/ProjectBrowserWorkspaceStateStore.cs`; `docs/REMOTE-AGENT-SCOPE.md`; `docs/LOCAL-V25-QUALIFICATION.md`
+- Updated: 2026-08-11
+
 ## Close-out rule
 
 Closing all `OPEN` P0/P1 items does not automatically mean the product is commercially released. Release publication still follows `CI_POLICY.md` and requires the owner's separate explicit release authorization. This inbox only records local engineering qualification truth.
