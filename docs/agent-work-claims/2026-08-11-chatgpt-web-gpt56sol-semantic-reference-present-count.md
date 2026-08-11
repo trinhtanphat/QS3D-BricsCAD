@@ -1,18 +1,18 @@
 # Work claim — semantic selection reference present-count integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-semantic-reference-present-count`
 - Registered: `2026-08-11T22:29:00+07:00`
+- Completed: `2026-08-11T22:32:00+07:00`
 - Baseline main SHA: `12524e100f54fb46b0875598eb27200363d78b20`
+- Reservation commit: `cf3f9fc94744da5fa5bf1704c43c42314cb72080`
 - Priority: make multi-selection reference summaries report actual Family/Floor/Zone presence instead of selection size.
 
-## Confirmed defect
+## Defect fixed
 
-`SemanticSelectionInspector.InspectReference(...)` normalizes reference IDs and correctly treats assigned-vs-unassigned values as mixed, but always constructs `SemanticSelectionTextValue` with `PresentCount = values.Count`. Blank/unassigned references are therefore counted as present.
+`SemanticSelectionInspector.InspectReference(...)` previously normalized reference IDs and detected assigned-vs-unassigned mixing correctly, but always reported `PresentCount = values.Count`. Blank/unassigned Family/Floor/Zone references were therefore counted as present.
 
-The Workspace consumes that public summary directly in `AddMultiReferenceRow(...)` and renders mixed reference labels as `Nhiều giá trị (PresentCount/selectionCount)`. A two-element selection with one Zone and one unassigned Zone currently reports `2/2` even though only one element has a Zone reference.
-
-Properties and quantities already define `PresentCount` as the number of selected elements that actually contain the value. Reference summaries should preserve the same contract.
+The inspector now counts only normalized nonblank references when constructing `SemanticSelectionTextValue`. This matches the existing `PresentCount` contract for properties and quantities and makes Workspace `x/n` mixed-reference labels truthful without modifying V25 UI code.
 
 ## Reserved scope
 
@@ -20,27 +20,32 @@ Properties and quantities already define `PresentCount` as the number of selecte
 - `tests/QS3D.Core.SmokeTests/SemanticSelectionInspectorSmoke.cs`
 - this claim file
 
-## Intended contract
+## Delivered contract
 
 - `Family`, `Floor` and `Zone` `PresentCount` equals the number of normalized nonblank references.
 - Assigned-vs-unassigned remains `IsMixed = true` and `Value = null`.
-- All-unassigned remains a non-mixed empty reference value but reports `PresentCount = 0`.
-- Existing reference validation, effective-property behavior, quantity summaries and selection identity ordering stay unchanged.
+- All-unassigned remains a non-mixed empty reference value and now reports `PresentCount = 0`.
+- Existing reference validation, effective-property behavior, quantity summaries and selection identity ordering remain unchanged.
+
+## Published commits
+
+- `b69b690fea4f3f09fe10c9f7ef9b5ff31a92dd19` — count actual nonblank semantic references in `InspectReference(...)`.
+- `5cbf9fb0861a3880b0e528c066cca68c692dddef` — cover partial (`1/2`) and all-unassigned (`0/2`) Zone reference presence.
+
+## Validation notes
+
+- Exact source diff only introduces the nonblank `present` count and passes it to the existing summary object.
+- Exact smoke diff only registers and implements the focused reference-presence regression inside the already-registered inspector smoke suite.
+- Workspace was read to verify the consumer renders `summary.PresentCount/selectionCount`; no Workspace/V25 source was modified.
+- The current execution environment has no `dotnet`, so executable smoke/build evidence was not produced in this session.
+- GitHub Actions were not dispatched and no force-push was used.
 
 ## Exclusions
 
-- No Workspace/V25 source edits; it already consumes `PresentCount`.
+- No Workspace/V25 source edits.
 - No bulk-edit behavior changes.
-- No selection/PICKFIRST/native lifecycle changes.
-- No GitHub Actions dispatch.
-- No shared smoke registry edit; `SemanticSelectionInspectorSmoke` is already registered.
-
-## Validation plan
-
-- Add a focused regression with one assigned and one unassigned Zone and assert `PresentCount == 1`, mixed state, and null common value.
-- Add an all-unassigned reference check with `PresentCount == 0` while preserving non-mixed semantics.
-- Re-fetch reserved blobs immediately before writes; stale writes must fail rather than overwrite concurrent work.
+- No PICKFIRST/native lifecycle changes.
 
 ## Completion condition
 
-Reference presence counts reflect actual nonblank assignments, focused regression is merged, exact diffs are reviewed, and this claim is closed with truthful source-only validation notes.
+Satisfied for the source/static contract. Executable Core/V25 qualification remains a separate exact-SHA gate.
