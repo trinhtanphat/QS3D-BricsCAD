@@ -8,9 +8,11 @@ The key rule is unchanged: provenance retention does **not** perform native clea
 
 ## Authorization boundary
 
-`ProjectInterchangeUseSourceSemanticImporter.Plan` remains authoritative for affected target elements and `TargetElementIdsRequiringNativeCleanup`.
+`ProjectInterchangeUseSourceSemanticImporter.Plan` remains authoritative for affected target elements and its exact per-element `NativeCleanupRequirements`. `TargetElementIdsRequiringNativeCleanup` is a reporting/convenience view only.
 
-The combined importer accepts the same `ProjectInterchangeNativeCleanupAuthorization` object and forwards it unchanged to the canonical UseSource executor. If required target owners are not authorized, semantic replacement fails before provenance mutation.
+The combined importer accepts the same `ProjectInterchangeNativeCleanupAuthorization` object and forwards it unchanged to the canonical UseSource executor. A successful native workflow should create that authorization with `ProjectInterchangeNativeCleanupAuthorization.ForPlan(plan.SemanticPlan)` after cleaning or transactionally staging the exact generated handles in the reviewed semantic plan.
+
+The canonical executor re-plans immediately before mutation and rejects missing, element-ID-only, or stale handle-bound authorization. Therefore provenance composition cannot turn an authorization for old handle `H1` into permission for a newly observed handle `H2` on the same Element ID.
 
 Provenance is never interpreted as permission to erase native CAD, and storing source handles does not satisfy the cleanup contract.
 
@@ -30,13 +32,13 @@ The combined mutating path requires a non-empty source drawing fingerprint whene
 
 Execution is:
 
-1. plan canonical UseSource replacement;
+1. plan canonical UseSource replacement and exact generated-handle cleanup requirements;
 2. plan canonical raw source-handle provenance;
 3. preserve the canonical native-cleanup requirement;
 4. build source ElementId -> target ElementId identity lineage;
 5. reject unscoped source handles;
 6. capture an outer `ProjectStateSnapshot`;
-7. call canonical UseSource import with the caller's cleanup authorization;
+7. call canonical UseSource import with the caller's handle-bound cleanup authorization;
 8. verify source Elements do not own imported CAD handles/fingerprint in the target project;
 9. store canonical raw source-handle provenance;
 10. store semantic target lineage;
@@ -71,4 +73,4 @@ Still `LOCAL_ONLY` / separate:
 - generic reviewed `QS3DINTERCHANGEIMPORT` UI;
 - exact-SHA licensed BricsCAD V25 qualification.
 
-This Core composition must not be described as proof that native cleanup occurred. The cleanup authorization is an explicit handoff from a guarded adapter/runtime workflow, not a bypass flag.
+This Core composition must not be described as proof that native cleanup occurred. The cleanup authorization is an exact generated-handle-set handoff from a guarded adapter/runtime workflow, not a bypass flag.
