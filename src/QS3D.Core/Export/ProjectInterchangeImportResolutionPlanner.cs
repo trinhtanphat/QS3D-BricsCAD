@@ -130,7 +130,7 @@ namespace QS3D.Core.Export
 
     public static class ProjectInterchangeImportResolutionPlanner
     {
-        private const int MaxPlanItems = 50000;
+        private const int MaxPlanItems = ProjectInterchangeJsonValidator.MaxCollectionItems;
         private const int MaxZones = 2000;
         private const int MaxFloors = 2000;
         private const int MaxFamilies = 10000;
@@ -178,22 +178,21 @@ namespace QS3D.Core.Export
 
             foreach (var zone in source.Zones)
             {
-                var zoneName = RequiredSnapshotValue(zone.Name, "Zone name", zone.Id);
                 var exists = targetZones.ContainsKey(zone.Id);
                 var appliesSource = !exists || policy.ZoneCollision == InterchangeExistingIdentityAction.UseSourceSemanticData;
-                if (appliesSource && !CatalogIdentityFitsRuntime(zone.Id, zoneName, exists, ZoneMaxIdLength, ZoneMaxNameLength, out var runtimeReason))
+                if (appliesSource && !CatalogIdentityFitsRuntime(zone.Id, zone.Name, exists, ZoneMaxIdLength, ZoneMaxNameLength, out var runtimeReason))
                 {
                     AddRuntimeCompatibilityBlock(items, InterchangeIdentityKind.Zone, zone.Id, runtimeReason);
                     continue;
                 }
-                if (sourceDuplicateZoneNames.Contains(zoneName.Trim()) && appliesSource)
+                if (sourceDuplicateZoneNames.Contains((zone.Name ?? string.Empty).Trim()) && appliesSource)
                 {
-                    AddSourceBatchNameCollision(items, InterchangeIdentityKind.Zone, zone.Id, "Zone name", zoneName);
+                    AddSourceBatchNameCollision(items, InterchangeIdentityKind.Zone, zone.Id, "Zone name", zone.Name);
                     continue;
                 }
-                if (NameOwnedByDifferentIdentity(targetZoneNames, zoneName, zone.Id) && appliesSource)
+                if (NameOwnedByDifferentIdentity(targetZoneNames, zone.Name, zone.Id) && appliesSource)
                 {
-                    AddNameCollision(items, InterchangeIdentityKind.Zone, zone.Id, "Zone name", zoneName);
+                    AddNameCollision(items, InterchangeIdentityKind.Zone, zone.Id, "Zone name", zone.Name);
                     continue;
                 }
                 AddSimple(items, InterchangeIdentityKind.Zone, zone.Id, exists, policy.ZoneCollision);
@@ -201,22 +200,21 @@ namespace QS3D.Core.Export
 
             foreach (var floor in source.Floors)
             {
-                var floorName = RequiredSnapshotValue(floor.Name, "Floor name", floor.Id);
                 var exists = targetFloors.ContainsKey(floor.Id);
                 var appliesSource = !exists || policy.FloorCollision == InterchangeExistingIdentityAction.UseSourceSemanticData;
-                if (appliesSource && !CatalogIdentityFitsRuntime(floor.Id, floorName, exists, FloorMaxIdLength, FloorMaxNameLength, out var runtimeReason))
+                if (appliesSource && !CatalogIdentityFitsRuntime(floor.Id, floor.Name, exists, FloorMaxIdLength, FloorMaxNameLength, out var runtimeReason))
                 {
                     AddRuntimeCompatibilityBlock(items, InterchangeIdentityKind.Floor, floor.Id, runtimeReason);
                     continue;
                 }
-                if (sourceDuplicateFloorNames.Contains(floorName.Trim()) && appliesSource)
+                if (sourceDuplicateFloorNames.Contains((floor.Name ?? string.Empty).Trim()) && appliesSource)
                 {
-                    AddSourceBatchNameCollision(items, InterchangeIdentityKind.Floor, floor.Id, "Floor name", floorName);
+                    AddSourceBatchNameCollision(items, InterchangeIdentityKind.Floor, floor.Id, "Floor name", floor.Name);
                     continue;
                 }
-                if (NameOwnedByDifferentIdentity(targetFloorNames, floorName, floor.Id) && appliesSource)
+                if (NameOwnedByDifferentIdentity(targetFloorNames, floor.Name, floor.Id) && appliesSource)
                 {
-                    AddNameCollision(items, InterchangeIdentityKind.Floor, floor.Id, "Floor name", floorName);
+                    AddNameCollision(items, InterchangeIdentityKind.Floor, floor.Id, "Floor name", floor.Name);
                     continue;
                 }
                 AddSimple(items, InterchangeIdentityKind.Floor, floor.Id, exists, policy.FloorCollision);
@@ -401,15 +399,6 @@ namespace QS3D.Core.Export
             }
             reason = string.Empty;
             return true;
-        }
-
-        private static string RequiredSnapshotValue(string? value, string label, string ownerId)
-        {
-            if (value == null || value.Length == 0)
-                throw new InvalidOperationException(
-                    "Validated interchange snapshot contains an empty " + label + " for source identity " +
-                    (ownerId ?? string.Empty) + ".");
-            return value;
         }
 
         private static void AddCapacityBlock(ICollection<string> globalBlocks, string kind, int targetCount, int addCount, int maxCount)

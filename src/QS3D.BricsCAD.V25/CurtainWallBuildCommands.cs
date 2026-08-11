@@ -2,6 +2,7 @@ using System;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Services;
 using Teigha.Runtime;
 
@@ -21,6 +22,9 @@ namespace QS3D.BricsCAD.V25
             var pathHostSolids = 0;
             var lineFrames = new CurtainFrameBuildResult();
             var pathFrames = new CurtainFrameBuildResult();
+            ProjectState project = null;
+            ProjectStateSnapshot rollback = null;
+            var nativeCommitted = false;
             try
             {
                 var selected = EntitySnapshotReader.ReadCurrentSelection(document);
@@ -30,28 +34,39 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var project = ExistingProjectMutationContext.Require(document, "Curtain 3D");
+                project = ExistingProjectMutationContext.Require(document, "Curtain 3D");
+                rollback = ProjectStateSnapshot.Capture(project);
 
-                // Resolve rule/dependency failures before any host/frame builder commits native CAD.
-                // Native host and detail builders intentionally remain separate transaction families,
-                // so semantic blockers must never be discovered only after those transactions succeed.
+                // Resolve rule/dependency failures before native mutation. The command snapshot restores
+                // this semantic phase as well when any later host/frame phase fails before outer commit.
                 regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
 
-                phase = "LINE host replacement";
-                lineHostSolids = WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall);
+                var hostSolids = 0;
+                var frameElements = 0;
+                var frameSolids = 0;
+                // Builder transactions remain canonical/nested. The outer transaction is the command-level
+                // native commit boundary, so aborting it rolls back every earlier host/frame phase together.
+                using (var commandTransaction = document.Database.TransactionManager.StartTransaction())
+                {
+                    phase = "LINE host replacement";
+                    lineHostSolids = WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall);
 
-                phase = "open-POLYLINE host replacement";
-                pathHostSolids = PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.GlassWall);
+                    phase = "open-POLYLINE host replacement";
+                    pathHostSolids = PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.GlassWall);
 
-                phase = "LINE frame replacement";
-                lineFrames = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
+                    phase = "LINE frame replacement";
+                    lineFrames = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
 
-                phase = "open/bulged path frame replacement";
-                pathFrames = CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project);
+                    phase = "open/bulged path frame replacement";
+                    pathFrames = CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project);
 
-                var hostSolids = checked(lineHostSolids + pathHostSolids);
-                var frameElements = checked(lineFrames.Elements + pathFrames.Elements);
-                var frameSolids = checked(lineFrames.Frames + pathFrames.Frames);
+                    hostSolids = checked(lineHostSolids + pathHostSolids);
+                    frameElements = checked(lineFrames.Elements + pathFrames.Elements);
+                    frameSolids = checked(lineFrames.Frames + pathFrames.Frames);
+                    commandTransaction.Commit();
+                    nativeCommitted = true;
+                }
+
                 phase = "live fingerprint stamp";
                 var stampWarning = string.Empty;
                 var stamped = frameElements > 0 ? CurtainWallFrameLiveStateService.TryStampSelected(document, project, out stampWarning) : 0;
@@ -65,36 +80,32 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                ReportPhaseFailure(document, phase, regenerated, lineHostSolids, pathHostSolids, lineFrames, pathFrames, ex);
+                if (!nativeCommitted && rollback != null && project != null)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        Report(document, "QS3DCURTAIN3D lỗi tại " + phase + " và semantic rollback thất bại: " +
+                            ex.Message + " • rollback: " + restoreError.Message);
+                        return;
+                    }
+                    TryRegen(document);
+                }
+                ReportAtomicFailure(document, phase, nativeCommitted, ex);
             }
         }
 
-        private static void ReportPhaseFailure(
-            Document document,
-            string phase,
-            int regenerated,
-            int lineHostSolids,
-            int pathHostSolids,
-            CurtainFrameBuildResult lineFrames,
-            CurtainFrameBuildResult pathFrames,
-            Exception error)
+        private static void ReportAtomicFailure(Document document, string phase, bool nativeCommitted, Exception error)
         {
-            var committedHosts = checked(lineHostSolids + pathHostSolids);
-            var committedFrames = checked((lineFrames?.Frames ?? 0) + (pathFrames?.Frames ?? 0));
-            if (regenerated == 0 && committedHosts == 0 && committedFrames == 0)
+            if (!nativeCommitted)
             {
-                Report(document, "QS3DCURTAIN3D lỗi tại " + phase + ": " + error.Message);
+                Report(document, "QS3DCURTAIN3D lỗi tại " + phase + ": " + error.Message +
+                    ". ATOMIC ROLLBACK đã hoàn tác toàn bộ host/frame CAD và semantic state; không có phase Curtain 3D nào được commit.");
                 return;
             }
 
-            var status = "Curtain 3D PARTIAL COMMIT: semantic regenerate=" + regenerated +
-                " • host LINE=" + lineHostSolids +
-                " • host path=" + pathHostSolids +
-                " • frame LINE=" + (lineFrames?.Frames ?? 0) +
-                " • frame path=" + (pathFrames?.Frames ?? 0) +
-                " • lỗi tại " + phase + ": " + error.Message +
-                ". Các phase trước đã commit bằng transaction riêng và không bị giả vờ rollback. Chạy QS3DCURTAINFRAMEHEALTH/QS3DHEALTHALL, sửa lỗi rồi rebuild host hoặc chạy QS3DCURTAINFRAMES3D theo kết quả health.";
-            Report(document, status);
+            Report(document, "QS3DCURTAIN3D post-commit warning tại " + phase + ": " + error.Message +
+                ". Native host/frame transaction đã commit; chạy QS3DCURTAINFRAMEHEALTH/QS3DHEALTHALL trước khi phát hành.");
         }
 
         private static void FinalizeUi(Document document, int hostSolids, int frameSolids, int stamped, int regenerated, string stampWarning)
@@ -129,6 +140,12 @@ namespace QS3D.BricsCAD.V25
         private static void TryWriteMessage(Document document, string message)
         {
             try { document.Editor.WriteMessage(message); }
+            catch { }
+        }
+
+        private static void TryRegen(Document document)
+        {
+            try { document.Editor.Regen(); }
             catch { }
         }
     }
