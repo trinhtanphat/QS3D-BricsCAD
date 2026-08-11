@@ -28,14 +28,7 @@ namespace QS3D.BricsCAD.V25.Cad
             if (!element.Properties.TryGetValue(GeneratedSemanticTagHealthService.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw))
                 return 0;
 
-            var handles = raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => x.Trim())
-                .Where(x => x.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            if (handles.Length == 0)
-                throw new InvalidOperationException("GeneratedSemanticTagHandles không có handle hợp lệ để remove cho " + element.Id + ".");
-
+            var handles = ParseExpectedHandles(raw, element);
             var ownership = GeneratedHandleOwnershipIndex.Build(project);
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
@@ -43,31 +36,34 @@ namespace QS3D.BricsCAD.V25.Cad
             try
             {
                 using (document.LockDocument())
-                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    foreach (var handle in handles)
+                    var ids = ValidateCompleteLiveTagSet(document.Database, project, element, ownership, handles);
+                    using (var transaction = document.Database.TransactionManager.StartTransaction())
                     {
-                        EnsureOwnedBySemanticTag(ownership, element, handle);
-                        var id = ResolveHandle(document.Database, handle, allowMissing: true);
-                        if (id.IsNull || !id.IsValid) continue;
+                        for (var i = 0; i < handles.Count; i++)
+                        {
+                            var handle = handles[i];
+                            var entity = transaction.GetObject(ids[i], OpenMode.ForWrite, false) as Entity;
+                            if (entity == null || entity.IsErased)
+                                throw new InvalidOperationException(
+                                    "Generated semantic tag handle " + handle + " is no longer live. Refusing partial destructive remove.");
+                            if (!(entity is MText))
+                                throw new InvalidOperationException(
+                                    "Generated semantic tag handle " + handle + " là live CAD nhưng không phải MText. Refusing destructive remove.");
+                            GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "remove semantic tag " + handle);
+                            entity.Erase();
+                            erased++;
+                        }
 
-                        var entity = transaction.GetObject(id, OpenMode.ForWrite, true) as Entity;
-                        if (entity == null || entity.IsErased) continue;
-                        if (!(entity is MText))
-                            throw new InvalidOperationException("Generated semantic tag handle " + handle + " là live CAD nhưng không phải MText. Refusing destructive remove.");
-                        GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "remove semantic tag " + handle);
-                        entity.Erase();
-                        erased++;
+                        ClearGeneratedTagMetadata(element);
+                        AuditTrail.ForProject(project).Record(
+                            "documentation.semantic-tag.remove",
+                            element.Id,
+                            erased.ToString(CultureInfo.InvariantCulture) + " live MText erased; tag ownership metadata cleared");
+                        project.Touch();
+                        transaction.Commit();
+                        cadCommitted = true;
                     }
-
-                    ClearGeneratedTagMetadata(element);
-                    AuditTrail.ForProject(project).Record(
-                        "documentation.semantic-tag.remove",
-                        element.Id,
-                        erased.ToString(CultureInfo.InvariantCulture) + " live MText erased; tag ownership metadata cleared");
-                    project.Touch();
-                    transaction.Commit();
-                    cadCommitted = true;
                 }
             }
             catch (Exception operationError)
@@ -86,6 +82,69 @@ namespace QS3D.BricsCAD.V25.Cad
             }
 
             return erased;
+        }
+
+        private static IReadOnlyList<string> ParseExpectedHandles(string raw, ProjectElement element)
+        {
+            var handles = new List<string>();
+            var seenCanonical = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var handle = token.Trim();
+                if (handle.Length == 0) continue;
+                var canonical = CadHandleService.NormalizeHexHandle(handle);
+                if (canonical == null)
+                    throw new InvalidOperationException(
+                        "GeneratedSemanticTagHandles chứa handle không hợp lệ cho " + element.Id + ": " + handle + ".");
+                if (seenCanonical.Add(canonical)) handles.Add(handle);
+            }
+
+            if (handles.Count == 0)
+                throw new InvalidOperationException("GeneratedSemanticTagHandles không có handle hợp lệ để remove cho " + element.Id + ".");
+            return handles;
+        }
+
+        private static IReadOnlyList<ObjectId> ValidateCompleteLiveTagSet(
+            Database database,
+            ProjectState project,
+            ProjectElement element,
+            GeneratedHandleOwnershipIndex ownership,
+            IReadOnlyList<string> handles)
+        {
+            var ids = new List<ObjectId>(handles.Count);
+            foreach (var handle in handles)
+            {
+                EnsureOwnedBySemanticTag(ownership, element, handle);
+                ids.Add(ResolveHandle(database, handle));
+            }
+
+            if (ids.Count != handles.Count)
+                throw new InvalidOperationException(
+                    "GeneratedSemanticTagHandles for " + element.Id + " did not resolve as a complete live CAD set. Refusing destructive remove.");
+
+            using (var validation = database.TransactionManager.StartOpenCloseTransaction())
+            {
+                for (var i = 0; i < handles.Count; i++)
+                {
+                    var entity = validation.GetObject(ids[i], OpenMode.ForRead, false) as Entity;
+                    if (entity == null || entity.IsErased)
+                        throw new InvalidOperationException(
+                            "Generated semantic tag handle " + handles[i] +
+                            " is missing or erased. Refusing destructive remove before any semantic tag is erased.");
+                    if (!(entity is MText))
+                        throw new InvalidOperationException(
+                            "Generated semantic tag handle " + handles[i] +
+                            " là live CAD nhưng không phải MText. Refusing destructive remove.");
+                    GeneratedGeometryService.RequireMatchingOwnership(
+                        entity,
+                        project,
+                        element,
+                        "validate semantic tag remove " + handles[i]);
+                }
+                validation.Commit();
+            }
+
+            return ids;
         }
 
         private static void EnsureOwnedBySemanticTag(GeneratedHandleOwnershipIndex ownership, ProjectElement element, string handle)
@@ -109,21 +168,27 @@ namespace QS3D.BricsCAD.V25.Cad
             foreach (var key in keys) element.Properties.Remove(key);
         }
 
-        private static ObjectId ResolveHandle(Database database, string text, bool allowMissing)
+        private static ObjectId ResolveHandle(Database database, string text)
         {
-            if (!long.TryParse((text ?? string.Empty).Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+            var canonical = CadHandleService.NormalizeHexHandle(text);
+            if (canonical == null ||
+                !long.TryParse(canonical, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
                 throw new InvalidOperationException("Generated semantic tag Handle không hợp lệ: " + text + ".");
+
             try
             {
                 var id = database.GetObjectId(false, new Handle(value), 0);
                 if (!id.IsNull && id.IsValid) return id;
             }
-            catch
+            catch (Exception error)
             {
-                if (!allowMissing) throw;
+                throw new InvalidOperationException(
+                    "Không resolve được generated semantic tag Handle " + text + ". Refusing destructive remove.",
+                    error);
             }
-            if (allowMissing) return ObjectId.Null;
-            throw new InvalidOperationException("Không resolve được generated semantic tag Handle: " + text + ".");
+
+            throw new InvalidOperationException(
+                "Không resolve được generated semantic tag Handle " + text + ". Refusing destructive remove.");
         }
     }
 }
