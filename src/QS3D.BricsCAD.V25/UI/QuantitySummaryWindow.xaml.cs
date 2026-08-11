@@ -56,11 +56,12 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void LoadColumnPreferences()
         {
+            var raw = string.Empty;
             var hasSaved = ProjectContextCoordinator.TryGetReadOnly(_document, out var project) &&
-                           project.Metadata.TryGetValue(TemplateProfileStore.VisibleBqColumnsKey, out var raw) &&
+                           project.Metadata.TryGetValue(TemplateProfileStore.VisibleBqColumnsKey, out raw) &&
                            !string.IsNullOrWhiteSpace(raw);
             var visible = hasSaved
-                ? new HashSet<string>(raw!.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase)
+                ? new HashSet<string>(raw.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(ColumnKeys, StringComparer.OrdinalIgnoreCase);
 
             _loadingColumnPreferences = true;
