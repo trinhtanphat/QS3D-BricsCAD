@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using QS3D.BricsCAD.V25.UI.ViewModels;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -10,7 +11,29 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private void OnWorkspaceDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
+            PreviewKeyDown -= OnPropertyFilterShortcut;
+            PreviewKeyDown += OnPropertyFilterShortcut;
             Dispatcher.BeginInvoke(new Action(ApplyPropertyFilter));
+        }
+
+        private void OnPropertyFilterShortcut(object sender, KeyEventArgs e)
+        {
+            var modifiers = Keyboard.Modifiers;
+            if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.F)
+            {
+                PropertySearch?.Focus();
+                PropertySearch?.SelectAll();
+                e.Handled = true;
+                return;
+            }
+
+            if (modifiers == ModifierKeys.None && e.Key == Key.Escape &&
+                PropertySearch != null && PropertySearch.IsKeyboardFocusWithin &&
+                !string.IsNullOrEmpty(PropertySearch.Text))
+            {
+                PropertySearch.Clear();
+                e.Handled = true;
+            }
         }
 
         private void OnPropertySearchChanged(object sender, TextChangedEventArgs e)
