@@ -3,6 +3,7 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -41,12 +42,49 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                Dispatch(document, family, advanced, operation);
+                var dispatchFamily = RequireCurrentDispatchSnapshot(document, project, family, operation);
+                Dispatch(document, dispatchFamily, advanced, operation);
             }
             catch (Exception ex)
             {
                 Report(document, operation + " lỗi: " + ex.Message);
             }
+        }
+
+        private static ProjectFamily RequireCurrentDispatchSnapshot(
+            Document document,
+            ProjectState presentedProject,
+            ProjectFamily presentedFamily,
+            string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(
+                    operation + ": DWG active đã thay đổi trước khi dispatch. Hãy chạy lại lệnh trên bản vẽ hiện hành.");
+
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject))
+                throw new InvalidOperationException(
+                    operation + ": QS3D project không còn khả dụng trước khi dispatch. Hãy Refresh Workspace rồi chạy lại.");
+
+            if (!string.Equals(currentProject.ProjectId, presentedProject.ProjectId, StringComparison.OrdinalIgnoreCase) ||
+                currentProject.ChangeVersion != presentedProject.ChangeVersion)
+                throw new InvalidOperationException(
+                    operation + ": QS3D project đã thay đổi sau khi đọc Active Family. Hãy chạy lại để dùng đúng Family hiện hành.");
+
+            var currentFamily = ProjectFamilyActivationService.GetActive(currentProject);
+            if (currentFamily == null)
+                throw new InvalidOperationException(
+                    operation + ": Active Family đã bị xóa/bỏ chọn trước khi dispatch. Hãy chọn lại Family/Type.");
+
+            var routingChanged =
+                !string.Equals(currentFamily.Id, presentedFamily.Id, StringComparison.OrdinalIgnoreCase) ||
+                currentFamily.Category != presentedFamily.Category ||
+                (currentFamily.Category == ElementCategory.WallOpening &&
+                 IsWindowFamily(currentFamily) != IsWindowFamily(presentedFamily));
+            if (routingChanged)
+                throw new InvalidOperationException(
+                    operation + ": Active Family/routing đã thay đổi trước khi dispatch. Hãy chạy lại lệnh.");
+
+            return currentFamily;
         }
 
         private static void Dispatch(Document document, ProjectFamily family, bool advanced, string operation)
