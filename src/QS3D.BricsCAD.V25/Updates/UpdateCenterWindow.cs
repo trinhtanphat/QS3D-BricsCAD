@@ -132,11 +132,13 @@ namespace QS3D.BricsCAD.V25.Updates
             _updateButton.IsEnabled = false;
             var result = await UpdateCoordinator.Instance.ScheduleLatestAsync();
             Apply(result);
-            if (result.State == UpdateState.Scheduled)
+            if (result.State != UpdateState.Scheduled) return;
+
+            if (!SecureUpdateLauncher.TryRequestGracefulHostClose(out var closeError))
             {
                 MessageBox.Show(
                     this,
-                    "QS3D đã lên lịch cập nhật. Hãy lưu bản vẽ và đóng BricsCAD theo cách bình thường. Updater sẽ chờ BricsCAD thoát, xác minh chữ ký, cập nhật và chỉ mở lại BricsCAD khi cập nhật thành công.",
+                    closeError,
                     "QS3D Update Center",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
