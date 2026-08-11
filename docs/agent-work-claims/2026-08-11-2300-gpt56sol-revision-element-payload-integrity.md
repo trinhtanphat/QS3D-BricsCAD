@@ -1,23 +1,36 @@
 # Work claim — Revision element payload canonical integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-revision-payload-20260811-2300`
 - Registered: `2026-08-11T23:00:00+07:00`
+- Completed: `2026-08-11T23:04:00+07:00`
 - Baseline main SHA: `0c32164f96fdc7d9fa4d7abc9dd855fcc6c49826`
+- Claim commit: `b143614d07b87ecaff1c35e8456e9478f73e6637`
+- Revision compare/capture fix commit: `8d2d27c2cdc37811a1cc3fd41444446bf933f648`
+- Quantity report fix commit: `07877d41200e2ffd7b35f5fa2d0b7f428f782986`
+- Regression commit: `4564b0b8014901ccbdfae2631edd318ced4394d3`
 - Priority: P2 source-proven regression hardening
 
 ## Reserved scope
 
-Finish the source-safe Revision element invariant alignment between public/in-memory snapshots and `RevisionSnapshotStore.Save`. The persistence boundary requires canonical category text, canonical property/quantity keys, finite quantities, and canonical unique source/dependency lists. `RevisionService.Capture` can still copy non-canonical map keys from directly mutable `ProjectElement` dictionaries, while `RevisionService.Compare` can bypass payload validation entirely for Added/Removed elements and currently normalizes malformed dependency lists during field comparison. `QuantityRevisionReport.Build` also accepts non-canonical quantity keys when they happen to compare equal.
+Finish the source-safe Revision element invariant alignment between public/in-memory snapshots and `RevisionSnapshotStore.Save`. The persistence boundary requires canonical category text, canonical property/quantity keys, finite quantities, and canonical unique source/dependency lists. `RevisionService.Capture` could copy non-canonical map keys from directly mutable `ProjectElement` dictionaries, while `RevisionService.Compare` could bypass payload validation entirely for Added/Removed elements and normalize malformed dependency lists during field comparison. `QuantityRevisionReport.Build` also accepted non-canonical quantity keys when equal values produced no rows.
 
-## Expected surfaces
+## Implemented surfaces
 
 - `src/QS3D.Core/Revisions/RevisionService.cs`
 - `src/QS3D.Core/Revisions/QuantityRevisionReport.cs`
 - `tests/QS3D.Core.SmokeTests/RevisionRegressionSmoke.cs`
-- this claim file for close-out
+- this claim file
 
-## Explicit exclusions
+## Implemented fix
+
+- Capture now rejects non-canonical property and quantity keys before emitting a revision element snapshot.
+- Compare indexing now validates canonical category names, property/quantity keys, finite quantity values, canonical source handles, and canonical unique dependency values before Added/Removed/Changed classification.
+- Existing canonical Family/Floor/Zone reference checks and case-insensitive element identity behavior are preserved.
+- Quantity revision indexing now validates canonical category, canonical quantity keys and finite values before building rows, including equal malformed values that previously produced no row and no error.
+- Regression coverage exercises direct mutable project map keys, malformed Added/Removed snapshot category/map/value/source/dependency payloads, and equal padded quantity keys in the quantity report.
+
+## Explicit exclusions honored
 
 - No revision XML schema/version or `RevisionSnapshotStore` changes.
 - No Revision UI/code-behind or BricsCAD coordinator changes.
@@ -25,19 +38,19 @@ Finish the source-safe Revision element invariant alignment between public/in-me
 - No quantity calculation/rule semantics changes.
 - No GitHub Actions dispatch or workflow edits.
 
-## Validation plan
+## Validation actually performed
 
-- Verify claim reachability from current `main`, then re-fetch exact source/test blobs before writes.
-- During capture, reject non-canonical property/quantity keys before emitting a snapshot; continue existing finite quantity and canonical source-handle behavior.
-- During compare indexing, validate category canonicality, property/quantity key canonicality, finite quantity values, and source/dependency list canonicality/uniqueness so Added/Removed elements cannot bypass the snapshot contract.
-- In `QuantityRevisionReport.Build`, reject non-canonical quantity keys and non-finite values at index time even when equal values would otherwise produce no rows.
-- Add deterministic smoke coverage for direct mutable map keys and malformed manually supplied Added/Removed snapshot payloads.
-- Source/static readback plus committed smoke coverage only; no local .NET/BricsCAD/Actions PASS claim.
+- Verified the claim commit was current `main` before substantive writes and re-fetched exact source/test blobs.
+- Used current blob SHA checks for all implementation writes; no force push/reset was used.
+- Re-fetched current `main` after implementation and verified capture map-key guards, compare pre-classification payload validation, quantity-report index validation, and all new regression methods in the already-registered `RevisionRegressionSmoke.Run()` suite.
+- Cross-checked the enforced rules against the existing `RevisionSnapshotStore.ValidateSnapshot` canonical category/map/list/finite-value contract.
+- No local checkout/.NET build/Core smoke execution was available in this connector-only lane; executable PASS is not claimed.
+- No BricsCAD V25 runtime or GitHub Actions execution is claimed.
 
 ## Coordination
 
-The preceding Revision Core claims are completed. Recent Revision UI/read-only claims are completed and disjoint. If a newer active claim reserves these exact Core Revision files before implementation, stop and re-scope.
+The preceding Revision Core claims were completed before this batch. Recent Revision UI/read-only claims are completed and disjoint, so this implementation remained inside Core Revision payload validation only.
 
 ## Completion condition
 
-Revision capture/compare/report cannot silently accept element payload forms that revision persistence rejects, focused regression coverage is committed on current `main`, current source is re-read, and this claim is marked `COMPLETED` with exact SHAs and actual validation scope.
+Completed. Revision capture/compare/report no longer silently accepts the covered element payload forms that revision persistence rejects, focused regression coverage is committed on current `main`, current source was re-read, and this claim records exact SHAs and the actual validation boundary.
