@@ -81,6 +81,8 @@ namespace QS3D.Core.SmokeTests
             second.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(first);
             project.Elements.Add(second);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = project.UpdatedUtc;
 
             var threw = false;
             try
@@ -89,8 +91,10 @@ namespace QS3D.Core.SmokeTests
             }
             catch (InvalidOperationException ex)
             {
-                threw = ex.Message.IndexOf("duplicate", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                    ex.Message.IndexOf("element id", StringComparison.OrdinalIgnoreCase) >= 0;
+                var message = ex.Message ?? string.Empty;
+                threw =
+                    message.IndexOf("duplicate element id", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    message.IndexOf("duplicate semantic element id", StringComparison.OrdinalIgnoreCase) >= 0;
             }
 
             if (!threw) throw new Exception("AssignFamily must fail closed when the project contains duplicate semantic element IDs.");
@@ -100,6 +104,8 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Rejected duplicate-ID family assignment mutated inherited properties.");
             if (first.Dirty != ElementDirtyFlags.None || second.Dirty != ElementDirtyFlags.None)
                 throw new Exception("Rejected duplicate-ID family assignment dirtied project elements.");
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Rejected duplicate-ID family assignment touched project persistence state.");
         }
 
         private static void GenericSemanticReferencesFailClosed()

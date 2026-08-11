@@ -51,7 +51,7 @@ namespace QS3D.Core.SmokeTests
             };
 
             var forward = WallJunctionOwnershipPlanner.Plan(new[] { near, far }, owners);
-            var reverse = WallJunctionOwnershipPlanner.Plan(new[] { far, near }, owners.AsEnumerable().Reverse());
+            var reverse = WallJunctionOwnershipPlanner.Plan(new[] { far, near }, Enumerable.Reverse(owners));
 
             Equal(2, forward.Count);
             Equal(2, reverse.Count);
