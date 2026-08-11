@@ -1,38 +1,38 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+from typing import List, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "CurtainWallWindow.xaml.cs"
 
 
-def method_slice(text: str, name: str, next_name: str | None = None) -> str:
-    marker = f"private void {name}("
+def source_slice(text: str, marker: str, next_marker: Optional[str] = None) -> str:
     start = text.find(marker)
     if start < 0:
         return ""
-    if next_name:
-        end = text.find(f"private void {next_name}(", start + len(marker))
+    if next_marker:
+        end = text.find(next_marker, start + len(marker))
         if end >= 0:
             return text[start:end]
     return text[start:]
 
 
-def require(condition: bool, message: str, failures: list[str]) -> None:
+def require(condition: bool, message: str, failures: List[str]) -> None:
     if not condition:
         failures.append(message)
 
 
 def main() -> int:
     text = SOURCE.read_text(encoding="utf-8")
-    failures: list[str] = []
+    failures: List[str] = []
 
-    save = method_slice(text, "OnSaveClick", "OnRecalculateClick")
-    recalc = method_slice(text, "OnRecalculateClick", "OnCommandClick")
-    refresh = method_slice(text, "RefreshAll", "LoadSelectedFamily")
-    summary = method_slice(text, "RefreshSummary", "ClearProjectView")
-    clear = method_slice(text, "ClearProjectView", "ClearSummary")
-    bound_guard = method_slice(text, "EnsureBoundProject", "ApplyFamilyValue")
+    save = source_slice(text, "private void OnSaveClick(", "private void OnRecalculateClick(")
+    recalc = source_slice(text, "private void OnRecalculateClick(", "private void OnCommandClick(")
+    refresh = source_slice(text, "private void RefreshAll(", "private void LoadSelectedFamily(")
+    summary = source_slice(text, "private void RefreshSummary(", "private void ClearProjectView(")
+    clear = source_slice(text, "private void ClearProjectView(", "private void ClearSummary(")
+    bound_guard = source_slice(text, "private void EnsureBoundProject(", "private static void ApplyFamilyValue(")
 
     require("private ProjectState? _boundProject;" in text, "missing exact ProjectState binding field", failures)
     require(text.count("_boundProject = project;") == 1, "project binding must occur exactly once", failures)
