@@ -24,6 +24,8 @@ The collection snapshots exposed by `SemanticScheduleDefinition` are **defensive
 
 A valid definition whose current filters match zero Elements produces a **header-only** `SemanticDocumentationTable` with zero rows. Zero current matches are a normal model state, not a malformed schedule definition. The legacy/default documentation table API still requires at least one row unless a caller explicitly opts into the empty-table path.
 
+Header-only output does not weaken template validation. `SemanticDocumentationTableBuilder` validates every column through `SemanticTagRenderer.ValidateTemplate(...)` before row resolution, so malformed token syntax, unsupported tokens and attempts to expose blocked **generated/native ownership** properties fail closed even when the schedule currently has zero rows. Row-dependent missing property/quantity values remain valid empty cells, matching normal non-empty schedule behavior.
+
 Malformed semantic model state is different: if the project's Element collection contains a **null semantic Element**, custom schedule rendering fails closed rather than silently skipping it. Explicit stale Floor/Zone/include/exclude references also continue to fail closed.
 
 The schedule layer does **not calculate BQ**, does **not calculate BBS**, and does not regenerate semantic quantities. `{Q:...}` columns only display quantity values already present on the semantic Element. Authoritative BQ, BBS, Door/Opening, Room Finish and Material calculators/schedules remain separate domain sources.
