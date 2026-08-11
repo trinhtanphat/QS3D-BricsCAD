@@ -252,6 +252,8 @@ namespace QS3D.Core.Review
         {
             CanonicalRequired(snapshot.Name, nameof(snapshot.Name));
             CanonicalRequired(snapshot.ProjectId, nameof(snapshot.ProjectId));
+            if (!Enum.IsDefined(typeof(PreviewReviewKind), snapshot.Kind))
+                throw new InvalidOperationException("Preview review kind is not supported: " + snapshot.Kind + ".");
             if (snapshot.SourceChangeVersion < 0) throw new InvalidOperationException("Preview review source change version cannot be negative.");
             if (!string.Equals(snapshot.Scope, "Project", StringComparison.Ordinal) && !string.Equals(snapshot.Scope, "Subset", StringComparison.Ordinal))
                 throw new InvalidOperationException("Preview review scope must be Project or Subset.");
@@ -393,7 +395,11 @@ namespace QS3D.Core.Review
 
             var name = CanonicalRequired(root, "name");
             var projectId = CanonicalRequired(root, "projectId");
-            if (!Enum.TryParse(Required(root, "kind"), false, out PreviewReviewKind kind)) throw new InvalidDataException("Invalid preview review kind.");
+            var kindText = Required(root, "kind");
+            if (!Enum.TryParse(kindText, false, out PreviewReviewKind kind) ||
+                !Enum.IsDefined(typeof(PreviewReviewKind), kind) ||
+                !string.Equals(kindText, kind.ToString(), StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid preview review kind.");
             var sourceChangeVersion = NonNegativeLong(root, "sourceChangeVersion");
             var scope = Required(root, "scope");
             var changedElementCount = NonNegativeInt(root, "changedElementCount");
