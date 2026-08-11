@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -12,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             SameLogicalAliasOnSameOwnerIsAllowed();
             DifferentOwnersFailClosed();
             DuplicateIdsFailClosedAtBuild();
+            NullElementFailsClosedAtBuild();
+            CorruptBlankIdFailsClosedAtBuild();
             DifferentLogicalSlotsOnSameOwnerFailClosed();
             BuiltIndexIsMembershipSnapshot();
         }
@@ -62,14 +65,33 @@ namespace QS3D.Core.SmokeTests
         private static void DuplicateIdsFailClosedAtBuild()
         {
             var project = NewProject();
-            var first = NewElement("E-1");
+            var first = NewElement(" E-1 ");
             var second = NewElement("e-1");
             first.Properties["GeneratedSolidHandle"] = "AA01";
             second.Properties["GeneratedSolidHandle"] = "AA01";
             project.Elements.Add(first);
             project.Elements.Add(second);
 
-            ExpectInvalid(() => GeneratedHandleOwnershipIndex.Build(project), "duplicate semantic element IDs");
+            ExpectInvalid(() => GeneratedHandleOwnershipIndex.Build(project), "trimmed case-insensitive duplicate semantic element IDs");
+        }
+
+        private static void NullElementFailsClosedAtBuild()
+        {
+            var project = NewProject();
+            project.Elements.Add(null!);
+            ExpectInvalid(() => GeneratedHandleOwnershipIndex.Build(project), "a null semantic element");
+        }
+
+        private static void CorruptBlankIdFailsClosedAtBuild()
+        {
+            var project = NewProject();
+            var owner = NewElement("E-1");
+            var idField = typeof(ProjectElement).GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (idField == null) throw new Exception("Could not locate ProjectElement.Id backing field for corruption smoke.");
+            idField.SetValue(owner, "   ");
+            project.Elements.Add(owner);
+
+            ExpectInvalid(() => GeneratedHandleOwnershipIndex.Build(project), "a corrupt blank semantic element ID");
         }
 
         private static void DifferentLogicalSlotsOnSameOwnerFailClosed()
