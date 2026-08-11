@@ -21,8 +21,8 @@ for relative in required:
 
 checks = {
     "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs": [
-        "using QS3D.Core.Persistence;", "using QS3D.Core.Geometry;", "ProjectStateSnapshot.Capture(project)", "var cadCommitted = false;",
-        "foreach (var update in pending) CommitSemanticUpdate(project, update);", "if (pending.Count > 0) project.Touch();",
+        "using QS3D.Core.Persistence;", "using QS3D.Core.Geometry;", "using QS3D.Core.Audit;", "ProjectStateSnapshot.Capture(project)", "var cadCommitted = false;",
+        "foreach (var update in pending) CommitSemanticUpdate(project, update);",
         "rollback.Restore(project)", "AggregateException(operationError, restoreError)",
         "RectangularSlabMeshPlanner.Plan", "PolygonalSlabMeshPlanner.Plan", "ElementCategory.Foundation", "GeneratedFoundationMeshHandles",
         "GeneratedRebarOwnershipGuard.Build", "ownership.EnsureOwned", "RebarFoundationXNotation", "RebarFoundationYNotation",
@@ -103,6 +103,9 @@ for relative, needles in checks.items():
 foundation_builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs"
 if foundation_builder.is_file():
     text = foundation_builder.read_text(encoding="utf-8")
+    if "project.Touch();" in text:
+        errors.append("Foundation mesh revision must remain per-element AuditTrail-owned; standalone project.Touch is redundant")
+
     start = text.find("public static FoundationMeshBuildResult BuildSelected(Document document, ProjectState project)")
     end = text.find("private static PendingUpdate CreateUpdate", start + 1) if start >= 0 else -1
     if start < 0 or end < 0:
@@ -110,17 +113,15 @@ if foundation_builder.is_file():
     else:
         body = text[start:end]
         semantic_token = "foreach (var update in pending) CommitSemanticUpdate(project, update);"
-        touch_token = "if (pending.Count > 0) project.Touch();"
         commit_token = "transaction.Commit();\n                    cadCommitted = true;"
         erase_token = "ErasePrevious(document, transaction, project, element, ownership)"
         semantic = body.find(semantic_token)
-        touch = body.find(touch_token, semantic if semantic >= 0 else 0)
         commit = body.find(commit_token)
         restore = body.find("rollback.Restore(project)")
-        if min(semantic, touch, commit, restore) < 0:
+        if min(semantic, commit, restore) < 0:
             errors.append("foundation mesh atomicity ordering tokens are incomplete")
-        elif not semantic < touch < commit < restore:
-            errors.append("Foundation mesh must commit handles/metadata/revision before CAD commit and restore project state only on the pre-commit failure path")
+        elif not semantic < commit < restore:
+            errors.append("Foundation mesh must commit handles/metadata/audit revision before CAD commit and restore project state only on the pre-commit failure path")
         if commit >= 0 and semantic_token in body[commit + len(commit_token):]:
             errors.append("Foundation mesh still mutates generated semantic ownership after CAD commit")
         if body.count(semantic_token) != 1 or body.count(commit_token) != 1:
@@ -147,6 +148,8 @@ if foundation_builder.is_file():
     ):
         if token not in helper:
             errors.append("Foundation mesh semantic commit helper missing metadata/audit contract: " + token)
+    if "project.Touch();" in helper:
+        errors.append("Foundation mesh semantic helper must not double-advance revision outside AuditTrail")
 
 resolver = ROOT / "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs"
 if resolver.is_file():
@@ -186,4 +189,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Foundation mesh preserves rectangle/polygon behavior, reserves batch limits before project-aware native-ownership replacement, commits semantic ownership while CAD is rollback-capable, and retains health/audit/runtime qualification gates.")
+print("PASS: Foundation mesh preserves rectangle/polygon behavior, reserves batch limits before project-aware native-ownership replacement, commits per-element AuditTrail-owned semantic revisions while CAD is rollback-capable, and retains health/runtime qualification gates.")
