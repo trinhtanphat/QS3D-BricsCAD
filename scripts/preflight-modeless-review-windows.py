@@ -60,8 +60,12 @@ if bbs.is_file():
         errors.append("BBS modeless totals must not use unchecked LINQ Sum")
 
 revision = windows["Revision"]
-if revision.is_file() and "EnsureActive();\n                _locate(row);" not in revision.read_text(encoding="utf-8"):
-    errors.append("Revision Locate must verify its source DWG before invoking the CAD callback")
+if revision.is_file():
+    text = revision.read_text(encoding="utf-8")
+    ensure = text.find("EnsureActive();")
+    callback = text.find("_locate?.Invoke(row);")
+    if min(ensure, callback) < 0 or ensure > callback:
+        errors.append("Revision Locate must verify its source DWG before invoking the CAD callback")
 
 health = windows["Model Health"]
 if health.is_file() and "EnsureActiveAndCurrent();\n                _locate(issue);" not in health.read_text(encoding="utf-8"):
