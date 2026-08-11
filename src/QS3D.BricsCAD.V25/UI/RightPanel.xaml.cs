@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media;
 using Bricscad.ApplicationServices;
 using Application = Bricscad.ApplicationServices.Application;
@@ -17,7 +18,6 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private const int MaxLayerSearchTokens = 8;
         private readonly RightPanelViewModel _viewModel = new RightPanelViewModel();
-        private IReadOnlyList<LayerSnapshot> _layerSnapshots = Array.Empty<LayerSnapshot>();
         private bool _refreshingLayers;
         private bool _refreshingDrawings;
 
@@ -43,7 +43,16 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     _refreshingDrawings = false;
                 }
-                _layerSnapshots = Array.Empty<LayerSnapshot>();
+                _refreshingLayers = true;
+                try
+                {
+                    _viewModel.Layers.Clear();
+                    LayerList?.UnselectAll();
+                }
+                finally
+                {
+                    _refreshingLayers = false;
+                }
                 ApplyLayerFilter();
                 _viewModel.Status = "Không có bản vẽ BricsCAD đang active.";
                 return;
@@ -52,7 +61,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 RefreshDrawingsOnly();
                 ReloadLayers();
-                _viewModel.Status = _viewModel.Drawings.Count + " bản vẽ • " + _layerSnapshots.Count + " layer";
+                _viewModel.Status = _viewModel.Drawings.Count + " bản vẽ • " + _viewModel.Layers.Count + " layer";
             }
             catch (Exception ex)
             {
@@ -62,21 +71,43 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void ReloadLayers()
         {
+            var selectedNames = LayerList?.SelectedItems.Cast<LayerItemViewModel>().Select(x => x.Name).ToArray() ?? Array.Empty<string>();
             var doc = Application.DocumentManager.MdiActiveDocument;
-            if (doc == null)
+            _refreshingLayers = true;
+            try
             {
-                _layerSnapshots = Array.Empty<LayerSnapshot>();
-                ApplyLayerFilter();
-                return;
+                _viewModel.Layers.Clear();
+                if (doc != null)
+                {
+                    foreach (var item in DrawingCatalogReader.ReadLayers(doc))
+                    {
+                        var brush = new SolidColorBrush(Color.FromRgb(item.Red, item.Green, item.Blue));
+                        brush.Freeze();
+                        _viewModel.Layers.Add(new LayerItemViewModel
+                        {
+                            Name = item.Name,
+                            IsVisible = item.IsVisible,
+                            IsLocked = item.IsLocked,
+                            ColorIndex = item.ColorIndex,
+                            ColorBrush = brush
+                        });
+                    }
+                }
             }
-            _layerSnapshots = DrawingCatalogReader.ReadLayers(doc);
+            finally
+            {
+                _refreshingLayers = false;
+            }
+
             ApplyLayerFilter();
+            RestoreLayerSelection(selectedNames);
         }
 
         private void ApplyLayerFilter()
         {
-            var selectedNames = LayerList?.SelectedItems.Cast<LayerItemViewModel>().Select(x => x.Name) ?? Enumerable.Empty<string>();
-            var selected = new HashSet<string>(selectedNames, StringComparer.OrdinalIgnoreCase);
+            var view = CollectionViewSource.GetDefaultView(_viewModel.Layers);
+            if (view == null) return;
+
             var search = LayerSearchBox?.Text?.Trim() ?? string.Empty;
             var tokens = search
                 .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
@@ -85,33 +116,23 @@ namespace QS3D.BricsCAD.V25.UI
                 .Take(MaxLayerSearchTokens)
                 .ToArray();
 
-            _refreshingLayers = true;
-            try
-            {
-                _viewModel.Layers.Clear();
-                foreach (var item in _layerSnapshots.Where(x => tokens.Length == 0 || tokens.All(token => MatchesLayerToken(x, token))))
-                {
-                    var brush = new SolidColorBrush(Color.FromRgb(item.Red, item.Green, item.Blue));
-                    brush.Freeze();
-                    var vm = new LayerItemViewModel
-                    {
-                        Name = item.Name,
-                        IsVisible = item.IsVisible,
-                        IsLocked = item.IsLocked,
-                        ColorIndex = item.ColorIndex,
-                        ColorBrush = brush
-                    };
-                    _viewModel.Layers.Add(vm);
-                    if (selected.Contains(vm.Name)) LayerList?.SelectedItems.Add(vm);
-                }
-            }
-            finally
-            {
-                _refreshingLayers = false;
-            }
+            view.Filter = tokens.Length == 0
+                ? null
+                : new Predicate<object>(item => item is LayerItemViewModel layer && tokens.All(token => MatchesLayerToken(layer, token)));
+            view.Refresh();
         }
 
-        private static bool MatchesLayerToken(LayerSnapshot layer, string token)
+        private void RestoreLayerSelection(IEnumerable<string> names)
+        {
+            if (LayerList == null) return;
+            var selected = new HashSet<string>(names ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+            LayerList.UnselectAll();
+            if (selected.Count == 0) return;
+            foreach (var item in LayerList.Items.Cast<LayerItemViewModel>())
+                if (selected.Contains(item.Name)) LayerList.SelectedItems.Add(item);
+        }
+
+        private static bool MatchesLayerToken(LayerItemViewModel layer, string token)
         {
             if (layer.Name.IndexOf(token, StringComparison.CurrentCultureIgnoreCase) >= 0) return true;
             if (layer.ColorIndex.ToString(CultureInfo.InvariantCulture).IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0) return true;
@@ -191,8 +212,9 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnInvertSelectionClick(object sender, RoutedEventArgs e)
         {
             var selected = LayerList.SelectedItems.Cast<LayerItemViewModel>().ToList();
+            var visible = LayerList.Items.Cast<LayerItemViewModel>().ToList();
             LayerList.UnselectAll();
-            foreach (var item in _viewModel.Layers.Where(x => !selected.Contains(x))) LayerList.SelectedItems.Add(item);
+            foreach (var item in visible.Where(x => !selected.Contains(x))) LayerList.SelectedItems.Add(item);
         }
         private void OnClearLayerSelectionClick(object sender, RoutedEventArgs e) => LayerList.UnselectAll();
 
