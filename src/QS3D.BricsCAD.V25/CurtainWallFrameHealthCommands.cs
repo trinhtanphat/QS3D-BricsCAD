@@ -18,7 +18,14 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    var blocked = "Curtain Frame Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.";
+                    PaletteCoordinator.SetStatus(blocked);
+                    document.Editor.WriteMessage("\nQS3D " + blocked);
+                    return;
+                }
+
                 var handles = project.Elements.SelectMany(ParseHandles).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
                 var live = CadHandleService.GetLiveSolidHandles(document, handles);
                 var issues = new List<ModelHealthIssue>(new GeneratedCurtainFrameHealthService().Inspect(project, live));
@@ -29,7 +36,8 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.WriteMessage("\nQS3D " + message);
                 Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue =>
                 {
-                    var element = project.FindElement(issue.ElementId);
+                    if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+                    var element = currentProject.FindElement(issue.ElementId);
                     if (element == null) return;
                     var count = CadHandleService.Select(document, ParseHandles(element));
                     PaletteCoordinator.SetStatus("Curtain Frame Health Định vị " + element.Id + " • " + count + " frame solid(s)");
