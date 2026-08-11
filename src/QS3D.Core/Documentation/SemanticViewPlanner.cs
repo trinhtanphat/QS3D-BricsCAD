@@ -72,6 +72,7 @@ namespace QS3D.Core.Documentation
 
     public static class SemanticViewPlanner
     {
+        private const int MaxCatalogViews = 10000;
         private const int MaxFilterIds = 100000;
         private const int MaxIdLength = 128;
         private const int MaxNameLength = 160;
@@ -86,10 +87,10 @@ namespace QS3D.Core.Documentation
             var elementIndex = BuildUniqueElementIndex(project);
 
             var floorId = NormalizeOptional(definition.FloorId, MaxIdLength, nameof(definition.FloorId));
-            if (floorId != null) EnsureUniqueReference(project.Floors.Select(x => x.Id), floorId, "floor");
+            if (floorId != null) EnsureUniqueReference(project.Floors, x => x.Id, floorId, "floor");
 
             var zoneId = NormalizeOptional(definition.ZoneId, MaxIdLength, nameof(definition.ZoneId));
-            if (zoneId != null) EnsureUniqueReference(project.Zones.Select(x => x.Id), zoneId, "zone");
+            if (zoneId != null) EnsureUniqueReference(project.Zones, x => x.Id, zoneId, "zone");
 
             var categories = new HashSet<ElementCategory>(definition.Categories);
             if (categories.Count != definition.Categories.Count)
@@ -124,9 +125,7 @@ namespace QS3D.Core.Documentation
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
 
-            var materialized = definitions.ToList();
-            if (materialized.Count > 10000) throw new InvalidOperationException("Semantic view catalog supports at most 10000 views.");
-
+            var materialized = MaterializeCatalogBounded(definitions);
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var plans = new List<SemanticViewPlan>(materialized.Count);
@@ -143,6 +142,21 @@ namespace QS3D.Core.Documentation
                 .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+        }
+
+        private static List<SemanticViewDefinition> MaterializeCatalogBounded(IEnumerable<SemanticViewDefinition> definitions)
+        {
+            var result = new List<SemanticViewDefinition>(Math.Min(MaxCatalogViews, 256));
+            using (var enumerator = definitions.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxCatalogViews)
+                        throw new InvalidOperationException("Semantic view catalog supports at most " + MaxCatalogViews + " views.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result;
         }
 
         private static Dictionary<string, ProjectElement> BuildUniqueElementIndex(ProjectState project)
@@ -176,9 +190,16 @@ namespace QS3D.Core.Documentation
                 if (!elementIndex.ContainsKey(id)) throw new InvalidOperationException("Semantic view references missing " + label + " element id: " + id + ".");
         }
 
-        private static void EnsureUniqueReference(IEnumerable<string> ids, string requestedId, string label)
+        private static void EnsureUniqueReference<T>(IEnumerable<T> items, Func<T, string> idSelector, string requestedId, string label)
+            where T : class
         {
-            var count = ids.Count(x => string.Equals(x, requestedId, StringComparison.OrdinalIgnoreCase));
+            var count = 0;
+            foreach (var item in items)
+            {
+                if (item == null) throw new InvalidOperationException("Project contains a null " + label + " entry.");
+                if (string.Equals(idSelector(item), requestedId, StringComparison.OrdinalIgnoreCase)) count++;
+            }
+
             if (count == 0) throw new InvalidOperationException("Semantic view references missing " + label + " id: " + requestedId + ".");
             if (count > 1) throw new InvalidOperationException("Semantic view references ambiguous " + label + " id: " + requestedId + ".");
         }

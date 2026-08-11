@@ -87,6 +87,83 @@ function Convert-ToSafeHttpsUri {
     return $uri
 }
 
+function Invoke-BoundedHttpsDownload {
+    param(
+        [Parameter(Mandatory = $true)]
+        [Uri]$Address,
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationPath,
+        [Parameter(Mandatory = $true)]
+        [int64]$MaxBytes,
+        [Parameter(Mandatory = $true)]
+        [ValidateRange(1000, 600000)]
+        [int]$TimeoutMilliseconds,
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    if ($null -eq $Address -or $Address.Scheme -ne [Uri]::UriSchemeHttps -or [string]::IsNullOrWhiteSpace($Address.Host)) {
+        throw "$Label download URI must be an absolute HTTPS URI."
+    }
+    if ($Address.UserInfo) { throw "$Label download URI must not contain embedded credentials." }
+    if ($MaxBytes -le 0) { throw "$Label download byte limit must be positive." }
+
+    $request = [System.Net.WebRequest]::CreateHttp($Address.AbsoluteUri)
+    $request.Method = 'GET'
+    $request.UserAgent = 'QS3D-BricsCAD-V25-Updater'
+    $request.Accept = '*/*'
+    $request.AllowAutoRedirect = $true
+    $request.MaximumAutomaticRedirections = 5
+    $request.AutomaticDecompression = [System.Net.DecompressionMethods]::GZip -bor [System.Net.DecompressionMethods]::Deflate
+    $request.Timeout = $TimeoutMilliseconds
+    $request.ReadWriteTimeout = $TimeoutMilliseconds
+
+    $response = $null
+    $input = $null
+    $output = $null
+    $completed = $false
+    try {
+        $response = [System.Net.HttpWebResponse]$request.GetResponse()
+        if ($response.StatusCode -ne [System.Net.HttpStatusCode]::OK) {
+            throw "$Label download returned HTTP $([int]$response.StatusCode)."
+        }
+        $finalUri = $response.ResponseUri
+        if ($null -eq $finalUri -or $finalUri.Scheme -ne [Uri]::UriSchemeHttps -or [string]::IsNullOrWhiteSpace($finalUri.Host) -or $finalUri.UserInfo) {
+            throw "$Label download redirected to a non-HTTPS or credential-bearing URI."
+        }
+        if ($response.ContentLength -gt $MaxBytes) {
+            throw "$Label download Content-Length $($response.ContentLength) exceeds the allowed maximum $MaxBytes bytes."
+        }
+
+        $input = $response.GetResponseStream()
+        if ($null -eq $input) { throw "$Label download response body was empty." }
+        $output = [System.IO.File]::Open($DestinationPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+        $buffer = New-Object byte[] 65536
+        [int64]$total = 0
+        while ($true) {
+            $read = $input.Read($buffer, 0, $buffer.Length)
+            if ($read -le 0) { break }
+            if ($total -gt ($MaxBytes - [int64]$read)) {
+                throw "$Label download exceeded the allowed maximum $MaxBytes bytes while streaming."
+            }
+            $output.Write($buffer, 0, $read)
+            $total += [int64]$read
+        }
+        if ($total -le 0) { throw "$Label download returned an empty response body." }
+        $output.Flush()
+        $completed = $true
+        return $total
+    }
+    finally {
+        if ($output) { $output.Dispose() }
+        if ($input) { $input.Dispose() }
+        if ($response) { $response.Dispose() }
+        if (-not $completed -and (Test-Path -LiteralPath $DestinationPath)) {
+            Remove-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Require-ManifestProperty {
     param($Manifest, [string]$Name)
     $property = $Manifest.PSObject.Properties[$Name]
@@ -447,7 +524,7 @@ try {
 
     try {
         New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
-        Invoke-WebRequest -Uri $manifestAddress.AbsoluteUri -OutFile $manifestPath -UseBasicParsing
+        Invoke-BoundedHttpsDownload -Address $manifestAddress -DestinationPath $manifestPath -MaxBytes 65536 -TimeoutMilliseconds 30000 -Label 'Update manifest' | Out-Null
         $manifestFile = Get-Item -LiteralPath $manifestPath
         if ($manifestFile.Length -le 0 -or $manifestFile.Length -gt 65536) { throw 'Update manifest must be between 1 byte and 64 KiB.' }
 
@@ -493,9 +570,9 @@ try {
 
         if (-not $PSCmdlet.ShouldProcess($InstallDirectory, "Update QS3D product $($installedProductVersion.Text) -> $($targetProductVersion.Text); assembly $installedVersion -> $targetVersion")) { return }
 
-        Invoke-WebRequest -Uri $packageAddress.AbsoluteUri -OutFile $zipPath -UseBasicParsing
-        $zipFile = Get-Item -LiteralPath $zipPath
         $maxBytes = [int64]$MaxPackageSizeMB * 1MB
+        Invoke-BoundedHttpsDownload -Address $packageAddress -DestinationPath $zipPath -MaxBytes $maxBytes -TimeoutMilliseconds 120000 -Label 'Update package' | Out-Null
+        $zipFile = Get-Item -LiteralPath $zipPath
         if ($zipFile.Length -le 0 -or $zipFile.Length -gt $maxBytes) {
             throw "Downloaded package size $($zipFile.Length) bytes is outside the allowed range (max $maxBytes)."
         }
