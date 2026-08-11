@@ -36,10 +36,12 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquirePath(document, "Vách Kính nhanh", 2, false);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "ThicknessM", 0.012d) : 0.012d;
-                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "HeightM", 3.6d) : 3.6d;
-                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d;
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.GlassWall, "ThicknessM", 0.012d) : 0.012d;
+                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.GlassWall, "HeightM", 3.6d) : 3.6d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d;
 
                 document.Editor.WriteMessage(
                     "\nQS3D Vách Kính nhanh: dùng Family hiện tại (dày " + thicknessM.ToString("0.###", CultureInfo.InvariantCulture) +
@@ -56,7 +58,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -119,10 +122,12 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquireFixedPath(document, "Trụ Tường nhanh", 2);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "ThicknessM", 0.2d) : 0.2d;
-                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "HeightM", 3.6d) : 3.6d;
-                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d;
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.WallPier, "ThicknessM", 0.2d) : 0.2d;
+                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.WallPier, "HeightM", 3.6d) : 3.6d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d;
 
                 document.Editor.WriteMessage(
                     "\nQS3D Trụ Tường nhanh: dùng Family hiện tại (dày " + thicknessM.ToString("0.###", CultureInfo.InvariantCulture) +
@@ -139,7 +144,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -202,10 +208,12 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquireFixedPath(document, "Vách BTCT nhanh", 2);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "ThicknessM", 0.2d) : 0.2d;
-                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "HeightM", 3.6d) : 3.6d;
-                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d;
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.StructuralWall, "ThicknessM", 0.2d) : 0.2d;
+                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.StructuralWall, "HeightM", 3.6d) : 3.6d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d;
 
                 document.Editor.WriteMessage(
                     "\nQS3D Vách BTCT nhanh: dùng Family hiện tại (dày " + thicknessM.ToString("0.###", CultureInfo.InvariantCulture) +
@@ -222,7 +230,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -284,9 +293,11 @@ namespace QS3D.BricsCAD.V25
                 var points = AcquirePath(document, "Móng nhanh", 3, true);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
-                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Foundation, "ThicknessM", 0.5d) : 0.5d;
-                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d;
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.Foundation, "ThicknessM", 0.5d) : 0.5d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d;
 
                 document.Editor.WriteMessage(
                     "\nQS3D Móng nhanh: dùng Family hiện tại (dày " + thicknessM.ToString("0.###", CultureInfo.InvariantCulture) +
@@ -301,7 +312,8 @@ namespace QS3D.BricsCAD.V25
                     {
                         element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 

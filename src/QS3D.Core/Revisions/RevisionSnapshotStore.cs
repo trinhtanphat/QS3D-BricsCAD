@@ -65,13 +65,20 @@ namespace QS3D.Core.Revisions
             var root = LoadDocument(path).Root ?? throw new InvalidDataException("Revision file has no root.");
             RevisionSnapshotXmlSchemaValidator.Validate(root);
             if (!string.Equals(root.Name.LocalName, "qs3dRevision", StringComparison.Ordinal)) throw new InvalidDataException("Invalid QS3D revision root.");
-            var snapshot = new RevisionSnapshot { Id = Required(root, "id"), CreatedUtc = Date(root.Attribute("createdUtc")?.Value) };
+            var snapshot = new RevisionSnapshot
+            {
+                Id = CanonicalRequired(root, "id", "revision id"),
+                CreatedUtc = Date(root.Attribute("createdUtc")?.Value)
+            };
             foreach (var node in root.Element("elements")?.Elements("element") ?? Enumerable.Empty<XElement>())
             {
                 var item = new RevisionElementSnapshot
                 {
-                    ElementId = Required(node, "id"), Category = Category(node.Attribute("category")?.Value), FamilyId = Value(node, "familyId"),
-                    FloorId = Value(node, "floorId"), ZoneId = Value(node, "zoneId")
+                    ElementId = CanonicalRequired(node, "id", "revision element id"),
+                    Category = Category(node.Attribute("category")?.Value),
+                    FamilyId = CanonicalOptionalValue(node, "familyId", "revision element family id"),
+                    FloorId = CanonicalOptionalValue(node, "floorId", "revision element floor id"),
+                    ZoneId = CanonicalOptionalValue(node, "zoneId", "revision element zone id")
                 };
                 foreach (var property in node.Element("properties")?.Elements("p") ?? Enumerable.Empty<XElement>())
                 {
@@ -91,6 +98,13 @@ namespace QS3D.Core.Revisions
                     if (item.SourceHandles.Contains(value, StringComparer.OrdinalIgnoreCase))
                         throw new InvalidDataException("Duplicate revision source handle: " + value);
                     item.SourceHandles.Add(value);
+                }
+                foreach (var dependency in node.Element("dependencies")?.Elements("d") ?? Enumerable.Empty<XElement>())
+                {
+                    var value = CanonicalRequired(dependency, "value", "revision dependency");
+                    if (item.Dependencies.Contains(value, StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidDataException("Duplicate revision dependency: " + value);
+                    item.Dependencies.Add(value);
                 }
                 snapshot.Elements.Add(item);
             }
@@ -131,7 +145,8 @@ namespace QS3D.Core.Revisions
                         new XAttribute("floorId", x.FloorId ?? string.Empty), new XAttribute("zoneId", x.ZoneId ?? string.Empty),
                         new XElement("properties", x.Properties.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase).Select(p => new XElement("p", new XAttribute("name", p.Key), new XAttribute("value", p.Value ?? string.Empty)))),
                         new XElement("quantities", x.Quantities.OrderBy(q => q.Key, StringComparer.OrdinalIgnoreCase).Select(q => new XElement("q", new XAttribute("name", q.Key), new XAttribute("value", Finite(q.Value).ToString("R", CultureInfo.InvariantCulture))))),
-                        new XElement("sourceHandles", x.SourceHandles.OrderBy(h => h, StringComparer.OrdinalIgnoreCase).Select(h => new XElement("h", new XAttribute("value", h)))))))));
+                        new XElement("sourceHandles", x.SourceHandles.OrderBy(h => h, StringComparer.OrdinalIgnoreCase).Select(h => new XElement("h", new XAttribute("value", h)))),
+                        new XElement("dependencies", x.Dependencies.OrderBy(d => d, StringComparer.OrdinalIgnoreCase).Select(d => new XElement("d", new XAttribute("value", d)))))))));
 
         private static void ValidateSnapshot(RevisionSnapshot snapshot)
         {
@@ -151,6 +166,7 @@ namespace QS3D.Core.Revisions
                 ValidateStringMap(element.Properties, "revision element " + element.ElementId + " properties");
                 ValidateNumberMap(element.Quantities, "revision element " + element.ElementId + " quantities");
                 ValidateCanonicalStringList(element.SourceHandles, "revision element " + element.ElementId + " source handles");
+                ValidateCanonicalStringList(element.Dependencies, "revision element " + element.ElementId + " dependencies");
             }
         }
 
@@ -196,7 +212,14 @@ namespace QS3D.Core.Revisions
             return category;
         }
 
-        private static string Category(string? value) => ParseCategory(value).ToString();
+        private static string Category(string? value)
+        {
+            var category = ParseCategory(value);
+            var canonical = category.ToString();
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Revision element category must use its canonical enum name: " + (value ?? string.Empty) + ".");
+            return canonical;
+        }
 
         private static void ValidateCanonicalRequired(string? value, string label)
         {
@@ -220,14 +243,18 @@ namespace QS3D.Core.Revisions
         }
 
         private static bool IsRecoverableDataFailure(Exception exception) => exception is InvalidDataException || exception is XmlException || exception is FormatException || exception is FileNotFoundException;
-        private static string Required(XElement element, string name) => !string.IsNullOrWhiteSpace(element.Attribute(name)?.Value) ? element.Attribute(name)!.Value.Trim() : throw new InvalidDataException("Missing attribute: " + name);
         private static string CanonicalRequired(XElement element, string name, string label)
         {
             var value = element.Attribute(name)?.Value;
             ValidateCanonicalRequired(value, label);
             return value ?? string.Empty;
         }
-        private static string Value(XElement element, string name) => element.Attribute(name)?.Value?.Trim() ?? string.Empty;
+        private static string CanonicalOptionalValue(XElement element, string name, string label)
+        {
+            var value = element.Attribute(name)?.Value;
+            ValidateOptionalCanonicalValue(value, label);
+            return value ?? string.Empty;
+        }
         private static double Number(string? value) => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) && !double.IsNaN(result) && !double.IsInfinity(result) ? result : throw new InvalidDataException("Invalid revision quantity.");
         private static double Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value) ? value : throw new InvalidDataException("Revision quantity must be finite.");
         private static DateTime Date(string? value)

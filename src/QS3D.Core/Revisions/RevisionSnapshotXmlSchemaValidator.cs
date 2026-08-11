@@ -19,10 +19,11 @@ namespace QS3D.Core.Revisions
                 ValidateElement(elements, "elements", Array.Empty<string>(), new[] { "element" });
                 foreach (var element in elements.Elements("element"))
                 {
-                    ValidateElement(element, "element", new[] { "id", "category", "familyId", "floorId", "zoneId" }, new[] { "properties", "quantities", "sourceHandles" });
+                    ValidateElement(element, "element", new[] { "id", "category", "familyId", "floorId", "zoneId" }, new[] { "properties", "quantities", "sourceHandles", "dependencies" });
                     RequireAtMostOne(element, "properties");
                     RequireAtMostOne(element, "quantities");
                     RequireAtMostOne(element, "sourceHandles");
+                    RequireAtMostOne(element, "dependencies");
 
                     foreach (var properties in element.Elements("properties"))
                     {
@@ -43,6 +44,13 @@ namespace QS3D.Core.Revisions
                         ValidateElement(handles, "sourceHandles", Array.Empty<string>(), new[] { "h" });
                         foreach (var handle in handles.Elements("h"))
                             ValidateElement(handle, "h", new[] { "value" }, Array.Empty<string>());
+                    }
+
+                    foreach (var dependencies in element.Elements("dependencies"))
+                    {
+                        ValidateElement(dependencies, "dependencies", Array.Empty<string>(), new[] { "d" });
+                        foreach (var dependency in dependencies.Elements("d"))
+                            ValidateElement(dependency, "d", new[] { "value" }, Array.Empty<string>());
                     }
                 }
             }

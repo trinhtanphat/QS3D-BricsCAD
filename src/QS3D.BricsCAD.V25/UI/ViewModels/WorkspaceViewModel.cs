@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using Application = Bricscad.ApplicationServices.Application;
 using QS3D.Core.Domain;
+using QS3D.Core.Services;
 
 namespace QS3D.BricsCAD.V25.UI.ViewModels
 {
@@ -21,7 +22,9 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             "AreaM2",
             "VolumeM3",
             "PerimeterM",
-            "Layer"
+            "Layer",
+            MeasuredSolidQuantityPolicy.VolumeProperty,
+            MeasuredSolidQuantityPolicy.SurfaceAreaProperty
         };
 
         private string _status = "Sẵn sàng";
@@ -258,10 +261,10 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 var current = hasInstance ? stored ?? string.Empty : familyValue;
                 var unit = UnitFor(key);
                 var row = CreatePropertyRow(key, current, unit);
-                var isSourceDerived = hasInstance && IsSourceDerivedInstanceKey(key);
-                if (isSourceDerived)
+                var isReadOnlyInstanceProperty = !SemanticPropertyEditPolicy.IsEditablePropertyKey(key);
+                if (isReadOnlyInstanceProperty)
                 {
-                    row.Group = "NGUỒN CAD / ĐO ĐẠC";
+                    row.Group = IsSourceDerivedInstanceKey(key) ? "NGUỒN CAD / ĐO ĐẠC" : "HỆ THỐNG / CHỈ ĐỌC";
                     row.IsReadOnly = true;
                     row.CanReset = false;
                     row.Value = ToDisplayValue(key, current);
@@ -367,6 +370,11 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         {
             var familyValue = family.Properties.TryGetValue(key, out var familyRaw) ? familyRaw ?? string.Empty : string.Empty;
             var current = element.Properties.TryGetValue(key, out var stored) ? stored ?? string.Empty : familyValue;
+            if (!SemanticPropertyEditPolicy.IsEditablePropertyKey(key))
+            {
+                Status = "Không thể cập nhật " + DisplayNameFor(key) + ": đây là thuộc tính nguồn/identity/ownership chỉ đọc.";
+                return current;
+            }
             if (!TryGetCurrentProjectForMutation("Cập nhật Instance property", out var project)) return current;
 
             try
@@ -405,6 +413,11 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
         private void ResetInstanceProperty(ProjectElement element, ProjectFamily family, string key, PropertyRowViewModel row)
         {
+            if (!SemanticPropertyEditPolicy.IsEditablePropertyKey(key))
+            {
+                Status = "Không thể đặt lại " + DisplayNameFor(key) + ": đây là thuộc tính nguồn/identity/ownership chỉ đọc.";
+                return;
+            }
             if (!TryGetCurrentProjectForMutation("Đặt lại Instance property", out var project)) return;
 
             try

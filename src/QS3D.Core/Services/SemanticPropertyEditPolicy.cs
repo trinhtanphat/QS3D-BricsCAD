@@ -4,7 +4,7 @@ using QS3D.Core.Domain;
 
 namespace QS3D.Core.Services
 {
-    internal static class SemanticPropertyEditPolicy
+    public static class SemanticPropertyEditPolicy
     {
         private static readonly HashSet<string> SourceDerivedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -27,19 +27,32 @@ namespace QS3D.Core.Services
             "ZoneId"
         };
 
+        public static bool IsEditablePropertyKey(string propertyName)
+        {
+            if (string.IsNullOrWhiteSpace(propertyName)) return false;
+            return EditBlockReason(propertyName.Trim()) == null;
+        }
+
         internal static string RequireEditablePropertyKey(string propertyName)
         {
             if (string.IsNullOrWhiteSpace(propertyName)) throw new ArgumentException("Property name is required.", nameof(propertyName));
             var key = propertyName.Trim();
+            var blockReason = EditBlockReason(key);
+            if (blockReason != null) throw new InvalidOperationException(blockReason + key + ".");
+            return key;
+        }
+
+        private static string EditBlockReason(string key)
+        {
             if (SourceDerivedKeys.Contains(key) || key.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Property is derived from CAD/source geometry and cannot be edited as a generic semantic property: " + key + ".");
+                return "Property is derived from CAD/source geometry and cannot be edited as a generic semantic property: ";
             if (ReservedIdentityKeys.Contains(key) || LooksLikeIdentityReferenceKey(key))
-                throw new InvalidOperationException("Semantic identity/reference field cannot be edited as a generic property: " + key + ".");
+                return "Semantic identity/reference field cannot be edited as a generic property: ";
             if (key.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 key.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase) ||
                 key.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Native/generated ownership state cannot be edited as a generic semantic property: " + key + ".");
-            return key;
+                return "Native/generated ownership state cannot be edited as a generic semantic property: ";
+            return null;
         }
 
         private static bool LooksLikeIdentityReferenceKey(string key)
