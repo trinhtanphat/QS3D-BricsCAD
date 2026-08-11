@@ -27,6 +27,20 @@ required = {
         "Evidence: PENDING_LOCAL",
         "Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`",
     ],
+    "docs/LOCAL-AGENT-HANDOFF-SCHEMA.md": [
+        "schema/contract only",
+        "docs/LOCAL-AGENT-INBOX.md` remains the single live queue",
+        "Required format for new or materially changed handoffs",
+        "Source-side status: REMOTE_DONE | REMOTE_PARTIAL | NOT_STARTED",
+        "Remote disposition: DO_NOT_RETRY_REMOTE",
+        "Blocker: exact reason a non-local agent cannot execute/prove the remaining work",
+        "Source SHA: exact source/main SHA whose behavior must be qualified",
+        "Expected result: objective pass condition",
+        "Evidence required: exact artifacts/measurements/logs/state needed to prove PASS",
+        "A chat-only note",
+        "Do not use it to avoid repository work that can be implemented or statically validated remotely",
+        "cannot manufacture `LOCAL_PASS`",
+    ],
 }
 
 errors = []
@@ -47,4 +61,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: remote agents must park machine-only blockers in the canonical local inbox with exact scenario/evidence, reuse existing LOCAL items instead of duplicating them, and honor DO_NOT_RETRY_REMOTE instead of repeating or marking local qualification PASS remotely.")
+print("PASS: remote agents must complete source-safe work, park only irreducible machine-only residue in the canonical local inbox using the required exact-SHA handoff schema, reuse existing LOCAL items, and honor DO_NOT_RETRY_REMOTE without manufacturing LOCAL_PASS.")
