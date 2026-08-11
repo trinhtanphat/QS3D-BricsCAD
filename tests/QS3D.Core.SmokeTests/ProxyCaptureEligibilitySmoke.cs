@@ -18,6 +18,13 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Metricless ProxyEntity must not be auto-accepted.");
             Throws<InvalidOperationException>(() => EntitySnapshotCaptureEligibility.EnsureReady(unmeasured, ElementCategory.Beam));
 
+            var paddedHandle = new EntitySnapshot("  A1  ", "Line", "blt beam");
+            if (!string.Equals(paddedHandle.Handle, "A1", StringComparison.Ordinal))
+                throw new Exception("EntitySnapshot must canonicalize surrounding CAD-handle whitespace at construction.");
+            var paddedHandleResult = new RecognitionResult(paddedHandle, Array.Empty<RecognitionCandidate>());
+            if (!string.Equals(paddedHandleResult.Handle, "A1", StringComparison.Ordinal))
+                throw new Exception("RecognitionResult must preserve the canonical EntitySnapshot handle identity.");
+
             var paddedProxy = new EntitySnapshot("A2", "  pRoXyEnTiTy  ", "blt beam");
             if (!string.Equals(paddedProxy.EntityType, "pRoXyEnTiTy", StringComparison.Ordinal))
                 throw new Exception("EntitySnapshot must canonicalize surrounding entity-type whitespace at construction.");
