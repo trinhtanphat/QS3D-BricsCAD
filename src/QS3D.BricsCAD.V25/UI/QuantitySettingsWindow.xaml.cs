@@ -368,11 +368,11 @@ namespace QS3D.BricsCAD.V25.UI
                     FileName = "QS3D_quantity_settings.json"
                 };
                 if (dialog.ShowDialog(this) != true) return;
-                if (_persistentSettingsWriteBlocked && SamePath(dialog.FileName, _store.SettingsPath))
+                if (_persistentSettingsWriteBlocked && IsProtectedSettingsPath(dialog.FileName))
                 {
                     MessageBox.Show(
                         this,
-                        "Không thể xuất đè lên file cấu hình theo máy đang dùng schema mới hơn. Hãy chọn một file khác hoặc cập nhật QS3D trước.",
+                        "Không thể xuất đè lên file cấu hình theo máy hoặc bản sao lưu đang được bảo vệ bởi schema mới hơn. Hãy chọn một file khác hoặc cập nhật QS3D trước.",
                         "QS3D • File cấu hình đang được bảo vệ",
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
@@ -435,6 +435,12 @@ namespace QS3D.BricsCAD.V25.UI
         {
             return exception is System.IO.InvalidDataException
                 && Equals(exception.Data[UnsupportedSchemaMarker], true);
+        }
+
+        private bool IsProtectedSettingsPath(string path)
+        {
+            return SamePath(path, _store.SettingsPath) ||
+                SamePath(path, _store.SettingsPath + ".bak");
         }
 
         private static bool SamePath(string left, string right)
