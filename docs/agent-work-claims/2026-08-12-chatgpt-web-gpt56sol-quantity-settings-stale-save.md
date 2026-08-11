@@ -1,0 +1,21 @@
+# Agent work claim — Quantity Settings stale-save guard
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `ACTIVE`
+- Scope: prevent long-lived `QS3DSETUP` windows from overwriting persisted Quantity Settings that changed externally after the window loaded.
+- Files reserved:
+  - `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.xaml.cs`
+  - `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.UnsavedChanges.cs`
+  - `scripts/preflight-quantity-settings-unsaved-close.py`
+  - `scripts/preflight-quantity-settings-stale-save.py`
+  - this claim file
+- Contract:
+  - keep the existing structural `SettingsEquivalent` comparator and unsaved-close Save/Discard/Cancel UX;
+  - establish whether the initial persisted baseline is verifiably equal to the loaded UI state;
+  - before normal Save and before close-time Save, if a verified baseline exists, reload/normalize current persisted settings and fail closed if they differ from that baseline;
+  - after a successful Save, advance the persisted baseline and mark it verified;
+  - preserve recovery behavior for an initially unreadable non-future-schema settings file: an unverifiable initial baseline does not permanently block an explicit recovery Save;
+  - future-schema read-only blocking, template import/export, rule/category editing semantics and `QuantitySettingsStore` atomic writer remain unchanged;
+  - reconcile the existing unsaved-close preflight and add a focused stale-save guard;
+  - no GitHub Actions dispatch and no BricsCAD V25/WPF runtime PASS from this web session.
