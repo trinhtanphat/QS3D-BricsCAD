@@ -32,6 +32,7 @@ namespace QS3D.Core.Reporting
         public static IReadOnlyList<CurtainWallScheduleRow> Build(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Curtain wall schedule");
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, CurtainWallScheduleRow>(StringComparer.OrdinalIgnoreCase);
