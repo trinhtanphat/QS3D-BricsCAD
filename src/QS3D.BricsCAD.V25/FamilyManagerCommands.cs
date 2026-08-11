@@ -15,7 +15,6 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var window = new FamilyManagerWindow(document);
-                DocumentBoundWindowLifetime.Attach(window, document);
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
                 PaletteCoordinator.SetStatus("Family Manager: CRUD • properties • inheritance-safe semantic assignment • khóa theo bản vẽ.");
             }
