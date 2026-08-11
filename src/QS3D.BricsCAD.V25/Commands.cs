@@ -119,17 +119,6 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("ED2 scope không được hỗ trợ: " + scope + ".");
                 }
 
-                var regenerated = RegenerateProject(project);
-                var details = elementIds == null
-                    ? ProjectQuantityReportBuilder.Detail(project)
-                    : ProjectQuantityReportBuilder.Detail(project, elementIds);
-                var summary = elementIds == null
-                    ? ProjectQuantityReportBuilder.Group(project)
-                    : ProjectQuantityReportBuilder.Group(project, elementIds);
-                if (details.Count == 0)
-                    throw new InvalidOperationException("ED2 scope " + scope + " không có cấu kiện hợp lệ để xuất.");
-
-                EnsureEd2HandlesAreLive(doc, details);
                 var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
                 var dialog = new SaveFileDialog
                 {
@@ -141,6 +130,18 @@ namespace QS3D.BricsCAD.V25
                     FileName = drawingName + "-ED2.xlsx"
                 };
                 if (dialog.ShowDialog() != true) return;
+
+                var regenerated = RegenerateProject(project);
+                var details = elementIds == null
+                    ? ProjectQuantityReportBuilder.Detail(project)
+                    : ProjectQuantityReportBuilder.Detail(project, elementIds);
+                var summary = elementIds == null
+                    ? ProjectQuantityReportBuilder.Group(project)
+                    : ProjectQuantityReportBuilder.Group(project, elementIds);
+                if (details.Count == 0)
+                    throw new InvalidOperationException("ED2 scope " + scope + " không có cấu kiện hợp lệ để xuất.");
+
+                EnsureEd2HandlesAreLive(doc, details);
                 XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);
 
                 var status = "ED2 " + scope + ": " + details.Count + " CHI_TIET • " + summary.Count +
@@ -157,6 +158,10 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DBBS", () =>
             {
+                var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
+                var dialog = new SaveFileDialog { Title = "Xuất Bar Bending Schedule", Filter = "Excel Workbook (*.xlsx)|*.xlsx", DefaultExt = ".xlsx", AddExtension = true, OverwritePrompt = true, FileName = drawingName + "-BBS.xlsx" };
+                if (dialog.ShowDialog() != true) return;
+
                 var project = ProjectContextCoordinator.GetOrCreate(doc);
                 RegenerateProject(project);
                 var rows = ProjectRebarScheduleBuilder.Build(project);
@@ -167,9 +172,6 @@ namespace QS3D.BricsCAD.V25
                     if (row == null) throw new InvalidOperationException("BBS không được chứa dòng null.");
                     totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight");
                 }
-                var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
-                var dialog = new SaveFileDialog { Title = "Xuất Bar Bending Schedule", Filter = "Excel Workbook (*.xlsx)|*.xlsx", DefaultExt = ".xlsx", AddExtension = true, OverwritePrompt = true, FileName = drawingName + "-BBS.xlsx" };
-                if (dialog.ShowDialog() != true) return;
                 XlsxRebarScheduleExporter.Export(dialog.FileName, rows);
                 var status = "BBS: " + rows.Count + " bar mark • " + totalWeight.ToString("0.###") + " kg • " + dialog.FileName;
                 PaletteCoordinator.SetStatus(status); doc.Editor.WriteMessage("\nQS3D " + status);
