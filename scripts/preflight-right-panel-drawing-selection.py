@@ -27,7 +27,9 @@ else:
             "_refreshingDrawings = true;",
             "_viewModel.Drawings.Clear();",
             "DrawingList?.UnselectAll();",
-            "_layerSnapshots = Array.Empty<LayerSnapshot>();",
+            "_refreshingLayers = true;",
+            "_viewModel.Layers.Clear();",
+            "LayerList?.UnselectAll();",
             "ApplyLayerFilter();",
             '"Không có bản vẽ BricsCAD đang active."',
         ):
@@ -36,6 +38,8 @@ else:
         stale_return = "var doc = Application.DocumentManager.MdiActiveDocument;\n            if (doc == null) return;"
         if stale_return in body:
             errors.append("RightPanel.Refresh must clear stale drawings/layers instead of returning with prior-document UI")
+        if "_layerSnapshots" in body:
+            errors.append("RightPanel no-document reset must clear the canonical layer VM collection, not a removed duplicate snapshot cache")
 
     refresh_drawings = re.search(
         r"private void RefreshDrawingsOnly\(\)\s*\{(?P<body>.*?)\n        \}\n\n        private void RefreshAfterXrefMutation",
@@ -163,4 +167,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: RightPanel clears stale prior-document and vanished-Xref selection state, drawing selection maps cleanly to CAD state, explicit clear avoids duplicate callbacks, and Xref reload/detach distinguish successful mutation from post-mutation panel refresh warnings.")
+print("PASS: RightPanel clears canonical drawing/layer UI state when no document exists, removes vanished-Xref implied selection, maps drawing selection cleanly to CAD state, avoids duplicate clear callbacks, and distinguishes Xref mutation success from refresh warnings.")
