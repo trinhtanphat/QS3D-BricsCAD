@@ -8,6 +8,28 @@ using QS3D.Core.Model;
 
 namespace QS3D.Core.Recognition
 {
+    internal static class RecognitionInputBounds
+    {
+        internal const int MaxRules = 10000;
+        internal const int MaxTermsPerCollection = 10000;
+        internal const int MaxBatchItems = 250000;
+
+        internal static List<T> Materialize<T>(IEnumerable<T> source, int maxCount, string label)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (maxCount <= 0) throw new ArgumentOutOfRangeException(nameof(maxCount));
+            if (source is ICollection<T> collection && collection.Count > maxCount)
+                throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
+            if (source is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > maxCount)
+                throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
+
+            var materialized = source.Take(maxCount + 1).ToList();
+            if (materialized.Count > maxCount)
+                throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
+            return materialized;
+        }
+    }
+
     public sealed class RecognitionRule
     {
         public RecognitionRule(string id, ElementCategory category, IEnumerable<string>? layerTerms = null, IEnumerable<string>? textTerms = null, IEnumerable<string>? entityTypes = null)
@@ -24,7 +46,19 @@ namespace QS3D.Core.Recognition
         public IReadOnlyList<string> LayerTerms { get; }
         public IReadOnlyList<string> TextTerms { get; }
         public IReadOnlyList<string> EntityTypes { get; }
-        private static IReadOnlyList<string> NormalizeTerms(IEnumerable<string>? source) => (source ?? Array.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(RecognitionText.Normalize).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        private static IReadOnlyList<string> NormalizeTerms(IEnumerable<string>? source)
+        {
+            var materialized = RecognitionInputBounds.Materialize(
+                source ?? Array.Empty<string>(),
+                RecognitionInputBounds.MaxTermsPerCollection,
+                "Recognition rule term collection");
+            return materialized
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(RecognitionText.Normalize)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
     }
 
     public sealed class RecognitionCandidate
@@ -104,7 +138,7 @@ namespace QS3D.Core.Recognition
             if (results == null) throw new ArgumentNullException(nameof(results));
             ValidateProbability(autoAcceptConfidence, nameof(autoAcceptConfidence));
             ValidateProbability(minimumMargin, nameof(minimumMargin));
-            var materialized = results.ToList();
+            var materialized = RecognitionInputBounds.Materialize(results, RecognitionInputBounds.MaxBatchItems, "Recognition result batch");
             if (materialized.Any(x => x == null)) throw new ArgumentException("Recognition results cannot contain null.", nameof(results));
             foreach (var result in materialized) result.ValidateCurrentCandidates();
             Results = materialized.AsReadOnly();
@@ -129,7 +163,10 @@ namespace QS3D.Core.Recognition
 
         public RecognitionEngine(IEnumerable<RecognitionRule>? rules = null)
         {
-            var materialized = (rules ?? DefaultRules()).ToList();
+            var materialized = RecognitionInputBounds.Materialize(
+                rules ?? DefaultRules(),
+                RecognitionInputBounds.MaxRules,
+                "Recognition rule collection");
             if (materialized.Any(x => x == null)) throw new ArgumentException("Recognition rules cannot contain null.", nameof(rules));
             var duplicate = materialized.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicate != null) throw new ArgumentException("Duplicate recognition rule id: " + duplicate.Key, nameof(rules));
@@ -153,7 +190,12 @@ namespace QS3D.Core.Recognition
             return new RecognitionResult(snapshot, candidates.OrderByDescending(x => x.Confidence).ThenBy(x => x.RuleId, StringComparer.OrdinalIgnoreCase).ToList());
         }
 
-        public RecognitionBatch SuggestBatch(IEnumerable<EntitySnapshot> snapshots, double autoAcceptConfidence = 0.92d, double minimumMargin = 0.15d) => new RecognitionBatch((snapshots ?? throw new ArgumentNullException(nameof(snapshots))).Select(Suggest), autoAcceptConfidence, minimumMargin);
+        public RecognitionBatch SuggestBatch(IEnumerable<EntitySnapshot> snapshots, double autoAcceptConfidence = 0.92d, double minimumMargin = 0.15d)
+        {
+            if (snapshots == null) throw new ArgumentNullException(nameof(snapshots));
+            var materialized = RecognitionInputBounds.Materialize(snapshots, RecognitionInputBounds.MaxBatchItems, "Recognition snapshot batch");
+            return new RecognitionBatch(materialized.Select(Suggest), autoAcceptConfidence, minimumMargin);
+        }
 
         public static bool IsEntityTypeCompatible(ElementCategory category, string entityType)
         {

@@ -24,7 +24,8 @@ namespace QS3D.Core.Recognition
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (snapshots == null) throw new ArgumentNullException(nameof(snapshots));
-            return new RecognitionBatch(snapshots.Select(x => Suggest(project, x)), autoAcceptConfidence, minimumMargin);
+            var materialized = RecognitionInputBounds.Materialize(snapshots, RecognitionInputBounds.MaxBatchItems, "Project recognition snapshot batch");
+            return new RecognitionBatch(materialized.Select(x => Suggest(project, x)), autoAcceptConfidence, minimumMargin);
         }
 
         internal static void ValidateLayerMappings(IEnumerable<KeyValuePair<string, string>> mappings, string label)
