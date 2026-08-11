@@ -1,0 +1,22 @@
+# Agent Work Claim
+
+- Status: `ACTIVE`
+- State: `ACTIVE`
+- Agent: `chatgpt-web-gpt56sol-20260811-quantity-locate-stale-selection-clear`
+- Started (UTC): `2026-08-11T15:14:30Z`
+- Last Updated (UTC): `2026-08-11T15:14:30Z`
+- Expected Completion: `same session after implementation and repository-verifiable checks`
+- Task Key: `UI-QUANTITY-LOCATE-STALE-SELECTION-CLEAR`
+- Intended Work: Harden quantity locate failure behavior so a failed/zero-live-handle locate cannot leave the previous CAD implied selection highlighted. Cover both QS3DBQ/QuantitySummaryWindow and Quantity Insight locate paths through an explicit replace-selection primitive that can set an empty implied selection, while preserving multi-object selection, stale-handle tolerance, document affinity, read-only project behavior and zoom-only-after-positive-selection invariants.
+- Scope: `src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs`; `src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs`; `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs`; one focused preflight; this claim/plan documentation.
+- Out of Scope: Quantity/reporting formulas or grouping; semantic identity rules; project persistence/mutation; Excel locate; generic changes to existing `Select`/`SelectIfAny` behavior for unrelated callers; viewport camera algorithms; native V25 runtime claims.
+- Coordination: The earlier quantity-description-3D-locate and quantity-insight-single-click-reveal claims are complete. No claims-directory match was found for `CadHandleService` or this stale-selection-clear task before registration. Existing completed behavior will be extended, not rewritten.
+- Verification Plan: Focused static/preflight contract proving the quantity paths use replacement selection, replacement selection calls `SetImpliedSelection` even for an empty resolved set, multi-object resolution/dedup remains unchanged, and zoom remains gated on positive selected count. Re-fetch merged files and inspect current-main concurrency. Native mouse/PICKFIRST behavior remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` under the existing local qualification queue.
+- Completion Evidence:
+  - Claim commit: pending
+  - Planning commit: pending
+  - Implementation commit: pending
+  - Focused gate: pending
+  - Qualifier verdict: pending
+- Change Log:
+  - `2026-08-11T15:14:30Z` — Registered claim before planning/source edits after confirming the defect: `SelectIfAny` returns zero without replacing the implied selection, allowing the prior quantity row's CAD highlight to remain visible after a zero-live-target locate.
