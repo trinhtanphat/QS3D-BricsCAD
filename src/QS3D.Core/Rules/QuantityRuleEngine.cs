@@ -157,7 +157,7 @@ namespace QS3D.Core.Rules
             foreach (var quantity in element.Quantities)
             {
                 if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value)) throw new InvalidOperationException("Rule variable quantity is not finite: " + element.Id + "/" + quantity.Key);
-                variables[quantity.Key] = quantity.Value;
+                AddVariable(variables, quantity.Key, quantity.Value);
             }
             if (!variables.ContainsKey("Count")) variables["Count"] = 1d;
             return variables;
@@ -169,8 +169,14 @@ namespace QS3D.Core.Rules
             {
                 if (string.IsNullOrWhiteSpace(item.Key)) continue;
                 if (double.TryParse(item.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && !double.IsNaN(value) && !double.IsInfinity(value))
-                    target[item.Key] = value;
+                    AddVariable(target, item.Key, value);
             }
+        }
+
+        private static void AddVariable(IDictionary<string, double> target, string name, double value)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return;
+            target[name.Trim()] = value;
         }
     }
 }
