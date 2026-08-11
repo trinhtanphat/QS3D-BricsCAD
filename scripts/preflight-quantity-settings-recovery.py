@@ -11,13 +11,16 @@ def main():
     required = [
         "var backupPath = GetBackupPath(_settingsPath);",
         "? ReadAndValidate(backupPath)",
-        "catch (InvalidDataException ex) when (!(ex is UnsupportedSchemaException) && File.Exists(backupPath))",
+        "catch (InvalidDataException ex) when (!IsUnsupportedSchema(ex) && File.Exists(backupPath))",
         "catch (FileNotFoundException) when (File.Exists(backupPath))",
         "var backup = GetBackupPath(path);",
         "File.Replace(temp, path, backup, true);",
         "if (value.SchemaVersion > QuantityCalculationSettings.CurrentSchemaVersion)",
-        "throw new UnsupportedSchemaException(value.SchemaVersion);",
-        "catch (Exception ex) when (!(ex is FileNotFoundException) && !(ex is UnsupportedSchemaException))",
+        "throw CreateUnsupportedSchemaException(value.SchemaVersion);",
+        "private static InvalidDataException CreateUnsupportedSchemaException(int schemaVersion)",
+        "exception.Data[UnsupportedSchemaMarker] = true;",
+        "private static bool IsUnsupportedSchema(Exception exception)",
+        "catch (Exception ex) when (!(ex is FileNotFoundException) && !IsUnsupportedSchema(ex))",
     ]
     missing = [token for token in required if token not in store]
     if missing:
@@ -56,6 +59,9 @@ def main():
         return 1
     if not (read_pos < future_check_pos < normalize_pos):
         print("ERROR: unsupported future settings schemas must fail closed before normal validation/fallback can hide incompatibility.")
+        return 1
+    if "UnsupportedSchemaException : InvalidDataException" in store:
+        print("ERROR: InvalidDataException is sealed on the V25 target; unsupported schemas must use the marked InvalidDataException factory.")
         return 1
     if not (write_pos < backup_write_pos < replace_pos):
         print("ERROR: atomic settings replacement must keep producing the same recovery backup path consumed by Load.")

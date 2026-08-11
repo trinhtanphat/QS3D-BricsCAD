@@ -1,6 +1,6 @@
 # Work claim — Quantity Settings V25 build compatibility
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T21:25:00+07:00`
 - Baseline main SHA: `adb2d1d4241398ea023dff721a0a9b6618f05963`
@@ -24,3 +24,11 @@
 - The previous Quantity Settings schema/recovery claims are `COMPLETED`; no current `ACTIVE` claim reserves the two implementation/gate files above.
 - Updater compile errors remain under separate ACTIVE updater claims and are explicitly excluded.
 
+## Completion evidence
+
+- Replaced the impossible private subclass of sealed `InvalidDataException` with a marked `InvalidDataException` factory plus a single classifier used by both fallback filters. Callers still receive the same public exception category, while a future-schema primary still cannot fall back to an older backup.
+- `scripts/preflight-quantity-settings-recovery.py`: PASS and now rejects reintroducing the sealed inheritance.
+- `scripts/preflight-quantity-settings-schema.py`: PASS.
+- `git diff --check`: PASS.
+- The installed BricsCAD V25 `Release|x64` build no longer reports any error in `QuantitySettingsStore.cs`; compilation proceeds to separately owned updater/Quantity Insight/Workspace/Wall Quantity nullable work.
+- No GitHub Actions or private drawings were used.

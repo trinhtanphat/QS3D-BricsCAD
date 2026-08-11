@@ -8,6 +8,7 @@ namespace QS3D.BricsCAD.V25.Services
     public sealed class QuantitySettingsStore
     {
         private const string SettingsFileName = "quantity_settings.json";
+        private const string UnsupportedSchemaMarker = "QS3D.QuantitySettings.UnsupportedSchema";
         private readonly string _settingsPath;
 
         public QuantitySettingsStore()
@@ -40,7 +41,7 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 return ReadAndValidate(_settingsPath);
             }
-            catch (InvalidDataException ex) when (!(ex is UnsupportedSchemaException) && File.Exists(backupPath))
+            catch (InvalidDataException ex) when (!IsUnsupportedSchema(ex) && File.Exists(backupPath))
             {
                 return ReadAndValidate(backupPath);
             }
@@ -87,12 +88,12 @@ namespace QS3D.BricsCAD.V25.Services
                     var value = serializer.ReadObject(stream) as QuantityCalculationSettings;
                     if (value == null) throw new InvalidDataException("Quantity settings template is empty or has an unsupported root object.");
                     if (value.SchemaVersion > QuantityCalculationSettings.CurrentSchemaVersion)
-                        throw new UnsupportedSchemaException(value.SchemaVersion);
+                        throw CreateUnsupportedSchemaException(value.SchemaVersion);
                     value.NormalizeAndValidate();
                     return value;
                 }
             }
-            catch (Exception ex) when (!(ex is FileNotFoundException) && !(ex is UnsupportedSchemaException))
+            catch (Exception ex) when (!(ex is FileNotFoundException) && !IsUnsupportedSchema(ex))
             {
                 throw new InvalidDataException("Cannot read quantity settings template '" + path + "': " + ex.Message, ex);
             }
@@ -136,12 +137,18 @@ namespace QS3D.BricsCAD.V25.Services
             }
         }
 
-        private sealed class UnsupportedSchemaException : InvalidDataException
+        private static InvalidDataException CreateUnsupportedSchemaException(int schemaVersion)
         {
-            public UnsupportedSchemaException(int schemaVersion)
-                : base("Quantity settings schema " + schemaVersion + " is newer than supported schema " + QuantityCalculationSettings.CurrentSchemaVersion + ".")
-            {
-            }
+            var exception = new InvalidDataException(
+                "Quantity settings schema " + schemaVersion + " is newer than supported schema " + QuantityCalculationSettings.CurrentSchemaVersion + ".");
+            exception.Data[UnsupportedSchemaMarker] = true;
+            return exception;
+        }
+
+        private static bool IsUnsupportedSchema(Exception exception)
+        {
+            return exception is InvalidDataException
+                && Equals(exception.Data[UnsupportedSchemaMarker], true);
         }
     }
 }
