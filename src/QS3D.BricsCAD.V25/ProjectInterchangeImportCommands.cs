@@ -40,6 +40,7 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
+                ProjectInterchangeValidatedSnapshotReader.Read(json);
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var previewChangeVersion = project.ChangeVersion;
                 var preview = ProjectInterchangeImportPreview.Plan(project, json);
