@@ -21,9 +21,15 @@ else:
     )
     for token in required:
         if token not in text:
-            errors.append("HT_PHÒNG schedule missing freshness token: " + token)
-    if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
-        errors.append("HT_PHÒNG modeless schedule must not create/cache replacement project state")
+            errors.append("HT_PHÒNG schedule missing detached freshness token: " + token)
+    for forbidden in (
+        "ProjectContextCoordinator.GetOrCreate(_document)",
+        "ExistingProjectMutationContext",
+        "RegenerateDirty(project)",
+        "RoomFinishScheduleBuilder.Build(project)",
+    ):
+        if forbidden in text:
+            errors.append("HT_PHÒNG modeless schedule must not create/bind/regenerate live project state: " + forbidden)
 
     if "RegenerateDirty(project)" in text or "RoomFinishScheduleBuilder.Build(project)" in text:
         errors.append("Room Finish modeless schedule must not mutate or build from the live project")
@@ -36,7 +42,7 @@ else:
     exporter_pos = body.find("RoomFinishXlsxExporter.Export(dialog.FileName, current)")
     stale_export_pos = body.find("RoomFinishXlsxExporter.Export(dialog.FileName, _rows)")
     if min(dialog_pos, build_pos, exporter_pos) < 0 or not dialog_pos < build_pos < exporter_pos:
-        errors.append("HT_PHÒNG export must wait for Save confirmation before rebuilding current rows and exporting them")
+        errors.append("HT_PHÒNG export must wait for Save confirmation before rebuilding current detached rows and exporting them")
     if stale_export_pos >= 0:
         errors.append("HT_PHÒNG export must not export cached _rows after project reload/change")
 
@@ -45,4 +51,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] HT_PHÒNG XLSX export re-resolves existing project state after Save confirmation and never exports stale cached schedule data")
+print("[PASS] HT_PHÒNG XLSX export re-resolves existing project state after Save confirmation, regenerates a detached snapshot, and never exports stale cached schedule data")

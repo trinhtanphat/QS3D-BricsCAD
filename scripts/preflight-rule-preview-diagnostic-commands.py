@@ -133,6 +133,7 @@ if SOURCE.is_file():
         "ResolveSelectedSemanticIds(document, project)",
         "if (elementIds.Count == 0)",
         "if (dialog.ShowDialog() != true) return;",
+        "new RegenerationPreviewService().PreviewSubset(project, elementIds)",
         "new PreviewReviewSnapshotStore().Save(snapshot, dialog.FileName)",
         "ReportReviewExport(document, snapshot, dialog.FileName)",
     )
@@ -147,6 +148,16 @@ if SOURCE.is_file():
         "ProjectDiagnosticSummaryExporter.Export(dialog.FileName, project, issues)",
         "FinalizeExportUi(document,",
     )
+    dialog_at = diagnostic.find("if (dialog.ShowDialog() != true) return;")
+    if dialog_at >= 0:
+        before_dialog = diagnostic[:dialog_at]
+        for forbidden in (
+            "ComprehensiveModelHealthService",
+            "ProjectDiagnosticSummaryExporter.Export",
+        ):
+            if forbidden in before_dialog:
+                errors.append("Diagnostic Summary must validate project first but defer expensive scan/write until after Save confirmation: " + forbidden)
+
 if RULES.is_file() and "ProjectStateSnapshot.CreateDetachedCopy(project)" not in RULES.read_text(encoding="utf-8"):
     errors.append("Quantity rule preview lost detached-state execution.")
 
@@ -171,4 +182,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: preview/diagnostic commands validate existing project/selection state before opening export dialogs, previews execute through one engine on detached Core state, and Diagnostic Summary atomically publishes aggregate output.")
+print("PASS: preview/diagnostic commands validate existing project/selection state before Save dialogs, defer expensive preview/health work until confirmation, execute previews on detached Core state, and publish review/diagnostic output safely.")

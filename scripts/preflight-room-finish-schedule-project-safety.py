@@ -13,23 +13,23 @@ for path in (WINDOW, COMMAND):
 
 if WINDOW.is_file():
     text = WINDOW.read_text(encoding="utf-8")
-    if "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)" not in text:
-        errors.append("HT_Phòng modeless refresh/export must require an existing project")
-    if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
-        errors.append("HT_Phòng modeless schedule must not create/cache replacement project state")
-    if "DocumentBoundWindowLifetime.Attach(this, _document);" not in text:
-        errors.append("HT_Phòng modeless schedule must remain source-DWG bound")
-    if "RoomFinishScheduleBuilder.Build(snapshot)" not in text:
-        errors.append("HT_Phòng modeless schedule must use the authoritative builder")
-
     for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
         "ProjectStateSnapshot.CreateDetachedCopy(project)",
         "RegenerateDirty(snapshot)",
+        "RoomFinishScheduleBuilder.Build(snapshot)",
+        "DocumentBoundWindowLifetime.Attach(this, _document);",
     ):
         if token not in text:
-            errors.append("HT_Phong modeless schedule missing detached read-only token: " + token)
-    if "RegenerateDirty(project)" in text or "RoomFinishScheduleBuilder.Build(project)" in text:
-        errors.append("HT_Phong modeless schedule must not mutate or build from the live project")
+            errors.append("HT_Phòng modeless schedule missing detached/read-only token: " + token)
+    for forbidden in (
+        "ProjectContextCoordinator.GetOrCreate(_document)",
+        "ExistingProjectMutationContext",
+        "RegenerateDirty(project)",
+        "RoomFinishScheduleBuilder.Build(project)",
+    ):
+        if forbidden in text:
+            errors.append("HT_Phòng modeless schedule must not create/bind/regenerate live project state: " + forbidden)
 
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
@@ -55,4 +55,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] HT_Phòng modeless schedule remains source-DWG bound; command export resolves existing state read-only and regenerates a detached snapshot")
+print("[PASS] HT_Phòng modeless and command exports remain source-DWG/existing-project bound and regenerate detached read-only snapshots")

@@ -44,7 +44,8 @@ checks = {
     ],
     required[5]: [
         "private readonly Document _document", "DoorOpeningScheduleWindow(Document document)",
-        "ProjectStateSnapshot.CreateDetachedCopy(project)", "RegenerateDirty(snapshot)", "DoorOpeningScheduleBuilder.Build(snapshot)",
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(snapshot)", "DoorOpeningScheduleBuilder.Build(snapshot)",
         "DoorOpeningXlsxExporter.Export", "RegenerationEngine", "SearchText.Contains(query)", "Distinct(StringComparer.OrdinalIgnoreCase)",
         "DrawingLabel(_document)", "EnsureActive", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
         'EnsureActive("đọc Door/Opening Schedule hiện hành")', 'EnsureActive("xuất Door/Opening XLSX")',
@@ -71,12 +72,14 @@ for relative, needles in checks.items():
 
 for relative in (required[2], required[5]):
     path = ROOT / relative
-    if path.is_file():
-        text = path.read_text(encoding="utf-8")
-        if ".Sum(" in text:
-            errors.append(relative + " must not use unchecked LINQ Sum for schedule totals")
-        if "RegenerateDirty(project)" in text or "DoorOpeningScheduleBuilder.Build(project)" in text:
-            errors.append(relative + " must not mutate or build from the live project")
+    if not path.is_file():
+        continue
+    text = path.read_text(encoding="utf-8")
+    if ".Sum(" in text:
+        errors.append(relative + " must not use unchecked LINQ Sum for schedule totals")
+    for forbidden in ("RegenerateDirty(project)", "DoorOpeningScheduleBuilder.Build(project)"):
+        if forbidden in text:
+            errors.append(relative + " must not regenerate/build schedule from live read-only project state: " + forbidden)
 
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
@@ -88,4 +91,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: deterministic Door/Opening schedule, host provenance, overflow-safe summaries, XLSX export and cross-DWG-safe modeless review UI are present.")
+print("PASS: deterministic Door/Opening schedule, host provenance, detached read-only freshness, overflow-safe summaries, XLSX export and cross-DWG-safe modeless review UI are present.")

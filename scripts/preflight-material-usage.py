@@ -90,6 +90,18 @@ if schedule.is_file():
     ):
         if eager in text: errors.append("material usage schedule still evaluates a fallback eagerly: " + eager)
 
+command_source = ROOT / required[2]
+if command_source.is_file():
+    text = command_source.read_text(encoding="utf-8")
+    for forbidden in (
+        "ProjectContextCoordinator.GetOrCreate(document)",
+        "ExistingProjectMutationContext",
+        "RegenerateDirty(project)",
+        "MaterialUsageScheduleBuilder.Build(project)",
+    ):
+        if forbidden in text:
+            errors.append("Material Usage export must not create/bind/regenerate live project state: " + forbidden)
+
 commands = []
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
 if adapter.is_dir():
@@ -101,4 +113,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: material usage keeps lazy validation, checked aggregation, HT_Phòng quantity-priority parity, catalog units/provenance, and atomic XLSX through bound UI/command entry points.")
+print("PASS: material usage keeps lazy validation, checked aggregation, HT_Phòng quantity-priority parity, catalog units/provenance, detached read-only freshness, and atomic XLSX through bound UI/command entry points.")

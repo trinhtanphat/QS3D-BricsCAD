@@ -39,9 +39,9 @@ checks = {
         "RoomFinishXlsxExporter.Export", "SaveFileDialog", "HT-Phong.xlsx", "QuantityReportMath.AddCount", "QuantityReportMath.Add",
     ],
     required[3]: [
-        "private readonly Document _document", "ProjectStateSnapshot.CreateDetachedCopy(project)",
-        "RegenerateDirty(snapshot)", "RoomFinishScheduleBuilder.Build(snapshot)", "EnsureActive",
-        "QuantityReportMath.AddCount", "QuantityReportMath.Add", '"HT_Phòng visible length"', '"HT_Phòng visible area"',
+        "private readonly Document _document", "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)", "RegenerateDirty(snapshot)", "RoomFinishScheduleBuilder.Build(snapshot)",
+        "EnsureActive", "QuantityReportMath.AddCount", "QuantityReportMath.Add", '"HT_Phòng visible length"', '"HT_Phòng visible area"',
     ],
     required[4]: [
         "GroupsAreaAndLengthFinishesByRoom", "FamilyMaterialAndInstanceOverrideSplitRows",
@@ -64,12 +64,14 @@ for relative, needles in checks.items():
 
 for relative in (required[2], required[3]):
     path = ROOT / relative
-    if path.is_file():
-        text = path.read_text(encoding="utf-8")
-        if ".Sum(" in text:
-            errors.append(relative + " must not use unchecked LINQ Sum for schedule totals")
-        if "RegenerateDirty(project)" in text or "RoomFinishScheduleBuilder.Build(project)" in text:
-            errors.append(relative + " must not mutate or build from the live project")
+    if not path.is_file():
+        continue
+    text = path.read_text(encoding="utf-8")
+    if ".Sum(" in text:
+        errors.append(relative + " must not use unchecked LINQ Sum for schedule totals")
+    for forbidden in ("RegenerateDirty(project)", "RoomFinishScheduleBuilder.Build(project)"):
+        if forbidden in text:
+            errors.append(relative + " must not regenerate/build schedule from live read-only project state: " + forbidden)
 
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
@@ -80,4 +82,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: room-finish schedule keeps stable room provenance, stale/orphan exclusion, lazy quantity fallbacks, overflow-safe summaries, material inheritance and real XLSX export.")
+print("PASS: room-finish schedule keeps stable room provenance, stale/orphan exclusion, lazy quantity fallbacks, detached read-only freshness, overflow-safe summaries, material inheritance and real XLSX export.")
