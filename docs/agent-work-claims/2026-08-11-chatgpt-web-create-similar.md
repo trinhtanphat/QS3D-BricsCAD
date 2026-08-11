@@ -3,7 +3,7 @@
 - Status: `BLOCKED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-11T19:31:00+07:00`
-- Updated: `2026-08-11T21:18:00+07:00`
+- Updated: `2026-08-11T21:24:00+07:00`
 - Baseline main SHA: `0296f6f31e28a598474875805b934edc26c98e60`
 - Priority: reduce owner-reported authoring interactions by reusing an existing QS3D element's Family/Type for the next Direct Draw operation
 
@@ -37,55 +37,37 @@ Implement a source-safe **Create Similar / Vẽ Tương Tự** Direct Draw lane:
 - `80be0a78f41c5785c32ab996219850986b9e1994` + `8a6fbd195028250482b24ccde8cc35ef6b93f33c` — source/runtime contract documentation including the exact LOCAL-008 matrix and Ribbon qualification delta.
 - `466f19f7291fdd7a71258fba165dbb0725e8bac8`, `214c276d0d0d3c743e5efdd09f69274c6971eb7d`, `c71d9a2589007bbbd02be5fb6c6066d63841f6ca` — auto-discovered static gate, route-support parity check and initial Ribbon contract guard.
 - `ec9868a2139776b628479cfe2c042d4fd3e838db` — stable/idempotent `Vẽ Tương Tự` Quick Workflow Ribbon action mapped to `QS3DCREATESIMILAR`.
-- `43308f46f901550237a69708ed274f3c59375b37` — `fix(ribbon): isolate quick workflow panel`
-  - grouped-Ribbon integration defect is now fixed;
-  - Quick Workflow creates/reuses exact `QS3D_AUTHOR_QUICK_PANEL_SOURCE` / `Tác vụ nhanh` under `QS3D_AUTHOR` instead of searching the removed flat panel or falling back to the first grouped panel;
-  - existing Quick Workflow button IDs and click-time active-DWG routing remain intact.
-- `bc37e7ccf411ab97e9963ae1f125317417d2b6ff` — focused static guard for the dedicated Quick Workflow panel and no-first-panel-fallback rule.
-- `2f61ef490bcd357560cae52c007a568851cdda77` — documentation updated for deterministic grouped-Ribbon placement and exact local qualification delta.
+- `43308f46f901550237a69708ed274f3c59375b37` — `fix(ribbon): isolate quick workflow panel`; Quick Workflow now creates/reuses exact `QS3D_AUTHOR_QUICK_PANEL_SOURCE` / `Tác vụ nhanh` instead of falling back to an unrelated grouped authoring panel.
+- `bc37e7ccf411ab97e9963ae1f125317417d2b6ff` — focused guard for the dedicated Quick Workflow panel and no-first-panel-fallback rule.
+- `2f61ef490bcd357560cae52c007a568851cdda77` — documentation for deterministic grouped-Ribbon placement.
+- `87cf340b8cbf4fc560a51fc40c5b0cbade28f5ca` — `fix(ribbon): reconcile quick workflow button state`; every stable Quick Workflow button is find-or-create by ID and then has Name/Text/visibility/CommandParameter/CommandHandler reconciled on reinitialization instead of being skipped merely because the ID already exists.
+- `e39bc5deb3e3137961561acca3145f58bf5f19d9` — strengthened Create Similar/Ribbon preflight requiring find-or-create followed by stable-button state reconciliation and rejecting the former `CollectionContainsId(...); continue` path.
+- `e157ef48c5212cdcbc3fb80975ce1c9a9aa70167` — updated Create Similar documentation and LOCAL_ONLY matrix for stale stable-button repair during Ribbon reinitialize.
 
 The source lane deliberately does not duplicate Direct Draw category dispatch, generated-handle parsing, geometry builders, project bootstrap, semantic capture or regeneration logic.
 
-## Grouped Ribbon integration status
+## Remote/source status
 
-The previously confirmed flat-panel compatibility defect is **REMOTE_DONE**. Current `QuickWorkflowRibbonAugmenter` uses the dedicated `QS3D_AUTHOR_QUICK_PANEL_SOURCE` / `Tác vụ nhanh` panel and no longer contains the removed `QS3D_AUTHOR_PANEL_SOURCE` or `if (source == null) source = candidate;` fallback.
+Create Similar command behavior, generated/source ownership resolution, supported-Family routing, deterministic dedicated Quick Workflow panel placement and stable-button reinitialization are now **REMOTE_DONE** at source/contract level.
 
-The later `RibbonBootstrapper` reconciliation work also preserves unknown/dedicated augmenter panels while reconciling grouped QS3D-owned panels, so hot reconciliation does not intentionally delete the Quick Workflow panel.
+Ancestry verification against later `main` showed `87cf340b...`, `e39bc5de...` and `e157ef48...` each with `behind_by: 0` and itself as merge base. Concurrent Direct Draw, Quantity/BQ, updater and reporting work remained intact.
 
-## Additional source hardening — stable button reconciliation
+The focused Python/static gates are committed but were **not executed in this connector-only lane**. No GitHub Actions, local checkout/build, BricsCAD V25 launch, installer, signing or release was dispatched.
 
-A later audit of the completed legacy Ribbon augmenters confirmed one remaining hot-reload drift pattern in Quick Workflow itself: the loop currently skips any existing stable button ID with `if (CollectionContainsId(items, spec.Id)) continue;`. That prevents `Reset()` + reinitialize from repairing stale Text/CommandParameter/CommandHandler state created by an older loaded plugin version.
+## Only remaining blocker
 
-Because `QuickWorkflowRibbonAugmenter.cs` is already reserved by this Create Similar claim, this claim now explicitly owns the narrow compatibility follow-up: find-or-create each stable Quick Workflow button by ID, then reconcile its current presentation/command/handler state on every initialization without touching unrelated buttons. `scripts/preflight-create-similar.py` will be strengthened to guard this behavior for the `Vẽ Tương Tự` entry and to reject the old create-only `continue` pattern.
+The **only remaining claim close-out blocker** is the canonical `docs/LOCAL-AGENT-INBOX.md` update under existing `LOCAL-008`.
 
-This follow-up does not change Create Similar authoring semantics, command IDs, panel placement or the LOCAL_ONLY qualification boundary.
+The inbox is large and actively changing, while the available GitHub content update replaces the entire file rather than applying a bounded line patch. Replacing that canonical queue from partial/truncated remote reads risks deleting concurrent local evidence and violates the repository no-overwrite rule. The exact Create Similar V25 qualification delta is already recorded in `docs/DIRECT-DRAW-CREATE-SIMILAR-2026-08-11.md`, but that supporting document is not a second queue and cannot substitute for the canonical inbox edit.
 
-## Remaining blocker
+A patch-capable writer or local agent must update only `LOCAL-008`, preserving current evidence, to add: sample-picker cancel/no-bootstrap behavior; source/generated owner resolution; fail-closed ambiguity/missing-Family/category/unsupported cases; project/owner/ownership/DWG drift; Quick/Advanced cancellation/no-residue behavior with intentional Active Family selection allowed to remain; exact `Vẽ Tương Tự` Ribbon idempotence/active-document routing, dedicated Quick Workflow panel and stable-button reinitialize repair; sanitized evidence only.
 
-After the stable-button source hardening above is merged, the **only remaining claim close-out blocker** remains the canonical `docs/LOCAL-AGENT-INBOX.md` update under existing `LOCAL-008`.
-
-In this connector session that inbox is large and actively changing, while the available GitHub content write replaces the entire file rather than applying a bounded line patch. Replacing the whole inbox from partial/truncated remote reads would risk deleting concurrent local evidence and violates the repository no-overwrite rule.
-
-The exact Create Similar V25 qualification delta is already recorded in `docs/DIRECT-DRAW-CREATE-SIMILAR-2026-08-11.md`, but that supporting document is **not** a second queue and does not substitute for the canonical inbox edit. This claim therefore stays `BLOCKED` rather than being falsely marked complete.
-
-## Required unblock / successor action
-
-A patch-capable writer or local agent should update only `LOCAL-008` on the newest intended SHA, preserving all current evidence, to add:
-
-- `QS3DCREATESIMILAR` / `QS3DCREATESIMILARADV` sample-picker cancel with no project bootstrap/cache/Family mutation;
-- live semantic-source and generated-output owner resolution;
-- ambiguity/non-semantic/missing-Family/category-mismatch/unsupported-Family refusal before Active Family changes;
-- project reload/replacement, owner remap, source/generated ownership drift and active-DWG switch refusal;
-- Quick/Advanced delegated cancel/no-residue behavior while intentional sampled Family activation may remain;
-- exact one-button Ribbon idempotence/active-document routing, deterministic dedicated Quick Workflow panel placement and stable-button state reconciliation after reinitialize;
-- sanitized evidence only, with no private path/raw Handle list.
-
-After that bounded inbox change is pushed, this same claim can be marked `COMPLETED`; exact V25 execution remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until real evidence exists.
+After that bounded canonical inbox edit, this claim can be marked `COMPLETED`. Exact V25 execution remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until real evidence exists.
 
 ## Coordination
 
-The generated-native source-recognition lane explicitly excludes Create Similar command-side ownership. Workspace multi-selection/property-origin, grouped Ribbon IA, legacy augmenter compatibility, RibbonBootstrapper reconciliation and Reference/Project augmenter reconciliation lanes are completed. Other concurrent claims should not modify the Create Similar command/route/QuickWorkflowRibbonAugmenter surfaces while this blocker remains reserved unless the split is coordinated in both claims.
+Workspace multi-selection/property-origin, grouped Ribbon IA, RibbonBootstrapper reconciliation and Reference/Project augmenter reconciliation are completed. Other concurrent claims should not modify Create Similar command/route/QuickWorkflow surfaces while this blocked handoff remains reserved unless coordination is recorded first.
 
 ## Completion condition
 
-Quick Workflow source reconciliation is merged, `LOCAL-008` carries the exact Create Similar interactive qualification delta on current `main`, this claim is marked `COMPLETED`, and all live BricsCAD V25-only evidence remains explicitly unclaimed/LOCAL_ONLY.
+`LOCAL-008` carries the exact Create Similar interactive qualification delta on current `main`, this claim is marked `COMPLETED`, and all live BricsCAD V25-only evidence remains explicitly unclaimed/LOCAL_ONLY.
