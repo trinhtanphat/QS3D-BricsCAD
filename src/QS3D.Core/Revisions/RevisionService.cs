@@ -47,7 +47,9 @@ namespace QS3D.Core.Revisions
         public RevisionSnapshot Capture(ProjectState project, string revisionId)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var snapshot = new RevisionSnapshot { Id = revisionId ?? string.Empty, CreatedUtc = DateTime.UtcNow };
+            if (string.IsNullOrWhiteSpace(revisionId) || !string.Equals(revisionId, revisionId.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Revision id is required and must not contain leading/trailing whitespace.", nameof(revisionId));
+            var snapshot = new RevisionSnapshot { Id = revisionId, CreatedUtc = DateTime.UtcNow };
             var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
