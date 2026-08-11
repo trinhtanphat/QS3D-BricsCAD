@@ -63,9 +63,13 @@ namespace QS3D.Core.Formulas
 
             foreach (var pair in variables)
             {
-                if (normalized.ContainsKey(pair.Key))
-                    throw new InvalidOperationException($"Variable name '{pair.Key}' conflicts with another variable using different casing.");
-                normalized.Add(pair.Key, pair.Value);
+                if (string.IsNullOrWhiteSpace(pair.Key))
+                    throw new InvalidOperationException("Variable names cannot be blank or whitespace-only.");
+
+                var normalizedName = pair.Key.Trim();
+                if (normalized.ContainsKey(normalizedName))
+                    throw new InvalidOperationException($"Variable name '{pair.Key}' conflicts with another variable after trimming whitespace and ignoring casing.");
+                normalized.Add(normalizedName, pair.Value);
             }
 
             return normalized;

@@ -44,7 +44,19 @@ namespace QS3D.Core.Persistence
         {
             ValidateElement(container, container.Name.LocalName, Array.Empty<string>(), new[] { "p" });
             foreach (var property in container.Elements("p"))
+            {
                 ValidateElement(property, "p", new[] { "name", "value" }, Array.Empty<string>());
+                ValidateCanonicalMapKey(property, owner);
+            }
+        }
+
+        private static void ValidateCanonicalMapKey(XElement property, string owner)
+        {
+            var key = property.Attribute("name")?.Value;
+            if (string.IsNullOrWhiteSpace(key))
+                throw new InvalidDataException("QSDB " + owner + " key must not be empty.");
+            if (!string.Equals(key, key.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("QSDB " + owner + " key must not contain leading/trailing whitespace.");
         }
 
         private static void ValidateZones(XElement zones)
