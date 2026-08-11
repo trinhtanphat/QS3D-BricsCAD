@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -17,6 +18,8 @@ namespace QS3D.Core.SmokeTests
             ZoneAssignmentOverflowDoesNotCommit();
             ActiveFamilyOverflowDoesNotCommit();
             GridRenumberOverflowDoesNotCommit();
+            AutoRoomStaleOverflowDoesNotCommit();
+            AutoRoomFamilySyncOverflowDoesNotCommit();
             MaterialRenameOverflowDoesNotCommit();
             MaterialDeleteOverflowDoesNotCommit();
         }
@@ -120,6 +123,63 @@ namespace QS3D.Core.SmokeTests
             Equal("9", grid.Properties[GridNamingService.GridSequenceIndexKey], "Failed Grid renumber changed the sequence index.");
             Equal(ElementDirtyFlags.None, grid.Dirty, "Failed Grid renumber changed dirty flags.");
             AssertPersistenceUnchanged(project, beforeUtc, "Grid renumber");
+        }
+
+        private static void AutoRoomStaleOverflowDoesNotCommit()
+        {
+            var source = new ProjectState("P-AUTOROOM-STALE-ATOMIC", "Auto-room stale atomicity");
+            var room = new ProjectElement("ROOM-1", ElementCategory.Room, string.Empty, "L1", "Z1");
+            room.Properties[AutoRoomLifecycle.BoundaryModeKey] = AutoRoomLifecycle.BoundaryModeAutoNetwork;
+            room.Properties[AutoRoomLifecycle.BoundaryStateKey] = AutoRoomLifecycle.BoundaryStateActive;
+            room.Properties[AutoRoomLifecycle.BoundarySourceSignatureKey] = "A1";
+            room.MarkClean(ElementDirtyFlags.All);
+            source.Elements.Add(room);
+            var project = AtVersion(source, long.MaxValue);
+            var beforeUtc = project.UpdatedUtc;
+
+            Throws<OverflowException>(() => AutoRoomLifecycle.MarkStaleForSelection(
+                project,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>(new[] { "A1" }, StringComparer.OrdinalIgnoreCase),
+                "L1",
+                "Z1",
+                new DateTime(2026, 8, 11, 0, 0, 0, DateTimeKind.Utc)));
+
+            room = RequiredElement(project, "ROOM-1");
+            Equal(AutoRoomLifecycle.BoundaryStateActive, room.Properties[AutoRoomLifecycle.BoundaryStateKey], "Failed auto-room stale marking changed BoundaryState.");
+            if (room.Properties.ContainsKey("BoundaryStaleUtc") || room.Properties.ContainsKey("BoundaryStaleReason"))
+                throw new Exception("Failed auto-room stale marking persisted stale metadata.");
+            Equal(ElementDirtyFlags.None, room.Dirty, "Failed auto-room stale marking changed dirty flags.");
+            AssertPersistenceUnchanged(project, beforeUtc, "auto-room stale marking");
+        }
+
+        private static void AutoRoomFamilySyncOverflowDoesNotCommit()
+        {
+            var source = new ProjectState("P-AUTOROOM-FAMILY-ATOMIC", "Auto-room family sync atomicity");
+            var oldFamily = new ProjectFamily("F-ROOM-OLD", "Old room", ElementCategory.Room);
+            oldFamily.Properties["Finish"] = "Old";
+            var newFamily = new ProjectFamily("F-ROOM-NEW", "New room", ElementCategory.Room);
+            newFamily.Properties["Finish"] = "New";
+            source.Families.Add(oldFamily);
+            source.Families.Add(newFamily);
+            var room = new ProjectElement("ROOM-1", ElementCategory.Room, oldFamily.Id, string.Empty, string.Empty);
+            room.Properties["Finish"] = "Old";
+            room.MarkClean(ElementDirtyFlags.All);
+            source.Elements.Add(room);
+            var project = AtVersion(source, long.MaxValue);
+            var beforeUtc = project.UpdatedUtc;
+
+            room = RequiredElement(project, "ROOM-1");
+            newFamily = project.FindFamily("F-ROOM-NEW") ?? throw new Exception("Missing new room family fixture.");
+            Throws<OverflowException>(() => AutoRoomLifecycle.SyncFamilyDefaults(project, room, newFamily));
+
+            room = RequiredElement(project, "ROOM-1");
+            Equal("F-ROOM-OLD", room.FamilyId, "Failed auto-room family sync changed FamilyId.");
+            Equal("Old", room.Properties["Finish"], "Failed auto-room family sync changed inherited properties.");
+            if (project.Metadata.Keys.Any(x => x.StartsWith("AutoRoomFamilyDefault:ROOM-1:", StringComparison.OrdinalIgnoreCase)))
+                throw new Exception("Failed auto-room family sync persisted family-default snapshots.");
+            Equal(ElementDirtyFlags.None, room.Dirty, "Failed auto-room family sync changed dirty flags.");
+            AssertPersistenceUnchanged(project, beforeUtc, "auto-room family sync");
         }
 
         private static void MaterialRenameOverflowDoesNotCommit()
