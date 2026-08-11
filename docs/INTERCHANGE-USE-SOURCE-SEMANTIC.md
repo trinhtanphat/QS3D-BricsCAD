@@ -20,6 +20,7 @@ The importer re-reads and strictly validates the snapshot, re-plans against the 
 - replaced Floor/Family identities conservatively invalidate target elements that consume them;
 - semantic dependents and `HostWallId` dependents of replaced elements are included in the affected target set;
 - generated/native ownership metadata is cleared only after explicit native cleanup authorization when live target generated handles are involved;
+- cleanup authorization is bound to the exact generated-handle set observed during the reviewed plan;
 - `ProjectStateSnapshot` restores the target semantic state if the Core mutation throws.
 
 The importer mutates matching Zone/Floor/Family/Element objects in place where possible so a same-ID semantic replacement does not deliberately create a second semantic identity or unnecessarily detach existing model references.
@@ -28,9 +29,13 @@ The importer mutates matching Zone/Floor/Family/Element objects in place where p
 
 Core can identify target elements that currently claim generated/native owner handles through `GeneratedHandleOwnershipPolicy`, but Core cannot erase BricsCAD entities.
 
-`ProjectInterchangeUseSourceSemanticPlan.TargetElementIdsRequiringNativeCleanup` is therefore an explicit handoff boundary. If that list is non-empty, `Import(...)` refuses to mutate until the caller supplies `ProjectInterchangeNativeCleanupAuthorization` covering every required target element.
+`ProjectInterchangeUseSourceSemanticPlan.NativeCleanupRequirements` is the authoritative handoff boundary. Each requirement binds one target Element ID to the exact normalized generated-owner handle set that was observed during planning. `TargetElementIdsRequiringNativeCleanup` remains a convenience view for display/reporting, not a sufficient authorization token by itself.
 
-The authorization means the native adapter has already completed or transactionally staged cleanup for those exact semantic owners. It is not a command-line bypass and it is not evidence that the CAD deletion actually happened.
+A guarded native adapter should plan first, perform or transactionally stage cleanup for those exact handles, then create `ProjectInterchangeNativeCleanupAuthorization.ForPlan(plan)`. `Import(...)` re-plans against the current target and requires the authorization to match the entire current requirement set exactly before semantic mutation.
+
+This closes the stale-authorization window where the same Element ID could move from generated handle `H1` to `H2` after native cleanup: an authorization bound to `H1` is rejected when the current re-plan requires `H2`. An element-ID-only authorization created with legacy `ForElementIds(...)` remains source-compatible but is intentionally not handle-bound and therefore cannot authorize a plan that requires native generated-handle cleanup.
+
+The authorization means the native adapter has already completed or transactionally staged cleanup for those exact semantic owners and exact generated handles. It is not a command-line bypass and it is not evidence that the CAD deletion actually happened.
 
 A target element can be affected even when it is absent from the source snapshot. Examples include a target-only instance of a replaced Family, an element on a replaced Floor, or a dependent of a replaced semantic element. Those elements keep their target source handles/fingerprint, but their generated ownership metadata is cleared and they are marked dirty after authorized native cleanup.
 
@@ -79,16 +84,15 @@ Execution:
 
 1. validates current target state;
 2. validates and reads the source snapshot;
-3. re-plans the current collisions;
-4. computes affected targets and required native cleanup;
-5. rejects missing cleanup authorization before semantic mutation;
-6. captures `ProjectStateSnapshot`;
-7. applies catalog and element semantic replacement/addition;
-8. clears generated ownership for affected target-only elements;
-9. marks affected elements dirty;
-10. preserves target project/drawing/active-context identity;
-11. records import metadata and audit;
-12. validates the resulting target references.
+3. re-plans the current collisions and exact generated-handle cleanup requirements;
+4. rejects missing, element-ID-only or stale handle-bound cleanup authorization before semantic mutation;
+5. captures `ProjectStateSnapshot`;
+6. applies catalog and element semantic replacement/addition;
+7. clears generated ownership for affected target-only elements;
+8. marks affected elements dirty;
+9. preserves target project/drawing/active-context identity;
+10. records import metadata and audit;
+11. validates the resulting target references.
 
 Any Core exception after snapshot capture restores the previous semantic project state. This rollback does not roll back BricsCAD native cleanup; that is exactly why a future adapter command requires native transaction/recovery orchestration rather than calling this Core API directly from an unguarded command.
 

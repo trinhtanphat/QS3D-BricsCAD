@@ -22,8 +22,12 @@ test = read(TEST)
 doc = read(DOC)
 
 for token in (
+    "ProjectInterchangeNativeCleanupRequirement",
     "ProjectInterchangeUseSourceSemanticPlan",
+    "NativeCleanupRequirements",
     "ProjectInterchangeNativeCleanupAuthorization",
+    "ProjectInterchangeNativeCleanupAuthorization ForPlan",
+    "MatchesExactly",
     "ProjectInterchangeUseSourceSemanticResult",
     "InterchangeExistingIdentityAction.UseSourceSemanticData",
     "InterchangeGeneratedOutputResetPolicy.ClearOwnershipAndRequireRebuild",
@@ -46,6 +50,7 @@ for token in (
 for token in (
     "PlanClassifiesReplacementAndNativeCleanup",
     "ImportRejectsMissingNativeCleanupWithoutMutation",
+    "ImportRejectsStaleNativeCleanupHandleAuthorizationWithoutMutation",
     "ImportReplacesInPlaceAndInvalidatesAffectedTargetElements",
     "SemanticOnlyReplacementNeedsNoNativeAuthorization",
     "ConflictsFailBeforeMutation",
@@ -53,7 +58,8 @@ for token in (
     "GeneratedSolidHandle",
     "GeneratedRebarHandles",
     "ProjectInterchangeNativeCleanupAuthorization.None",
-    "ProjectInterchangeNativeCleanupAuthorization.ForElementIds",
+    "ProjectInterchangeNativeCleanupAuthorization.ForPlan",
+    'element.Properties["GeneratedSolidHandle"] = "BB22"',
 ):
     if token not in test:
         errors.append("UseSource semantic smoke missing regression token: " + token)
@@ -61,6 +67,7 @@ for token in (
 for token in (
     "semantic replacement",
     "native cleanup authorization",
+    "exact generated-handle set",
     "Core importer does not",
     "source handles",
     "generated ownership",
@@ -76,4 +83,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: UseSourceSemanticData is bounded to explicit semantic replacement, generated-output cleanup authorization, dirty rebuild, and rollback-safe Core mutation.")
+print("PASS: UseSourceSemanticData is bounded to exact handle-bound native cleanup authorization, semantic replacement, dirty rebuild, and rollback-safe Core mutation.")
