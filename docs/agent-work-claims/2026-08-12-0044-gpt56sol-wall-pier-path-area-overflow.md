@@ -1,6 +1,6 @@
 # Work claim — Wall-pier path area overflow
 
-- Status: `ACTIVE`
+- Status: `COMPLETED_NO_CHANGE`
 - Agent: `chatgpt-web-gpt56sol-wall-pier-path-area-overflow-20260812-0044`
 - Registered: `2026-08-12T00:44:00+07:00`
 - Baseline main SHA: `ad4f2f304fc449ba7ce59b5b904675a68d1fdc48`
@@ -8,29 +8,25 @@
 
 ## Reserved scope
 
-Make `WallPierPathProfilePlanner` use the canonical scale-safe polygon metric for footprint area instead of maintaining a raw-product duplicate implementation.
+Audit whether `WallPierPathProfilePlanner` needs an independent scale-safe footprint-area fix.
 
-## Expected surfaces
+## Finding
 
-- `src/QS3D.Core/Geometry/WallPierPathProfilePlanner.cs`
-- isolated focused Core smoke regression
-- this claim file for close-out
+The private `PolygonArea` helper does duplicate raw determinant arithmetic, but deeper call-chain validation showed the proposed failure is not independently reachable through `WallPierPathProfilePlanner.Plan`: `WallFootprintEngine.Build` computes the same footprint area earlier, using its own raw determinant path, before the wall-pier private area helper runs. A large-coordinate determinant-cancellation fixture therefore fails upstream first.
 
-## Concrete defect
+Applying a Wall-pier-only refactor would not fix the user-visible failure and would create a source change without an independently demonstrable regression. Per the repository's evidence-driven/no-speculative-change rule, no Wall-pier source edit was made under this claim.
 
-The private `PolygonArea` helper triangulates relative to an origin but still computes `ax * by - ay * bx` directly. As with the already hardened canonical `PolylineMetrics.SignedArea`, nearly parallel finite vectors around `1e160` can have overflowing component products while the final determinant/area remains finite. Wall-pier path profiles can therefore reject a representable footprint solely because this duplicate area implementation is numerically weaker than the canonical metric.
+## Follow-up
 
-## Explicit exclusions
+The actual upstream defect is in `WallFootprintEngine` (`SignedAreaRelative` and determinant-based segment intersection math). That upstream scope must be claimed separately before any source edit.
 
-- No wall-pier centerline/footprint generation, terminal chamfer geometry, miter policy, perimeter/volume/lateral-area semantics, native V25 authoring, UI, Actions, release, or LOCAL_PASS behavior changes.
+## Validation performed
 
-## Validation plan
+- Re-fetched `WallPierPathProfilePlanner.PolygonArea` and confirmed the duplicate raw cross path.
+- Re-fetched `WallFootprintEngine.Build`/`SignedAreaRelative` and confirmed the same determinant class is evaluated earlier on the generated footprint.
+- No source/test files changed under this claim.
+- No GitHub Actions dispatched and no BricsCAD V25 runtime/build/NETLOAD PASS claimed.
 
-- Route private footprint-area calculation through `PolylineMetrics.Area`, preserving positive-area validation and all downstream quantity formulas.
-- Add focused smoke coverage for a finite large-coordinate polygon through the area path where raw cross products overflow but canonical area remains finite.
-- Re-fetch target source before implementation and do not overwrite concurrent edits.
-- No GitHub Actions will be dispatched and no BricsCAD runtime PASS will be claimed from this web session.
+## Completion
 
-## Completion condition
-
-Wall-pier path area uses the canonical hardened polyline metric and no longer fails solely on duplicate raw-product overflow, focused regression is integrated on current `main`, and this claim is marked `COMPLETED`.
+Claim closed with no source change because the initially suspected Wall-pier-only defect is upstream-dominated; the correct fix surface is `WallFootprintEngine`.
