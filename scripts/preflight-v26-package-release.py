@@ -54,6 +54,12 @@ finalize = read("scripts/finalize-v26-signed-package.ps1")
 manifest = read("scripts/new-v26-update-manifest.ps1")
 workflow = read(".github/workflows/release-v26.yml")
 v26_project = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
+v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
+v26_release_client = read("src/QS3D.BricsCAD.V26/Updates/GitHubReleaseClient.cs")
+v26_manifest_probe = read("src/QS3D.BricsCAD.V26/Updates/UpdateManifestProbe.cs")
+v26_launcher = read("src/QS3D.BricsCAD.V26/Updates/SecureUpdateLauncher.cs")
+v26_update_command = read("src/QS3D.BricsCAD.V26/Updates/UpdateCommands.cs")
+v26_entry = read("src/QS3D.BricsCAD.V26/PluginEntry.cs")
 
 for token in (
     ".Replace('V25', 'V26').Replace('v25', 'v26')",
@@ -133,6 +139,48 @@ for text, label, template_name in (
     require(text, "contains a V25 token", label)
     require(text, "QS3D-BricsCAD-V26", label)
 
+# Release channel isolation: V25/V26 share a repository stream but only the exact
+# major-specific manifest asset makes a release eligible for that client's channel.
+for text, label, asset in (
+    (v25_release_client, "V25 release client", "QS3D-BricsCAD-V25.update.json"),
+    (v26_release_client, "V26 release client", "QS3D-BricsCAD-V26.update.json"),
+):
+    require(text, asset, label)
+    require(text, "if (manifestUri == null) continue;", label)
+    require(text, "UpdateManifestAssetName", label)
+for token in ("QS3D-BricsCAD-V25.update.json", "QS3D-BricsCAD-V25-Updater"):
+    forbid(v26_release_client, token, "V26 release client")
+
+for token in (
+    'private const string Target = "BricsCAD V26 x64";',
+    'request.UserAgent = "QS3D-BricsCAD-V26-Updater";',
+    '"QS3D-BricsCAD-V26.zip"',
+    "GitHubReleaseClient.UpdateManifestAssetName",
+    "schemaVersion 2",
+):
+    require(v26_manifest_probe, token, "V26 manifest probe")
+for token in ("BricsCAD V25 x64", "QS3D-BricsCAD-V25.zip", "QS3D-BricsCAD-V25.update.json"):
+    forbid(v26_manifest_probe, token, "V26 manifest probe")
+
+for token in (
+    "Global\\\\QS3D-BricsCAD-V26-Update-",
+    'Path.Combine(installDirectory, "update-v26.ps1")',
+    "TryVerifyAuthenticode",
+    "WinVerifyTrust",
+    "TryAcquireCrossProcessReservation",
+    "WorkerReadyTimeoutMilliseconds",
+    "-AllowedPackageHost @('github.com')",
+    "-ExpectedSignerThumbprint $expectedSigner",
+):
+    require(v26_launcher, token, "V26 secure update launcher")
+for token in ("QS3D-BricsCAD-V25-Update-", "update-v25.ps1"):
+    forbid(v26_launcher, token, "V26 secure update launcher")
+
+for token in ("QS3DUPDATE", "UpdateCenterWindowHost.Show()", "QS3DUPDATE V26 error"):
+    require(v26_update_command, token, "V26 update command")
+for token in ("UpdateBootstrapper.Start();", "UpdateBootstrapper.Stop();"):
+    require(v26_entry, token, "V26 PluginEntry")
+
 for token in (
     "workflow_dispatch:",
     "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
@@ -161,7 +209,14 @@ for token in ("QS3D-BricsCAD-V25", "BRICSCAD_V25_DIR", "bricscad-v25", "QS3D.Bri
 for trigger in ("\n  push:", "\n  pull_request:", "\n  schedule:", "\n  workflow_run:"):
     forbid(workflow, trigger, "V26 release workflow")
 
-for token in ("<TargetFramework>net8.0-windows</TargetFramework>", "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>"):
+for token in (
+    "<TargetFramework>net8.0-windows</TargetFramework>",
+    "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>",
+    "Updates\\SemanticReleaseVersion.cs",
+    "Updates\\UpdateBootstrapper.cs",
+    "Updates\\UpdateCenterWindow.cs",
+    "Updates\\UpdateCoordinator.cs",
+):
     require(v26_project, token, "V26 project")
 plugin_version = property_value("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj", "Version")
 plugin_info = property_value("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj", "InformationalVersion")
@@ -179,4 +234,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V26 packaging derives current hardened V25 transaction/security logic under a guarded major transform; package, signing, finalization, update assets and manual release stay V26-only while V25 remains untouched.")
+print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; V25/V26 release discovery is manifest-channel isolated; V26 signing/finalization/one-click update/release assets remain host-major specific.")
