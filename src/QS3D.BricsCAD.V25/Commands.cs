@@ -79,7 +79,6 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DED2", () =>
             {
-                if (!DrawingUnitWorkflow.EnsureResolved(doc, "QS3DED2")) return;
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
                     throw new InvalidOperationException("ED2 cần một QS3D project hiện hữu; export không tạo project mới.");
                 if (project.Elements.Count == 0)
@@ -132,7 +131,14 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
-                var snapshot = QS3D.Core.Persistence.ProjectStateSnapshot.CreateDetachedCopy(project);
+                var expectedProjectId = project.ProjectId;
+                if (!ExistingProjectMutationContext.TryGet(doc, out var canonicalProject))
+                    throw new InvalidOperationException("ED2 project không còn khả dụng sau khi xác nhận export; chưa tạo project mới.");
+                if (!string.Equals(canonicalProject.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("ED2 project đã thay đổi trong lúc chọn phạm vi/file; export bị chặn để tránh dùng state khác.");
+                if (!DrawingUnitWorkflow.EnsureResolved(doc, "QS3DED2")) return;
+
+                var snapshot = QS3D.Core.Persistence.ProjectStateSnapshot.CreateDetachedCopy(canonicalProject);
                 var regenerated = RegenerateProject(snapshot);
                 var details = elementIds == null
                     ? ProjectQuantityReportBuilder.Detail(snapshot)
