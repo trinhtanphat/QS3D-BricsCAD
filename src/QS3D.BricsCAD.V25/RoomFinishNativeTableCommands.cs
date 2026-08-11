@@ -20,10 +20,10 @@ namespace QS3D.BricsCAD.V25
             {
                 RequireModelSpace(document);
                 RequireSupportedUcs(document);
+                var project = RequireExistingProject(document, "Room Finish Table");
                 var point = document.Editor.GetPoint("\nChọn điểm đặt QS3D Room Finish Schedule Table: ");
                 if (point.Status != PromptStatus.OK) return;
                 var world = point.Value.TransformBy(document.Editor.CurrentUserCoordinateSystem);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
                 var handle = RoomFinishNativeTableBuilder.Build(document, project, world);
                 FinalizeUi(document, "Room Finish Table: đã tạo/cập nhật native Table " + handle + ".");
             }
@@ -38,7 +38,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 RequireModelSpace(document);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = RequireExistingProject(document, "Room Finish Table refresh");
                 var handle = RoomFinishNativeTableBuilder.Build(document, project, RoomFinishNativeTableBuilder.StoredPosition(project));
                 FinalizeUi(document, "Room Finish Table: đã refresh native Table " + handle + " tại WCS position đã lưu.");
             }
@@ -52,7 +52,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = RequireExistingProject(document, "Room Finish Table remove");
                 RoomFinishNativeTableBuilder.Remove(document, project);
                 FinalizeUi(document, "Room Finish Table: đã xóa owned native Table/metadata (nếu có).");
             }
@@ -84,6 +84,13 @@ namespace QS3D.BricsCAD.V25
                 Report(document, "Room Finish Table health: " + issues.Count + " issue(s).\n- " + string.Join("\n- ", visible) + suffix);
             }
             catch (Exception ex) { Report(document, "QS3DFINISHTABLEHEALTH lỗi: " + ex.Message); }
+        }
+
+        private static QS3D.Core.Domain.ProjectState RequireExistingProject(Document document, string operation)
+        {
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                throw new InvalidOperationException(operation + " cần một QS3D project hiện hữu; native schedule table không tạo project mới.");
+            return project;
         }
 
         private static void RequireModelSpace(Document document)
