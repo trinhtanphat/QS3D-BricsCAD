@@ -1,6 +1,6 @@
 # Work claim — updater generation-safe publication
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T00:07:00+07:00`
 - Baseline main SHA: `8eacf8db3b264304b168017fa0af1989251c2a33`
@@ -8,38 +8,47 @@
 
 ## Verified defect
 
-`UpdateCoordinator.CheckCoreAsync(...)` and `ScheduleLatestAsync()` currently test lifecycle freshness with `IsGenerationCurrent(generation)` and then call `Publish(...)` in a separate critical section. `Stop()` / `Start()` can advance `_generation` between those operations. A completed async check from the old lifecycle can therefore overwrite `_last` or enqueue `StateChanged` / `AutomaticUpdateFound` after a new lifecycle has started.
+`UpdateCoordinator.CheckCoreAsync(...)` and `ScheduleLatestAsync()` previously tested lifecycle freshness with `IsGenerationCurrent(generation)` and then called `Publish(...)` in a separate critical section. `Stop()` / `Start()` could advance `_generation` between those operations, allowing an old async lifecycle to overwrite `_last` or enqueue state/automatic-update events after a newer lifecycle had started.
 
-The dispatcher callback created by `Publish(...)` also has no generation guard. Even when the state write happened while the generation was current, a queued callback can run after `Stop()` / `Start()` and surface stale update state or an automatic-update notification in the new lifecycle.
+The old dispatcher callback also had no generation revalidation, so an event queued while generation N was active could run after `Stop()` / `Start()` moved the coordinator to a later generation.
 
-## Reserved scope
+## Reserved scope used
 
 - `src/QS3D.BricsCAD.V25/Updates/UpdateCoordinator.cs`
-- `scripts/preflight-update-generation-publish.py` (new)
-- `scripts/preflight-update-coordinator-lifecycle.py` (reconcile existing lifecycle gate with the new atomic publication contract; preserve all existing stopped/schedule assertions)
-- `docs/UPDATER-GENERATION-PUBLISH-PLAN-2026-08-12.md` (new)
+- `scripts/preflight-update-generation-publish.py`
+- `scripts/preflight-update-coordinator-lifecycle.py`
+- `docs/UPDATER-GENERATION-PUBLISH-PLAN-2026-08-12.md`
 - this claim file
 
-## Non-overlap / preservation
+## Implemented contract
 
-- Preserve current release selection, strict SemVer, signed-manifest pre-close validation, stopped-refresh behavior, in-flight single-flight semantics, cross-process update reservation, graceful host close and updater worker contracts.
-- Do not edit `SecureUpdateLauncher.cs`, `GitHubReleaseClient.cs`, installer/uninstaller scripts, manifest generation, release workflow, or unrelated product surfaces.
-- The lifecycle gate edit is compatibility reconciliation only: retain its existing Stop/restart, stopped manual refresh and lock-linearized schedule authorization checks while replacing assertions that require the now-removed split `IsGenerationCurrent(...)` + `Publish(...)` pattern.
-- No GitHub Actions dispatch and no release publication.
+1. `TryPublishCurrent(...)` now checks `_started` and the captured generation under `_sync` before mutating `_last`, so lifecycle freshness and state publication are one coordinator-critical operation.
+2. The dispatcher callback re-enters `_sync` and verifies the same generation again before invoking `StateChanged` or `AutomaticUpdateFound`, preventing queued callbacks from leaking across Stop/Start lifecycle boundaries.
+3. `Checking`, final success, final error, schedule failure and scheduled state all route through the generation-aware publisher where lifecycle ownership applies.
+4. Existing stopped-refresh behavior remains fail closed: `CheckAsync(...)` returns `_last` without launching network work when the coordinator is stopped.
+5. Existing lock-linearized `TryScheduleCurrentGeneration(...)` authorization is preserved; `SecureUpdateLauncher` and all signing/manifest/install/restart contracts were left untouched.
 
-## Intended contract
+## Commits
 
-1. Generation freshness and `_last` publication are one atomic coordinator operation.
-2. A stale generation cannot overwrite `_last` after `Stop()` / `Start()` advances lifecycle state.
-3. Dispatcher-delivered `StateChanged` / `AutomaticUpdateFound` revalidate the same generation before invoking subscribers.
-4. `Checking`, successful results, errors and scheduled-state publication all use the same generation-aware publication contract where lifecycle ownership matters.
-5. Existing `Stop()` behavior remains fail closed: stopped refreshes do not start network work and stale in-flight work can complete only as an un-published return value.
+- Claim registration: `d15cf5c19fe24350379c03d0c6dc0bb5bdb336cf`
+- Planning: `1ad5fcdb75f23803d077aadd607e7f45fce6ad31`
+- Claim scope reconciliation for existing lifecycle gate: `ff81ef7719c8d85b20a5d3f980e5aeb5761494ca`
+- Source fix: `f32808c84d8b509d64dfe1d46da6e1f39e4caec5`
+- Existing lifecycle gate reconciliation: `59c9ec210abd88e0e3636b3bf7c04a089eebfc6c`
+- Focused generation-publication regression gate: `7e4a16ae144406947ad930220715b7e9b2445e6d`
 
-## Validation / release conditions
+## Verification
 
-- Commit a planning MD before implementation.
-- Add an auto-discovered static regression pinning atomic generation publication and dispatcher revalidation, while rejecting the old split `IsGenerationCurrent(...)` + `Publish(...)` pattern in lifecycle-owned call sites.
-- Reconcile `preflight-update-coordinator-lifecycle.py` so the existing lifecycle regression keeps checking stopped-refresh and scheduling authorization but recognizes the atomic generation publisher.
-- Re-fetch exact source/gates and verify ancestry with `behind_by: 0` before closing.
-- BricsCAD V25 runtime behavior remains `LOCAL-009 / PENDING_LOCAL`; do not claim remote runtime PASS.
-- Mark this claim `COMPLETED` only after source + regression gates are committed on `main`.
+- Re-fetched exact committed `UpdateCoordinator.cs`, `preflight-update-coordinator-lifecycle.py` and `preflight-update-generation-publish.py` from current `main` after the gate commits.
+- Verified the real source-fix commit object `f32808c84d8b509d64dfe1d46da6e1f39e4caec5` changes only `UpdateCoordinator.cs` for this defect.
+- Against observed `main` `b26dfb463369d00b5c84f32c26047d62f59c9337`:
+  - source fix compare: `behind_by: 0`;
+  - lifecycle gate reconciliation compare: `behind_by: 0`;
+  - focused gate compare: `behind_by: 0`.
+- The old split `IsGenerationCurrent(...)` + `Publish(...)` implementation is no longer present in the committed coordinator; the lifecycle gate now rejects its return.
+- These are source/static regression contracts only. Real WPF dispatcher timing and BricsCAD V25 lifecycle qualification remain `LOCAL-009 / PENDING_LOCAL`.
+- No GitHub Actions workflow was dispatched and no release was created/published in this batch.
+
+## Outcome
+
+The updater no longer has a source-level race window where an obsolete lifecycle can pass a freshness check and publish after a newer lifecycle takes ownership, and queued dispatcher notifications are generation-checked again at delivery time. Claim released.
