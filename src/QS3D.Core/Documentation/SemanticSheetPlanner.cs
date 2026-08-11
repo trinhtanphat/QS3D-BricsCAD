@@ -103,6 +103,7 @@ namespace QS3D.Core.Documentation
     public static class SemanticSheetPlanner
     {
         private const int MaxCatalogSheets = 10000;
+        private const int MaxAvailableViews = 10000;
         private const int MaxPlacements = 128;
         private const int MaxIdLength = 128;
         private const int MaxNameLength = 160;
@@ -121,7 +122,8 @@ namespace QS3D.Core.Documentation
             PositiveFinite(definition.WidthMm, nameof(definition.WidthMm));
             PositiveFinite(definition.HeightMm, nameof(definition.HeightMm));
 
-            var viewIndex = BuildUniqueViewIndex(availableViews);
+            var views = MaterializeAvailableViewsBounded(availableViews);
+            var viewIndex = BuildUniqueViewIndex(views);
             if (definition.Placements.Count > MaxPlacements)
                 throw new InvalidOperationException("Semantic sheet supports at most " + MaxPlacements + " view placements.");
 
@@ -166,7 +168,7 @@ namespace QS3D.Core.Documentation
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
             if (availableViews == null) throw new ArgumentNullException(nameof(availableViews));
 
-            var views = availableViews.ToArray();
+            var views = MaterializeAvailableViewsBounded(availableViews);
             BuildUniqueViewIndex(views);
             var materialized = MaterializeCatalogBounded(definitions);
 
@@ -197,6 +199,21 @@ namespace QS3D.Core.Documentation
                 {
                     if (result.Count >= MaxCatalogSheets)
                         throw new InvalidOperationException("Semantic sheet catalog supports at most " + MaxCatalogSheets + " sheets.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result;
+        }
+
+        private static List<SemanticViewPlan> MaterializeAvailableViewsBounded(IEnumerable<SemanticViewPlan> availableViews)
+        {
+            var result = new List<SemanticViewPlan>(Math.Min(MaxAvailableViews, 256));
+            using (var enumerator = availableViews.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxAvailableViews)
+                        throw new InvalidOperationException("Semantic sheet planner supports at most " + MaxAvailableViews + " available views.");
                     result.Add(enumerator.Current);
                 }
             }
