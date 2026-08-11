@@ -74,6 +74,8 @@ The machine must have a licensed BricsCAD V25 installation and repository variab
 - `BRICSCAD_V25_PROFILE` when runtime validation uses a dedicated profile;
 - `QS3D_SIGNING_CERT_THUMBPRINT` and `QS3D_TIMESTAMP_SERVER` when `sign_package=true`.
 
+The production signing helper requires the selected CurrentUser certificate to be currently valid, expose an accessible private key and include an explicit Enhanced Key Usage extension containing the Code Signing OID `1.3.6.1.5.5.7.3.3`. EKU authorization is read from the structured OID collection, not localized certificate display text.
+
 Runtime/screenshot validation requires an interactive Windows session.
 
 For provisioning a dedicated Windows runner from a local/cached MSI, `scripts/install-bricscad-v25.ps1` treats the filename only as an advisory. Before invoking `msiexec`, the helper verifies the optional requested SHA-256, enforces the configured Authenticode publisher policy, reads the MSI Property table, requires ProductName to identify BricsCAD, and requires ProductVersion major 25. A renamed Bricsys-signed MSI for another BricsCAD major version must therefore fail before installation. This source-side identity check does not replace licensed first-launch/runtime qualification.
