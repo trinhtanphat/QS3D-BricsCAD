@@ -27,6 +27,14 @@ for path in (GENERIC, SCHEDULE):
         if token not in text:
             errors.append(label + " missing Unicode-safe project XData identity token: " + token)
 
+    owner_token = (
+        "project.Metadata[definition.OwnerProjectKey].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal"
+        if path == GENERIC
+        else "project.Metadata[keys.OwnerProjectId].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal"
+    )
+    if owner_token not in text:
+        errors.append(label + " must compare persisted owner metadata against the normalized ProjectId.")
+
     for forbidden in (
         "new TypedValue((int)DxfCode.ExtendedDataAsciiString, projectId.Trim())",
         "new TypedValue((int)DxfCode.ExtendedDataAsciiString, (projectId ?? string.Empty).Trim())",
@@ -41,4 +49,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: native documentation tables persist ASCII SHA-256 project identity tokens in QS3DDOC XData while readers retain legacy raw-ProjectId compatibility.")
+print("PASS: native documentation tables persist ASCII SHA-256 project identity tokens in QS3DDOC XData, preserve legacy raw-ProjectId reads, and normalize persisted owner metadata consistently.")
