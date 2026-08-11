@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             RoomFinishProvenanceReachesReleaseGuard();
             ProvenanceConflictDoesNotCrashReleaseGuard();
             NullSemanticEntryBlocksReleaseWithoutCrashing();
+            ExceptionDetailIsRedactedFromReleaseIssues();
         }
 
         private static void BasicBomGuard()
@@ -94,6 +95,8 @@ namespace QS3D.Core.SmokeTests
             Has(issues, "ROOM_PROVENANCE_CONFLICT");
             Has(issues, "BOM_EXCLUSION_FAILED");
             Has(issues, "BOM_REPORT_FAILED");
+            MessageEquals(issues, "BOM_EXCLUSION_FAILED", "Không thể quyết định an toàn cấu kiện có được đưa vào BQ hay không.");
+            MessageEquals(issues, "BOM_REPORT_FAILED", "Không thể dựng bảng khối lượng an toàn.");
         }
 
         private static void NullSemanticEntryBlocksReleaseWithoutCrashing()
@@ -106,6 +109,25 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Null semantic BOM entry must be an Error-level release blocker.");
         }
 
+        private static void ExceptionDetailIsRedactedFromReleaseIssues()
+        {
+            var project = new ProjectState("bom-redaction", "BOM redaction");
+            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+
+            var first = new ProjectElement("duplicate-beam", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            first.SetQuantity("NetConcreteM3", 1d);
+            first.MarkClean(ElementDirtyFlags.All);
+            var second = new ProjectElement("duplicate-beam", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            second.SetQuantity("NetConcreteM3", 2d);
+            second.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Has(issues, "BOM_TRACEABILITY_FAILED");
+            MessageEquals(issues, "BOM_TRACEABILITY_FAILED", "Không thể dựng provenance Handle an toàn cho cấu kiện.");
+        }
+
         private static void Empty(IReadOnlyList<ModelHealthIssue> issues)
         {
             if (issues.Count != 0) throw new Exception("Clean BOM fixture unexpectedly produced: " + string.Join(", ", issues.Select(x => x.Code)));
@@ -114,6 +136,15 @@ namespace QS3D.Core.SmokeTests
         private static void Has(IReadOnlyList<ModelHealthIssue> issues, string code)
         {
             if (!issues.Any(x => string.Equals(x.Code, code, StringComparison.Ordinal))) throw new Exception("Expected BOM issue " + code + ".");
+        }
+
+        private static void MessageEquals(IReadOnlyList<ModelHealthIssue> issues, string code, string expected)
+        {
+            var matches = issues.Where(x => string.Equals(x.Code, code, StringComparison.Ordinal)).ToList();
+            if (matches.Count == 0) throw new Exception("Expected BOM issue " + code + ".");
+            foreach (var issue in matches)
+                if (!string.Equals(issue.Message, expected, StringComparison.Ordinal))
+                    throw new Exception("Expected redacted message for " + code + ", got: " + issue.Message);
         }
 
         private static int Count(IReadOnlyList<ModelHealthIssue> issues, string code) =>
