@@ -1,9 +1,11 @@
 # Work claim — Room Finish mutation/regeneration safety
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-room-finish`
 - Registered: `2026-08-11T19:37:00+07:00`
 - Baseline main SHA: `3319fba7bf1b0845539ea0aec25536ab61335496`
+- Completed: `2026-08-11T19:48:00+07:00`
+- Result commit: `49bcaf114a200c70cab641fce86b78d8004dda71`
 - Priority: continue the localized-mutation hardening lane after scoped manual host-link regeneration; prevent a local Room Finish authoring operation from consuming unrelated project dirty state or violating rollback/lifecycle boundaries.
 
 ## Reserved scope
@@ -25,17 +27,18 @@ Audit and, only where current source proves a defect, harden the `QS3DFINISH` / 
 - No intentionally global `QS3DREGEN` / `QS3DREFRESH` behavior changes.
 - No BricsCAD V25 runtime PASS, GitHub Actions dispatch, release, installer or signing work.
 
-## Validation plan
+## Validation result
 
-- Inspect current `main` source to determine the exact Room Finish mutation set and regeneration behavior before changing code.
-- If a source defect exists, add/update static preflight coverage that fails on full-project regeneration or broken lifecycle/rollback ordering for this lane.
-- Compare the implementation commit against its base and re-fetch `main` plus active claims immediately before branch update.
-- Keep any required live BricsCAD V25 selection/Undo/save-reopen qualification explicitly LOCAL_ONLY and unclaimed remotely.
+Current `SemanticCaptureService.GenerateRoomFinishes` was already safe in product source: it acquires current-selection snapshots, filters Rooms by selected semantic reference handles, synchronizes only the matching Room Finish elements, and invokes `Regenerate(project, finish)` per synchronized finish. The audited method contains no full-project `RegenerateDirty(...)` or `RegenerateProject(...)` path, so unrelated pre-existing dirty semantic elements are not consumed by this localized authoring operation.
+
+Commit `49bcaf114a200c70cab641fce86b78d8004dda71` strengthens `scripts/preflight-room-finish-project-lifecycle.py` to require the element-scoped regeneration call and reject future full-project regeneration inside `GenerateRoomFinishes`. Existing selection-before-bind, canonical-existing-project, rollback snapshot, and synchronization guards remain in place.
+
+No product-source change was required. No GitHub Actions, C# build, BricsCAD V25 `NETLOAD`, private-DWG execution, Undo, or save/reopen runtime qualification was run or claimed in this lane; existing LOCAL-001 remains the owner of native V25 proof.
 
 ## Coordination
 
-Current neighboring active claims cover Create Similar and Workspace multi-policy plus registration protocol bootstrap; this reservation is limited to Room Finish semantic generation and does not edit those capabilities. If a later claim overlaps Room Finish before implementation begins, stop and re-scope rather than competing.
+The lane remained outside Direct Draw/Create Similar, Workspace, material refresh, modeless viewer, and Core mutation-atomicity claims. No neighboring agent claim was edited.
 
 ## Completion condition
 
-Current Room Finish source is either proven already safe with no product-source commit, or a focused source/preflight fix is merged to current `main`; the exact audited outcome and any LOCAL_ONLY residual are recorded here and the claim is marked `COMPLETED` or `RELEASED` accordingly.
+Satisfied: current Room Finish source is proven selection-scoped and element-regenerated, its static lifecycle preflight now locks that invariant, and no remote-only claim is made for native V25 runtime behavior.
