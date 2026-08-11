@@ -50,15 +50,13 @@ else:
         if not (empty_boundaries < require_existing < appeared_project < create_new < freshness < snapshot < mutate):
             errors.append("QS3DROOMAUTO must bind/create only after accepted topology, reject an appeared project on the no-project preview path, then revalidate context before snapshot/mutation")
 
-    regeneration_tokens = (
-        "SemanticCaptureService.SyncExistingRoomFinishes(project, element)",
-        "var staleRooms = AutoRoomLifecycle.MarkStaleForSelection(",
-        "var regenerationTargets = new HashSet<string>(activeRoomIds, StringComparer.OrdinalIgnoreCase);",
-        "foreach (var stale in staleRooms)",
-        "regenerationTargets.Add(stale.Id);",
-        ".RegenerateDirtySubset(project, regenerationTargets);",
-    )
-    regeneration_positions = [body.find(token) for token in regeneration_tokens]
+    sync_pos = body.find("SemanticCaptureService.SyncExistingRoomFinishes(project, element)")
+    mark_pos = body.find("var staleRooms = AutoRoomLifecycle.MarkStaleForSelection(")
+    target_pos = body.find("var regenerationTargets = new HashSet<string>(activeRoomIds, StringComparer.OrdinalIgnoreCase);")
+    stale_loop_pos = body.find("foreach (var stale in staleRooms)", target_pos)
+    add_pos = body.find("regenerationTargets.Add(stale.Id);", stale_loop_pos)
+    subset_pos = body.find(".RegenerateDirtySubset(project, regenerationTargets);", add_pos)
+    regeneration_positions = (sync_pos, mark_pos, target_pos, stale_loop_pos, add_pos, subset_pos)
     if any(position < 0 for position in regeneration_positions):
         errors.append("QS3DROOMAUTO missing scoped active/stale Room regeneration contract")
     elif not all(left < right for left, right in zip(regeneration_positions, regeneration_positions[1:])):

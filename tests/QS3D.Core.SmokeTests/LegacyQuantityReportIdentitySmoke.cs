@@ -41,6 +41,28 @@ namespace QS3D.Core.SmokeTests
                 () => QuantityReportTotals.FromRows(new QuantityReportRow[] { valid, null! }),
                 "rows",
                 "index: 1");
+
+            var negativeLength = new ElementInstance("Legacy-Negative-Length", family, "Floor") { LengthM = -1d };
+            ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(new[] { negativeLength }));
+
+            var negativeNet = new ElementInstance("Legacy-Negative-Net", family, "Floor")
+            {
+                GrossConcreteM3 = 1d,
+                DeductionM3 = 2d
+            };
+            ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(new[] { negativeNet }));
+
+            var negativeTotalRow = new QuantityReportRow { Count = 1, LengthM = -0.5d };
+            ExpectThrows<InvalidOperationException>(() => QuantityReportTotals.FromRows(new[] { negativeTotalRow }));
+
+            var project = new ProjectState("negative-report-project", "Negative report project");
+            project.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("zone", "Zone"));
+            project.Families.Add(new ProjectFamily("slab", "Slab", ElementCategory.Slab));
+            var projectElement = new ProjectElement("P1", ElementCategory.Slab, "slab", "floor", "zone");
+            projectElement.Quantities["LengthM"] = -1d;
+            project.Elements.Add(projectElement);
+            ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project));
         }
 
         private static void ExpectArgumentException(Action action, string paramName, string messagePart)

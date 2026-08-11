@@ -1,51 +1,39 @@
 # Work claim — Quantity Settings intersection rule browser
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-settings-intersection-browser`
 - Registered: `2026-08-11T21:25:00+07:00`
+- Completed: `2026-08-11T21:31:00+07:00`
 - Baseline main SHA: `19a40ff629122a0e2258c3a7a066a945e380a033`
 - Priority: P1 — direct screenshot-parity continuation of the owner-requested Setup & Rules workflow.
 
-## Reserved scope
+## Implemented
 
-- Replace the current 784-row-style flat Intersection Rules grid with a compact three-pane directed-rule browser matching the supplied workflow: primary component selector, reference component selector, and one editable selected directed rule.
-- Keep the full imported/native intersection matrix in memory and persistence; the browser edits exactly the selected existing source->target row rather than dropping/filtering unselected rules.
-- Expose the reverse target->source rule as a read-only summary plus an explicit "view reverse" navigation action, without inferring or changing engineering subtraction semantics.
-- Preserve unknown compatibility category codes and templates whose rule category codes are not present in the native enum/category-rule list.
+- `9c82be8ea5594475eed9609a3b6148de53096b20` — replaced the flat all-rules Intersection Rules grid with a compact three-pane browser: Cấu kiện chính, Cấu kiện tham chiếu, and one selected directed-rule editor. The right pane exposes the five existing persisted subtraction flags and a reverse-rule summary/navigation surface.
+- `f84ea990b8ca4727c318a6b432c27368ba1b85be` — added selector/browser behavior. Selector choices are rebuilt from the union of category-rule codes plus every intersection source/target code, so imported unknown compatibility codes remain selectable. A selected pair resolves only an existing exact `SourceCode -> TargetCode` row; missing pairs are displayed unavailable and are never synthesized. Reverse navigation swaps selectors only when the real reverse row exists.
+- `af2fb0874ad338f717451a4b21d9f4a40c49ef04` / `62c7276ff1e2c82ca9a761c2228b90caf2caf97c` — added and hardened `scripts/preflight-quantity-settings-intersection-browser.py`, including XAML well-formedness, three-pane wiring, directed lookup ordering, no silent rule creation, reverse navigation, and full-matrix persistence guards.
 
-## Expected surfaces
+## Preserved contracts
 
-- `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.xaml`
-- `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.xaml.cs`
-- `scripts/preflight-quantity-settings-intersection-browser.py`
-- this claim file for close-out
+- `BuildSettingsFromView()` still serializes every `IntersectionRows` entry, not only the selected row; import/export/reset therefore keep the complete matrix payload.
+- The browser does not mirror or copy A -> B values into B -> A. Both directions continue to be independent persisted rules.
+- No Core quantity arithmetic, intersection geometry, default values, schema fields, category-code mapping, `QuantitySettingsStore.cs`, Ribbon, shared Theme, Workspace/RightPanel, updater/release or Direct Draw source was changed.
+- No engineering subtraction semantics were inferred from the screenshots.
 
-## Excluded scope
+## Validation
 
-- No edits to `QuantitySettingsStore.cs` or its recovery preflight; the active local V25 build-compatibility claim owns those files.
-- No changes to Core quantity arithmetic, intersection geometry, default rule values, schema fields, category-code mapping, Ribbon, shared `Theme.xaml`, Workspace/RightPanel, updater/release or Direct Draw.
-- No claim that BLT-compatible numeric rules are production-engine semantics; this is UI/navigation over the existing persisted directed rule payload only.
-- No GitHub Actions dispatch.
+- Re-fetched current `QuantitySettingsWindow.xaml` after implementation and confirmed the three-pane source/reference/editor structure, selected-rule checkboxes, reverse summary/navigation, and removal of the flat `ItemsSource={Binding IntersectionRows}` grid from this tab.
+- Re-fetched current `QuantitySettingsWindow.xaml.cs` and confirmed union selector construction, exact directed `SingleOrDefault` row resolution, explicit missing-pair refusal, reverse-row lookup/swap, and complete `IntersectionRows.Select(...).ToList()` persistence.
+- Re-fetched the focused preflight after its final hardening; it is auto-discovered by `scripts/preflight-all.py` and also parses the XAML as XML before checking the source contract.
+- GitHub exposes no combined status checks for the final preflight commit. No GitHub Actions workflow was dispatched.
 
-## Functional contract
+## Coordination / LOCAL_ONLY
 
-- Selector choices are the union of category-rule codes and all intersection source/target codes, so unknown imported compatibility codes remain addressable.
-- Source and target selection resolves at most one existing directed row; a missing pair is displayed as unavailable and is not silently created.
-- Editing the detail checkboxes mutates only that selected row object; `BuildSettingsFromView()` continues serializing every `IntersectionRows` entry.
-- Reverse-rule display uses the actual existing reverse row and navigation swaps selectors; it does not mirror/copy values between A->B and B->A.
-- Template import/reset refreshes the browser choices and selects a deterministic first available pair.
+- The separate active local Quantity Settings V25 build-fix lane owns only `QuantitySettingsStore.cs` plus its recovery gate and explicitly excludes UI behavior; this lane did not touch those files.
+- A later Core runtime-rule-resolution claim explicitly excludes this UI browser and is non-overlapping.
+- Exact BricsCAD V25 WPF rendering, keyboard/mouse interaction and DPI qualification remain part of the existing local UI/runtime qualification queue; no duplicate LOCAL inbox item and no remote runtime PASS were created.
 
-## Validation plan
+## Completion evidence
 
-- Re-fetch current `main` and both UI files before implementation; preserve concurrent winners.
-- Add a focused auto-discovered static preflight requiring union selector construction, exact directed-row lookup, no missing-pair creation, reverse navigation, and full `IntersectionRows` persistence.
-- Re-fetch final source/current main and source-review for no arithmetic/engine changes; do not dispatch Actions.
-
-## Coordination
-
-- The active Quantity Settings V25 build-fix lane is limited to `QuantitySettingsStore.cs` plus its recovery gate and explicitly excludes UI behavior, so these UI files are non-overlapping.
-- The active premium theme lane owns shared `Theme.xaml`; this window keeps its existing local styles and does not alter shared resources.
-
-## Completion condition
-
-- Setup & Rules has a compact primary/reference/directed-rule interaction matching the supplied screenshot at source level, preserves all rule payloads/unknown codes, is regression-guarded, and this claim is marked `COMPLETED` with exact implementation evidence.
+- Setup & Rules now presents the requested source/reference pair interaction without hiding or discarding the full directed rule matrix.
+- Current source/test tip for this lane: `62c7276ff1e2c82ca9a761c2228b90caf2caf97c`; subsequent concurrent main commits were preserved and no force push was used.

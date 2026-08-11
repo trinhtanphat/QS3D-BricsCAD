@@ -2,35 +2,39 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11T21:27:00+07:00
-- Status: `ACTIVE`
+- Completed: 2026-08-11T21:29:00+07:00
+- Status: `COMPLETED`
 - Baseline main SHA: `710e692d20aacfd294db41660b6ee128019025cd`
 - Priority: source-safe Rebar geometry hardening; reject rectangular slab mesh layouts whose second stacked bar layer crosses the opposite concrete-cover boundary when only one slab face is enabled.
 
 ## Confirmed defect
 
-`RectangularSlabMeshPlanner.Plan(...)` computes stacked X/Y elevations for each slab face. Its single-face branch checks only the near cover boundary: bottom-only validates the lower occupied edge and top-only validates the upper occupied edge. A thin slab can therefore pass while the farther stacked layer crosses the opposite usable cover plane.
+`RectangularSlabMeshPlanner.Plan(...)` computed stacked X/Y elevations for each slab face, but its single-face branch checked only the near cover boundary: bottom-only validated the lower occupied edge and top-only validated the upper occupied edge. A thin slab could therefore pass while the farther stacked layer crossed the opposite usable cover plane.
 
-## Reserved scope
+## Implemented
 
-- `src/QS3D.Core/Rebar/RectangularSlabMeshPlanner.cs`
-- `tests/QS3D.Core.SmokeTests/RectangularSlabMeshCoverRegressionSmoke.cs`
-- this claim file for close-out
+- `9c840b471bd37714b85ae18f6fe34809ac107527` — `fix(rebar): enforce rectangular slab single-face cover`
+  - defines the usable slab depth between both concrete-cover planes;
+  - bottom-only and top-only branches now validate the complete occupied low/high envelope of both stacked bar directions;
+  - leaves the existing dual-face separation branch and all distribution/bar-cap behavior unchanged.
+- `ef67a548f05cf3b00b3271ea957886d4b5bd062f` — `test(core): cover rectangular slab mesh depth`
+  - adds deterministic bottom-only/top-only thin-slab rejection;
+  - keeps valid single-face and dual-face success coverage;
+  - uses the established net8 Core smoke `[ModuleInitializer]` registration pattern.
 
-## Functional contract
+## Validation evidence
 
-- bottom-only and top-only meshes must keep the entire occupied X/Y bar envelope within `[-halfThickness + cover, halfThickness - cover]`;
-- preserve existing dual-face separation, X/Y closest-to-face ordering, spacing/count/bar-cap behavior, and finite-input guards;
-- do not change polygonal slab code, wall mesh, CAD/native generation, UI, persistence, quantities, updater, Ribbon, or other concurrent lanes.
+- Re-fetched `src/QS3D.Core/Rebar/RectangularSlabMeshPlanner.cs` from newer current `main`; the full single-face low/high cover-envelope guards remain present.
+- Re-fetched `tests/QS3D.Core.SmokeTests/RectangularSlabMeshCoverRegressionSmoke.cs` from newer current `main`; regression coverage remains intact.
+- The Core smoke project is SDK-style `net8.0`, and the repository already uses `[ModuleInitializer]` registration for Rebar smoke files.
+- No GitHub Actions workflow was dispatched and no smoke-executable run is claimed from this connector-only lane.
+- No BricsCAD V25/native runtime claim is required for this pure Core planner invariant.
 
-## Validation target
+## Reserved scope honored
 
-- deterministic bottom-only thin-slab rejection;
-- symmetric top-only rejection;
-- valid single-face layout still succeeds;
-- valid dual-face layout still contains both faces;
-- use the existing net8 Core smoke `[ModuleInitializer]` registration pattern;
-- no GitHub Actions dispatch and no claim of remote BricsCAD V25 runtime PASS.
+- Changed only `RectangularSlabMeshPlanner.cs`, the focused rectangular slab Core smoke file, and this claim close-out.
+- Did not change polygonal slab, wall mesh, CAD/native generation, UI, persistence, quantities, updater, Ribbon, Direct Draw, or other concurrent lanes.
 
-## Completion condition
+## Completion
 
-The rectangular single-face full-depth cover invariant is enforced and regression-locked on current `main`, source evidence is re-fetched after concurrent updates, and this claim is marked `COMPLETED` with exact implementation/test SHAs.
+Completed. The rectangular single-face full-depth cover invariant is enforced and regression-locked in source on `main`; exact implementation and test SHAs are recorded above.

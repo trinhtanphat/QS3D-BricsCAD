@@ -300,12 +300,37 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void LocateCurrent()
         {
-            if (_locate == null || !(QuantityGrid.SelectedItem is QuantityReportRow row)) return;
+            if (!(QuantityGrid.SelectedItem is QuantityReportRow row)) return;
             try
             {
                 EnsureCurrentProject("định vị BQ");
+                var displayedHandles = CanonicalIds(row.SourceHandles);
                 var currentRow = ResolveCurrentRow(row);
-                _locate(currentRow);
+                var liveHandles = CanonicalIds(currentRow.SourceHandles);
+                if (liveHandles.Length > 0)
+                {
+                    var selectedCount = Cad.CadHandleService.Select(_document, liveHandles);
+                    var expectedCount = displayedHandles.Length > 0 ? displayedHandles.Length : liveHandles.Length;
+                    if (selectedCount <= 0)
+                    {
+                        PaletteCoordinator.SetStatus("BQ Định vị: không còn đối tượng CAD hợp lệ trong " + expectedCount + " handle của dòng này.");
+                        return;
+                    }
+
+                    PaletteCoordinator.SetStatus(selectedCount < expectedCount
+                        ? "BQ Định vị: đã chọn " + selectedCount + "/" + expectedCount + " đối tượng CAD; " + (expectedCount - selectedCount) + " handle đã mất hoặc không còn hợp lệ."
+                        : "BQ Định vị: đã chọn " + selectedCount + " đối tượng CAD.");
+                    _document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                    return;
+                }
+
+                if (_locate != null)
+                {
+                    _locate(currentRow);
+                    return;
+                }
+
+                PaletteCoordinator.SetStatus("BQ Định vị: dòng này không còn CAD handle hợp lệ để chọn.");
             }
             catch (Exception ex) { MessageBox.Show(this, "Không thể định vị: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
         }
@@ -313,8 +338,12 @@ namespace QS3D.BricsCAD.V25.UI
         private QuantityReportRow ResolveCurrentRow(QuantityReportRow displayedRow)
         {
             var displayedIds = CanonicalIds(displayedRow.ElementIds);
+            var displayedHandles = CanonicalIds(displayedRow.SourceHandles);
+            if (displayedIds.Length == 0 && displayedHandles.Length == 0)
+                throw new InvalidOperationException("Dòng BQ này không có semantic ElementId hoặc CAD handle ổn định để định vị an toàn.");
+
             if (displayedIds.Length == 0)
-                throw new InvalidOperationException("Dòng BQ này không có semantic ElementId ổn định để định vị an toàn.");
+                return ResolveSourceHandleRow(displayedRow, displayedHandles);
 
             var currentRows = _detailMode ? RecalculateDetailRows() : RecalculateSummaryRows(true);
             var matches = currentRows.Where(x => x != null && SameElementIdentity(displayedIds, x)).ToList();
@@ -325,10 +354,50 @@ namespace QS3D.BricsCAD.V25.UI
             return matches[0];
         }
 
+        private QuantityReportRow ResolveSourceHandleRow(QuantityReportRow displayedRow, string[] expectedHandles)
+        {
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject))
+                throw new InvalidOperationException("BQ Định vị cần một QS3D project hiện hữu để xác nhận drawing hiện hành.");
+
+            var unit = Cad.CadUnitService.GetDrawingUnit(_document);
+            var snapshots = Cad.EntitySnapshotReader.ReadHandles(_document, expectedHandles);
+            if (snapshots.Count == 0)
+                throw new InvalidOperationException("Không còn CAD handle nào của dòng BQ tồn tại trong bản vẽ hiện hành.");
+
+            var currentRows = SnapshotQuantityAdapter.Build(snapshots, unit);
+            foreach (var current in currentRows) current.DrawingFingerprint = currentProject.DrawingFingerprint;
+            var matches = currentRows.Where(x => x != null && SameSourceGroupIdentity(displayedRow, x)).ToList();
+            if (matches.Count != 1)
+                throw new InvalidOperationException("Các CAD handle của dòng BQ đã đổi loại/layer hoặc không còn tạo thành một nhóm định vị duy nhất. Tính lại BQ trước khi tiếp tục.");
+
+            var currentRow = matches[0];
+            var currentHandles = CanonicalIds(currentRow.SourceHandles);
+            if (currentHandles.Length == 0 || currentHandles.Any(x => !expectedHandles.Contains(x, StringComparer.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("CAD handle của dòng BQ không còn khớp drawing hiện hành.");
+
+            if (currentHandles.Length == expectedHandles.Length && !SameRow(displayedRow, currentRow))
+                throw new InvalidOperationException("Dòng BQ đã thay đổi kể từ lúc bảng được mở. Tính lại BQ trước khi định vị.");
+
+            return currentRow;
+        }
+
         private static bool SameElementIdentity(string[] expectedIds, QuantityReportRow candidate)
         {
             var currentIds = CanonicalIds(candidate.ElementIds);
             return expectedIds.SequenceEqual(currentIds, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static bool SameSourceGroupIdentity(QuantityReportRow expected, QuantityReportRow candidate)
+        {
+            return string.Equals(expected.Floor, candidate.Floor, StringComparison.Ordinal) &&
+                   string.Equals(expected.Zone, candidate.Zone, StringComparison.Ordinal) &&
+                   string.Equals(expected.Category, candidate.Category, StringComparison.Ordinal) &&
+                   string.Equals(expected.FamilyId, candidate.FamilyId, StringComparison.Ordinal) &&
+                   string.Equals(expected.FamilyName, candidate.FamilyName, StringComparison.Ordinal) &&
+                   string.Equals(expected.ElementName, candidate.ElementName, StringComparison.Ordinal) &&
+                   string.Equals(expected.Material, candidate.Material, StringComparison.Ordinal) &&
+                   string.Equals(expected.Note, candidate.Note, StringComparison.Ordinal) &&
+                   string.Equals(expected.DrawingFingerprint, candidate.DrawingFingerprint, StringComparison.Ordinal);
         }
 
         private static string[] CanonicalIds(IEnumerable<string> values)

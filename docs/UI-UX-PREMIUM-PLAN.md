@@ -1,318 +1,371 @@
 # QS3D UI/UX Premium / Professional / Luxury Plan
 
-**Updated:** 2026-08-10 (UTC+7)  
+**Updated:** 2026-08-11 (UTC+7)  
 **Product:** `trinhtanphat/QS3D-BricsCAD`  
-**Scope:** BricsCAD V25 x64 plugin UI — Ribbon, palettes and modeless WPF windows hosted inside BricsCAD.
+**Scope:** BricsCAD V25 x64 plugin UI — Ribbon, palettes and modeless WPF windows hosted inside BricsCAD.  
+**Runtime reference:** owner-supplied BricsCAD screenshot from `MB MONG.dwg` on 2026-08-11.
 
-## 1. Product direction
+## 1. Executive direction
 
-QS3D should look like a high-end professional CAD/BIM tool, not a decorative desktop app.
+QS3D must feel like a mature, high-end BIM/CAD extension rather than a collection of utility panels.
 
-The visual target is:
+The visual target is deliberately restrained:
 
-- **Premium:** crisp typography, strong contrast, consistent spacing, deliberate active/hover/focus states.
-- **Professional:** dense enough for quantity/BIM work, predictable command hierarchy, no wasted chrome, no ambiguity between destructive and primary actions.
-- **Luxury:** restrained dark neutral surfaces with one cool blue action accent and a very limited warm premium accent for branding/status emphasis only.
-- **CAD-first:** the BricsCAD viewport remains visually dominant. Palettes must not compete with the drawing through gradients, glow, blur, large shadows or animation-heavy effects.
-- **Vietnamese-first:** Vietnamese labels remain primary and readable at narrow palette widths; technical English is used only where it is genuinely part of a BIM/CAD term or identifier.
+- **Premium** — crisp typography, high contrast, deliberate hierarchy, polished hover/focus/selected/disabled states.
+- **Professional** — dense enough for engineering work, minimal wasted space, stable action placement and predictable semantics.
+- **Luxury** — deep graphite/navy surfaces plus a restrained champagne accent used only for hierarchy/branding; never a gold-heavy decorative skin.
+- **CAD-first** — BricsCAD's native drawing/model viewport remains visually dominant.
+- **Vietnamese-first** — Vietnamese labels must stay legible at narrow palette widths and 100–200% DPI.
+- **Host-safe** — critical control chrome must not depend on Windows/BricsCAD system themes that can leak light backgrounds or black text into dark QS3D surfaces.
+- **Fast** — no blur, acrylic, glow, heavy shadows, animated gradients or per-row effects that make modeless palettes feel sluggish.
 
-QS3D remains a BricsCAD-hosted plugin. This plan does not introduce a standalone shell or replace BricsCAD's native viewport.
+QS3D remains a BricsCAD-hosted plugin. This plan does not create a standalone shell or a replacement CAD viewport.
 
-## 2. Immediate screenshot issue — heading becomes black
+## 2. Runtime screenshot review
 
-The supplied runtime screenshot shows headings such as **“ĐỐI TƯỢNG ĐANG CHỌN”** rendering black/dark on a dark palette.
+The supplied screenshot shows that the information architecture is already useful, but the presentation still reads as an early engineering UI.
 
-Root source risk:
+### 2.1 Visible weaknesses
 
-- Workspace headings use the keyed `PanelTitle` WPF style.
-- A keyed `TextBlock` style does not automatically inherit the implicit `TextBlock` style.
-- If `PanelTitle` does not explicitly set `Foreground`, a host/system foreground can leak through while QS3D is embedded in a BricsCAD palette.
+1. **Light/native control chrome inside a dark palette.** Zone/Floor ComboBoxes and some native WPF controls still appear gray/light because setters alone do not fully replace host/system templates.
+2. **Weak surface separation.** Adjacent panels are close in tone, so Family/Type, selected objects, properties, Xref and layer sections blend together.
+3. **Inconsistent command hierarchy.** Primary, secondary and destructive buttons are often similar in shape/weight.
+4. **Scrollbars look system-default.** The bright native scrollbar is visually disconnected from the rest of the dark UI.
+5. **Section hierarchy is too utilitarian.** Headings, subheadings and metadata lack a premium rhythm.
+6. **Lists/tables are dense but not refined.** Header chrome and selection states need stronger consistency.
+7. **The warm premium accent is underused as hierarchy.** Luxury should come from controlled typography/dividers/badges, not decorative gradients.
+8. **Host-dependent foreground is dangerous.** The earlier black-heading issue proves keyed styles must explicitly own their foreground.
 
-### P0 fix
+### 2.2 What should *not* change
 
-`PanelTitle` must explicitly use `TextBrush` (`TextPrimary`) so headings stay high-contrast regardless of host defaults.
+- Keep the current BricsCAD viewport.
+- Keep current command handlers, bindings and semantic behavior.
+- Keep dense palette workflows.
+- Do not add decorative buttons or fake controls.
+- Do not turn all controls blue or gold.
+- Do not make the palette look like a mobile/web dashboard.
 
-The theme preflight must guard this contract so future refactors cannot accidentally remove the explicit foreground.
-
-## 3. Design system
+## 3. Design system v2
 
 ### 3.1 Surface hierarchy
 
-Use three main dark surfaces:
+| Token | Role |
+| --- | --- |
+| `BgCanvas` | deepest workspace/palette background |
+| `BgPanel` | normal section surface |
+| `BgElevated` | cards, table regions, popup surfaces |
+| `BgRaised` | headers and elevated command chrome |
+| `BgInput` | TextBox/ComboBox input surface |
+| `BgHover` | hover state |
+| `BgSelected` | selected semantic/list row |
+| `BgPressed` | active/pressed secondary action |
+
+The palette uses graphite with a subtle navy bias. Pure black is avoided to reduce glare.
+
+### 3.2 Border hierarchy
 
 | Token | Role |
 | --- | --- |
-| `BgCanvas` | deepest workspace/background surface |
-| `BgPanel` | normal palette/card surface |
-| `BgElevated` | inputs, table headers and elevated controls |
-| `BgHover` | hover state |
-| `BgSelected` | selected row/object state |
-| `BgPressed` | pressed/active command state |
+| `BorderWeak` | structural separators |
+| `BorderStrong` | inputs/cards/header edges |
+| `BorderFocus` | keyboard/mouse focus |
+| `BorderLuxury` | rare champagne-accented premium surfaces |
 
-Avoid pure black. Near-black neutral surfaces reduce glare while keeping CAD geometry dominant.
+Focus must be immediately visible without glow.
 
-### 3.2 Text hierarchy
+### 3.3 Text hierarchy
 
-| Token | Use |
+| Token | Role |
 | --- | --- |
-| `TextPrimary` | headings, values, normal controls |
-| `TextSecondary` | captions, metadata, section labels |
-| `TextDisabled` | disabled controls only |
+| `TextPrimary` | section titles, values, normal command text |
+| `TextSecondary` | captions and metadata |
+| `TextMuted` | tertiary context |
+| `TextDisabled` | unavailable controls only |
 
-Rules:
+No keyed title style may rely on host foreground inheritance.
 
-- Primary text must remain near-white on all dark palette surfaces.
-- Section labels may be muted but cannot become low-contrast gray-on-gray.
-- Disabled text should be visually distinct from read-only values.
-- Read-only CAD provenance should be muted, not hidden.
+### 3.4 Accent hierarchy
 
-### 3.3 Accent hierarchy
+- **Blue** — primary action, focus, selection.
+- **Champagne** — section/group hierarchy and rare premium badges only.
+- **Green** — success/healthy.
+- **Amber** — review/warning.
+- **Red** — destructive/error.
 
-- **Blue (`Accent`)** — primary action, selected state, focus border.
-- **Green (`Success`)** — success/healthy status only.
-- **Amber (`Warning`)** — warning/review state only.
-- **Red (`Danger`)** — destructive/error state only.
-- **Warm premium (`Luxury`)** — rare branding/badge/divider emphasis. Do not use it for normal commands or CAD semantics.
+The champagne accent is intentionally muted. It should make QS3D feel expensive, not ornamental.
 
-This prevents a “luxury” look from turning into a gold-heavy theme that reduces engineering clarity.
+### 3.5 Typography
 
-### 3.4 Typography
+- Font family: `Segoe UI` for Windows/BricsCAD compatibility.
+- Body/control: 11 px.
+- Caption/group label: 9.5 px.
+- Table header: 10 px.
+- Palette title: 12 px, semibold.
+- Dense engineering labels should use weight and contrast rather than oversized text.
 
-Recommended compact scale:
+### 3.6 Geometry and spacing
 
-- 9.5 px — captions/group labels.
-- 10 px — table headers.
-- 11 px — normal controls/body.
-- 11.5–12 px — palette section titles.
-- 13–14 px — modeless-window titles where needed.
+- Base rhythm: 4 / 6 / 8 / 12 px.
+- Dense buttons: 23 px minimum height.
+- Normal buttons/inputs: ~25 px.
+- Control/card radius: 4–5 px.
+- Status pills: compact 9 px radius.
+- Avoid oversized rounded corners.
 
-Use `Segoe UI` for BricsCAD/Windows consistency. Prefer weight/contrast over oversized text.
+## 4. P0 — shared theme foundation
 
-### 3.5 Spacing and geometry
+**Status:** implemented in the shared `Theme.xaml` lane.
 
-- Base spacing rhythm: **4 / 6 / 8 / 12 px**.
-- Normal buttons: 24–28 px minimum height.
-- Dense toolbar buttons: 22–24 px.
-- Inputs: 24–28 px.
-- Card radius: 3–4 px.
-- Avoid excessive rounded “mobile app” styling.
-- Keep separators subtle; use strong borders only for focus, selected state or structural boundaries.
+Goals:
 
-## 4. Phase P0 — theme foundation and contrast safety
-
-**Goal:** fix the screenshot bug and establish a premium baseline without changing workflows.
-
-Deliverables:
-
-1. Explicit white/high-contrast `PanelTitle` foreground.
-2. Refined neutral dark palette and clearer border hierarchy.
-3. Stronger primary/secondary/disabled text distinction.
-4. Standard focus border for keyboard/text input interaction.
-5. Clear hover/pressed states for buttons and selectable rows.
-6. Primary and destructive buttons retain distinct semantics.
-7. DataGrid/ListView headers and row spacing become more consistent.
-8. Tooltips/cards receive the same visual language.
-9. Static preflight prevents regression of the `PanelTitle` contrast fix.
+1. Keep the explicit `PanelTitle` high-contrast foreground guard.
+2. Upgrade graphite/navy palette and border hierarchy.
+3. Add richer primary/secondary/muted typography tokens.
+4. Add restrained champagne hierarchy resources.
+5. Preserve every existing public theme resource key.
+6. Add new reusable `PremiumCard`, `LuxuryCard`, `StatusPill`, `LuxuryButton` resources without forcing feature owners to use them.
 
 Acceptance:
 
-- “ĐỐI TƯỢNG ĐANG CHỌN”, “FAMILY / TYPE”, “THUỘC TÍNH”, “QUẢN LÝ BẢN VẼ”, “QUẢN LÝ LỚP” and similar headings remain legible on dark palettes.
-- No keyed title style is allowed to silently inherit black host text.
-- Existing command handlers, bindings and semantic workflows are untouched.
+- Existing XAML keeps resolving all current keys.
+- No black heading can be introduced through `PanelTitle`.
+- The theme remains a pure presentation resource with no command/business logic.
 
-## 5. Phase P1 — Workspace palette refinement
+## 5. P1 — host-independent core control chrome
 
-**Goal:** make the three-pane QS3D Workspace feel like a mature BIM authoring palette.
+**Status:** implemented in the shared theme lane; runtime visual proof remains local-only.
 
-### Left pane — model/navigation
+### ComboBox
 
-- Stronger selected row and hover state.
-- Visually separate project hierarchy from category hierarchy.
-- Compact counts/badges for relevant groups without adding noise.
-- Search/filter affordance for large semantic projects.
-- Clear empty state when no project/semantic objects exist.
-- Preserve keyboard tree navigation.
+The screenshot's light Zone/Floor controls are the clearest visual regression. The v2 theme therefore owns the full ComboBox template instead of trusting host/system chrome.
 
-### Middle pane — Family / Type and room finish
+Requirements:
 
-- Make active Family visually unmistakable.
-- Keep `+ Thêm`, delete and bulk actions at stable positions.
-- Separate primary create action from destructive delete.
-- Use compact section headers rather than large boxes.
-- Make type/property selection states consistent with the left tree.
-- When no compatible Family exists, show a short actionable empty state rather than a blank panel.
+- dark input surface;
+- dark arrow button;
+- dark popup;
+- blue focus/open border;
+- selected/hover rows stay high contrast;
+- editable ComboBoxes keep `PART_EditableTextBox` and two-way `Text` behavior;
+- disabled state stays legible without looking active.
 
-### Selected object area
+### TextBox
 
-- Title and object count should be high contrast.
-- `Focus`, isolate, build, host and review actions should use consistent action hierarchy.
-- Show the selected semantic category/type near the title when space permits.
-- Multiple-selection state should clearly differ from single-instance editing.
+Requirements:
 
-### Property inspector
+- dark custom border/template;
+- visible focus border;
+- explicit read-only treatment;
+- disabled treatment distinct from read-only;
+- no light system border leaking into a BricsCAD palette.
 
-- Keep **Family / Type** vs **Đối tượng / Instance** scope visually explicit.
-- Read-only CAD provenance gets a distinct muted surface/label.
-- Editable values get visible focus state.
-- Validation errors should be inline and close to the field.
-- Reset/inheritance (`↺`) should have clear hover/tooltip semantics.
-- Keep dense row height for engineering workflows.
+### CheckBox / RadioButton
 
-## 6. Phase P2 — Right Panel: Drawing / Xref / Layer
+Requirements:
 
-**Goal:** turn the right palette into a production-grade control center without overloading it.
+- custom dark glyph chrome;
+- blue checked/selected state;
+- high-contrast glyph;
+- keyboard focus;
+- disabled state.
 
-Improvements:
+### ScrollBar
 
-- Stable top action bar for attach/reload/move/detach.
-- Destructive `Gỡ Xref` remains visually separated.
-- Search field gets clear focus state and optional clear affordance.
-- Layer visibility/lock/color indicators use consistent alignment.
-- Selected-layer state must remain legible in dense lists.
-- Multi-select action feedback should state how many layers are affected.
-- Status footer should distinguish information, warning and failure.
-- Very long layer/drawing names should truncate with tooltip, never distort the palette.
+Requirements:
 
-## 7. Phase P3 — modeless window consistency
+- narrow dark track;
+- subtle graphite thumb;
+- blue drag state;
+- both horizontal and vertical templates;
+- no bright Windows scrollbar inside QS3D lists/trees/tables.
 
-Apply one visual contract to:
+### ToolTip
 
-- Domain Hub
-- Project Tools
-- Schedule Hub
-- BQ / Quantity Summary
-- Family / Floor / Zone / Material editors
-- Door/Opening schedule
-- Curtain Wall
-- Rebar hubs and setup
-- Health / Release / Recognition / Revision windows
+Requirements:
+
+- dark elevated tooltip surface;
+- high-contrast text;
+- no system drop shadow dependency.
+
+## 6. P2 — shared data/list chrome
+
+**Status:** implemented in the shared theme lane; feature-specific layouts remain owned by their active claims.
+
+- Consistent TreeView/ListView/ListBox selection and hover tones.
+- Dark `GridViewColumnHeader`.
+- Dark `DataGridColumnHeader`.
+- Consistent DataGrid row/header density.
+- Virtualization remains enabled.
+- Selected rows retain primary text contrast.
+- No expensive effects are introduced.
+
+## 7. P3 — Workspace palette refinement
+
+**Owner lane:** existing active Workspace compact-shell claim; not owned by the shared theme lane.
+
+Target:
+
+- clearer Zone/Floor scope card;
+- cleaner model/category hierarchy;
+- compact Family/Type toolbar;
+- unmistakable active selection;
+- stronger property scope;
+- useful empty states;
+- 1366×768-friendly density;
+- preserve all existing real handlers and semantic boundaries.
+
+The shared v2 theme is designed to make that lane look substantially better without requiring duplicated layout edits.
+
+## 8. P4 — Right Panel: Drawing / Xref / Layer
+
+**Owner lane:** existing Right Panel feature work; not owned by the shared theme lane.
+
+Target:
+
+- stable top action bar;
+- destructive Xref removal visually separated;
+- layer search/input follows the same dark control chrome;
+- dark list/table header treatment;
+- selected layer remains obvious;
+- lock/show/hide states remain readable;
+- long names truncate with tooltip rather than widening the palette.
+
+## 9. P5 — modeless window consistency
+
+All major modeless windows should eventually consume the same shared design language:
+
+- Domain Hub;
+- Project Tools;
+- Schedule Hub;
+- BQ / Quantity Summary;
+- Family / Floor / Zone / Material editors;
+- Room/Door/Opening schedules;
+- Curtain Wall;
+- Rebar hubs/setup;
+- Model Health;
+- Recognition / Revision / Release / Update Center.
 
 Standardize:
 
-- header/title treatment;
-- toolbar/action placement;
-- input and filter sizing;
-- DataGrid headers/row density;
+- title/header hierarchy;
+- primary/secondary/destructive action placement;
+- filter/input sizing;
+- DataGrid density;
 - empty/loading/error states;
-- footer/status area;
-- primary vs secondary vs destructive actions;
+- footer/status treatment;
 - close/cancel/save semantics.
 
-Avoid a situation where each feature looks like a separate utility.
+Feature owners keep behavior ownership; the theme owns only shared presentation primitives.
 
-## 8. Phase P4 — interaction and feedback polish
+## 10. P6 — interaction and safety semantics
 
-### State feedback
+Every important control state must be visually distinct:
 
-Every long or consequential operation should have an appropriate visible state:
-
-- ready;
-- dirty/unsaved semantic data;
-- processing;
-- success;
-- warning/review required;
-- failed;
-- disabled/not applicable.
-
-### Command safety
-
-- Destructive actions require strong visual semantics, not just text.
-- Do not use red for ordinary secondary buttons.
-- Disabled commands should explain why through tooltip/status where practical.
-- Preserve ESC/cancel and BricsCAD-native editor behavior.
-
-### Micro-interactions
-
-Use only lightweight state changes:
-
+- idle;
 - hover;
 - pressed;
+- keyboard focus;
 - selected;
-- focus;
-- short status transitions.
-
-Do **not** add blur, acrylic, animated gradients, large drop shadows or continuous motion inside BricsCAD palettes.
-
-## 9. Phase P5 — accessibility, DPI and Vietnamese QA
-
-Required runtime visual matrix:
-
-- DPI: **100%, 125%, 150%, 200%**.
-- Palette widths: narrow, normal, wide.
-- BricsCAD dark host appearance.
-- Vietnamese Unicode with long labels.
-- Keyboard focus through buttons, inputs, tree/list/table controls.
-- Disabled, read-only, selected, hover, warning and error states.
-
-Checks:
-
-- no clipped diacritics;
-- no black text on dark surfaces;
-- no white text on light native popup surface;
-- no horizontal overflow caused by fixed labels;
-- touch-sized controls are not required, but keyboard/mouse hit targets must remain reliable;
-- selected rows retain text contrast.
-
-## 10. Phase P6 — performance guardrails
-
-Premium UI must remain fast.
+- disabled;
+- read-only;
+- warning;
+- destructive;
+- successful/healthy.
 
 Rules:
 
-- keep ListView/DataGrid virtualization enabled;
-- avoid per-row heavy visual effects;
-- avoid dynamic shadows/blur;
-- avoid rebuilding large item sources for simple selection changes;
-- debounce only searches that genuinely need it;
-- keep palette refresh independent from expensive geometry regeneration;
-- do not turn UI synchronization failures into destructive CAD rollback after a valid model commit.
+- blue is not used for every action;
+- red is not used for ordinary secondary actions;
+- champagne is not used for semantic warning/success;
+- disabled controls must not look selectable;
+- destructive actions keep explicit labels and existing confirmation/business rules;
+- visual refresh failures must never retroactively corrupt a valid semantic/CAD commit.
 
-## 11. Phase P7 — real BricsCAD V25 visual qualification
+## 11. P7 — accessibility, DPI and Vietnamese QA
 
-Static XAML review is not enough. Before calling the UI production-ready, validate the exact release SHA on licensed BricsCAD V25 x64:
+Real BricsCAD qualification matrix:
 
-1. compile adapter against the installed V25 managed assemblies;
-2. NETLOAD/DemandLoad;
-3. open Workspace and Right Panel in a real drawing;
-4. verify title/label contrast;
-5. test all DPI and palette-width cases above;
-6. exercise Family/Instance/property editing;
-7. exercise selection/focus/isolate/build/host flows;
-8. open representative modeless hubs/windows;
-9. inspect popup/ComboBox/TextBox disabled/read-only behavior;
-10. capture before/after screenshots for visual review;
-11. test with a representative private DWG without committing that drawing.
+- DPI: 100%, 125%, 150%, 200%;
+- palette width: narrow, normal, wide;
+- dark BricsCAD host;
+- long Vietnamese labels and diacritics;
+- keyboard navigation;
+- editable/read-only/disabled ComboBox/TextBox;
+- checked/unchecked/disabled CheckBox and RadioButton;
+- horizontal/vertical scrolling;
+- selected/hover/focus rows;
+- dark ComboBox popup and ToolTip;
+- modeless document switching.
 
-## 12. Implementation order
+Acceptance:
 
-Recommended order:
+- no clipped Vietnamese diacritics;
+- no black text on dark surfaces;
+- no light native ComboBox/TextBox/ScrollBar chrome;
+- no unreadable popup text;
+- no focus state lost against dark backgrounds;
+- no new horizontal overflow from theme chrome;
+- no meaningful palette latency regression.
 
-1. **Theme foundation + title contrast** — low-risk, global consistency.
-2. **Workspace density/hierarchy** — highest daily-use value.
-3. **Right Panel** — Xref/layer productivity.
-4. **Shared modeless-window patterns**.
-5. **Interaction/feedback states**.
-6. **DPI/accessibility pass**.
-7. **Runtime screenshot review and small iterative adjustments**.
+This is covered by the existing LOCAL_ONLY Workspace/HiDPI qualification boundary (`LOCAL-012`) and must not be promoted to runtime PASS from remote/static review.
 
-Each phase should remain a small, reviewable commit and should preserve BricsCAD plugin boundaries and current command behavior.
+## 12. Performance guardrails
 
-## 13. Definition of done
+Premium must stay fast.
 
-The UI/UX upgrade is done only when:
+- Keep DataGrid/List/Tree virtualization.
+- No `DropShadowEffect`.
+- No blur/acrylic.
+- No animated gradients.
+- No continuous animations.
+- No per-row `Effect`.
+- No geometry regeneration from theme state.
+- No CAD command dispatch from presentation helpers.
+- No semantic/project mutation from theme resources.
 
-- core dark theme has no host-dependent text-color leaks;
-- headings and values have consistent hierarchy;
+## 13. Static contract
+
+`scripts/preflight-wpf-theme.py` must fail if:
+
+- required core brushes disappear;
+- premium v2 brushes disappear;
+- `PanelTitle` loses explicit `TextBrush`;
+- ComboBox loses its host-independent `ControlTemplate`;
+- ComboBox loses `PART_Popup` or editable `PART_EditableTextBox`;
+- TextBox loses `PART_ContentHost`;
+- CheckBox loses custom template/glyph contract;
+- ScrollBar loses vertical/horizontal templates;
+- ToolTip loses dark custom template;
+- heavy WPF effects (`DropShadowEffect`, `BlurEffect`) are introduced.
+
+The preflight is source/static evidence only.
+
+## 14. Implementation order
+
+1. **Shared theme v2** — palette, host-independent control chrome, list/table polish.
+2. **Workspace compact shell** — active parallel claim.
+3. **Right Panel density/hierarchy** — active neighboring claim.
+4. **Shared modeless-window pattern adoption**.
+5. **Interaction/status semantics**.
+6. **DPI/Vietnamese/local visual matrix**.
+7. **Screenshot-driven final tuning on exact release SHA**.
+
+## 15. Definition of done
+
+The premium/luxury UI program is complete only when:
+
+- core controls never fall back to bright host-system chrome;
+- headings and values have consistent contrast/hierarchy;
 - primary/destructive/secondary actions are visually distinct;
 - selected/hover/focus/disabled/read-only states are obvious;
 - Workspace and Right Panel remain usable at narrow widths;
-- major modeless windows share one design system;
-- Vietnamese Unicode and 100–200% DPI pass;
-- no meaningful palette performance regression is introduced;
-- exact release SHA has real BricsCAD V25 visual/runtime evidence.
+- major modeless windows share the same design system;
+- Vietnamese Unicode and 100–200% DPI are qualified;
+- no meaningful rendering/performance regression is introduced;
+- exact release SHA has real BricsCAD V25 visual evidence.
 
-## 14. Current validation boundary
+## 16. Current evidence boundary
 
-The first implementation pass can be source/static validated and committed without starting GitHub Actions. Repository Actions remain owner-controlled/manual-only.
+This repository batch implements the **shared source-side premium theme v2** and the corresponding static guard. It does not claim a licensed BricsCAD V25 runtime visual PASS.
 
-A source/static pass is **not** the same as licensed BricsCAD V25 runtime proof. Runtime visual qualification remains a separate explicit validation step.
+GitHub Actions remain manual-only under `CI_POLICY.md`; no Action is authorized merely by implementing or pushing this UI work.

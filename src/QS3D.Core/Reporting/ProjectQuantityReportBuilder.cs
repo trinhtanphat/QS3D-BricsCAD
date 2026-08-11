@@ -118,7 +118,7 @@ namespace QS3D.Core.Reporting
                     element.Id + "/TopAreaM2");
                 row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, QFirst(element, "OtherAreaM2", "MeasuredSurfaceAreaM2"), element.Id + "/OtherAreaM2");
                 if (created && row.MassKg.HasValue)
-                    row.MassKg = QuantityReportMath.Finite(row.MassKg.Value, element.Id + "/MassKg");
+                    row.MassKg = QuantityReportMath.NonNegative(row.MassKg.Value, element.Id + "/MassKg");
             }
 
             return order.Select(x => rows[x]).ToList();
@@ -202,9 +202,7 @@ namespace QS3D.Core.Reporting
             foreach (var key in keys)
             {
                 if (!element.Quantities.ContainsKey(key)) continue;
-                var value = Q(element, key);
-                if (value < 0d) throw new InvalidOperationException(element.Id + "/" + key + " must be non-negative.");
-                return value;
+                return Q(element, key);
             }
             return null;
         }
@@ -239,13 +237,13 @@ namespace QS3D.Core.Reporting
         {
             foreach (var key in keys)
                 if (element.Quantities.ContainsKey(key)) return Q(element, key);
-            return QuantityReportMath.Finite(fallback, element.Id + "/fallback");
+            return QuantityReportMath.NonNegative(fallback, element.Id + "/fallback");
         }
 
         private static double Q(ProjectElement element, string name, double fallback = 0d)
         {
             var value = element.Quantities.TryGetValue(name, out var stored) ? stored : fallback;
-            return QuantityReportMath.Finite(value, element.Id + "/" + name);
+            return QuantityReportMath.NonNegative(value, element.Id + "/" + name);
         }
     }
 }

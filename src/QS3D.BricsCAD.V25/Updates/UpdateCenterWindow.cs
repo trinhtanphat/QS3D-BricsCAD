@@ -16,7 +16,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private readonly Button _refreshButton;
         private readonly Button _updateButton;
         private readonly Button _releaseButton;
-        private UpdateCheckResult _result;
+        private UpdateCheckResult? _result;
 
         internal UpdateCenterWindow()
         {
@@ -108,7 +108,7 @@ namespace QS3D.BricsCAD.V25.Updates
             Apply(UpdateCoordinator.Instance.LastResult);
         }
 
-        internal void Apply(UpdateCheckResult result)
+        internal void Apply(UpdateCheckResult? result)
         {
             if (result == null) return;
             _result = result;
@@ -183,29 +183,35 @@ namespace QS3D.BricsCAD.V25.Updates
 
     internal static class UpdateCenterWindowHost
     {
-        private static UpdateCenterWindow _window;
+        private static UpdateCenterWindow? _window;
 
-        internal static void Show(UpdateCheckResult result = null, bool activate = true)
+        internal static void Show(UpdateCheckResult? result = null, bool activate = true)
         {
-            if (_window == null || !_window.IsLoaded)
+            var window = _window;
+            if (window == null || !window.IsLoaded)
             {
-                _window = new UpdateCenterWindow();
-                _window.Closed += (_, __) => _window = null;
+                window = new UpdateCenterWindow();
+                _window = window;
+                window.Closed += (_, __) =>
+                {
+                    if (ReferenceEquals(_window, window)) _window = null;
+                };
             }
 
-            if (result != null) _window.Apply(result);
-            if (!_window.IsVisible)
-                BricscadApplication.ShowModelessWindow(IntPtr.Zero, _window, true);
+            if (result != null) window.Apply(result);
+            if (!window.IsVisible)
+                BricscadApplication.ShowModelessWindow(IntPtr.Zero, window, true);
             else if (activate)
-                _window.Activate();
+                window.Activate();
         }
 
         internal static void Close()
         {
-            if (_window == null) return;
-            try { _window.Close(); }
+            var window = _window;
+            if (window == null) return;
+            try { window.Close(); }
             catch { }
-            _window = null;
+            if (ReferenceEquals(_window, window)) _window = null;
         }
     }
 }

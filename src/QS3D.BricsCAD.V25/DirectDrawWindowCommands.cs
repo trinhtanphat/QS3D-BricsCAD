@@ -94,11 +94,11 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc nhập Cửa Sổ. Hãy chạy lại lệnh.");
 
                 var project = BindProjectAfterPrompts(document, projectPreview, expectedProjectChangeVersion, operation);
-                Execute(document, project, points[0], points[1], widthM, heightM, sillM, clearanceM);
+                Execute(document, project, hasProjectBeforePrompts, points[0], points[1], widthM, heightM, sillM, clearanceM);
             });
         }
 
-        private static void Execute(Document document, ProjectState project, Point3d start, Point3d end, double widthM, double heightM, double sillM, double clearanceM)
+        private static void Execute(Document document, ProjectState project, bool projectExistedBeforeAuthoring, Point3d start, Point3d end, double widthM, double heightM, double sillM, double clearanceM)
         {
             EnsureActive(document, "Direct Draw Cửa Sổ");
             RequireExactProject(document, project, "Direct Draw Cửa Sổ");
@@ -165,6 +165,7 @@ namespace QS3D.BricsCAD.V25
                 catch (Exception ex) { cleanupError = ex; }
                 try { rollback.Restore(project); }
                 catch (Exception ex) { restoreError = ex; }
+                if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);
                 try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
                 catch { }
 

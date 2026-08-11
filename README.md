@@ -1,6 +1,10 @@
 # QS3D for BricsCAD V25
 
+## Product form — BricsCAD plugin, not standalone EXE
+
 QS3D is a clean-room **BIM / quantity takeoff / semantic 3D plugin for BricsCAD V25 x64**. It runs inside BricsCAD through `QS3D.BricsCAD.V25.dll`; it is not a standalone CAD application.
+
+BricsCAD V25 is required at runtime.
 
 The repository intentionally excludes BLT/BLT3D source or binaries, proprietary BricsCAD assemblies, customer drawings and private project data. BLT-style references describe workflow familiarity only; QS3D remains an independent implementation.
 
@@ -82,6 +86,8 @@ dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c R
 ```
 
 The BricsCAD adapter must resolve V25 managed assemblies externally; proprietary assemblies must not be committed into this repository. GitHub Actions are manual-only unless the repository CI policy is explicitly changed. See [`CI_POLICY.md`](CI_POLICY.md) and [`docs/CI.md`](docs/CI.md).
+
+GitHub Actions remain manual-only through `workflow_dispatch`; `release-v25.yml` requires owner-approved `RELEASE` confirmation.
 
 ## Runtime/release truth
 

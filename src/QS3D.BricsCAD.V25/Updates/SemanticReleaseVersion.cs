@@ -14,7 +14,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
         private readonly string[] _prerelease;
 
-        private SemanticReleaseVersion(int major, int minor, int patch, string[] prerelease, string original)
+        private SemanticReleaseVersion(int major, int minor, int patch, string[]? prerelease, string original)
         {
             Major = major;
             Minor = minor;
@@ -29,7 +29,7 @@ namespace QS3D.BricsCAD.V25.Updates
         internal bool IsPrerelease => _prerelease.Length != 0;
         internal string Original { get; }
 
-        internal static bool TryParse(string value, out SemanticReleaseVersion version)
+        internal static bool TryParse(string? value, out SemanticReleaseVersion? version)
         {
             version = null;
             if (string.IsNullOrWhiteSpace(value)) return false;
@@ -57,22 +57,24 @@ namespace QS3D.BricsCAD.V25.Updates
             return true;
         }
 
-        internal static SemanticReleaseVersion FromRunningVersion(string informationalVersion, Version assemblyVersion)
+        internal static SemanticReleaseVersion FromRunningVersion(string? informationalVersion, Version? assemblyVersion)
         {
-            if (TryParse(informationalVersion, out var semantic)) return semantic;
+            if (TryParse(informationalVersion, out var semantic) && semantic != null) return semantic;
 
             var fallback = assemblyVersion ?? new Version(0, 0, 0, 0);
+            var major = Math.Max(0, fallback.Major);
+            var minor = Math.Max(0, fallback.Minor);
+            var patch = Math.Max(0, fallback.Build);
             var text = string.Format(
                 CultureInfo.InvariantCulture,
                 "{0}.{1}.{2}",
-                Math.Max(0, fallback.Major),
-                Math.Max(0, fallback.Minor),
-                Math.Max(0, fallback.Build));
-            TryParse(text, out semantic);
-            return semantic;
+                major,
+                minor,
+                patch);
+            return new SemanticReleaseVersion(major, minor, patch, Array.Empty<string>(), text);
         }
 
-        public int CompareTo(SemanticReleaseVersion other)
+        public int CompareTo(SemanticReleaseVersion? other)
         {
             if (ReferenceEquals(other, null)) return 1;
 

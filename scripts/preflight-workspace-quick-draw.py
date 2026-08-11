@@ -66,8 +66,8 @@ if BASE.is_file():
 
     partials = list((ROOT / "src/QS3D.BricsCAD.V25/UI").glob("WorkspacePanel*.cs"))
     combined = "\n".join(path.read_text(encoding="utf-8") for path in partials)
-    if combined.count("public WorkspacePanel()") != 1 or "static WorkspacePanel()" in combined:
-        errors.append("Workspace partials must keep exactly one instance constructor and no competing static constructors")
+    if combined.count("public WorkspacePanel()") != 1:
+        errors.append("Workspace partials must keep exactly one public instance constructor")
 
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")

@@ -1,29 +1,29 @@
 # Work claim — Wall Quantity documentation discoverability
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-wall-quantity-doc-discoverability`
 - Registered: `2026-08-11T21:25:00+07:00`
+- Completed: `2026-08-11T21:29:00+07:00`
 - Baseline main SHA: `2a2548a92c0fc14f50ec61317497540a0ad804b5`
+- Documentation commits: `38919ce0f7dfe6b278a89a1a6b98cf8cbea2f96f`, `94ca82cc3b9e5dbbf9ae49e3cdef0074f5b108e1`
 - Priority: P2
 
-## Reserved scope
+## Delivered scope
 
-Make the already-merged `QS3DWALLQTY` workflow discoverable from the canonical command reference and compact documentation map, without changing product code or any concurrently owned UX surface.
+Made the already-merged `QS3DWALLQTY` workflow discoverable from the canonical command reference and compact documentation map, without changing product code or any concurrently owned UX surface.
 
-## Reserved files
+## Delivered files
 
 - `docs/COMMANDS.md`
 - `docs/README.md`
-- this claim file for close-out
 
-## Contract
+## Delivered contract
 
-- add `QS3DWALLQTY` to the wall/quantity command catalog with its browser/filter/detail/totals/XLSX and guarded `Bám 3D` / `Định vị 3D` behavior;
-- add `WALL-QUANTITY-TAKEOFF.md` to the canonical major-workflow documentation map;
-- keep runtime truth explicit: merged source behavior is not licensed V25 interactive qualification;
-- do not touch README root, Ribbon, Start Center, Schedule Hub, `Commands.cs`, quantity formulas, local inbox or other active product lanes;
-- no GitHub Actions dispatch/re-run.
+- `docs/COMMANDS.md` now registers `QS3DWALLQTY` under the Wall workflow and describes browser/filter/detail/totals, detached recompute, filtered XLSX export, guarded default-on `Bám 3D` and explicit `Định vị 3D`, with the licensed V25 runtime boundary kept explicit;
+- `docs/README.md` now links `WALL-QUANTITY-TAKEOFF.md` from the canonical Quantity/BQ workflow map;
+- root README, Ribbon, Start Center, Schedule Hub, `Commands.cs`, quantity formulas and product code were not touched;
+- no GitHub Actions workflow was dispatched/re-run by this documentation lane.
 
-## Completion condition
+## Completion
 
-Canonical command/docs indexes point to the Wall Quantity workflow and this claim is closed with the exact pushed SHA.
+Canonical command/docs indexes now point to the Wall Quantity workflow. Licensed modeless/viewport runtime qualification remains local-only and is not represented as completed by these documentation commits.

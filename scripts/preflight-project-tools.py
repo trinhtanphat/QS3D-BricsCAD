@@ -48,7 +48,7 @@ checks = {
         'new ButtonSpec("QS3D_PROJECT_LEVELS", "Tầng / Cao độ", "QS3DLEVELS")',
         'new ButtonSpec("QS3D_PROJECT_ZONES", "Khu vực / Zone", "QS3DZONES")',
         'new ButtonSpec("QS3D_PROJECT_MATERIALS", "Vật liệu", "QS3DMATERIALS")',
-        "CollectionContainsId", "CommandParameter", "CommandHandler", "SendStringToExecute",
+        "FindById(items, spec.Id)", "CommandParameter", "CommandHandler", "SendStringToExecute",
     ],
     "src/QS3D.BricsCAD.V25/PluginEntry.cs": [
         "RibbonBootstrapper.TryInitialize();", "ProjectRibbonAugmenter.TryInitialize();", "ProjectRibbonAugmenter.Reset();", "RibbonBootstrapper.Reset();",

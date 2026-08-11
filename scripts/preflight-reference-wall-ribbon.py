@@ -30,7 +30,7 @@ if AUGMENTER.is_file():
         'private const string ButtonId = "QS3D_AUTHOR_DRAWWALLREF";',
         'private const string ButtonText = "Vẽ Tường tham chiếu";',
         'private const string Command = "QS3DDRAWWALLREF";',
-        'CollectionContainsId(items, ButtonId) || CollectionContainsCommand(items, Command)',
+        'var button = FindById(items, ButtonId) ?? FindByCommand(items, Command);',
         'SetProperty(button, "CommandParameter", Command);',
         'Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + " ", true, false, false);',
     ]
