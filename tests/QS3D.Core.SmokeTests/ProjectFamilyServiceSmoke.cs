@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             FamilyAssignmentDropsOldInheritedDefaultsButKeepsOverrides();
             FamilyAssignmentRejectsSpoofedSameIdElement();
             DuplicateRenameDeleteGuards();
+            DuplicateRejectsInvalidSourcePropertiesAtomically();
         }
 
         private static void PropertyUpdatesPreserveOverrides()
@@ -85,8 +86,10 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("p3", "Family guards");
             var family = ProjectFamilyService.Create(project, "f1", "Vách Kính A", ElementCategory.GlassWall);
             family.Properties["Material"] = "Kính";
+            var beforeDuplicateVersion = project.ChangeVersion;
             var clone = ProjectFamilyService.Duplicate(project, family.Id, "f2", "Vách Kính B");
             if (clone.Properties["Material"] != "Kính") throw new Exception("Family duplicate did not copy properties.");
+            if (project.ChangeVersion != beforeDuplicateVersion + 1) throw new Exception("Family duplicate must advance project ChangeVersion exactly once.");
             Throws<InvalidOperationException>(() => ProjectFamilyService.Rename(project, clone.Id, "vách kính a"));
             project.Metadata["ActiveFamilyId"] = family.Id;
             Throws<InvalidOperationException>(() => ProjectFamilyService.Delete(project, family.Id));
@@ -96,6 +99,20 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectFamilyService.Delete(project, family.Id));
             project.Elements.Clear();
             if (!ProjectFamilyService.Delete(project, family.Id)) throw new Exception("Unused non-active Family delete failed.");
+        }
+
+        private static void DuplicateRejectsInvalidSourcePropertiesAtomically()
+        {
+            var project = new ProjectState("p-dup-invalid", "Family duplicate invariants");
+            var source = ProjectFamilyService.Create(project, "source", "Nguồn", ElementCategory.GlassWall);
+            source.Properties["Material"] = new string('X', 1001);
+            var beforeVersion = project.ChangeVersion;
+            var beforeCount = project.Families.Count;
+
+            Throws<ArgumentException>(() => ProjectFamilyService.Duplicate(project, source.Id, "clone", "Bản sao"));
+            if (project.Families.Count != beforeCount) throw new Exception("Rejected Family duplicate must not add a partial clone.");
+            if (project.FindFamily("clone") != null) throw new Exception("Rejected Family duplicate left a discoverable clone.");
+            if (project.ChangeVersion != beforeVersion) throw new Exception("Rejected Family duplicate must not advance ChangeVersion.");
         }
 
         private static void Throws<T>(Action action) where T : Exception
