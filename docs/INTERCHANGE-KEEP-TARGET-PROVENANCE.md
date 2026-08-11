@@ -17,7 +17,7 @@ Therefore:
 - no source->target lineage record is created for that collided source Element;
 - the target must not be described as having been imported from that source Element merely because their IDs collide.
 
-Only actually appended source Elements receive source->target semantic lineage. Under the all-new KeepTarget append slice, their source and target Element IDs are identical.
+The lineage rule is explicit: only actually appended source Elements receive source->target semantic lineage. Under the all-new KeepTarget append slice, their source and target Element IDs are identical.
 
 ## Execution
 
@@ -42,7 +42,7 @@ Raw source-handle provenance remains historical data only and is never target CA
 
 An actually appended source Element is mapped to its new target semantic Element, but that target still owns no imported CAD handle/fingerprint. Generated/native geometry must be created in the target drawing through normal target-DWG generation workflows.
 
-Portable semantic re-export excludes project provenance metadata, so neither raw handles nor lineage records become portable Element ownership.
+The portable semantic re-export boundary excludes project provenance metadata, so neither raw handles nor lineage records become portable Element ownership.
 
 ## Why this differs from other policies
 
