@@ -46,12 +46,20 @@ namespace QS3D.BricsCAD.V25
         {
             if (!_started) return;
             var docs = Application.DocumentManager;
-            docs.DocumentCreated -= OnDocumentCreated;
-            docs.DocumentActivated -= OnDocumentActivated;
-            docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;
-            docs.DocumentDestroyed -= OnDocumentDestroyed;
-            foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
-            SelectionSyncCoordinator.Stop();
+            try { docs.DocumentCreated -= OnDocumentCreated; } catch { }
+            try { docs.DocumentActivated -= OnDocumentActivated; } catch { }
+            try { docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed; } catch { }
+            try { docs.DocumentDestroyed -= OnDocumentDestroyed; } catch { }
+            try
+            {
+                foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
+            }
+            catch
+            {
+                // Continue teardown even if native document bookkeeping is already unavailable.
+            }
+            try { SelectionSyncCoordinator.Stop(); }
+            catch { }
             _started = false;
         }
 
