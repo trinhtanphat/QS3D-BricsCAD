@@ -37,10 +37,34 @@ for name, has_modeless_locate in COMMANDS.items():
         if "var element = project.FindElement(issue.ElementId);" in text:
             errors.append(name + " Locate callback must not use the ProjectState captured when the window opened.")
 
+health_all = SRC / "HealthAllCommands.cs"
+if not health_all.is_file():
+    errors.append("missing HealthAllCommands.cs")
+else:
+    text = health_all.read_text(encoding="utf-8")
+    for token in (
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
+        "LocateProjectArtifactHandles(currentProject, issue.Code)",
+        "currentProject.FindElement(issue.ElementId)",
+        "SourceHandleResolver.Resolve(currentProject, new[] { element.Id })",
+    ):
+        if token not in text:
+            errors.append("HealthAllCommands.cs missing read-only Locate token: " + token)
+    if "ProjectContextCoordinator.GetOrCreate" in text:
+        errors.append("HealthAllCommands.cs must not create/cache project state merely to inspect Health.")
+    for stale in (
+        "LocateProjectArtifactHandles(project, issue.Code)",
+        "var element = project.FindElement(issue.ElementId);",
+        "SourceHandleResolver.Resolve(project, new[] { element.Id })",
+    ):
+        if stale in text:
+            errors.append("HealthAllCommands.cs Locate callback still captures stale project state: " + stale)
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: focused Health inspections are read-only, and modeless Locate callbacks re-resolve current project state by stable element identity.")
+print("PASS: focused and comprehensive Health inspections are read-only, and modeless Locate callbacks re-resolve current project state by stable identity.")
