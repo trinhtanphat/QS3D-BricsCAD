@@ -97,10 +97,11 @@ namespace QS3D.Core.SmokeTests
 
         private static void CleanupReportingUsesRequiredSemantics()
         {
+            const string legacyCleanedKey = "Interchange.LastImport.TargetGeneratedHandlesCleaned";
             var target = BuildTarget();
             var element = target.FindElement("E-1")!;
             element.Properties["GeneratedSolidHandle"] = "AA11";
-            target.Metadata[ProjectInterchangeFieldMergeImporter.LastTargetGeneratedHandlesCleanedKey] = "legacy-stale";
+            target.Metadata[legacyCleanedKey] = "legacy-stale";
             var source = BuildSource("SOURCE");
             var policy = MixedPolicy();
             var json = ProjectInterchangeJsonExporter.Build(source);
@@ -115,7 +116,7 @@ namespace QS3D.Core.SmokeTests
             Equal(1, result.TargetGeneratedHandlesCleaned);
 #pragma warning restore CS0618
             Equal("1", target.Metadata[ProjectInterchangeFieldMergeImporter.LastNativeCleanupHandlesRequiredKey]);
-            True(!target.Metadata.ContainsKey(ProjectInterchangeFieldMergeImporter.LastTargetGeneratedHandlesCleanedKey));
+            True(!target.Metadata.ContainsKey(legacyCleanedKey));
             True(!element.Properties.ContainsKey("GeneratedSolidHandle"));
         }
 
