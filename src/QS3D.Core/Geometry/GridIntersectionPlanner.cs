@@ -421,17 +421,21 @@ namespace QS3D.Core.Geometry
             if (!(rLength > 0.0) || !(sLength > 0.0))
                 throw new InvalidOperationException("Grid LINE cross tolerance requires positive finite line lengths.");
 
+            var lengthProduct = rLength * sLength;
+            if (IsFinite(lengthProduct))
+            {
+                var value = tolerance * Math.Max(1.0, lengthProduct);
+                if (!IsFinite(value)) throw new OverflowException("Grid LINE cross tolerance exceeds the supported numeric range.");
+                return value;
+            }
+
             var smallerLength = Math.Min(rLength, sLength);
             var largerLength = Math.Max(rLength, sLength);
-            if (smallerLength <= 1.0 / largerLength) return tolerance;
-
-            var factors = new[] { tolerance, smallerLength, largerLength };
-            Array.Sort(factors);
-            var partial = factors[0] * factors[1];
-            if (!IsFinite(partial)) throw new OverflowException("Grid LINE cross tolerance exceeds the supported numeric range.");
-            var value = partial * factors[2];
-            if (!IsFinite(value)) throw new OverflowException("Grid LINE cross tolerance exceeds the supported numeric range.");
-            return value;
+            var scaled = tolerance * smallerLength;
+            if (!IsFinite(scaled)) throw new OverflowException("Grid LINE cross tolerance exceeds the supported numeric range.");
+            var overflowSafeValue = scaled * largerLength;
+            if (!IsFinite(overflowSafeValue)) throw new OverflowException("Grid LINE cross tolerance exceeds the supported numeric range.");
+            return overflowSafeValue;
         }
 
         private static double Length(double x, double y)
