@@ -3,34 +3,62 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = [
-    ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeCommands.cs",
-    ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeRemapAppendCommands.cs",
+APPEND = ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeCommands.cs"
+REMAP = ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeRemapAppendCommands.cs"
+USE_SOURCE = [
+    ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeUseSourceCommands.cs",
+    ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeUseSourceCatalogCommands.cs",
+    ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeUseSourceAllCommands.cs",
 ]
+GUARD = ROOT / "src/QS3D.BricsCAD.V25/Services/InterchangeConfirmationGuard.cs"
 
 errors = []
-for path in FILES:
+for path in [APPEND, REMAP] + USE_SOURCE + [GUARD]:
     if not path.is_file():
         errors.append("missing source: " + str(path.relative_to(ROOT)))
+
+for path in [APPEND, REMAP]:
+    if not path.is_file():
         continue
     text = path.read_text(encoding="utf-8")
-    required = [
+    for token in [
         "previewChangeVersion = project.ChangeVersion",
         "ProjectContextCoordinator.GetOrCreate(document)",
         "ReferenceEquals(currentProject, project)",
         "currentProject.ChangeVersion != previewChangeVersion",
         "changed after preview",
-    ]
-    for token in required:
+    ]:
         if token not in text:
             errors.append(str(path.relative_to(ROOT)) + " missing freshness guard token: " + token)
 
-append = FILES[0].read_text(encoding="utf-8") if FILES[0].is_file() else ""
-remap = FILES[1].read_text(encoding="utf-8") if FILES[1].is_file() else ""
-if "ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)" not in append:
+if APPEND.is_file() and "ProjectInterchangeAppendOnlyImporter.Import(currentProject, json)" not in APPEND.read_text(encoding="utf-8"):
     errors.append("append import must mutate the re-resolved current project")
-if "ProjectInterchangeRemapAppendImporter.Import(currentProject, json)" not in remap:
+if REMAP.is_file() and "ProjectInterchangeRemapAppendImporter.Import(currentProject, json)" not in REMAP.read_text(encoding="utf-8"):
     errors.append("remap append must mutate the re-resolved current project")
+
+for path in USE_SOURCE:
+    if not path.is_file():
+        continue
+    text = path.read_text(encoding="utf-8")
+    for token in [
+        "previewChangeVersion = project.ChangeVersion",
+        "InterchangeConfirmationGuard.RequireFresh(",
+        "project,\n                    previewChangeVersion",
+    ]:
+        if token not in text:
+            errors.append(str(path.relative_to(ROOT)) + " missing UseSource freshness guard token: " + token)
+
+if GUARD.is_file():
+    guard = GUARD.read_text(encoding="utf-8")
+    for token in [
+        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
+        "ProjectContextCoordinator.GetOrCreate(document)",
+        "ReferenceEquals(currentProject, reviewedProject)",
+        "currentProject.ChangeVersion != reviewedChangeVersion",
+        "changed after preview",
+    ]:
+        if token not in guard:
+            errors.append("confirmation guard missing token: " + token)
 
 if errors:
     for error in errors:
@@ -38,4 +66,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: confirmed Append and Remap Append mutations are bound to the exact reviewed project instance/change version.")
+print("PASS: mutating Append, Remap Append and standalone UseSource confirmations are bound to the exact reviewed document/project/change version.")
