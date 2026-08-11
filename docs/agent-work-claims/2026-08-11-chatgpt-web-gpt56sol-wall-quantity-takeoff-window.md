@@ -12,6 +12,7 @@
 - `src/QS3D.BricsCAD.V25/UI/WallQuantityWindow.xaml.cs` (new)
 - `scripts/preflight-wall-quantity-window.py` (new)
 - `docs/WALL-QUANTITY-TAKEOFF.md` (new)
+- `docs/LOCAL-AGENT-INBOX.md` only for the new `LOCAL-015` wall-takeoff runtime-qualification item; do not edit or reinterpret other LOCAL sections
 - this claim file for close-out
 
 ## Functional contract
@@ -29,6 +30,7 @@
 - do not edit `QuantitySummaryWindow.xaml` / `.xaml.cs`; active quantity-detail/viewport claims own those screenshot-1/2 surfaces;
 - do not edit `src/QS3D.BricsCAD.V25/Commands.cs`; active command-boundary claim owns that file;
 - do not edit `src/QS3D.Core/Reporting/*`, wall quantity calculators/formulas, Core persistence/mutation, RightPanel, Ribbon, Start Center or Create Similar;
+- do not edit any existing `LOCAL-001`…`LOCAL-014` inbox scenario/evidence owned by neighboring source/local lanes; only append/update `LOCAL-015` introduced by this claim;
 - no project mutation, save, CAD database writes or hidden project creation from the new viewer;
 - no GitHub Actions dispatch/re-run/release;
 - no remote claim of native BricsCAD V25 runtime PASS.
@@ -36,7 +38,8 @@
 ## Validation
 - add an auto-discovered static preflight for command/window wiring, wall category filter, detached snapshot regen, existing report builder/XLSX reuse, and absence of live project mutation/save calls;
 - validate XAML as XML and Python preflight syntax from source-safe tooling where possible;
+- add `LOCAL-015` with the exact native V25 modeless/filter/recompute/export scenario and `PENDING_LOCAL` evidence, without touching other inbox lanes;
 - re-fetch the final implementation commit and inspect available GitHub status without dispatching workflows.
 
 ## Completion condition
-The dedicated wall takeoff window and command are committed on current `main`, static source guard is present, documentation records the runtime-local qualification boundary, and this claim is marked `COMPLETED` with the exact implementation SHA.
+The dedicated wall takeoff window and command are committed on current `main`, static source guard is present, documentation plus `LOCAL-015` record the runtime-local qualification boundary, and this claim is marked `COMPLETED` with the exact implementation SHA.
