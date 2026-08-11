@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Export
@@ -289,11 +290,23 @@ namespace QS3D.Core.Export
             foreach (var pair in source.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var key = CanonicalRequired(pair.Key, label + " key");
+                if (IsGeneratedOwnershipProperty(key))
+                    throw new InvalidDataException("Validated semantic snapshot contains generated/native ownership property in " + label + ": " + key + ".");
                 if (copy.ContainsKey(key))
                     throw new InvalidDataException("Validated semantic snapshot contains ambiguous key in " + label + ": " + key + ".");
                 copy[key] = pair.Value ?? string.Empty;
             }
             return new ReadOnlyDictionary<string, string>(copy);
+        }
+        private static bool IsGeneratedOwnershipProperty(string key)
+        {
+            var normalized = (key ?? string.Empty).Trim();
+            if (normalized.Length == 0) return false;
+            if (GeneratedHandleOwnershipPolicy.IsOwnerSlot(normalized)) return true;
+            if (normalized.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return true;
+            if (normalized.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return true;
+            if (normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
+            return normalized.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase);
         }
         private static IReadOnlyDictionary<string, double> NumberMap(IDictionary<string, double>? source, string label)
         {
