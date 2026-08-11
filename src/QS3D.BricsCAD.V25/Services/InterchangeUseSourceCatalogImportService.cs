@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -80,54 +81,94 @@ namespace QS3D.BricsCAD.V25.Services
             EnsureActive(document, "Interchange source-catalog import / mutation");
 
             var invalidationTargets = ExpandInvalidationTargets(project, prepared.Source, prepared.Resolution, prepared.Plan);
-            var rollback = ProjectStateSnapshot.Capture(project);
-            var cadCommitted = false;
+            GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);
 
-            var targetHadZones = project.Zones.Count > 0;
-            var targetHadFloors = project.Floors.Count > 0;
-            var targetHadFamilies = project.Families.Count > 0;
-            var previousActiveZoneId = project.ActiveZoneId ?? string.Empty;
-            var previousActiveFloorId = project.ActiveFloorId ?? string.Empty;
-            var hadActiveFamilyMetadata = project.Metadata.TryGetValue("ActiveFamilyId", out var previousActiveFamilyId);
-            previousActiveFamilyId = previousActiveFamilyId ?? string.Empty;
+            ProjectStateSnapshot? rollback = null;
+            var cadCommitted = false;
+            var generatedElementsInvalidated = 0;
 
             try
             {
                 using (document.LockDocument())
-                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var invalidation = GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets);
-
-                    ApplyCatalogState(project, prepared.Source, prepared.Resolution);
-                    ApplyNewElementsOnly(project, prepared.Source, prepared.Resolution);
-                    RestoreExistingActiveContext(
+                    EnsureActive(document, "Interchange source-catalog import / locked mutation");
+                    var lockedProject = InterchangeMutationTargetGuard.RequireExact(
+                        document,
                         project,
+                        "Interchange source-catalog import / locked mutation");
+                    var lockedInvalidationTargets = ExpandInvalidationTargets(
+                        lockedProject,
                         prepared.Source,
-                        targetHadZones,
-                        targetHadFloors,
-                        targetHadFamilies,
-                        previousActiveZoneId,
-                        previousActiveFloorId,
-                        hadActiveFamilyMetadata,
-                        previousActiveFamilyId);
+                        prepared.Resolution,
+                        prepared.Plan);
 
-                    foreach (var element in invalidationTargets)
-                        element.MarkDirty(ElementDirtyFlags.All);
+                    using (var transaction = document.Database.TransactionManager.StartTransaction())
+                    {
+                        rollback = ProjectStateSnapshot.Capture(lockedProject);
 
-                    // The native erasure plan was built from the pre-import target ownership map.
-                    // Clear those owner slots while the CAD transaction is still rollback-capable.
-                    invalidation.CommitMetadata();
+                        GeneratedNativeCleanupCoverageGuard.EnsureSupported(lockedInvalidationTargets);
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange source-catalog import / pre-native cleanup");
 
-                    ValidateCombinedProject(project, json);
-                    RecordImportMetadata(project, prepared.Source, prepared.Plan, invalidation.ElementCount);
-                    project.Touch();
-                    transaction.Commit();
-                    cadCommitted = true;
+                        var invalidation = GeneratedDependentGeometryInvalidator.Prepare(
+                            document,
+                            transaction,
+                            lockedProject,
+                            lockedInvalidationTargets);
+
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange source-catalog import / pre-semantic apply");
+
+                        var targetHadZones = lockedProject.Zones.Count > 0;
+                        var targetHadFloors = lockedProject.Floors.Count > 0;
+                        var targetHadFamilies = lockedProject.Families.Count > 0;
+                        var previousActiveZoneId = lockedProject.ActiveZoneId ?? string.Empty;
+                        var previousActiveFloorId = lockedProject.ActiveFloorId ?? string.Empty;
+                        var hadActiveFamilyMetadata = lockedProject.Metadata.TryGetValue("ActiveFamilyId", out var previousActiveFamilyId);
+                        previousActiveFamilyId = previousActiveFamilyId ?? string.Empty;
+
+                        ApplyCatalogState(lockedProject, prepared.Source, prepared.Resolution);
+                        ApplyNewElementsOnly(lockedProject, prepared.Source, prepared.Resolution);
+                        RestoreExistingActiveContext(
+                            lockedProject,
+                            prepared.Source,
+                            targetHadZones,
+                            targetHadFloors,
+                            targetHadFamilies,
+                            previousActiveZoneId,
+                            previousActiveFloorId,
+                            hadActiveFamilyMetadata,
+                            previousActiveFamilyId);
+
+                        foreach (var element in lockedInvalidationTargets)
+                            element.MarkDirty(ElementDirtyFlags.All);
+
+                        // The native erasure plan was built from the pre-import target ownership map.
+                        // Clear those owner slots while the CAD transaction is still rollback-capable.
+                        invalidation.CommitMetadata();
+
+                        ValidateCombinedProject(lockedProject, json);
+                        RecordImportMetadata(lockedProject, prepared.Source, prepared.Plan, invalidation.ElementCount);
+                        lockedProject.Touch();
+
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange source-catalog import / pre-CAD commit");
+
+                        transaction.Commit();
+                        cadCommitted = true;
+                        generatedElementsInvalidated = invalidation.ElementCount;
+                    }
                 }
             }
             catch (Exception operationError)
             {
-                if (!cadCommitted)
+                if (!cadCommitted && rollback != null)
                 {
                     try { rollback.Restore(project); }
                     catch (Exception restoreError)
@@ -150,7 +191,7 @@ namespace QS3D.BricsCAD.V25.Services
                 FloorsReplaced = prepared.Plan.FloorsToReplace,
                 FamiliesReplaced = prepared.Plan.FamiliesToReplace,
                 ElementCollisionsKept = prepared.Plan.ElementCollisionsKept,
-                GeneratedElementsInvalidated = invalidationTargets.Count,
+                GeneratedElementsInvalidated = generatedElementsInvalidated,
                 SourceHandlesDiscarded = prepared.Plan.SourceHandlesToDiscard
             };
         }
