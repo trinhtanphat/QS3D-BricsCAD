@@ -14,6 +14,37 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$UpdateMutexPrefix = 'Global\QS3D-BricsCAD-V25-Update-'
+
+function Enter-Qs3dUpdateMutex {
+    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    try { $sid = [string]$identity.User.Value }
+    finally { $identity.Dispose() }
+    if ([string]::IsNullOrWhiteSpace($sid)) { throw 'Could not resolve the current Windows user SID for QS3D install serialization.' }
+
+    $mutexName = $UpdateMutexPrefix + $sid
+    $mutex = [System.Threading.Mutex]::new($false, $mutexName)
+    $ownsMutex = $false
+    try {
+        try { $ownsMutex = $mutex.WaitOne(0) }
+        catch [System.Threading.AbandonedMutexException] { $ownsMutex = $true }
+        if (-not $ownsMutex) {
+            throw 'Another QS3D install/update is already active for this Windows user. Finish that operation before starting another install.'
+        }
+        return $mutex
+    }
+    catch {
+        $mutex.Dispose()
+        throw
+    }
+}
+
+function Exit-Qs3dUpdateMutex {
+    param([System.Threading.Mutex]$Mutex)
+    if ($null -eq $Mutex) { return }
+    try { $Mutex.ReleaseMutex() }
+    finally { $Mutex.Dispose() }
+}
 
 function Get-RegistryTargets {
     param([string[]]$RequestedVersions, [string[]]$RequestedLanguages)
@@ -388,117 +419,123 @@ if ($runningBricsCAD.Count -gt 0) {
     throw ('Close all BricsCAD processes before installing or upgrading QS3D. Detected: ' + ($runningBricsCAD -join ' | '))
 }
 
-Write-Warning 'QS3D managed plugin requires BricsCAD V25 Pro or higher. BricsCAD Shape/Lite cannot load the BRX/.NET plugin.'
-
-$scriptDirectory = $PSScriptRoot
-if ([string]::IsNullOrWhiteSpace($scriptDirectory) -and -not [string]::IsNullOrWhiteSpace([string]$MyInvocation.MyCommand.Path)) {
-    $scriptDirectory = Split-Path -Parent ([IO.Path]::GetFullPath([string]$MyInvocation.MyCommand.Path))
-}
-if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
-    $PackageDirectory = $scriptDirectory
-}
-if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
-    throw 'PackageDirectory could not be resolved from the installer script location. Pass -PackageDirectory explicitly.'
-}
-
-$package = (Resolve-Path -LiteralPath $PackageDirectory).Path
-$commands = Assert-PackageIntegrity -Directory $package -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
-Assert-PackageIdentity -Directory $package
-$targets = @(Get-RegistryTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)
-
-foreach ($target in $targets) {
-    if ((Test-Path -LiteralPath $target.AppKey) -and -not $Force) {
-        throw "QS3D DemandLoad registration already exists for $($target.Version)/$($target.Language). Use -Force for an intentional upgrade."
-    }
-}
-
-$registrySnapshots = @($targets | ForEach-Object { Get-DemandLoadSnapshot -AppKey $_.AppKey })
-$installFull = [IO.Path]::GetFullPath($InstallDirectory)
-$parent = Split-Path -Parent $installFull
-if ([string]::IsNullOrWhiteSpace($parent)) { throw 'InstallDirectory must have a parent directory.' }
-$stage = Join-Path $parent ('.qs3d-stage-' + [Guid]::NewGuid().ToString('N'))
-$backup = $null
-$payloadCommitted = $false
-$payload = @(
-    'QS3D.BricsCAD.V25.dll',
-    'QS3D.Core.dll',
-    'COMMANDS.txt',
-    'PACKAGE-METADATA.json',
-    'README.txt',
-    'SHA256SUMS.txt',
-    'uninstall-v25-autoload.ps1',
-    'update-v25.ps1'
-)
-
+$updateMutex = Enter-Qs3dUpdateMutex
 try {
-    if ($PSCmdlet.ShouldProcess($installFull, 'Install QS3D V25 payload')) {
-        New-Item -ItemType Directory -Path $parent -Force | Out-Null
-        New-Item -ItemType Directory -Path $stage -Force | Out-Null
-        foreach ($name in $payload) {
-            $source = Join-Path $package $name
-            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing installer payload: $name" }
-            $destination = Join-Path $stage $name
-            Copy-Item -LiteralPath $source -Destination $destination -Force
-            Unblock-File -LiteralPath $destination -ErrorAction Stop
-        }
+    Write-Warning 'QS3D managed plugin requires BricsCAD V25 Pro or higher. BricsCAD Shape/Lite cannot load the BRX/.NET plugin.'
 
-        if (Test-Path -LiteralPath $installFull) {
-            if (-not $Force) { throw "Install directory already exists: $installFull" }
-            $backup = $installFull + '.backup-' + [Guid]::NewGuid().ToString('N')
-            Move-Item -LiteralPath $installFull -Destination $backup
-        }
-        Move-Item -LiteralPath $stage -Destination $installFull
-        $payloadCommitted = $true
+    $scriptDirectory = $PSScriptRoot
+    if ([string]::IsNullOrWhiteSpace($scriptDirectory) -and -not [string]::IsNullOrWhiteSpace([string]$MyInvocation.MyCommand.Path)) {
+        $scriptDirectory = Split-Path -Parent ([IO.Path]::GetFullPath([string]$MyInvocation.MyCommand.Path))
+    }
+    if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
+        $PackageDirectory = $scriptDirectory
+    }
+    if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
+        throw 'PackageDirectory could not be resolved from the installer script location. Pass -PackageDirectory explicitly.'
     }
 
-    $loader = Join-Path $installFull 'QS3D.BricsCAD.V25.dll'
-    $loadCtrls = if ($LoadMode -eq 'OnStartup') { 2 } else { 4 }
+    $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
+    $commands = Assert-PackageIntegrity -Directory $package -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
+    Assert-PackageIdentity -Directory $package
+    $targets = @(Get-RegistryTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)
+
     foreach ($target in $targets) {
-        if ($PSCmdlet.ShouldProcess("$($target.Version)/$($target.Language)", "Register QS3D DemandLoad ($LoadMode)")) {
-            New-Item -Path $target.AppKey -Force | Out-Null
-            New-ItemProperty -Path $target.AppKey -Name 'Loader' -Value $loader -PropertyType String -Force | Out-Null
-            New-ItemProperty -Path $target.AppKey -Name 'LoadCtrls' -Value $loadCtrls -PropertyType DWord -Force | Out-Null
-            New-ItemProperty -Path $target.AppKey -Name 'Description' -Value 'QS3D for BricsCAD V25' -PropertyType String -Force | Out-Null
-            $commandsKey = Join-Path $target.AppKey 'Commands'
-            Remove-Item -LiteralPath $commandsKey -Recurse -Force -ErrorAction SilentlyContinue
-            New-Item -Path $commandsKey -Force | Out-Null
-            foreach ($command in $commands) {
-                New-ItemProperty -Path $commandsKey -Name $command -Value $command -PropertyType String -Force | Out-Null
-            }
-            Assert-DemandLoadRegistration -Target $target -ExpectedLoader $loader -ExpectedLoadCtrls $loadCtrls -ExpectedCommands $commands
+        if ((Test-Path -LiteralPath $target.AppKey) -and -not $Force) {
+            throw "QS3D DemandLoad registration already exists for $($target.Version)/$($target.Language). Use -Force for an intentional upgrade."
         }
     }
 
-    if ($backup -and (Test-Path -LiteralPath $backup)) { Remove-Item -LiteralPath $backup -Recurse -Force }
-    Write-Host "QS3D installed: $installFull"
-    Write-Host "DemandLoad mode: $LoadMode"
-    Write-Host "Registered targets: $($targets.Count)"
-    Write-Host 'Host requirement: BricsCAD V25 Pro or higher. Shape/Lite cannot load the QS3D BRX/.NET plugin.'
-    Write-Host 'Security settings were not weakened. Production -RequireSigned verifies both DLLs and all packaged PowerShell executable payloads.'
-}
-catch {
-    $originalError = $_
-    $rollbackFailures = @()
-
-    for ($index = $registrySnapshots.Count - 1; $index -ge 0; $index--) {
-        try { Restore-DemandLoadSnapshot -Snapshot $registrySnapshots[$index] }
-        catch { $rollbackFailures += ("registry " + $registrySnapshots[$index].AppKey + ": " + $_.Exception.Message) }
-    }
+    $registrySnapshots = @($targets | ForEach-Object { Get-DemandLoadSnapshot -AppKey $_.AppKey })
+    $installFull = [IO.Path]::GetFullPath($InstallDirectory)
+    $parent = Split-Path -Parent $installFull
+    if ([string]::IsNullOrWhiteSpace($parent)) { throw 'InstallDirectory must have a parent directory.' }
+    $stage = Join-Path $parent ('.qs3d-stage-' + [Guid]::NewGuid().ToString('N'))
+    $backup = $null
+    $payloadCommitted = $false
+    $payload = @(
+        'QS3D.BricsCAD.V25.dll',
+        'QS3D.Core.dll',
+        'COMMANDS.txt',
+        'PACKAGE-METADATA.json',
+        'README.txt',
+        'SHA256SUMS.txt',
+        'uninstall-v25-autoload.ps1',
+        'update-v25.ps1'
+    )
 
     try {
-        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
-        if ($backup -and (Test-Path -LiteralPath $backup)) {
-            if (Test-Path -LiteralPath $installFull) { Remove-Item -LiteralPath $installFull -Recurse -Force }
-            Move-Item -LiteralPath $backup -Destination $installFull
-        }
-        elseif ($payloadCommitted -and (Test-Path -LiteralPath $installFull)) {
-            Remove-Item -LiteralPath $installFull -Recurse -Force
-        }
-    }
-    catch { $rollbackFailures += ("payload: " + $_.Exception.Message) }
+        if ($PSCmdlet.ShouldProcess($installFull, 'Install QS3D V25 payload')) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+            New-Item -ItemType Directory -Path $stage -Force | Out-Null
+            foreach ($name in $payload) {
+                $source = Join-Path $package $name
+                if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing installer payload: $name" }
+                $destination = Join-Path $stage $name
+                Copy-Item -LiteralPath $source -Destination $destination -Force
+                Unblock-File -LiteralPath $destination -ErrorAction Stop
+            }
 
-    if ($rollbackFailures.Count -gt 0) {
-        Write-Warning ("QS3D installer rollback encountered error(s): " + ($rollbackFailures -join ' | '))
+            if (Test-Path -LiteralPath $installFull) {
+                if (-not $Force) { throw "Install directory already exists: $installFull" }
+                $backup = $installFull + '.backup-' + [Guid]::NewGuid().ToString('N')
+                Move-Item -LiteralPath $installFull -Destination $backup
+            }
+            Move-Item -LiteralPath $stage -Destination $installFull
+            $payloadCommitted = $true
+        }
+
+        $loader = Join-Path $installFull 'QS3D.BricsCAD.V25.dll'
+        $loadCtrls = if ($LoadMode -eq 'OnStartup') { 2 } else { 4 }
+        foreach ($target in $targets) {
+            if ($PSCmdlet.ShouldProcess("$($target.Version)/$($target.Language)", "Register QS3D DemandLoad ($LoadMode)")) {
+                New-Item -Path $target.AppKey -Force | Out-Null
+                New-ItemProperty -Path $target.AppKey -Name 'Loader' -Value $loader -PropertyType String -Force | Out-Null
+                New-ItemProperty -Path $target.AppKey -Name 'LoadCtrls' -Value $loadCtrls -PropertyType DWord -Force | Out-Null
+                New-ItemProperty -Path $target.AppKey -Name 'Description' -Value 'QS3D for BricsCAD V25' -PropertyType String -Force | Out-Null
+                $commandsKey = Join-Path $target.AppKey 'Commands'
+                Remove-Item -LiteralPath $commandsKey -Recurse -Force -ErrorAction SilentlyContinue
+                New-Item -Path $commandsKey -Force | Out-Null
+                foreach ($command in $commands) {
+                    New-ItemProperty -Path $commandsKey -Name $command -Value $command -PropertyType String -Force | Out-Null
+                }
+                Assert-DemandLoadRegistration -Target $target -ExpectedLoader $loader -ExpectedLoadCtrls $loadCtrls -ExpectedCommands $commands
+            }
+        }
+
+        if ($backup -and (Test-Path -LiteralPath $backup)) { Remove-Item -LiteralPath $backup -Recurse -Force }
+        Write-Host "QS3D installed: $installFull"
+        Write-Host "DemandLoad mode: $LoadMode"
+        Write-Host "Registered targets: $($targets.Count)"
+        Write-Host 'Host requirement: BricsCAD V25 Pro or higher. Shape/Lite cannot load the QS3D BRX/.NET plugin.'
+        Write-Host 'Security settings were not weakened. Production -RequireSigned verifies both DLLs and all packaged PowerShell executable payloads.'
     }
-    throw $originalError
+    catch {
+        $originalError = $_
+        $rollbackFailures = @()
+
+        for ($index = $registrySnapshots.Count - 1; $index -ge 0; $index--) {
+            try { Restore-DemandLoadSnapshot -Snapshot $registrySnapshots[$index] }
+            catch { $rollbackFailures += ("registry " + $registrySnapshots[$index].AppKey + ": " + $_.Exception.Message) }
+        }
+
+        try {
+            if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+            if ($backup -and (Test-Path -LiteralPath $backup)) {
+                if (Test-Path -LiteralPath $installFull) { Remove-Item -LiteralPath $installFull -Recurse -Force }
+                Move-Item -LiteralPath $backup -Destination $installFull
+            }
+            elseif ($payloadCommitted -and (Test-Path -LiteralPath $installFull)) {
+                Remove-Item -LiteralPath $installFull -Recurse -Force
+            }
+        }
+        catch { $rollbackFailures += ("payload: " + $_.Exception.Message) }
+
+        if ($rollbackFailures.Count -gt 0) {
+            Write-Warning ("QS3D installer rollback encountered error(s): " + ($rollbackFailures -join ' | '))
+        }
+        throw $originalError
+    }
+}
+finally {
+    Exit-Qs3dUpdateMutex -Mutex $updateMutex
 }
