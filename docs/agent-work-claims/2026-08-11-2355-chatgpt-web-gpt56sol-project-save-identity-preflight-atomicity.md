@@ -1,17 +1,37 @@
 # Agent Work Claim
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETE`
+- State: `COMPLETE`
 - Agent: `chatgpt-web-gpt56sol-20260811-project-save-identity-preflight-atomicity`
 - Started (UTC): `2026-08-11T16:55:00Z`
-- Last Updated (UTC): `2026-08-11T16:55:00Z`
-- Expected Completion: `same session after source-safe implementation and repository-verifiable qualification`
+- Last Updated (UTC): `2026-08-11T17:03:00Z`
+- Expected Completion: `completed source-side; interactive BricsCAD Save As qualification remains local-only`
 - Task Key: `PERSISTENCE-PROJECT-SAVE-IDENTITY-PREFLIGHT-ATOMICITY`
 - Intended Work: Prevent fail-fast QS3D Save / Save As validation failures from mutating the in-memory project's drawing identity or ChangeVersion before any sidecar write is authorized.
-- Scope: `src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs`; one focused source preflight; this claim and planning documentation.
-- Verified Defect: `Save()` currently calls `SyncDrawingIdentity(project, document)` before recovery-block checks, project-file lock acquisition, backing-store freshness/path-transition validation, and sidecar-baseline validation. `SyncDrawingIdentity` can change `DrawingPath`, `DrawingFingerprint`, matching `ProjectElement.DrawingFingerprint` values and call `project.Touch()`. Therefore a Save As rejected because the target sidecar already exists/stale, or another pre-write freshness/baseline guard fails, can leave RAM identity/revision changed even though no write was authorized.
-- Implementation Contract: Keep Save As identity synchronization, but defer it until all fail-fast no-write guards that do not require the synchronized identity have passed and the project lock is held. Do not add whole-project rollback around store writes; disk publication may already have occurred on later I/O failures and a blind rollback would create RAM/disk divergence. Preserve recovery metadata semantics and same-lock freshness/conditional-commit guarantees.
-- Out of Scope: Qsdb serialization/replacement internals; recovery backup selection; post-publication I/O rollback semantics; Reload/HasPendingChanges/TrySavePending behavior unless required by source contract; native BricsCAD V25 runtime claims; GitHub Actions dispatch.
-- Coordination: Historical local V25 parity branch is 870 commits behind current main with zero unique commits, so it does not own this file. The previous `recovery-save-stamp` claim is `RELEASED` and concerned `ProjectPersistenceStamp`, not Save As identity/preflight ordering. No current matching claim was found before registration.
-- Verification Plan: Record detailed plan before source edit; preserve current path-transition/backing-store guard and recovery ordering; add a focused preflight that isolates `Save()` and requires path/recovery/no-write guards before `SyncDrawingIdentity`, while requiring identity sync before Store SaveNew/Save/SavePreservingValidatedBackup and before MarkSaved; verify no broad rollback introduced; compare current-main concurrency before merge and re-fetch merge-SHA source after integration.
-- Native V25 Disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` where interactive Save As qualification is required; source-order behavior is remotely verifiable.
+- Final Scope: `src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs`; `scripts/preflight-project-save-identity-preflight-atomicity.py`; this claim and planning documentation.
+- Implementation Contract: Save now completes recovery/path/freshness/sidecar-baseline/path-transition no-write guards under the project lock before calling the mutating `SyncDrawingIdentity`. Identity synchronization still occurs before Store dispatch; same-lock revision capture and persistence stamping remain after Store dispatch. No whole-project post-I/O rollback was introduced.
+- Out of Scope Preserved: Qsdb serialization/replacement internals; recovery backup selection; post-publication I/O rollback semantics; Reload/HasPendingChanges/TrySavePending behavior; native BricsCAD V25 runtime claims; GitHub Actions dispatch.
+- Planning: `docs/PROJECT-SAVE-IDENTITY-PREFLIGHT-ATOMICITY-PLAN-2026-08-11.md` — final source-side status `IMPLEMENTED_SOURCE_SIDE`.
+- Completion Evidence:
+  - Claim registration before source: `b81e277b75d714c6d4805d14623cfeb26a674cfe`.
+  - Planning before source: `29c01a21d60fc83adc39ebcc1ae4e6c198260e77`.
+  - Source commit: `94d5b9326e6084dc9541791fa8279cae37be721a` — exact diff 1 addition / 1 deletion, moving only `SyncDrawingIdentity(project, document);` from the start of `Save()` to immediately after `pathTransition` calculation.
+  - Focused gate/head: `5c34ec2d9a156c66cf1c9016386b73a49c85c07b`.
+  - Branch diff: exactly two files; source 1-line move plus 144-line focused source preflight.
+  - PR #548 raw pre-merge state: `mergeable=true`, `rebaseable=true`, `mergeable_state=clean`.
+  - Final merge: PR #548 -> `cb3dcfbd9dcafe6ceb37eb8692b6119462a2293f`, merged with expected head SHA; no force update used.
+  - Merge-SHA source blob: `adc2e97885dff110734a997d6f5fb772115eb978`; focused gate blob: `3b3f314cad1ee18dbb5867140f21d95de54cc7e1`.
+  - Source qualifier: merge-SHA re-fetch confirms recovery-required check, same-lock `EnsureBackingStoreUnchanged`, sidecar baseline and `pathTransition` all precede `SyncDrawingIdentity`, while all Store branches and `MarkSaved()` remain afterward.
+  - Concurrency qualifier: 23 commits landed between branch base and pre-merge main without touching ProjectContext/gate; six commits landed immediately after merge and likewise did not touch them.
+  - Historical local V25 branch `agent/local-v25-blt-parity-next-20260811` was verified 870 commits behind current main with zero unique commits; no active ownership collision remained.
+  - GitHub checks: no combined status checks and no workflow runs registered for the merge SHA; absence recorded, not treated as CI PASS.
+  - Native V25 disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` for interactive Save As behavior under the existing local qualification queue.
+- Qualifier Verdict: `REMOTE_PASS` for source ordering/pre-write atomicity; native Save As runtime remains intentionally unclaimed remotely.
+- Requirement Smoke Verdict: focused source-order contract `PASS`; native UI/runtime `PENDING_LOCAL`.
+- Change Log:
+  - `2026-08-11T16:55:00Z` — Registered claim after verifying that `SyncDrawingIdentity` mutates project/element identity and `ChangeVersion` before Save's no-write guards.
+  - `2026-08-11T16:56:00Z` — Recorded plan and verified `EnsureBackingStoreUnchanged` does not require synchronized project drawing identity.
+  - `2026-08-11T16:58:43Z` — Committed the exact one-line call reorder.
+  - `2026-08-11T17:00:00Z` — Added focused save-order gate and opened clean PR #548.
+  - `2026-08-11T17:01:00Z` — PR #548 merged atomically with expected head SHA.
+  - `2026-08-11T17:03:00Z` — Re-fetched merge-SHA source/gate, checked post-merge concurrency and GitHub check/workflow absence, and closed claim `COMPLETE`.
