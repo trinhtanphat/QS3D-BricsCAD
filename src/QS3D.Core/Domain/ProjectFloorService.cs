@@ -199,7 +199,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var floor = FindRequired(project, floorId);
-            if (string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals((project.ActiveFloorId ?? string.Empty).Trim(), floor.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active floor. Activate another floor first.");
             var references = ResolveProjectElements(project).Count(x => ReferencesFloor(x, floor.Id));
             if (references > 0)
@@ -218,16 +218,18 @@ namespace QS3D.Core.Domain
         public static bool ReferencesFloor(ProjectElement element, string floorId)
         {
             if (element == null || string.IsNullOrWhiteSpace(floorId)) return false;
-            return string.Equals(element.FloorId, floorId, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(Property(element, BottomLevelIdKey), floorId, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(Property(element, TopLevelIdKey), floorId, StringComparison.OrdinalIgnoreCase);
+            var normalizedFloorId = floorId.Trim();
+            return string.Equals((element.FloorId ?? string.Empty).Trim(), normalizedFloorId, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(Property(element, BottomLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(Property(element, TopLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase);
         }
 
         public static bool ReferencesVerticalLevel(ProjectElement element, string floorId)
         {
             if (element == null || string.IsNullOrWhiteSpace(floorId)) return false;
-            return string.Equals(Property(element, BottomLevelIdKey), floorId, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(Property(element, TopLevelIdKey), floorId, StringComparison.OrdinalIgnoreCase);
+            var normalizedFloorId = floorId.Trim();
+            return string.Equals(Property(element, BottomLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(Property(element, TopLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase);
         }
 
         private static IReadOnlyList<ProjectElement> ResolveOwnedElements(ProjectState project, IEnumerable<ProjectElement> elements)
