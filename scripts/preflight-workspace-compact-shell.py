@@ -70,6 +70,8 @@ if XAML.is_file():
         'Click="OnHealthClick"',
         'Click="OnSaveClick"',
         'PHẠM VI LÀM VIỆC',
+        'MÔ HÌNH',
+        'Content="Làm mới"',
         'FAMILY / TYPE',
         'THUỘC TÍNH',
         'ĐỐI TƯỢNG ĐANG CHỌN',
@@ -114,8 +116,8 @@ if PARTIAL.is_file():
         '"FAMILY / TYPE"',
         '"THUỘC TÍNH"',
         '"ĐỐI TƯỢNG ĐANG CHỌN"',
-        # Responsive header contract: preserve the full XAML labels/handlers but collapse
-        # decorative badges and shorten only display labels at the compact breakpoint.
+        # Responsive top-header contract: preserve full XAML labels/handlers but collapse
+        # decorative badges and shorten only display labels at compact breakpoints.
         "TuneResponsiveHeader()",
         "header.SizeChanged += OnCompactHeaderSizeChanged",
         "ApplyCompactHeaderBreakpoint(header)",
@@ -128,6 +130,19 @@ if PARTIAL.is_file():
         'button.Content = narrow ? "Zoom" : "Zoom chọn"',
         "status.MinWidth = 0",
         "status.TextAlignment = TextAlignment.Center",
+        # Owner screenshot regression: the narrow model-section DockPanel must reserve
+        # the right-side refresh action and constrain the MÔ HÌNH/caption text area.
+        "TuneModelSectionHeaderCollision()",
+        'string.Equals(text.Text, "MÔ HÌNH"',
+        'FindButton("Làm mới")',
+        "header.LastChildFill = false",
+        "DockPanel.SetDock(titleStack, Dock.Left)",
+        "DockPanel.SetDock(refreshButton, Dock.Right)",
+        "TextWrapping.NoWrap",
+        "TextTrimming.CharacterEllipsis",
+        "titleStack.MaxWidth = Math.Max(48, header.ActualWidth - refreshWidth - 7)",
+        "header.SizeChanged += (_, __) => UpdateAvailableTitleWidth()",
+        "refreshButton.SizeChanged += (_, __) => UpdateAvailableTitleWidth()",
     )
     for token in required_partial:
         if token not in partial:
@@ -143,10 +158,11 @@ if PARTIAL.is_file():
         "OnDeleteClick(",
         "OnQuantityClick(",
         "OnSaveClick(",
+        "Canvas.Set",
         "Margin = new Thickness(-",
     ):
         if forbidden in partial:
-            errors.append("Workspace compact presentation must remain presentation-only: " + forbidden)
+            errors.append("Workspace compact presentation must remain presentation-only/collision-safe: " + forbidden)
 
 if DOC.is_file():
     doc = DOC.read_text(encoding="utf-8")
@@ -172,4 +188,8 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Workspace compact-shell preflight PASS: compact header breakpoints prevent badge/action collisions, existing Workspace actions remain wired, presentation stays source-only, and the BricsCAD viewport boundary is preserved.")
+print(
+    "Workspace compact-shell preflight PASS: top-header breakpoints and the narrow MÔ HÌNH/Làm mới "
+    "section reserve collision-free space, existing Workspace actions remain wired, presentation stays "
+    "source-only, and the BricsCAD viewport boundary is preserved."
+)
