@@ -45,6 +45,10 @@ namespace QS3D.Core.SmokeTests
             if (BomReleaseGuardService.Inspect(project, live).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
                 throw new Exception("Live generated Handle must satisfy the BOM release guard.");
 
+            var caseSensitiveLive = new HashSet<string>(new[] { "2b" }, StringComparer.Ordinal);
+            if (BomReleaseGuardService.Inspect(project, caseSensitiveLive).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
+                throw new Exception("BOM generated Handle liveness must be case-insensitive regardless of the caller set comparer.");
+
             element.Properties["GeneratedFuturePanelHandles"] = "3C;3D;3d";
             var partialFuture = new HashSet<string>(new[] { "2B", "3C" }, StringComparer.OrdinalIgnoreCase);
             Has(BomReleaseGuardService.Inspect(project, partialFuture), "BOM_GENERATED_HANDLE_MISSING");

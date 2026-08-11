@@ -12,9 +12,19 @@ namespace QS3D.Core.Diagnostics
         public static IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveGeneratedHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+
+            ISet<string>? liveHandleIndex = null;
+            if (liveGeneratedHandles != null)
+            {
+                var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var handle in liveGeneratedHandles)
+                    if (handle != null) index.Add(handle);
+                liveHandleIndex = index;
+            }
+
             var issues = new List<ModelHealthIssue>();
             issues.AddRange(new RoomFinishHealthService().Inspect(project));
-            issues.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, liveGeneratedHandles));
+            issues.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, liveHandleIndex));
 
             var included = new List<ProjectElement>();
             foreach (var element in project.Elements)
@@ -68,9 +78,9 @@ namespace QS3D.Core.Diagnostics
                     issues.Add(new ModelHealthIssue("BOM_TRACEABILITY_FAILED", HealthSeverity.Error, "Không thể dựng provenance Handle an toàn: " + ex.Message, element.Id));
                 }
 
-                if (liveGeneratedHandles != null)
+                if (liveHandleIndex != null)
                     foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element))
-                        if (!liveGeneratedHandles.Contains(entry.Key))
+                        if (!liveHandleIndex.Contains(entry.Key))
                             issues.Add(new ModelHealthIssue("BOM_GENERATED_HANDLE_MISSING", HealthSeverity.Error, entry.Value + " tham chiếu CAD Handle không còn tồn tại: " + entry.Key + ".", element.Id));
             }
 

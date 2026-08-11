@@ -16,7 +16,10 @@ namespace QS3D.Core.Services
             // Validate every applicable measured input before mutating quantities so
             // malformed later fields cannot leave a partially applied measurement.
             var hasSurfaceArea = TryRead(element, SurfaceAreaProperty, out var surfaceArea);
-            var hasVolume = SupportsMaterialVolume(element.Category) && TryRead(element, VolumeProperty, out var volume);
+            var hasVolume = false;
+            var volume = 0d;
+            if (SupportsMaterialVolume(element.Category))
+                hasVolume = TryRead(element, VolumeProperty, out volume);
 
             if (hasSurfaceArea)
                 element.SetQuantity("MeasuredSurfaceAreaM2", surfaceArea);

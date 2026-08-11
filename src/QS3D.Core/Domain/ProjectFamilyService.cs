@@ -213,7 +213,7 @@ namespace QS3D.Core.Domain
             {
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
                 if (!ids.Add(element.Id)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id);
-                if (string.Equals(element.FamilyId, familyId, StringComparison.OrdinalIgnoreCase)) result.Add(element);
+                if (string.Equals((element.FamilyId ?? string.Empty).Trim(), familyId, StringComparison.OrdinalIgnoreCase)) result.Add(element);
             }
             result.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Id, right.Id));
             return result.AsReadOnly();
