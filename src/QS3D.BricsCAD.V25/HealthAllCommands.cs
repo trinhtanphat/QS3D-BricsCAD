@@ -97,9 +97,11 @@ namespace QS3D.BricsCAD.V25
 
                 var window = new ModelHealthWindow(document, issues, issue =>
                 {
+                    if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+
                     if (string.IsNullOrWhiteSpace(issue.ElementId))
                     {
-                        var artifactHandles = LocateProjectArtifactHandles(project, issue.Code).ToArray();
+                        var artifactHandles = LocateProjectArtifactHandles(currentProject, issue.Code).ToArray();
                         if (artifactHandles.Length == 0) return;
                         var artifactCount = CadHandleService.Select(document, artifactHandles);
                         PaletteCoordinator.SetStatus("Health All Locate " + issue.Code + " • " + artifactCount + " CAD object");
@@ -107,10 +109,10 @@ namespace QS3D.BricsCAD.V25
                         return;
                     }
 
-                    var element = project.FindElement(issue.ElementId);
+                    var element = currentProject.FindElement(issue.ElementId);
                     if (element == null) return;
                     var handles = LocateHandles(element, issue.Code).ToArray();
-                    if (handles.Length == 0) handles = SourceHandleResolver.Resolve(project, new[] { element.Id }).ToArray();
+                    if (handles.Length == 0) handles = SourceHandleResolver.Resolve(currentProject, new[] { element.Id }).ToArray();
                     var count = CadHandleService.Select(document, handles);
                     PaletteCoordinator.SetStatus("Health All Locate " + element.Id + " • " + count + " CAD object");
                     if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
