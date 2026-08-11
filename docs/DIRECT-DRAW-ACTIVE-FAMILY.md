@@ -25,6 +25,26 @@ choose Family / Type once
 
 This is complementary to the existing per-category primary commands. It does not remove them and does not replace any `*ADV` workflow.
 
+## Workspace gestures
+
+The Family / Type list now exposes the same stable entry point without forcing the modeler to move back to the Ribbon:
+
+- **double-click a Family / Type** → make that row authoritative as the active Family and launch `QS3DDRAWACTIVE`;
+- **Ctrl+D** while the Workspace has keyboard focus → launch `QS3DDRAWACTIVE` for the selected Family;
+- Family context menu → **Vẽ Nhanh (Ctrl+D)**.
+
+All three gestures reuse the same `WorkspaceViewModel.SetActiveFamily(...)` write already used by other Workspace authoring actions, then send the single `QS3DDRAWACTIVE` command. They do not duplicate per-category dispatch rules inside the Workspace.
+
+The interaction intent is:
+
+```text
+Family list
+-> select/double-click type
+-> draw
+```
+
+instead of repeatedly moving between the Family palette and different Ribbon commands.
+
 ## Dispatch contract
 
 `QS3DDRAWACTIVE` reads the existing active Family through `ProjectFamilyActivationService` and delegates to the already-guarded primary Quick Direct Draw command:
@@ -62,9 +82,13 @@ The dispatcher itself is **read-only / non-creating**:
 
 After dispatch, the target primary command remains the sole owner of its established geometry-acquisition, preview-project, semantic capture, regeneration, ownership and rollback lifecycle. Therefore cancelling the target command keeps the same project-creation boundary as running that primary command directly.
 
+The Workspace gesture layer does intentionally call the existing canonical `SetActiveFamily(...)` operation before dispatch. That is the same user-requested Family-selection mutation already used by Workspace authoring actions; it is not a geometry or project-bootstrap shortcut.
+
 ## Why this is not a second authoring engine
 
 `QS3DDRAWACTIVE` contains no source geometry builder, no semantic capture implementation, no regeneration engine and no native builder. It only selects the already-supported primary command from the current active Family category.
+
+The Workspace gesture layer likewise contains no category switch. It only sets the selected Family active and sends `QS3DDRAWACTIVE`.
 
 This keeps the product direction simple:
 
@@ -86,8 +110,11 @@ Local proof should include:
 4. WallOpening versus Window Family metadata dispatch is deterministic and Window still persists `OpeningUsage=Window` on created semantics;
 5. ESC/cancel inside the delegated primary command leaves the same no-residue state as direct invocation;
 6. unsupported active categories fail closed without mutation;
-7. Ribbon **Vẽ Nhanh** routes to `QS3DDRAWACTIVE` and remains usable across document switches without cross-DWG mutation.
+7. Ribbon **Vẽ Nhanh** routes to `QS3DDRAWACTIVE` and remains usable across document switches without cross-DWG mutation;
+8. Workspace Family double-click, `Ctrl+D`, and context-menu **Vẽ Nhanh** each activate exactly the selected live Family and launch one command only;
+9. stale/reloaded Workspace Family rows still fail closed through the existing canonical `SetActiveFamily` boundary instead of dispatching against a stale Family;
+10. repeated load/unload of the modeless Workspace does not accumulate duplicate key, double-click, or context-menu handlers.
 
-Transient DrawJig preview, continuous/repeated authoring and native editor lifecycle remain LOCAL_ONLY under `LOCAL-008`; this dispatcher does not claim those runtime behaviors are complete.
+Transient DrawJig preview, continuous/repeated authoring and native editor lifecycle remain LOCAL_ONLY under `LOCAL-008`; these gestures do not claim those runtime behaviors are complete.
 
 GitHub Actions remain manual-only under `CI_POLICY.md`; this source/docs batch does not authorize workflow dispatch.
