@@ -8,6 +8,8 @@ namespace QS3D.Core.Reporting
 {
     public sealed class RoomFinishScheduleRow
     {
+        public string ProjectId { get; set; } = string.Empty;
+        public string DrawingFingerprint { get; set; } = string.Empty;
         public string Floor { get; set; } = string.Empty;
         public string Room { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;
@@ -20,6 +22,7 @@ namespace QS3D.Core.Reporting
         public double PrimaryQuantity { get; set; }
         public IList<string> ElementIds { get; } = new List<string>();
         public IList<string> RoomIds { get; } = new List<string>();
+        public IList<string> SourceHandles { get; } = new List<string>();
     }
 
     public static class RoomFinishScheduleBuilder
@@ -67,6 +70,8 @@ namespace QS3D.Core.Reporting
                 {
                     row = new RoomFinishScheduleRow
                     {
+                        ProjectId = project.ProjectId,
+                        DrawingFingerprint = project.DrawingFingerprint,
                         Floor = floor,
                         Room = roomLabel,
                         Category = element.Category.ToString(),
@@ -82,6 +87,7 @@ namespace QS3D.Core.Reporting
                 row.AreaM2 = Add(row.AreaM2, metrics.AreaM2, element.Id + "/finish area");
                 row.PrimaryQuantity = Add(row.PrimaryQuantity, primary, element.Id + "/finish primary quantity");
                 row.ElementIds.Add(element.Id);
+                ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
                 if (roomId.Length > 0 && !row.RoomIds.Contains(roomId, StringComparer.OrdinalIgnoreCase)) row.RoomIds.Add(roomId);
             }
             return order.Select(x => rows[x]).ToList().AsReadOnly();
