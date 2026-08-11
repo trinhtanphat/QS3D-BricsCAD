@@ -59,8 +59,7 @@ namespace QS3D.Core.Reporting
                 var category = element.Category.ToString();
                 var key = detail
                     ? "ELEMENT\u001f" + elementId
-                    : floorId + "\u001f" + zoneId + "\u001f" + category + "\u001f" + familyId +
-                      "\u001f" + material + "\u001f" + DensityKey(densityKgM3);
+                    : CanonicalGroupKey(floorId, zoneId, category, familyId, material, DensityKey(densityKgM3));
                 var created = false;
                 if (!rows.TryGetValue(key, out var row))
                 {
@@ -210,6 +209,16 @@ namespace QS3D.Core.Reporting
         private static string DensityKey(double? densityKgM3) => densityKgM3.HasValue
             ? densityKgM3.Value.ToString("R", CultureInfo.InvariantCulture)
             : "<none>";
+
+        private static string CanonicalGroupKey(params string[] parts)
+        {
+            return string.Join("|", (parts ?? Array.Empty<string>())
+                .Select(part =>
+                {
+                    var value = part ?? string.Empty;
+                    return value.Length.ToString(CultureInfo.InvariantCulture) + ":" + value;
+                }));
+        }
 
         private static double? AddHomogeneousMass(double? current, double? value, string label)
         {
