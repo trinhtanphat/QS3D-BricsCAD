@@ -1,0 +1,24 @@
+# Agent work claim — Native Table ChangeVersion freshness
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `ACTIVE`
+- Scope: close the pre-prompt semantic freshness gap for the six fixed native Table placement commands.
+- Files reserved:
+  - `src/QS3D.BricsCAD.V25/BqNativeTableCommands.cs`
+  - `src/QS3D.BricsCAD.V25/BbsNativeTableCommands.cs`
+  - `src/QS3D.BricsCAD.V25/DoorOpeningNativeTableCommands.cs`
+  - `src/QS3D.BricsCAD.V25/MaterialUsageNativeTableCommands.cs`
+  - `src/QS3D.BricsCAD.V25/RoomFinishNativeTableCommands.cs`
+  - `src/QS3D.BricsCAD.V25/SemanticElementTableCommands.cs`
+  - `scripts/preflight-native-table-changeversion-freshness.py`
+  - this claim file for close-out
+- Evidence: all six commands probe an existing project before `GetPoint`, preserve only `ProjectId`, then rebind canonically after the prompt. `ExistingProjectMutationContext` protects project/backing-store identity but not the pre-prompt `ChangeVersion`. A modeless semantic edit can therefore keep the same ProjectId while changing the state the Table is about to materialize. `SemanticScheduleNativeTableCommands` already carries the intended stronger precedent: snapshot `ProjectId + ChangeVersion`, then fail closed through `RequireFresh` after user interaction.
+- Intended contract:
+  - capture `previewProject.ChangeVersion` together with `ProjectId` before point acquisition;
+  - after canonical existing-project bind, reject either ProjectId or ChangeVersion drift before regeneration/native Table mutation;
+  - preserve cancel-before-bind behavior, UCS/modelspace checks, existing ownership/transaction/audit rollback, and UI finalization;
+  - do not alter refresh/remove/health paths that do not have a pre-mutation placement prompt.
+- Non-overlap: Custom Semantic Schedule Table already implements this freshness contract and is excluded. Recent native-table single-touch/audit-owned-touch claims are completed. Grid annotation, quantity locate, release SemVer and unrelated active claims are excluded.
+- Validation: exact source diff/current-source review plus focused auto-discovered static preflight. No GitHub Actions under `continue all`; no BricsCAD V25 runtime PASS claimed.
+- Completion condition: all six placement commands fail closed on same-ProjectId ChangeVersion drift before any Table mutation, with exact SHAs recorded and reservation released.
