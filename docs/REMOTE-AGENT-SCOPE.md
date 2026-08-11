@@ -14,6 +14,31 @@ Remote agents must not repeatedly re-audit, re-run, re-open or re-report these g
 
 The purpose of this rule is to stop remote reviews from spending time rediscovering the same environment boundary and to keep runtime truth tied to the machine that can actually prove it.
 
+## Mandatory durable handoff for anything a non-local agent cannot finish
+
+This is an **owner-required hard rule**, not optional documentation hygiene.
+
+If a remote/hybrid/non-local agent cannot complete, execute, validate or prove a task with the environment and credentials actually available to that agent, it must create or update a durable Markdown handoff **before ending that work batch**. A chat-only note, final-answer caveat, private scratchpad, issue comment, or repeated `NOT TESTED` statement is not a sufficient handoff.
+
+Use `docs/LOCAL-AGENT-INBOX.md` for every task whose remaining blocker needs a local machine, licensed BricsCAD V25, Windows/native CAD runtime, private DWG, local GUI/hardware, signing secret, customer-like install environment, or other local-only resource. Do **not** create another live queue.
+
+Before adding anything, search the current inbox by task ID, area, command, source file and scenario. If a matching item already exists, update that item instead of creating a duplicate. A remote agent must read the current inbox before re-auditing a previously parked topic; an existing unchanged LOCAL_ONLY item is removed from the remote backlog.
+
+Every new or materially changed handoff must record enough information for a local agent to continue without rediscovering the remote work:
+
+- a unique/stable inbox task ID and priority/status;
+- the exact blocker and why the current agent cannot prove it;
+- `Source-side status: COMPLETE`, `PARTIAL`, or `NOT_STARTED`;
+- the exact source files, commands, test scenario or runbook involved;
+- the minimum local steps/probe to execute;
+- the expected pass/fail evidence and exit criteria;
+- related issue/PR/commit/SHA when known;
+- the last date/source state checked.
+
+If deterministic source-safe work can still be done remotely, do that work first. Handoff only the irreducible local residue. Never use this rule to avoid source implementation that the current agent can actually perform.
+
+A non-local agent must not repeatedly report the same unchanged local blocker on later `continue all` passes. It should only touch that inbox item again when source changes materially alter the required local scenario, the owner supplies missing policy/input, or local evidence changes its status.
+
 ## Current remote completion snapshot
 
 Before creating another broad remote backlog, read `docs/REMOTE-IMPLEMENTATION-COMPLETION-2026-08-11.md`. It is the newest repository-level classification of the current source-safe implementation wave and explains which remaining gaps are `LOCAL_ONLY`, `POLICY_REQUIRED`, `ENGINEERING_REQUIRED` or `FORMAT_SCOPE_REQUIRED`.
