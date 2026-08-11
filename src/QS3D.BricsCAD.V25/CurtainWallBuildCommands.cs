@@ -23,7 +23,14 @@ namespace QS3D.BricsCAD.V25
             var pathFrames = new CurtainFrameBuildResult();
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var selected = EntitySnapshotReader.ReadCurrentSelection(document);
+                if (selected.Count == 0)
+                {
+                    Report(document, "Curtain 3D: chọn GlassWall semantic LINE hoặc open/bulged POLYLINE WCS-XY.");
+                    return;
+                }
+
+                var project = ExistingProjectMutationContext.Require(document, "Curtain 3D");
 
                 // Resolve rule/dependency failures before any host/frame builder commits native CAD.
                 // Native host and detail builders intentionally remain separate transaction families,
