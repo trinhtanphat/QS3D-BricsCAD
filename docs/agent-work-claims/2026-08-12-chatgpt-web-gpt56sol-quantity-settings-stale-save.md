@@ -2,20 +2,27 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: prevent long-lived `QS3DSETUP` windows from overwriting persisted Quantity Settings that changed externally after the window loaded.
-- Files reserved:
-  - `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.xaml.cs`
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.xaml.cs` (reviewed/reserved; no source edit required)
   - `src/QS3D.BricsCAD.V25/UI/QuantitySettingsWindow.UnsavedChanges.cs`
   - `scripts/preflight-quantity-settings-unsaved-close.py`
   - `scripts/preflight-quantity-settings-stale-save.py`
   - this claim file
-- Contract:
-  - keep the existing structural `SettingsEquivalent` comparator and unsaved-close Save/Discard/Cancel UX;
-  - establish whether the initial persisted baseline is verifiably equal to the loaded UI state;
-  - before normal Save and before close-time Save, if a verified baseline exists, reload/normalize current persisted settings and fail closed if they differ from that baseline;
-  - after a successful Save, advance the persisted baseline and mark it verified;
-  - preserve recovery behavior for an initially unreadable non-future-schema settings file: an unverifiable initial baseline does not permanently block an explicit recovery Save;
-  - future-schema read-only blocking, template import/export, rule/category editing semantics and `QuantitySettingsStore` atomic writer remain unchanged;
-  - reconcile the existing unsaved-close preflight and add a focused stale-save guard;
-  - no GitHub Actions dispatch and no BricsCAD V25/WPF runtime PASS from this web session.
+- Implemented contract:
+  - existing structural `SettingsEquivalent` and unsaved-close Save/Discard/Cancel UX remain intact;
+  - initial persisted baseline is structurally verified against the store when readable;
+  - normal Save now replaces the direct XAML-wired `Save_Click` event with a guarded wrapper that checks persisted freshness first, then delegates to the unchanged Save implementation;
+  - close-time Save runs the same freshness check before `_store.Save(current)`;
+  - persisted changes after window load fail closed instead of overwriting newer settings; successful Save advances and verifies the baseline;
+  - if the window originally opened from an unreadable non-future-schema file and that file remains unreadable, explicit recovery Save remains allowed; if it becomes valid but different, Save is blocked;
+  - future-schema read-only blocking, template import/export, category/rule editing and `QuantitySettingsStore` atomic writer remain unchanged.
+- Source commits:
+  - `1834d8ed76213726ee70f8f60e1799ca133dc38c` — `fix(quantity): guard settings stale persistence`.
+  - `0f99e74189ef5aade2ac311fc65226df4ed08618` — `fix(quantity): guard normal settings save freshness`.
+- Existing guard reconciliation: `7e1f1060fd5700b2dc99e40bd3daf40a792e347b` — `test(quantity): align unsaved close with stale guard`.
+- Focused stale-save guard: `a006b701de90662fa8adfdbf5da94dd315f52441` — `scripts/preflight-quantity-settings-stale-save.py`.
+- Validation actually performed: connector-side exact source diff review for both source commits, current Save handler review, existing unsaved-close gate reconciliation review, and focused guard source review. Preflight scripts were not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25/WPF runtime PASS claimed.
+- Reservation released.
