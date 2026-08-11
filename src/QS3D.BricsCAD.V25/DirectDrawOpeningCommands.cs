@@ -139,7 +139,8 @@ namespace QS3D.BricsCAD.V25
                 createdElement.SetProperty("BottomOffsetM", sillM.ToString("R", CultureInfo.InvariantCulture));
                 createdElement.SetProperty("BooleanClearanceM", clearanceM.ToString("R", CultureInfo.InvariantCulture));
 
-                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                    .RegenerateDirtySubset(project, new[] { createdElementId });
 
                 // QS3DAUTOLINKHOSTS resolves the active document internally. Re-check immediately
                 // before delegating and keep only the newly-created source selected so no unrelated
@@ -160,9 +161,11 @@ namespace QS3D.BricsCAD.V25
                 if (!createdElement.Properties.TryGetValue("HostWallId", out hostId) || string.IsNullOrWhiteSpace(hostId))
                     throw new InvalidOperationException(label + " chưa tìm được host duy nhất trong phạm vi Auto Host; operation được rollback để không tạo opening mồ côi.");
 
-                // AutoHostLinkCommands catches its command-surface failures. A second deterministic
-                // regeneration forces any semantic/link inconsistency back into this outer rollback.
-                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                // AutoHostLinkCommands catches its command-surface failures. Keep the deterministic
+                // second pass inside the created opening + resolved host scope so unrelated dirty
+                // project elements remain untouched by one Direct Draw operation.
+                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                    .RegenerateDirtySubset(project, new[] { createdElementId, hostId });
                 project.Touch();
             }
             catch (Exception operationError)
