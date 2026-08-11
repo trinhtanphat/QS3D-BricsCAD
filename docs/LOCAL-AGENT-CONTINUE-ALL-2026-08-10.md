@@ -183,12 +183,9 @@ Do not compose `QS3DSYNCSOURCE` + `QS3DBUILD3D` and call the result atomic unles
 
 ### 7.1 Whole-command atomicity/recovery
 
-`QS3DCURTAIN3D` still orchestrates semantic regeneration, host replacement and frame replacement across separate native transaction families. Keep truthful `PARTIAL COMMIT` reporting until one of these is implemented and tested:
+`QS3DCURTAIN3D` now wraps the canonical nested host/frame builder transactions in one outer native transaction and restores a command-level semantic snapshot when that outer transaction does not commit. The old `PARTIAL COMMIT` source contract is retired.
 
-- a shared native transaction orchestration that all builders can participate in; or
-- a durable compensation journal with deterministic recovery and save/reopen behavior.
-
-Failure injection is required after every logical phase.
+LOCAL_ONLY completion still requires failure injection after every logical phase on the exact built SHA, followed by health and save/reopen checks proving no half-host/half-frame state survives.
 
 ### 7.2 Native panel-by-panel glass
 

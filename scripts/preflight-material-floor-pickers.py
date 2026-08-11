@@ -78,7 +78,7 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs": [
         "private readonly Document _document", "MaterialCatalogWindow(Document document)",
-        "_document = document", "ProjectContextCoordinator.GetOrCreate(_document)", "ReferenceEquals(",
+        "_document = document", "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", "ReferenceEquals(",
         "SemanticSelectionResolver.ResolveImplied(_document, project)", "ProjectMaterialCatalog.UpsertCustom", "ProjectMaterialCatalog.DeleteCustom",
         'element.SetProperty(target, material.Name)', '"CurtainFrameMaterial"', "ElementCategory.GlassWall",
         'AuditTrail.ForProject(project).Record("material.assign"', 'AuditTrail.ForProject(project).Record("material.catalog.upsert"',

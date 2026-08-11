@@ -65,6 +65,12 @@ The `ProjectElement.Category` hardening intentionally preserves the prior setter
 
 This is a Core/source invariant only; it does not change the LOCAL_ONLY BricsCAD V25 qualification boundary.
 
+### Curtain whole-command atomicity source boundary
+
+`QS3DCURTAIN3D` now captures a command-level semantic snapshot and opens one outer BricsCAD/Teigha transaction around the canonical LINE/path host and frame builders. Their cross-layer-safe builder transactions remain nested; an outer abort rolls back every earlier CAD phase before semantic state is restored. The obsolete `PARTIAL COMMIT` report was removed, and `scripts/preflight-curtain-orchestration-atomicity.py` guards ordering, commit and rollback wiring.
+
+This closes the source orchestration gap only. Exact-SHA V25 failure injection after each host/frame phase, health inspection and save/reopen proof remain LOCAL_ONLY. Panel-by-panel glass is a separate open feature.
+
 ## Product logic / detailed roadmap
 
 Read `docs/SOURCE-PRODUCT-PLAN-2026-08-10.md` for the new detailed architecture and execution plan.

@@ -14,18 +14,11 @@ This file extends `docs/LOCAL-V25-QUALIFICATION.md` and `docs/LOCAL-AGENT-REMAIN
 
 ## P0 — `QS3DCURTAIN3D` whole-command recovery/atomicity
 
-### Current boundary
+### Current source boundary
 
-`src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs` intentionally runs semantic regeneration, LINE host replacement, path host replacement, LINE frame replacement and path-frame replacement as separate stages. Each canonical host/frame builder is internally cross-layer atomic, but a later stage can fail after an earlier stage has already committed. The command correctly reports `PARTIAL COMMIT`; do not remove that warning until a stronger contract is implemented and proven.
+`src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs` now captures one command-level `ProjectStateSnapshot` and starts one outer BricsCAD/Teigha transaction around the canonical LINE host, path host, LINE frame and path-frame builders. Their existing transactions are nested; an outer abort therefore rolls back every earlier nested CAD commit before the semantic snapshot is restored. `PARTIAL COMMIT` reporting has been removed and `scripts/preflight-curtain-orchestration-atomicity.py` protects the source ordering/rollback contract.
 
-### Acceptable implementation directions
-
-Choose one architecture and document it before coding:
-
-1. **Shared native transaction orchestration**: refactor the participating host/frame builders so the high-level command can prepare all work and commit one BricsCAD transaction while semantic state remains rollback-capable; or
-2. **Recoverable compensation journal**: snapshot the complete previous host/frame semantic ownership plus enough native replacement state to deterministically restore the previous valid family when a later stage fails.
-
-Do not fake whole-command rollback by restoring only `.qsdb` metadata after native solids have committed. Do not erase foreign/ambiguous generated objects during compensation.
+This is source/build evidence, not yet exact-SHA licensed-runtime proof. Do not replace it with semantic-only rollback outside a native transaction, and do not erase foreign/ambiguous generated objects.
 
 ### Required source acceptance
 
@@ -35,7 +28,7 @@ Do not fake whole-command rollback by restoring only `.qsdb` metadata after nati
 - rollback/compensation failure is surfaced as a distinct health/readiness error, never as success;
 - `QS3DHEALTHALL` and `QS3DRELEASECHECK` detect an interrupted journal/recovery state;
 - save/reopen does not lose a pending recovery marker if a journal design is used;
-- add a dedicated `preflight-curtain-orchestration-atomicity.py` only after the contract is real.
+- keep `preflight-curtain-orchestration-atomicity.py` aligned with the real outer-transaction/snapshot contract.
 
 ### Required V25 proof
 

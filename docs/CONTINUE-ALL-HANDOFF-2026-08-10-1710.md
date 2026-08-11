@@ -63,13 +63,11 @@ Do not revert newer concurrent `main` work. Recent batches include:
 
 Current source wins if a commit after this handoff changes any of those areas.
 
-## Important remaining boundary: aggregate QS3DCURTAIN3D
+## Superseding boundary: aggregate QS3DCURTAIN3D
 
-The individual host/frame builders have guarded transaction/project rollback contracts, but `QS3DCURTAIN3D` still orchestrates multiple independent native transaction phases.
+Current source now places the guarded nested host/frame builder transactions inside one command-level outer native transaction and restores a semantic snapshot when it aborts. The historical `Curtain 3D PARTIAL COMMIT` source behavior described by this older handoff no longer applies.
 
-Therefore a later frame/path phase can fail after an earlier host phase has legitimately committed. Current source correctly reports `Curtain 3D PARTIAL COMMIT` instead of pretending a whole-command rollback occurred.
-
-Do not advertise whole-command Curtain atomicity yet.
+Do not advertise runtime qualification until the exact-SHA V25 phase-failure matrix below passes.
 
 A local V25 agent must explicitly test:
 

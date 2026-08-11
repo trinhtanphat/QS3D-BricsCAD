@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Export
@@ -33,7 +34,8 @@ namespace QS3D.Core.Export
             int namesToRemap,
             int sourceHandleCount,
             int blockerCount,
-            IReadOnlyList<string> nativeCleanupElementIds)
+            IReadOnlyList<string> nativeCleanupElementIds,
+            ProjectInterchangeNativeCleanupAuthorization nativeCleanupAuthorization)
         {
             Mode = mode;
             PreserveSourceHandleProvenance = preserveSourceHandleProvenance;
@@ -47,6 +49,7 @@ namespace QS3D.Core.Export
             SourceHandleCount = sourceHandleCount;
             BlockerCount = blockerCount;
             NativeCleanupElementIds = nativeCleanupElementIds ?? throw new ArgumentNullException(nameof(nativeCleanupElementIds));
+            NativeCleanupAuthorization = nativeCleanupAuthorization ?? throw new ArgumentNullException(nameof(nativeCleanupAuthorization));
         }
 
         public ProjectInterchangeImportExecutionMode Mode { get; }
@@ -61,6 +64,7 @@ namespace QS3D.Core.Export
         public int SourceHandleCount { get; }
         public int BlockerCount { get; }
         public IReadOnlyList<string> NativeCleanupElementIds { get; }
+        public ProjectInterchangeNativeCleanupAuthorization NativeCleanupAuthorization { get; }
         public bool RequiresNativeCleanup => NativeCleanupElementIds.Count > 0;
         public bool CanExecute => BlockerCount == 0;
     }
@@ -298,7 +302,8 @@ namespace QS3D.Core.Export
                 0,
                 plan.SourceHandlesToDiscard,
                 0,
-                plan.TargetElementIdsRequiringNativeCleanup);
+                plan.TargetElementIdsRequiringNativeCleanup,
+                ProjectInterchangeNativeCleanupAuthorization.ForPlan(plan));
         }
 
         private static ProjectInterchangeImportCoordinatorPlan Build(
@@ -313,10 +318,14 @@ namespace QS3D.Core.Export
             int nameRemaps,
             int sourceHandleCount,
             int blockers,
-            IEnumerable<string> cleanupIds)
+            IEnumerable<string> cleanupIds,
+            ProjectInterchangeNativeCleanupAuthorization? cleanupAuthorization = null)
         {
             var cleanup = new List<string>(cleanupIds ?? Array.Empty<string>());
             cleanup.Sort(StringComparer.OrdinalIgnoreCase);
+            var authorization = cleanupAuthorization ?? ProjectInterchangeNativeCleanupAuthorization.None;
+            if (!cleanup.SequenceEqual(authorization.ElementIds, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Interchange coordinator cleanup authorization does not match the planned target element IDs.");
             return new ProjectInterchangeImportCoordinatorPlan(
                 mode,
                 preserve,
@@ -329,7 +338,8 @@ namespace QS3D.Core.Export
                 nameRemaps,
                 sourceHandleCount,
                 blockers,
-                new ReadOnlyCollection<string>(cleanup));
+                new ReadOnlyCollection<string>(cleanup),
+                authorization);
         }
 
         private static void ValidateMode(ProjectInterchangeImportExecutionMode mode)

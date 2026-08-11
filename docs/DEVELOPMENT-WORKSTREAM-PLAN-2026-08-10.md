@@ -339,16 +339,11 @@ Priority: **P0**
 Concurrency: **RED / LOCAL_ONLY for native proof**  
 Suggested branch: `feat/curtain-orchestration-atomicity`
 
-Scope:
+Source status: **implemented; LOCAL_ONLY failure injection pending**.
 
-Choose one real architecture:
+The selected architecture is shared native transaction orchestration: one command-level outer transaction encloses the canonical nested host + LINE/path frame replacement transactions, with a command-level semantic snapshot restored on abort. `PARTIAL COMMIT` is no longer the source contract.
 
-1. shared native transaction orchestration; or
-2. durable compensation journal with deterministic restore.
-
-Cover host + LINE/path frame replacement as one recoverable user operation. Preserve truthful `PARTIAL COMMIT` behavior until this is genuinely solved.
-
-This workstream is a blocker for panel-by-panel native glass.
+Remaining acceptance is exact-SHA V25 phase-failure injection, health inspection and save/reopen proof. This runtime proof remains a blocker for panel-by-panel native glass qualification.
 
 ### WS-14 — Curtain panel-by-panel native glass
 
