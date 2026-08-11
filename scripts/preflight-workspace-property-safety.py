@@ -101,6 +101,8 @@ else:
         "_canReset = false;",
         "OnChanged(nameof(CanReset));",
         "OnChanged(nameof(IsEditable));",
+        "var next = !_isReadOnly && value;",
+        "if (_canReset == next) return;",
         "if (string.Equals(_value, requested, StringComparison.Ordinal)) return;",
         "var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;",
         "bool.TryParse(text, out var parsed)",
@@ -121,4 +123,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Workspace property rows keep property-specific dirty/geometry invalidation, reactive read-only/editable/reset state, exact editor no-ops avoid mutation callbacks, Instance reset resolves live Family state, selection scope fails closed, and numeric/boolean editors stay validated.")
+print("PASS: Workspace property rows keep property-specific dirty/geometry invalidation, read-only rows can never retain or regain reset state, exact editor no-ops avoid mutation callbacks, Instance reset resolves live Family state, selection scope fails closed, and numeric/boolean editors stay validated.")
