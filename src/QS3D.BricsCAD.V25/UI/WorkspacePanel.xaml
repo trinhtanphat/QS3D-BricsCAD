@@ -396,7 +396,7 @@
                                                            ToolTip="{Binding Name}"/>
                                                 <Border Style="{StaticResource WorkspaceStatePill}"
                                                         HorizontalAlignment="Left">
-                                                    <TextBlock FontSize="8.5" Style="{StaticResource Caption}">
+                                                    <TextBlock FontSize="8.5">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
                                                                 <Setter Property="Text" Value="Family"/>
