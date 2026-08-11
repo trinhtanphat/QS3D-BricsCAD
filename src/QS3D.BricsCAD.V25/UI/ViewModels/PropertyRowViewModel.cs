@@ -57,7 +57,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             set
             {
                 var requested = value ?? string.Empty;
-                if (string.Equals(_value, requested, StringComparison.Ordinal)) return;
+                if ((IsReadOnly || Apply == null) && string.Equals(_value, requested, StringComparison.Ordinal)) return;
                 var next = !IsReadOnly && Apply != null ? Apply(requested) ?? string.Empty : requested;
                 if (_value == next)
                 {
