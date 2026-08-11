@@ -237,6 +237,7 @@ namespace QS3D.Core.Navigation
             var expanded = ReadValues(root.Element("ExpandedPaths"), "Path");
             var selected = ReadValues(root.Element("SelectedElementIds"), "Id");
             var queryRaw = (string)root.Attribute("query");
+            var primaryRaw = (string)root.Attribute("primaryElementId");
 
             try
             {
@@ -249,9 +250,11 @@ namespace QS3D.Core.Navigation
                     zoneIds,
                     expanded,
                     selected,
-                    (string)root.Attribute("primaryElementId"));
+                    primaryRaw);
                 if (!string.Equals(queryRaw, state.Query, StringComparison.Ordinal))
                     throw new InvalidDataException("Project browser workspace query is non-canonical.");
+                if (!string.Equals(primaryRaw, state.PrimaryElementId, StringComparison.Ordinal))
+                    throw new InvalidDataException("Project browser workspace primary element id is non-canonical.");
                 return state;
             }
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
