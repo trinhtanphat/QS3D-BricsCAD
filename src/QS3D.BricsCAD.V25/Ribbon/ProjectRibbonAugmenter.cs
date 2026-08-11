@@ -67,16 +67,20 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
                 foreach (var spec in Buttons)
                 {
-                    if (CollectionContainsId(items, spec.Id)) continue;
-                    var button = Create("Bricscad.Windows.RibbonButton");
-                    SetProperty(button, "Id", spec.Id);
+                    var button = FindById(items, spec.Id);
+                    if (button == null)
+                    {
+                        button = Create("Bricscad.Windows.RibbonButton");
+                        SetProperty(button, "Id", spec.Id);
+                        Add(items, button);
+                    }
+
                     SetProperty(button, "Name", spec.Text);
                     SetProperty(button, "Text", spec.Text);
                     SetProperty(button, "ShowText", true);
                     SetProperty(button, "ShowImage", false);
                     SetProperty(button, "CommandParameter", spec.Command);
                     SetProperty(button, "CommandHandler", new CommandHandler());
-                    Add(items, button);
                 }
                 _initialized = true;
                 return true;
@@ -154,15 +158,15 @@ namespace QS3D.BricsCAD.V25.Ribbon
             method.Invoke(collection, new[] { item });
         }
 
-        private static bool CollectionContainsId(object collection, string id)
+        private static object? FindById(object collection, string id)
         {
-            if (!(collection is IEnumerable enumerable)) return false;
+            if (!(collection is IEnumerable enumerable)) return null;
             foreach (var item in enumerable)
             {
                 if (item == null) continue;
-                if (string.Equals(GetProperty(item, "Id") as string, id, StringComparison.OrdinalIgnoreCase)) return true;
+                if (string.Equals(GetProperty(item, "Id") as string, id, StringComparison.OrdinalIgnoreCase)) return item;
             }
-            return false;
+            return null;
         }
 
         private sealed class CommandHandler : ICommand
