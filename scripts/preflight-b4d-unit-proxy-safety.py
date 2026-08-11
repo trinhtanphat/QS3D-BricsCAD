@@ -37,10 +37,16 @@ require("unit policy", policy, (
 ))
 require("CAD unit resolver", cad_units, (
     "TryGetNativeLengthUnit", "TryGetPolicy", "Drawing units are unresolved",
+    "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
     "ValidateQuantityCompatibility",
 ))
 if "default: return LengthUnit.Millimeter" in cad_units:
     errors.append("CadUnitService still silently falls back to millimeter.")
+policy_start = cad_units.find("public static bool TryGetPolicy")
+native_start = cad_units.find("public static bool TryGetNativeLengthUnit", policy_start)
+policy_body = cad_units[policy_start:native_start] if policy_start >= 0 and native_start > policy_start else ""
+if "ProjectContextCoordinator.GetOrCreate" in policy_body:
+    errors.append("Unit-policy inspection must not create/cache a replacement QS3D project.")
 require("unit workflow", workflow, (
     "ProjectStateSnapshot.Capture", "rollback.Restore(project)",
     "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",

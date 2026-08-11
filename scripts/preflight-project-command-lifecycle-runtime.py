@@ -36,6 +36,11 @@ for token in (
     '"absent_sidecar_noncreating=true"',
     '"no_cached_project=true"',
     '"canonical_project_identity_matched=true"',
+    '"legacy_unit_binding_persisted=true"',
+    '"native_unit_resolution_noncreating=true"',
+    '"explicit_unit_override_persisted=true"',
+    "DrawingUnitResolutionPolicy.BoundMetadataKey",
+    "Teigha.DatabaseServices.UnitsValue.Undefined",
 ):
     if token not in source:
         errors.append("command lifecycle probe missing token: " + token)
@@ -47,14 +52,24 @@ for phase, command in (
     ("REGEN_ABSENT", "QS3DREGEN"),
     ("REFRESH_ABSENT", "QS3DREFRESH"),
     ("FINISH_ABSENT", "QS3DFINISH"),
+    ("BQ_LEGACY_EXISTING", "QS3DBQ"),
+    ("BQ_NATIVE_ABSENT", "QS3DBQ"),
+    ("UNITS_OVERRIDE_ABSENT", "QS3DUNITS"),
 ):
     mapping = '"' + phase + '" = "' + command + '"'
     if mapping not in runner:
         errors.append("runner missing real command phase: " + mapping)
 
-prep = runner.find('"QS3DLIFECYCLECOMMANDPREP", $command, "QS3DLIFECYCLECOMMANDVERIFY"')
-if prep < 0:
-    errors.append("runner must execute prep -> real user command -> verify in one BricsCAD process")
+for token in (
+    '"QS3DLIFECYCLECOMMANDPREP", $command',
+    '$phaseLines += "QS3DLIFECYCLECOMMANDVERIFY"',
+    'if ($phase -eq "UNITS_OVERRIDE_ABSENT") { $phaseLines += "Meter" }',
+    'legacyBqUnitBindingPersisted = $true',
+    'nativeBqAbsentNoncreating = $true',
+    'explicitUnitOverrideBootstrap = $true',
+):
+    if token not in runner:
+        errors.append("runner unit/execution lifecycle contract missing token: " + token)
 
 refresh_start = workspace.find("public void RefreshProject()")
 refresh_end = workspace.find("public void SetStatus", refresh_start)
@@ -87,6 +102,8 @@ for token in (
     "QS3DREGEN",
     "QS3DREFRESH",
     "QS3DFINISH",
+    "QS3DBQ",
+    "QS3DUNITS",
     "absent-sidecar",
 ):
     if token not in docs:
@@ -108,4 +125,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: the exact-SHA V25 lifecycle runner executes real REGEN/REFRESH/FINISH commands after cold-cache preparation, proves canonical existing-project mutation and absent-sidecar non-creation, and emits bounded sanitized evidence.")
+print("PASS: the exact-SHA V25 lifecycle runner executes real REGEN/REFRESH/FINISH and unit-binding commands, proves canonical legacy persistence, no-project native-unit inspection, intentional QS3DUNITS bootstrap, and bounded sanitized evidence.")

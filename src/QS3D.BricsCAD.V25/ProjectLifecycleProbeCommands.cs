@@ -9,6 +9,7 @@ using Bricscad.ApplicationServices;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
+using QS3D.Core.Units;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -241,7 +242,8 @@ namespace QS3D.BricsCAD.V25
                 if (!SamePath(document.Name, expectedDrawing))
                     throw new InvalidOperationException("The command lifecycle active drawing does not match its phase.");
 
-                if (existing) PrepareExistingCommandPhase(document, phase, nonce, statePath);
+                if (IsUnitPhase(phase)) PrepareUnitCommandPhase(document, phase, nonce, statePath);
+                else if (existing) PrepareExistingCommandPhase(document, phase, nonce, statePath);
                 else PrepareAbsentCommandPhase(document, phase);
                 document.Editor.WriteMessage("\nQS3D command lifecycle phase prepared.");
             }
@@ -273,9 +275,11 @@ namespace QS3D.BricsCAD.V25
                 if (!SamePath(document.Name, expectedDrawing))
                     throw new InvalidOperationException("The command lifecycle verification drawing does not match its phase.");
 
-                var marker = existing
-                    ? VerifyExistingCommandPhase(document, phase, nonce, statePath)
-                    : VerifyAbsentCommandPhase(document, phase);
+                var marker = IsUnitPhase(phase)
+                    ? VerifyUnitCommandPhase(document, phase, nonce, statePath)
+                    : existing
+                        ? VerifyExistingCommandPhase(document, phase, nonce, statePath)
+                        : VerifyAbsentCommandPhase(document, phase);
                 WriteMarkerAtomic(result, marker);
                 document.Editor.WriteMessage("\nQS3D command lifecycle phase PASS.");
             }
@@ -324,6 +328,51 @@ namespace QS3D.BricsCAD.V25
                 if (Cad.CadHandleService.SelectIfAny(document, new[] { sourceHandle }) != 1)
                     throw new InvalidOperationException("The absent-project fixture source could not be selected for QS3DFINISH.");
             }
+        }
+
+        private static void PrepareUnitCommandPhase(Document document, string phase, string nonce, string statePath)
+        {
+            if (phase == "BQ_LEGACY_EXISTING")
+            {
+                var state = ReadState(statePath, nonce);
+                var expectedA = RequiredDigest(state, "a");
+                ProjectContextCoordinator.Forget(document);
+                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                    throw new InvalidOperationException("The legacy-unit phase could not bind its saved sidecar.");
+                EnsureProject(project, "A", expectedA, nonce);
+                EnsureProbeRoom(document, project);
+                if (!Cad.CadUnitService.TryGetNativeLengthUnit(document, out var nativeUnit))
+                    throw new InvalidOperationException("The synthetic lifecycle fixture must expose a supported native INSUNITS value.");
+
+                project.Metadata.Remove(DrawingUnitResolutionPolicy.BoundMetadataKey);
+                project.Metadata.Remove(DrawingUnitResolutionPolicy.OverrideMetadataKey);
+                project.Metadata.Remove(DrawingUnitResolutionPolicy.BindingSourceMetadataKey);
+                project.Metadata[DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = nativeUnit + " (assumed)";
+                project.Metadata[DrawingUnitResolutionPolicy.LegacyAssumptionMetadataKey] = "Lifecycle probe legacy unit evidence";
+                project.Metadata[CommandPhaseMetadataKey] = phase;
+                project.Touch();
+                ProjectContextCoordinator.Save(document);
+                ProjectContextCoordinator.Forget(document);
+                return;
+            }
+
+            PrepareAbsentCommandPhase(document, phase);
+            if (phase == "BQ_NATIVE_ABSENT")
+            {
+                if (!Cad.CadUnitService.TryGetNativeLengthUnit(document, out _))
+                    throw new InvalidOperationException("The no-project BQ phase requires supported native INSUNITS.");
+                return;
+            }
+
+            if (phase == "UNITS_OVERRIDE_ABSENT")
+            {
+                document.Database.Insunits = Teigha.DatabaseServices.UnitsValue.Undefined;
+                if (Cad.CadUnitService.TryGetNativeLengthUnit(document, out _))
+                    throw new InvalidOperationException("The explicit unit phase could not make INSUNITS unresolved.");
+                return;
+            }
+
+            throw new InvalidOperationException("Unsupported drawing-unit lifecycle phase.");
         }
 
         private static IReadOnlyList<string> VerifyExistingCommandPhase(Document document, string phase, string nonce, string statePath)
@@ -397,6 +446,89 @@ namespace QS3D.BricsCAD.V25
             };
         }
 
+        private static IReadOnlyList<string> VerifyUnitCommandPhase(Document document, string phase, string nonce, string statePath)
+        {
+            if (phase == "BQ_LEGACY_EXISTING")
+            {
+                var state = ReadState(statePath, nonce);
+                var expectedA = RequiredDigest(state, "a");
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                    throw new InvalidOperationException("QS3DBQ lost the legacy project while binding drawing units.");
+                EnsureProject(project, "A", expectedA, nonce);
+                if (project.Elements.Count == 0)
+                    throw new InvalidOperationException("The legacy-unit binding phase lost its semantic quantities.");
+                if (!Cad.CadUnitService.TryGetNativeLengthUnit(document, out var nativeUnit))
+                    throw new InvalidOperationException("The legacy-unit verification lost native INSUNITS.");
+                RequireMetadata(project, CommandPhaseMetadataKey, phase);
+                RequireMetadata(project, DrawingUnitResolutionPolicy.BoundMetadataKey, nativeUnit.ToString());
+                RequireMetadata(project, DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey, nativeUnit.ToString());
+                RequireMetadata(project, DrawingUnitResolutionPolicy.BindingSourceMetadataKey, DrawingUnitResolutionSource.NativeInsunits.ToString());
+                if (project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.OverrideMetadataKey))
+                    throw new InvalidOperationException("Automatic legacy binding unexpectedly created a project unit override.");
+                if (ProjectContextCoordinator.HasPendingChanges(document))
+                    throw new InvalidOperationException("Automatic legacy unit binding was not persisted.");
+                return new[]
+                {
+                    "status=PASS",
+                    "command=QS3DLIFECYCLECOMMANDVERIFY",
+                    "schema=QS3D_PROJECT_COMMAND_LIFECYCLE_V2",
+                    "nonce=" + nonce,
+                    "phase=" + phase,
+                    "existing_project_bound=true",
+                    "canonical_project_identity_matched=true",
+                    "legacy_unit_binding_persisted=true",
+                    "no_pending_project_state=true"
+                };
+            }
+
+            if (phase == "BQ_NATIVE_ABSENT")
+            {
+                if (!Cad.CadUnitService.TryGetNativeLengthUnit(document, out _))
+                    throw new InvalidOperationException("The no-project BQ verification lost native INSUNITS.");
+                return VerifyAbsentCommandPhase(document, phase)
+                    .Concat(new[] { "native_unit_resolution_noncreating=true" })
+                    .ToList();
+            }
+
+            if (phase == "UNITS_OVERRIDE_ABSENT")
+            {
+                if (Cad.CadUnitService.TryGetNativeLengthUnit(document, out _))
+                    throw new InvalidOperationException("Explicit unit verification unexpectedly resolved native INSUNITS.");
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                    throw new InvalidOperationException("QS3DUNITS did not create a persisted project override.");
+                if (project.Elements.Count != 0)
+                    throw new InvalidOperationException("QS3DUNITS bootstrap unexpectedly created semantic elements.");
+                RequireMetadata(project, DrawingUnitResolutionPolicy.OverrideMetadataKey, LengthUnit.Meter.ToString());
+                RequireMetadata(project, DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey, LengthUnit.Meter.ToString());
+                RequireMetadata(project, DrawingUnitResolutionPolicy.BindingSourceMetadataKey, DrawingUnitResolutionSource.ProjectOverride.ToString());
+                if (project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.BoundMetadataKey))
+                    throw new InvalidOperationException("An empty QS3DUNITS bootstrap must not claim existing quantity binding.");
+                if (ProjectContextCoordinator.HasPendingChanges(document))
+                    throw new InvalidOperationException("QS3DUNITS did not persist the explicit override.");
+                return new[]
+                {
+                    "status=PASS",
+                    "command=QS3DLIFECYCLECOMMANDVERIFY",
+                    "schema=QS3D_PROJECT_COMMAND_LIFECYCLE_V2",
+                    "nonce=" + nonce,
+                    "phase=" + phase,
+                    "explicit_unit_override_persisted=true",
+                    "intentional_project_bootstrap=true",
+                    "no_pending_project_state=true",
+                    "semantic_elements_not_created=true"
+                };
+            }
+
+            throw new InvalidOperationException("Unsupported drawing-unit lifecycle verification phase.");
+        }
+
+        private static void RequireMetadata(ProjectState project, string key, string expected)
+        {
+            if (!project.Metadata.TryGetValue(key, out var actual) ||
+                !string.Equals(actual, expected, StringComparison.Ordinal))
+                throw new InvalidOperationException("Drawing-unit lifecycle metadata did not match its canonical value.");
+        }
+
         private static ProjectElement EnsureProbeRoom(Document document, ProjectState project)
         {
             var family = project.FindFamily(ProbeRoomFamilyId);
@@ -449,6 +581,9 @@ namespace QS3D.BricsCAD.V25
                 case "REGEN_ABSENT":
                 case "REFRESH_ABSENT":
                 case "FINISH_ABSENT":
+                case "BQ_LEGACY_EXISTING":
+                case "BQ_NATIVE_ABSENT":
+                case "UNITS_OVERRIDE_ABSENT":
                     return phase;
                 default:
                     throw new InvalidOperationException("The lifecycle command phase is invalid.");
@@ -456,6 +591,11 @@ namespace QS3D.BricsCAD.V25
         }
 
         private static bool IsExistingPhase(string phase) => phase.EndsWith("_EXISTING", StringComparison.Ordinal);
+
+        private static bool IsUnitPhase(string phase) =>
+            phase == "BQ_LEGACY_EXISTING" ||
+            phase == "BQ_NATIVE_ABSENT" ||
+            phase == "UNITS_OVERRIDE_ABSENT";
 
         private static string CommandResultFileName(string phase) =>
             "project-lifecycle-" + phase.ToLowerInvariant().Replace('_', '-') + ".txt";

@@ -235,6 +235,9 @@ try {
         "REGEN_ABSENT" = "QS3DREGEN"
         "REFRESH_ABSENT" = "QS3DREFRESH"
         "FINISH_ABSENT" = "QS3DFINISH"
+        "BQ_LEGACY_EXISTING" = "QS3DBQ"
+        "BQ_NATIVE_ABSENT" = "QS3DBQ"
+        "UNITS_OVERRIDE_ABSENT" = "QS3DUNITS"
     }
     foreach ($entry in $commandPhases.GetEnumerator()) {
         $phase = [string]$entry.Key
@@ -243,13 +246,31 @@ try {
         $phaseFile = "project-lifecycle-" + $phase.ToLowerInvariant().Replace('_', '-') + ".txt"
         $phaseResult = Join-Path $ArtifactDir $phaseFile
         $phaseDrawing = if ($phase.EndsWith("_EXISTING", [StringComparison]::Ordinal)) { $drawingA } else { $drawingC }
-        $phaseMarker = Invoke-Qs3dScript -Drawing $phaseDrawing -ScriptPath (Join-Path $ArtifactDir ($phaseFile + ".scr")) -ResultPath $phaseResult -Lines @(
+        $phaseLines = @(
             "FILEDIA", "0", "CMDECHO", "1", "NETLOAD", ('"' + $PluginDll + '"'),
-            "QS3DLIFECYCLECOMMANDPREP", $command, "QS3DLIFECYCLECOMMANDVERIFY"
+            "QS3DLIFECYCLECOMMANDPREP", $command
         )
+        if ($phase -eq "UNITS_OVERRIDE_ABSENT") { $phaseLines += "Meter" }
+        $phaseLines += "QS3DLIFECYCLECOMMANDVERIFY"
+        $phaseMarker = Invoke-Qs3dScript -Drawing $phaseDrawing -ScriptPath (Join-Path $ArtifactDir ($phaseFile + ".scr")) -ResultPath $phaseResult -Lines $phaseLines
         Require-Qs3dValue -Marker $phaseMarker -Key "nonce" -Expected $nonce
         Require-Qs3dValue -Marker $phaseMarker -Key "phase" -Expected $phase
-        if ($phase.EndsWith("_EXISTING", [StringComparison]::Ordinal)) {
+        if ($phase -eq "BQ_LEGACY_EXISTING") {
+            foreach ($key in @("existing_project_bound", "canonical_project_identity_matched", "legacy_unit_binding_persisted", "no_pending_project_state")) {
+                Require-Qs3dValue -Marker $phaseMarker -Key $key -Expected "true"
+            }
+        }
+        elseif ($phase -eq "BQ_NATIVE_ABSENT") {
+            foreach ($key in @("absent_sidecar_noncreating", "no_cached_project", "no_pending_project_state", "semantic_mutation_not_applied", "native_unit_resolution_noncreating")) {
+                Require-Qs3dValue -Marker $phaseMarker -Key $key -Expected "true"
+            }
+        }
+        elseif ($phase -eq "UNITS_OVERRIDE_ABSENT") {
+            foreach ($key in @("explicit_unit_override_persisted", "intentional_project_bootstrap", "no_pending_project_state", "semantic_elements_not_created")) {
+                Require-Qs3dValue -Marker $phaseMarker -Key $key -Expected "true"
+            }
+        }
+        elseif ($phase.EndsWith("_EXISTING", [StringComparison]::Ordinal)) {
             foreach ($key in @("existing_project_bound", "canonical_project_identity_matched", "pending_semantic_mutation")) {
                 Require-Qs3dValue -Marker $phaseMarker -Key $key -Expected "true"
             }
@@ -270,8 +291,8 @@ try {
     if (-not (Test-Path -LiteralPath $sidecarA) -or -not (Test-Path -LiteralPath $sidecarB)) {
         throw "Lifecycle A/B sidecars are missing after save/reopen."
     }
-    if ((Test-Path -LiteralPath $sidecarC) -or (Test-Path -LiteralPath ($sidecarC + ".bak"))) {
-        throw "The absent-sidecar drawing acquired a QS3D project file."
+    if (-not (Test-Path -LiteralPath $sidecarC)) {
+        throw "The explicit QS3DUNITS phase did not persist its intentional project sidecar."
     }
     $corruptHashAfter = (Get-FileHash -LiteralPath $corruptSidecar -Algorithm SHA256).Hash.ToUpperInvariant()
     if (-not [string]::Equals($corruptHashBefore, $corruptHashAfter, [StringComparison]::Ordinal)) {
@@ -283,7 +304,7 @@ try {
     }
 
     $metadata = [ordered]@{
-        schema = 2
+        schema = 3
         status = "PASS"
         exactSha = $exactSha
         bricscadVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($bricscadExe).FileVersion
@@ -308,6 +329,10 @@ try {
         regenAbsentNoncreating = $true
         refreshAbsentNoncreating = $true
         finishAbsentNoncreating = $true
+        unitLifecyclePhaseCount = 3
+        legacyBqUnitBindingPersisted = $true
+        nativeBqAbsentNoncreating = $true
+        explicitUnitOverrideBootstrap = $true
         startedUtc = $startedAt.ToString("O")
         completedUtc = [DateTime]::UtcNow.ToString("O")
     }
