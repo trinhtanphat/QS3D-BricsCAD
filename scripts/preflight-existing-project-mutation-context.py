@@ -25,6 +25,10 @@ else:
 DIRECT_TRY = {
     "AutoHostLinkCommands.cs": "ExistingProjectMutationContext.TryGet(document, out var project)",
     "BbsCsvCommands.cs": "ExistingProjectMutationContext.TryGet(document, out var project)",
+    "CurtainWallScheduleCommands.cs": "ExistingProjectMutationContext.TryGet(document, out var project)",
+    "DoorOpeningScheduleCommands.cs": "ExistingProjectMutationContext.TryGet(document, out var project)",
+    "MaterialUsageScheduleCommands.cs": "ExistingProjectMutationContext.TryGet(document, out var project)",
+    "RoomFinishScheduleCommands.cs": "ExistingProjectMutationContext.TryGet(document, out var project)",
 }
 for filename, token in DIRECT_TRY.items():
     path = SOURCE_ROOT / filename
@@ -65,4 +69,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: existing-project mutations use canonical cached state while health/read-only inspection remains detached-safe.")
+print("PASS: existing-project mutations/regeneration use canonical cached state while health/read-only inspection remains detached-safe.")
