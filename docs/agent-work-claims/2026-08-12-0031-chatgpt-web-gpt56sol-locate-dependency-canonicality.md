@@ -2,19 +2,22 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12T00:31:00+07:00
-- Status: `ACTIVE`
+- Status: `DONE`
 - Baseline main SHA: `db883e2575b1d8d7c95cac8e04e831c9e9fc2d1a`
 - Scope: make `SourceHandleResolver` fail closed on malformed in-memory `ProjectElement.DependsOn` relations instead of trimming/skipping them during semantic Locate traversal.
-- Evidence: current Locate traversal computes each dependency as `(value ?? string.Empty).Trim()` and skips blank values. `DependencyGraph` and revision capture now require nonblank, trim-canonical, case-insensitively unique dependency IDs, so Locate currently remains a weaker bypass of that relation invariant.
-- Files reserved:
+- Evidence: Locate traversal previously computed each dependency as `(value ?? string.Empty).Trim()` and skipped blank values. `DependencyGraph` and revision capture now require nonblank, trim-canonical, case-insensitively unique dependency IDs, so Locate had remained a weaker bypass of that relation invariant.
+- Files reserved during work:
   - `src/QS3D.Core/Services/SourceHandleResolver.cs`
   - `tests/QS3D.Core.SmokeTests/SourceHandleResolverCanonicalDependencySmoke.cs`
   - this claim file for close-out
-- Plan:
-  1. Validate each visited element's dependency list as nonblank, already trim-canonical and case-insensitively duplicate-free before pushing dependency roots.
-  2. Preserve reverse-push traversal order, cycle termination, direct/boundary/generated-handle priority and the previously added 10,000 root input bound.
-  3. Reject malformed relation state before it can redirect Locate to a normalized dependency target.
-  4. Add CAD-independent smoke coverage for canonical dependency traversal plus blank/padded/duplicate rejection and read-only failure.
-  5. Refresh current `main`, verify reachability/current source, then release the claim.
-- Non-overlap: no `DependencyGraph`, no revision capture, no HostLink/Room relation mutation, no native `CadHandleService` and no WPF/PICKFIRST/editor work.
-- Validation boundary: source/smoke contract review only; no GitHub Actions dispatch and no licensed BricsCAD V25/V26 runtime PASS.
+- Implemented:
+  1. Each visited semantic element now validates its dependency list as nonblank, already trim-canonical and case-insensitively duplicate-free before Locate consumes those relations.
+  2. Dependency traversal now pushes the validated canonical IDs directly while preserving the existing reverse-push deterministic order and cycle termination.
+  3. Existing direct-source → boundary → generated-owner priority and the 10,000 root input bound remain unchanged.
+  4. Added CAD-independent smoke coverage for canonical A→B traversal order plus blank, padded and case-insensitive duplicate dependency rejection with no `ProjectState.ChangeVersion` mutation.
+- Implementation commit: `74ae380faf339d6b77654d83fe1f00cef957e0c8` (`fix(locate): reject malformed dependency entries`).
+- Regression commit: `966a2cadabfa4b5c4ef18e691b2a8a5de64720b1` (`test(locate): guard canonical dependency entries`).
+- Integration verification: at regression publication `main` pointed at `966a2cadabfa4b5c4ef18e691b2a8a5de64720b1`; implementation and regression are sequential and the reserved source was not overwritten between them.
+- Non-overlap: no `DependencyGraph`, revision capture, HostLink/Room relation mutation, native `CadHandleService` or WPF/PICKFIRST/editor code was modified.
+- Validation boundary: source/smoke contract reviewed remotely. GitHub Actions were not dispatched; the smoke executable was not claimed as run in this session; no licensed BricsCAD V25/V26 runtime PASS is claimed.
+- Reservation released: this claim is complete and no longer reserves the listed files.
