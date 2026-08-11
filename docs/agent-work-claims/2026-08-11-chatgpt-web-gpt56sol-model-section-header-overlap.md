@@ -1,31 +1,53 @@
 # Work claim — Workspace model-section header overlap
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-model-section-header-overlap-20260811`
 - Registered: `2026-08-11T21:40:00+07:00`
+- Completed: `2026-08-11T21:44:00+07:00`
 - Baseline: current `main` after premium theme v2 and responsive top-header integration.
 - Owner evidence: the supplied BricsCAD runtime screenshot shows the compact left `MÔ HÌNH` section and its `Làm mới` action competing for the same narrow horizontal space; the owner explicitly asked to remove component/element overlap.
 
-## Reserved scope
+## Delivered scope
 
-Fix only the narrow **model-section** header inside the existing Workspace palette (`MÔ HÌNH` + `Làm mới`). Preserve the already-completed premium theme v2 and responsive top-header breakpoint work. The fix must be presentation-only, keep all existing XAML handlers/tooltips/bindings, reserve independent layout space for the title/caption and refresh action, and trim text instead of allowing visual collision.
+Fixed only the narrow **model-section** header inside the existing Workspace palette (`MÔ HÌNH` + `Làm mới`) while preserving the already-completed premium theme v2 and responsive top-header breakpoint work.
 
-## Expected surfaces
+The presentation-only guard now:
+
+- locates the exact `MÔ HÌNH` title stack and its sibling `Làm mới` button;
+- disables `DockPanel.LastChildFill` only for that exact section so the refresh action cannot expand into the title/caption area;
+- docks the title stack left and refresh action right;
+- reserves a 7 px gap between text and action;
+- measures actual header/button width and caps the title stack to the remaining horizontal space;
+- uses `NoWrap` + `CharacterEllipsis` for the section title/caption at constrained widths;
+- recomputes available title width on header/button `SizeChanged`;
+- keeps the existing `TuneResponsiveHeader()` top-bar breakpoints unchanged.
+
+No XAML handlers, tooltips, bindings, CAD commands, project mutation paths, selection behavior, viewport behavior or Core semantics were changed.
+
+## Implemented surfaces
 
 - `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs`
 - `scripts/preflight-workspace-compact-shell.py`
-- this claim file for close-out
+- this claim file
 
-## Excluded scope
+## Commits / integration
 
-- No changes to `Theme.xaml` / premium theme v2.
-- No changes to `WorkspacePanel.xaml`, handlers, Core semantics, project state, CAD commands, selection behavior or viewport behavior.
-- No Right Panel / Ribbon / BQ / updater / release work.
-- No GitHub Actions dispatch.
+- implementation commit: `bdbba119b62d7512e0f862573cd0b07eec37828f`
+- integrated through PR `#482`
+- `main` merge commit: `a9eabc97e749ef1d3ee16c5784344c4aa0c3b96a`
 
-## Validation
+## Validation evidence
 
-- Re-fetch latest `main` and preserve the existing `TuneResponsiveHeader()` implementation.
-- Require a focused `MÔ HÌNH` / `Làm mới` collision guard: disable DockPanel last-child fill for that exact header, dock the title stack left and refresh action right, constrain title width from actual measured header/button width, and apply ellipsis/no-wrap to the header labels.
-- Extend the existing compact-shell preflight without weakening prior top-header, handler or CAD-boundary checks.
-- Real BricsCAD V25 visual/DPI verification remains `LOCAL-012`; remote source/static work must not claim runtime PASS.
+- Final source preserves the existing responsive top-header implementation and adds the focused model-section collision guard only.
+- The compact-shell preflight now requires the exact `MÔ HÌNH`/`Làm mới` contract: `LastChildFill = false`, opposing DockPanel docks, no-wrap/ellipsis text, measured remaining-width cap and resize recomputation.
+- Prior handler, viewport-boundary and no-business-side-effect checks remain in the same preflight.
+- Negative-margin/Canvas overlay-style collision hacks remain rejected.
+- No GitHub Actions were dispatched.
+
+## LOCAL_ONLY boundary
+
+Real BricsCAD V25 runtime visual qualification, Vietnamese text clipping and HiDPI/palette-width verification remain under existing `LOCAL-012`; this remote/source batch does not claim a licensed BricsCAD runtime PASS.
+
+## Completion
+
+Reservation released. The owner-demonstrated model-section header overlap fix is integrated into `main`; future agents must re-check current `main` and active claims before modifying these surfaces.
