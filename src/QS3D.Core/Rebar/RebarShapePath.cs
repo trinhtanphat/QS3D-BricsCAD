@@ -25,8 +25,10 @@ namespace QS3D.Core.Rebar
         public RebarShapePath(string shapeCode, IReadOnlyList<RebarShapePoint> points)
         {
             ShapeCode = string.IsNullOrWhiteSpace(shapeCode) ? "00" : shapeCode.Trim();
-            Points = points ?? throw new ArgumentNullException(nameof(points));
-            if (Points.Count < 2) throw new ArgumentException("Rebar shape path requires at least two points.", nameof(points));
+            if (points == null) throw new ArgumentNullException(nameof(points));
+            var snapshot = new List<RebarShapePoint>(points);
+            if (snapshot.Count < 2) throw new ArgumentException("Rebar shape path requires at least two points.", nameof(points));
+            Points = snapshot.AsReadOnly();
         }
         public string ShapeCode { get; }
         public IReadOnlyList<RebarShapePoint> Points { get; }
