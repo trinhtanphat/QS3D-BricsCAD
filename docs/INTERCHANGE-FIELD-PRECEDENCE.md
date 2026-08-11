@@ -40,6 +40,8 @@ Category is **not mergeable**. A same-ID Family or Element whose source and targ
 
 Choosing a source Zone/Floor name cannot silently take a display name owned by another target semantic ID.
 
+The planner also evaluates selected source names as a batch. Two different same-scope semantic IDs cannot both select the same new source display name merely because neither name was owned by the target before the merge. Zone and Floor names are checked globally within their catalog; Family names are checked within their Family category.
+
 Family display-name ownership remains category-scoped. A source Beam Family name may coexist with the same display name in another Family category, but it cannot silently take a name already owned by another Beam Family.
 
 These planner blockers are not a rename/remap implementation. `ImportAsNew` remains the explicit retain-both/remap policy.
@@ -84,7 +86,7 @@ A future field-level executor must be reviewed separately and, at minimum:
 1. re-read/re-plan against the exact current target state immediately before mutation;
 2. preserve confirmation freshness and reject stale reviewed state;
 3. reuse canonical runtime bounds for Zone/Floor/Family IDs/names and Family property key/value lengths;
-4. recheck target capacity and display-name ownership;
+4. recheck target capacity and display-name ownership, including same-batch selected source names;
 5. validate selected semantic references and dependency ordering after mixed-field application;
 6. use canonical Family services so inherited defaults and explicit instance overrides remain correct;
 7. compute the complete affected-element/generated-output invalidation closure;
