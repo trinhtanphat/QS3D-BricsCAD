@@ -191,7 +191,7 @@ namespace QS3D.Core.Export
             }).ToList().AsReadOnly();
 
             var projectTimestamp = CanonicalOptional(contract.Project.UpdatedUtc, "project updatedUtc");
-            return new ProjectInterchangeValidatedSnapshot(
+            var result = new ProjectInterchangeValidatedSnapshot(
                 validation,
                 Required(contract.Format, "format"),
                 contract.FormatVersion,
@@ -211,6 +211,8 @@ namespace QS3D.Core.Export
                 floors,
                 families,
                 elements);
+            ProjectInterchangeSemanticReferenceValidator.Validate(result);
+            return result;
         }
 
         private static SnapshotContract Parse(string json)
