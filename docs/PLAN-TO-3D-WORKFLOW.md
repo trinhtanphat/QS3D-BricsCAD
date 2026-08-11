@@ -40,7 +40,28 @@ Trước mutation, toàn selection được kiểm tra:
 - POLYLINE phải có ít nhất 2 đỉnh và mặt phẳng song song WCS XY;
 - source phải chưa thuộc semantic/generated ownership khác.
 
-Nếu batch mới bị lỗi giữa chừng, command tìm generated CAD bằng ownership metadata, xóa các Solid3d thuộc chính batch đó rồi restore `ProjectStateSnapshot`. Source 2D của người dùng không nằm trong rollback-delete set.
+### Preview-to-commit freshness
+
+Family defaults được đọc trước các prompt, vì vậy command phải giữ một **preview-to-commit** boundary rõ ràng thay vì tin rằng project/drawing/source vẫn giống lúc bắt đầu.
+
+Sau khi người dùng xác nhận Thickness/Height/BottomOffset và trước `ProjectStateSnapshot` hoặc semantic/native mutation, command hiện:
+
+- xác nhận đúng DWG ban đầu vẫn active;
+- kiểm tra lại Model Space và planar UCS;
+- xác nhận drawing unit policy chưa đổi;
+- **re-preflight** đúng các `ObjectId` đã chọn và yêu cầu count/ObjectId/handle/source kind vẫn khớp selection ban đầu;
+- nếu preview đã có project, bind canonical existing project và yêu cầu **same `ProjectId`**;
+- nếu preview bắt đầu projectless nhưng một project appears trước commit, fail-closed và yêu cầu chạy lại thay vì áp projectless defaults vào project vừa xuất hiện;
+- sau khi project được resolve mới kiểm lại semantic/generated ownership của source;
+- chỉ sau toàn bộ freshness checks mới capture snapshot và bắt đầu batch mutation.
+
+Các số Thickness/Height/BottomOffset đã được người dùng xác nhận ở prompt nên command không stale toàn bộ thao tác chỉ vì `ProjectState.ChangeVersion` đổi bởi một thay đổi không liên quan; boundary bắt buộc ở đây là project identity + drawing/source eligibility.
+
+Nếu batch mới bị lỗi giữa chừng, command tìm generated CAD bằng ownership metadata, xóa các Solid3d thuộc chính batch đó rồi restore `ProjectStateSnapshot`. Source 2D của người dùng không nằm trong rollback-delete set. Compensation này vẫn là whole-batch safety boundary hiện hữu; freshness hardening không tạo transaction engine thứ hai.
+
+Static lifecycle contract được khóa bởi `scripts/preflight-plan-to-3d-project-lifecycle.py`.
+
+Exact BricsCAD V25 proof cho project xuất hiện/thay project, Model Space/UCS thay đổi, source bị sửa/xóa/chuyển loại và ownership-scoped compensation nằm trong **LOCAL-008** của `docs/LOCAL-AGENT-INBOX.md`; source review không được coi là `LOCAL_PASS`.
 
 ## Bước 3 — Hoàn thiện mô hình
 

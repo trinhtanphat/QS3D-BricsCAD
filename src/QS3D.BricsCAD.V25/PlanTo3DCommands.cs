@@ -58,8 +58,10 @@ namespace QS3D.BricsCAD.V25
                 if (selectedIds == null || selectedIds.Count == 0) return;
                 var sources = PreflightSources(document, selectedIds);
                 if (sources.Count == 0) return;
+                var selectionUnit = CadUnitService.GetLengthUnit(document);
 
                 var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var expectedProjectId = hasDefaultsProject ? defaultsProject.ProjectId : null;
                 if (hasDefaultsProject) RequireFreshSources(defaultsProject, sources);
 
                 var thicknessM = PromptPositiveMeters(
@@ -81,7 +83,28 @@ namespace QS3D.BricsCAD.V25
                 if (!bottomOffsetM.HasValue) return;
 
                 EnsureActive(document, operation);
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                RequireModelSpace(document);
+                if (CadUnitService.GetLengthUnit(document) != selectionUnit)
+                    throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc xác nhận 2D -> 3D. Hãy chạy lại lệnh.");
+
+                var refreshedSources = PreflightSources(document, selectedIds);
+                RequireSameSources(sources, refreshedSources);
+                sources = refreshedSources;
+
+                ProjectState project;
+                if (expectedProjectId != null)
+                {
+                    project = ExistingProjectMutationContext.Require(document, operation);
+                    if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("QS3D project đã thay đổi trong lúc xác nhận 2D -> 3D. Hãy chạy lại lệnh.");
+                }
+                else
+                {
+                    if (ProjectContextCoordinator.TryGetReadOnly(document, out _))
+                        throw new InvalidOperationException("QS3D project đã xuất hiện trong lúc xác nhận 2D -> 3D. Hãy chạy lại lệnh để dùng đúng project defaults.");
+                    project = ProjectContextCoordinator.GetOrCreate(document);
+                }
+
                 RequireFreshSources(project, sources);
                 var rollback = ProjectStateSnapshot.Capture(project);
                 var createdElements = new List<ProjectElement>();
@@ -205,6 +228,22 @@ namespace QS3D.BricsCAD.V25
             }
 
             return result.AsReadOnly();
+        }
+
+        private static void RequireSameSources(IReadOnlyList<SourceCandidate> before, IReadOnlyList<SourceCandidate> after)
+        {
+            if (before.Count != after.Count)
+                throw new InvalidOperationException("Selection 2D -> 3D đã thay đổi trong lúc xác nhận. Hãy chạy lại lệnh.");
+
+            for (var index = 0; index < before.Count; index++)
+            {
+                var left = before[index];
+                var right = after[index];
+                if (!left.Id.Equals(right.Id) ||
+                    left.Kind != right.Kind ||
+                    !string.Equals(left.Handle, right.Handle, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Source 2D -> 3D đã thay đổi trong lúc xác nhận. Hãy chạy lại lệnh.");
+            }
         }
 
         private static void RequireWorldPlanNormal(Polyline polyline)
