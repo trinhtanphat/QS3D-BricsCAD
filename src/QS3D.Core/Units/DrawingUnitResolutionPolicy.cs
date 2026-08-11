@@ -87,6 +87,7 @@ namespace QS3D.Core.Units
             LengthUnit effectiveUnit,
             DrawingUnitResolutionSource source)
         {
+            if (!Enum.IsDefined(typeof(DrawingUnitResolutionSource), source)) throw new ArgumentOutOfRangeException(nameof(source));
             ValidateQuantityCompatibility(projectMetadata, hasElements, effectiveUnit);
             if (TryReadCanonical(projectMetadata, BoundMetadataKey, out _)) return false;
             projectMetadata[BoundMetadataKey] = effectiveUnit.ToString();

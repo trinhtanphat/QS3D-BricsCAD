@@ -9,7 +9,7 @@ namespace QS3D.Core.Model
         {
             if (string.IsNullOrWhiteSpace(handle)) throw new ArgumentException("Handle is required.", nameof(handle));
             if (string.IsNullOrWhiteSpace(entityType)) throw new ArgumentException("Entity type is required.", nameof(entityType));
-            Handle = handle; EntityType = entityType; Layer = layer ?? string.Empty;
+            Handle = handle; EntityType = entityType.Trim(); Layer = layer ?? string.Empty;
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
         public string Handle { get; }

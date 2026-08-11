@@ -458,12 +458,12 @@ namespace QS3D.BricsCAD.V25
         public void Locate()
         {
             var doc = Active(); if (doc == null) return;
-            var options = new PromptStringOptions("\nNhập QS3D Element Id: ") { AllowSpaces = false };
-            var result = doc.Editor.GetString(options); if (result.Status != PromptStatus.OK) return;
             Guard(doc, "QS3DLOCATE", () =>
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
                     throw new InvalidOperationException("QS3D Locate cần một project hiện hữu; lệnh định vị không tạo project mới.");
+                var options = new PromptStringOptions("\nNhập QS3D Element Id: ") { AllowSpaces = false };
+                var result = doc.Editor.GetString(options); if (result.Status != PromptStatus.OK) return;
                 var element = project.FindElement(result.StringResult);
                 if (element == null) { doc.Editor.WriteMessage("\nKhông tìm thấy QS3D element."); return; }
                 var count = Cad.CadHandleService.Select(doc, SourceHandleResolver.Resolve(project, new[] { element.Id }));
@@ -485,13 +485,13 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DEXCELLOCATE", () =>
             {
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                    throw new InvalidOperationException("Excel Locate cần một QS3D project hiện hữu; lệnh định vị không tạo project mới.");
                 var dialog = new OpenFileDialog { Title = "Chọn bảng Excel QS3D/BLT để định vị", Filter = "Excel Workbook (*.xlsx)|*.xlsx", CheckFileExists = true, Multiselect = false };
                 if (dialog.ShowDialog() != true) return;
                 var prompt = new PromptIntegerOptions("\nNhập số dòng Excel cần định vị: ") { AllowNone = false, LowerLimit = 1, UseDefaultValue = true, DefaultValue = 2 };
                 var row = doc.Editor.GetInteger(prompt); if (row.Status != PromptStatus.OK) return;
                 var lookup = XlsxHandleReader.ReadHandleLookup(dialog.FileName, row.Value);
-                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
-                    throw new InvalidOperationException("Excel Locate cần một QS3D project hiện hữu; lệnh định vị không tạo project mới.");
                 IReadOnlyList<string> handles;
                 IReadOnlyList<ObjectId> resolved;
                 if (lookup.IsModernSchema)

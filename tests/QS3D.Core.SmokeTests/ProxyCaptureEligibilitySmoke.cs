@@ -18,11 +18,25 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Metricless ProxyEntity must not be auto-accepted.");
             Throws<InvalidOperationException>(() => EntitySnapshotCaptureEligibility.EnsureReady(unmeasured, ElementCategory.Beam));
 
+            var paddedProxy = new EntitySnapshot("A2", "  pRoXyEnTiTy  ", "blt beam");
+            if (!string.Equals(paddedProxy.EntityType, "pRoXyEnTiTy", StringComparison.Ordinal))
+                throw new Exception("EntitySnapshot must canonicalize surrounding entity-type whitespace at construction.");
+            var paddedResult = new RecognitionEngine().Suggest(paddedProxy);
+            if (paddedResult.TopCandidate == null || paddedResult.TopCandidate.Category != ElementCategory.Beam || !paddedResult.RequiresReview || paddedResult.IsCaptureReady)
+                throw new Exception("Padded/case-varied metricless ProxyEntity must remain review-only after canonicalization.");
+            if (new RecognitionBatch(new[] { paddedResult }).AutoAccepted.Count != 0)
+                throw new Exception("Padded/case-varied metricless ProxyEntity must not be auto-accepted.");
+            Throws<InvalidOperationException>(() => EntitySnapshotCaptureEligibility.EnsureReady(paddedProxy, ElementCategory.Beam));
+
             var project = new ProjectState("p", "Proxy mapping");
-            project.Metadata[TemplateProfileStore.LayerMappingPrefix + "BLT-COL"] = ElementCategory.Column.ToString();
+            var mappingKey = TemplateProfileStore.LayerMappingPrefix + "BLT-COL";
+            project.Metadata[mappingKey] = ElementCategory.Column.ToString();
             var mapped = new ProjectRecognitionService().SuggestBatch(project, new[] { new EntitySnapshot("B", "ProxyEntity", "BLT-COL") });
             if (mapped.AutoAccepted.Count != 0 || mapped.ReviewRequired.Count != 1)
                 throw new Exception("Project-mapped metricless ProxyEntity must remain review-only.");
+            project.Metadata[mappingKey] = "999";
+            Throws<InvalidOperationException>(() => new ProjectRecognitionService().Suggest(project, new EntitySnapshot("B-INVALID", "Line", "BLT-COL")));
+            project.Metadata[mappingKey] = ElementCategory.Column.ToString();
 
             var measured = new EntitySnapshot("C", "ProxyEntity", "blt beam") { LengthDrawingUnits = 2500d };
             var measuredResult = new RecognitionEngine().Suggest(measured);

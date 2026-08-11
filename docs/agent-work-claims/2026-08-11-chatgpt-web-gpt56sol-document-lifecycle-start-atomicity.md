@@ -1,43 +1,25 @@
 # Work claim — document lifecycle start atomicity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-document-lifecycle-start-atomicity`
 - Registered: `2026-08-11T22:12:00+07:00`
+- Completed: `2026-08-11T22:18:00+07:00`
 - Baseline main SHA: `4f4cc84f3248e94cd6b7a9686d8ce490619b7f83`
-- Priority: make plugin lifecycle subscription startup fail atomically instead of leaving half-attached handlers that a retry cannot safely reconcile.
 
-## Confirmed defects
+## Result
 
-Two deterministic initialization paths currently mutate subscription ownership before a throwing operation can complete:
+Two source-proven startup ownership defects are fixed on `main`.
 
-1. `DocumentLifecycleCoordinator.Start()` subscribes four `DocumentManager` events, then attaches active-document persistence/selection handlers, and sets `_started = true` only at the end. If either active-document attach throws, the collection handlers remain subscribed while `_started` stays false. A later retry can subscribe them again and produce duplicate lifecycle callbacks.
-2. `SelectionSyncCoordinator.Attach(document)` adds the document to `Attached` before subscribing `ImpliedSelectionChanged`. If event subscription throws, the document remains marked attached and all later retries return early, permanently suppressing selection sync for that document.
+- `c9b05df72fcc603fcc662fae0d834bae5d6352a2` — `DocumentLifecycleCoordinator.Start()` now wraps manager-event subscription plus active-document persistence/selection attachment in one rollback boundary. Failure removes all four manager handlers best-effort, detaches incomplete persistence ownership, stops selection sync, keeps `_started = false`, and rethrows.
+- `4225a6635b9fd17635cf29b5f7097daeca6cf53b` — `SelectionSyncCoordinator.Attach()` now subscribes `ImpliedSelectionChanged` before claiming `Attached` ownership and removes native/bookkeeping state on failure so retry remains possible.
+- `cc3203a50f0ab8f90a54ff97e319fdb842eecc80` — the existing auto-discovered document lifecycle preflight now requires success/rollback ordering and rejects add-before-subscribe selection ownership while preserving exact-Document destruction cleanup.
 
-These are source-level ownership/rollback defects; no native rendering behavior is required to establish them.
+Exact implementation/preflight diffs were inspected. Compare from `cc3203a5...` to later `main` reported `behind_by: 0` with that commit as merge base. A first contents write collided with concurrent `main`; all retries remained non-force and preserved concurrent winners.
 
-## Reserved scope
+## Validation boundary
 
-- `src/QS3D.BricsCAD.V25/DocumentLifecycleCoordinator.cs`
-- `src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs`
-- `scripts/preflight-document-lifecycle.py`
-- this claim file
+The static gate is merged but was **not executed in a full local checkout in this connector-only lane**. No GitHub Actions, BricsCAD V25 failure injection, build/NETLOAD, installer, signing or release was run. Native event-subscription failure/retry proof remains local-only; no `LOCAL_PASS` is claimed.
 
-## Intended contract
+## Coordination
 
-- `DocumentLifecycleCoordinator.Start()` either completes all subscriptions/active-document attachments and marks started, or rolls back manager events, project-persistence attachments and selection-sync ownership before rethrowing.
-- `SelectionSyncCoordinator.Attach()` must not retain `Attached` membership when native event subscription fails; retry remains possible.
-- Existing exact-Document destruction cleanup, save/close persistence, selection refresh semantics and Stop behavior remain unchanged.
-- No exceptions are swallowed at startup merely to claim success.
-
-## Excluded scope
-
-- No ProjectContext persistence semantics, modeless window redesign, updater, Ribbon, Quantity/BQ, Direct Draw, Core, installer/signing/release or LOCAL inbox edits.
-- No GitHub Actions dispatch and no BricsCAD V25 runtime PASS claim.
-
-## Validation plan
-
-Re-fetch every reserved file immediately before writes. Add explicit rollback/fail-retry contracts without weakening existing fail-closed behavior. Extend the auto-discovered document lifecycle preflight to require rollback ordering and reject add-before-subscribe selection ownership. Inspect exact diffs and verify ancestry after concurrent integration without force push.
-
-## Completion condition
-
-Lifecycle startup no longer leaves manager/document handlers in a half-attached state after failure, selection-sync attachment remains retryable, focused static coverage is merged, and native V25 failure-injection qualification remains local-only.
+No ProjectContext semantics, modeless UI, updater, Ribbon, Quantity/BQ, Direct Draw, Core or LOCAL inbox files were modified.

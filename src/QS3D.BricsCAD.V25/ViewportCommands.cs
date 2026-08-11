@@ -74,7 +74,7 @@ namespace QS3D.BricsCAD.V25
             document.Editor.UpdateScreen();
         }
 
-        private static bool TryZoomSelection(Document document)
+        internal static bool TryZoomSelection(Document document)
         {
             var result = document.Editor.SelectImplied();
             if (result.Status != PromptStatus.OK || result.Value == null) return false;

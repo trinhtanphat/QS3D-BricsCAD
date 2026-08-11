@@ -20,6 +20,8 @@ namespace QS3D.Core.SmokeTests
             SheetIndexIsDeterministicAndImmutable();
             SheetIndexIdentityFailsClosed();
             SheetIndexBoundsAndNullsFailClosed();
+            TitleBlockParameterMapIsDeterministicAndImmutable();
+            TitleBlockParameterMapFailsClosed();
         }
 
         private static void ViewFilteringIsDeterministic()
@@ -208,6 +210,87 @@ namespace QS3D.Core.SmokeTests
             MustFailArgument(
                 () => SemanticSheetIndexBuilder.Build(new SemanticSheetPlan[] { null! }),
                 "Sheet Index null source rows must fail closed.");
+        }
+
+        private static void TitleBlockParameterMapIsDeterministicAndImmutable()
+        {
+            var project = BuildProject();
+            var views = SemanticViewPlanner.BuildCatalog(project, new[] { new SemanticViewDefinition("V1", "Plan") });
+            var sheet = SemanticSheetPlanner.Build(
+                new SemanticSheetDefinition(
+                    "SHEET-100", "A-100", "General Plan", 841d, 594d,
+                    new[] { new SemanticSheetPlacementDefinition("V1", 20d, 20d, 300d, 200d) },
+                    "A1 Standard"),
+                views);
+            var definitions = new List<SemanticTitleBlockParameterDefinition>
+            {
+                new SemanticTitleBlockParameterDefinition("VIEW_COUNT", SemanticTitleBlockSheetField.PlacedViewCount),
+                new SemanticTitleBlockParameterDefinition("SHEET_TITLE", SemanticTitleBlockSheetField.SheetName),
+                new SemanticTitleBlockParameterDefinition("SHEET_NO", SemanticTitleBlockSheetField.SheetNumber),
+                new SemanticTitleBlockParameterDefinition("STABLE_ID", SemanticTitleBlockSheetField.SheetId),
+                new SemanticTitleBlockParameterDefinition("BLOCK_NAME", SemanticTitleBlockSheetField.TitleBlockName)
+            };
+
+            var map = SemanticTitleBlockParameterMapBuilder.Build(sheet, definitions);
+            definitions.Clear();
+
+            Equal(5, map.Values.Count);
+            Equal("BLOCK_NAME", map.Values[0].DestinationTag);
+            Equal("A1 Standard", map.Values[0].Value);
+            Equal("SHEET_NO", map.Values[1].DestinationTag);
+            Equal("A-100", map.Values[1].Value);
+            Equal("SHEET_TITLE", map.Values[2].DestinationTag);
+            Equal("General Plan", map.Values[2].Value);
+            Equal("STABLE_ID", map.Values[3].DestinationTag);
+            Equal("SHEET-100", map.Values[3].Value);
+            Equal("VIEW_COUNT", map.Values[4].DestinationTag);
+            Equal("1", map.Values[4].Value);
+
+            var mutable = map.Values as IList<SemanticTitleBlockParameterValue>;
+            if (mutable == null) throw new Exception("Semantic title-block parameter values must expose a read-only list implementation.");
+            var blocked = false;
+            try { mutable.Add(map.Values[0]); }
+            catch (NotSupportedException) { blocked = true; }
+            if (!blocked) throw new Exception("Semantic title-block parameter values must not be externally mutable.");
+        }
+
+        private static void TitleBlockParameterMapFailsClosed()
+        {
+            var project = BuildProject();
+            var views = SemanticViewPlanner.BuildCatalog(project, new[] { new SemanticViewDefinition("V1", "Plan") });
+            var sheet = SemanticSheetPlanner.Build(
+                new SemanticSheetDefinition("SHEET-1", "A-101", "Plan", 420d, 297d, Array.Empty<SemanticSheetPlacementDefinition>()),
+                views);
+
+            MustFail(
+                () => SemanticTitleBlockParameterMapBuilder.Build(sheet, new[]
+                {
+                    new SemanticTitleBlockParameterDefinition("SHEET_NO", SemanticTitleBlockSheetField.SheetNumber),
+                    new SemanticTitleBlockParameterDefinition("sheet_no", SemanticTitleBlockSheetField.SheetName)
+                }),
+                "Title-block destination tags must be unique case-insensitively.");
+            MustFail(
+                () => SemanticTitleBlockParameterMapBuilder.Build(
+                    sheet,
+                    Enumerable.Repeat(
+                        new SemanticTitleBlockParameterDefinition("X", SemanticTitleBlockSheetField.SheetId),
+                        129)),
+                "Title-block parameter maps must reject over-bounded definitions before duplicate processing.");
+            MustFail(
+                () => SemanticTitleBlockParameterMapBuilder.Build(sheet, new[]
+                {
+                    new SemanticTitleBlockParameterDefinition("UNKNOWN", (SemanticTitleBlockSheetField)999)
+                }),
+                "Unknown title-block semantic source fields must fail closed.");
+            MustFailArgument(
+                () => SemanticTitleBlockParameterMapBuilder.Build(sheet, new SemanticTitleBlockParameterDefinition[] { null! }),
+                "Null title-block mapping definitions must fail closed.");
+            MustFailArgument(
+                () => SemanticTitleBlockParameterMapBuilder.Build(sheet, new[]
+                {
+                    new SemanticTitleBlockParameterDefinition(" ", SemanticTitleBlockSheetField.SheetId)
+                }),
+                "Blank title-block destination tags must fail closed.");
         }
 
         private static ProjectState BuildProject()

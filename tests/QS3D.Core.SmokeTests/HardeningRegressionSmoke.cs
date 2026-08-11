@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Xml;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
+using QS3D.Core.Features;
 using QS3D.Core.Formulas;
 using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
@@ -24,6 +25,7 @@ namespace QS3D.Core.SmokeTests
             ModelHealthDimensionIntegrity();
             ModelHealthGeneratedGeometryIntegrity();
             FamilyChangeNotification();
+            FeatureFlagsNormalizeLookupNames();
             FormulaEvaluatorIsConcurrent();
             FormulaEvaluatorHasResourceGuards();
             FormulaRoundingAndSmallDivisor();
@@ -176,6 +178,18 @@ namespace QS3D.Core.SmokeTests
             Equal("New Name", family.Name);
             Equal("Name", changed);
             Throws<ArgumentException>(() => family.Name = "   ");
+        }
+
+        private static void FeatureFlagsNormalizeLookupNames()
+        {
+            var flags = new FeatureFlags();
+            flags.Set("  hardening.flag  ", true);
+
+            True(flags.IsEnabled("hardening.flag"));
+            True(flags.IsEnabled("  HARDENING.FLAG  "));
+
+            flags.Set("hardening.flag", false);
+            True(!flags.IsEnabled("  Hardening.Flag  "));
         }
 
         private static void FormulaEvaluatorIsConcurrent()
