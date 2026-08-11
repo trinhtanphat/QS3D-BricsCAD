@@ -8,6 +8,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class QuantitySettingsWindow
     {
         private QuantityCalculationSettings? _persistedSettingsBaseline;
+        private bool _persistedSettingsBaselineVerified;
         private bool _unsavedChangesTrackingInitialized;
         private bool _allowCloseWithoutPrompt;
 
@@ -15,7 +16,9 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (_unsavedChangesTrackingInitialized) return;
 
-            _persistedSettingsBaseline = BuildSettingsFromView();
+            var baseline = BuildSettingsFromView();
+            _persistedSettingsBaseline = baseline.Clone();
+            _persistedSettingsBaselineVerified = TryVerifyPersistedSettingsBaseline(baseline);
             Closing += QuantitySettingsWindow_Closing;
             SaveSettingsButton.Click += QuantitySettingsSaveBaseline_Click;
             _unsavedChangesTrackingInitialized = true;
@@ -31,7 +34,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var persisted = _store.Load();
                 persisted.NormalizeAndValidate();
                 if (SettingsEquivalent(current, persisted))
-                    _persistedSettingsBaseline = current.Clone();
+                    AcceptPersistedSettingsBaseline(current);
             }
             catch
             {
@@ -106,8 +109,9 @@ namespace QS3D.BricsCAD.V25.UI
 
             try
             {
+                EnsurePersistedSettingsFreshBeforeSave();
                 _store.Save(current);
-                _persistedSettingsBaseline = current.Clone();
+                AcceptPersistedSettingsBaseline(current);
                 _loadedSettings = current.Clone();
                 _allowCloseWithoutPrompt = true;
             }
@@ -116,6 +120,53 @@ namespace QS3D.BricsCAD.V25.UI
                 e.Cancel = true;
                 ShowError("Không thể lưu cài đặt trước khi đóng. Cửa sổ vẫn được giữ mở.", ex);
             }
+        }
+
+        private void EnsurePersistedSettingsFreshBeforeSave()
+        {
+            var baseline = _persistedSettingsBaseline;
+            if (baseline == null) return;
+
+            QuantityCalculationSettings persisted;
+            try
+            {
+                persisted = _store.Load();
+                persisted.NormalizeAndValidate();
+            }
+            catch
+            {
+                if (_persistedSettingsBaselineVerified) throw;
+
+                // The window may have opened from a malformed legacy/current-schema file.
+                // Preserve the existing explicit recovery-save path while that file remains unreadable.
+                return;
+            }
+
+            if (!SettingsEquivalent(persisted, baseline))
+                throw new InvalidOperationException(
+                    "Cấu hình QS3D theo máy đã thay đổi bên ngoài cửa sổ này. Không ghi đè snapshot cũ. Hãy đóng/mở lại QS3DSETUP, kiểm tra thay đổi mới rồi áp dụng lại chỉnh sửa của bạn.");
+
+            _persistedSettingsBaselineVerified = true;
+        }
+
+        private bool TryVerifyPersistedSettingsBaseline(QuantityCalculationSettings baseline)
+        {
+            try
+            {
+                var persisted = _store.Load();
+                persisted.NormalizeAndValidate();
+                return SettingsEquivalent(baseline, persisted);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void AcceptPersistedSettingsBaseline(QuantityCalculationSettings settings)
+        {
+            _persistedSettingsBaseline = settings.Clone();
+            _persistedSettingsBaselineVerified = true;
         }
 
         private static bool SettingsEquivalent(QuantityCalculationSettings left, QuantityCalculationSettings right)
