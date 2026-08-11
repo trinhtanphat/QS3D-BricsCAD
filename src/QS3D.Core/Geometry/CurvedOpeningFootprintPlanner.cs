@@ -122,11 +122,14 @@ namespace QS3D.Core.Geometry
         {
             var dx = segment.End.X - segment.Start.X;
             var dy = segment.End.Y - segment.Start.Y;
-            var denominator = segment.Length * segment.Length;
-            if (!Finite(denominator) || denominator <= 0d) throw new OverflowException("Curved host projection denominator is invalid.");
-            var dot = (point.X - segment.Start.X) * dx + (point.Y - segment.Start.Y) * dy;
-            if (!Finite(dot)) throw new OverflowException("Curved host projection overflowed.");
-            var t = Math.Max(0d, Math.Min(1d, dot / denominator));
+            var ux = dx / segment.Length;
+            var uy = dy / segment.Length;
+            if (!Finite(ux) || !Finite(uy)) throw new OverflowException("Curved host projection direction is invalid.");
+            var px = point.X - segment.Start.X;
+            var py = point.Y - segment.Start.Y;
+            if (!Finite(px) || !Finite(py)) throw new OverflowException("Curved host projection offset overflowed.");
+            var along = DotFinite(px, py, ux, uy, "curved host projection distance");
+            var t = Math.Max(0d, Math.Min(1d, along / segment.Length));
             var projected = new Point2(segment.Start.X + dx * t, segment.Start.Y + dy * t);
             Validate(projected, "curved host projection");
             var distance = point.DistanceTo(projected);
@@ -164,6 +167,18 @@ namespace QS3D.Core.Geometry
                 return point;
             }
             return segments[segments.Count - 1].End;
+        }
+
+        private static double DotFinite(double ax, double ay, double bx, double by, string label)
+        {
+            var scale = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            if (!Finite(scale)) throw new OverflowException(label + " contains a non-finite value.");
+            if (scale == 0d) return 0d;
+            var normalized = ax / scale * bx + ay / scale * by;
+            if (!Finite(normalized)) throw new OverflowException(label + " overflowed.");
+            var value = normalized * scale;
+            if (!Finite(value)) throw new OverflowException(label + " overflowed.");
+            return value;
         }
 
         private static double Add(double left, double right, string label)
