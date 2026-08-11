@@ -120,18 +120,27 @@ namespace QS3D.Core.Rebar
             ValidateFinite(topX, "top X elevation");
             ValidateFinite(topY, "top Y elevation");
 
+            var usableLow = -half + cover;
+            var usableHigh = half - cover;
             if (input.IncludeBottom && input.IncludeTop)
             {
                 var bottomHigh = Math.Max(bottomX + xRadius, bottomY + yRadius);
                 var topLow = Math.Min(topX - xRadius, topY - yRadius);
                 if (!(topLow > bottomHigh)) throw new InvalidOperationException("Slab thickness is insufficient for the requested top + bottom two-direction mesh and cover.");
             }
-            else
+            else if (input.IncludeBottom)
             {
                 var low = Math.Min(bottomX - xRadius, bottomY - yRadius);
+                var high = Math.Max(bottomX + xRadius, bottomY + yRadius);
+                if (low < usableLow - 1e-12d || high > usableHigh + 1e-12d)
+                    throw new InvalidOperationException("Bottom slab mesh does not fit within the concrete cover envelope.");
+            }
+            else if (input.IncludeTop)
+            {
+                var low = Math.Min(topX - xRadius, topY - yRadius);
                 var high = Math.Max(topX + xRadius, topY + yRadius);
-                if (input.IncludeBottom && low < -half + cover - 1e-12d) throw new InvalidOperationException("Bottom slab mesh violates concrete cover.");
-                if (input.IncludeTop && high > half - cover + 1e-12d) throw new InvalidOperationException("Top slab mesh violates concrete cover.");
+                if (low < usableLow - 1e-12d || high > usableHigh + 1e-12d)
+                    throw new InvalidOperationException("Top slab mesh does not fit within the concrete cover envelope.");
             }
 
             var bars = new List<SlabMeshBarPlacement>((int)projectedBars);
