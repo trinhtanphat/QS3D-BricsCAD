@@ -1,50 +1,32 @@
 # Work claim — floor/level assignment offset overflow
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-floor-level-offset-overflow`
 - Registered: `2026-08-12T01:12:00+07:00`
 - Baseline main SHA: `4ba60c002c51d1d154e3cd8f49e4c8d88a657527`
+- Claim commit: `b085e99a1d58a3e414537db3b932e0ce37efd532`
+- Implementation commit: `a33b85dc168b5ceea1c7dc1afeaa5630db836d22`
+- Regression commit: `98976fbd457b1bbb884d645ad6634d7a99870896`
 - Priority: deterministic CAD-independent numeric preflight defect found during owner-requested continue-all audit
 
-## Confirmed defect
+## Completed
 
-`ProjectFloorService.AssignBottomLevel(...)` and `AssignTopLevel(...)` validate each floor elevation and configured level offset as finite, but compare effective elevations with raw `ElevationM + Offset` arithmetic. Two individually finite doubles can overflow to `+Infinity` / `-Infinity`. The assignment preflight can therefore accept and persist a Bottom/Top level relation whose effective elevation is non-finite, while `ElementVerticalPlacementService.Resolve(...)` later fails closed on the same configuration through its guarded `Add(...)` helper.
+`ProjectFloorService.AssignBottomLevel(...)` and `AssignTopLevel(...)` now compute candidate/existing effective elevations through a finite-add guard before ordering comparison or mutation. This closes the gap where individually finite Floor elevations and offsets could overflow to infinity, pass/escape assignment preflight, and only fail later in `ElementVerticalPlacementService.Resolve(...)`.
 
-This is a validate-before-mutate inconsistency: invalid vertical placement can be admitted by the authoring service and rejected only downstream.
+Assign Bottom now validates the candidate bottom effective elevation even when no Top Level is configured, so it cannot persist a standalone Bottom Level relation whose elevation+offset is already non-finite.
 
-## Reserved scope
+## Validation actually performed
 
-- Replace raw level-elevation + offset preflight arithmetic in `AssignBottomLevel` / `AssignTopLevel` with one finite-add helper local to `ProjectFloorService`.
-- Throw before `project.Touch()` or element mutation if either effective elevation overflows/non-finite.
-- Preserve all existing ordering (`top > bottom`), ownership, no-op, dirty/stale and relation semantics.
+- Verified claim commit remained an ancestor of moving `main`; the only intervening commit before implementation added an unrelated Room Finish schedule registration.
+- Inspected exact implementation diff: two raw effective-elevation additions were replaced with `AddFinite(...)`, candidate bottom validation was moved ahead of the optional Top-Level branch, and one local finite-add helper was added. No mutation/dirty/ownership behavior changed.
+- Re-fetched module-initialized regression from current `main` and reviewed coverage for candidate bottom overflow, existing top overflow, existing bottom overflow, candidate top overflow, failure non-mutation, and a valid finite Bottom+Top assignment resolved through `ElementVerticalPlacementService`.
+- GitHub Actions were not dispatched and no BricsCAD V25/V26 runtime qualification is claimed.
 
-## Expected surfaces
-
-- `src/QS3D.Core/Domain/ProjectFloorService.cs`
-- `tests/QS3D.Core.SmokeTests/ProjectFloorLevelOffsetOverflowSmoke.cs`
-- module-initializer registration in the new smoke file
-- this claim file
-
-## Excluded scope
+## Excluded scope retained
 
 - No `ElementVerticalPlacementService`, FloorDefinition, Level UI/native/V25/V26, persistence schema or engineering policy changes.
 - No new bounds on otherwise finite elevations/offsets; only arithmetic closure is enforced.
-- No GitHub Actions dispatch.
-
-## Validation plan
-
-- AssignBottomLevel rejects top effective elevation overflow before touching project/element.
-- AssignBottomLevel rejects candidate bottom effective elevation overflow before mutation.
-- AssignTopLevel rejects existing bottom effective elevation overflow before mutation.
-- AssignTopLevel rejects candidate top effective elevation overflow before mutation.
-- Valid finite effective elevations continue assigning and marking relation/geometry/quantity dirty as before.
-- Failure preserves relation properties, project ChangeVersion/UpdatedUtc and element UpdatedUtc/Dirty.
-- Inspect exact implementation diff and re-fetch source/test from moving `main` before close-out.
-
-## Coordination
-
-Recent vertical placement work already hardened `ElementVerticalPlacement`/resolver finite height arithmetic, but recent commit search found no active/recent claim for overflow in `ProjectFloorService` assignment preflight arithmetic. Current unrelated agent work is on materials, release/V26, polygon, documentation and other surfaces.
 
 ## Completion condition
 
-Current `main` rejects non-finite effective level elevations before Bottom/Top assignment mutation, valid behavior remains unchanged, focused deterministic smoke coverage is present, and this claim is closed `COMPLETED`.
+Satisfied on current `main`; invalid non-finite effective elevations are rejected before Floor/Level assignment mutation, valid behavior remains intact, focused regression coverage is present, and this lane is released.
