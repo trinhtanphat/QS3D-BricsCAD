@@ -105,7 +105,9 @@ namespace QS3D.Core.Domain
             string? previousName = null;
             if (byId >= 0)
             {
-                previousName = custom[byId].Name;
+                var existing = custom[byId];
+                if (SameMaterial(existing, material)) return existing;
+                previousName = existing.Name;
                 custom[byId] = material;
             }
             else
@@ -227,6 +229,13 @@ namespace QS3D.Core.Domain
         {
             if (properties.TryGetValue("Material", out var material) && !string.IsNullOrWhiteSpace(material)) names.Add(material.Trim());
             if (properties.TryGetValue("CurtainFrameMaterial", out var frame) && !string.IsNullOrWhiteSpace(frame)) names.Add(frame.Trim());
+        }
+
+        private static bool SameMaterial(ProjectMaterial left, ProjectMaterial right)
+        {
+            return string.Equals(left.Name, right.Name, StringComparison.Ordinal) &&
+                   string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                   string.Equals(left.Description, right.Description, StringComparison.Ordinal);
         }
 
         private static List<ProjectMaterial> ReadCustom(ProjectState project)
