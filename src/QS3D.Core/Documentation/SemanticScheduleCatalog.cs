@@ -71,7 +71,13 @@ namespace QS3D.Core.Documentation
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
-            var list = definitions.ToList();
+            var list = new List<SemanticScheduleDefinition>(MaxSchedules);
+            foreach (var definition in definitions)
+            {
+                if (list.Count >= MaxSchedules)
+                    throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
+                list.Add(definition);
+            }
             ValidateCatalog(list);
             if (list.Count == 0)
             {
