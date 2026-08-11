@@ -105,6 +105,12 @@ Baseline audited before this expansion: `origin/main@aff0efa0`. The completed ge
 
 Reserve only that released smoke file to replace those three unresolved helper calls with `True(...)`, preserving each condition and message byte-for-byte. Do not edit `ProjectElement`, generated-stale semantics, timestamps, dirty flags or any production source. Re-run the complete Core smoke after this compile-only reconciliation.
 
+## 2026-08-12 revision dependency freshness smoke reconciliation expansion
+
+Baseline audited before this expansion: `origin/main@9c20cbfb`. The next full Core smoke reaches `tests/QS3D.Core.SmokeTests/RevisionDependencyFreshnessSmoke.cs`, whose equivalent-set case still supplies blank, padded and case-insensitive duplicate dependency entries that the completed canonical capture contract now intentionally rejects.
+
+Reserve only that released smoke file to express the same order/case-insensitive equivalent-set comparison with two unique, nonblank, trim-canonical dependency IDs on each side. Preserve dependency-only diff, persistence round-trip, malformed XML and production Revision behavior. Do not edit `RevisionService`, snapshot storage or canonical dependency validation. Re-run the complete Core smoke after this test-data reconciliation.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
