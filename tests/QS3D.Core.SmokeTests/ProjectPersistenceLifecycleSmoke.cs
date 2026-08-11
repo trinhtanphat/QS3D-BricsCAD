@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 
@@ -10,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             StampTracksSemanticChanges();
             SnapshotRollbackRestoresChangeVersion();
+            TouchOverflowDoesNotPartiallyMutatePersistenceState();
             StampRejectsAnotherProject();
         }
 
@@ -43,6 +45,28 @@ namespace QS3D.Core.SmokeTests
 
             Equal(expectedVersion, project.ChangeVersion, "Project rollback did not restore the change version.");
             Equal(expectedUpdatedUtc, project.UpdatedUtc, "Project rollback did not restore UpdatedUtc.");
+        }
+
+        private static void TouchOverflowDoesNotPartiallyMutatePersistenceState()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-touch-overflow-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                File.WriteAllText(path,
+                    "<qs3d schema=\"3\" projectId=\"touch-overflow\" name=\"Touch overflow\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"9223372036854775807\" drawingPath=\"\" drawingFingerprint=\"\" activeZoneId=\"\" activeFloorId=\"\">" +
+                    "<metadata/><zones/><floors/><families/><rules/><elements/><audit/></qs3d>");
+                var project = new QsdbProjectStore().Load(path);
+                var expectedUpdatedUtc = project.UpdatedUtc;
+
+                Equal(long.MaxValue, project.ChangeVersion, "Overflow fixture did not load the maximum change version.");
+                Throws<OverflowException>(() => project.Touch());
+                Equal(long.MaxValue, project.ChangeVersion, "Failed Touch changed the maximum change version.");
+                Equal(expectedUpdatedUtc, project.UpdatedUtc, "Failed Touch partially changed UpdatedUtc before overflow.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
         }
 
         private static void StampRejectsAnotherProject()
