@@ -67,6 +67,10 @@ def main():
         floor,
         'public static int Assign(ProjectState project, string floorId',
         'public static int AssignBottomLevel')
+    floor_resolver = method_slice(
+        floor,
+        'private static IReadOnlyList<ProjectElement> ResolveOwnedElements',
+        'private static IReadOnlyList<ProjectElement> ResolveProjectElements')
     zone_active = method_slice(
         zone,
         'public static void SetActive(ProjectState project, string zoneId)',
@@ -81,7 +85,7 @@ def main():
         ("floor Assign", floor_assign, 'string.Equals(x.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase)'),
         ("zone SetActive", zone_active, 'string.Equals(project.ActiveZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)'),
         ("zone Assign", zone_assign, 'string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)'),
-        ("floor target validation", floor, 'if (element == null) continue;'),
+        ("floor target validation", floor_resolver, 'if (element == null) continue;'),
         ("zone target validation", zone_assign, 'if (element == null) continue;'),
     ]
     for label, text, token in unsafe:
@@ -89,12 +93,22 @@ def main():
             print("ERROR: unsafe " + label + " behavior returned: " + token)
             return 1
 
-    for label, text in (("floor Assign", floor_assign), ("zone Assign", zone_assign)):
-        null_guard = text.find('if (element == null)')
-        touch = text.find('project.Touch();')
-        if null_guard < 0 or touch < 0 or null_guard > touch:
-            print("ERROR: " + label + " null-target validation must complete before mutation.")
-            return 1
+    floor_resolve_call = floor_assign.find('var targets = ResolveOwnedElements(project, elements);')
+    floor_touch = floor_assign.find('project.Touch();')
+    floor_null_guard = floor_resolver.find('if (element == null)')
+    floor_ownership_guard = floor_resolver.find('if (!projectElements.TryGetValue(element.Id')
+    if floor_resolve_call < 0 or floor_touch < 0 or floor_resolve_call > floor_touch:
+        print("ERROR: Floor target resolution must complete before mutation.")
+        return 1
+    if floor_null_guard < 0 or floor_ownership_guard < 0 or floor_null_guard > floor_ownership_guard:
+        print("ERROR: Floor null-target guard must run before ownership dereference.")
+        return 1
+
+    zone_null_guard = zone_assign.find('if (element == null)')
+    zone_touch = zone_assign.find('project.Touch();')
+    if zone_null_guard < 0 or zone_touch < 0 or zone_null_guard > zone_touch:
+        print("ERROR: Zone null-target validation must complete before mutation.")
+        return 1
 
     print("PASS: Floor/Zone activation and assignment use canonical no-op identity, and null-containing object-target batches fail closed before mutation with module-registered Core regression coverage.")
     return 0
