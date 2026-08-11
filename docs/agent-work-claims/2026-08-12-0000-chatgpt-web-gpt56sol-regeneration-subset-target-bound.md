@@ -1,42 +1,45 @@
 # Work claim — Regeneration subset target bounded enumeration
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-regeneration-subset-target-bound`
 - Registered: `2026-08-12T00:00:00+07:00`
+- Completed: `2026-08-12T00:02:00+07:00`
 - Baseline main SHA: `17273180af0868afe06b724e1101db1de1e4b9d6`
+- Reservation commit: `3f2a706b82d37e453d9fbb6ee2335d5053ae6160`
 - Priority: P1 — targeted regeneration input must be bounded before materializing arbitrary caller enumerables.
 
-## Confirmed defect
+## Defect fixed
 
-`RegenerationEngine.RegenerateDirtySubset(...)` passes the caller-provided `IEnumerable<string>` to `CanonicalTargetIds(...)`, which enumerates the entire sequence into a `HashSet<string>` before any project resolution occurs. A valid unique target set can never contain more IDs than `project.Elements.Count`, yet an excessively large or non-terminating unique enumerable can currently consume unbounded time/memory before the engine reports an unknown target.
+`RegenerationEngine.RegenerateDirtySubset(...)` previously passed the caller-provided `IEnumerable<string>` to `CanonicalTargetIds(...)`, which enumerated the entire sequence into a `HashSet<string>` before any project resolution occurred. A valid unique target set can never contain more IDs than `project.Elements.Count`, yet an excessively large or non-terminating unique enumerable could consume unbounded time/memory before the engine reported an unknown target.
 
-The exact project element cardinality is a natural semantic upper bound, so this can be hardened without inventing a new product limit.
+Target canonicalization now receives the current project element count and rejects the next unique ID when accepting it would exceed that exact semantic maximum. Blank/padded validation and duplicate detection remain ahead of the cardinality check, so their existing diagnostics retain precedence.
 
 ## Reserved scope
 
 - `src/QS3D.Core/Services/RegenerationEngine.cs`
-- `tests/QS3D.Core.SmokeTests/RegenerationSubsetTargetBoundSmoke.cs` (new auto-registered focused smoke)
+- `tests/QS3D.Core.SmokeTests/RegenerationSubsetTargetBoundSmoke.cs`
 - this claim file
 
-## Intended contract
+## Published commits
 
-- `RegenerateDirtySubset(...)` stops consuming unique target IDs once accepting another target would exceed the current project element count.
-- Existing canonical blank/padded/duplicate validation remains intact and duplicate diagnostics take precedence over cardinality when the repeated ID itself is encountered.
-- A target set at exactly project cardinality remains valid and normal unknown-target resolution semantics are unchanged inside that bound.
-- No regenerator selection, dirty-state, quantity, dependency, rollback, or native behavior changes.
+- `a9f5f55dccd153f27abd13484a4230d9fc199e33` — bound unique subset target enumeration by `project.Elements.Count` while preserving canonical/duplicate validation order.
+- `956d25e0c861b4f88e1126a98a70b73f6d35247f` — add isolated auto-registered smoke covering sentinel non-overenumeration, exact-cardinality acceptance, and duplicate precedence.
 
-## Coordination
+## Delivered contract
 
-Recent regeneration work covers profile DTO integrity, semantic numeric fail-closed behavior, and null-regenerator validation; those lanes are completed and do not reserve this subset-target input path. Current recent claims concern recognition enumeration, dependency-impact freshness, grids, quantity settings, and unrelated surfaces.
+- `RegenerateDirtySubset(...)` cannot eagerly consume unique target IDs beyond the largest subset that could possibly resolve in the current project.
+- No valid target subset is rejected by the new bound.
+- Duplicate target validation remains duplicate-specific even when the project cardinality has already been reached.
+- Regenerator selection, dirty-state, quantity, dependency, rollback, and native behavior are unchanged.
 
-## Validation plan
+## Validation notes
 
-- Add an auto-registered Core smoke using a sentinel enumerable to prove a project with two elements rejects the third unique target without requesting a fourth item.
-- Verify two exact in-project targets remain accepted.
-- Verify duplicate target validation remains duplicate-specific rather than being masked by the cardinality guard.
-- Re-fetch source immediately before update, use the current blob SHA, inspect exact diff, and close the claim with published SHAs.
-- No GitHub Actions dispatch; no executable .NET or BricsCAD V25 runtime PASS claim from this hosted environment.
+- Exact source and smoke diffs were fetched after publication and are limited to the reserved surfaces.
+- The sentinel regression is structured so the previous implementation would enumerate once beyond the possible project bound and throw the sentinel exception; the new implementation rejects the third unique ID for a two-element project before requesting another item.
+- The focused smoke auto-registers via `ModuleInitializer`; no shared smoke registry was edited.
+- No force-push and no GitHub Actions dispatch.
+- This hosted environment does not provide the repository .NET/BricsCAD V25 qualification toolchain, so executable/native runtime PASS is not claimed.
 
 ## Completion condition
 
-Targeted regeneration no longer eagerly consumes target sequences beyond the maximum possible valid project subset, focused regression is on `main`, and this claim is closed.
+Satisfied for the remote-safe source/static contract. Exact executable/native qualification remains separate.
