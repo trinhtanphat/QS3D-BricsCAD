@@ -9,6 +9,7 @@ namespace QS3D.BricsCAD.V25.Services
     {
         private const string SettingsFileName = "quantity_settings.json";
         private const string UnsupportedSchemaMarker = "QS3D.QuantitySettings.UnsupportedSchema";
+        private const long MaxSettingsFileBytes = 32L * 1024L * 1024L;
         private readonly string _settingsPath;
 
         public QuantitySettingsStore()
@@ -84,6 +85,7 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 using (var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
+                    EnsureSupportedFileLength(stream.Length);
                     var serializer = new DataContractJsonSerializer(typeof(QuantityCalculationSettings));
                     var value = serializer.ReadObject(stream) as QuantityCalculationSettings;
                     if (value == null) throw new InvalidDataException("Quantity settings template is empty or has an unsupported root object.");
@@ -135,6 +137,7 @@ namespace QS3D.BricsCAD.V25.Services
                     var serializer = new DataContractJsonSerializer(typeof(QuantityCalculationSettings));
                     serializer.WriteObject(stream, settings);
                     stream.Flush(true);
+                    EnsureSupportedFileLength(stream.Length);
                 }
 
                 if (File.Exists(path))
@@ -154,6 +157,13 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 if (File.Exists(temp)) File.Delete(temp);
             }
+        }
+
+        private static void EnsureSupportedFileLength(long length)
+        {
+            if (length > MaxSettingsFileBytes)
+                throw new InvalidDataException(
+                    "Quantity settings template exceeds the maximum supported size of " + MaxSettingsFileBytes + " bytes.");
         }
 
         private static InvalidDataException CreateUnsupportedSchemaException(int schemaVersion)
