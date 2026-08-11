@@ -8,20 +8,23 @@ namespace QS3D.Core.Services
 {
     public static class SourceHandleResolver
     {
+        private const int MaxRootElementIdInputCount = 10000;
+
         public static IReadOnlyList<string> Resolve(ProjectState project, IEnumerable<string> elementIds)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
             var elementIndex = BuildElementIndex(project);
+            var rootElementIds = MaterializeRootElementIds(elementIds);
             var handles = new List<string>();
             var knownHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var stack = new Stack<string>();
 
-            foreach (var rawId in elementIds.Where(x => !string.IsNullOrWhiteSpace(x)))
+            foreach (var rootElementId in rootElementIds)
             {
-                stack.Push(rawId.Trim());
+                stack.Push(rootElementId);
                 while (stack.Count > 0)
                 {
                     var elementId = stack.Pop();
@@ -49,6 +52,26 @@ namespace QS3D.Core.Services
                 }
             }
             return handles.AsReadOnly();
+        }
+
+        private static IReadOnlyList<string> MaterializeRootElementIds(IEnumerable<string> elementIds)
+        {
+            if (elementIds is ICollection<string> collection && collection.Count > MaxRootElementIdInputCount)
+                throw new InvalidOperationException("Locate root selection cannot exceed " + MaxRootElementIdInputCount + " input entries.");
+            if (elementIds is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaxRootElementIdInputCount)
+                throw new InvalidOperationException("Locate root selection cannot exceed " + MaxRootElementIdInputCount + " input entries.");
+
+            var roots = new List<string>();
+            var inputCount = 0;
+            foreach (var rawId in elementIds)
+            {
+                if (inputCount >= MaxRootElementIdInputCount)
+                    throw new InvalidOperationException("Locate root selection cannot exceed " + MaxRootElementIdInputCount + " input entries.");
+                inputCount++;
+                if (string.IsNullOrWhiteSpace(rawId)) continue;
+                roots.Add(rawId.Trim());
+            }
+            return roots.AsReadOnly();
         }
 
         private static IReadOnlyDictionary<string, ProjectElement> BuildElementIndex(ProjectState project)
