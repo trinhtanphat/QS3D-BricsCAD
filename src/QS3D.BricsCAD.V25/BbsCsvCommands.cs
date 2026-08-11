@@ -4,6 +4,7 @@ using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Export;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
@@ -32,14 +33,15 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
-                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 {
                     Report(document, "BBS CSV: BLOCKED • chưa có QS3D project state/sidecar; export không tạo project mới.");
                     return;
                 }
 
-                new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                var rows = ProjectRebarScheduleBuilder.Build(project);
+                var snapshot = ProjectStateSnapshot.CreateDetachedCopy(project);
+                new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(snapshot);
+                var rows = ProjectRebarScheduleBuilder.Build(snapshot);
                 if (rows.Count == 0)
                 {
                     Report(document, "BBS CSV: chưa có cấu kiện khai báo RebarNotation.");
