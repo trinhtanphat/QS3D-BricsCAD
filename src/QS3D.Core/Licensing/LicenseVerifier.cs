@@ -162,6 +162,8 @@ namespace QS3D.Core.Licensing
                 license.Features.Add(Required(feature, "name"));
             if (!string.Equals(Required(signatureElement, "algorithm"), "RSA-SHA256", StringComparison.Ordinal))
                 throw new InvalidDataException("Unsupported license signature algorithm.");
+            if (signatureElement.HasElements)
+                throw new InvalidDataException("License signature must contain text only.");
             try { license.Signature = Convert.FromBase64String((signatureElement.Value ?? string.Empty).Trim()); }
             catch (FormatException ex) { throw new InvalidDataException("License signature is not valid Base64.", ex); }
             if (license.Signature.Length > 1024) throw new InvalidDataException("License signature is too large.");
