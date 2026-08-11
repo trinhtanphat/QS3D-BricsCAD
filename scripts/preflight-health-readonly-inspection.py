@@ -7,10 +7,12 @@ SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
 
 COMMANDS = {
     "RebarHealthCommands.cs": True,
+    "RebarModeHealthCommands.cs": True,
     "ColumnTieHealthCommands.cs": True,
     "ShapeRebarHealthCommands.cs": True,
     "FoundationMeshHealthCommands.cs": True,
     "StructuralWallMeshHealthCommands.cs": False,
+    "SemanticTagHealthCommands.cs": False,
 }
 
 errors = []
