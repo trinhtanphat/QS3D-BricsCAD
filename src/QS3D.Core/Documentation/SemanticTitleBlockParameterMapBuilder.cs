@@ -61,10 +61,7 @@ namespace QS3D.Core.Documentation
             if (sheet == null) throw new ArgumentNullException(nameof(sheet));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
 
-            var materialized = definitions.ToList();
-            if (materialized.Count > MaxParameters)
-                throw new InvalidOperationException("Semantic title-block mapping supports at most " + MaxParameters + " parameters.");
-
+            var materialized = MaterializeDefinitionsBounded(definitions);
             var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var values = new List<SemanticTitleBlockParameterValue>(materialized.Count);
             for (var i = 0; i < materialized.Count; i++)
@@ -82,6 +79,22 @@ namespace QS3D.Core.Documentation
 
             return new SemanticTitleBlockParameterMap(values
                 .OrderBy(x => x.DestinationTag, StringComparer.OrdinalIgnoreCase));
+        }
+
+        private static List<SemanticTitleBlockParameterDefinition> MaterializeDefinitionsBounded(
+            IEnumerable<SemanticTitleBlockParameterDefinition> definitions)
+        {
+            var result = new List<SemanticTitleBlockParameterDefinition>(MaxParameters);
+            using (var enumerator = definitions.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxParameters)
+                        throw new InvalidOperationException("Semantic title-block mapping supports at most " + MaxParameters + " parameters.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result;
         }
 
         private static string ResolveValue(SemanticSheetPlan sheet, SemanticTitleBlockSheetField field)
