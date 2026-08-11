@@ -3,7 +3,7 @@
 - Status: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-door-xlsx-cell-text-limit-20260812-0055`
 - Registered: `2026-08-12T00:55:00+07:00`
-- Baseline main SHA: `c6acf7a3b338cd94dc4de58103f2b141d6508490`
+- Baseline main SHA: `94a6e479c386cd6b67c6284ed61f22bb042efe60`
 - Priority: evidence-driven remote-safe XLSX integrity hardening during owner-requested `continue all`
 
 ## Reserved scope
