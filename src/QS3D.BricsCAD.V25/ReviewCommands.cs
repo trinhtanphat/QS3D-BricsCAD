@@ -76,6 +76,7 @@ namespace QS3D.BricsCAD.V25
                     project = ProjectContextCoordinator.GetOrCreate(doc);
                 }
 
+                var reviewProjectId = project.ProjectId;
                 var batch = new ProjectRecognitionService().SuggestBatch(project, snapshots); var applied = 0; var skipped = 0;
                 Action<RecognitionResult> apply = result =>
                 {
@@ -89,6 +90,8 @@ namespace QS3D.BricsCAD.V25
 
                     if (!ExistingProjectMutationContext.TryGet(doc, out var currentProject))
                         throw new InvalidOperationException("Recognition Apply: QS3D project hiện hành không còn khả dụng. Hãy chạy lại Recognition.");
+                    if (!string.Equals(currentProject.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Recognition Apply: QS3D project đã bị thay thế từ khi mở cửa sổ Review. Hãy chạy lại Recognition.");
                     var refreshed = new ProjectRecognitionService().Suggest(currentProject, liveSnapshots[0]);
                     var candidate = refreshed.TopCandidate
                         ?? throw new InvalidOperationException("Recognition Apply: đối tượng " + result.Handle + " không còn candidate hợp lệ. Hãy chạy lại Recognition.");
@@ -130,7 +133,8 @@ namespace QS3D.BricsCAD.V25
                         catch (System.Exception ex)
                         {
                             skipped++;
-                            if (ExistingProjectMutationContext.TryGet(doc, out var auditProject))
+                            if (ExistingProjectMutationContext.TryGet(doc, out var auditProject) &&
+                                string.Equals(auditProject.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase))
                                 AuditTrail.ForProject(auditProject).Record("recognition.skip", result.Handle, ex.Message);
                             doc.Editor.WriteMessage("\nQS3D Recognition skip " + result.Handle + ": " + ex.Message);
                         }

@@ -13,6 +13,11 @@ namespace QS3D.Core.Export
 {
     public static class XlsxQuantityExporter
     {
+        private const int Decimal2Style = 2;
+        private const int WrappedTextStyle = 3;
+        private const int IntegerStyle = 4;
+        private const int Decimal3Style = 5;
+
         public static void Export(string path, IReadOnlyList<QuantityReportRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
@@ -142,19 +147,19 @@ namespace QS3D.Core.Export
                 AppendInlineStringCell(sb, CellRef(1, r), row.Zone, 0);
                 AppendInlineStringCell(sb, CellRef(2, r), row.Category, 0);
                 AppendInlineStringCell(sb, CellRef(3, r), row.FamilyName, 0);
-                AppendNumberCell(sb, CellRef(4, r), row.Count);
-                AppendNumberCell(sb, CellRef(5, r), row.GrossConcreteM3);
-                AppendNumberCell(sb, CellRef(6, r), row.DeductionM3);
-                AppendNumberCell(sb, CellRef(7, r), row.NetConcreteM3);
-                AppendNumberCell(sb, CellRef(8, r), row.FormworkM2);
-                AppendNumberCell(sb, CellRef(9, r), row.LengthM);
-                AppendNumberCell(sb, CellRef(10, r), row.OuterPerimeterM);
-                AppendNumberCell(sb, CellRef(11, r), row.InnerPerimeterM);
-                AppendNumberCell(sb, CellRef(12, r), row.DoorAreaM2);
-                AppendNumberCell(sb, CellRef(13, r), row.SideAreaM2);
-                AppendNumberCell(sb, CellRef(14, r), row.BottomAreaM2);
-                AppendNumberCell(sb, CellRef(15, r), row.TopAreaM2);
-                AppendNumberCell(sb, CellRef(16, r), row.OtherAreaM2);
+                AppendNumberCell(sb, CellRef(4, r), row.Count, IntegerStyle);
+                AppendNumberCell(sb, CellRef(5, r), row.GrossConcreteM3, Decimal3Style);
+                AppendNumberCell(sb, CellRef(6, r), row.DeductionM3, Decimal3Style);
+                AppendNumberCell(sb, CellRef(7, r), row.NetConcreteM3, Decimal3Style);
+                AppendNumberCell(sb, CellRef(8, r), row.FormworkM2, Decimal3Style);
+                AppendNumberCell(sb, CellRef(9, r), row.LengthM, Decimal3Style);
+                AppendNumberCell(sb, CellRef(10, r), row.OuterPerimeterM, Decimal3Style);
+                AppendNumberCell(sb, CellRef(11, r), row.InnerPerimeterM, Decimal3Style);
+                AppendNumberCell(sb, CellRef(12, r), row.DoorAreaM2, Decimal3Style);
+                AppendNumberCell(sb, CellRef(13, r), row.SideAreaM2, Decimal3Style);
+                AppendNumberCell(sb, CellRef(14, r), row.BottomAreaM2, Decimal3Style);
+                AppendNumberCell(sb, CellRef(15, r), row.TopAreaM2, Decimal3Style);
+                AppendNumberCell(sb, CellRef(16, r), row.OtherAreaM2, Decimal3Style);
                 AppendInlineStringCell(sb, CellRef(17, r), row.ElementIdText, 0);
                 AppendInlineStringCell(sb, CellRef(18, r), row.SourceHandleText, 0);
                 AppendInlineStringCell(sb, CellRef(19, r), row.DrawingFingerprint, 0);
@@ -197,31 +202,31 @@ namespace QS3D.Core.Export
                 sb.Append("<row r=\"").Append(r).Append("\"");
                 if (row.Count > 1) sb.Append(" ht=\"96\" customHeight=\"1\"");
                 sb.Append(">");
-                AppendNumberCell(sb, CellRef(0, r), i + 1);
+                AppendNumberCell(sb, CellRef(0, r), i + 1, IntegerStyle);
                 AppendInlineStringCell(sb, CellRef(1, r), displayName, 0);
                 AppendInlineStringCell(sb, CellRef(2, r), row.Category, 0);
                 AppendInlineStringCell(sb, CellRef(3, r), row.Material, 0);
                 AppendInlineStringCell(sb, CellRef(4, r), row.FamilyId, 0);
                 AppendInlineStringCell(sb, CellRef(5, r), row.FloorZoneText, 0);
-                AppendNumberCell(sb, CellRef(6, r), row.Count);
-                AppendNumberCell(sb, CellRef(7, r), row.GrossConcreteM3);
-                AppendNumberCell(sb, CellRef(8, r), row.DeductionM3);
-                AppendNumberCell(sb, CellRef(9, r), row.NetConcreteM3);
-                AppendNumberCell(sb, CellRef(10, r), row.FormworkM2);
-                AppendNumberCell(sb, CellRef(11, r), row.LengthM);
-                AppendNumberCell(sb, CellRef(12, r), row.OuterPerimeterM);
-                AppendNumberCell(sb, CellRef(13, r), row.InnerPerimeterM);
-                AppendNumberCell(sb, CellRef(14, r), row.DoorAreaM2);
-                AppendNumberCell(sb, CellRef(15, r), row.SideAreaM2);
-                AppendNumberCell(sb, CellRef(16, r), row.BottomAreaM2);
-                AppendNumberCell(sb, CellRef(17, r), row.TopAreaM2);
-                AppendNumberCell(sb, CellRef(18, r), row.OtherAreaM2);
-                AppendNullableNumberCell(sb, CellRef(19, r), row.DensityKgM3);
-                AppendNullableNumberCell(sb, CellRef(20, r), row.MassKg);
-                AppendInlineStringCell(sb, CellRef(21, r), row.Note, 3);
-                AppendInlineStringCell(sb, CellRef(22, r), row.ElementIdText, 3);
-                AppendInlineStringCell(sb, CellRef(23, r), row.SourceHandleText, 3);
-                AppendInlineStringCell(sb, CellRef(24, r), row.DrawingFingerprint, 3);
+                AppendNumberCell(sb, CellRef(6, r), row.Count, IntegerStyle);
+                AppendNumberCell(sb, CellRef(7, r), row.GrossConcreteM3, Decimal3Style);
+                AppendNumberCell(sb, CellRef(8, r), row.DeductionM3, Decimal3Style);
+                AppendNumberCell(sb, CellRef(9, r), row.NetConcreteM3, Decimal3Style);
+                AppendNumberCell(sb, CellRef(10, r), row.FormworkM2, Decimal3Style);
+                AppendNumberCell(sb, CellRef(11, r), row.LengthM, Decimal3Style);
+                AppendNumberCell(sb, CellRef(12, r), row.OuterPerimeterM, Decimal3Style);
+                AppendNumberCell(sb, CellRef(13, r), row.InnerPerimeterM, Decimal3Style);
+                AppendNumberCell(sb, CellRef(14, r), row.DoorAreaM2, Decimal3Style);
+                AppendNumberCell(sb, CellRef(15, r), row.SideAreaM2, Decimal3Style);
+                AppendNumberCell(sb, CellRef(16, r), row.BottomAreaM2, Decimal3Style);
+                AppendNumberCell(sb, CellRef(17, r), row.TopAreaM2, Decimal3Style);
+                AppendNumberCell(sb, CellRef(18, r), row.OtherAreaM2, Decimal3Style);
+                AppendNullableNumberCell(sb, CellRef(19, r), row.DensityKgM3, Decimal2Style);
+                AppendNullableNumberCell(sb, CellRef(20, r), row.MassKg, Decimal2Style);
+                AppendInlineStringCell(sb, CellRef(21, r), row.Note, WrappedTextStyle);
+                AppendInlineStringCell(sb, CellRef(22, r), row.ElementIdText, WrappedTextStyle);
+                AppendInlineStringCell(sb, CellRef(23, r), row.SourceHandleText, WrappedTextStyle);
+                AppendInlineStringCell(sb, CellRef(24, r), row.DrawingFingerprint, WrappedTextStyle);
                 sb.Append("</row>");
             }
 
@@ -243,17 +248,17 @@ namespace QS3D.Core.Export
                 .Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
         }
 
-        private static void AppendNumberCell(StringBuilder sb, string cellRef, double value)
+        private static void AppendNumberCell(StringBuilder sb, string cellRef, double value, int style = Decimal2Style)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "XLSX numeric values must be finite.");
-            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>")
-                .Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"").Append(style).Append("\"><v>")
+                .Append(value.ToString("R", CultureInfo.InvariantCulture)).Append("</v></c>");
         }
 
-        private static void AppendNullableNumberCell(StringBuilder sb, string cellRef, double? value)
+        private static void AppendNullableNumberCell(StringBuilder sb, string cellRef, double? value, int style = Decimal2Style)
         {
             if (!value.HasValue) return;
-            AppendNumberCell(sb, cellRef, value.Value);
+            AppendNumberCell(sb, cellRef, value.Value, style);
         }
 
         private static string CellRef(int columnZeroBased, int row)
@@ -298,6 +303,6 @@ namespace QS3D.Core.Export
             "<col min=\"25\" max=\"25\" width=\"42\" customWidth=\"1\"/>" +
             "</cols>";
 
-        private const string StylesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Segoe UI\"/></font><font><b/><sz val=\"11\"/><name val=\"Segoe UI\"/></font></fonts><fills count=\"3\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFC000\"/><bgColor indexed=\"64\"/></patternFill></fill></fills><borders count=\"2\"><border/><border><left style=\"thin\"><color rgb=\"FFD9D9D9\"/></left><right style=\"thin\"><color rgb=\"FFD9D9D9\"/></right><top style=\"thin\"><color rgb=\"FFD9D9D9\"/></top><bottom style=\"thin\"><color rgb=\"FFD9D9D9\"/></bottom></border></borders><cellStyleXfs count=\"1\"><xf/></cellStyleXfs><cellXfs count=\"4\"><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf fontId=\"1\" fillId=\"2\" borderId=\"1\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" numFmtId=\"4\" applyNumberFormat=\"1\"/><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf></cellXfs></styleSheet>";
+        private const string StylesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><numFmts count=\"1\"><numFmt numFmtId=\"164\" formatCode=\"#,##0.000\"/></numFmts><fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Segoe UI\"/></font><font><b/><sz val=\"11\"/><name val=\"Segoe UI\"/></font></fonts><fills count=\"3\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFC000\"/><bgColor indexed=\"64\"/></patternFill></fill></fills><borders count=\"2\"><border/><border><left style=\"thin\"><color rgb=\"FFD9D9D9\"/></left><right style=\"thin\"><color rgb=\"FFD9D9D9\"/></right><top style=\"thin\"><color rgb=\"FFD9D9D9\"/></top><bottom style=\"thin\"><color rgb=\"FFD9D9D9\"/></bottom></border></borders><cellStyleXfs count=\"1\"><xf/></cellStyleXfs><cellXfs count=\"6\"><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf fontId=\"1\" fillId=\"2\" borderId=\"1\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" numFmtId=\"4\" applyNumberFormat=\"1\"/><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" numFmtId=\"3\" applyNumberFormat=\"1\"/><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" numFmtId=\"164\" applyNumberFormat=\"1\"/></cellXfs></styleSheet>";
     }
 }

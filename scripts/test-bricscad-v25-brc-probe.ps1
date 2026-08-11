@@ -11,6 +11,12 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$windowInteropPath = Join-Path $PSScriptRoot "bricscad-runner-window-interop.ps1"
+if (-not (Test-Path -LiteralPath $windowInteropPath -PathType Leaf)) {
+    throw "BRC runner window interop helper is missing: $windowInteropPath"
+}
+. $windowInteropPath
+
 function Read-Qs3dProbeMarker {
     param([Parameter(Mandatory = $true)][string]$Path)
     $marker = @{}
@@ -118,6 +124,7 @@ $nonce = [Guid]::NewGuid().ToString("N")
 $oldResult = [Environment]::GetEnvironmentVariable("QS3D_BRC_PROBE_RESULT", "Process")
 $oldNonce = [Environment]::GetEnvironmentVariable("QS3D_BRC_PROBE_NONCE", "Process")
 $process = $null
+$proxyInformationDialogsDismissed = 0
 $startedAt = Get-Date
 
 try {
@@ -146,6 +153,7 @@ try {
     $deadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $resultPath -PathType Leaf) { break }
+        $proxyInformationDialogsDismissed += Close-Qs3dProxyInformationDialog -Process $process
         $process.Refresh()
         if ($process.HasExited) {
             throw "BricsCAD exited before QS3DBRCPROBE created its marker. ExitCode=$($process.ExitCode)"
@@ -191,6 +199,7 @@ try {
         entity_attempted_count = $entityCount
         entity_opened_count = Read-NonNegativeMarkerInt -Marker $marker -Key "entity_opened_count"
         proxy_entity_count = $proxyEntityCount
+        proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
         marker = $marker
     }
     $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
@@ -198,6 +207,7 @@ try {
     Write-Host "QS3D BricsCAD V25 clean-room BRC public probe PASS"
     Write-Host "Marker: $resultPath"
     Write-Host "Metadata: $metadataPath"
+    Write-Host "Proxy Information dialogs dismissed for the launched PID: $proxyInformationDialogsDismissed"
     Write-Host "Reference-copy SHA256 unchanged: $drawingHashAfter"
 }
 finally {

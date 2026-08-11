@@ -80,6 +80,7 @@ namespace QS3D.Core.SmokeTests
                     Note = "ED2 note",
                     DensityKgM3 = 2400d,
                     MassKg = 4500d,
+                    GrossConcreteM3 = 1e-9d,
                     DrawingFingerprint = "DWG-FINGERPRINT-1",
                     Count = 1
                 };
@@ -102,7 +103,7 @@ namespace QS3D.Core.SmokeTests
 
                 var secondDetail = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
                 secondDetail.ElementIds.Add("WF-2"); secondDetail.SourceHandles.Add("40AA");
-                var summary = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 2 };
+                var summary = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 2, GrossConcreteM3 = 1e-9d };
                 summary.ElementIds.Add("WF-1"); summary.ElementIds.Add("WF-2"); summary.SourceHandles.Add("AB12"); summary.SourceHandles.Add("30DE"); summary.SourceHandles.Add("40AA");
                 XlsxQuantityExporter.ExportEd2(ed2Path, new[] { row, secondDetail }, new[] { summary });
                 using (var archive = ZipFile.OpenRead(ed2Path))
@@ -122,9 +123,20 @@ namespace QS3D.Core.SmokeTests
                         True(detailSheet.Contains("Tầng/Zone")); True(detailSheet.Contains("Khối lượng riêng (kg/m³)"));
                         True(detailSheet.Contains("Khối lượng (kg)")); True(detailSheet.Contains("Ghi chú"));
                         True(detailSheet.Contains(">2400<")); True(detailSheet.Contains(">4500<"));
+                        True(detailSheet.Contains("r=\"A2\" s=\"4\"><v>1</v>"));
+                        True(detailSheet.Contains("r=\"G2\" s=\"4\"><v>1</v>"));
+                        True(detailSheet.Contains("r=\"H2\" s=\"5\"><v>1E-09</v>"));
+                        True(detailSheet.Contains("r=\"T2\" s=\"2\"><v>2400</v>"));
+                        True(detailSheet.Contains("r=\"U2\" s=\"2\"><v>4500</v>"));
                         True(!detailSheet.Contains("r=\"T3\"")); True(!detailSheet.Contains("r=\"U3\""));
                         True(detailSheet.Contains("QS3D Element ID")); True(detailSheet.Contains("CAD Handle (hex)"));
                         True(detailSheet.Contains("QS3D Drawing Fingerprint"));
+                    }
+                    using (var reader = new StreamReader(archive.GetEntry("xl/styles.xml")!.Open(), Encoding.UTF8))
+                    {
+                        var styles = reader.ReadToEnd();
+                        True(styles.Contains("numFmtId=\"164\" formatCode=\"#,##0.000\""));
+                        True(styles.Contains("cellXfs count=\"6\""));
                     }
                 }
                 var ed2Detail = XlsxHandleReader.ReadHandleLookup(ed2Path, 3);

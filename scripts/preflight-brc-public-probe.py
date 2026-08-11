@@ -6,6 +6,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 COMMAND = ROOT / "src/QS3D.BricsCAD.V25/BrcPublicProbeCommands.cs"
 RUNNER = ROOT / "scripts/test-bricscad-v25-brc-probe.ps1"
+WINDOW_INTEROP = ROOT / "scripts/bricscad-runner-window-interop.ps1"
 errors = []
 
 
@@ -22,7 +23,7 @@ def forbid_tokens(path, text, tokens, label):
             errors.append(label + " contains forbidden private/unsafe token: " + token)
 
 
-for path in (COMMAND, RUNNER):
+for path in (COMMAND, RUNNER, WINDOW_INTEROP):
     if not path.is_file():
         errors.append("missing BRC public-probe contract file: " + str(path.relative_to(ROOT)))
 
@@ -140,6 +141,9 @@ if RUNNER.is_file():
         "-WorkingDirectory $ArtifactDir",
         "finally",
         "Stop-Qs3dLaunchedProcess -Process $process",
+        '. $windowInteropPath',
+        'Close-Qs3dProxyInformationDialog -Process $process',
+        'proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed',
         "Stop-Process -Id $Process.Id",
         "$Process.WaitForExit",
     ), "test-bricscad-v25-brc-probe.ps1")
@@ -199,6 +203,20 @@ if RUNNER.is_file():
     if re.search(r"(?i)(handle|layer|text|string_value|database[_-]?filename)\s*=", text):
         errors.append("BRC runner must not add handles/layers/text/metadata/database filename to its report")
 
+if WINDOW_INTEROP.is_file():
+    text = WINDOW_INTEROP.read_text(encoding="utf-8")
+    require_tokens(WINDOW_INTEROP, text, (
+        "CloseProxyInformationDialogs(int processId)",
+        'string.Equals(title.ToString(), "Proxy Information", StringComparison.Ordinal)',
+        'string.Equals(className.ToString(), "#32770", StringComparison.Ordinal)',
+        "ownerProcessId != (uint)processId",
+        "PostMessage(window, WmClose",
+        "function Close-Qs3dProxyInformationDialog",
+    ), "bricscad-runner-window-interop.ps1")
+    for forbidden in ("FindWindow(", "SendKeys", "SetForegroundWindow", "Process.GetProcesses"):
+        if forbidden in text:
+            errors.append("BRC runner dialog helper must target only windows owned by the launched PID: " + forbidden)
+
 print("QS3D BRC public-probe preflight")
 if errors:
     for error in errors:
@@ -206,4 +224,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DBRCPROBE and its V25 runner use aggregate public-API counts only, require an explicit *.reference-copy.dwg, verify before/after SHA256 immutability, NETLOAD the exact plugin DLL, bind a nonce/result marker, clean up BricsCAD, and exclude private BLT/binary/path plus handle/layer/text/metadata/database identity data.")
+print("PASS: QS3DBRCPROBE and its V25 runner use aggregate public-API counts only, dismiss only the launched PID's exact Proxy Information dialog, require an explicit *.reference-copy.dwg, verify before/after SHA256 immutability, NETLOAD the exact plugin DLL, bind a nonce/result marker, clean up BricsCAD, and exclude private BLT/binary/path plus handle/layer/text/metadata/database identity data.")

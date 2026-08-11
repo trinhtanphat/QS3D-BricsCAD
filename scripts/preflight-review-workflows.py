@@ -12,7 +12,8 @@ if not review.is_file():
 else:
     text = review.read_text(encoding="utf-8")
     required = (
-        "if (ExistingProjectMutationContext.TryGet(doc, out var auditProject))",
+        "ExistingProjectMutationContext.TryGet(doc, out var auditProject)",
+        "string.Equals(auditProject.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase)",
         'AuditTrail.ForProject(auditProject).Record("recognition.skip"',
         "QS3D Recognition skip",
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",

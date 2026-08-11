@@ -11,6 +11,12 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$windowInteropPath = Join-Path $PSScriptRoot "bricscad-runner-window-interop.ps1"
+if (-not (Test-Path -LiteralPath $windowInteropPath -PathType Leaf)) {
+    throw "BRC runner window interop helper is missing: $windowInteropPath"
+}
+. $windowInteropPath
+
 function Read-Qs3dMarker {
     param([Parameter(Mandatory = $true)][string]$Path)
     $marker = @{}
@@ -119,6 +125,7 @@ $oldResult = [Environment]::GetEnvironmentVariable("QS3D_BRC_ROUNDTRIP_RESULT", 
 $oldWorkbook = [Environment]::GetEnvironmentVariable("QS3D_BRC_ROUNDTRIP_WORKBOOK", "Process")
 $oldNonce = [Environment]::GetEnvironmentVariable("QS3D_BRC_ROUNDTRIP_NONCE", "Process")
 $process = $null
+$proxyInformationDialogsDismissed = 0
 $startedAt = Get-Date
 
 try {
@@ -148,6 +155,7 @@ try {
     $deadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $resultPath -PathType Leaf) { break }
+        $proxyInformationDialogsDismissed += Close-Qs3dProxyInformationDialog -Process $process
         $process.Refresh()
         if ($process.HasExited) {
             throw "BricsCAD exited before the BRC quantity round-trip created its marker. ExitCode=$($process.ExitCode)"
@@ -208,6 +216,7 @@ try {
         drawing_copy_sha256_before = $drawingHashBefore
         drawing_copy_sha256_after = $drawingHashAfter
         workbook_sha256 = (Get-FileHash -LiteralPath $workbookPath -Algorithm SHA256).Hash.ToUpperInvariant()
+        proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
         marker = $marker
     }
     $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
@@ -216,6 +225,7 @@ try {
     Write-Host "Marker: $resultPath"
     Write-Host "Workbook: $workbookPath"
     Write-Host "Metadata: $metadataPath"
+    Write-Host "Proxy Information dialogs dismissed for the launched PID: $proxyInformationDialogsDismissed"
     Write-Host "Reference-copy SHA256 unchanged: $drawingHashAfter"
 }
 finally {

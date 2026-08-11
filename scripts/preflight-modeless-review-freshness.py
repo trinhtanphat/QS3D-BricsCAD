@@ -34,9 +34,14 @@ if REVIEW.is_file():
     apply_pos = text.find("Action<RecognitionResult> apply = result =>")
     locate_pos = text.find("Action<RecognitionResult> locate = result =>", apply_pos)
     apply_body = text[apply_pos:locate_pos] if apply_pos >= 0 and locate_pos > apply_pos else ""
+    review_project_pos = text.find("var reviewProjectId = project.ProjectId;")
+    batch_pos = text.find("var batch = new ProjectRecognitionService().SuggestBatch(project, snapshots)")
+    if min(review_project_pos, batch_pos, apply_pos) < 0 or not review_project_pos < batch_pos < apply_pos:
+        errors.append("Recognition modeless review must capture ProjectId before building the batch and Apply callback")
     for token in (
         "EntitySnapshotReader.ReadHandles(doc, new[] { result.Handle })",
         "if (!ExistingProjectMutationContext.TryGet(doc, out var currentProject))",
+        "string.Equals(currentProject.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase)",
         "new ProjectRecognitionService().Suggest(currentProject, liveSnapshots[0])",
         "candidate.Category != expectedCandidate.Category",
         "!refreshed.IsCaptureReady",
@@ -55,6 +60,16 @@ if REVIEW.is_file():
     ):
         if forbidden in apply_body:
             errors.append("Recognition modeless Apply still uses stale or replacement-creating state: " + forbidden)
+
+    auto_apply_pos = text.find("if (autoApply)", locate_pos)
+    window_pos = text.find("Application.ShowModelessWindow", auto_apply_pos)
+    auto_apply_body = text[auto_apply_pos:window_pos] if auto_apply_pos >= 0 and window_pos > auto_apply_pos else ""
+    for token in (
+        "ExistingProjectMutationContext.TryGet(doc, out var auditProject)",
+        "string.Equals(auditProject.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase)",
+    ):
+        if token not in auto_apply_body:
+            errors.append("Recognition auto-apply skip audit missing reviewed-project identity guard: " + token)
 
 if READER.is_file():
     text = READER.read_text(encoding="utf-8")
@@ -76,4 +91,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] BBS/Revision Locate re-resolve current semantic state read-only and Recognition Apply re-reads live CAD then binds canonical existing project state before modeless commit")
+print("[PASS] BBS/Revision Locate re-resolve current semantic state read-only and Recognition Apply re-reads live CAD then requires the exact reviewed ProjectId before modeless commit/audit")

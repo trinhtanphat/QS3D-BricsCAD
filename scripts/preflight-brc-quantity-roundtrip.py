@@ -6,6 +6,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 COMMAND = ROOT / "src/QS3D.BricsCAD.V25/BrcQuantityRoundTripProbeCommands.cs"
 RUNNER = ROOT / "scripts/test-bricscad-v25-brc-quantity-roundtrip.ps1"
+WINDOW_INTEROP = ROOT / "scripts/bricscad-runner-window-interop.ps1"
 errors = []
 
 
@@ -15,7 +16,7 @@ def require(text, tokens, label):
             errors.append(label + " missing contract token: " + token)
 
 
-for path in (COMMAND, RUNNER):
+for path in (COMMAND, RUNNER, WINDOW_INTEROP):
     if not path.is_file():
         errors.append("missing BRC quantity round-trip file: " + str(path.relative_to(ROOT)))
 
@@ -69,6 +70,8 @@ require(runner, (
     'Start-Process',
     '-PassThru',
     'Stop-Qs3dLaunchedProcess -Process $process',
+    '. $windowInteropPath',
+    'Close-Qs3dProxyInformationDialog -Process $process',
     'Stop-Process -Id $Process.Id',
     'Require-Qs3dValue -Marker $marker -Key "proxy_capture_ready_count" -Expected "0"',
     'Require-Qs3dValue -Marker $marker -Key "proxy_autoaccepted_count" -Expected "0"',
@@ -76,6 +79,7 @@ require(runner, (
     'drawing_copy_sha256_before',
     'drawing_copy_sha256_after',
     'workbook_sha256',
+    'proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed',
 ), "test-bricscad-v25-brc-quantity-roundtrip.ps1")
 
 if command:
@@ -115,6 +119,19 @@ if runner:
     ):
         if 'Restore-EnvironmentValue -Name "' + variable + '"' not in runner:
             errors.append("runner must restore process environment variable " + variable)
+
+if WINDOW_INTEROP.is_file():
+    helper = WINDOW_INTEROP.read_text(encoding="utf-8")
+    require(helper, (
+        'CloseProxyInformationDialogs(int processId)',
+        'string.Equals(title.ToString(), "Proxy Information", StringComparison.Ordinal)',
+        'string.Equals(className.ToString(), "#32770", StringComparison.Ordinal)',
+        'ownerProcessId != (uint)processId',
+        'PostMessage(window, WmClose',
+    ), "bricscad-runner-window-interop.ps1")
+    for token in ("FindWindow(", "SendKeys", "SetForegroundWindow", "Process.GetProcesses"):
+        if token in helper:
+            errors.append("runner dialog helper must not target windows outside the exact launched PID: " + token)
 
 print("QS3D BRC B4D/ED2/Excel-Locate round-trip preflight")
 if errors:
