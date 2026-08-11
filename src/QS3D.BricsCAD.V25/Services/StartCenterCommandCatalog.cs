@@ -119,16 +119,23 @@ namespace QS3D.BricsCAD.V25.Services
             var text = value ?? string.Empty;
             if (text.Length == 0) return string.Empty;
 
-            var normalized = text.Normalize(NormalizationForm.FormD);
-            var builder = new StringBuilder(normalized.Length);
-            foreach (var c in normalized)
+            try
             {
-                if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
-                if (c == 'đ') builder.Append('d');
-                else if (c == 'Đ') builder.Append('D');
-                else builder.Append(c);
+                var normalized = text.Normalize(NormalizationForm.FormD);
+                var builder = new StringBuilder(normalized.Length);
+                foreach (var c in normalized)
+                {
+                    if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
+                    if (c == 'đ') builder.Append('d');
+                    else if (c == 'Đ') builder.Append('D');
+                    else builder.Append(c);
+                }
+                return builder.ToString().Normalize(NormalizationForm.FormC);
             }
-            return builder.ToString().Normalize(NormalizationForm.FormC);
+            catch (ArgumentException)
+            {
+                return text;
+            }
         }
 
         private static List<StartCenterCommandItem> Build()

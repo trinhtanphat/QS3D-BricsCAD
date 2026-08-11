@@ -177,6 +177,14 @@ def main():
     require(catalog, "UnicodeCategory.NonSpacingMark", "diacritic removal search fold")
     require(catalog, "if (c == 'đ') builder.Append('d');", "Vietnamese d-stroke search fold")
     require(catalog, "else if (c == 'Đ') builder.Append('D');", "Vietnamese D-stroke search fold")
+    search_fold = section(
+        catalog,
+        "private static string FoldForSearch(string value)",
+        "private static List<StartCenterCommandItem> Build()",
+        "launcher Unicode search fold")
+    require(search_fold, "try", "launcher Unicode normalization exception boundary")
+    require(search_fold, "catch (ArgumentException)", "malformed Unicode normalization containment")
+    require(search_fold, "return text;", "malformed Unicode raw-text fallback")
 
     declared = re.findall(r'New\("(QS3D[A-Z0-9]*)"', catalog)
     if len(declared) < 49:
@@ -200,7 +208,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, optional-state-fail-soft, stream-size-bounded, write-size-bounded, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, optional-state-fail-soft, stream-size-bounded, write-size-bounded, malformed-Unicode-safe, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
