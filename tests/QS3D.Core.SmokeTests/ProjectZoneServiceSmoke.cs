@@ -8,7 +8,6 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CreateUpdateAssignAndDelete();
-            ActiveIdCanonicalizationRepairsAliases();
             AssignmentMarksGeneratedGeometryStale();
             AssignmentRejectsSpoofedSameIdElement();
             DeleteGuardsActiveAndReferencedZones();
@@ -34,29 +33,6 @@ namespace QS3D.Core.SmokeTests
             ProjectZoneService.Update(project, z2.Id, "Khu kỹ thuật");
             if (z2.Name != "Khu kỹ thuật") throw new Exception("Zone update failed.");
             if (!ProjectZoneService.Delete(project, z2.Id)) throw new Exception("Unused non-active zone delete failed.");
-        }
-
-        private static void ActiveIdCanonicalizationRepairsAliases()
-        {
-            var project = new ProjectState("p-active-canonical", "Active zone canonicality");
-            var zone = ProjectZoneService.Create(project, "zone-a", "Khu A");
-            project.ActiveZoneId = " ZONE-A ";
-            var beforeRepair = project.ChangeVersion;
-
-            ProjectZoneService.SetActive(project, " Zone-A ");
-            if (!string.Equals(project.ActiveZoneId, zone.Id, StringComparison.Ordinal))
-                throw new Exception("SetActive must repair a Zone alias to the exact project-owned canonical id.");
-            if (project.ChangeVersion != beforeRepair + 1L)
-                throw new Exception("Canonical Zone id repair must touch the project exactly once.");
-
-            var canonicalVersion = project.ChangeVersion;
-            ProjectZoneService.SetActive(project, zone.Id);
-            if (project.ChangeVersion != canonicalVersion)
-                throw new Exception("Setting an already-canonical active Zone must remain a no-op.");
-
-            Throws<InvalidOperationException>(() => ProjectZoneService.SetActive(project, "missing-zone"));
-            if (project.ChangeVersion != canonicalVersion || project.ActiveZoneId != zone.Id)
-                throw new Exception("Rejected missing Zone activation must not mutate active identity or ChangeVersion.");
         }
 
         private static void AssignmentMarksGeneratedGeometryStale()

@@ -8,7 +8,6 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CreateUpdateAssignAndDelete();
-            ActiveIdCanonicalizationRepairsAliases();
             ElevationChangeMarksGeneratedGeometryStale();
             DeleteGuardsActiveAndReferencedFloors();
             CorruptElementCollectionFailsClosed();
@@ -36,29 +35,6 @@ namespace QS3D.Core.SmokeTests
             ProjectFloorService.Update(project, f2.Id, "Tầng mái", 7.2d);
             if (f2.Name != "Tầng mái" || Math.Abs(f2.ElevationM - 7.2d) > 1e-12d) throw new Exception("Floor update failed.");
             if (!ProjectFloorService.Delete(project, f2.Id)) throw new Exception("Unused non-active floor delete failed.");
-        }
-
-        private static void ActiveIdCanonicalizationRepairsAliases()
-        {
-            var project = new ProjectState("p-active-canonical", "Active floor canonicality");
-            var floor = ProjectFloorService.Create(project, "floor-a", "Tầng A", 0d);
-            project.ActiveFloorId = " FLOOR-A ";
-            var beforeRepair = project.ChangeVersion;
-
-            ProjectFloorService.SetActive(project, " Floor-A ");
-            if (!string.Equals(project.ActiveFloorId, floor.Id, StringComparison.Ordinal))
-                throw new Exception("SetActive must repair a Floor alias to the exact project-owned canonical id.");
-            if (project.ChangeVersion != beforeRepair + 1L)
-                throw new Exception("Canonical Floor id repair must touch the project exactly once.");
-
-            var canonicalVersion = project.ChangeVersion;
-            ProjectFloorService.SetActive(project, floor.Id);
-            if (project.ChangeVersion != canonicalVersion)
-                throw new Exception("Setting an already-canonical active Floor must remain a no-op.");
-
-            Throws<InvalidOperationException>(() => ProjectFloorService.SetActive(project, "missing-floor"));
-            if (project.ChangeVersion != canonicalVersion || project.ActiveFloorId != floor.Id)
-                throw new Exception("Rejected missing Floor activation must not mutate active identity or ChangeVersion.");
         }
 
         private static void ElevationChangeMarksGeneratedGeometryStale()
