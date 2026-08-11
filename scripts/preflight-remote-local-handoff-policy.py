@@ -22,6 +22,7 @@ required = {
     "docs/LOCAL-AGENT-INBOX.md": [
         "## Mandatory handoff contract",
         "same source/docs batch",
+        "DO_NOT_RETRY_REMOTE",
         "Evidence required:",
         "Evidence: PENDING_LOCAL",
         "Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`",
@@ -46,4 +47,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: remote agents must park machine-only blockers in the canonical local inbox with exact scenario/evidence, reuse existing LOCAL items instead of duplicating them, and never repeat or mark local qualification PASS remotely.")
+print("PASS: remote agents must park machine-only blockers in the canonical local inbox with exact scenario/evidence, reuse existing LOCAL items instead of duplicating them, and honor DO_NOT_RETRY_REMOTE instead of repeating or marking local qualification PASS remotely.")
