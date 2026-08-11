@@ -8,7 +8,7 @@ The cloud workflow deliberately does **not** claim real BricsCAD NETLOAD/runtime
 
 ## Why no BricsCAD DLLs are committed
 
-`QS3D.BricsCAD.V25.csproj` needs `BrxMgd.dll` and `TD_Mgd.dll` as compile-time references. The cloud workflow obtains them transiently from an authorized official BricsCAD V25 x64 MSI installer and never commits or packages those assemblies.
+`QS3D.BricsCAD.V25.csproj` needs `BrxMgd.dll` and `TD_Mgd.dll` as compile-time references. The cloud workflow obtains them transiently from the pinned official BricsCAD V25.2.10 x64 MSI installer and never commits or packages those assemblies.
 
 `scripts/package-v25.ps1` already rejects `BrxMgd.dll`, `TD_Mgd.dll`, and `TD_MgdBrep.dll` if they appear in the QS3D release payload.
 
@@ -18,15 +18,17 @@ Do not add fake/reimplemented `BrxMgd.dll` or `TD_Mgd.dll` shims to make CI gree
 
 Repository -> Settings -> Secrets and variables -> Actions.
 
-Create repository secret:
+The workflow contains the pinned public URL for the official BricsCAD V25.2.10 x64 en_US MSI. If that public object requires a signed query URL in GitHub's network environment, optionally create repository secret:
 
-- `BRICSCAD_V25_MSI_URL`: authorized HTTPS URL for the official BricsCAD V25 x64 MSI installer.
+- `BRICSCAD_V25_MSI_URL`: signed HTTPS fallback for the **same pinned public MSI object**. The workflow rejects a fallback that does not start with the pinned official object URL.
 
 Create repository variable:
 
-- `BRICSCAD_V25_MSI_SHA256`: **required** 64-hex SHA-256 of that exact MSI. The cloud workflow fails closed if the digest is missing/malformed and always verifies the downloaded installer before extracting compile references.
+- `BRICSCAD_V25_MSI_SHA256`: **required** 64-hex SHA-256 of that exact pinned MSI. The cloud workflow fails closed if the digest is missing/malformed and always verifies the downloaded installer before extracting compile references.
 
-When the authorized MSI changes, update the URL/digest pair together after independently obtaining the SHA-256 for that exact installer. Do not leave the digest blank to bypass pinning.
+The fallback URL never replaces integrity pinning. Whether the MSI comes from the public URL or the optional signed fallback, the exact same required SHA-256 must match. The workflow then also verifies the MSI Authenticode signature before administrative extraction. Digest verification and Authenticode are complementary gates; neither is treated as a substitute for the other.
+
+When the pinned MSI changes, update the pinned object/version and required digest together after independently obtaining the SHA-256 for that exact installer. Do not leave the digest blank to bypass pinning.
 
 Do not put a BricsCAD license key in the workflow. The cloud preview workflow does not launch BricsCAD and does not need runtime activation.
 
@@ -46,15 +48,16 @@ The workflow performs:
 2. manual-only/preflight gates;
 3. Core Release build;
 4. deterministic Core smoke tests;
-5. download the authorized official V25 MSI;
+5. download the pinned official V25.2.10 MSI from the public URL or same-object signed fallback;
 6. verify the downloaded MSI against the required pinned SHA-256;
-7. MSI administrative extraction on GitHub-hosted Windows;
-8. resolve `BrxMgd.dll` + `TD_Mgd.dll` only as compile references;
-9. build `QS3D.BricsCAD.V25.dll` x64/net48;
-10. package QS3D while excluding BricsCAD runtime assemblies;
-11. create SHA-256;
-12. upload Actions artifact;
-13. publish a GitHub prerelease.
+7. verify the MSI Authenticode signature;
+8. MSI administrative extraction on GitHub-hosted Windows;
+9. resolve `BrxMgd.dll` + `TD_Mgd.dll` only as compile references;
+10. build `QS3D.BricsCAD.V25.dll` x64/net48;
+11. package QS3D while excluding BricsCAD runtime assemblies;
+12. create SHA-256;
+13. upload Actions artifact;
+14. publish a GitHub prerelease.
 
 ## Runtime qualification
 
