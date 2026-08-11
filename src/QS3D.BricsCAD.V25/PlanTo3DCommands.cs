@@ -41,13 +41,13 @@ namespace QS3D.BricsCAD.V25
             public string GeometryFingerprint { get; set; } = string.Empty;
         }
 
-        [CommandMethod("QS3DCONVERT2D", CommandFlags.Modal)]
+        [CommandMethod("QS3DCONVERT2D", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void Convert2D() => ConvertPlanWalls("QS3DCONVERT2D", promptStyle: false);
 
-        [CommandMethod("QS3DPLAN2WALLS", CommandFlags.Modal)]
+        [CommandMethod("QS3DPLAN2WALLS", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void PlanToWalls() => ConvertPlanWalls("QS3DPLAN2WALLS", promptStyle: false);
 
-        [CommandMethod("QS3DCONVERT2DADV", CommandFlags.Modal)]
+        [CommandMethod("QS3DCONVERT2DADV", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void Convert2DAdvanced() => ConvertPlanWalls("QS3DCONVERT2DADV", promptStyle: true);
 
         private static void ConvertPlanWalls(string operation, bool promptStyle)
