@@ -91,6 +91,7 @@ Room Auto is non-destructive: stable provenance can reuse Rooms and topology cha
 - `QS3DWALL` — capture Tường Gạch / ArchitecturalWall.
 - `QS3DGLASSWALL` — capture Vách Kính / GlassWall and seed Curtain defaults.
 - `QS3DWALLPIER` — capture Trụ Tường / WallPier and seed profile defaults.
+- `QS3DWALLQTY` — open the drawing-bound Wall Quantity takeoff workspace: search/filter by floor/category, inspect one semantic wall per detail row, review visible-row totals, recompute on a detached snapshot, export the visible wall scope to XLSX, and use guarded default-on `Bám 3D` / explicit `Định vị 3D` to revalidate the current semantic wall + current source Handles before CAD select/zoom. The merged source path is not a substitute for licensed V25 modeless/viewport qualification; see `WALL-QUANTITY-TAKEOFF.md`.
 - `QS3DWALLJUNCTIONS` — analyze L/T/X/Straight/End/Multi wall-centerline junctions and report a reviewable endpoint plan.
 - `QS3DWALLSNAPPREVIEW` — calculate/fingerprint supported straight endpoint cleanup without mutation.
 - `QS3DWALLSNAPAPPLY` — apply only the matching preview signature; stale preview/curved/bulged/nonsemantic source fails closed.
