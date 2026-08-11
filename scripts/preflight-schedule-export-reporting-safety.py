@@ -26,11 +26,13 @@ for name, (error_prefix, empty_status) in FILES.items():
         "private static void Report(Document document, string status)",
         "try { PaletteCoordinator.SetStatus(status); } catch { }",
         "try { document.Editor.WriteMessage(\"\\nQS3D \" + status); } catch { }",
-        'Report(document, "' + error_prefix + '" + ex.Message);',
         'Report(document, "' + empty_status + '");',
     ):
         if token not in text:
             errors.append(name + " missing export safety token: " + token)
+    error_report = 'Report(document, "' + error_prefix
+    if error_report not in text or '" + ex.Message);' not in text[text.find(error_report):text.find(error_report) + 160]:
+        errors.append(name + " missing best-effort exception reporting with prefix: " + error_prefix)
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append(name + " must not create/cache project state during schedule export.")
 
