@@ -1,18 +1,20 @@
 # Work claim — ElementInstance finite stored measurements
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T00:23:00+07:00`
+- Completed: `2026-08-12T00:26:00+07:00`
 - Baseline main SHA: `42ad446c6d70ba4462e4c830e83d16733aa368e1`
+- Claim commit: `f19d3786d444a4a86cfb7e53a7f7ec4405804629`
 - Priority: evidence-driven remote-safe Core domain integrity
 
 ## Confirmed defect
 
-`ElementInstance` exposes thirteen public stored measurement `double` auto-properties (length, areas and volumes). All currently accept `double.NaN` and infinities, allowing non-finite measurement state to persist in a public Core domain instance even though downstream quantity APIs increasingly fail closed on non-finite values.
+`ElementInstance` exposed thirteen public stored measurement `double` auto-properties that accepted `double.NaN` and infinities, allowing non-finite measurement state to persist in a public Core domain instance.
 
-## Reserved scope
+## Completed scope
 
-Require every stored numeric measurement assignment on `ElementInstance` to be finite. Preserve current default zero values and every finite value, including negative values; this lane does not introduce nonnegative quantity or engineering rules.
+All thirteen stored numeric measurement setters now require finite `double` values. Existing zero defaults and every finite value, including negative values, remain accepted. The `NetConcreteM3` derived subtraction remains unchanged.
 
 Covered stored properties:
 
@@ -30,35 +32,28 @@ Covered stored properties:
 - `TopAreaM2`
 - `OtherAreaM2`
 
-## Expected surfaces
+## Product/test commits
 
-- `src/QS3D.Core/Domain/ElementInstance.cs`
-- `tests/QS3D.Core.SmokeTests/ElementInstanceFiniteMeasurementsSmoke.cs`
-- `tests/QS3D.Core.SmokeTests/ElementInstanceFiniteMeasurementsRegistration.cs`
-- this claim file
+- `77f514eaf8c16536da06398dea808370f4c0fd36` — `fix(domain): reject non-finite element measurements`
+- `fdc992439cf16653a7e7972c0886b8138a397bb8` — `test(domain): cover finite element measurements`
+- `06f362d0bc22db420b9561ad021e023038d83ebf` — `test(domain): register element measurement smoke`
+
+## Validation
+
+- Re-fetched the current target blob after claim publication before the source write.
+- Reviewed exact source diff: only backing storage/setters plus one shared finite guard were added; identity, family, floor, source handles and `NetConcreteM3` formula were preserved.
+- Smoke verifies all thirteen zero defaults, representative negative/positive finite values, NaN/+Infinity/-Infinity rejection across every stored measurement, preservation of the prior value after each failed assignment, and unchanged normal `NetConcreteM3` behavior.
+- Registration uses a dedicated module initializer to avoid shared smoke registry contention.
+- After registration, observed `main` at `48b0a57a3463d0c0d22ce80a9406faf84d83807b`; comparison from `06f362d0bc22db420b9561ad021e023038d83ebf` reported `status=ahead`, `behind_by=0`, with merge base equal to the registration commit. Concurrent commits touched other surfaces.
+- GitHub Actions were not dispatched.
+- No .NET SDK or BricsCAD V25 runtime PASS is claimed from this hosted session.
 
 ## Excluded scope
 
-- No `ProjectElement.cs` changes; another active lane currently reserves `SetQuantity` there.
+- No `ProjectElement.cs` changes.
 - No reporting nonnegative policy, quantity formulas, rounding/tolerance or unit semantics.
-- No change to `NetConcreteM3` derived subtraction/overflow behavior in this lane.
-- No family/floor/source-handle behavior changes.
-- No GitHub Actions dispatch.
+- No derived subtraction overflow policy.
 
-## Validation plan
+## Completion
 
-- Preserve all zero defaults.
-- Preserve representative zero, negative and positive finite assignments.
-- Reject NaN, +Infinity and -Infinity across all thirteen stored measurement properties.
-- Verify rejected assignments retain the previous finite stored value.
-- Use a dedicated module initializer to avoid shared smoke registry contention.
-- Re-fetch target blob immediately before product write and inspect exact pushed diffs/ancestry.
-- No .NET/V25 runtime PASS will be claimed unless actually executed.
-
-## Coordination
-
-Recent commit/claim search found no active or recent reservation for `ElementInstance` finite measurement setters. This is intentionally narrower than reporting nonnegative-integrity work and does not touch reporting surfaces.
-
-## Completion condition
-
-`ElementInstance` cannot retain non-finite stored measurements through its public setters, focused smoke coverage is on current `main`, concurrent work is preserved, and this claim is closed with exact commit SHAs.
+The finite stored-measurement invariant and focused regression source are on current `main`; claim released as completed.
