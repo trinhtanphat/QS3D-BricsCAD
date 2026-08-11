@@ -20,12 +20,18 @@ else:
         "return scope.Preview;",
         "private sealed class DispatchPreviewScope : IDisposable",
         "private readonly DispatchPreviewScope? _previous;",
-        "if (ReferenceEquals(_dispatchScope, this))",
-        "_dispatchScope = _previous;",
+        "if (!ReferenceEquals(_dispatchScope, this)) return;",
+        "var previous = _previous;",
+        "while (previous != null && previous._disposed)",
+        "previous = previous._previous;",
+        "_dispatchScope = previous;",
     )
     for token in required:
         if token not in text:
             errors.append("dispatch preview scope missing: " + token)
+
+    if "_dispatchScope = _previous;" in text:
+        errors.append("disposed nested scopes must not be restored directly into ambient dispatch state")
 
     begin = text.find("public static IDisposable BeginDispatchScope(Document document)")
     capture_current = text.find("CaptureCurrent(document)", begin)
@@ -38,6 +44,25 @@ else:
     fallback = text.find("return CaptureCurrent(document);", capture)
     if capture < 0 or reuse < 0 or fallback < 0 or not (capture < reuse < fallback):
         errors.append("Capture must prefer the matching dispatch-scoped preview before live fallback")
+
+    dispose = text.find("public void Dispose()")
+    mark_disposed = text.find("_disposed = true;", dispose)
+    current_guard = text.find("if (!ReferenceEquals(_dispatchScope, this)) return;", mark_disposed)
+    previous = text.find("var previous = _previous;", current_guard)
+    skip_disposed = text.find("while (previous != null && previous._disposed)", previous)
+    walk_previous = text.find("previous = previous._previous;", skip_disposed)
+    restore = text.find("_dispatchScope = previous;", walk_previous)
+    if (
+        dispose < 0
+        or mark_disposed < 0
+        or current_guard < 0
+        or previous < 0
+        or skip_disposed < 0
+        or walk_previous < 0
+        or restore < 0
+        or not (dispose < mark_disposed < current_guard < previous < skip_disposed < walk_previous < restore)
+    ):
+        errors.append("Dispose must mark the scope, ignore non-current disposal, skip disposed ancestors, then restore live ambient state")
 
 if not DISPATCHER.is_file():
     errors.append("missing ActiveFamilyQuickDrawCommands.cs")
