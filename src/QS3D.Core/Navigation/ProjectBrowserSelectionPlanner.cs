@@ -61,12 +61,10 @@ namespace QS3D.Core.Navigation
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
             var selected = NormalizeSelection(selectedElementIds);
-            var entries = BuildIndex(root);
-            var rootEntry = entries[0];
-            var rootIds = new HashSet<string>(rootEntry.Node.ElementIds, StringComparer.OrdinalIgnoreCase);
+            var index = BuildIndex(root);
 
             foreach (var elementId in selected)
-                if (!rootIds.Contains(elementId))
+                if (!index.Root.ElementIds.Contains(elementId))
                     throw new InvalidOperationException("Project browser selection references missing semantic element id: " + elementId + ".");
 
             var primary = NormalizePrimary(primaryElementId, selected);
@@ -77,24 +75,26 @@ namespace QS3D.Core.Navigation
             var expansion = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var elementId in selected)
             {
-                var matches = entries
-                    .Where(x => x.ElementIds.Contains(elementId))
-                    .ToList();
-                if (matches.Count == 0)
+                if (!index.Memberships.TryGetValue(elementId, out var matches) || matches.Count == 0)
                     throw new InvalidOperationException("Project browser tree lost semantic element id: " + elementId + ".");
 
                 var deepest = matches.Max(x => x.Depth);
-                var targets = matches.Where(x => x.Depth == deepest).ToList();
-                if (targets.Count != 1)
+                NodeEntry target = null;
+                var deepestCount = 0;
+                foreach (var match in matches)
+                {
+                    if (match.Depth != deepest) continue;
+                    target = match;
+                    deepestCount++;
+                }
+                if (deepestCount != 1 || target == null)
                     throw new InvalidOperationException("Project browser selection is ambiguous for semantic element id: " + elementId + ".");
 
-                var target = targets[0];
                 targetPaths.Add(target.Path);
                 var parentPath = target.ParentPath;
                 while (parentPath.Length > 0)
                 {
-                    var parent = entries.SingleOrDefault(x => string.Equals(x.Path, parentPath, StringComparison.Ordinal));
-                    if (parent == null)
+                    if (!index.ByPath.TryGetValue(parentPath, out var parent))
                         throw new InvalidOperationException("Project browser selection found a broken ancestor path: " + parentPath + ".");
                     if (!expansion.ContainsKey(parent.Path)) expansion.Add(parent.Path, parent.Depth);
                     parentPath = parent.ParentPath;
@@ -108,11 +108,7 @@ namespace QS3D.Core.Navigation
                 .ToList()
                 .AsReadOnly();
 
-            return new ProjectBrowserSelectionRevealPlan(
-                selected,
-                expansionPaths,
-                targetPaths,
-                primary);
+            return new ProjectBrowserSelectionRevealPlan(selected, expansionPaths, targetPaths, primary);
         }
 
         public static ProjectBrowserNodeSelectionPlan PlanNodeSelection(
@@ -160,22 +156,21 @@ namespace QS3D.Core.Navigation
             return selected.First(x => string.Equals(x, primary, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static List<NodeEntry> BuildIndex(ProjectBrowserNode root)
+        private static TreeIndex BuildIndex(ProjectBrowserNode root)
         {
-            var entries = new List<NodeEntry>();
-            var paths = new HashSet<string>(StringComparer.Ordinal);
-            IndexNode(root, string.Empty, 0, entries, paths);
-            if (entries.Count > MaxNodes)
-                throw new InvalidOperationException("Project browser selection supports at most " + MaxNodes + " tree nodes.");
-            return entries;
+            var byPath = new Dictionary<string, NodeEntry>(StringComparer.Ordinal);
+            var memberships = new Dictionary<string, List<NodeEntry>>(StringComparer.OrdinalIgnoreCase);
+            var rootEntry = IndexNode(root, string.Empty, 0, null, byPath, memberships);
+            return new TreeIndex(rootEntry, byPath, memberships);
         }
 
-        private static void IndexNode(
+        private static NodeEntry IndexNode(
             ProjectBrowserNode node,
             string parentPath,
             int depth,
-            ICollection<NodeEntry> entries,
-            ISet<string> paths)
+            HashSet<string> parentElementIds,
+            IDictionary<string, NodeEntry> byPath,
+            IDictionary<string, List<NodeEntry>> memberships)
         {
             if (node == null) throw new InvalidOperationException("Project browser selection found a null node.");
             if (depth > MaxDepth)
@@ -188,8 +183,10 @@ namespace QS3D.Core.Navigation
                 throw new InvalidOperationException("Project browser selection requires node collections: " + node.Key + ".");
 
             var path = parentPath.Length == 0 ? Segment(node.Key) : parentPath + "/" + Segment(node.Key);
-            if (!paths.Add(path))
+            if (byPath.ContainsKey(path))
                 throw new InvalidOperationException("Project browser selection found duplicate node path: " + path + ".");
+            if (byPath.Count >= MaxNodes)
+                throw new InvalidOperationException("Project browser selection supports at most " + MaxNodes + " tree nodes.");
 
             var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in node.ElementIds)
@@ -197,20 +194,25 @@ namespace QS3D.Core.Navigation
                 var elementId = CanonicalRequired(raw, "project browser node element id");
                 if (!elementIds.Add(elementId))
                     throw new InvalidOperationException("Project browser node contains duplicate semantic element id: " + node.Key + "/" + elementId + ".");
+                if (parentElementIds != null && !parentElementIds.Contains(elementId))
+                    throw new InvalidOperationException("Project browser child contains semantic element outside its parent: " + elementId + ".");
             }
 
-            entries.Add(new NodeEntry(node, path, parentPath, depth, elementIds));
-            foreach (var child in node.Children)
+            var entry = new NodeEntry(node, path, parentPath, depth, elementIds);
+            byPath.Add(path, entry);
+            foreach (var elementId in elementIds)
             {
-                if (child == null) throw new InvalidOperationException("Project browser selection found a null child node: " + node.Key + ".");
-                foreach (var raw in child.ElementIds)
+                if (!memberships.TryGetValue(elementId, out var elementMemberships))
                 {
-                    var childElementId = CanonicalRequired(raw, "project browser child element id");
-                    if (!elementIds.Contains(childElementId))
-                        throw new InvalidOperationException("Project browser child contains semantic element outside its parent: " + childElementId + ".");
+                    elementMemberships = new List<NodeEntry>();
+                    memberships.Add(elementId, elementMemberships);
                 }
-                IndexNode(child, path, depth + 1, entries, paths);
+                elementMemberships.Add(entry);
             }
+
+            foreach (var child in node.Children)
+                IndexNode(child, path, depth + 1, elementIds, byPath, memberships);
+            return entry;
         }
 
         private static string CanonicalRequired(string value, string label)
@@ -229,6 +231,23 @@ namespace QS3D.Core.Navigation
         }
 
         private static string Segment(string key) => Uri.EscapeDataString(key ?? string.Empty);
+
+        private sealed class TreeIndex
+        {
+            internal TreeIndex(
+                NodeEntry root,
+                IDictionary<string, NodeEntry> byPath,
+                IDictionary<string, List<NodeEntry>> memberships)
+            {
+                Root = root;
+                ByPath = byPath;
+                Memberships = memberships;
+            }
+
+            internal NodeEntry Root { get; }
+            internal IDictionary<string, NodeEntry> ByPath { get; }
+            internal IDictionary<string, List<NodeEntry>> Memberships { get; }
+        }
 
         private sealed class NodeEntry
         {
