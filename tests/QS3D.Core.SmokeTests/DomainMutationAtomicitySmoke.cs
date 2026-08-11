@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             FloorAssignmentOverflowDoesNotCommit();
             ZoneAssignmentOverflowDoesNotCommit();
             ActiveFamilyOverflowDoesNotCommit();
+            GridRenumberOverflowDoesNotCommit();
             MaterialRenameOverflowDoesNotCommit();
             MaterialDeleteOverflowDoesNotCommit();
         }
@@ -96,6 +97,29 @@ namespace QS3D.Core.SmokeTests
 
             Equal("F-A", project.Metadata["ActiveFamilyId"], "Failed active-family mutation changed metadata.");
             AssertPersistenceUnchanged(project, beforeUtc, "active family mutation");
+        }
+
+        private static void GridRenumberOverflowDoesNotCommit()
+        {
+            var source = new ProjectState("P-GRID-DOMAIN-ATOMIC", "Grid domain atomicity");
+            var grid = new ProjectElement("G1", ElementCategory.Grid, string.Empty, string.Empty, string.Empty);
+            grid.Properties[GridNamingService.GridLabelKey] = "OLD";
+            grid.Properties[GridNamingService.GridSequenceIndexKey] = "9";
+            grid.MarkClean(ElementDirtyFlags.All);
+            source.Elements.Add(grid);
+            var project = AtVersion(source, long.MaxValue);
+            var beforeUtc = project.UpdatedUtc;
+
+            Throws<OverflowException>(() => GridNamingService.Renumber(
+                project,
+                new[] { "G1" },
+                new GridNamingOptions { Sequence = GridLabelSequence.Numeric, StartIndex = 1 }));
+
+            grid = RequiredElement(project, "G1");
+            Equal("OLD", grid.Properties[GridNamingService.GridLabelKey], "Failed Grid renumber changed the label.");
+            Equal("9", grid.Properties[GridNamingService.GridSequenceIndexKey], "Failed Grid renumber changed the sequence index.");
+            Equal(ElementDirtyFlags.None, grid.Dirty, "Failed Grid renumber changed dirty flags.");
+            AssertPersistenceUnchanged(project, beforeUtc, "Grid renumber");
         }
 
         private static void MaterialRenameOverflowDoesNotCommit()
