@@ -77,7 +77,7 @@ namespace QS3D.Core.Revisions
                     item.Quantities[quantity.Key] = RevisionMath.Finite(quantity.Value, element.Id + "/" + quantity.Key);
                 }
                 foreach (var handle in CanonicalSourceHandles(element)) item.SourceHandles.Add(handle);
-                foreach (var dependency in CanonicalDependencies(element.DependsOn)) item.Dependencies.Add(dependency);
+                foreach (var dependency in CanonicalDependencies(element.DependsOn, "element " + element.Id)) item.Dependencies.Add(dependency);
                 snapshot.Elements.Add(item);
             }
             return snapshot;
@@ -138,15 +138,22 @@ namespace QS3D.Core.Revisions
             return result.AsReadOnly();
         }
 
-        private static IReadOnlyList<string> CanonicalDependencies(IEnumerable<string> dependencies)
+        private static IReadOnlyList<string> CanonicalDependencies(IEnumerable<string> dependencies, string label)
         {
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var raw in dependencies ?? Enumerable.Empty<string>())
+            var index = 0;
+            foreach (var rawValue in dependencies ?? Enumerable.Empty<string>())
             {
-                var value = (raw ?? string.Empty).Trim();
-                if (value.Length == 0 || !seen.Add(value)) continue;
-                result.Add(value);
+                var raw = rawValue ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new InvalidOperationException("Revision " + label + " contains a blank dependency at index " + index.ToString(CultureInfo.InvariantCulture) + ".");
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded dependency: " + raw + ".");
+                if (!seen.Add(raw))
+                    throw new InvalidOperationException("Revision " + label + " contains a duplicate dependency: " + raw + ".");
+                result.Add(raw);
+                index++;
             }
             result.Sort(StringComparer.OrdinalIgnoreCase);
             return result.AsReadOnly();
@@ -167,8 +174,8 @@ namespace QS3D.Core.Revisions
 
         private static void CompareDependencies(RevisionDelta delta, IEnumerable<string> before, IEnumerable<string> after)
         {
-            var left = CanonicalDependencies(before);
-            var right = CanonicalDependencies(after);
+            var left = CanonicalDependencies(before, "before dependency list");
+            var right = CanonicalDependencies(after, "after dependency list");
             if (left.SequenceEqual(right, StringComparer.OrdinalIgnoreCase)) return;
             delta.Fields.Add(new RevisionFieldDelta
             {
