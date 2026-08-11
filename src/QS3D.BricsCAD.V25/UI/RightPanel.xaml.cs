@@ -155,7 +155,12 @@ namespace QS3D.BricsCAD.V25.UI
                         IsXref = true
                     });
                 if (selectedDrawing != null && DrawingList != null)
-                    DrawingList.SelectedItem = _viewModel.Drawings.FirstOrDefault(x => x.IsXref == selectedDrawing.IsXref && string.Equals(x.Name, selectedDrawing.Name, StringComparison.OrdinalIgnoreCase));
+                {
+                    var restored = _viewModel.Drawings.FirstOrDefault(x => x.IsXref == selectedDrawing.IsXref && string.Equals(x.Name, selectedDrawing.Name, StringComparison.OrdinalIgnoreCase));
+                    DrawingList.SelectedItem = restored;
+                    if (selectedDrawing.IsXref && restored == null)
+                        doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
+                }
             }
             finally
             {
