@@ -26,7 +26,7 @@ if CONVERTER.is_file():
         "string.Equals(element.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)",
         '+ " cấu kiện";',
         'return "—";',
-        "throw new NotSupportedException(\"Family usage badge is read-only.\")",
+        'throw new NotSupportedException("Family usage badge is read-only.")',
     )
     for needle in required:
         if needle not in text:
@@ -48,7 +48,8 @@ if PARTIAL.is_file():
     text = PARTIAL.read_text(encoding="utf-8")
     required = (
         "private static readonly bool FamilyUsageClassHandlerRegistered = RegisterFamilyUsageClassHandler();",
-        'DependencyProperty.RegisterAttached(\n            "FamilyUsageUpgraded"',
+        "DependencyProperty.RegisterAttached(",
+        '"FamilyUsageUpgraded"',
         "FrameworkElement.LoadedEvent",
         "panel.EnsureFamilyUsageHooks();",
         "panel.UpgradeFamilyUsageBadges();",
