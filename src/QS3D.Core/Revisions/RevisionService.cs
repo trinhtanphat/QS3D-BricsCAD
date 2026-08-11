@@ -53,6 +53,9 @@ namespace QS3D.Core.Revisions
             {
                 if (element == null || string.IsNullOrWhiteSpace(element.Id)) throw new InvalidOperationException("Revision capture encountered an element without id.");
                 if (!elementIds.Add(element.Id)) throw new InvalidOperationException("Revision capture encountered duplicate element id: " + element.Id + ".");
+                ValidateOptionalCanonicalIdentity(element.FamilyId, "element " + element.Id + " family id");
+                ValidateOptionalCanonicalIdentity(element.FloorId, "element " + element.Id + " floor id");
+                ValidateOptionalCanonicalIdentity(element.ZoneId, "element " + element.Id + " zone id");
                 var item = new RevisionElementSnapshot
                 {
                     ElementId = element.Id,
@@ -174,10 +177,20 @@ namespace QS3D.Core.Revisions
                 if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
                 if (!string.Equals(element.ElementId, element.ElementId.Trim(), StringComparison.Ordinal))
                     throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded element id: " + element.ElementId + ".");
+                ValidateOptionalCanonicalIdentity(element.FamilyId, label + " element " + element.ElementId + " family id");
+                ValidateOptionalCanonicalIdentity(element.FloorId, label + " element " + element.ElementId + " floor id");
+                ValidateOptionalCanonicalIdentity(element.ZoneId, label + " element " + element.ElementId + " zone id");
                 if (result.ContainsKey(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains duplicate element id: " + element.ElementId);
                 result.Add(element.ElementId, element);
             }
             return result;
+        }
+
+        private static void ValidateOptionalCanonicalIdentity(string? value, string label)
+        {
+            if (value == null || value.Length == 0) return;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision " + label + " must not contain leading/trailing whitespace.");
         }
 
         private static void CompareProperties(RevisionDelta delta, IDictionary<string, string> before, IDictionary<string, string> after)
