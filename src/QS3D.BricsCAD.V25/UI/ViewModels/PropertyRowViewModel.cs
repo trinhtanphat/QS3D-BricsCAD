@@ -42,7 +42,13 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public bool CanReset
         {
             get => _canReset;
-            set { if (_canReset == value) return; _canReset = value; OnChanged(); }
+            set
+            {
+                var next = !_isReadOnly && value;
+                if (_canReset == next) return;
+                _canReset = next;
+                OnChanged();
+            }
         }
 
         public string Value
