@@ -40,10 +40,36 @@ namespace QS3D.BricsCAD.V25.Updates
         internal const string ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=20";
         internal const string UpdateManifestAssetName = "QS3D-BricsCAD-V25.update.json";
         private const int MaxResponseBytes = 2 * 1024 * 1024;
+        private const int MaxReleasePages = 10;
 
         internal async Task<IReadOnlyList<UpdateReleaseInfo>> GetPublishedReleasesAsync()
         {
-            var request = WebRequest.CreateHttp(ReleasesEndpoint);
+            var result = new List<UpdateReleaseInfo>();
+            for (var pageNumber = 1; pageNumber <= MaxReleasePages; pageNumber++)
+            {
+                var page = await GetReleasePageAsync(pageNumber).ConfigureAwait(false);
+                result.AddRange(Convert(page.Items));
+
+                if (!page.HasNext) return result;
+                if (pageNumber == MaxReleasePages)
+                {
+                    throw new InvalidOperationException(
+                        "GitHub Releases history exceeds the bounded updater scan window. Open the release page manually or increase the reviewed scan bound before relying on automatic latest-version selection.");
+                }
+            }
+
+            return result;
+        }
+
+        private static async Task<GitHubReleasePage> GetReleasePageAsync(int pageNumber)
+        {
+            if (pageNumber < 1 || pageNumber > MaxReleasePages)
+                throw new ArgumentOutOfRangeException(nameof(pageNumber));
+
+            var address = pageNumber == 1
+                ? ReleasesEndpoint
+                : ReleasesEndpoint + "&page=" + pageNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var request = WebRequest.CreateHttp(address);
             request.Method = "GET";
             request.Accept = "application/vnd.github+json";
             request.UserAgent = "QS3D-BricsCAD-V25-Updater";
@@ -66,7 +92,9 @@ namespace QS3D.BricsCAD.V25.Updates
                     buffer.Position = 0;
                     var serializer = new DataContractJsonSerializer(typeof(GitHubReleaseDto[]));
                     var payload = serializer.ReadObject(buffer) as GitHubReleaseDto?[] ?? Array.Empty<GitHubReleaseDto?>();
-                    return Convert(payload);
+                    var link = response.Headers["Link"];
+                    var hasNext = link != null && link.IndexOf("rel=\"next\"", StringComparison.OrdinalIgnoreCase) >= 0;
+                    return new GitHubReleasePage(payload, hasNext);
                 }
             }
         }
@@ -146,6 +174,18 @@ namespace QS3D.BricsCAD.V25.Updates
                 if (total > maxBytes) throw new InvalidOperationException("GitHub Releases response exceeded the allowed size.");
                 await output.WriteAsync(buffer, 0, read).ConfigureAwait(false);
             }
+        }
+
+        private sealed class GitHubReleasePage
+        {
+            internal GitHubReleasePage(GitHubReleaseDto?[] items, bool hasNext)
+            {
+                Items = items ?? Array.Empty<GitHubReleaseDto?>();
+                HasNext = hasNext;
+            }
+
+            internal GitHubReleaseDto?[] Items { get; }
+            internal bool HasNext { get; }
         }
 
         [DataContract]
