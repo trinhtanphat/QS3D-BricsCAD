@@ -26,7 +26,7 @@ if AUGMENTER.is_file():
     text = AUGMENTER.read_text(encoding="utf-8")
     required = [
         'private const string TabId = "QS3D_AUTHOR";',
-        'private const string PanelSourceId = "QS3D_AUTHOR_PANEL_SOURCE";',
+        'private const string PanelSourceId = "QS3D_AUTHOR_ARCHITECTURE_PANEL_SOURCE";',
         'private const string ButtonId = "QS3D_AUTHOR_DRAWWALLREF";',
         'private const string ButtonText = "Vẽ Tường tham chiếu";',
         'private const string Command = "QS3DDRAWWALLREF";',

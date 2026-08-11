@@ -41,3 +41,5 @@ Because `/root` explicitly prohibited commit/push in this delegated batch, this 
 Every reported aggregate failure is classified, stale scripts are minimally reconciled and pass focused execution, any real source regression is reported without product edits, and the resulting file list is handed back to `/root` for integration.
 
 Completed on 2026-08-11: all 12 stale Ribbon consumers were moved from the retired `RibbonButtonSpec` literals to the canonical `Button(...)` catalog contract. The stronger Workspace property-origin gate landed independently on `main` and was preserved. Focused gates and the 451-gate aggregate passed; no product source was changed by this claim.
+
+Post-merge follow-up: the Reference Wall gate now follows the canonical grouped architecture panel ID introduced by `e2ed78ed`; the augmenter source was already correct. The 452-gate exact-SHA qualification will be rerun after this gate-only repair.
