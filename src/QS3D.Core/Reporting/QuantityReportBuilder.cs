@@ -19,10 +19,17 @@ namespace QS3D.Core.Reporting
                     throw new ArgumentException("Quantity report elements cannot contain null entries. Invalid element index: " + elementIndex + ".", nameof(elements));
                 if (!seenElementIds.Add(element.Id))
                     throw new InvalidOperationException("Quantity report contains duplicate element id: " + element.Id + ".");
-                var key = element.Floor + "\u001f" + element.Family.Category + "\u001f" + element.Family.Name;
+                var material = NormalizeMaterial(element.Family.Material);
+                var key = element.Floor + "\u001f" + element.Family.Category + "\u001f" + element.Family.Name + "\u001f" + material;
                 if (!grouped.TryGetValue(key, out var row))
                 {
-                    row = new QuantityReportRow { Floor = element.Floor, Category = element.Family.Category.ToString(), FamilyName = element.Family.Name };
+                    row = new QuantityReportRow
+                    {
+                        Floor = element.Floor,
+                        Category = element.Family.Category.ToString(),
+                        FamilyName = element.Family.Name,
+                        Material = material
+                    };
                     grouped.Add(key, row); order.Add(key);
                 }
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
@@ -46,6 +53,9 @@ namespace QS3D.Core.Reporting
             foreach (var key in order) result.Add(grouped[key]);
             return result;
         }
+
+        private static string NormalizeMaterial(string material) =>
+            string.IsNullOrWhiteSpace(material) ? "Khác" : material.Trim();
 
         private static double NonNegative(double value, string elementId, string quantity) =>
             QuantityReportMath.NonNegative(value, elementId + "/" + quantity);

@@ -27,6 +27,20 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Legacy quantity grouping must remain unchanged for distinct element identities.");
             if (valid.SourceHandles.Count != 2 || valid.SourceHandles[0] != "AA" || valid.SourceHandles[1] != "Bb")
                 throw new Exception("Legacy quantity source handles must be trimmed and case-insensitively deduplicated in first-seen order.");
+            if (valid.Material != "Concrete")
+                throw new Exception("Legacy quantity rows must retain normalized material provenance.");
+
+            var equivalentMaterialFamily = new FamilyDefinition("Legacy wall", ElementCategory.ArchitecturalWall, " concrete ");
+            var equivalentMaterial = new ElementInstance("Legacy-C", equivalentMaterialFamily, "Floor") { LengthM = 1d };
+            var differentMaterialFamily = new FamilyDefinition("Legacy wall", ElementCategory.ArchitecturalWall, "Steel");
+            var differentMaterial = new ElementInstance("Legacy-D", differentMaterialFamily, "Floor") { LengthM = 4d };
+            var materialGroups = QuantityReportBuilder.Group(new[] { first, equivalentMaterial, differentMaterial });
+            if (materialGroups.Count != 2)
+                throw new Exception("Legacy quantity grouping must separate different materials while merging case-equivalent material names.");
+            var concreteGroup = materialGroups.Single(x => string.Equals(x.Material, "Concrete", StringComparison.OrdinalIgnoreCase));
+            var steelGroup = materialGroups.Single(x => string.Equals(x.Material, "Steel", StringComparison.OrdinalIgnoreCase));
+            if (concreteGroup.Count != 2 || Math.Abs(concreteGroup.LengthM - 3d) > 1e-12 || steelGroup.Count != 1 || Math.Abs(steelGroup.LengthM - 4d) > 1e-12)
+                throw new Exception("Legacy material grouping totals/provenance are inconsistent.");
 
             ExpectArgumentException(
                 () => QuantityReportBuilder.Group(new ElementInstance[] { first, null!, second }),
