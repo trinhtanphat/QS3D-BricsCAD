@@ -22,17 +22,19 @@ for filename in TABLE_COMMANDS:
 
     text = path.read_text(encoding="utf-8")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
-        errors.append(filename + ": native documentation table command must not create/cache an empty project")
-    if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in text:
-        errors.append(filename + ": missing existing-project/read-only lookup contract")
+        errors.append(filename + ": native documentation table command must not create/cache an empty project directly")
     if "RequireExistingProject" not in text:
         errors.append(filename + ": mutating native table entrypoints must use an explicit existing-project guard")
+    if "ExistingProjectMutationContext.Require(document, operation)" not in text:
+        errors.append(filename + ": mutation guard must resolve the canonical cached existing project")
 
     health_index = text.find("TABLEHEALTH")
     if health_index >= 0:
         health_tail = text[health_index:]
-        if "TryGetReadOnly(document, out var project)" not in health_tail:
-            errors.append(filename + ": health path must remain read-only and must not create project state")
+        if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in health_tail:
+            errors.append(filename + ": health path must remain read-only and must not create/cache project state")
+        if "ExistingProjectMutationContext" in health_tail:
+            errors.append(filename + ": health path must not promote a read-only inspection into mutation context")
 
 for filename in ("BqNativeTableCommands.cs", "SemanticElementTableCommands.cs"):
     path = COMMAND_ROOT / filename
@@ -41,6 +43,7 @@ for filename in ("BqNativeTableCommands.cs", "SemanticElementTableCommands.cs"):
     text = path.read_text(encoding="utf-8")
     for operation_token in (
         "var project = RequireExistingProject(document",
+        "return ExistingProjectMutationContext.Require(document, operation);",
         "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
     ):
         if operation_token not in text:
@@ -52,4 +55,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: native BQ/BBS/Door-Opening/Room-Finish/Material/Semantic tables require an existing QS3D project and health remains read-only.")
+print("PASS: native BQ/BBS/Door-Opening/Room-Finish/Material/Semantic mutations use canonical existing state while health remains read-only.")
