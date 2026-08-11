@@ -1,6 +1,6 @@
 # Work claim — Opening host projection overflow
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-opening-host-projection-overflow-20260812-0029`
 - Registered: `2026-08-12T00:29:00+07:00`
 - Baseline main SHA: `441a4ba8ed0e9efcd8af0a49aaba94e1aeeeee46`
@@ -18,20 +18,24 @@ Make `OpeningHostMatcher.ClosestPointOnSegment` handle finite opening-to-host of
 
 ## Concrete defect
 
-`ClosestPointOnSegment` normalizes the host direction but still evaluates `qx * ux + qy * uy` directly. For a finite opening point far beyond a long diagonal segment, both terms can be finite while their sum overflows. The mathematically correct projection is simply beyond the segment end, so the closest point is the finite endpoint; throwing on the unneeded unbounded scalar rejects representable host matching.
+`ClosestPointOnSegment` normalized the host direction but still evaluated `qx * ux + qy * uy` directly. For a finite opening point far beyond a long diagonal segment, both terms can be finite while their sum overflows. The mathematically correct projection is simply beyond the segment end, so the closest point is the finite endpoint; throwing on the unneeded unbounded scalar rejected representable host matching.
 
-## Explicit exclusions
+## Implementation
+
+- `ce8f8a7a02517cb944e4abe559bb65bd2748e129` — scale the opening offset, compare scaled projection against scaled segment length, and clamp start/end before reconstructing an interior along-distance.
+- `e5028138be2e5ba2deb7f58426e71869564dc805` — add focused smoke coverage for a finite long diagonal host with an opening beyond its endpoint where the old raw dot sum overflowed but endpoint distance/gap remain finite.
+
+## Validation performed
+
+- Re-fetched target source after claim registration and confirmed the raw unit-direction dot sum remained before editing.
+- Re-fetched committed source and confirmed endpoint decisions are now made in scaled projection space before interior along-distance reconstruction.
+- Re-fetched the smoke fixture and confirmed it asserts matched host identity, exact endpoint closest-point, finite centerline distance and finite accepted gap.
+- Source/static validation only; no GitHub Actions dispatched and no BricsCAD V25 runtime/build/NETLOAD PASS claimed.
+
+## Explicit exclusions retained
 
 - No host ranking/gap/ambiguity policy, source enumeration cap, host identity, Auto Host lifecycle, Opening Property/native V25, cut/materialization, UI, Actions, release, or LOCAL_PASS behavior changes.
 
-## Validation plan
+## Completion
 
-- Scale the opening offset before the unit-direction dot product and compare the scaled projection against the scaled segment length so endpoint clamping occurs before reconstructing an unbounded along-distance.
-- Preserve ordinary interior/start/end projection behavior.
-- Add focused smoke coverage with a finite diagonal host and finite opening point beyond its endpoint where the old raw dot sum overflows but endpoint distance/gap remain finite.
-- Re-fetch target source before implementation and do not overwrite concurrent edits.
-- No GitHub Actions will be dispatched and no BricsCAD runtime PASS will be claimed from this web session.
-
-## Completion condition
-
-Opening host matching no longer fails solely because an out-of-segment projection scalar would exceed the numeric range when the finite endpoint is the correct closest point, regression is integrated on current `main`, and this claim is marked `COMPLETED`.
+Opening host matching no longer fails solely because an out-of-segment projection scalar would exceed the numeric range when the finite endpoint is the correct closest point, focused regression is integrated on `main`, and this claim is closed.
