@@ -42,9 +42,20 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var source = FindRequired(project, sourceFamilyId);
+            var properties = new List<KeyValuePair<string, string>>();
+            var canonicalKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in source.Properties)
+            {
+                var normalizedKey = Required(pair.Key, "source property key", MaxPropertyKeyLength);
+                if (!string.Equals(normalizedKey, pair.Key, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Source Family contains a non-canonical property key: '" + pair.Key + "'. Repair the Family before duplication.");
+                if (!canonicalKeys.Add(normalizedKey))
+                    throw new InvalidOperationException("Source Family contains duplicate canonical property key: " + normalizedKey);
+                properties.Add(new KeyValuePair<string, string>(normalizedKey, Value(pair.Value, "source property value", MaxPropertyValueLength)));
+            }
+
             var clone = Create(project, newId, newName, source.Category);
-            foreach (var pair in source.Properties) clone.Properties[pair.Key] = pair.Value;
-            project.Touch();
+            foreach (var pair in properties) clone.Properties[pair.Key] = pair.Value;
             return clone;
         }
 
