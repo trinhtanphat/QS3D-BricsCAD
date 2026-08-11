@@ -1,8 +1,9 @@
 # Work claim — Start Center Ribbon entry
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-start-center-ribbon-20260811`
 - Registered: `2026-08-11T20:20:00+07:00`
+- Completed: `2026-08-11`
 - Baseline main SHA: `06c74e79f1c9c8d44672241309d0e80f60ab7733`
 - Priority: finish owner-requested Start Center discoverability after the grouped Ribbon information-architecture lane completed.
 
@@ -13,9 +14,8 @@ Add exactly one discoverable `QS3DSTART` entry to the current grouped BricsCAD R
 ## Expected surfaces
 
 - `src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs`
-- `scripts/preflight-start-center-ribbon.py` (new)
-- `docs/UI-START-CENTER-2026-08-11.md` only if the discoverability note needs updating
-- `docs/LOCAL-AGENT-INBOX.md` only for the exact V25 render/dispatch evidence already required by Start Center
+- `scripts/preflight-start-center-ribbon.py`
+- `docs/UI-START-CENTER-2026-08-11.md`
 - this claim file for close-out
 
 ## Excluded scope
@@ -24,13 +24,18 @@ Add exactly one discoverable `QS3DSTART` entry to the current grouped BricsCAD R
 - No command implementation changes, Core semantic/persistence changes, Workspace/RightPanel/Theme changes, Direct Draw/Create Similar behavior changes, modeless viewer changes, installer/release/signing or GitHub Actions work.
 - No BricsCAD V25 runtime PASS claim from the remote connector lane.
 
-## Validation plan
+## Completion record
 
-- Re-fetch current `main`, active claims and the current grouped `RibbonBootstrapper.cs` before editing.
-- Preserve all existing Ribbon command strings and panel grouping; add only `Button("Start Center", "QS3DSTART")` in the home/project panel.
-- Add an auto-discovered focused preflight that verifies `QS3DSTART` is registered in `StartCenterCommands.cs`, appears exactly once in Ribbon source and remains in the `QS3D_HOME` / `PROJECT` group without fallback to arbitrary command execution.
-- Inspect final ancestry/diff; do not dispatch GitHub Actions.
+- Reservation commit: `fbd73dc7183245d246e6627a81b34b7bd61fc901`.
+- Ribbon implementation commit: `3836653f827759268eed1dd0be4e49aa66553f3a` — adds exactly `Button("Start Center", "QS3DSTART")` to `QS3D_HOME` → `PROJECT`. Commit diff inspection shows no Ribbon regrouping or command removal; the only semantic Ribbon change is that one button.
+- Focused auto-discovered gate: `2befa8a3ae973ffb05190036396558cea8e6a1c3` — `scripts/preflight-start-center-ribbon.py` locks command registration, one-and-only-one Ribbon binding, `QS3D_HOME` / `PROJECT` placement and click-time active-document dispatch.
+- Documentation follow-up: `010ca2006ada55bb3a122cc894979161e106ee4e` records Ribbon discoverability and keeps exact V25 rendering/dispatch in LOCAL_ONLY qualification.
+- No GitHub Actions were dispatched.
+
+## Validation disposition
+
+Source/diff inspection is complete and conflict-safe. Licensed BricsCAD V25 Ribbon rendering, click dispatch, DPI/Unicode and multi-DWG runtime behavior remain `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`; this claim does not manufacture a runtime PASS.
 
 ## Completion condition
 
-The single Ribbon entry and focused regression gate are pushed to current `main`, local V25 rendering/dispatch remains explicitly pending, and this claim is marked `COMPLETED` with exact commit SHA(s).
+Satisfied for the remote/source lane. The single Ribbon entry and focused regression gate are on `main`; exact V25 rendering/dispatch remains local qualification work.
