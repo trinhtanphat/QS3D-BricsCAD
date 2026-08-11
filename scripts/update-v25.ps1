@@ -63,6 +63,82 @@ function Require-ManifestProperty {
     return $property.Value
 }
 
+function Convert-ToStrictSemVer {
+    param([string]$Value, [string]$Label)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
+    $text = $Value.Trim()
+    $match = [regex]::Match(
+        $text,
+        '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $match.Success) { throw "$Label is not strict SemVer: $text" }
+
+    $components = @()
+    foreach ($index in 1..3) {
+        $parsed = 0
+        if (-not [int]::TryParse($match.Groups[$index].Value, [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
+            throw "$Label numeric component is outside the supported range: $text"
+        }
+        $components += $parsed
+    }
+
+    [string[]]$prerelease = @()
+    if ($match.Groups[4].Success) {
+        $prerelease = @($match.Groups[4].Value.Split('.'))
+        foreach ($identifier in $prerelease) {
+            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') {
+                throw "$Label has a numeric prerelease identifier with a leading zero: $text"
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Text = $text
+        Major = [int]$components[0]
+        Minor = [int]$components[1]
+        Patch = [int]$components[2]
+        Prerelease = [string[]]$prerelease
+    }
+}
+
+function Compare-StrictSemVer {
+    param($Left, $Right)
+
+    foreach ($property in @('Major', 'Minor', 'Patch')) {
+        $comparison = ([int]$Left.$property).CompareTo([int]$Right.$property)
+        if ($comparison -ne 0) { return $comparison }
+    }
+
+    $leftPre = @($Left.Prerelease)
+    $rightPre = @($Right.Prerelease)
+    if ($leftPre.Count -eq 0 -and $rightPre.Count -eq 0) { return 0 }
+    if ($leftPre.Count -eq 0) { return 1 }
+    if ($rightPre.Count -eq 0) { return -1 }
+
+    $count = [Math]::Min($leftPre.Count, $rightPre.Count)
+    for ($index = 0; $index -lt $count; $index++) {
+        $leftIdentifier = [string]$leftPre[$index]
+        $rightIdentifier = [string]$rightPre[$index]
+        $leftNumeric = $leftIdentifier -match '^[0-9]+$'
+        $rightNumeric = $rightIdentifier -match '^[0-9]+$'
+
+        if ($leftNumeric -and $rightNumeric) {
+            $lengthComparison = $leftIdentifier.Length.CompareTo($rightIdentifier.Length)
+            if ($lengthComparison -ne 0) { return $lengthComparison }
+            $numericComparison = [string]::CompareOrdinal($leftIdentifier, $rightIdentifier)
+            if ($numericComparison -ne 0) { return $numericComparison }
+            continue
+        }
+        if ($leftNumeric -ne $rightNumeric) { return $(if ($leftNumeric) { -1 } else { 1 }) }
+
+        $lexicalComparison = [string]::CompareOrdinal($leftIdentifier, $rightIdentifier)
+        if ($lexicalComparison -ne 0) { return $lexicalComparison }
+    }
+
+    return $leftPre.Count.CompareTo($rightPre.Count)
+}
+
 function Read-InstalledVersion {
     param([string]$Directory)
 
@@ -103,6 +179,45 @@ function Read-InstalledVersion {
     if ($pluginVersion) { return $pluginVersion }
     if ($metadataVersion) { return $metadataVersion }
     throw 'Installed QS3D state does not expose a readable version.'
+}
+
+function Read-PluginProductVersion {
+    param([string]$Path, [string]$Label)
+    try {
+        $productVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($Path).ProductVersion
+        return Convert-ToStrictSemVer -Value ([string]$productVersion) -Label $Label
+    }
+    catch {
+        throw "$Label is unreadable: $($_.Exception.Message)"
+    }
+}
+
+function Read-InstalledProductVersion {
+    param([string]$Directory)
+
+    $metadataPath = Join-Path $Directory 'PACKAGE-METADATA.json'
+    $pluginPath = Join-Path $Directory 'QS3D.BricsCAD.V25.dll'
+    $hasMetadata = Test-Path -LiteralPath $metadataPath -PathType Leaf
+    $hasPlugin = Test-Path -LiteralPath $pluginPath -PathType Leaf
+    if (-not $hasMetadata -and -not $hasPlugin) {
+        return Convert-ToStrictSemVer -Value '0.0.0' -Label 'Installed QS3D productVersion'
+    }
+    if (-not $hasMetadata -or -not $hasPlugin) {
+        throw 'Installed QS3D state is incomplete; PACKAGE-METADATA.json and QS3D.BricsCAD.V25.dll must both exist before secure update.'
+    }
+
+    try { $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json }
+    catch { throw "Installed PACKAGE-METADATA.json is unreadable: $($_.Exception.Message)" }
+    if (-not $metadata.PSObject.Properties['productVersion']) {
+        throw 'Installed PACKAGE-METADATA.json is missing productVersion; install a product-version-aware signed QS3D build manually before using secure auto-update.'
+    }
+
+    $metadataProductVersion = Convert-ToStrictSemVer -Value ([string]$metadata.productVersion) -Label 'Installed PACKAGE-METADATA productVersion'
+    $pluginProductVersion = Read-PluginProductVersion -Path $pluginPath -Label 'Installed signed QS3D plugin product version'
+    if (-not [string]::Equals($metadataProductVersion.Text, $pluginProductVersion.Text, [StringComparison]::Ordinal)) {
+        throw "Installed PACKAGE-METADATA productVersion $($metadataProductVersion.Text) does not match installed QS3D plugin product version $($pluginProductVersion.Text)."
+    }
+    return $pluginProductVersion
 }
 
 function Read-SignedPluginVersion {
@@ -232,10 +347,11 @@ try {
 
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     $schemaVersion = [int](Require-ManifestProperty -Manifest $manifest -Name 'schemaVersion')
-    if ($schemaVersion -ne 1) { throw "Unsupported update manifest schemaVersion: $schemaVersion" }
+    if ($schemaVersion -ne 2) { throw "Unsupported update manifest schemaVersion: $schemaVersion. Secure auto-update requires schemaVersion 2 with productVersion binding." }
     if ([string](Require-ManifestProperty -Manifest $manifest -Name 'product') -ne 'QS3D') { throw 'Update manifest product must be QS3D.' }
     if ([string](Require-ManifestProperty -Manifest $manifest -Name 'target') -ne 'BricsCAD V25 x64') { throw 'Update manifest target must be BricsCAD V25 x64.' }
 
+    $targetProductVersion = Convert-ToStrictSemVer -Value ([string](Require-ManifestProperty -Manifest $manifest -Name 'productVersion')) -Label 'Update manifest productVersion'
     $versionText = [string](Require-ManifestProperty -Manifest $manifest -Name 'version')
     try { $targetVersion = [Version]::Parse($versionText) }
     catch { throw "Update manifest version is invalid: $versionText" }
@@ -251,10 +367,19 @@ try {
     if ($manifestSigner -ne $expectedSigner) { throw 'Update manifest signerThumbprint does not match ExpectedSignerThumbprint.' }
 
     $installedVersion = Read-InstalledVersion -Directory $InstallDirectory
-    if ($targetVersion -lt $installedVersion) { throw "Refusing downgrade from $installedVersion to $targetVersion." }
-    if ($targetVersion -eq $installedVersion -and -not $AllowSameVersion) { throw "QS3D $targetVersion is already installed. Use -AllowSameVersion only for an intentional repair." }
+    if ($targetVersion -lt $installedVersion) { throw "Refusing assembly-version downgrade from $installedVersion to $targetVersion." }
+    if ($targetVersion -eq $installedVersion -and -not $AllowSameVersion) { throw "QS3D assembly version $targetVersion is already installed. Use -AllowSameVersion only when the product SemVer is independently newer." }
 
-    if (-not $PSCmdlet.ShouldProcess($InstallDirectory, "Update QS3D from $installedVersion to $targetVersion")) { return }
+    $installedProductVersion = Read-InstalledProductVersion -Directory $InstallDirectory
+    $productComparison = Compare-StrictSemVer -Left $targetProductVersion -Right $installedProductVersion
+    if ($productComparison -lt 0) {
+        throw "Refusing product-version downgrade from $($installedProductVersion.Text) to $($targetProductVersion.Text)."
+    }
+    if ($productComparison -eq 0) {
+        throw "QS3D product version $($targetProductVersion.Text) is already installed. -AllowSameVersion never authorizes product-version replay or repair."
+    }
+
+    if (-not $PSCmdlet.ShouldProcess($InstallDirectory, "Update QS3D product $($installedProductVersion.Text) -> $($targetProductVersion.Text); assembly $installedVersion -> $targetVersion")) { return }
 
     Invoke-WebRequest -Uri $packageAddress.AbsoluteUri -OutFile $zipPath -UseBasicParsing
     $zipFile = Get-Item -LiteralPath $zipPath
@@ -271,18 +396,41 @@ try {
     Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
     Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner
 
-    $signedPluginVersion = Read-SignedPluginVersion -Path (Join-Path $extractRoot 'QS3D.BricsCAD.V25.dll')
+    $downloadedPluginPath = Join-Path $extractRoot 'QS3D.BricsCAD.V25.dll'
+    $signedPluginVersion = Read-SignedPluginVersion -Path $downloadedPluginPath
     if ($signedPluginVersion -ne $targetVersion) {
         throw "Signed QS3D plugin assembly version $signedPluginVersion does not match manifest version $targetVersion. Refusing replay/downgrade metadata substitution."
     }
 
     $downloadedMetadata = Get-Content -LiteralPath (Join-Path $extractRoot 'PACKAGE-METADATA.json') -Raw | ConvertFrom-Json
     if (-not $downloadedMetadata.PSObject.Properties['version']) { throw 'Downloaded PACKAGE-METADATA.json is missing version.' }
+    if (-not $downloadedMetadata.PSObject.Properties['productVersion']) { throw 'Downloaded PACKAGE-METADATA.json is missing productVersion.' }
     $packageVersion = [Version]::Parse([string]$downloadedMetadata.version)
     if ($packageVersion -ne $signedPluginVersion) {
         throw "Downloaded package metadata version $packageVersion does not match signed plugin assembly version $signedPluginVersion."
     }
     if ($packageVersion -ne $targetVersion) { throw "Downloaded package version $packageVersion does not match manifest version $targetVersion." }
+
+    $packageProductVersion = Convert-ToStrictSemVer -Value ([string]$downloadedMetadata.productVersion) -Label 'Downloaded PACKAGE-METADATA productVersion'
+    $signedPluginProductVersion = Read-PluginProductVersion -Path $downloadedPluginPath -Label 'Downloaded signed QS3D plugin product version'
+    if (-not [string]::Equals($packageProductVersion.Text, $signedPluginProductVersion.Text, [StringComparison]::Ordinal)) {
+        throw "Downloaded PACKAGE-METADATA productVersion $($packageProductVersion.Text) does not match signed plugin product version $($signedPluginProductVersion.Text)."
+    }
+    if (-not [string]::Equals($packageProductVersion.Text, $targetProductVersion.Text, [StringComparison]::Ordinal)) {
+        throw "Downloaded package productVersion $($packageProductVersion.Text) does not match manifest productVersion $($targetProductVersion.Text)."
+    }
+    if ((Compare-StrictSemVer -Left $packageProductVersion -Right $installedProductVersion) -le 0) {
+        throw "Downloaded package productVersion $($packageProductVersion.Text) is not newer than installed productVersion $($installedProductVersion.Text)."
+    }
+
+    $currentInstalledVersion = Read-InstalledVersion -Directory $InstallDirectory
+    if ($currentInstalledVersion -ne $installedVersion) {
+        throw "Installed QS3D assembly version changed during update preparation ($installedVersion -> $currentInstalledVersion). Refusing concurrent/stale install."
+    }
+    $currentInstalledProductVersion = Read-InstalledProductVersion -Directory $InstallDirectory
+    if (-not [string]::Equals($currentInstalledProductVersion.Text, $installedProductVersion.Text, [StringComparison]::Ordinal)) {
+        throw "Installed QS3D productVersion changed during update preparation ($($installedProductVersion.Text) -> $($currentInstalledProductVersion.Text)). Refusing concurrent/stale install."
+    }
 
     $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
     $arguments = @{
@@ -297,7 +445,7 @@ try {
     if ($LanguageKeys) { $arguments.LanguageKeys = $LanguageKeys }
     & $installer @arguments
 
-    Write-Host "QS3D updated securely to $targetVersion."
+    Write-Host "QS3D updated securely to product $($targetProductVersion.Text) (assembly $targetVersion)."
 }
 finally {
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
