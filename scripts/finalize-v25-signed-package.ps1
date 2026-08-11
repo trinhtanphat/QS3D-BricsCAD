@@ -35,15 +35,27 @@ function Assert-AuthenticodeSigner {
     if ($actualSigner -ne $ExpectedSigner) { throw "$Label signer mismatch. Expected $ExpectedSigner, got $actualSigner." }
 }
 
-function Read-PluginAssemblyVersion {
-    param([string]$Path)
+function Read-ManagedAssemblyVersion {
+    param([string]$Path, [string]$Label)
     try {
         $version = [Reflection.AssemblyName]::GetAssemblyName($Path).Version
         if (-not $version) { throw 'assembly version is missing' }
         return $version
     }
     catch {
-        throw "QS3D plugin assembly version is unreadable: $($_.Exception.Message)"
+        throw "$Label assembly version is unreadable: $($_.Exception.Message)"
+    }
+}
+
+function Read-ManagedProductVersion {
+    param([string]$Path, [string]$Label)
+    try {
+        $version = ([string][Diagnostics.FileVersionInfo]::GetVersionInfo($Path).ProductVersion).Trim()
+        if ([string]::IsNullOrWhiteSpace($version)) { throw 'product version is missing' }
+        return $version
+    }
+    catch {
+        throw "$Label product version is unreadable: $($_.Exception.Message)"
     }
 }
 
@@ -59,13 +71,33 @@ foreach ($name in $SignedPayloadNames) {
 }
 
 $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+if ([string]$metadata.product -ne 'QS3D') { throw 'PACKAGE-METADATA product must be QS3D.' }
+if ([string]$metadata.target -ne 'BricsCAD V25 x64') { throw 'PACKAGE-METADATA target must be BricsCAD V25 x64.' }
 if (-not $metadata.PSObject.Properties['version']) { throw 'PACKAGE-METADATA is missing version.' }
+if (-not $metadata.PSObject.Properties['productVersion']) { throw 'PACKAGE-METADATA is missing productVersion.' }
 try { $metadataVersion = [Version]::Parse([string]$metadata.version) }
 catch { throw "PACKAGE-METADATA version is invalid: $($metadata.version)" }
-$signedPluginVersion = Read-PluginAssemblyVersion -Path (Join-Path $package 'QS3D.BricsCAD.V25.dll')
-if ($metadataVersion -ne $signedPluginVersion) {
-    throw "PACKAGE-METADATA version $metadataVersion does not match signed QS3D plugin assembly version $signedPluginVersion."
+$metadataProductVersion = ([string]$metadata.productVersion).Trim()
+if ([string]::IsNullOrWhiteSpace($metadataProductVersion)) { throw 'PACKAGE-METADATA productVersion is empty.' }
+
+$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
+$managedIdentities = @{}
+foreach ($name in $managedIdentityNames) {
+    $path = Join-Path $package $name
+    $assemblyVersion = Read-ManagedAssemblyVersion -Path $path -Label $name
+    if ($metadataVersion -ne $assemblyVersion) {
+        throw "PACKAGE-METADATA version $metadataVersion does not match signed $name assembly version $assemblyVersion."
+    }
+    $productVersion = Read-ManagedProductVersion -Path $path -Label $name
+    if (-not [string]::Equals($metadataProductVersion, $productVersion, [StringComparison]::Ordinal)) {
+        throw "PACKAGE-METADATA productVersion $metadataProductVersion does not match signed $name product version $productVersion."
+    }
+    $managedIdentities[$name] = [pscustomobject]@{
+        AssemblyVersion = $assemblyVersion
+        ProductVersion = $productVersion
+    }
 }
+$signedPluginVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].AssemblyVersion
 
 if (-not $PSCmdlet.ShouldProcess($zip, 'Finalize signed QS3D V25 package and rebuild ZIP')) { return }
 
