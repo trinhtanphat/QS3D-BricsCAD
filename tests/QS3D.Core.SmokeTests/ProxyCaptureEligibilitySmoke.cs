@@ -43,6 +43,21 @@ namespace QS3D.Core.SmokeTests
             var blockDoor = new ProjectRecognitionService().Suggest(project, new EntitySnapshot("F", "BlockReference", "BLT-COL"));
             if (blockDoor.TopCandidate == null) throw new Exception("Non-proxy recognition behavior must remain available.");
 
+            var invalidCategory = (ElementCategory)int.MaxValue;
+            Throws<ArgumentOutOfRangeException>(() => new RecognitionRule("invalid-category", invalidCategory));
+            var mutableCandidate = new RecognitionCandidate
+            {
+                RuleId = "manual-beam",
+                Category = ElementCategory.Beam,
+                Confidence = 1d
+            };
+            Throws<ArgumentOutOfRangeException>(() => mutableCandidate.Category = invalidCategory);
+            var validManual = new RecognitionResult(
+                new EntitySnapshot("F2", "Line", "blt beam"),
+                new[] { mutableCandidate });
+            if (new RecognitionBatch(new[] { validManual }).AutoAccepted.Count != 1)
+                throw new Exception("Defined recognition categories must preserve normal non-proxy auto-accept behavior.");
+
             var generated = new EntitySnapshot("G", "Solid3d", "blt beam")
             {
                 VolumeDrawingUnitsCubed = 1d,
