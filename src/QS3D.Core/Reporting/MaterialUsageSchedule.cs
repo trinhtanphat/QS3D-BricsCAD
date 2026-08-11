@@ -62,7 +62,8 @@ namespace QS3D.Core.Reporting
             foreach (var element in project.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
-                families.TryGetValue(element.FamilyId, out var family);
+                var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+                families.TryGetValue(familyId, out var family);
                 var material = Effective(element, family, "Material");
                 if (material.Length > 0)
                     Add(project, element, family, floors, units, rows, order, material, "Material", MetricsForMainMaterial(element));
@@ -148,10 +149,12 @@ namespace QS3D.Core.Reporting
             string component,
             UsageMetrics metrics)
         {
-            var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
-            var familyName = family?.Name ?? element.FamilyId;
+            var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
+            var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+            var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
+            var familyName = family?.Name ?? familyId;
             var category = element.Category.ToString();
-            var key = element.FloorId + "\u001f" + material + "\u001f" + component + "\u001f" + category + "\u001f" + element.FamilyId;
+            var key = floorId + "\u001f" + material + "\u001f" + component + "\u001f" + category + "\u001f" + familyId;
             if (!rows.TryGetValue(key, out var row))
             {
                 row = new MaterialUsageRow

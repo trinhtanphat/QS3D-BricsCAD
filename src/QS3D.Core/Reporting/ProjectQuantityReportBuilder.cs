@@ -42,9 +42,11 @@ namespace QS3D.Core.Reporting
                 var elementId = element.Id.Trim();
                 if (selectedIds != null && !selectedIds.Contains(elementId)) continue;
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
-                var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
-                var zone = zones.TryGetValue(element.ZoneId, out var zoneName) ? zoneName : element.ZoneId;
-                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
+                var zoneId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.ZoneId);
+                var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+                var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
+                var zone = zones.TryGetValue(zoneId, out var zoneName) ? zoneName : zoneId;
                 families.TryGetValue(familyId, out var family);
                 var familyName = family != null ? family.Name : familyId;
                 var elementName = FirstInstanceProperty(element, "Name", "TenCauKien");
@@ -57,7 +59,7 @@ namespace QS3D.Core.Reporting
                 var category = element.Category.ToString();
                 var key = detail
                     ? "ELEMENT\u001f" + elementId
-                    : element.FloorId + "\u001f" + element.ZoneId + "\u001f" + category + "\u001f" + familyId +
+                    : floorId + "\u001f" + zoneId + "\u001f" + category + "\u001f" + familyId +
                       "\u001f" + material + "\u001f" + DensityKey(densityKgM3);
                 var created = false;
                 if (!rows.TryGetValue(key, out var row))
