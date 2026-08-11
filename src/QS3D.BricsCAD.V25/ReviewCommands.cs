@@ -8,6 +8,7 @@ using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using QS3D.Core.Recognition;
 using QS3D.Core.Revisions;
@@ -24,7 +25,14 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DBBSVIEW", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc); Regenerate(project); var rows = ProjectRebarScheduleBuilder.Build(project);
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                {
+                    doc.Editor.WriteMessage("\nQS3D BBS: chưa có QS3D project hiện hữu; viewer không tạo project mới.");
+                    return;
+                }
+                var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);
+                Regenerate(previewProject);
+                var rows = ProjectRebarScheduleBuilder.Build(previewProject);
                 if (rows.Count == 0) { doc.Editor.WriteMessage("\nQS3D BBS: chưa có cấu kiện khai báo RebarNotation."); return; }
                 Action<RebarScheduleRow> locate = row =>
                 {
@@ -125,7 +133,9 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DREVBASE", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc); Regenerate(project); var path = RevisionCoordinator.CaptureBaseline(doc);
+                var project = ExistingProjectMutationContext.Require(doc, "Revision baseline");
+                Regenerate(project);
+                var path = RevisionCoordinator.CaptureBaseline(doc);
                 AuditTrail.ForProject(project).Record("revision.baseline", string.Empty, path);
                 PaletteCoordinator.SetStatus("Đã lưu baseline revision: " + path); doc.Editor.WriteMessage("\nQS3D revision baseline saved: " + path);
             });
@@ -137,12 +147,29 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DREVDIFF", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc); Regenerate(project); var before = RevisionCoordinator.LoadBaseline(doc); var after = RevisionCoordinator.CaptureCurrent(doc); var rows = new QuantityRevisionReport().Build(before, after);
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out _))
+                    throw new InvalidOperationException("Revision diff cần một QS3D project hiện hữu; review không tạo project mới.");
+                var before = RevisionCoordinator.LoadBaseline(doc);
+                var after = RevisionCoordinator.CaptureCurrent(doc);
+                var rows = new QuantityRevisionReport().Build(before, after);
                 Action<QuantityRevisionRow> locate = row => LocateCurrentElement(doc, row.ElementId, "Revision Locate");
                 Application.ShowModelessWindow(IntPtr.Zero, new RevisionWindow(doc, before, after, rows, locate), true);
-                AuditTrail.ForProject(project).Record("revision.compare", string.Empty, before.Id + " → " + after.Id + " • " + rows.Count + " quantity changes");
+                TryRecordRevisionCompare(doc, before, after, rows.Count);
                 PaletteCoordinator.SetStatus("Revision diff: " + rows.Count + " thay đổi quantity.");
             });
+        }
+
+        private static void TryRecordRevisionCompare(Document document, RevisionSnapshot before, RevisionSnapshot after, int rowCount)
+        {
+            try
+            {
+                if (ExistingProjectMutationContext.TryGet(document, out var project))
+                    AuditTrail.ForProject(project).Record("revision.compare", string.Empty, before.Id + " → " + after.Id + " • " + rowCount + " quantity changes");
+            }
+            catch (System.Exception auditError)
+            {
+                try { document.Editor.WriteMessage("\nQS3D Revision diff đã mở; audit warning: " + auditError.Message); } catch { }
+            }
         }
 
         private static int LocateCurrentElement(Document document, string elementId, string operation)
