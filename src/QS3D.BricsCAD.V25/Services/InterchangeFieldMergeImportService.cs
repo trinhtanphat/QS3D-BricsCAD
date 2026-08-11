@@ -83,50 +83,65 @@ namespace QS3D.BricsCAD.V25.Services
             // can erase anything or Core can clear the corresponding ownership metadata.
             GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);
 
-            var rollback = ProjectStateSnapshot.Capture(project);
+            ProjectStateSnapshot? rollback = null;
             var cadCommitted = false;
 
             try
             {
                 using (document.LockDocument())
-                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    EnsureActive(document, "Interchange field merge / native mutation");
+                    EnsureActive(document, "Interchange field merge / locked mutation");
+                    var lockedProject = ExistingProjectMutationContext.Require(document, "Interchange field merge / locked mutation");
+                    if (!ReferenceEquals(lockedProject, project))
+                        throw new InvalidOperationException(
+                            "Interchange field merge target project changed before the native mutation lock was acquired. Re-plan and review the merge.");
 
-                    // Repeat the coverage check under the document lock so a modeless/event callback
-                    // cannot swap generated owner-slot metadata between the early precheck and native
-                    // invalidation. This check must remain immediately before destructive preparation.
-                    GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);
+                    // Never carry pre-lock element references into destructive native work. Re-resolve
+                    // the reviewed affected ids from the exact canonical project under the document lock.
+                    var lockedInvalidationTargets = ResolveAffectedTargets(
+                        lockedProject,
+                        reviewedPlan.CorePlan.AffectedTargetElementIds);
 
-                    // Prepare native erasure before Core mutation while the target's reviewed generated
-                    // handle metadata still exists. Prepare is rollback-capable and does not clear semantic
-                    // ownership metadata. Core Import re-plans next and rejects stale target/source/policy/
-                    // handle authorization before any semantic mutation can be accepted.
-                    var invalidation = GeneratedDependentGeometryInvalidator.Prepare(
-                        document,
-                        transaction,
-                        project,
-                        invalidationTargets);
+                    using (var transaction = document.Database.TransactionManager.StartTransaction())
+                    {
+                        EnsureActive(document, "Interchange field merge / native mutation");
+                        rollback = ProjectStateSnapshot.Capture(lockedProject);
 
-                    var coreResult = ProjectInterchangeFieldMergeImporter.Import(
-                        project,
-                        json,
-                        policy,
-                        reviewedPlan.Authorization);
+                        // Repeat the coverage check under the document lock so a modeless/event callback
+                        // cannot swap generated owner-slot metadata between the early precheck and native
+                        // invalidation. This check must remain immediately before destructive preparation.
+                        GeneratedNativeCleanupCoverageGuard.EnsureSupported(lockedInvalidationTargets);
 
-                    // Core clears generated/native ownership metadata for the full affected closure after
-                    // authorization succeeds. CommitMetadata is intentionally retained as the native
-                    // invalidator's final parity sweep; after the Core clear it is idempotent.
-                    invalidation.CommitMetadata();
+                        // Prepare native erasure before Core mutation while the target's reviewed generated
+                        // handle metadata still exists. Prepare is rollback-capable and does not clear semantic
+                        // ownership metadata. Core Import re-plans next and rejects stale target/source/policy/
+                        // handle authorization before any semantic mutation can be accepted.
+                        var invalidation = GeneratedDependentGeometryInvalidator.Prepare(
+                            document,
+                            transaction,
+                            lockedProject,
+                            lockedInvalidationTargets);
 
-                    transaction.Commit();
-                    cadCommitted = true;
-                    return new InterchangeFieldMergeNativeResult(coreResult, invalidation.ElementCount);
+                        var coreResult = ProjectInterchangeFieldMergeImporter.Import(
+                            lockedProject,
+                            json,
+                            policy,
+                            reviewedPlan.Authorization);
+
+                        // Core clears generated/native ownership metadata for the full affected closure after
+                        // authorization succeeds. CommitMetadata is intentionally retained as the native
+                        // invalidator's final parity sweep; after the Core clear it is idempotent.
+                        invalidation.CommitMetadata();
+
+                        transaction.Commit();
+                        cadCommitted = true;
+                        return new InterchangeFieldMergeNativeResult(coreResult, invalidation.ElementCount);
+                    }
                 }
             }
             catch (Exception operationError)
             {
-                if (!cadCommitted)
+                if (!cadCommitted && rollback != null)
                 {
                     try
                     {
