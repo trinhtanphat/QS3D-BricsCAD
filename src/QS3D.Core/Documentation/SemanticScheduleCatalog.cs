@@ -199,7 +199,7 @@ namespace QS3D.Core.Documentation
                     new XElement("categories", x.Categories.Select(c => new XElement("category", new XAttribute("value", c)))),
                     new XElement("include", x.IncludeElementIds.Select(id => new XElement("id", new XAttribute("value", id)))),
                     new XElement("exclude", x.ExcludeElementIds.Select(id => new XElement("id", new XAttribute("value", id)))),
-                    new XElement("columns", x.Columns.Select(c => new XElement("column", new XAttribute("header", c.Header), new XAttribute("template", c.Template))))))));
+                    new XElement("columns", x.Columns.Select(c => new XElement("column", new XAttribute("header", c.Header), new XAttribute("template", c.Template)))))));
             return root.ToString(SaveOptions.DisableFormatting);
         }
 
