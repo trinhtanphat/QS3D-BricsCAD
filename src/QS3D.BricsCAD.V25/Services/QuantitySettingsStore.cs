@@ -40,7 +40,7 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 return ReadAndValidate(_settingsPath);
             }
-            catch (InvalidDataException) when (File.Exists(backupPath))
+            catch (InvalidDataException ex) when (!(ex is UnsupportedSchemaException) && File.Exists(backupPath))
             {
                 return ReadAndValidate(backupPath);
             }
@@ -86,11 +86,13 @@ namespace QS3D.BricsCAD.V25.Services
                     var serializer = new DataContractJsonSerializer(typeof(QuantityCalculationSettings));
                     var value = serializer.ReadObject(stream) as QuantityCalculationSettings;
                     if (value == null) throw new InvalidDataException("Quantity settings template is empty or has an unsupported root object.");
+                    if (value.SchemaVersion > QuantityCalculationSettings.CurrentSchemaVersion)
+                        throw new UnsupportedSchemaException(value.SchemaVersion);
                     value.NormalizeAndValidate();
                     return value;
                 }
             }
-            catch (Exception ex) when (!(ex is FileNotFoundException))
+            catch (Exception ex) when (!(ex is FileNotFoundException) && !(ex is UnsupportedSchemaException))
             {
                 throw new InvalidDataException("Cannot read quantity settings template '" + path + "': " + ex.Message, ex);
             }
@@ -131,6 +133,14 @@ namespace QS3D.BricsCAD.V25.Services
             finally
             {
                 if (File.Exists(temp)) File.Delete(temp);
+            }
+        }
+
+        private sealed class UnsupportedSchemaException : InvalidDataException
+        {
+            public UnsupportedSchemaException(int schemaVersion)
+                : base("Quantity settings schema " + schemaVersion + " is newer than supported schema " + QuantityCalculationSettings.CurrentSchemaVersion + ".")
+            {
             }
         }
     }
