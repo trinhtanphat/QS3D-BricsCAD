@@ -54,6 +54,12 @@ namespace QS3D.BricsCAD.V25.Cad
         private const string GeneratedSolidHandleKey = "GeneratedSolidHandle";
         private const string CurtainFrameHandlesKey = "GeneratedCurtainFrameHandles";
 
+        private enum SolidOwnershipKind
+        {
+            Rebar,
+            CurtainFrame
+        }
+
         public static GeneratedGeometryInvalidation Prepare(
             Document document,
             Transaction transaction,
@@ -84,8 +90,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
                 if (rebarOwnership != null)
                     foreach (var key in CoreOwnershipPolicy.RebarHandleKeys)
-                        EraseRebarSet(document, transaction, element, key, rebarOwnership);
-                if (curtainOwnership != null) EraseCurtainFrames(document, transaction, element, curtainOwnership);
+                        EraseRebarSet(document, transaction, project, element, key, rebarOwnership);
+                if (curtainOwnership != null) EraseCurtainFrames(document, transaction, project, element, curtainOwnership);
                 EraseGridAnnotations(document, transaction, project, element);
             }
             return new GeneratedGeometryInvalidation(targets);
@@ -109,7 +115,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                         var expected = ParseExpectedHandles(raw, element, key);
                         foreach (var handle in expected) rebarOwnership.EnsureOwned(handle, element, key);
-                        EnsureSolidSetLive(document, element, key, expected);
+                        EnsureSolidSetLive(document, project, element, key, expected, SolidOwnershipKind.Rebar);
                     }
                 }
 
@@ -119,7 +125,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var expected = ParseExpectedHandles(curtainRaw, element, CurtainFrameHandlesKey);
                     foreach (var handle in expected) curtainOwnership.EnsureOwned(handle, element);
-                    EnsureSolidSetLive(document, element, CurtainFrameHandlesKey, expected);
+                    EnsureSolidSetLive(document, project, element, CurtainFrameHandlesKey, expected, SolidOwnershipKind.CurtainFrame);
                 }
 
                 EnsureGridAnnotationsLive(document, project, element);
@@ -149,7 +155,13 @@ namespace QS3D.BricsCAD.V25.Cad
             }
         }
 
-        private static void EnsureSolidSetLive(Document document, ProjectElement element, string propertyKey, IReadOnlyList<string> expected)
+        private static void EnsureSolidSetLive(
+            Document document,
+            ProjectState project,
+            ProjectElement element,
+            string propertyKey,
+            IReadOnlyList<string> expected,
+            SolidOwnershipKind ownershipKind)
         {
             var ids = ResolveCompleteSet(document, element, propertyKey, expected);
             using (var validation = document.Database.TransactionManager.StartOpenCloseTransaction())
@@ -163,6 +175,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (!(entity is Solid3d))
                         throw new InvalidOperationException(
                             "Generated " + propertyKey + " handle " + id.Handle + " for " + element.Id + " is live but is not a Solid3d. Refusing destructive invalidation before any generated geometry is erased.");
+                    RequireNativeOwnership(entity, project, element, propertyKey, ownershipKind, "validate stale " + propertyKey + " " + id.Handle);
                 }
                 validation.Commit();
             }
@@ -248,6 +261,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private static void EraseRebarSet(
             Document document,
             Transaction transaction,
+            ProjectState project,
             ProjectElement element,
             string propertyKey,
             GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
@@ -255,19 +269,20 @@ namespace QS3D.BricsCAD.V25.Cad
             if (!element.Properties.TryGetValue(propertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             var expected = ParseExpectedHandles(raw, element, propertyKey);
             foreach (var handle in expected) ownership.EnsureOwned(handle, element, propertyKey);
-            EraseSolidSet(document, transaction, element, propertyKey, expected);
+            EraseSolidSet(document, transaction, project, element, propertyKey, expected, SolidOwnershipKind.Rebar);
         }
 
         private static void EraseCurtainFrames(
             Document document,
             Transaction transaction,
+            ProjectState project,
             ProjectElement element,
             GeneratedCurtainFrameOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(CurtainFrameHandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             var expected = ParseExpectedHandles(raw, element, CurtainFrameHandlesKey);
             foreach (var handle in expected) ownership.EnsureOwned(handle, element);
-            EraseSolidSet(document, transaction, element, CurtainFrameHandlesKey, expected);
+            EraseSolidSet(document, transaction, project, element, CurtainFrameHandlesKey, expected, SolidOwnershipKind.CurtainFrame);
         }
 
         private static void EraseGridAnnotations(Document document, Transaction transaction, ProjectState project, ProjectElement element)
@@ -308,9 +323,11 @@ namespace QS3D.BricsCAD.V25.Cad
         private static void EraseSolidSet(
             Document document,
             Transaction transaction,
+            ProjectState project,
             ProjectElement element,
             string propertyKey,
-            IReadOnlyList<string> expected)
+            IReadOnlyList<string> expected,
+            SolidOwnershipKind ownershipKind)
         {
             var ids = ResolveCompleteSet(document, element, propertyKey, expected);
             foreach (var id in ids)
@@ -323,8 +340,25 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (solid == null)
                     throw new InvalidOperationException(
                         "Generated " + propertyKey + " handle " + id.Handle + " is live but is not a Solid3d. Refusing destructive invalidation.");
+                RequireNativeOwnership(solid, project, element, propertyKey, ownershipKind, "erase stale " + propertyKey + " " + id.Handle);
                 solid.Erase();
             }
+        }
+
+        private static void RequireNativeOwnership(
+            Entity entity,
+            ProjectState project,
+            ProjectElement element,
+            string propertyKey,
+            SolidOwnershipKind ownershipKind,
+            string operation)
+        {
+            if (ownershipKind == SolidOwnershipKind.Rebar)
+            {
+                GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(entity, project, element, propertyKey, operation);
+                return;
+            }
+            GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(entity, project, element, operation);
         }
     }
 }
