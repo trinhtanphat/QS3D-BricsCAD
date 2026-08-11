@@ -28,6 +28,12 @@ else:
         "public void SetSelectedElement(ProjectElement? element)",
         "_selectedElement = null;",
         "ShowFamilyProperties();",
+        "row.Reset = () => ResetInstanceProperty(element, family, key, row);",
+        "private void ResetInstanceProperty(ProjectElement element, ProjectFamily family, string key, PropertyRowViewModel row)",
+        'TryGetCurrentProjectForMutation("Đặt lại Instance property", out var project)',
+        "ownedElement == null || !ReferenceEquals(ownedElement, element) || ownedFamily == null || !ReferenceEquals(ownedFamily, family)",
+        "if (!ownedFamily.Properties.TryGetValue(key, out var liveFamilyRaw))",
+        "row.Value = ToDisplayValue(key, liveFamilyRaw ?? string.Empty);",
     )
     for token in required:
         if token not in text:
@@ -35,9 +41,10 @@ else:
     for stale in (
         'case "BottomOffsetM": return "Cao độ đáy";',
         'case "TopOffsetM": return "Cao độ đỉnh";',
+        "row.Reset = () => row.Value = ToDisplayValue(key, familyValue);",
     ):
         if stale in text:
-            errors.append("Workspace still exposes source-relative offset as absolute elevation: " + stale)
+            errors.append("Workspace still exposes stale/unsafe property behavior: " + stale)
 
 if not panel.is_file():
     errors.append("missing WorkspacePanel.xaml.cs")
@@ -87,4 +94,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Workspace property rows stay bounded to one exclusive live semantic selection, multi-selection drops Instance scope, source-derived CAD measurements remain read-only, impossible geometry dimensions fail early, source-relative offsets are labeled accurately, and Vietnamese boolean values render consistently.")
+print("PASS: Workspace property rows stay bounded to one exclusive live semantic selection, Instance reset resolves the current Family value instead of an opening-time snapshot, multi-selection drops Instance scope, source-derived CAD measurements remain read-only, impossible geometry dimensions fail early, source-relative offsets are labeled accurately, and Vietnamese boolean values render consistently.")
