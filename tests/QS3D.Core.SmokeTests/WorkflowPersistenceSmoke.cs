@@ -109,11 +109,15 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 var profile = new TemplateProfile("company", "Company Standard");
+                profile.Name = "  Company Standard  ";
+                Equal("Company Standard", profile.Name);
+                Throws<ArgumentException>(() => profile.Name = "   ");
+                Equal("Company Standard", profile.Name);
                 var family = new ProjectFamily("beam-company", "Dầm C30", ElementCategory.Beam); family.Properties["WidthM"] = "0.3"; family.Properties["HeightM"] = "0.6"; family.Properties["Material"] = "C30"; family.Properties["Classification.Code"] = "STR-BEAM"; profile.Families.Add(family);
                 profile.QuantityRules.Add(new QuantityRule("beam-factor", ElementCategory.Beam, "TenderVolumeM3", "NetVolumeM3*1.03", "2026.1"));
                 profile.LayerMappings["A-BEAM"] = ElementCategory.Beam.ToString(); profile.VisibleBqColumns.Add("Floor"); profile.VisibleBqColumns.Add("NetConcreteM3");
                 var store = new TemplateProfileStore(); store.Save(profile, path); store.Save(profile, path); True(File.Exists(path + ".bak"));
-                var loaded = store.Load(path); Equal("C30", loaded.Families.Single().Properties["Material"]); Equal("STR-BEAM", loaded.Families.Single().Properties["Classification.Code"]);
+                var loaded = store.Load(path); Equal("Company Standard", loaded.Name); Equal("C30", loaded.Families.Single().Properties["Material"]); Equal("STR-BEAM", loaded.Families.Single().Properties["Classification.Code"]);
                 var project = new ProjectState("p", "Project"); var result = store.Apply(project, loaded);
                 Equal(1, result.FamiliesAdded); Equal(1, result.RulesAdded); Equal(1, result.LayerMappingsApplied); Equal(ElementCategory.Beam.ToString(), project.Metadata[TemplateProfileStore.LayerMappingPrefix + "A-BEAM"]); True(project.Metadata[TemplateProfileStore.VisibleBqColumnsKey].Contains("NetConcreteM3"));
                 var exported = store.ExportProject(project, "copy", "Copy"); Equal(1, exported.Families.Count); Equal(1, exported.QuantityRules.Count); Equal(ElementCategory.Beam.ToString(), exported.LayerMappings["A-BEAM"]);
