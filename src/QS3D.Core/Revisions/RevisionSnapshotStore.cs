@@ -212,7 +212,14 @@ namespace QS3D.Core.Revisions
             return category;
         }
 
-        private static string Category(string? value) => ParseCategory(value).ToString();
+        private static string Category(string? value)
+        {
+            var category = ParseCategory(value);
+            var canonical = category.ToString();
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Revision element category must use its canonical enum name: " + (value ?? string.Empty) + ".");
+            return canonical;
+        }
 
         private static void ValidateCanonicalRequired(string? value, string label)
         {
