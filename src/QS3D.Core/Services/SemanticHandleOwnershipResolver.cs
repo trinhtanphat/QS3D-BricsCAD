@@ -13,6 +13,7 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             var normalized = (sourceHandle ?? string.Empty).Trim();
             if (normalized.Length == 0) throw new ArgumentException("Source handle is required.", nameof(sourceHandle));
+            EnsureUniqueElementIds(project);
 
             ProjectElement? owner = null;
             foreach (var element in project.Elements)
@@ -71,6 +72,7 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (selectedHandles == null) throw new ArgumentNullException(nameof(selectedHandles));
+            EnsureUniqueElementIds(project);
 
             var selected = new HashSet<string>(
                 selectedHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
@@ -107,6 +109,18 @@ namespace QS3D.Core.Services
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList()
                 .AsReadOnly();
+        }
+
+        private static void EnsureUniqueElementIds(ProjectState project)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null element entry.");
+                if (!seen.Add(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+            }
         }
 
         private static void Add(
