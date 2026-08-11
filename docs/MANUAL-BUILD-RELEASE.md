@@ -90,6 +90,7 @@ The source-side install/update path is hardened, but a production release should
 
 - per-user DemandLoad installation/replacement snapshots the targeted prior payload and registry registration;
 - a forced replacement of an existing `InstallDirectory` must first prove that directory is a canonical QS3D BricsCAD V25 installation from its package metadata plus managed DLL assembly/product identities; `-Force` alone never authorizes moving/deleting an arbitrary existing file or foreign directory;
+- uninstall file removal always requires canonical QS3D V25 metadata plus matching plugin/Core assembly and ProductVersion identity; `-Force` only authorizes an intentional verified custom path outside the default QS3D LocalAppData scope and never bypasses ownership validation;
 - if a replacement fails, the installer restores the previous files/registration; if a first install fails, partial new state is removed;
 - the updater accepts only the intended HTTPS/package-host path and verifies archive/path/size limits, SHA-256 and Authenticode signer expectations;
 - update manifests use schema 2 and bind `productVersion` to package metadata and the signed plugin ProductVersion, while AssemblyVersion remains an independent binary/package check;
