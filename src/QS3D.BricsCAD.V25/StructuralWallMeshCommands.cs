@@ -15,7 +15,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Wall Mesh 3D");
                 var result = StructuralWallMeshSolidBuilder.BuildSelected(document, project);
                 var message = result.Bars == 0
                     ? "Wall Mesh 3D: chọn StructuralWall semantic LINE có RebarWallHorizontalNotation/RebarWallVerticalNotation."
