@@ -96,7 +96,7 @@ namespace QS3D.Core.Geometry
             if (!Finite(maxGapM) || maxGapM < 0d) throw new ArgumentOutOfRangeException(nameof(maxGapM));
             if (!Finite(ambiguityToleranceM) || ambiguityToleranceM < 0d) throw new ArgumentOutOfRangeException(nameof(ambiguityToleranceM));
 
-            var segments = source.ToList();
+            var segments = source.Take(MaxSegments + 1).ToList();
             if (segments.Count > MaxSegments)
                 throw new InvalidOperationException("Opening host matching supports at most " + MaxSegments.ToString(CultureInfo.InvariantCulture) + " wall segments per opening.");
             if (segments.Any(x => x == null)) throw new ArgumentException("Host segment collection contains null.", nameof(source));
