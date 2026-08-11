@@ -394,7 +394,6 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             }
 
             element.SetProperty(key, next);
-            element.MarkDirty(ElementDirtyFlags.All);
             project.Touch();
             row.CanReset = !string.Equals(next, familyValue, StringComparison.Ordinal);
             var displayValue = ToDisplayValue(key, next);
