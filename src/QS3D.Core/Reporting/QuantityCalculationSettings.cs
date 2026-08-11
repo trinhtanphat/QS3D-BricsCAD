@@ -139,12 +139,12 @@ namespace QS3D.Core.Reporting
             }
         }
 
-        public QuantityCategoryRuleSetting FindCategoryRule(int categoryCode)
+        public QuantityCategoryRuleSetting? FindCategoryRule(int categoryCode)
         {
             return (CategoryRules ?? new List<QuantityCategoryRuleSetting>()).FirstOrDefault(x => x != null && x.Category == categoryCode);
         }
 
-        public QuantityIntersectionRuleSetting FindIntersectionRule(int sourceCode, int targetCode)
+        public QuantityIntersectionRuleSetting? FindIntersectionRule(int sourceCode, int targetCode)
         {
             return (IntersectionRules ?? new List<QuantityIntersectionRuleSetting>()).FirstOrDefault(x => x != null && x.Source == sourceCode && x.Target == targetCode);
         }
