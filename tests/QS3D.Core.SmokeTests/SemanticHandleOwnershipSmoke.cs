@@ -25,6 +25,7 @@ namespace QS3D.Core.SmokeTests
             StableIdSourceOwnerIsReused();
             DuplicateSourceOwnerIsRejected();
             CanonicalSourceRebindIsRejected();
+            DuplicateReferenceSourceOwnerIsRejectedBeforeUntrackMutation();
         }
 
         private static void UnrelatedAmbiguityDoesNotBlockCleanSelection()
@@ -155,6 +156,23 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => SemanticHandleOwnershipResolver.ResolveCaptureTarget(
                 project, "22A", ElementCategory.ArchitecturalWall, canonical.Id));
+        }
+
+        private static void DuplicateReferenceSourceOwnerIsRejectedBeforeUntrackMutation()
+        {
+            var project = new ProjectState("duplicate-reference", "Duplicate Reference");
+            var element = new ProjectElement("wall-10", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            element.SourceHandles.Add("22A");
+            project.Elements.Add(element);
+            project.Elements.Add(element);
+            var changeVersion = project.ChangeVersion;
+
+            Throws<InvalidOperationException>(() => SemanticUntrackService.Untrack(project, new[] { "22A" }));
+
+            if (project.Elements.Count != 2 || !ReferenceEquals(project.Elements[0], element) || !ReferenceEquals(project.Elements[1], element))
+                throw new Exception("Duplicate-reference ownership corruption changed project elements before failing closed.");
+            if (project.ChangeVersion != changeVersion)
+                throw new Exception("Duplicate-reference ownership corruption changed project version before failing closed.");
         }
 
         private static ProjectState Project()
