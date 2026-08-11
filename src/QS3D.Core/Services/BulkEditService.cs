@@ -23,8 +23,7 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            if (string.IsNullOrWhiteSpace(propertyName)) throw new ArgumentException("Property name is required.", nameof(propertyName));
-            var key = propertyName.Trim();
+            var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
             var changed = new List<string>();
             foreach (var element in OwnedDistinct(project, elements))
             {
@@ -43,9 +42,8 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            if (string.IsNullOrWhiteSpace(propertyName)) throw new ArgumentException("Property name is required.", nameof(propertyName));
             if (double.IsNaN(factor) || double.IsInfinity(factor)) throw new ArgumentOutOfRangeException(nameof(factor));
-            var key = propertyName.Trim();
+            var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
 
             var updates = new List<PendingPropertyUpdate>();
             foreach (var element in OwnedDistinct(project, elements))
