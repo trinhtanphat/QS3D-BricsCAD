@@ -8,6 +8,7 @@ workspace = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs"
 panel = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
 selection_panel = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.SelectionInspection.cs"
 row = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/PropertyRowViewModel.cs"
+element = ROOT / "src/QS3D.Core/Domain/ProjectElement.cs"
 
 if not workspace.is_file():
     errors.append("missing WorkspaceViewModel.cs")
@@ -34,6 +35,7 @@ else:
         "ownedElement == null || !ReferenceEquals(ownedElement, element) || ownedFamily == null || !ReferenceEquals(ownedFamily, family)",
         "if (!ownedFamily.Properties.TryGetValue(key, out var liveFamilyRaw))",
         "row.Value = ToDisplayValue(key, liveFamilyRaw ?? string.Empty);",
+        "element.SetProperty(key, next);\n            project.Touch();",
     )
     for token in required:
         if token not in text:
@@ -42,9 +44,22 @@ else:
         'case "BottomOffsetM": return "Cao độ đáy";',
         'case "TopOffsetM": return "Cao độ đỉnh";',
         "row.Reset = () => row.Value = ToDisplayValue(key, familyValue);",
+        "element.SetProperty(key, next);\n            element.MarkDirty(ElementDirtyFlags.All);",
     ):
         if stale in text:
-            errors.append("Workspace still exposes stale/unsafe property behavior: " + stale)
+            errors.append("Workspace still exposes stale/over-invalidating property behavior: " + stale)
+
+if not element.is_file():
+    errors.append("missing ProjectElement.cs")
+else:
+    text = element.read_text(encoding="utf-8")
+    for token in (
+        "var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;",
+        "if (ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key)) flags |= ElementDirtyFlags.Geometry;",
+        "MarkDirty(flags);",
+    ):
+        if token not in text:
+            errors.append("ProjectElement property-specific dirty policy missing: " + token)
 
 if not panel.is_file():
     errors.append("missing WorkspacePanel.xaml.cs")
@@ -100,4 +115,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Workspace property rows stay bounded to one exclusive live semantic selection, exact editor no-ops do not re-enter mutation callbacks, Instance reset resolves the current Family value, multi-selection drops Instance scope, source-derived CAD measurements remain read-only, impossible geometry dimensions fail early, and Vietnamese boolean values render consistently.")
+print("PASS: Workspace property rows keep property-specific dirty/geometry invalidation, exact editor no-ops do not re-enter mutation callbacks, Instance reset resolves the current Family value, selection scope fails closed, source-derived CAD measurements remain read-only, and numeric/boolean editors stay validated.")
