@@ -2,20 +2,23 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-11 (UTC+7)
-- Status: `ACTIVE`
+- Completed: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
 - Scope: source-safe project-context rollback for projectless Door/WallOpening Direct Draw failure.
-- Files reserved:
+- Files reserved during implementation:
   - `src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs`
   - `scripts/preflight-directdraw-opening-bootstrap-rollback.py`
   - this claim file for close-out
-- Problem: `Execute` resolves/bootstraps the preview project before source/capture/Auto Host. Its failure path erases the LINE and restores `ProjectState`, but does not release a project context bootstrapped by this authoring attempt.
-- Intended contract:
-  - capture project ownership before `ResolveForMutation`;
-  - preserve existing-project context on failure;
-  - after source cleanup + semantic restore, forget only projectless authoring bootstrap;
-  - cleanup runs before secondary rollback error aggregation;
-  - success keeps intentional bootstrap;
-  - Auto Host, stable-id re-resolution, scoped regeneration and UI behavior remain unchanged.
-- Non-overlap: excludes P0/P1/Window/ReferenceWall, Ribbon, Quantity, WPF, generated-XData tokenization and LOCAL_ONLY V25 execution.
-- Validation: exact diff/current-source review plus auto-discovered static preflight; no GitHub Actions under `continue all`.
-- Completion condition: failed projectless Door/WallOpening Direct Draw cannot leave a cached project and claim closes with exact SHAs.
+- Problem fixed: `Execute` resolved/bootstrapped the preview project before source/capture/Auto Host. Its failure path erased the LINE and restored `ProjectState`, but did not release a project context bootstrapped by this authoring attempt.
+- Implemented contract:
+  - project ownership is captured from `projectPreview.HasProject` before `ResolveForMutation`;
+  - existing-project failures preserve the project context;
+  - failed projectless Door/WallOpening authoring erases the source, restores semantic state, then calls `ProjectContextCoordinator.Forget(document)`;
+  - project cleanup runs before secondary rollback-error aggregation;
+  - successful authoring keeps intentional bootstrap;
+  - Auto Host, stable-id re-resolution, scoped opening+host regeneration and UI finalization remain unchanged.
+- Source commit: `0a5e9566e4b18077d92074639a1805aae64f41e9` (`fix(authoring): roll back failed Opening bootstrap`).
+- Regression guard commit: `c8b63565b8001d67203075fe1752c78d07f3ee9e` (`test(authoring): guard Opening bootstrap rollback`).
+- Validation: exact source diff contains only project ownership detection and conditional cleanup. The static preflight locks Auto Host preservation, stable-id re-resolution, scoped regeneration, rollback ordering and aggregation; it follows the existing auto-discovered `preflight-*.py` convention. No GitHub Actions were dispatched and no BricsCAD V25 runtime PASS is claimed.
+- LOCAL_ONLY: no new local-only scenario introduced; exact native runtime rollback proof remains under the existing V25 qualification boundary.
+- Handoff: reservation released; future agents may edit these files after re-checking current `main` and active claims.
