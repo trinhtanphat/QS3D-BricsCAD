@@ -41,6 +41,16 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DTEMPLATEIMPORT", () =>
             {
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var previewProject))
+                {
+                    const string blocked = "Template import: chưa có QS3D project hiện hữu; import không tạo project mới.";
+                    try { PaletteCoordinator.SetStatus(blocked); } catch { }
+                    try { doc.Editor.WriteMessage("\nQS3D " + blocked); } catch { }
+                    return;
+                }
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
+
                 var dialog = new OpenFileDialog { Title = "Nạp QS3D Template", Filter = "QS3D Template (*.qstemplate)|*.qstemplate", CheckFileExists = true, Multiselect = false };
                 if (dialog.ShowDialog() != true) return;
 
@@ -53,7 +63,14 @@ namespace QS3D.BricsCAD.V25
                                   "QS3D sẽ regenerate thử trước khi chấp nhận thay đổi. File .qsdb sẽ chưa tự lưu.";
                 if (System.Windows.MessageBox.Show(confirmText, "QS3D — Nạp Template", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, doc))
+                    throw new InvalidOperationException("Template Import: DWG active đã thay đổi trong lúc chọn/xác nhận template. Hãy chạy lại trên bản vẽ hiện hành.");
+
                 var project = ExistingProjectMutationContext.Require(doc, "Template Import");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Template Import: QS3D project đã thay đổi trong lúc chọn/xác nhận template. Không áp dụng dữ liệu stale; hãy chạy lại.");
+
                 var rollback = ProjectStateSnapshot.Capture(project);
                 TemplateApplyResult result;
                 int regenerated;
@@ -67,19 +84,18 @@ namespace QS3D.BricsCAD.V25
                     try
                     {
                         rollback.Restore(project);
-                        PaletteCoordinator.RefreshProject();
                     }
                     catch (System.Exception restoreError)
                     {
                         throw new InvalidOperationException("Template import failed and project rollback also failed.", new AggregateException(importError, restoreError));
                     }
+
+                    RefreshProjectBestEffort(doc, "rollback sau Template Import");
                     throw;
                 }
 
-                PaletteCoordinator.RefreshProject();
                 var message = "Template " + profile.Name + ": family +" + result.FamiliesAdded + "/~" + result.FamiliesUpdated + " • rule +" + result.RulesAdded + "/~" + result.RulesUpdated + " • mapping " + result.LayerMappingsApplied + " • regen " + regenerated + ". Chưa tự lưu .qsdb.";
-                PaletteCoordinator.SetStatus(message);
-                doc.Editor.WriteMessage("\nQS3D " + message);
+                FinalizeImportUi(doc, message);
             });
         }
 
@@ -97,7 +113,39 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static void FinalizeImportUi(Document document, string message)
+        {
+            System.Exception? warning = null;
+            try { PaletteCoordinator.RefreshProject(); }
+            catch (System.Exception ex) { warning = ex; }
+            try { PaletteCoordinator.SetStatus(message); }
+            catch (System.Exception ex) { if (warning == null) warning = ex; }
+            try { document.Editor.WriteMessage("\nQS3D " + message); }
+            catch (System.Exception ex) { if (warning == null) warning = ex; }
+            if (warning == null) return;
+            try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau import template: " + warning.Message); }
+            catch { }
+        }
+
+        private static void RefreshProjectBestEffort(Document document, string context)
+        {
+            try { PaletteCoordinator.RefreshProject(); }
+            catch (System.Exception ex)
+            {
+                try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI " + context + ": " + ex.Message); }
+                catch { }
+            }
+        }
+
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
-        private static void Guard(Document document, string operation, Action action) { try { action(); } catch (System.Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }
+        private static void Guard(Document document, string operation, Action action)
+        {
+            try { action(); }
+            catch (System.Exception ex)
+            {
+                try { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); } catch { }
+                try { PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } catch { }
+            }
+        }
     }
 }
