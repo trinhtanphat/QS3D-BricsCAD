@@ -32,12 +32,17 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    Report(document, "BBS CSV: BLOCKED • chưa có QS3D project state/sidecar; export không tạo project mới.");
+                    return;
+                }
+
                 new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
                 var rows = ProjectRebarScheduleBuilder.Build(project);
                 if (rows.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3D BBS CSV: chưa có cấu kiện khai báo RebarNotation.");
+                    Report(document, "BBS CSV: chưa có cấu kiện khai báo RebarNotation.");
                     return;
                 }
 
@@ -51,8 +56,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
-                try { document.Editor.WriteMessage("\nQS3DBBSCSV error: " + ex.Message); } catch { }
-                TrySetStatus("QS3DBBSCSV lỗi: " + ex.Message);
+                Report(document, "QS3DBBSCSV lỗi: " + ex.Message);
             }
         }
 
@@ -74,6 +78,13 @@ namespace QS3D.BricsCAD.V25
                     // Export has already committed; UI reporting is best effort only.
                 }
             }
+        }
+
+        private static void Report(Document document, string status)
+        {
+            TrySetStatus(status);
+            try { document.Editor.WriteMessage("\nQS3D " + status); }
+            catch { }
         }
 
         private static void TrySetStatus(string status)
