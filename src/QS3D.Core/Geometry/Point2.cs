@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace QS3D.Core.Geometry
 {
@@ -33,7 +34,7 @@ namespace QS3D.Core.Geometry
         public bool Equals(Point2 other) => X.Equals(other.X) && Y.Equals(other.Y);
         public override bool Equals(object? obj) => obj is Point2 p && Equals(p);
         public override int GetHashCode() => unchecked((X.GetHashCode() * 397) ^ Y.GetHashCode());
-        public override string ToString() => $"({X}, {Y})";
+        public override string ToString() => string.Format(CultureInfo.InvariantCulture, "({0}, {1})", X, Y);
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
