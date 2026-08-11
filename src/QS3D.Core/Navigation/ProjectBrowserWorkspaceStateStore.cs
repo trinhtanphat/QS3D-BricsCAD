@@ -202,6 +202,7 @@ namespace QS3D.Core.Navigation
 
             var root = document.Root;
             if (root == null || root.Name != "ProjectBrowserWorkspaceState") throw new InvalidDataException("Project browser workspace state root is invalid.");
+            ValidateRootShape(root);
             RequireAttribute(root, "format", FormatName);
             RequireAttribute(root, "version", FormatVersion.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
@@ -259,10 +260,11 @@ namespace QS3D.Core.Navigation
         private static IReadOnlyList<ElementCategory> ReadCategories(XElement container)
         {
             if (container == null) throw new InvalidDataException("Project browser workspace Categories element is missing.");
-            RejectUnexpectedChildren(container, "Category");
+            ValidateCollectionShape(container, "Category");
             var result = new List<ElementCategory>();
             foreach (var element in container.Elements("Category"))
             {
+                ValidateItemShape(element, "Category");
                 if (!Enum.TryParse(element.Value, false, out ElementCategory value) || !Enum.IsDefined(typeof(ElementCategory), value))
                     throw new InvalidDataException("Project browser workspace category is invalid: " + element.Value + ".");
                 result.Add(value);
@@ -273,15 +275,62 @@ namespace QS3D.Core.Navigation
         private static IReadOnlyList<string> ReadValues(XElement container, string itemName)
         {
             if (container == null) throw new InvalidDataException("Project browser workspace collection element is missing.");
-            RejectUnexpectedChildren(container, itemName);
-            return container.Elements(itemName).Select(x => x.Value).ToList().AsReadOnly();
+            ValidateCollectionShape(container, itemName);
+            var result = new List<string>();
+            foreach (var element in container.Elements(itemName))
+            {
+                ValidateItemShape(element, itemName);
+                result.Add(element.Value);
+            }
+            return result.AsReadOnly();
         }
 
-        private static void RejectUnexpectedChildren(XElement container, string itemName)
+        private static void ValidateRootShape(XElement root)
         {
+            var expectedAttributes = new HashSet<XName>(new[]
+            {
+                XName.Get("format"),
+                XName.Get("version"),
+                XName.Get("grouping"),
+                XName.Get("dirtyOnly"),
+                XName.Get("query"),
+                XName.Get("primaryElementId")
+            });
+            foreach (var attribute in root.Attributes())
+                if (!expectedAttributes.Contains(attribute.Name))
+                    throw new InvalidDataException("Project browser workspace root contains unsupported attribute: " + attribute.Name + ".");
+            foreach (var name in expectedAttributes)
+                if (root.Attribute(name) == null)
+                    throw new InvalidDataException("Project browser workspace root is missing required attribute: " + name + ".");
+            RejectNonWhitespaceText(root, "root");
+        }
+
+        private static void ValidateCollectionShape(XElement container, string itemName)
+        {
+            if (container.HasAttributes)
+                throw new InvalidDataException("Project browser workspace collection contains unsupported attributes: " + container.Name + ".");
             foreach (var child in container.Elements())
                 if (child.Name != itemName)
                     throw new InvalidDataException("Project browser workspace collection contains unsupported element: " + child.Name + ".");
+            RejectNonWhitespaceText(container, container.Name.LocalName);
+        }
+
+        private static void ValidateItemShape(XElement element, string itemName)
+        {
+            if (element.HasAttributes)
+                throw new InvalidDataException("Project browser workspace " + itemName + " item contains unsupported attributes.");
+            if (element.Elements().Any())
+                throw new InvalidDataException("Project browser workspace " + itemName + " item must contain text only.");
+        }
+
+        private static void RejectNonWhitespaceText(XElement element, string label)
+        {
+            foreach (var node in element.Nodes())
+            {
+                var text = node as XText;
+                if (text != null && !string.IsNullOrWhiteSpace(text.Value))
+                    throw new InvalidDataException("Project browser workspace " + label + " contains unsupported mixed text.");
+            }
         }
 
         private static void RequireAttribute(XElement element, string name, string expected)
