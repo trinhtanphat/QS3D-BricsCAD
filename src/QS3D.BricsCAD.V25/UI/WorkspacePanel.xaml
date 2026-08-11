@@ -357,7 +357,7 @@
                                     <TextBox x:Name="PropertySearch" BorderThickness="0"
                                              Background="Transparent" MinHeight="22"
                                              Padding="4,1"
-                                             ToolTip="Lọc theo nhóm, tên, đơn vị hoặc giá trị thuộc tính"
+                                             ToolTip="Lọc theo nhóm, tên, đơn vị, giá trị hoặc trạng thái thuộc tính"
                                              TextChanged="OnPropertySearchChanged"/>
                                     <Button Grid.Column="1" Content="×"
                                             Style="{StaticResource DenseButton}"
@@ -371,7 +371,7 @@
                                     BorderBrush="{StaticResource BorderBrush}"
                                     BorderThickness="1" CornerRadius="4"
                                     Padding="5,3" Margin="0,0,0,4">
-                                <TextBlock Text="Family kế thừa • Instance override • CAD khóa"
+                                <TextBlock Text="Family • Kế thừa • Override • CAD/đo • Hệ thống • Selection"
                                            Style="{StaticResource Caption}"
                                            TextTrimming="CharacterEllipsis"/>
                             </Border>
@@ -417,19 +417,22 @@
                                                            ToolTip="{Binding Name}"/>
                                                 <Border Style="{StaticResource WorkspaceStatePill}"
                                                         HorizontalAlignment="Left">
-                                                    <TextBlock FontSize="8.5">
+                                                    <TextBlock Text="{Binding StateLabel}" FontSize="8.5">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
-                                                                <Setter Property="Text" Value="Family"/>
                                                                 <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
                                                                 <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsReadOnly}" Value="True">
-                                                                        <Setter Property="Text" Value="CAD / đọc"/>
+                                                                    <DataTrigger Binding="{Binding StateKind}" Value="Cad">
                                                                         <Setter Property="Foreground" Value="{StaticResource LuxuryBrush}"/>
                                                                     </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding CanReset}" Value="True">
-                                                                        <Setter Property="Text" Value="Override"/>
+                                                                    <DataTrigger Binding="{Binding StateKind}" Value="Override">
                                                                         <Setter Property="Foreground" Value="{StaticResource AccentHoverBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding StateKind}" Value="Selection">
+                                                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding StateKind}" Value="Multi">
+                                                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
