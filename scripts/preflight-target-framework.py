@@ -16,6 +16,8 @@ if plugin_project.is_file() and "<TargetFramework>net48</TargetFramework>" not i
     errors.append("QS3D.BricsCAD.V25 target framework drifted from net48")
 
 # High-confidence APIs that are unavailable on netstandard2.0 / .NET Framework 4.8.
+# Keep call-local regexes bounded by the matching call's first closing parenthesis so a later
+# StartsWith(..., StringComparison) on the same line cannot be attributed to Contains().
 patterns = [
     (re.compile(r"\bMath\.Clamp\s*\("), "Math.Clamp"),
     (re.compile(r"\bStringSplitOptions\.TrimEntries\b"), "StringSplitOptions.TrimEntries"),
@@ -23,8 +25,8 @@ patterns = [
     (re.compile(r"\bDateOnly\b"), "DateOnly"),
     (re.compile(r"\bTimeOnly\b"), "TimeOnly"),
     (re.compile(r"\.(?:MaxBy|MinBy|DistinctBy|Chunk)\s*\("), "newer LINQ operator"),
-    (re.compile(r"\.Contains\s*\([^;\n]*\bStringComparison\."), "string.Contains(StringComparison) overload"),
-    (re.compile(r"\.Replace\s*\([^;\n]*\bStringComparison\."), "string.Replace(StringComparison) overload"),
+    (re.compile(r"\.Contains\s*\([^\)\n]*\bStringComparison\."), "string.Contains(StringComparison) overload"),
+    (re.compile(r"\.Replace\s*\([^\)\n]*\bStringComparison\."), "string.Replace(StringComparison) overload"),
     (re.compile(r"\bConvert\.ToHexString\s*\("), "Convert.ToHexString"),
     (re.compile(r"\bSHA(?:1|256|384|512)\.HashData\s*\("), "static HashData API"),
     (re.compile(r"\bOperatingSystem\.Is(?:Windows|Linux|MacOS)\s*\("), "OperatingSystem.Is* API"),
