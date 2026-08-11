@@ -81,7 +81,6 @@ namespace QS3D.BricsCAD.V25.Services
                     foreach (var grid in annotatedGridTargets)
                         GridAnnotationBuilder.RebuildInTransaction(document, transaction, project, grid);
 
-                    project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
