@@ -5,6 +5,7 @@ namespace QS3D.Core.Persistence
 {
     public sealed class ProjectPersistenceStamp
     {
+        private const string RecoveredFromBackupKey = "QS3D.RecoveredFromBackup";
         private readonly string _projectId;
         private long _savedChangeVersion;
 
@@ -20,6 +21,9 @@ namespace QS3D.Core.Persistence
         public bool RequiresSave(ProjectState project)
         {
             EnsureSameProject(project);
+            if (project.Metadata.TryGetValue(RecoveredFromBackupKey, out var recovered) &&
+                string.Equals(recovered, "true", StringComparison.OrdinalIgnoreCase))
+                return true;
             return project.ChangeVersion != _savedChangeVersion;
         }
 
