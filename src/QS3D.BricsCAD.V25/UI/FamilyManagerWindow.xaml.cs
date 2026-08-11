@@ -16,6 +16,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class FamilyManagerWindow : Window
     {
         private readonly Document _document;
+        private ProjectState _boundProject;
         private bool _loading;
         private bool _creatingNew;
 
@@ -273,6 +274,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var previous = string.IsNullOrWhiteSpace(preferredId) ? (FamilyList.SelectedItem as ProjectFamily)?.Id : preferredId;
                 if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 {
+                    _boundProject = null;
                     _loading = true;
                     try { FamilyList.ItemsSource = null; FamilyList.SelectedItem = null; }
                     finally { _loading = false; }
@@ -291,6 +293,7 @@ namespace QS3D.BricsCAD.V25.UI
                 finally { _loading = false; }
                 _creatingNew = false;
                 LoadFamily();
+                _boundProject = project;
                 Title = "QS3D • Family Manager • " + DrawingLabel(_document);
             }
             catch (Exception ex) { SetStatus("Đọc Family Catalog lỗi: " + ex.Message); }
@@ -396,7 +399,16 @@ namespace QS3D.BricsCAD.V25.UI
             throw new InvalidOperationException("Không tìm được tên Family duplicate an toàn.");
         }
 
-        private void EnsureActive(string operation) { if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)) throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Family Manager trước khi " + operation + "."); }
+        private void EnsureActive(string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Family Manager trước khi " + operation + ".");
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject) ||
+                _boundProject == null ||
+                !ReferenceEquals(currentProject, _boundProject))
+                throw new InvalidOperationException("QS3D project đã thay đổi từ lần Refresh gần nhất. Hãy Refresh Family Manager trước khi " + operation + ".");
+        }
+
         private static string DrawingLabel(Document document) { var name = document.Name ?? string.Empty; if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu"; try { return System.IO.Path.GetFileName(name); } catch { return name; } }
         private void SetStatus(string text) { StatusText.Text = text ?? string.Empty; try { PaletteCoordinator.SetStatus(StatusText.Text); } catch { } }
     }
