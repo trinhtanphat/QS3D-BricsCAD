@@ -16,6 +16,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class CurtainWallWindow : Window
     {
         private readonly Document _document;
+        private ProjectState? _boundProject;
         private bool _loading;
 
         public CurtainWallWindow(Document document)
@@ -46,6 +47,9 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("lưu Family Vách Kính");
+                if (!ExistingProjectMutationContext.TryGet(_document, out var project))
+                    throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Vách Kính Hub không tạo project thay thế; hãy nạp project rồi Refresh.");
+                EnsureBoundProject(project, "lưu Family Vách Kính");
                 if (!(FamilyCombo.SelectedItem is ProjectFamily selectedFamily)) return;
                 var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
@@ -61,8 +65,6 @@ namespace QS3D.BricsCAD.V25.UI
                     ["CurtainFrameMaterial"] = Required(FrameMaterialBox.Text, "Vật liệu khung")
                 };
 
-                if (!ExistingProjectMutationContext.TryGet(_document, out var project))
-                    throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Vách Kính Hub không tạo project thay thế; hãy nạp project rồi Refresh.");
                 var family = project.FindFamily(selectedFamily.Id)
                     ?? throw new InvalidOperationException("Family Vách Kính đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại Family.");
                 if (family.Category != ElementCategory.GlassWall)
@@ -101,6 +103,7 @@ namespace QS3D.BricsCAD.V25.UI
                 EnsureActive("tính lại Vách Kính");
                 if (!ExistingProjectMutationContext.TryGet(_document, out var project))
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Vách Kính Hub không tạo project thay thế; hãy nạp project rồi Refresh.");
+                EnsureBoundProject(project, "tính lại Vách Kính");
                 var rollback = ProjectStateSnapshot.Capture(project);
                 var count = 0;
                 try
@@ -146,6 +149,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshAll()
         {
+            _boundProject = null;
             try
             {
                 EnsureActive("làm mới Vách Kính Hub");
@@ -168,9 +172,14 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 finally { _loading = false; }
                 RefreshSummary(project);
+                _boundProject = project;
                 SetStatus(families.Count == 0 ? "Chưa có Family Vách Kính. Chọn đối tượng CAD rồi bấm “Bóc Vách Kính”." : "Đã nạp " + families.Count + " Family Vách Kính.");
             }
-            catch (Exception ex) { SetStatus("Đọc Vách Kính lỗi: " + ex.Message); }
+            catch (Exception ex)
+            {
+                _boundProject = null;
+                SetStatus("Đọc Vách Kính lỗi: " + ex.Message);
+            }
         }
 
         private void LoadSelectedFamily()
@@ -194,7 +203,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshSummary()
         {
-            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project) ||
+                _boundProject == null ||
+                !ReferenceEquals(_boundProject, project))
             {
                 ClearSummary();
                 return;
@@ -223,6 +234,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void ClearProjectView()
         {
+            _boundProject = null;
             _loading = true;
             try
             {
@@ -240,6 +252,14 @@ namespace QS3D.BricsCAD.V25.UI
             PanelCountText.Text = "0";
             GlassAreaText.Text = "0 m²";
             FrameLengthText.Text = "0 m";
+        }
+
+        private void EnsureBoundProject(ProjectState project, string operation)
+        {
+            if (_boundProject == null)
+                throw new InvalidOperationException("Vách Kính Hub chưa được bind vào QS3D project hiện hành. Hãy Refresh trước khi " + operation + ".");
+            if (!ReferenceEquals(_boundProject, project))
+                throw new InvalidOperationException("QS3D project của bản vẽ đã được nạp lại hoặc thay thế. Hãy Refresh Vách Kính Hub trước khi " + operation + ".");
         }
 
         private static void ApplyFamilyValue(ProjectState project, ProjectFamily family, string key, string next, ref int inherited, ref int overrides)
