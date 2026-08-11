@@ -77,12 +77,24 @@ if not errors:
         "source.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString()))",
         "target.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString()))",
         "NameKey(x.NameScope, x.Name)",
-        "NextName(sourceItem.Name, sourceItem.NameScope, occupiedNames)",
+        "NextName(sourceName, sourceItem.NameScope, occupiedNames, maxNameLength)",
         "public string NameScope { get; }",
+        "private const int ZoneMaxIdLength = 64;",
+        "private const int ZoneMaxNameLength = 120;",
+        "private const int FloorMaxIdLength = 64;",
+        "private const int FloorMaxNameLength = 120;",
+        "private const int FamilyMaxIdLength = 80;",
+        "private const int FamilyMaxNameLength = 160;",
+        "private const int ElementMaxIdLength = 128;",
+        "sourceId.Length > maxIdLength",
+        "sourceName.Length > maxNameLength",
+        "assignedIds.Contains(sourceId)",
+        "assignedNames.Contains(sourceNameKey)",
+        "NextId(sourceId, occupiedIds, maxIdLength)",
     ]
     for needle in required_planner:
         if needle not in p:
-            errors.append("remap planner missing family/ownership/name-scope preview contract: " + needle)
+            errors.append("remap planner missing family/ownership/name-scope/runtime-bound contract: " + needle)
 
     # Planner preview and executor must recognize the exact same conservative ID/ref suffix set.
     reference_suffixes = ["Id", "Ids", "Ref", "Refs", "RefId", "RefIds"]
@@ -162,4 +174,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-remap-append: PASS")
-print("Import As New keeps blocked plans inspectable, fails closed before mutation, aligns Family/Element opaque-reference policy, scopes Family names by category, strips incoming native ownership, and preserves existing target identities.")
+print("Import As New keeps blocked plans inspectable, fails closed before mutation, bounds Zone/Floor/Family identities to target runtime services, aligns opaque-reference policy, and preserves existing target identities.")
