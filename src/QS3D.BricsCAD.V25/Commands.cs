@@ -264,10 +264,16 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DLINKHOST", () =>
             {
-                var project = ExistingProjectMutationContext.Require(doc, "Link opening host");
                 var selectedHandles = new HashSet<string>(
                     Cad.EntitySnapshotReader.ReadCurrentSelection(doc).Select(x => x.Handle),
                     StringComparer.OrdinalIgnoreCase);
+                if (selectedHandles.Count == 0)
+                {
+                    doc.Editor.WriteMessage("\nQS3DLINKHOST: pick 1 Door/WallOpening và 1 wall source rồi chạy lại.");
+                    return;
+                }
+
+                var project = ExistingProjectMutationContext.Require(doc, "Link opening host");
                 var selected = project.Elements
                     .Where(x => SemanticReferenceHandles.MatchesSelection(x, selectedHandles))
                     .ToList();

@@ -17,6 +17,16 @@ def read(path):
         return ""
     return path.read_text(encoding="utf-8")
 
+
+def region(text, start_token, end_token, label):
+    start = text.find(start_token)
+    end = text.find(end_token, start + 1) if start >= 0 else -1
+    if start < 0 or end <= start:
+        errors.append("cannot isolate " + label)
+        return ""
+    return text[start:end]
+
+
 palette = read(PALETTE)
 selection = read(SELECTION)
 legacy = read(LEGACY)
@@ -29,16 +39,11 @@ for token in (
     if token not in palette:
         errors.append("Palette selection sync missing read-only lifecycle token: " + token)
 
-set_start = palette.find("public static void SetInspection(")
-set_end = palette.find("public static void SetStatus", set_start)
-if set_start < 0 or set_end <= set_start:
-    errors.append("cannot isolate PaletteCoordinator.SetInspection")
-else:
-    set_region = palette[set_start:set_end]
-    if "ProjectContextCoordinator.GetOrCreate" in set_region:
-        errors.append("Palette selection sync must not create/cache project state")
-    if ".SetInspection(snapshots)" in set_region:
-        errors.append("Palette selection sync must not call the legacy creating semantic-sync path")
+set_region = region(palette, "public static void SetInspection(", "public static void SetStatus", "PaletteCoordinator.SetInspection")
+if "ProjectContextCoordinator.GetOrCreate" in set_region:
+    errors.append("Palette selection sync must not create/cache project state")
+if ".SetInspection(snapshots)" in set_region:
+    errors.append("Palette selection sync must not route implicit events through the compatibility path")
 
 for token in (
     "internal void SetInspectionReadOnly(",
@@ -52,12 +57,40 @@ for token in (
 if "ProjectContextCoordinator.GetOrCreate" in selection or "ExistingProjectMutationContext" in selection:
     errors.append("Workspace read-only selection partial must not bind/create mutable project state")
 
-# Keep the old public method source for compatibility, but PaletteCoordinator must no longer route
-# implicit selection events through it because it historically calls GetOrCreate.
 if "public void SetInspection(IReadOnlyList<EntitySnapshot> snapshots)" not in legacy:
-    errors.append("legacy WorkspacePanel.SetInspection compatibility method unexpectedly disappeared")
+    errors.append("WorkspacePanel.SetInspection compatibility method unexpectedly disappeared")
 if "SyncFamilyFromSelection();" not in legacy:
-    errors.append("legacy WorkspacePanel.SetInspection contract changed unexpectedly")
+    errors.append("WorkspacePanel.SetInspection compatibility method must continue semantic sync")
+
+sync_region = region(legacy, "private void SyncFamilyFromSelection()", "private void OnZoneChanged", "WorkspacePanel.SyncFamilyFromSelection")
+if "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)" not in sync_region:
+    errors.append("Workspace compatibility selection sync must resolve the project read-only")
+if "ProjectContextCoordinator.GetOrCreate" in sync_region or "ExistingProjectMutationContext" in sync_region:
+    errors.append("Workspace compatibility selection sync must not create/bind mutable project state")
+
+add_region = region(legacy, "private void OnAddClick", "private void OnDeleteClick", "WorkspacePanel.OnAddClick")
+for token in (
+    "var selected = FamilyList.SelectedItem as ProjectFamily;",
+    "selected == null",
+    "ProjectContextCoordinator.GetOrCreate(doc)",
+    "ExistingProjectMutationContext.Require(doc, \"Nhân bản Family từ Workspace\")",
+):
+    if token not in add_region:
+        errors.append("Workspace Family create/duplicate boundary missing token: " + token)
+if add_region.count("ProjectContextCoordinator.GetOrCreate(doc)") != 1:
+    errors.append("Workspace Family add must keep exactly one creation-capable resolver for explicit create-new intent")
+
+delete_region = region(legacy, "private void OnDeleteClick", "private void OnCaptureSelectedClick", "WorkspacePanel.OnDeleteClick")
+if "ExistingProjectMutationContext.Require(doc, \"Xóa Family từ Workspace\")" not in delete_region:
+    errors.append("Workspace Family delete must require an existing canonical project")
+if "ProjectContextCoordinator.GetOrCreate" in delete_region:
+    errors.append("Workspace Family delete must not create a replacement project")
+
+source_region = region(legacy, "private int SelectInspectionSemanticSourcesForBuild()", "private void ApplyFamilyFilter", "WorkspacePanel.SelectInspectionSemanticSourcesForBuild")
+if "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)" not in source_region:
+    errors.append("Workspace source-handle restore must resolve semantic state read-only")
+if "ProjectContextCoordinator.GetOrCreate" in source_region or "ExistingProjectMutationContext" in source_region:
+    errors.append("Workspace source-handle restore must not create/bind mutable project state")
 
 for token in (
     "LOCAL-011 — staged native rollback and post-commit UI isolation",
@@ -73,4 +106,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: implicit Workspace CAD-selection sync remains read-only/non-creating while preserving raw inspection and the LOCAL-011 unavailable-project runtime scenario.")
+print("PASS: Workspace selection/source inspection stays read-only, delete/duplicate require an existing canonical project, and only explicit create-new Family intent may create project state.")
