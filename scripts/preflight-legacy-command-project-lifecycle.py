@@ -62,7 +62,7 @@ checks = [
     )),
     ("QS3DEXCELLOCATE", None, (
         "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)",
-        "Excel Locate need" if False else "Excel Locate cần một QS3D project hiện hữu",
+        "Excel Locate cần một QS3D project hiện hữu",
     )),
 ]
 
@@ -73,10 +73,8 @@ for command, next_command, required in checks:
     for token in required:
         if token not in body:
             errors.append(command + " missing lifecycle token: " + token)
-    if command != "QS3DLINKHOST" and "ProjectContextCoordinator.GetOrCreate(doc)" in body:
-        errors.append(command + " must not create/cache project state on this read-only/review/export path.")
-    if command == "QS3DLINKHOST" and "ProjectContextCoordinator.GetOrCreate(doc)" in body:
-        errors.append("QS3DLINKHOST must bind an existing canonical project, not create one from a mutation command.")
+    if "ProjectContextCoordinator.GetOrCreate(doc)" in body:
+        errors.append(command + " must not create/cache project state on this lifecycle path.")
 
 ed2 = section("QS3DED2", "QS3DBBS")
 if ed2:
