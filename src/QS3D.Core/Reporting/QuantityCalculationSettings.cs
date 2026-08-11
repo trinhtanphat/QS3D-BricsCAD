@@ -81,6 +81,10 @@ namespace QS3D.Core.Reporting
 
         public QuantityCalculationSettings Clone()
         {
+            var categoryRules = CategoryRules ?? new List<QuantityCategoryRuleSetting>();
+            var intersectionRules = IntersectionRules ?? new List<QuantityIntersectionRuleSetting>();
+            RequireCollectionCardinality(categoryRules, intersectionRules);
+
             return new QuantityCalculationSettings
             {
                 SchemaVersion = SchemaVersion,
@@ -95,8 +99,8 @@ namespace QS3D.Core.Reporting
                 RoomSearchRadiusMm = RoomSearchRadiusMm,
                 DimColor = DimColor,
                 DimTextHeight = DimTextHeight,
-                CategoryRules = (CategoryRules ?? new List<QuantityCategoryRuleSetting>()).Select(CloneCategoryRule).ToList(),
-                IntersectionRules = (IntersectionRules ?? new List<QuantityIntersectionRuleSetting>()).Select(CloneIntersectionRule).ToList()
+                CategoryRules = categoryRules.Select(CloneCategoryRule).ToList(),
+                IntersectionRules = intersectionRules.Select(CloneIntersectionRule).ToList()
             };
         }
 
@@ -108,10 +112,7 @@ namespace QS3D.Core.Reporting
 
             CategoryRules = CategoryRules ?? new List<QuantityCategoryRuleSetting>();
             IntersectionRules = IntersectionRules ?? new List<QuantityIntersectionRuleSetting>();
-            if (CategoryRules.Count > MaxObservedCategoryCodeCount)
-                throw new InvalidOperationException("CategoryRules cannot contain more than " + MaxObservedCategoryCodeCount + " entries.");
-            if (IntersectionRules.Count > MaxDirectedIntersectionRuleCount)
-                throw new InvalidOperationException("IntersectionRules cannot contain more than " + MaxDirectedIntersectionRuleCount + " entries.");
+            RequireCollectionCardinality(CategoryRules, IntersectionRules);
 
             DimColor = string.IsNullOrWhiteSpace(DimColor) ? "#FFFFFF" : DimColor.Trim().ToUpperInvariant();
 
@@ -172,6 +173,16 @@ namespace QS3D.Core.Reporting
         {
             if (rule == null) throw new InvalidOperationException(NullIntersectionRuleMessage);
             return rule.Clone();
+        }
+
+        private static void RequireCollectionCardinality(
+            List<QuantityCategoryRuleSetting> categoryRules,
+            List<QuantityIntersectionRuleSetting> intersectionRules)
+        {
+            if (categoryRules.Count > MaxObservedCategoryCodeCount)
+                throw new InvalidOperationException("CategoryRules cannot contain more than " + MaxObservedCategoryCodeCount + " entries.");
+            if (intersectionRules.Count > MaxDirectedIntersectionRuleCount)
+                throw new InvalidOperationException("IntersectionRules cannot contain more than " + MaxDirectedIntersectionRuleCount + " entries.");
         }
 
         private static void AddObservedCategoryCode(HashSet<int> observedCategoryCodes, int categoryCode)

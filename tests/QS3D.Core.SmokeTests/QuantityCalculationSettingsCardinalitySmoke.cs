@@ -21,8 +21,11 @@ namespace QS3D.Core.SmokeTests
         {
             var settings = QuantityCalculationSettings.CreateDefault();
             settings.NormalizeAndValidate();
+            var clone = settings.Clone();
             True(settings.CategoryRules.Count < QuantityCalculationSettings.MaxObservedCategoryCodeCount);
             True(settings.IntersectionRules.Count < QuantityCalculationSettings.MaxDirectedIntersectionRuleCount);
+            Equal(settings.CategoryRules.Count, clone.CategoryRules.Count);
+            Equal(settings.IntersectionRules.Count, clone.IntersectionRules.Count);
         }
 
         private static void ImportedTwentyEightCodeMatrixRemainsValid()
@@ -40,8 +43,10 @@ namespace QS3D.Core.SmokeTests
                 });
 
             settings.NormalizeAndValidate();
+            var clone = settings.Clone();
             Equal(28, settings.CategoryRules.Count);
             Equal(28 * 28, settings.IntersectionRules.Count);
+            Equal(28 * 28, clone.IntersectionRules.Count);
             True(settings.FindIntersectionRule(1000, 1027) != null);
         }
 
@@ -54,11 +59,14 @@ namespace QS3D.Core.SmokeTests
             settings.IntersectionRules.Add(new QuantityIntersectionRuleSetting { Source = int.MaxValue, Target = 1301 });
 
             settings.NormalizeAndValidate();
+            var clone = settings.Clone();
 
             True(settings.FindCategoryRule(1301) != null);
             True(settings.FindCategoryRule(int.MaxValue) != null);
             True(settings.FindIntersectionRule(1301, int.MaxValue) != null);
             True(settings.FindIntersectionRule(int.MaxValue, 1301) != null);
+            True(clone.FindIntersectionRule(1301, int.MaxValue) != null);
+            True(clone.FindIntersectionRule(int.MaxValue, 1301) != null);
         }
 
         private static void ExactCategoryUniverseBoundaryRemainsValid()
@@ -68,7 +76,9 @@ namespace QS3D.Core.SmokeTests
                 settings.CategoryRules.Add(CategoryRule(10000 + i));
 
             settings.NormalizeAndValidate();
+            var clone = settings.Clone();
             Equal(QuantityCalculationSettings.MaxObservedCategoryCodeCount, settings.CategoryRules.Count);
+            Equal(QuantityCalculationSettings.MaxObservedCategoryCodeCount, clone.CategoryRules.Count);
         }
 
         private static void CategoryRuleOverflowFailsClosed()
@@ -77,6 +87,7 @@ namespace QS3D.Core.SmokeTests
             for (var i = 0; i <= QuantityCalculationSettings.MaxObservedCategoryCodeCount; i++)
                 settings.CategoryRules.Add(CategoryRule(20000 + i));
 
+            Throws<InvalidOperationException>(() => settings.Clone());
             Throws<InvalidOperationException>(() => settings.NormalizeAndValidate());
         }
 
@@ -89,6 +100,7 @@ namespace QS3D.Core.SmokeTests
             for (var i = 0; i <= QuantityCalculationSettings.MaxDirectedIntersectionRuleCount; i++)
                 settings.IntersectionRules.Add(repeated);
 
+            Throws<InvalidOperationException>(() => settings.Clone());
             Throws<InvalidOperationException>(() => settings.NormalizeAndValidate());
         }
 
@@ -104,6 +116,8 @@ namespace QS3D.Core.SmokeTests
                 });
 
             True(settings.IntersectionRules.Count < QuantityCalculationSettings.MaxDirectedIntersectionRuleCount);
+            var clone = settings.Clone();
+            Equal(settings.IntersectionRules.Count, clone.IntersectionRules.Count);
             Throws<InvalidOperationException>(() => settings.NormalizeAndValidate());
         }
 
