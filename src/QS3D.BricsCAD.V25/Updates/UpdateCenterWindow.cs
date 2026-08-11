@@ -17,6 +17,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private readonly Button _updateButton;
         private readonly Button _releaseButton;
         private UpdateCheckResult? _result;
+        private bool _coordinatorAttached;
 
         internal UpdateCenterWindow()
         {
@@ -104,7 +105,8 @@ namespace QS3D.BricsCAD.V25.Updates
 
             Content = root;
             UpdateCoordinator.Instance.StateChanged += OnStateChanged;
-            Closed += (_, __) => UpdateCoordinator.Instance.StateChanged -= OnStateChanged;
+            _coordinatorAttached = true;
+            Closed += (_, __) => DetachCoordinator();
             Apply(UpdateCoordinator.Instance.LastResult);
         }
 
@@ -125,6 +127,13 @@ namespace QS3D.BricsCAD.V25.Updates
             _updateButton.IsEnabled = result.CanAutoInstall;
             _releaseButton.IsEnabled = result.Release?.PageUri != null;
             _updateButton.Content = result.State == UpdateState.Scheduled ? "Đã lên lịch" : "Cập nhật ngay";
+        }
+
+        internal void DetachCoordinator()
+        {
+            if (!_coordinatorAttached) return;
+            UpdateCoordinator.Instance.StateChanged -= OnStateChanged;
+            _coordinatorAttached = false;
         }
 
         private async System.Threading.Tasks.Task ScheduleUpdateAsync()
@@ -209,9 +218,18 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             var window = _window;
             if (window == null) return;
-            try { window.Close(); }
-            catch { }
-            if (ReferenceEquals(_window, window)) _window = null;
+            try
+            {
+                window.Close();
+            }
+            catch
+            {
+            }
+            finally
+            {
+                window.DetachCoordinator();
+                if (ReferenceEquals(_window, window)) _window = null;
+            }
         }
     }
 }
