@@ -12,14 +12,14 @@ namespace QS3D.Core.Navigation
     {
         public ProjectBrowserWorkspaceState(
             ProjectBrowserGrouping grouping = ProjectBrowserGrouping.FloorThenCategory,
-            string query = null,
+            string? query = null,
             bool dirtyOnly = false,
-            IEnumerable<ElementCategory> categories = null,
-            IEnumerable<string> floorIds = null,
-            IEnumerable<string> zoneIds = null,
-            IEnumerable<string> expandedPaths = null,
-            IEnumerable<string> selectedElementIds = null,
-            string primaryElementId = null)
+            IEnumerable<ElementCategory>? categories = null,
+            IEnumerable<string>? floorIds = null,
+            IEnumerable<string>? zoneIds = null,
+            IEnumerable<string>? expandedPaths = null,
+            IEnumerable<string>? selectedElementIds = null,
+            string? primaryElementId = null)
         {
             if (!Enum.IsDefined(typeof(ProjectBrowserGrouping), grouping)) throw new ArgumentOutOfRangeException(nameof(grouping));
             Grouping = grouping;
@@ -46,7 +46,7 @@ namespace QS3D.Core.Navigation
         internal ProjectBrowserQueryOptions ToQueryOptions() =>
             new ProjectBrowserQueryOptions(Query, DirtyOnly, Categories, FloorIds, ZoneIds);
 
-        private static string NormalizeQuery(string value)
+        private static string NormalizeQuery(string? value)
         {
             if (string.IsNullOrWhiteSpace(value)) return string.Empty;
             var normalized = value.Trim();
@@ -54,7 +54,7 @@ namespace QS3D.Core.Navigation
             return normalized;
         }
 
-        private static IReadOnlyList<ElementCategory> NormalizeCategories(IEnumerable<ElementCategory> values)
+        private static IReadOnlyList<ElementCategory> NormalizeCategories(IEnumerable<ElementCategory>? values)
         {
             var result = new SortedSet<ElementCategory>();
             foreach (var value in values ?? Enumerable.Empty<ElementCategory>())
@@ -66,7 +66,7 @@ namespace QS3D.Core.Navigation
             return result.ToList().AsReadOnly();
         }
 
-        private static IReadOnlyList<string> NormalizeIds(IEnumerable<string> values, string label, int maxCount)
+        private static IReadOnlyList<string> NormalizeIds(IEnumerable<string>? values, string label, int maxCount)
         {
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -81,7 +81,7 @@ namespace QS3D.Core.Navigation
             return result.AsReadOnly();
         }
 
-        private static IReadOnlyList<string> NormalizePaths(IEnumerable<string> values)
+        private static IReadOnlyList<string> NormalizePaths(IEnumerable<string>? values)
         {
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -96,7 +96,7 @@ namespace QS3D.Core.Navigation
             return result.AsReadOnly();
         }
 
-        private static string NormalizePrimary(string value, IReadOnlyList<string> selected)
+        private static string NormalizePrimary(string? value, IReadOnlyList<string> selected)
         {
             if (string.IsNullOrWhiteSpace(value)) return selected.Count == 0 ? string.Empty : selected[0];
             var primary = RequiredCanonical(value, "project browser workspace primary element id");
