@@ -46,6 +46,14 @@ else:
         "modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.F",
         "PropertySearch?.Focus();",
         "PropertySearch?.SelectAll();",
+        "modifiers == ModifierKeys.None && e.Key == Key.Enter",
+        "PropertyList != null && PropertyList.IsKeyboardFocusWithin",
+        "var combo = FindPropertyEditorAncestor<ComboBox>(source);",
+        "combo.GetBindingExpression(ComboBox.TextProperty)?.UpdateSource();",
+        "var textBox = FindPropertyEditorAncestor<TextBox>(source);",
+        "textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();",
+        "private static T? FindPropertyEditorAncestor<T>(DependencyObject? source) where T : DependencyObject",
+        "current = ParentOf(current);",
         "e.Key == Key.Escape",
         "PropertySearch.IsKeyboardFocusWithin",
         "PropertySearch.Clear();",
@@ -68,7 +76,7 @@ else:
         "StringComparison.CurrentCultureIgnoreCase",
     ):
         if token not in text:
-            errors.append("Workspace property filter/search shortcut missing: " + token)
+            errors.append("Workspace property filter/editor keyboard UX missing: " + token)
     for forbidden in (
         "GetOrCreate(",
         "ExistingProjectMutationContext",
@@ -78,7 +86,7 @@ else:
         "SendStringToExecute",
     ):
         if forbidden in text:
-            errors.append("Workspace presentation-only property filter must not mutate project/CAD: " + forbidden)
+            errors.append("Workspace property filter/keyboard routing must not directly mutate project/CAD: " + forbidden)
 
 print("QS3D Workspace property palette preflight")
 if errors:
@@ -87,4 +95,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Workspace exposes a denser BLT-style Family/property palette with bounded multi-term search, Ctrl+Shift+F/Escape keyboard UX, source/override/editor/choice aliases, counts and wider editors; filtering remains presentation-only.")
+print("PASS: Workspace exposes a denser BLT-style Family/property palette with bounded multi-term search, Ctrl+Shift+F/Escape search UX, Enter-to-commit through existing bindings, source/override/editor/choice aliases, counts and wider editors; routing itself remains mutation-free.")
