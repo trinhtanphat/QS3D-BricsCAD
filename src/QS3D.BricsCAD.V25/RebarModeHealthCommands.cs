@@ -17,7 +17,14 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    var blocked = "Rebar Mode Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.";
+                    PaletteCoordinator.SetStatus(blocked);
+                    document.Editor.WriteMessage("\nQS3D " + blocked);
+                    return;
+                }
+
                 var issues = new GeneratedRebarModeHealthService().Inspect(project);
                 var summary = new HealthSummary(issues);
                 var message = "Rebar Mode Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
@@ -25,7 +32,8 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.WriteMessage("\nQS3D " + message);
                 var window = new ModelHealthWindow(document, issues, issue =>
                 {
-                    var element = project.FindElement(issue.ElementId);
+                    if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+                    var element = currentProject.FindElement(issue.ElementId);
                     if (element == null) return;
                     var handles = element.Properties.TryGetValue("GeneratedRebarHandles", out var raw) && !string.IsNullOrWhiteSpace(raw)
                         ? raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToArray()
