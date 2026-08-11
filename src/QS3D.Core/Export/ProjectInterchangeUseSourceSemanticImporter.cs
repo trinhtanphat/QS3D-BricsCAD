@@ -496,6 +496,9 @@ namespace QS3D.Core.Export
             ProjectInterchangeImportResolutionPlan resolution)
         {
             var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var replacedZones = new HashSet<string>(
+                resolution.Items.Where(x => x.Kind == InterchangeIdentityKind.Zone && x.Action == InterchangeImportResolutionAction.UseSourceSemanticData).Select(x => x.Id),
+                StringComparer.OrdinalIgnoreCase);
             var replacedFloors = new HashSet<string>(
                 resolution.Items.Where(x => x.Kind == InterchangeIdentityKind.Floor && x.Action == InterchangeImportResolutionAction.UseSourceSemanticData).Select(x => x.Id),
                 StringComparer.OrdinalIgnoreCase);
@@ -509,7 +512,8 @@ namespace QS3D.Core.Export
             foreach (var element in target.Elements)
             {
                 if (element == null) continue;
-                if ((!string.IsNullOrWhiteSpace(element.FloorId) && replacedFloors.Contains(element.FloorId)) ||
+                if ((!string.IsNullOrWhiteSpace(element.ZoneId) && replacedZones.Contains(element.ZoneId.Trim())) ||
+                    ReferencesReplacedFloor(element, replacedFloors) ||
                     (!string.IsNullOrWhiteSpace(element.FamilyId) && replacedFamilies.Contains(element.FamilyId)))
                     affected.Add(element.Id);
             }
@@ -536,6 +540,20 @@ namespace QS3D.Core.Export
                     affected.Add(id);
 
             return affected.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static bool ReferencesReplacedFloor(ProjectElement element, ISet<string> replacedFloors)
+        {
+            if (element == null || replacedFloors == null || replacedFloors.Count == 0) return false;
+            if (!string.IsNullOrWhiteSpace(element.FloorId) && replacedFloors.Contains(element.FloorId.Trim())) return true;
+            if (ReferencesFloorProperty(element, ProjectFloorService.BottomLevelIdKey, replacedFloors)) return true;
+            return ReferencesFloorProperty(element, ProjectFloorService.TopLevelIdKey, replacedFloors);
+        }
+
+        private static bool ReferencesFloorProperty(ProjectElement element, string key, ISet<string> replacedFloors)
+        {
+            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return false;
+            return replacedFloors.Contains(raw.Trim());
         }
 
         private static bool ReferencesAffectedHost(ProjectElement element, ISet<string> affected)
