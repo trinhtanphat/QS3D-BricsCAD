@@ -15,7 +15,8 @@ for path in (SERVICE, SMOKE, REG):
 if SERVICE.is_file():
     text = SERVICE.read_text(encoding="utf-8")
     for token in (
-        '(previous ?? string.Empty).Trim()',
+        'var previousHostRaw = hasPreviousHost ? previous ?? string.Empty : string.Empty;',
+        'var previousHost = previousHostRaw.Trim();',
         '(value ?? string.Empty).Trim()',
         "RemoveDependencies(opening, previousHost);",
         "RemoveDependencies(opening, wall.Id);",

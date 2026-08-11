@@ -17,7 +17,7 @@ for path in (PLANNER, READER, SMOKE, REG, DOC):
 if PLANNER.is_file():
     text = PLANNER.read_text(encoding="utf-8")
     for token in (
-        "private const int MaxPlanItems = 50000",
+        "private const int MaxPlanItems = ProjectInterchangeJsonValidator.MaxCollectionItems",
         "ProjectInterchangeValidatedSnapshotReader.Read(json)",
         "InterchangeImportResolutionAction.Unresolved",
         "InterchangeImportResolutionAction.BlockedIncompatible",

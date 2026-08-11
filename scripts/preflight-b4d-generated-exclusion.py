@@ -17,7 +17,8 @@ for path in (review, adapter_policy, core_policy, semantic):
 if review.is_file():
     text = review.read_text(encoding="utf-8")
     for needle in (
-        "CollectGeneratedHandles(project)",
+        "ProjectContextCoordinator.TryGetReadOnly(doc, out var previewProject)",
+        "CollectGeneratedHandles(previewProject)",
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
         "snapshots.Where(x => !generatedHandles.Contains(x.Handle))",
     ):

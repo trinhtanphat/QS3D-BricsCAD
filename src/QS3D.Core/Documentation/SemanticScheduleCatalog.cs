@@ -208,10 +208,10 @@ namespace QS3D.Core.Documentation
         {
             try
             {
-                var categories = node.Element("categories")?.Elements("category").Select(x => (ElementCategory)Enum.Parse(typeof(ElementCategory), Required((string)x.Attribute("value"), "category", 64), true)) ?? Array.Empty<ElementCategory>();
-                var include = node.Element("include")?.Elements("id").Select(x => (string)x.Attribute("value")) ?? Array.Empty<string>();
-                var exclude = node.Element("exclude")?.Elements("id").Select(x => (string)x.Attribute("value")) ?? Array.Empty<string>();
-                var columns = node.Element("columns")?.Elements("column").Select(x => new SemanticDocumentationColumn((string)x.Attribute("header"), (string)x.Attribute("template"))) ?? Array.Empty<SemanticDocumentationColumn>();
+                var categories = node.Element("categories").Elements("category").Select(ParseCategory);
+                var include = node.Element("include").Elements("id").Select(x => (string)x.Attribute("value"));
+                var exclude = node.Element("exclude").Elements("id").Select(x => (string)x.Attribute("value"));
+                var columns = node.Element("columns").Elements("column").Select(x => new SemanticDocumentationColumn((string)x.Attribute("header"), (string)x.Attribute("template")));
                 return Normalize(new SemanticScheduleDefinition((string)node.Attribute("id"), (string)node.Attribute("name"), (string)node.Attribute("title"), categories, (string)node.Attribute("floorId"), (string)node.Attribute("zoneId"), include, exclude, columns));
             }
             catch (Exception ex) when (!(ex is InvalidDataException))
@@ -220,47 +220,58 @@ namespace QS3D.Core.Documentation
             }
         }
 
+        private static ElementCategory ParseCategory(XElement node)
+        {
+            var stored = (string)node.Attribute("value");
+            var raw = Required(stored, "category", 64);
+            if (!string.Equals(stored, raw, StringComparison.Ordinal)
+                || !Enum.TryParse(raw, false, out ElementCategory category)
+                || !Enum.IsDefined(typeof(ElementCategory), category)
+                || !string.Equals(raw, category.ToString(), StringComparison.Ordinal))
+                throw new InvalidDataException("Semantic schedule category must use a canonical ElementCategory name.");
+            return category;
+        }
+
         private static void ValidateSchema(XElement root)
         {
             ValidateElement(root, "semanticSchedules", new[] { "version" }, new[] { "schedule" });
+            EnsureRequiredAttributes(root, "version");
             foreach (var schedule in root.Elements("schedule"))
             {
                 ValidateElement(schedule, "schedule", new[] { "id", "name", "title", "floorId", "zoneId" }, new[] { "categories", "include", "exclude", "columns" });
-                EnsureAtMostOneChild(schedule, "categories");
-                EnsureAtMostOneChild(schedule, "include");
-                EnsureAtMostOneChild(schedule, "exclude");
-                EnsureAtMostOneChild(schedule, "columns");
+                EnsureRequiredAttributes(schedule, "id", "name", "title", "floorId", "zoneId");
 
-                var categories = schedule.Element("categories");
-                if (categories != null)
+                var categories = RequireExactlyOneChild(schedule, "categories");
+                var include = RequireExactlyOneChild(schedule, "include");
+                var exclude = RequireExactlyOneChild(schedule, "exclude");
+                var columns = RequireExactlyOneChild(schedule, "columns");
+
+                ValidateElement(categories, "categories", Array.Empty<string>(), new[] { "category" });
+                foreach (var category in categories.Elements("category"))
                 {
-                    ValidateElement(categories, "categories", Array.Empty<string>(), new[] { "category" });
-                    foreach (var category in categories.Elements("category"))
-                        ValidateElement(category, "category", new[] { "value" }, Array.Empty<string>());
+                    ValidateElement(category, "category", new[] { "value" }, Array.Empty<string>());
+                    EnsureRequiredAttributes(category, "value");
                 }
 
-                var include = schedule.Element("include");
-                if (include != null)
+                ValidateElement(include, "include", Array.Empty<string>(), new[] { "id" });
+                foreach (var id in include.Elements("id"))
                 {
-                    ValidateElement(include, "include", Array.Empty<string>(), new[] { "id" });
-                    foreach (var id in include.Elements("id"))
-                        ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+                    ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+                    EnsureRequiredAttributes(id, "value");
                 }
 
-                var exclude = schedule.Element("exclude");
-                if (exclude != null)
+                ValidateElement(exclude, "exclude", Array.Empty<string>(), new[] { "id" });
+                foreach (var id in exclude.Elements("id"))
                 {
-                    ValidateElement(exclude, "exclude", Array.Empty<string>(), new[] { "id" });
-                    foreach (var id in exclude.Elements("id"))
-                        ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+                    ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+                    EnsureRequiredAttributes(id, "value");
                 }
 
-                var columns = schedule.Element("columns");
-                if (columns != null)
+                ValidateElement(columns, "columns", Array.Empty<string>(), new[] { "column" });
+                foreach (var column in columns.Elements("column"))
                 {
-                    ValidateElement(columns, "columns", Array.Empty<string>(), new[] { "column" });
-                    foreach (var column in columns.Elements("column"))
-                        ValidateElement(column, "column", new[] { "header", "template" }, Array.Empty<string>());
+                    ValidateElement(column, "column", new[] { "header", "template" }, Array.Empty<string>());
+                    EnsureRequiredAttributes(column, "header", "template");
                 }
             }
         }
@@ -292,10 +303,19 @@ namespace QS3D.Core.Documentation
             }
         }
 
-        private static void EnsureAtMostOneChild(XElement parent, string childName)
+        private static void EnsureRequiredAttributes(XElement element, params string[] attributeNames)
         {
-            if (parent.Elements(childName).Skip(1).Any())
-                throw new InvalidDataException("Semantic schedule catalog contains duplicate " + childName + " containers.");
+            foreach (var attributeName in attributeNames)
+                if (element.Attribute(attributeName) == null)
+                    throw new InvalidDataException("Semantic schedule catalog is missing required attribute " + attributeName + " on " + element.Name.LocalName + ".");
+        }
+
+        private static XElement RequireExactlyOneChild(XElement parent, string childName)
+        {
+            var children = parent.Elements(childName).ToArray();
+            if (children.Length != 1)
+                throw new InvalidDataException("Semantic schedule catalog requires exactly one " + childName + " container per schedule.");
+            return children[0];
         }
 
         private static XElement Parse(string payload)

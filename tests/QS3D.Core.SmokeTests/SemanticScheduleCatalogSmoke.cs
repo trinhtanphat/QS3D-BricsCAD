@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Xml.Linq;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
 
@@ -12,6 +15,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             SaveLoadRoundTripIsDeterministic();
+            PersistedCategoriesRequireCanonicalNames();
+            PersistedSchemaRequiresCanonicalShape();
             UpsertAndRemoveSupportMultipleDefinitions();
             BuildFiltersAndUsesCanonicalTemplateRenderer();
             EmptySelectionBuildsHeaderOnlyTable();
@@ -40,6 +45,51 @@ namespace QS3D.Core.SmokeTests
             SemanticScheduleCatalog.Save(project, loaded);
             Equal(payload, project.Metadata[SemanticScheduleCatalog.MetadataKey]);
             Equal(version, project.ChangeVersion);
+        }
+
+        private static void PersistedCategoriesRequireCanonicalNames()
+        {
+            var project = Project();
+            SemanticScheduleCatalog.Save(project, new[] { Definition("S1", "Beam schedule", "BEAMS", "", "", Array.Empty<string>(), Array.Empty<string>()) });
+            var canonical = project.Metadata[SemanticScheduleCatalog.MetadataKey];
+            var categoryName = ElementCategory.Beam.ToString();
+            var canonicalToken = "value=\"" + categoryName + "\"";
+
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = canonical.Replace(canonicalToken, "value=\"" + categoryName.ToLowerInvariant() + "\"");
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = canonical.Replace(
+                canonicalToken,
+                "value=\"" + Convert.ToInt64(ElementCategory.Beam, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "\"");
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = canonical.Replace(canonicalToken, "value=\" " + categoryName + " \"");
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+        }
+
+        private static void PersistedSchemaRequiresCanonicalShape()
+        {
+            var project = Project();
+            SemanticScheduleCatalog.Save(project, new[] { Definition("S1", "Beam schedule", "BEAMS", "", "", Array.Empty<string>(), Array.Empty<string>()) });
+            var canonical = project.Metadata[SemanticScheduleCatalog.MetadataKey];
+
+            foreach (var containerName in new[] { "categories", "include", "exclude", "columns" })
+            {
+                var root = XDocument.Parse(canonical).Root ?? throw new Exception("Catalog root missing.");
+                var schedule = root.Element("schedule") ?? throw new Exception("Schedule missing.");
+                (schedule.Element(containerName) ?? throw new Exception("Canonical container missing.")).Remove();
+                project.Metadata[SemanticScheduleCatalog.MetadataKey] = root.ToString(SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+            }
+
+            foreach (var attributeName in new[] { "id", "name", "title", "floorId", "zoneId" })
+            {
+                var root = XDocument.Parse(canonical).Root ?? throw new Exception("Catalog root missing.");
+                var schedule = root.Element("schedule") ?? throw new Exception("Schedule missing.");
+                (schedule.Attribute(attributeName) ?? throw new Exception("Canonical attribute missing.")).Remove();
+                project.Metadata[SemanticScheduleCatalog.MetadataKey] = root.ToString(SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+            }
         }
 
         private static void UpsertAndRemoveSupportMultipleDefinitions()

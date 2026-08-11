@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
-    [string]$PackageDirectory = $PSScriptRoot,
+    [string]$PackageDirectory,
     [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'QS3D\BricsCAD-V25'),
     [ValidateSet('OnCommand', 'OnStartup')]
     [string]$LoadMode = 'OnCommand',
@@ -218,6 +218,17 @@ if (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {
     throw 'Close all BricsCAD processes before installing or upgrading QS3D.'
 }
 
+$scriptDirectory = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($scriptDirectory) -and -not [string]::IsNullOrWhiteSpace([string]$MyInvocation.MyCommand.Path)) {
+    $scriptDirectory = Split-Path -Parent ([IO.Path]::GetFullPath([string]$MyInvocation.MyCommand.Path))
+}
+if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
+    $PackageDirectory = $scriptDirectory
+}
+if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
+    throw 'PackageDirectory could not be resolved from the installer script location. Pass -PackageDirectory explicitly.'
+}
+
 $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
 $commands = Assert-PackageIntegrity -Directory $package -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
 $targets = @(Get-RegistryTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)
@@ -253,7 +264,9 @@ try {
         foreach ($name in $payload) {
             $source = Join-Path $package $name
             if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing installer payload: $name" }
-            Copy-Item -LiteralPath $source -Destination (Join-Path $stage $name) -Force
+            $destination = Join-Path $stage $name
+            Copy-Item -LiteralPath $source -Destination $destination -Force
+            Unblock-File -LiteralPath $destination -ErrorAction Stop
         }
 
         if (Test-Path -LiteralPath $installFull) {

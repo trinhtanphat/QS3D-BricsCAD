@@ -21,8 +21,8 @@ else:
     tokens = (
         "ProjectContextCoordinator.TryGetReadOnly(document, out var existingPreview)",
         "RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance, splineChord)",
-        "if (segments.Count == 0)",
-        "new RoomBoundaryEngine().Discover(segments, tolerance, minimumArea)",
+        "new RoomBoundaryDiagnosticService().Analyze(segments, tolerance, minimumArea)",
+        "diagnostic.AcceptedBoundaries",
         "if (boundaries.Count == 0)",
         "ExistingProjectMutationContext.Require(document, \"Room Auto\")",
         "ProjectContextCoordinator.GetOrCreate(document)",
@@ -33,9 +33,9 @@ else:
     if any(position < 0 for position in positions):
         errors.append("QS3DROOMAUTO missing preview/selection/discovery/commit lifecycle token")
     else:
-        preview, read_selection, empty_segments, discover, empty_boundaries, require_existing, create_new, snapshot, mutate = positions
-        if not (preview < read_selection < empty_segments < discover < empty_boundaries):
-            errors.append("QS3DROOMAUTO must preview metadata, then acquire selection and prove a closed boundary before any project commit path")
+        preview, read_selection, analyze, accepted, empty_boundaries, require_existing, create_new, snapshot, mutate = positions
+        if not (preview < read_selection < analyze < accepted < empty_boundaries):
+            errors.append("QS3DROOMAUTO must preview metadata, then acquire and diagnose selection and prove an accepted closed boundary before any project commit path")
         if not (empty_boundaries < require_existing < snapshot < mutate and empty_boundaries < create_new < snapshot < mutate):
             errors.append("QS3DROOMAUTO existing bind/project creation must occur only after non-empty boundary discovery and before semantic mutation")
 

@@ -41,9 +41,21 @@ namespace QS3D.BricsCAD.V25.Cad
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 foreach (var host in project.Elements
-                    .Where(x => x.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var raw) && !string.IsNullOrWhiteSpace(raw))
+                    .Where(x => HasValue(x, "PhysicalOpeningCutSolidHandle") || HasValue(x, "PhysicalOpeningCutFingerprint"))
                     .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
+                    var hasCutSolid = host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolid) && !string.IsNullOrWhiteSpace(cutSolid);
+                    var hasCutFingerprint = host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) && !string.IsNullOrWhiteSpace(cutFingerprint);
+                    if (hasCutSolid != hasCutFingerprint)
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "PHYSICAL_OPENING_CUT_STATE_INCOMPLETE",
+                            HealthSeverity.Error,
+                            "Physical opening cut metadata thiếu handle hoặc fingerprint; Build 3D + Cut lại host trước khi phát hành.",
+                            host.Id));
+                        continue;
+                    }
+
                     if (!host.Properties.TryGetValue(FingerprintKey, out var stored) || string.IsNullOrWhiteSpace(stored))
                     {
                         issues.Add(new ModelHealthIssue(
@@ -55,8 +67,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
 
                     if (!host.Properties.TryGetValue("GeneratedSolidHandle", out var generated) || string.IsNullOrWhiteSpace(generated) ||
-                        !host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolid) || string.IsNullOrWhiteSpace(cutSolid) ||
-                        !string.Equals(generated.Trim(), cutSolid.Trim(), StringComparison.OrdinalIgnoreCase))
+                        !string.Equals(generated.Trim(), cutSolid!.Trim(), StringComparison.OrdinalIgnoreCase))
                     {
                         issues.Add(new ModelHealthIssue(
                             "PHYSICAL_OPENING_CUT_SOLID_MISMATCH",
@@ -68,6 +79,8 @@ namespace QS3D.BricsCAD.V25.Cad
 
                     try
                     {
+                        RequireOwnedGeneratedSolid(document, transaction, project, host, generated, "inspect physical opening live state");
+
                         var sourceIds = CadHandleService.Resolve(document, host.SourceHandles);
                         if (sourceIds.Count != 1)
                             throw new InvalidOperationException("Host cần đúng một live CAD source để kiểm tra physical opening cut.");
@@ -144,10 +157,15 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var host = project.FindElement(group.Key);
                     if (host == null) continue;
-                    if (!host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) || string.IsNullOrWhiteSpace(cutFingerprint)) continue;
+                    var hasCutSolid = host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolid) && !string.IsNullOrWhiteSpace(cutSolid);
+                    var hasCutFingerprint = host.Properties.TryGetValue("PhysicalOpeningCutFingerprint", out var cutFingerprint) && !string.IsNullOrWhiteSpace(cutFingerprint);
+                    if (hasCutSolid != hasCutFingerprint)
+                        throw new InvalidOperationException("Host " + host.Id + " có physical opening metadata không đầy đủ; không stamp live state.");
+                    if (!hasCutSolid) continue;
                     if (!host.Properties.TryGetValue("GeneratedSolidHandle", out var generated) || string.IsNullOrWhiteSpace(generated)) continue;
-                    if (!host.Properties.TryGetValue("PhysicalOpeningCutSolidHandle", out var cutSolid) || string.IsNullOrWhiteSpace(cutSolid)) continue;
-                    if (!string.Equals(generated.Trim(), cutSolid.Trim(), StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(generated.Trim(), cutSolid!.Trim(), StringComparison.OrdinalIgnoreCase)) continue;
+
+                    RequireOwnedGeneratedSolid(document, transaction, project, host, generated, "stamp physical opening live state");
 
                     var sourceIds = CadHandleService.Resolve(document, host.SourceHandles);
                     if (sourceIds.Count != 1) continue;
@@ -195,6 +213,26 @@ namespace QS3D.BricsCAD.V25.Cad
             if (changed > 0) project.Touch();
             return changed;
         }
+
+        private static void RequireOwnedGeneratedSolid(
+            Document document,
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement host,
+            string generatedHandle,
+            string operation)
+        {
+            var ids = CadHandleService.Resolve(document, new[] { generatedHandle });
+            if (ids.Count != 1)
+                throw new InvalidOperationException("Generated host solid " + generatedHandle.Trim() + " không resolve duy nhất cho " + host.Id + ".");
+            var solid = transaction.GetObject(ids[0], OpenMode.ForRead, false) as Solid3d;
+            if (solid == null || solid.IsErased)
+                throw new InvalidOperationException("Generated host solid không còn live cho " + host.Id + ".");
+            GeneratedGeometryService.RequireMatchingOwnership(solid, project, host, operation + " " + generatedHandle.Trim());
+        }
+
+        private static bool HasValue(ProjectElement element, string key) =>
+            element.Properties.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value);
 
         private static bool IsOpening(ProjectElement element) =>
             element.Category == ElementCategory.Door || element.Category == ElementCategory.WallOpening;

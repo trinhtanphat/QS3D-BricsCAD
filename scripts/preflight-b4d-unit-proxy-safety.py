@@ -74,8 +74,12 @@ if ed2.find("DrawingUnitWorkflow.EnsureResolved") < 0 or ed2.find("DrawingUnitWo
 b4d_start = review.find("private static void RecognizeInternal")
 b4d_end = review.find('CommandMethod("QS3DREVBASE"', b4d_start)
 b4d = review[b4d_start:b4d_end]
-if b4d.find("DrawingUnitWorkflow.EnsureResolved") < 0 or b4d.find("DrawingUnitWorkflow.EnsureResolved") > b4d.find("ReadCurrentSpace"):
-    errors.append("B4D must resolve units before scanning Current Space.")
+b4d_read = b4d.find("ReadCurrentSpace")
+b4d_empty = b4d.find("if (snapshots.Count == 0)")
+b4d_units = b4d.find("DrawingUnitWorkflow.EnsureResolved")
+b4d_suggest = b4d.find("SuggestBatch(project, snapshots)")
+if min(b4d_read, b4d_empty, b4d_units, b4d_suggest) < 0 or not (b4d_read < b4d_empty < b4d_units < b4d_suggest):
+    errors.append("B4D must reject empty Current Space before project bootstrap, then resolve units before recognition.")
 require("semantic capture", capture, (
     "EntitySnapshotCaptureEligibility.EnsureReady(snapshot, category)",
     "DrawingUnitResolutionPolicy.BindQuantityUnit",
