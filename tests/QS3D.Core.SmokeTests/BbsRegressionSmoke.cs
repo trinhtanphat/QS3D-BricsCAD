@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -27,6 +29,7 @@ namespace QS3D.Core.SmokeTests
             CuttingLengthFallbackIsLazy();
             FabricationProvenanceFlowsToExports();
             CsvRejectsInvalidRowsBeforeReplace();
+            XlsxRejectsWorksheetOverflowBeforeMutation();
         }
 
         private static void RebarWeightRejectsNonFiniteValues()
@@ -233,6 +236,42 @@ namespace QS3D.Core.SmokeTests
             {
                 try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
             }
+        }
+
+        private static void XlsxRejectsWorksheetOverflowBeforeMutation()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-limit-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "bbs.xlsx");
+            try
+            {
+                File.WriteAllText(path, "ORIGINAL");
+                var oversized = new OversizedBbsRows(1048576);
+                Throws<ArgumentOutOfRangeException>(() => XlsxRebarScheduleExporter.Export(path, oversized));
+                Equal(0, oversized.IndexerReads);
+                Equal("ORIGINAL", File.ReadAllText(path));
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private sealed class OversizedBbsRows : IReadOnlyList<RebarScheduleRow>
+        {
+            public OversizedBbsRows(int count) { Count = count; }
+            public int Count { get; }
+            public int IndexerReads { get; private set; }
+            public RebarScheduleRow this[int index]
+            {
+                get
+                {
+                    IndexerReads++;
+                    throw new InvalidOperationException("Oversized BBS rows must be rejected before indexing.");
+                }
+            }
+            public IEnumerator<RebarScheduleRow> GetEnumerator() => throw new InvalidOperationException("Oversized BBS rows must be rejected before enumeration.");
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static void Require(string text, string token)
