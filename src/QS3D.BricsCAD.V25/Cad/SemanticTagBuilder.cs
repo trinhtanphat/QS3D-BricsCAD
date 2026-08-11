@@ -61,54 +61,57 @@ namespace QS3D.BricsCAD.V25.Cad
             try
             {
                 using (document.LockDocument())
-                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var sourceId = ResolveHandle(document.Database, sourceHandle, "semantic tag source " + element.Id);
-                    var source = transaction.GetObject(sourceId, OpenMode.ForRead, false) as Entity;
-                    if (source == null || source.IsErased)
-                        throw new InvalidOperationException("Semantic tag source không còn live: " + sourceHandle + ".");
-                    var owner = transaction.GetObject(source.OwnerId, OpenMode.ForWrite, false) as BlockTableRecord;
-                    if (owner == null)
-                        throw new InvalidOperationException("Không mở được owner space của semantic source " + element.Id + ".");
-
-                    ErasePrevious(document, transaction, project, element, ownership);
-
-                    var tag = new MText
+                    var previous = ValidatePrevious(document.Database, project, element, ownership);
+                    using (var transaction = document.Database.TransactionManager.StartTransaction())
                     {
-                        Location = worldPosition,
-                        TextHeight = textHeight,
-                        Contents = EncodePlainMText(rendered),
-                        Attachment = AttachmentPoint.MiddleCenter,
-                        Normal = Vector3d.ZAxis,
-                        Rotation = rotationRadians
-                    };
-                    tag.SetDatabaseDefaults(document.Database);
-                    try { tag.LayerId = source.LayerId; } catch { }
-                    owner.AppendEntity(tag);
-                    transaction.AddNewlyCreatedDBObject(tag, true);
-                    GeneratedGeometryService.MarkGenerated(document, transaction, tag, project.ProjectId, element.Id, element.Category);
-                    generatedHandle = tag.Handle.ToString();
+                        var sourceId = ResolveHandle(document.Database, sourceHandle, "semantic tag source " + element.Id);
+                        var source = transaction.GetObject(sourceId, OpenMode.ForRead, false) as Entity;
+                        if (source == null || source.IsErased)
+                            throw new InvalidOperationException("Semantic tag source không còn live: " + sourceHandle + ".");
+                        var owner = transaction.GetObject(source.OwnerId, OpenMode.ForWrite, false) as BlockTableRecord;
+                        if (owner == null)
+                            throw new InvalidOperationException("Không mở được owner space của semantic source " + element.Id + ".");
 
-                    element.Properties[GeneratedSemanticTagHealthService.HandlesKey] = generatedHandle;
-                    element.Properties[GeneratedSemanticTagHealthService.TemplateKey] = template;
-                    element.Properties[GeneratedSemanticTagHealthService.TextKey] = rendered;
-                    element.Properties[GeneratedSemanticTagHealthService.OwnerProjectKey] = project.ProjectId;
-                    element.Properties[GeneratedSemanticTagHealthService.OwnerElementKey] = element.Id;
-                    element.Properties[GeneratedSemanticTagHealthService.OwnershipVersionKey] = GeneratedSemanticTagHealthService.OwnershipVersion;
-                    element.Properties[GeneratedSemanticTagHealthService.TextHeightKey] = textHeightM.ToString("R", CultureInfo.InvariantCulture);
-                    element.Properties[GeneratedSemanticTagHealthService.PositionScopeKey] = GeneratedSemanticTagHealthService.DrawingLocalWcs;
-                    element.Properties[GeneratedSemanticTagHealthService.PositionXKey] = worldPosition.X.ToString("R", CultureInfo.InvariantCulture);
-                    element.Properties[GeneratedSemanticTagHealthService.PositionYKey] = worldPosition.Y.ToString("R", CultureInfo.InvariantCulture);
-                    element.Properties[GeneratedSemanticTagHealthService.PositionZKey] = worldPosition.Z.ToString("R", CultureInfo.InvariantCulture);
-                    element.Properties["GeneratedSemanticTagRotationRad"] = rotationRadians.ToString("R", CultureInfo.InvariantCulture);
+                        ErasePrevious(transaction, project, element, previous);
 
-                    AuditTrail.ForProject(project).Record(
-                        "documentation.semantic-tag.replace",
-                        element.Id,
-                        generatedHandle + " • template=" + template);
-                    project.Touch();
-                    transaction.Commit();
-                    cadCommitted = true;
+                        var tag = new MText
+                        {
+                            Location = worldPosition,
+                            TextHeight = textHeight,
+                            Contents = EncodePlainMText(rendered),
+                            Attachment = AttachmentPoint.MiddleCenter,
+                            Normal = Vector3d.ZAxis,
+                            Rotation = rotationRadians
+                        };
+                        tag.SetDatabaseDefaults(document.Database);
+                        try { tag.LayerId = source.LayerId; } catch { }
+                        owner.AppendEntity(tag);
+                        transaction.AddNewlyCreatedDBObject(tag, true);
+                        GeneratedGeometryService.MarkGenerated(document, transaction, tag, project.ProjectId, element.Id, element.Category);
+                        generatedHandle = tag.Handle.ToString();
+
+                        element.Properties[GeneratedSemanticTagHealthService.HandlesKey] = generatedHandle;
+                        element.Properties[GeneratedSemanticTagHealthService.TemplateKey] = template;
+                        element.Properties[GeneratedSemanticTagHealthService.TextKey] = rendered;
+                        element.Properties[GeneratedSemanticTagHealthService.OwnerProjectKey] = project.ProjectId;
+                        element.Properties[GeneratedSemanticTagHealthService.OwnerElementKey] = element.Id;
+                        element.Properties[GeneratedSemanticTagHealthService.OwnershipVersionKey] = GeneratedSemanticTagHealthService.OwnershipVersion;
+                        element.Properties[GeneratedSemanticTagHealthService.TextHeightKey] = textHeightM.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties[GeneratedSemanticTagHealthService.PositionScopeKey] = GeneratedSemanticTagHealthService.DrawingLocalWcs;
+                        element.Properties[GeneratedSemanticTagHealthService.PositionXKey] = worldPosition.X.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties[GeneratedSemanticTagHealthService.PositionYKey] = worldPosition.Y.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties[GeneratedSemanticTagHealthService.PositionZKey] = worldPosition.Z.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties["GeneratedSemanticTagRotationRad"] = rotationRadians.ToString("R", CultureInfo.InvariantCulture);
+
+                        AuditTrail.ForProject(project).Record(
+                            "documentation.semantic-tag.replace",
+                            element.Id,
+                            generatedHandle + " • template=" + template);
+                        project.Touch();
+                        transaction.Commit();
+                        cadCommitted = true;
+                    }
                 }
             }
             catch (Exception operationError)
@@ -146,31 +149,79 @@ namespace QS3D.BricsCAD.V25.Cad
             return RequiredFinite(element, "GeneratedSemanticTagRotationRad");
         }
 
-        private static void ErasePrevious(
-            Document document,
-            Transaction transaction,
+        private static IReadOnlyList<KeyValuePair<string, ObjectId>> ValidatePrevious(
+            Database database,
             ProjectState project,
             ProjectElement element,
             GeneratedHandleOwnershipIndex ownership)
         {
-            if (!element.Properties.TryGetValue(GeneratedSemanticTagHealthService.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var result = new List<KeyValuePair<string, ObjectId>>();
+            if (!element.Properties.TryGetValue(GeneratedSemanticTagHealthService.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw))
+                return result;
+
+            var seenCanonical = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var token in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 var handle = token.Trim();
-                if (handle.Length == 0 || !seen.Add(handle)) continue;
+                if (handle.Length == 0) continue;
+                var canonical = CadHandleService.NormalizeHexHandle(handle);
+                if (canonical == null)
+                    throw new InvalidOperationException(
+                        "Generated semantic tag handle không hợp lệ cho " + element.Id + ": " + handle + ". Refusing destructive replacement.");
+                if (!seenCanonical.Add(canonical)) continue;
+
                 if (!ownership.TryFindOwner(handle, out var owner, out var slot) || owner == null ||
                     !ReferenceEquals(owner, element) ||
                     !string.Equals(GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot(slot), GeneratedSemanticTagHealthService.HandlesKey, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Refusing semantic tag replacement because generated handle ownership is not " + element.Id + "/" + GeneratedSemanticTagHealthService.HandlesKey + ": " + handle + ".");
+                    throw new InvalidOperationException(
+                        "Refusing semantic tag replacement because generated handle ownership is not " +
+                        element.Id + "/" + GeneratedSemanticTagHealthService.HandlesKey + ": " + handle + ".");
 
-                var id = ResolveHandle(document.Database, handle, "generated semantic tag " + element.Id, allowMissing: true);
-                if (id.IsNull || !id.IsValid) continue;
-                var entity = transaction.GetObject(id, OpenMode.ForWrite, true) as Entity;
-                if (entity == null || entity.IsErased) continue;
+                result.Add(new KeyValuePair<string, ObjectId>(
+                    handle,
+                    ResolveHandle(database, handle, "generated semantic tag " + element.Id)));
+            }
+
+            if (result.Count == 0)
+                throw new InvalidOperationException(
+                    "GeneratedSemanticTagHandles không có handle hợp lệ để replace cho " + element.Id + ".");
+
+            using (var validation = database.TransactionManager.StartOpenCloseTransaction())
+            {
+                foreach (var item in result)
+                {
+                    var entity = validation.GetObject(item.Value, OpenMode.ForRead, false) as Entity;
+                    if (entity == null || entity.IsErased)
+                        throw new InvalidOperationException(
+                            "Generated semantic tag handle " + item.Key +
+                            " is missing or erased. Refusing destructive replacement before any semantic tag is erased.");
+                    if (!(entity is MText))
+                        throw new InvalidOperationException(
+                            "Generated semantic tag handle " + item.Key + " is live but is not MText. Refusing destructive replacement.");
+                    GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "validate semantic tag replacement " + item.Key);
+                }
+                validation.Commit();
+            }
+
+            return result;
+        }
+
+        private static void ErasePrevious(
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement element,
+            IReadOnlyList<KeyValuePair<string, ObjectId>> previous)
+        {
+            foreach (var item in previous)
+            {
+                var entity = transaction.GetObject(item.Value, OpenMode.ForWrite, false) as Entity;
+                if (entity == null || entity.IsErased)
+                    throw new InvalidOperationException(
+                        "Generated semantic tag handle " + item.Key + " is no longer live. Refusing partial destructive replacement.");
                 if (!(entity is MText))
-                    throw new InvalidOperationException("Generated semantic tag handle " + handle + " is live but is not MText. Refusing destructive replacement.");
-                GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "erase semantic tag " + handle);
+                    throw new InvalidOperationException(
+                        "Generated semantic tag handle " + item.Key + " is live but is not MText. Refusing destructive replacement.");
+                GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "erase semantic tag " + item.Key);
                 entity.Erase();
             }
         }
@@ -187,20 +238,21 @@ namespace QS3D.BricsCAD.V25.Cad
             return sources[0];
         }
 
-        private static ObjectId ResolveHandle(Database database, string text, string label, bool allowMissing = false)
+        private static ObjectId ResolveHandle(Database database, string text, string label)
         {
-            if (!long.TryParse((text ?? string.Empty).Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+            var canonical = CadHandleService.NormalizeHexHandle(text);
+            if (canonical == null ||
+                !long.TryParse(canonical, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
                 throw new InvalidOperationException(label + " Handle không hợp lệ: " + text + ".");
             try
             {
                 var id = database.GetObjectId(false, new Handle(value), 0);
                 if (!id.IsNull && id.IsValid) return id;
             }
-            catch
+            catch (Exception error)
             {
-                if (!allowMissing) throw;
+                throw new InvalidOperationException("Không resolve được " + label + " Handle: " + text + ".", error);
             }
-            if (allowMissing) return ObjectId.Null;
             throw new InvalidOperationException("Không resolve được " + label + " Handle: " + text + ".");
         }
 

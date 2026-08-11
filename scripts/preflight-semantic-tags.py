@@ -85,6 +85,11 @@ for token in [
     "GeneratedHandleOwnershipIndex.Build(project)",
     "ProjectStateSnapshot.Capture(project)",
     "var cadCommitted = false;",
+    "ValidatePrevious",
+    "CadHandleService.NormalizeHexHandle",
+    "OpenMode.ForRead",
+    "Refusing destructive replacement before any semantic tag is erased.",
+    "Refusing partial destructive replacement.",
     "if (!(entity is MText))",
     "GeneratedGeometryService.RequireMatchingOwnership(entity, project, element",
     "GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot(slot)",
@@ -103,14 +108,23 @@ for token in [
     require(builder, token, "native semantic tag builder")
 
 render = builder.find("SemanticTagRenderer.Render(project, element, template)")
-erase = builder.find("ErasePrevious(document, transaction, project, element, ownership)")
+validate_previous = builder.find("var previous = ValidatePrevious(document.Database, project, element, ownership);")
+erase = builder.find("ErasePrevious(transaction, project, element, previous)")
 metadata = builder.find("element.Properties[GeneratedSemanticTagHealthService.HandlesKey] = generatedHandle;")
 audit = builder.find('AuditTrail.ForProject(project).Record(')
 touch = builder.find("project.Touch();", audit)
 commit = builder.find("transaction.Commit();", touch)
-if min(render, erase, metadata, audit, touch, commit) < 0 or not render < erase < metadata < audit < touch < commit:
-    print("[FAIL] native semantic tag builder: render/validate must precede erase and semantic ownership/audit/revision must precede CAD commit")
+if min(render, validate_previous, erase, metadata, audit, touch, commit) < 0 or not render < validate_previous < erase < metadata < audit < touch < commit:
+    print("[FAIL] native semantic tag builder: render and complete previous-handle validation must precede erase; semantic ownership/audit/revision must precede CAD commit")
     sys.exit(1)
+for forbidden in [
+    "allowMissing: true",
+    "if (id.IsNull || !id.IsValid) continue;",
+    "if (entity == null || entity.IsErased) continue;",
+]:
+    if forbidden in builder:
+        print("[FAIL] native semantic tag builder must fail closed instead of skipping stale previous handles: " + forbidden)
+        sys.exit(1)
 if "Editor.Regen(" in builder or "PaletteCoordinator" in builder:
     print("[FAIL] native semantic tag builder: UI work must remain command-level post-commit")
     sys.exit(1)
