@@ -57,10 +57,11 @@ The CAD-independent View/Sheet planning layer is already source-implemented and 
 - `SemanticSheetPlanner` validates stable sheet IDs/numbers, paper bounds, optional title-block name and non-overlapping view placements;
 - `SemanticSheetAutoLayoutPlanner` performs deterministic multi-sheet packing with bounded margins/gaps and reserved bottom/title-block space instead of making CAD runtime code invent another packing algorithm;
 - `SemanticSheetIndexBuilder` derives a bounded, handle-free Sheet Index from validated semantic sheet plans, preserves stable `SheetId` separately from display number/name, sorts deterministically by number then ID, rejects duplicate IDs/numbers case-insensitively, and returns a defensive read-only snapshot;
+- `SemanticTitleBlockParameterMapBuilder` maps bounded opaque destination parameter tags to explicit semantic Sheet fields (`SheetId`, number, name, optional title-block name and placed-view count), renders values deterministically/invariantly and does not encode BricsCAD attribute syntax or native IDs in Core;
 - `SemanticDocumentationCatalogStore` persists the documentation catalog in project metadata with bounded XML parsing/serialization;
 - `SemanticDocumentationCatalogEditor` performs referentially safe View/Sheet replacement/removal so a view cannot silently disappear while sheet placements still reference it.
 
-These classes are planning/persistence/documentation infrastructure. They do **not** by themselves prove native BricsCAD Layout, PaperSpace Viewport, title-block insertion, viewport scale/lock, native Sheet Index Table materialization or save/reopen behavior.
+These classes are planning/persistence/documentation infrastructure. They do **not** by themselves prove native BricsCAD Layout, PaperSpace Viewport, title-block insertion/attribute discovery, viewport scale/lock, native Sheet Index Table materialization or save/reopen behavior.
 
 Source checks:
 
@@ -68,9 +69,10 @@ Source checks:
 python scripts/preflight-semantic-tags.py
 python scripts/preflight-semantic-documentation-table.py
 python scripts/preflight-semantic-sheet-index.py
+python scripts/preflight-semantic-title-block-map.py
 ```
 
-The Core smoke suite includes `SemanticTagRendererSmoke`, `SemanticDocumentationTableSmoke` and `SemanticViewSheetPlannerSmoke`. The documentation-table and Sheet Index coverage verifies that returned snapshots are not externally mutable through retained source lists or collection casts; the Sheet Index smoke also locks deterministic ordering and fail-closed identity/bounds behavior.
+The Core smoke suite includes `SemanticTagRendererSmoke`, `SemanticDocumentationTableSmoke` and `SemanticViewSheetPlannerSmoke`. Documentation-table, Sheet Index and title-block-map coverage verifies that returned snapshots are not externally mutable; the Sheet documentation smoke also locks deterministic ordering, bounds, duplicate identity/tag rejection and unknown mapping-field failure.
 
 ## Native V25 status
 
@@ -111,14 +113,14 @@ Still open for native table qualification/expansion:
 
 ### Layout / Sheet / View — Core planned, native materialization still open
 
-Core planning/persistence and the handle-free Sheet Index model are implemented, but native BricsCAD Layout/PaperSpace/Viewport/title-block/Sheet-Index-Table materialization is still open. Native code should consume the existing `SemanticViewPlanner`, `SemanticSheetPlanner`, `SemanticSheetAutoLayoutPlanner`, `SemanticSheetIndexBuilder` and documentation catalog rather than rebuilding their identity/layout/index rules.
+Core planning/persistence, the handle-free Sheet Index model and title-block parameter mapping contract are implemented, but native BricsCAD Layout/PaperSpace/Viewport/title-block/Sheet-Index-Table materialization is still open. Native code should consume the existing `SemanticViewPlanner`, `SemanticSheetPlanner`, `SemanticSheetAutoLayoutPlanner`, `SemanticSheetIndexBuilder`, `SemanticTitleBlockParameterMapBuilder` and documentation catalog rather than rebuilding their identity/layout/index/mapping rules.
 
 Before calling this native workflow complete, establish and qualify:
 
 - stable QS3D sheet/view identity separate from display title;
 - ownership of generated layouts/viewports/title blocks without deleting user-created content;
 - mapping of semantic sheet paper bounds and view placements into Layout/PaperSpace coordinates;
-- title-block selection/insertion rules without assuming a customer-private block definition exists;
+- title-block selection/insertion and destination-attribute discovery rules without assuming a customer-private block definition exists;
 - view target/direction, viewport scale and viewport lock rules;
 - native Sheet Index Table placement/update ownership rules driven from the Core index rather than rescanning layouts as a second source of truth;
 - update/recreate/rename/delete behavior for both semantic catalog and native objects;
