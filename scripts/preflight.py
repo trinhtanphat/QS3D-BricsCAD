@@ -311,7 +311,7 @@ if semantic_capture.exists():
 ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 if ribbon.exists():
     text = ribbon.read_text(encoding="utf-8")
-    for command in ("QS3DTEMPLATEEXPORT", "QS3DTEMPLATEIMPORT", "QS3DRECOGNIZE", "QS3DRECOGNIZEAUTO", "QS3DBBSVIEW", "QS3DREVBASE", "QS3DREVBASE", "QS3DREVDIFF"):
+    for command in ("QS3DTEMPLATEEXPORT", "QS3DTEMPLATEIMPORT", "QS3DRECOGNIZE", "QS3DRECOGNIZEAUTO", "QS3DBBSVIEW", "QS3DREVBASE", "QS3DREVDIFF"):
         if command not in text: errors.append("Ribbon workflow entry missing: " + command)
 installer = ROOT / "scripts/install-bricscad-v25.ps1"
 if installer.exists():
