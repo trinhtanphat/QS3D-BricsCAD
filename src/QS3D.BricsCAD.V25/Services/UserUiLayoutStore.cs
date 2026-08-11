@@ -12,6 +12,8 @@ namespace QS3D.BricsCAD.V25.Services
         public int WorkspacePaletteHeight { get; set; } = 720;
         public int RightPaletteWidth { get; set; } = 300;
         public int RightPaletteHeight { get; set; } = 720;
+        public int QuantityPaletteWidth { get; set; } = 330;
+        public int QuantityPaletteHeight { get; set; } = 720;
         public double ModelColumnWidth { get; set; } = 160d;
         public double FamilyColumnWidth { get; set; } = 245d;
         public double FamilyTopHeight { get; set; } = 250d;
@@ -24,6 +26,8 @@ namespace QS3D.BricsCAD.V25.Services
         internal const int WorkspacePaletteMinHeight = 420;
         internal const int RightPaletteMinWidth = 255;
         internal const int RightPaletteMinHeight = 480;
+        internal const int QuantityPaletteMinWidth = 280;
+        internal const int QuantityPaletteMinHeight = 360;
 
         private const int MaxFileBytes = 16 * 1024;
         private static readonly object Gate = new object();
@@ -73,6 +77,8 @@ namespace QS3D.BricsCAD.V25.Services
                 layout.WorkspacePaletteHeight = Int(values, "WorkspacePaletteHeight", layout.WorkspacePaletteHeight);
                 layout.RightPaletteWidth = Int(values, "RightPaletteWidth", layout.RightPaletteWidth);
                 layout.RightPaletteHeight = Int(values, "RightPaletteHeight", layout.RightPaletteHeight);
+                layout.QuantityPaletteWidth = Int(values, "QuantityPaletteWidth", layout.QuantityPaletteWidth);
+                layout.QuantityPaletteHeight = Int(values, "QuantityPaletteHeight", layout.QuantityPaletteHeight);
                 layout.ModelColumnWidth = Double(values, "ModelColumnWidth", layout.ModelColumnWidth);
                 layout.FamilyColumnWidth = Double(values, "FamilyColumnWidth", layout.FamilyColumnWidth);
                 layout.FamilyTopHeight = Double(values, "FamilyTopHeight", layout.FamilyTopHeight);
@@ -140,6 +146,8 @@ namespace QS3D.BricsCAD.V25.Services
             builder.Append("WorkspacePaletteHeight=").AppendLine(layout.WorkspacePaletteHeight.ToString(invariant));
             builder.Append("RightPaletteWidth=").AppendLine(layout.RightPaletteWidth.ToString(invariant));
             builder.Append("RightPaletteHeight=").AppendLine(layout.RightPaletteHeight.ToString(invariant));
+            builder.Append("QuantityPaletteWidth=").AppendLine(layout.QuantityPaletteWidth.ToString(invariant));
+            builder.Append("QuantityPaletteHeight=").AppendLine(layout.QuantityPaletteHeight.ToString(invariant));
             builder.Append("ModelColumnWidth=").AppendLine(layout.ModelColumnWidth.ToString("R", invariant));
             builder.Append("FamilyColumnWidth=").AppendLine(layout.FamilyColumnWidth.ToString("R", invariant));
             builder.Append("FamilyTopHeight=").AppendLine(layout.FamilyTopHeight.ToString("R", invariant));
@@ -160,6 +168,8 @@ namespace QS3D.BricsCAD.V25.Services
             layout.WorkspacePaletteHeight = Clamp(layout.WorkspacePaletteHeight, WorkspacePaletteMinHeight, 2000);
             layout.RightPaletteWidth = Clamp(layout.RightPaletteWidth, RightPaletteMinWidth, 1200);
             layout.RightPaletteHeight = Clamp(layout.RightPaletteHeight, RightPaletteMinHeight, 2000);
+            layout.QuantityPaletteWidth = Clamp(layout.QuantityPaletteWidth, QuantityPaletteMinWidth, 1200);
+            layout.QuantityPaletteHeight = Clamp(layout.QuantityPaletteHeight, QuantityPaletteMinHeight, 2000);
             layout.ModelColumnWidth = Clamp(layout.ModelColumnWidth, 135d, 500d, 160d);
             layout.FamilyColumnWidth = Clamp(layout.FamilyColumnWidth, 220d, 700d, 245d);
             layout.FamilyTopHeight = Clamp(layout.FamilyTopHeight, 160d, 900d, 250d);
@@ -172,6 +182,8 @@ namespace QS3D.BricsCAD.V25.Services
                    left.WorkspacePaletteHeight == right.WorkspacePaletteHeight &&
                    left.RightPaletteWidth == right.RightPaletteWidth &&
                    left.RightPaletteHeight == right.RightPaletteHeight &&
+                   left.QuantityPaletteWidth == right.QuantityPaletteWidth &&
+                   left.QuantityPaletteHeight == right.QuantityPaletteHeight &&
                    left.ModelColumnWidth == right.ModelColumnWidth &&
                    left.FamilyColumnWidth == right.FamilyColumnWidth &&
                    left.FamilyTopHeight == right.FamilyTopHeight &&
@@ -198,6 +210,8 @@ namespace QS3D.BricsCAD.V25.Services
             WorkspacePaletteHeight = source.WorkspacePaletteHeight,
             RightPaletteWidth = source.RightPaletteWidth,
             RightPaletteHeight = source.RightPaletteHeight,
+            QuantityPaletteWidth = source.QuantityPaletteWidth,
+            QuantityPaletteHeight = source.QuantityPaletteHeight,
             ModelColumnWidth = source.ModelColumnWidth,
             FamilyColumnWidth = source.FamilyColumnWidth,
             FamilyTopHeight = source.FamilyTopHeight,
