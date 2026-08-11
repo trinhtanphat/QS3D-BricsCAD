@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "src/QS3D.BricsCAD.V25/QuantityRuleCreateCommands.cs"
+SRC = ROOT / "src/QS3D.BricsCAD.V25"
+SOURCE = SRC / "QuantityRuleCreateCommands.cs"
 errors = []
+
+expected_owner = "src/QS3D.BricsCAD.V25/QuantityRuleCreateCommands.cs"
+for command in ("QS3DRULECREATE", "QS3DINTERSECTIONRULECREATE"):
+    owners = []
+    pattern = re.compile(r'\[CommandMethod\("' + re.escape(command) + r'"', re.IGNORECASE)
+    for path in SRC.rglob("*.cs"):
+        if pattern.search(path.read_text(encoding="utf-8")):
+            owners.append(path.relative_to(ROOT).as_posix())
+    if owners != [expected_owner]:
+        errors.append(command + " must have exactly one canonical owner; found: " + ", ".join(owners))
 
 if not SOURCE.is_file():
     errors.append("missing QuantityRuleCreateCommands.cs")
@@ -68,4 +80,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DRULECREATE creates exactly one confirmed missing A->B settings row, preserves reverse-rule independence, rejects unknown/duplicate pairs, validates before persistence, and writes only through QuantitySettingsStore.")
+print("PASS: QS3DRULECREATE has one canonical owner, creates exactly one confirmed missing A->B settings row, preserves reverse-rule independence, rejects unknown/duplicate pairs, validates before persistence, and writes only through QuantitySettingsStore.")
