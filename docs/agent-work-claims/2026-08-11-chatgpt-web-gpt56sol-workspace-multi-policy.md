@@ -1,9 +1,9 @@
 # Work claim — Workspace multi-selection policy unification
 
 - Status: `ACTIVE`
-- Agent: `chatgpt-web-gpt56sol`
+- Agent: `chatgpt-web-gpt56sol-workspace-1930`
 - Registered: `2026-08-11T19:30:00+07:00`
-- Baseline main SHA: `0296f6f31e28a598474875805b934edc26c98e60`
+- Baseline main SHA: `44dae5d5f3a6184cadf93d27661d1b71dc9bc860`
 - Priority: continue-all source hardening after the Workspace semantic edit-policy batch
 
 ## Reserved scope
@@ -21,7 +21,7 @@ Unify Workspace multi-selection read-only/editability classification with the ca
 - No changes to Core edit-policy semantics or key classification.
 - No single-selection Property Inspector behavior changes beyond preserving current shared-policy behavior.
 - No BricsCAD V25/WPF runtime qualification, Direct Draw, revisions, persistence, release, CI, or local-only gates.
-- No changes to the active agent-registration protocol lane.
+- No changes to the active agent-registration protocol lane or the separately reserved Direct Draw Create Similar lane.
 
 ## Validation plan
 
@@ -32,7 +32,7 @@ Unify Workspace multi-selection read-only/editability classification with the ca
 
 ## Coordination
 
-The only visible active neighboring claim at registration time owns the agent-registration protocol and explicitly excludes product source changes. This lane is non-overlapping. Recheck pushed claims and latest `main` before implementation and merge.
+At registration time the agent-registration protocol claim excludes product source changes, and the concurrently published Create Similar claim reserves Direct Draw command/ownership surfaces. Neither overlaps this Workspace multi-selection policy lane. Recheck pushed claims and latest `main` before implementation and merge.
 
 ## Completion condition
 
