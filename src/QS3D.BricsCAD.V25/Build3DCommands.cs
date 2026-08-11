@@ -39,7 +39,7 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var project = ExistingProjectMutationContext.Require(document, "Build 3D");
                 var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
                 var selectedElements = project.Elements
                     .Where(x => SemanticReferenceHandles.MatchesSelection(x, handles))
