@@ -46,13 +46,17 @@ namespace QS3D.Core.Geometry
 
     public sealed class WallJunctionAdjustmentPlanner
     {
+        private const int MaxSegments = 10000;
+
         public WallJunctionAdjustmentPlan Plan(IEnumerable<WallAxisSegment> source, double junctionTolerance = 0.005d, double movementEpsilon = 1e-9d)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (!Finite(junctionTolerance) || junctionTolerance <= 0d) throw new ArgumentOutOfRangeException(nameof(junctionTolerance));
             if (!Finite(movementEpsilon) || movementEpsilon < 0d || movementEpsilon >= junctionTolerance) throw new ArgumentOutOfRangeException(nameof(movementEpsilon));
 
-            var segments = source.ToList();
+            var segments = source.Take(MaxSegments + 1).ToList();
+            if (segments.Count > MaxSegments)
+                throw new InvalidOperationException("Wall junction planning supports at most " + MaxSegments + " segments per batch.");
             var junctions = new WallJunctionPlanner().Plan(segments, junctionTolerance);
             var segmentsById = segments.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             foreach (var junction in junctions.Where(x => x.SegmentIds.Count > 1))
