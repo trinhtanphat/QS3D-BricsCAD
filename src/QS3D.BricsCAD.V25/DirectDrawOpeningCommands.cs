@@ -44,8 +44,11 @@ namespace QS3D.BricsCAD.V25
             Guard(document, operation, () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquireTwoPoints(document, label + (promptParameters ? " tùy chỉnh" : " nhanh"));
                 if (points == null) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, operation);
 
                 var widthDrawing = CadGeometryGuard.Hypot(
                     CadGeometryGuard.Subtract(points[1].X, points[0].X, label + "/dx"),
@@ -347,6 +350,16 @@ namespace QS3D.BricsCAD.V25
                 if (active != null && active.Category == category) return active;
             }
             return project.Families.FirstOrDefault(x => x.Category == category);
+        }
+
+        private static void RequirePromptContextUnchanged(Document document, object promptUnit, Matrix3d promptUcs, string operation)
+        {
+            EnsureActive(document, operation + " / geometry prompt freshness");
+            RequireModelSpace(document);
+            if (!Equals(CadUnitService.GetLengthUnit(document), promptUnit))
+                throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc chọn geometry cho " + operation + ". Hãy chạy lại lệnh.");
+            if (!document.Editor.CurrentUserCoordinateSystem.Equals(promptUcs))
+                throw new InvalidOperationException("Current UCS đã thay đổi trong lúc chọn geometry cho " + operation + ". Hãy chạy lại lệnh.");
         }
 
         private static void RequireModelSpace(Document document)
