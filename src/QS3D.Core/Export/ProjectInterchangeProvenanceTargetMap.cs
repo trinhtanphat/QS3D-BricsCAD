@@ -129,6 +129,8 @@ namespace QS3D.Core.Export
                 !string.Equals(fields[2], elementId, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Interchange provenance target-map record does not match the requested source identity.");
             var targetId = Required(fields[3], "targetElementId");
+            if (!string.Equals(fields[3], targetId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Interchange provenance target-map record contains a non-canonical padded target Element id.");
             if (target.FindElement(targetId) == null)
                 throw new InvalidOperationException("Interchange provenance target-map record points to missing target Element " + targetId + ".");
             return targetId;
