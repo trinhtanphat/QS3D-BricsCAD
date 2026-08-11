@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ExactDuplicateIdsFailClosed();
             CaseVariantDuplicateIdsFailClosed();
             NullProjectElementsFailClosed();
+            MalformedReferenceIdentitiesFailClosed();
             UniqueIdsRemainAccepted();
             ProvenanceIsRetainedAcrossSchedules();
         }
@@ -33,12 +34,40 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(new ProjectElement("E1", ElementCategory.Slab, "family", "floor", "zone"));
             project.Elements.Add(null!);
 
-            ExpectThrowsContaining<InvalidOperationException>(() => MaterialUsageScheduleBuilder.Build(project), "index 1");
-            ExpectThrows<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project));
-            ExpectThrows<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
-            ExpectThrows<InvalidOperationException>(() => RoomFinishScheduleBuilder.Build(project));
-            ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project));
-            ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Detail(project));
+            AssertAllProjectReportBuildersReject(project, "element index 1");
+        }
+
+        private static void MalformedReferenceIdentitiesFailClosed()
+        {
+            var nullFloor = new ProjectState("schedule-null-floor", "Schedule null floor");
+            nullFloor.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
+            nullFloor.Floors.Add(null!);
+            AssertAllProjectReportBuildersReject(nullFloor, "floor index 1");
+
+            var duplicateFloor = new ProjectState("schedule-duplicate-floor", "Schedule duplicate floor");
+            duplicateFloor.Floors.Add(new FloorDefinition("Floor-A", "Floor A", 0d));
+            duplicateFloor.Floors.Add(new FloorDefinition(" floor-a ", "Floor duplicate", 3d));
+            AssertAllProjectReportBuildersReject(duplicateFloor, "floor id 'floor-a'");
+
+            var nullZone = new ProjectState("schedule-null-zone", "Schedule null zone");
+            nullZone.Zones.Add(new ZoneDefinition("zone", "Zone"));
+            nullZone.Zones.Add(null!);
+            AssertAllProjectReportBuildersReject(nullZone, "zone index 1");
+
+            var duplicateZone = new ProjectState("schedule-duplicate-zone", "Schedule duplicate zone");
+            duplicateZone.Zones.Add(new ZoneDefinition("Zone-A", "Zone A"));
+            duplicateZone.Zones.Add(new ZoneDefinition(" zone-a ", "Zone duplicate"));
+            AssertAllProjectReportBuildersReject(duplicateZone, "zone id 'zone-a'");
+
+            var nullFamily = new ProjectState("schedule-null-family", "Schedule null family");
+            nullFamily.Families.Add(new ProjectFamily("family", "Family", ElementCategory.Slab));
+            nullFamily.Families.Add(null!);
+            AssertAllProjectReportBuildersReject(nullFamily, "family index 1");
+
+            var duplicateFamily = new ProjectState("schedule-duplicate-family", "Schedule duplicate family");
+            duplicateFamily.Families.Add(new ProjectFamily("Family-A", "Family A", ElementCategory.Slab));
+            duplicateFamily.Families.Add(new ProjectFamily(" family-a ", "Family duplicate", ElementCategory.Slab));
+            AssertAllProjectReportBuildersReject(duplicateFamily, "family id 'family-a'");
         }
 
         private static void UniqueIdsRemainAccepted()
@@ -160,6 +189,16 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(new ProjectElement("E1", ElementCategory.Slab, "family", "floor", "zone"));
             project.Elements.Add(new ProjectElement(secondId, ElementCategory.Slab, "family", "floor", "zone"));
             return project;
+        }
+
+        private static void AssertAllProjectReportBuildersReject(ProjectState project, string messagePart)
+        {
+            ExpectThrowsContaining<InvalidOperationException>(() => MaterialUsageScheduleBuilder.Build(project), messagePart);
+            ExpectThrowsContaining<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project), messagePart);
+            ExpectThrowsContaining<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project), messagePart);
+            ExpectThrowsContaining<InvalidOperationException>(() => RoomFinishScheduleBuilder.Build(project), messagePart);
+            ExpectThrowsContaining<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project), messagePart);
+            ExpectThrowsContaining<InvalidOperationException>(() => ProjectQuantityReportBuilder.Detail(project), messagePart);
         }
 
         private static void AssertAllScheduleBuildersReject(ProjectState project)
