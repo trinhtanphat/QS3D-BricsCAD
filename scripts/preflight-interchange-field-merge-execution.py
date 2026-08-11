@@ -84,10 +84,16 @@ if not errors:
     command_required = (
         'CommandMethod("QS3DINTERCHANGEFIELDMERGE"',
         "ProjectInterchangeValidatedSnapshotReader.Read(json)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var reviewedProject)",
         "ExistingProjectMutationContext.Require",
         "InterchangeFieldMergeImportService.Plan",
-        "InterchangeConfirmationGuard.RequireFresh",
         "InterchangeFieldMergeImportService.Import",
+        "currentProject.ProjectId",
+        "plan.TargetProjectId",
+        "currentProject.DrawingFingerprint",
+        "plan.TargetDrawingFingerprint",
+        "currentProject.ChangeVersion",
+        "plan.TargetChangeVersion",
         "policy.ZoneName",
         "policy.FloorName",
         "policy.FloorElevation",
@@ -105,6 +111,20 @@ if not errors:
     for token in command_required:
         if token not in command:
             errors.append("field-merge command missing reviewed policy/freshness token: " + token)
+
+    probe_at = command.find("ProjectContextCoordinator.TryGetReadOnly(document, out var reviewedProject)")
+    policy_at = command.find("TryChoosePolicy(out var policy)")
+    plan_at = command.find("InterchangeFieldMergeImportService.Plan(reviewedProject, json, policy)")
+    confirm_at = command.find("System.Windows.MessageBox.Show(", plan_at)
+    bind_at = command.find("ExistingProjectMutationContext.Require", confirm_at)
+    command_import_at = command.find("InterchangeFieldMergeImportService.Import", bind_at)
+    if min(probe_at, policy_at, plan_at, confirm_at, bind_at, command_import_at) < 0 or not (
+        probe_at < policy_at < plan_at < confirm_at < bind_at < command_import_at
+    ):
+        errors.append("field-merge command must preserve read-only preview -> policy -> plan -> confirmation -> canonical bind -> authorized import ordering")
+
+    if "InterchangeConfirmationGuard.RequireFresh" in command:
+        errors.append("field-merge command must not use reference-identity freshness before a cold-cache canonical bind; exact target identity/version is checked after confirmation instead")
 
     if "FieldMerge" in coordinator or "FieldPrecedence" in coordinator:
         errors.append("field merge must stay a dedicated reviewed BricsCAD command until exact-V25 qualification closes the generic coordinator exposure gate")
@@ -130,4 +150,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: reviewed Core field merge is target/source/decision fresh and exact-handle cleanup-bound; BricsCAD now exposes it only through a dedicated field-policy review command whose native transaction prepares owned erasure before authorized Core mutation, keeps semantic rollback outside CAD commit, and leaves generic coordinator exposure gated on exact-V25 qualification.")
+print("PASS: reviewed Core field merge is target/source/decision fresh and exact-handle cleanup-bound; BricsCAD previews through a non-creating read-only project, defers canonical binding until explicit confirmation, rechecks target identity/version before the atomic native transaction, and keeps generic coordinator exposure gated on exact-V25 qualification.")
