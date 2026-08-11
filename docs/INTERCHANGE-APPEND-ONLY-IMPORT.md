@@ -10,7 +10,9 @@ This is the first deliberately narrow mutating path for `QS3D.SemanticSnapshot` 
 
 The adapter reads the selected file once through a bounded, strict UTF-8 path using the validator's 16 MiB limit. It validates that exact in-memory text, builds the existing read-only ID collision preview, then builds `ProjectInterchangeAppendOnlyImporter.Plan(...)`. The append plan is also read-only and applies the stricter all-new ID **and name** rules before any Yes/No confirmation is shown.
 
-After confirmation, `Import(...)` repeats the same append preflight immediately before mutation. If target state changed while the dialog was open, the second preflight fails closed rather than applying stale intent.
+The standalone command may intentionally initialize the target project **before** preview when the active DWG has no cached QS3D project yet; that target project then becomes part of the reviewed intent. After confirmation, it must not call `GetOrCreate` again. `InterchangeConfirmationGuard.RequireFresh(...)` re-resolves state through the non-creating read-only path and requires the same reviewed `ProjectState` instance and `ChangeVersion`. A cache forget/reload, sidecar replacement, project replacement or version change therefore rejects the stale plan before mutation instead of silently binding a replacement target.
+
+After the freshness guard succeeds, `Import(...)` repeats the same append preflight immediately before mutation. If target state changed while the dialog was open, either the adapter freshness guard or the importer preflight fails closed rather than applying stale intent.
 
 The command does **not** auto-save `.qsdb` and does not claim that imported semantic objects already have native geometry in the current DWG.
 
@@ -94,6 +96,8 @@ Static contract guard:
 ```text
 python scripts/preflight-interchange-append-only-import.py
 ```
+
+The static adapter guard requires exactly one intentional target `GetOrCreate` before preview, then `InterchangeConfirmationGuard.RequireFresh(...)` after confirmation and before `ProjectInterchangeAppendOnlyImporter.Import(...)`. This prevents a second target creation/rebinding from becoming part of the standalone append confirmation path.
 
 Do not claim those tests or the static guard passed unless they were actually executed on the exact source SHA.
 
