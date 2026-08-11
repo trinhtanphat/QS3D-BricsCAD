@@ -39,7 +39,8 @@ for token in [
     "polygonal Slab mesh hiện yêu cầu plan-view POLYLINE có normal +Z",
     "ProjectStateSnapshot.Capture(project)",
     "GeneratedRebarOwnershipGuard.Build(project)",
-    "ErasePrevious(document, transaction, element, ownership)",
+    "ErasePrevious(document, transaction, project, element, ownership)",
+    "GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey",
     "CommitSemanticUpdate(project, update)",
     "transaction.Commit()",
     "rollback.Restore(project)",
@@ -62,9 +63,10 @@ require(command, "Rectangle giữ local-axis legacy; polygon dùng drawing X/Y",
 require(health, '"GeneratedSlabMeshMode"', "slab health metadata")
 require(mode_health, 'RequireExactMode(element, "GeneratedSlabMeshMode", "SlabMeshXY"', "mode compatibility")
 require(invalidator, "CoreOwnershipPolicy.RebarHandleKeys", "generated invalidation/ownership")
+require(invalidator, "GeneratedRebarNativeOwnershipService.RequireMatchingOwnership", "native rebar ownership validation")
 
 if 'private const string Mode = "SlabMeshXY"' not in builder:
     print("[FAIL] polygon footprint must not invent a new generated rebar mode")
     sys.exit(1)
 
-print("[PASS] QS3DSLABREBAR3D preserves rotated-rectangle local-axis behavior and adds guarded simple-polygon native mesh fallback")
+print("[PASS] QS3DSLABREBAR3D preserves rotated-rectangle local-axis behavior, adds guarded simple-polygon fallback, and verifies project-aware native ownership before replacement")
