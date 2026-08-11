@@ -126,7 +126,7 @@ namespace QS3D.Core.Export
             AppendStringArray(json, element.DependsOn, "dependencies");
             json.Append(",\n");
             json.Append("      \"properties\": ");
-            AppendStringMap(json, element.Properties.Where(x => IsInterchangeProperty(x.Key)), 3);
+            AppendStringMap(json, element.Properties.Where(x => ProjectInterchangeElementPropertyPolicy.IsPortable(x.Key)), 3);
             json.Append(",\n");
             json.Append("      \"quantities\": ");
             AppendNumberMap(json, element.Quantities);
