@@ -1,6 +1,6 @@
 # Work claim — BOM release diagnostics exception redaction
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-bom-diagnostics-redaction-20260812-0015`
 - Registered: `2026-08-12T00:15:00+07:00`
 - Baseline main SHA: `b78b069f3df92de6a7a740ac468edecc94216ae2`
@@ -13,27 +13,28 @@ Harden `BomReleaseGuardService` so its public `ModelHealthIssue.Message` values 
 ## Expected surfaces
 
 - `src/QS3D.Core/Diagnostics/BomReleaseGuardService.cs`
-- one focused deterministic Core/static regression surface, preferably an existing BOM smoke/preflight when suitable, otherwise a new narrow preflight under `scripts/`
+- `tests/QS3D.Core.SmokeTests/BomReleaseGuardSmoke.cs`
 - this claim file for close-out
 
 ## Excluded scope
 
-- Quantity Settings diagnostic commands/exporters (owned by the separate active quantity diagnostics redaction claim)
+- Quantity Settings diagnostic commands/exporters (owned by the separate quantity diagnostics redaction lane)
 - exception wording produced by lower-level stores/services for interactive/local troubleshooting
 - generated-health ownership logic, quantity calculation rules, reporting grouping semantics, BricsCAD runtime, installer/updater, release publication and GitHub Actions
 
-## Validation plan
+## Validation delivered
 
-- Pin stable generic messages for `BOM_EXCLUSION_FAILED`, `BOM_TRACEABILITY_FAILED` and `BOM_REPORT_FAILED`.
-- Guard that `BomReleaseGuardService` does not append `ex.Message`, exception `ToString()`, stack traces or filesystem paths to release-facing issues.
-- Preserve the existing error codes/severities and fail-closed continuation behavior.
-- Re-fetch current `main` before integration and reapply onto the latest head without overwriting concurrent work.
-- No GitHub Actions dispatch; no BricsCAD V25 runtime PASS claimed.
+- Merge commit: `3be032f3a6f9567eb7a2de1098fd27165bc2a797` via PR #570.
+- `BOM_EXCLUSION_FAILED`, `BOM_TRACEABILITY_FAILED` and `BOM_REPORT_FAILED` keep their existing Error severity/fail-closed paths but now emit stable generic messages instead of concatenating caught exception detail.
+- Existing BOM smoke coverage now pins exact redacted messages for exclusion/report failures and adds a deterministic duplicate-element traceability failure that pins the traceability message.
+- PR #570 was verified mergeable with exactly two changed product/test files before merge.
+- No GitHub Actions workflow was dispatched by this lane.
+- No licensed BricsCAD V25 runtime PASS is claimed. This remote session could not execute a local checkout/build because its shell environment could not resolve GitHub; validation here is source/diff plus committed deterministic smoke coverage, not an executed local runtime qualification.
 
 ## Coordination
 
-The active Quantity Settings error-redaction claim owns only the two BricsCAD Quantity Settings diagnostic command files and explicitly excludes exception swallowing elsewhere. Recent BOM handle-case work is `COMPLETED`. This reservation owns only the Core BOM release guard messages above.
+The Quantity Settings error-redaction work remains separate. This completed reservation changed only the Core BOM release guard and its existing smoke test; no neighboring active lane was overwritten.
 
 ## Completion condition
 
-BOM release-health exceptions remain fail-closed but no longer echo arbitrary exception details through `ModelHealthIssue.Message`, focused regression coverage is committed to current `main`, and this claim is marked `COMPLETED` with the implementation SHA and validation evidence.
+Satisfied: BOM release-health exceptions remain fail-closed, arbitrary caught exception details are no longer echoed through the three BOM release-facing `ModelHealthIssue.Message` paths, focused regression coverage is on `main`, and this claim records the exact merge evidence.
