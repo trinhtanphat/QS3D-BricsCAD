@@ -82,7 +82,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (document == null || !ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, document)) return;
             try
             {
-                Cad.CadHandleService.Select(document, Array.Empty<string>());
+                Cad.CadHandleService.ClearSelection(document);
             }
             catch
             {
