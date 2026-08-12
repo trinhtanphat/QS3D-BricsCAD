@@ -40,8 +40,8 @@ if AUGMENTER.is_file():
 
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
-    if '[CommandMethod("QS3DDRAWWALLREF", CommandFlags.Modal)]' not in text:
-        errors.append("ribbon target QS3DDRAWWALLREF command is not registered")
+    if '[CommandMethod("QS3DDRAWWALLREF", CommandFlags.Modal | CommandFlags.UsePickSet)]' not in text:
+        errors.append("ribbon target QS3DDRAWWALLREF PICKFIRST command is not registered")
 
 if errors:
     for error in errors:
@@ -49,4 +49,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3D_AUTHOR exposes the reference-wall command through the real plugin startup path without replacing existing wall authoring.")
+print("PASS: QS3D_AUTHOR exposes the PICKFIRST-capable reference-wall command through the real plugin startup path without replacing existing wall authoring.")
