@@ -7,9 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 required = {
     "README.md": [
-        "Product form — BricsCAD plugin, not standalone EXE",
+        "It runs inside BricsCAD as a managed plugin; it is not a standalone CAD executable.",
         "plugin for BricsCAD V25 and V26 x64",
-        "A matching licensed BricsCAD host is required at runtime",
+        "A matching licensed BricsCAD installation is required for host builds and runtime qualification.",
         "docs/PRODUCT-BOUNDARY.md",
     ],
     "AGENTS.md": [
