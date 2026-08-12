@@ -1,23 +1,28 @@
 # Work claim — Host link dependency-cycle preflight
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-host-link-dependency-cycle-20260812-1119`
 - Registered: `2026-08-12T11:19:00+07:00`
+- Completed: `2026-08-12T11:44:00+07:00`
 - Baseline main SHA: `6b2da3495aca6bced29937ff8683da32c2c1fb88`
 - Priority: owner-requested continue-all Core mutation integrity
 
 ## Confirmed defect
 
-`HostLinkService.LinkOpening(...)` persists the host relation as `opening.DependsOn.Add(wall.Id)` after resolving the target wall, but it does not preflight whether that wall already depends directly or transitively on the opening. A valid acyclic project can therefore be mutated into a dependency cycle (for example `WALL -> OPENING`, followed by host-link `OPENING -> WALL`). The write/audit succeeds because cycle detection only occurs later when dependency ordering is evaluated.
+`HostLinkService.LinkOpening(...)` persisted the host relation as `opening.DependsOn.Add(wall.Id)` after resolving the target wall, but did not preflight whether that wall already depended directly or transitively on the opening. A valid acyclic project could therefore be mutated into a dependency cycle, with cycle detection deferred until later dependency ordering.
+
+## Completed implementation
+
+- Claim commit: `cc44bde30e4f685774c59186ba2a768dc4aaaae3`
+- Product fix: `66c15ba42b6c83c06d64a4de63674df0d967131a`
+- Regression: `0a075eacbb9781bd4a782caaa17499abd8f061f4`
+- `HostLinkService.LinkOpening(...)` now preflights the target wall dependency closure before adding a new semantic host dependency edge.
+- Direct/transitive dependency paths from the wall back to the opening fail before relation, dependency, audit or revision mutation.
+- Closure traversal fails closed for blank, padded or missing dependency identities in the traversed subgraph.
+- Existing same-host canonical repair behavior remains outside the new-edge cycle preflight.
+- Focused CAD-independent smoke coverage pins a transitive cycle rejection as atomic and preserves an acyclic control.
 
 ## Reserved scope
-
-- Preflight the proposed host dependency edge before any host-link mutation/audit.
-- Reject a target wall that is already a direct/transitive dependent of the opening.
-- Preserve canonical same-host repair, re-host physical-cut safety, dependency cleanup, dirty flags, audit-owned revision semantics and unlink behavior.
-- Add focused CAD-independent Core smoke coverage proving cycle rejection is atomic and a normal acyclic host link remains valid.
-
-## Expected surfaces
 
 - `src/QS3D.Core/Services/HostLinkService.cs`
 - `tests/QS3D.Core.SmokeTests/HostLinkDependencyCycleSmoke.cs`
@@ -29,13 +34,13 @@
 - No changes to `UnlinkOpening`, physical opening-cut state, Auto Host metadata policy, CAD/native runtime or UI wrappers.
 - No GitHub Actions, force push, release publication or BricsCAD runtime PASS claim.
 
-## Validation plan
+## Validation evidence
 
-- Refresh `main` and re-fetch exact `HostLinkService.cs` after claim registration.
-- Build the current dependency graph before mutation and fail if the target wall is already in the opening's transitive dependents; this means adding `opening -> wall` would close a cycle.
-- Add a module-initializer smoke with a direct/transitive cycle candidate and assertions that relation, dependencies, project version and audit history remain unchanged; include a canonical acyclic control.
-- Re-fetch final source/test, verify ancestry against moving `main`, then close this claim with exact SHAs.
+- Final regression commit `0a075eacbb9781bd4a782caaa17499abd8f061f4` is an ancestor of refreshed `main` `099e3fd46758e3d2c16c05e833016bdcf1aab8e9` (`ahead_by=77`, `behind_by=0`, merge base equals the regression commit).
+- Final source and smoke were re-fetched after integration in the implementation session; subsequent concurrent changes observed before closure did not modify the reserved source/test paths.
+- Compile-surface readback confirmed `ElementCategory.CustomQuantity` and the `ProjectElement(id, category, familyId, floorId, zoneId)` constructor used by the focused smoke exist in the repository.
+- The smoke file was committed but not executed in this GitHub connector session; no build, GitHub Actions or BricsCAD runtime PASS is claimed.
 
 ## Completion condition
 
-Completed only when `HostLinkService.LinkOpening(...)` cannot introduce a semantic dependency cycle, focused regression coverage is committed, and this claim is closed on `main` with exact integration evidence.
+Completed: `HostLinkService.LinkOpening(...)` cannot introduce the covered direct/transitive semantic dependency cycle, focused regression coverage is integrated on `main`, and this claim is closed with exact commit ancestry evidence.
