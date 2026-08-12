@@ -418,3 +418,11 @@ Baseline audited after a clean fetch and fast-forward: `origin/main@3b3616b4633d
 The full Core smoke returns to the already reserved `RoomFinishGeneratorNumericSafetySmoke.cs`: its two negative-metric generator cases still assign through public `ElementInstance` setters. The completed non-negative measurement contract now rejects those assignments before generator execution, superseding this claim's earlier assumption that finite negative metrics remained constructible. The original generator and measurement claims are `COMPLETED`; no other ACTIVE/BLOCKED claim owns this fixture.
 
 Extend the existing reservation for that smoke file only to inject negative legacy/corrupt `_areaM2` and `_sideAreaM2` state through a test-local private-field helper for the consumed and disabled-output defense cases. Preserve the public NaN/Infinity setter-boundary assertions, valid generation/provenance, output selection and all production `ElementInstance`/Room Finish code. Re-run the complete Core smoke after this fixture-boundary reconciliation.
+
+## 2026-08-12 Locate unknown-root fixture supersession expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@0a33c938f420125dfb8549c8d44e9e2f60384430`.
+
+The full Core smoke reaches `SourceHandleResolverMissingDependencySmoke.PreservesUnknownRootBehavior()`, which still expects an unknown requested root ID to return an empty handle list. The completed missing-requested-root contract now intentionally fails closed with an actionable diagnostic before traversal, so the old expectation is superseded. The missing-dependency, missing-root and structural-freshness claims are `COMPLETED`; the current ACTIVE/BLOCKED audit found no owner for this exact fixture.
+
+Reserve only `tests/QS3D.Core.SmokeTests/SourceHandleResolverMissingDependencySmoke.cs` to require `E-UNKNOWN` to throw `InvalidOperationException` with the missing root in its diagnostic. Preserve valid direct/dependent handle ordering, missing canonical dependency rejection and all production Locate/source-handle code. Re-run the complete Core smoke after this test-only supersession reconciliation.
