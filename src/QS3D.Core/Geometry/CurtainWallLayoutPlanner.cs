@@ -213,8 +213,12 @@ namespace QS3D.Core.Geometry
 
         private static double Multiply(double left, double right, string label)
         {
-            var result = Finite(left, label + " left") * Finite(right, label + " right");
+            left = Finite(left, label + " left");
+            right = Finite(right, label + " right");
+            var result = left * right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " overflowed.");
+            if (result == 0d && left != 0d && right != 0d)
+                throw new InvalidOperationException(label + " underflowed to zero.");
             return result;
         }
 
