@@ -53,7 +53,7 @@ namespace QS3D.Core.Reporting
             }
             var result = new List<QuantityReportRow>(order.Count);
             foreach (var key in order) result.Add(grouped[key]);
-            return result;
+            return result.AsReadOnly();
         }
 
         private static string GroupKey(params string[] tokens)

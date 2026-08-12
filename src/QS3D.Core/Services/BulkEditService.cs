@@ -65,8 +65,8 @@ namespace QS3D.Core.Services
                     throw new FormatException("Invalid numeric property " + key + " on " + element.Id + ": " + text);
                 var next = current * factor;
                 if (double.IsNaN(next) || double.IsInfinity(next)) throw new OverflowException("Bulk property multiplication overflow for " + element.Id + "/" + key);
+                if (next.Equals(current)) continue;
                 var formatted = next.ToString("R", CultureInfo.InvariantCulture);
-                if (string.Equals(text, formatted, StringComparison.Ordinal)) continue;
                 updates.Add(new PendingPropertyUpdate { Element = element, Value = formatted });
             }
 

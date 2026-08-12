@@ -20,12 +20,12 @@ namespace QS3D.Core.Diagnostics
                 if (element == null)
                     throw new InvalidOperationException("Tie rebar health cannot inspect a null project element.");
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
-                var handles = raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
+                var handles = raw.Split(new[] { ';' }, StringSplitOptions.None).Select(x => (x ?? string.Empty).Trim()).ToArray();
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var valid = 0;
                 foreach (var handle in handles)
                 {
-                    if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                    if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                     {
                         issues.Add(new ModelHealthIssue("INVALID_TIE_REBAR_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
                         continue;

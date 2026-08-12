@@ -25,7 +25,11 @@ namespace QS3D.Core.Diagnostics
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (issues == null) throw new ArgumentNullException(nameof(issues));
 
-            var health = issues.Where(x => x != null)
+            var normalizedIssues = issues.ToList();
+            if (normalizedIssues.Any(x => x == null))
+                throw new InvalidOperationException("Diagnostic summary cannot contain a null health issue.");
+
+            var health = normalizedIssues
                 .GroupBy(x => new { x.Severity, Code = CanonicalCode(x.Code) })
                 .OrderByDescending(x => x.Key.Severity)
                 .ThenBy(x => x.Key.Code, StringComparer.Ordinal)

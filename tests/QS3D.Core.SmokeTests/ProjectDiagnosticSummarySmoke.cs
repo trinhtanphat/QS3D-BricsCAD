@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             SummaryContainsCountsWithoutProjectPayload();
+            NullIssuesFailClosedWithoutReplacingExport();
             ExportReplacesAtomically();
         }
 
@@ -60,6 +61,50 @@ namespace QS3D.Core.SmokeTests
             Forbid(json, "123.456");
             Forbid(json, "Sensitive detail");
             Forbid(json, "Customer geometry detail");
+        }
+
+        private static void NullIssuesFailClosedWithoutReplacingExport()
+        {
+            var project = new ProjectState("P-NULL", "Diagnostic Null");
+            var malformed = new ModelHealthIssue[]
+            {
+                new ModelHealthIssue("VALID", HealthSeverity.Info, "valid"),
+                null!
+            };
+
+            try
+            {
+                _ = ProjectDiagnosticSummaryExporter.Build(project, malformed);
+                throw new Exception("Diagnostic summary Build must reject a null health issue.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("null health issue", StringComparison.Ordinal) < 0)
+                    throw new Exception("Diagnostic summary Build rejected a null issue for the wrong reason.", ex);
+            }
+
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-diagnostic-null-" + Guid.NewGuid().ToString("N") + ".json");
+            try
+            {
+                File.WriteAllText(path, "old");
+                try
+                {
+                    ProjectDiagnosticSummaryExporter.Export(path, project, malformed);
+                    throw new Exception("Diagnostic summary Export must reject a null health issue.");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    if (ex.Message.IndexOf("null health issue", StringComparison.Ordinal) < 0)
+                        throw new Exception("Diagnostic summary Export rejected a null issue for the wrong reason.", ex);
+                }
+                var persisted = File.ReadAllText(path);
+                if (!string.Equals(persisted, "old", StringComparison.Ordinal))
+                    throw new Exception("Malformed diagnostic export must not replace the existing destination.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
         }
 
         private static void ExportReplacesAtomically()
