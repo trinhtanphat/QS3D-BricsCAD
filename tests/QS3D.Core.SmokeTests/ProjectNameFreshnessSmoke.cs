@@ -1,5 +1,8 @@
 using System;
+using System.Globalization;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 
@@ -43,6 +46,52 @@ namespace QS3D.Core.SmokeTests
             Equal("Renamed Project", project.Name, "snapshot restored name");
             Equal(savedVersion, project.ChangeVersion, "snapshot restored revision");
             Equal(savedUpdated, project.UpdatedUtc, "snapshot restored timestamp");
+
+            OverflowRenameIsAtomic();
+        }
+
+        private static void OverflowRenameIsAtomic()
+        {
+            var project = AtVersion(new ProjectState("P-NAME-OVERFLOW", "Overflow Original"), long.MaxValue);
+            var beforeName = project.Name;
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = project.UpdatedUtc;
+
+            project.Name = " Overflow Original ";
+            Equal(beforeName, project.Name, "overflow canonical-equivalent name");
+            Equal(beforeVersion, project.ChangeVersion, "overflow canonical-equivalent revision");
+            Equal(beforeUpdated, project.UpdatedUtc, "overflow canonical-equivalent timestamp");
+
+            Throws<OverflowException>(() => project.Name = "Overflow Changed");
+            Equal(beforeName, project.Name, "overflow failed rename preserves name");
+            Equal(beforeVersion, project.ChangeVersion, "overflow failed rename preserves revision");
+            Equal(beforeUpdated, project.UpdatedUtc, "overflow failed rename preserves timestamp");
+        }
+
+        private static ProjectState AtVersion(ProjectState source, long version)
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-project-name-overflow-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.SaveNew(source, path);
+                var document = XDocument.Load(path);
+                var root = document.Root ?? throw new Exception("ProjectNameFreshnessSmoke fixture has no root element.");
+                root.SetAttributeValue("changeVersion", version.ToString(CultureInfo.InvariantCulture));
+                document.Save(path, SaveOptions.DisableFormatting);
+                return store.Load(path);
+            }
+            finally
+            {
+                TryDelete(path);
+                TryDelete(path + ".bak");
+            }
+        }
+
+        private static void TryDelete(string path)
+        {
+            try { if (File.Exists(path)) File.Delete(path); }
+            catch { }
         }
 
         private static void True(bool value, string label)
