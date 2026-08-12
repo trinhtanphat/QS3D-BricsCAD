@@ -55,6 +55,7 @@ namespace QS3D.Core.Domain
             options ??= new GridNamingOptions();
 
             var targetEnumerationVersion = project.ChangeVersion;
+            var projectElementsAtStart = project.Elements.ToList();
             var ids = new List<string>();
             foreach (var value in orderedGridElementIds)
             {
@@ -85,6 +86,12 @@ namespace QS3D.Core.Domain
             {
                 if (!projectElements.TryGetValue(id, out var element))
                     throw new InvalidOperationException("Grid element does not exist: " + id);
+                var originalMatches = projectElementsAtStart
+                    .Where(x => x != null && string.Equals((x.Id ?? string.Empty).Trim(), id, StringComparison.OrdinalIgnoreCase))
+                    .Take(2)
+                    .ToArray();
+                if (originalMatches.Length != 1 || !ReferenceEquals(originalMatches[0], element))
+                    throw new InvalidOperationException("Grid renumber target changed while Grid IDs were being enumerated: " + id + ". Retry against the current project state.");
                 if (element.Category != ElementCategory.Grid)
                     throw new InvalidOperationException("Element is not a Grid reference: " + element.Id);
                 targets.Add(element);
