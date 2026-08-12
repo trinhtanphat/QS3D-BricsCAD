@@ -16,11 +16,12 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
+            var elementIndex = BuildElementIndex(project);
             var inputVersion = project.ChangeVersion;
             var rootElementIds = MaterializeRootElementIds(elementIds);
             if (project.ChangeVersion != inputVersion)
                 throw new InvalidOperationException("Project state changed while materializing Locate root element ids. Retry Locate against the current project state.");
-            var elementIndex = BuildElementIndex(project);
+            RequireElementOwnershipUnchanged(project, elementIndex);
             foreach (var rootElementId in rootElementIds)
             {
                 if (!elementIndex.ContainsKey(rootElementId))
@@ -98,6 +99,23 @@ namespace QS3D.Core.Services
                 result[element.Id] = element;
             }
             return result;
+        }
+
+        private static void RequireElementOwnershipUnchanged(
+            ProjectState project,
+            IReadOnlyDictionary<string, ProjectElement> expected)
+        {
+            if (project.Elements.Count != expected.Count)
+                throw new InvalidOperationException("Project element ownership changed while materializing Locate root element ids. Retry Locate against the current project state.");
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null || !seen.Add(element.Id) ||
+                    !expected.TryGetValue(element.Id, out var original) ||
+                    !ReferenceEquals(original, element))
+                    throw new InvalidOperationException("Project element ownership changed while materializing Locate root element ids. Retry Locate against the current project state.");
+            }
         }
 
         private static void ValidateDependencies(ProjectElement element)
