@@ -57,8 +57,13 @@ namespace QS3D.Core.Navigation
         private static IReadOnlyList<ElementCategory> NormalizeCategories(IEnumerable<ElementCategory>? values)
         {
             var result = new SortedSet<ElementCategory>();
+            var count = 0;
             foreach (var value in values ?? Enumerable.Empty<ElementCategory>())
             {
+                if (count >= ProjectBrowserQueryPlanner.MaxFilterIds)
+                    throw new InvalidOperationException(
+                        "Project browser workspace category filter exceeds " + ProjectBrowserQueryPlanner.MaxFilterIds + " entries.");
+                count++;
                 if (!Enum.IsDefined(typeof(ElementCategory), value))
                     throw new ArgumentOutOfRangeException(nameof(values), "Project browser workspace contains an undefined category.");
                 result.Add(value);
