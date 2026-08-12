@@ -37,9 +37,9 @@ try {
         Write-Host "PASS: $typeName initialized and completed WPF layout."
 
         if ($typeName -eq 'QS3D.BricsCAD.V25.UI.WorkspacePanel') {
-            $wideScroller = [System.Windows.Media.VisualTreeHelper]::GetChild($control, 0)
+            $wideScroller = $control.FindName('WorkspaceOverflow')
             if (-not ($wideScroller -is [System.Windows.Controls.ScrollViewer])) {
-                throw 'WorkspacePanel template root must be the guarded horizontal ScrollViewer.'
+                throw 'WorkspacePanel must expose the host-safe WorkspaceOverflow ScrollViewer.'
             }
             if ($wideScroller.ComputedHorizontalScrollBarVisibility -ne [System.Windows.Visibility]::Collapsed) {
                 throw 'WorkspacePanel must not show horizontal overflow at 1200x800.'
@@ -51,9 +51,13 @@ try {
             $compact.Measure([System.Windows.Size]::new(460d, 420d))
             $compact.Arrange([System.Windows.Rect]::new(0d, 0d, 460d, 420d))
             $compact.UpdateLayout()
-            $compactScroller = [System.Windows.Media.VisualTreeHelper]::GetChild($compact, 0)
+            $compactScroller = $compact.FindName('WorkspaceOverflow')
+            $contentRoot = $compact.FindName('WorkspaceContentRoot')
             if (-not ($compactScroller -is [System.Windows.Controls.ScrollViewer])) {
-                throw 'Compact WorkspacePanel template root must remain the guarded horizontal ScrollViewer.'
+                throw 'Compact WorkspacePanel must retain the host-safe WorkspaceOverflow ScrollViewer.'
+            }
+            if (-not ($contentRoot -is [System.Windows.Controls.Grid])) {
+                throw 'Compact WorkspacePanel must expose WorkspaceContentRoot inside the overflow viewport.'
             }
             if ([Math]::Abs($compact.ActualWidth - 460d) -gt 0.1d -or [Math]::Abs($compact.ActualHeight - 420d) -gt 0.1d) {
                 throw "WorkspacePanel did not honor compact 460x420 arrange: $($compact.ActualWidth)x$($compact.ActualHeight)."
@@ -70,19 +74,19 @@ try {
                 $compactScroller.ExtentHeight -gt ($compactScroller.ViewportHeight + 0.1d)) {
                 throw "WorkspacePanel outer viewport must not add vertical overflow: extent=$($compactScroller.ExtentHeight), viewport=$($compactScroller.ViewportHeight)."
             }
-            if (-not ($compact.Content -is [System.Windows.Controls.Grid]) -or
+            if (-not ($compact.Content -is [System.Windows.Controls.ScrollViewer]) -or
                 -not [object]::ReferenceEquals($compact.DataContext, $dataContextMarker) -or
-                -not [object]::ReferenceEquals($compact.Content.DataContext, $dataContextMarker)) {
-                throw 'WorkspacePanel custom template must preserve its original Grid content and inherited DataContext.'
+                -not [object]::ReferenceEquals($contentRoot.DataContext, $dataContextMarker)) {
+                throw 'WorkspacePanel host-safe content composition must preserve inherited DataContext.'
             }
             foreach ($name in @('FamilySearch', 'PropertySearch')) {
                 $focusTarget = $compact.FindName($name)
                 if (-not ($focusTarget -is [System.Windows.Controls.Control]) -or
                     -not $focusTarget.Focusable -or -not $focusTarget.IsTabStop) {
-                    throw "WorkspacePanel custom template must preserve keyboard focus for $name."
+                    throw "WorkspacePanel host-safe content composition must preserve keyboard focus for $name."
                 }
             }
-            Write-Host "PASS: WorkspacePanel honors compact 460x420 overflow without vertical clipping and preserves content, DataContext and keyboard focus targets."
+            Write-Host "PASS: WorkspacePanel honors compact 460x420 overflow with normal WPF content composition and preserves DataContext plus keyboard focus targets."
         }
     }
 }
