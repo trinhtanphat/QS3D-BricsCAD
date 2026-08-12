@@ -30,6 +30,7 @@ namespace QS3D.Core.SmokeTests
             FabricationProvenanceFlowsToExports();
             CsvPreservesNonzeroSubSixDecimalValues();
             CsvRejectsInvalidRowsBeforeReplace();
+            XlsxPreservesNonzeroSubEightDecimalValues();
             XlsxRejectsWorksheetOverflowBeforeMutation();
         }
 
@@ -270,6 +271,63 @@ namespace QS3D.Core.SmokeTests
             {
                 try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
             }
+        }
+
+        private static void XlsxPreservesNonzeroSubEightDecimalValues()
+        {
+            const double tiny = 0.000000004d;
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-tiny-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "bbs.xlsx");
+            try
+            {
+                var row = new RebarScheduleRow
+                {
+                    ElementId = "E-XLSX-TINY",
+                    BarMark = "B-XLSX-TINY",
+                    ShapeCode = "00",
+                    Notation = "1D16",
+                    DiameterMm = 16d,
+                    Quantity = 1,
+                    CuttingLengthM = tiny,
+                    TotalLengthM = tiny,
+                    UnitWeightKgM = tiny,
+                    NetWeightKg = tiny,
+                    WastePercent = tiny,
+                    TotalWeightKg = tiny
+                };
+                XlsxRebarScheduleExporter.Export(path, new[] { row });
+
+                string sheet;
+                using (var stream = File.OpenRead(path))
+                using (var archive = new ZipArchive(stream, ZipArchiveMode.Read, false))
+                using (var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open()))
+                    sheet = reader.ReadToEnd();
+
+                Equal(16d, XlsxNumber(sheet, "E2"));
+                Equal(1d, XlsxNumber(sheet, "F2"));
+                foreach (var cell in new[] { "G2", "H2", "I2", "J2", "K2", "L2" })
+                {
+                    var parsed = XlsxNumber(sheet, cell);
+                    Equal(tiny, parsed);
+                    if (parsed == 0d) throw new Exception("BBS XLSX converted a validated non-zero numeric value to zero at cell " + cell + ".");
+                }
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static double XlsxNumber(string sheet, string cellRef)
+        {
+            var cellToken = "<c r=\"" + cellRef + "\"";
+            var cellStart = sheet.IndexOf(cellToken, StringComparison.Ordinal);
+            if (cellStart < 0) throw new Exception("Expected BBS XLSX numeric cell: " + cellRef);
+            var valueStart = sheet.IndexOf("<v>", cellStart, StringComparison.Ordinal);
+            var valueEnd = valueStart < 0 ? -1 : sheet.IndexOf("</v>", valueStart + 3, StringComparison.Ordinal);
+            if (valueStart < 0 || valueEnd < 0) throw new Exception("Expected BBS XLSX numeric value in cell: " + cellRef);
+            return double.Parse(sheet.Substring(valueStart + 3, valueEnd - valueStart - 3), NumberStyles.Float, CultureInfo.InvariantCulture);
         }
 
         private static void XlsxRejectsWorksheetOverflowBeforeMutation()
