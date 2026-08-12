@@ -5,12 +5,12 @@
 - Started: 2026-08-12 13:31 Asia/Ho_Chi_Minh
 - Scope: Add canonical read-only Project / Zone / Floor context to the Workspace footer using the current ExistingProjectMutationContext.
 - Owned paths:
-  - src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs
   - src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FooterContext.cs
   - scripts/preflight-workspace-footer-context.py
 - Released paths:
   - src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml
   - src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs
+  - src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs
 - Contract:
   - Resolve the live project through ExistingProjectMutationContext.TryGet(...).
   - Resolve zone from ActiveZoneId via FindZone(...).
