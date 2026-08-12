@@ -202,8 +202,28 @@ for token in (
     "Stable V26 release requires sign_package=true",
     "draft = $true",
     "draft = $false",
+    "Assert-RemoteReleaseTagTargetsWorkflowSha",
+    "git ls-remote --tags origin",
+    "application/octet-stream",
+    "uploadedAsset.url",
+    "Uploaded V26 release asset size mismatch",
+    "Uploaded V26 release asset SHA-256 mismatch",
+    "Draft V26 release contains unexpected assets",
 ):
     require(workflow, token, "V26 release workflow")
+if workflow.count("Assert-RemoteReleaseTagTargetsWorkflowSha") < 3:
+    errors.append("V26 release workflow must define and invoke remote tag/SHA verification both before and after asset verification")
+
+release_create = workflow.find('$release = Invoke-RestMethod -Method Post')
+first_tag_check = workflow.find('Assert-RemoteReleaseTagTargetsWorkflowSha', release_create + 1)
+asset_hash_check = workflow.find('Uploaded V26 release asset SHA-256 mismatch', first_tag_check + 1)
+second_tag_check = workflow.find('Assert-RemoteReleaseTagTargetsWorkflowSha', asset_hash_check + 1)
+publish_release = workflow.find('$published = Invoke-RestMethod -Method Patch', second_tag_check + 1)
+if min(release_create, first_tag_check, asset_hash_check, second_tag_check, publish_release) < 0 or not (
+    release_create < first_tag_check < asset_hash_check < second_tag_check < publish_release
+):
+    errors.append("V26 release publication order must be draft create -> tag/SHA check -> remote asset SHA-256 check -> tag/SHA recheck -> publish")
+
 for token in ("QS3D-BricsCAD-V25", "BRICSCAD_V25_DIR", "bricscad-v25", "QS3D.BricsCAD.V25.dll"):
     forbid(workflow, token, "V26 release workflow")
 for trigger in ("\n  push:", "\n  pull_request:", "\n  schedule:", "\n  workflow_run:"):
@@ -234,4 +254,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; V25/V26 release discovery is manifest-channel isolated; V26 signing/finalization/one-click update/release assets remain host-major specific.")
+print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; V25/V26 discovery is manifest-channel isolated; V26 publication revalidates remote tag identity and uploaded asset bytes before publish.")
