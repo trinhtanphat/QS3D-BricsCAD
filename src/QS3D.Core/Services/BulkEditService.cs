@@ -173,7 +173,21 @@ namespace QS3D.Core.Services
 
         private static IReadOnlyList<ProjectElement> OwnedDistinctByIds(ProjectState project, IEnumerable<string> elementIds)
         {
+            var sourceElements = new List<ProjectElement>(project.Elements);
             var rawIds = MaterializeBounded(elementIds, "Bulk edit target list");
+            var sourceIndex = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var sourceElement in sourceElements)
+            {
+                if (sourceElement == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                var sourceElementId = (sourceElement.Id ?? string.Empty).Trim();
+                if (sourceElementId.Length == 0)
+                    throw new InvalidOperationException("Project contains a semantic element with a blank id.");
+                if (sourceIndex.ContainsKey(sourceElementId))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + sourceElementId);
+                sourceIndex.Add(sourceElementId, sourceElement);
+            }
+
             var resolved = new List<ProjectElement>();
             var requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var id in rawIds)
@@ -183,10 +197,11 @@ namespace QS3D.Core.Services
                 var normalized = id.Trim();
                 if (!requested.Add(normalized))
                     throw new InvalidOperationException("Bulk edit target list contains duplicate semantic element id: " + normalized);
-                var match = project.FindElement(normalized) ?? throw new KeyNotFoundException("Unknown semantic element: " + normalized);
+                if (!sourceIndex.TryGetValue(normalized, out var match))
+                    throw new KeyNotFoundException("Unknown semantic element: " + normalized);
                 resolved.Add(match);
             }
-            return OwnedDistinct(project, resolved);
+            return resolved.AsReadOnly();
         }
 
         private static IReadOnlyList<ProjectElement> OwnedDistinct(ProjectState project, IEnumerable<ProjectElement> elements)
