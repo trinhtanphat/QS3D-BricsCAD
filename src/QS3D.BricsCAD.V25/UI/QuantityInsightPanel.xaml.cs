@@ -264,14 +264,21 @@ namespace QS3D.BricsCAD.V25.UI
                 var handles = SourceHandleResolver.Resolve(project, currentRow.ElementIds);
                 if (handles.Count == 0)
                 {
-                    Cad.CadHandleService.Select(document, handles);
+                    Cad.CadHandleService.ClearSelection(document);
                     _viewModel.Status = "Dòng này chưa có semantic handle hiện hành để định vị trong CAD.";
                     return;
                 }
 
                 var count = Cad.CadHandleService.Select(document, handles);
-                _viewModel.Status = "Định vị: đã chọn " + count.ToString("N0") + " đối tượng CAD.";
-                if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                if (count > 0)
+                {
+                    _viewModel.Status = "Định vị: đã chọn " + count.ToString("N0") + " đối tượng CAD.";
+                    document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                    return;
+                }
+
+                Cad.CadHandleService.ClearSelection(document);
+                _viewModel.Status = "Định vị: không còn đối tượng CAD hợp lệ để chọn.";
             }
             catch (Exception ex)
             {
