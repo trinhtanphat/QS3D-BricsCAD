@@ -1,137 +1,237 @@
 # QS3D for BricsCAD V25 + V26
 
-## Product form — BricsCAD plugin, not standalone EXE
+QS3D is a clean-room **BIM, semantic 3D and quantity-takeoff plugin for BricsCAD V25 and V26 x64**. It runs inside BricsCAD as a managed plugin; it is not a standalone CAD executable.
 
-QS3D is a clean-room **BIM / quantity takeoff / semantic 3D plugin for BricsCAD V25 and V26 x64**. It runs inside BricsCAD through a host-specific managed DLL; it is not a standalone CAD application.
+| Layer | Target | Role |
+| --- | --- | --- |
+| `QS3D.Core` | `netstandard2.0` | CAD-independent domain model, persistence, geometry/quantity logic, diagnostics and reporting |
+| `QS3D.BricsCAD.V25` | .NET Framework 4.8 / x64 | BricsCAD V25 host adapter, commands, WPF UI and CAD integration |
+| `QS3D.BricsCAD.V26` | `net8.0-windows` / x64 | BricsCAD V26 .NET 8 host build with V26-specific host/update boundaries |
 
-- BricsCAD V25 loads `QS3D.BricsCAD.V25.dll` built for .NET Framework 4.8.
-- BricsCAD V26 loads `QS3D.BricsCAD.V26.dll` built for `net8.0-windows` / the BricsCAD V26 .NET 8 managed host.
-- `QS3D.Core` remains `netstandard2.0` and is shared by both host adapters.
+A matching licensed BricsCAD installation is required for host builds and runtime qualification. Proprietary BricsCAD assemblies, customer drawings, private project data and third-party product source/binaries are intentionally excluded from the repository.
 
-A matching licensed BricsCAD host is required at runtime. The repository intentionally excludes BLT/BLT3D source or binaries, proprietary BricsCAD assemblies, customer drawings and private project data. BLT-style references describe workflow familiarity only; QS3D remains an independent implementation.
+## Current engineering status — 2026-08-12
 
-## Current status — 2026-08-12
+The repository is well beyond a prototype: it contains broad source-side implementation for project data, semantic authoring, CAD generation, quantity/reporting, schedules, review, rebar, model health, persistence and release tooling.
 
-The codebase is beyond prototype stage and contains broad source-side coverage for project data, semantic authoring, 3D generation, quantity/reporting, review, rebar and model-health workflows. The project is under active multi-agent development, so **source presence is not the same as production/runtime qualification**.
+The important qualification boundary is:
 
-The V25 and V26 lanes are intentionally separate at the managed-host boundary. V25 remains the established `net48` adapter; V26 is a real .NET 8 rebuild lane rather than a renamed V25 binary. V26 also has host-major-aware build/runtime/package/release guards so V25 assets cannot be silently treated as V26 assets.
+> **Implemented in source does not automatically mean production-qualified in BricsCAD.**
 
-A production claim still requires the exact release SHA to be built and exercised on a licensed Windows x64 workstation for the target BricsCAD major. See [`docs/LOCAL-V25-QUALIFICATION.md`](docs/LOCAL-V25-QUALIFICATION.md), [`docs/LOCAL-V26-QUALIFICATION.md`](docs/LOCAL-V26-QUALIFICATION.md) and [`docs/HEALTH-AND-PREFLIGHT.md`](docs/HEALTH-AND-PREFLIGHT.md).
+Static preflights and deterministic Core smoke tests can prove repository contracts and many regressions without proprietary SDK files. They cannot replace an exact-SHA build and runtime pass on the licensed BricsCAD major being released.
 
-## What QS3D contains
+The repository is also under active concurrent development. `main` can move frequently, so contributors and release operators must follow the claim/synchronization rules in [`AGENTS.md`](AGENTS.md) and [`docs/AGENT-WORK-REGISTRATION.md`](docs/AGENT-WORK-REGISTRATION.md).
 
-### Semantic BIM/QS core
+## Product capabilities represented in the codebase
 
-- Project, Zone, Floor/Level, Family/Type and Element model.
-- `.qsdb` persistence, migration, audit/revision data and deterministic regeneration.
-- Drawing-bound project lifecycle, selection synchronization and generated-handle ownership.
-- Model Health and Release Readiness checks for semantic/source/generated consistency.
+### Semantic BIM / QS project model
 
-### Authoring and 3D
+- Project, Zone, Floor/Level, Family/Type and semantic Element state.
+- Drawing-bound project lifecycle and source/generated CAD-handle ownership.
+- Dependency, dirty-state, regeneration and persistence metadata.
+- Project Browser / Workspace / Project Tools synchronization.
+- Model Health and Release Readiness checks for semantic, source and generated consistency.
+
+### Authoring and 3D generation
 
 - Semantic capture for architectural, structural, room/opening and related QS categories.
-- Direct Draw workflows for common wall/beam/slab/column and extended structural/architectural families.
-- Plan-to-3D / guarded native `Solid3d` generation with rollback and ownership checks.
-- Door/opening host links, room/finish workflows, Curtain Wall generation and source review tools.
-- Rebar 3D workflows for columns, beams, stirrups/ties, slabs, structural walls and foundations.
+- Direct Draw workflows for common wall, beam, slab, column and extended domain families.
+- Plan-to-3D and guarded native `Solid3d` generation with ownership/rollback checks.
+- Door/opening host links, room/finish workflows, Curtain Wall generation and source review.
+- Rebar 3D workflows covering columns, beams, stirrups/ties, slabs, structural walls and foundations.
 
 ### Quantity, schedules and deliverables
 
-- BQ/quantity review, filtering, recalculation and CAD locate/reveal flows.
+- Quantity/BQ review, filtering, recalculation and CAD locate/reveal flows.
 - Quick Takeoff and B4D-assisted recognition/review paths.
-- Schedule Hub and domain schedules for quantities, finishes, materials, openings/doors, Curtain and rebar/BBS.
-- XLSX/CSV deliverables with drawing/element traceability where supported by the workflow.
+- Schedule Hub plus domain schedules for quantities, finishes, materials, openings/doors, Curtain and rebar/BBS.
+- XLSX/CSV deliverables with source/element traceability where supported by the workflow.
 
 ### BricsCAD UX
 
-- Ribbon, Workspace palette, Project Tools, Domain Hub, Schedule Hub and Rebar 3D Hub.
-- Modeless WPF tools tied to the owning drawing instead of silently mutating the active document after a DWG switch.
-- Review commands for locate/highlight/focus/isolate/section workflows.
-- Start/readiness surfaces and health-oriented workflow entry points are maintained as source evolves.
+- Ribbon integration, Workspace palette, Project Tools, Domain Hub, Schedule Hub and Rebar 3D Hub.
+- Modeless WPF tools with drawing-ownership guards so a DWG switch does not silently redirect edits to the wrong document.
+- Locate/highlight/focus/isolate/section-style review commands.
+- Start/readiness and health-oriented entry points.
 
-For the exact command inventory, use [`docs/COMMANDS.md`](docs/COMMANDS.md) rather than duplicating the complete list here.
+For the authoritative command inventory, use [`docs/COMMANDS.md`](docs/COMMANDS.md) rather than duplicating every command here.
 
-## Architecture
+## Repository architecture
 
 ```text
-src/QS3D.Core/                 CAD-independent domain, persistence, quantities, diagnostics
-src/QS3D.BricsCAD.V25/         BricsCAD V25 / .NET Framework 4.8 adapter and shared CAD/WPF source
-src/QS3D.BricsCAD.V26/         BricsCAD V26 / .NET 8 host project and V26-specific host boundaries
-tests/QS3D.Core.SmokeTests/    deterministic Core regression/smoke coverage
-scripts/                       repository preflights, packaging/install/update/runtime helpers
-samples/generated/             repository-owned synthetic fixtures only
-docs/                          product, architecture, workflows, qualification and handoff docs
+src/
+  QS3D.Core/                 CAD-independent domain, persistence, geometry,
+                             quantities, diagnostics and reporting
+  QS3D.BricsCAD.V25/         V25 net48 BricsCAD/WPF adapter and the main shared
+                             host implementation
+  QS3D.BricsCAD.V26/         V26 net8.0-windows host project and V26-specific
+                             entry/update boundaries
+
+tests/
+  QS3D.Core.SmokeTests/      deterministic Core regression/smoke executable
+
+scripts/                     preflight, package, install, update and runtime helpers
+samples/generated/           repository-owned synthetic fixtures only
+docs/                        architecture, product, workflow and qualification docs
 ```
 
-Primary technology targets:
+### V25 / V26 source-sharing model
 
-- BricsCAD V25 on Windows x64: C# / .NET Framework 4.8 / WPF / BricsCAD .NET API;
-- BricsCAD V26 on Windows x64: C# / `net8.0-windows` / WPF / BricsCAD V26 .NET API;
-- Core: `netstandard2.0`;
-- source of truth: DWG source geometry plus `.qsdb` semantic/project metadata.
+V25 is the established `net48` adapter. V26 is a real .NET 8 build lane, not a renamed V25 binary.
 
-The canonical product boundary is [`docs/PRODUCT-BOUNDARY.md`](docs/PRODUCT-BOUNDARY.md); architecture details are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+The V26 project deliberately **links most V25 C# and XAML source** while excluding/replacing host-specific entry and updater surfaces. This reduces feature drift between majors, but it also creates a deliberate compatibility coupling: shared host code must continue compiling and behaving correctly under both the .NET Framework V25 host and the .NET 8 V26 host.
 
-## Repository validation
+For that reason, V25 runtime evidence must never be reported as V26 runtime evidence, or vice versa.
 
-Run the repository/source guards before feature-specific work:
+## Persistence and data-integrity posture
+
+The `.qsdb` path is treated as product data rather than an incidental sidecar. The current implementation includes defensive boundaries such as:
+
+- bounded project/XML input handling;
+- hardened XML parsing and schema/current-state validation;
+- canonical identity checks across persisted project/domain references;
+- save-time validation before publication;
+- atomic publication with backup/recovery behavior;
+- project-file locking and revision/baseline checks around concurrent/stale saves;
+- persistence stamps and dirty/freshness contracts used by save/regeneration flows.
+
+The practical source of truth is **DWG source geometry plus `.qsdb` semantic/project metadata**. See [`docs/SOURCE-OF-TRUTH.md`](docs/SOURCE-OF-TRUTH.md) for the canonical rules.
+
+## Update and release security posture
+
+The update/package code is intentionally fail-safe rather than permissive. Current safeguards include host-major isolation, bounded downloads, secure release-origin checks, signed artifact/script verification where required by the release lane, manifest/package integrity checks and rollback-oriented update flow.
+
+V25 and V26 package/update identities are kept separate. A V25 package or updater must not silently qualify as V26 simply because most application source is shared.
+
+The in-plugin V26 update lane remains subject to V26-specific qualification; do not treat source presence alone as proof that one-click V26 updating is production-ready.
+
+## Quick start for contributors
+
+### 1. Clone and inspect repository policy
+
+```bash
+git clone https://github.com/trinhtanphat/QS3D-BricsCAD.git
+cd QS3D-BricsCAD
+```
+
+Before substantive edits, read:
+
+- [`AGENTS.md`](AGENTS.md) — concurrent-editing rules;
+- [`CI_POLICY.md`](CI_POLICY.md) — manual-only GitHub Actions policy;
+- [`docs/AGENT-WORK-REGISTRATION.md`](docs/AGENT-WORK-REGISTRATION.md) — ACTIVE/BLOCKED claim protocol.
+
+### 2. Run repository preflights
 
 ```bash
 python scripts/preflight.py
 python scripts/preflight-all.py
 ```
 
-`preflight.py` owns generic repository/source policy. `preflight-all.py` discovers feature `preflight-*.py` guards, including V26 host/package isolation guards and the repository-health regression that protects cross-platform private-artifact/manual-CI checks.
+`preflight.py` owns generic repository/source policy. `preflight-all.py` discovers the focused `preflight-*.py` gates used to protect feature, release, host-major and regression contracts.
 
-Core-only validation does not require proprietary BricsCAD binaries:
+### 3. Build and run Core smoke tests
+
+These commands do not require BricsCAD SDK assemblies:
 
 ```bash
 dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
 dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
 ```
 
-Host adapter builds must resolve the matching BricsCAD managed assemblies externally; proprietary assemblies must not be committed into this repository. V25 uses `BRICSCAD_V25_DIR`; V26 uses `BRICSCAD_V26_DIR`. Never point one major's build/package/runtime lane at the other major's installation.
+The smoke executable covers far more than a startup check; its registered regressions span domain/persistence, geometry, quantities, dependency/freshness behavior, health, QSDB and interchange/export contracts.
 
-GitHub Actions are manual-only unless the repository CI policy is explicitly changed. `release-v25.yml`, `release-v25-cloud.yml` and `release-v26.yml` are owner-controlled release lanes; release jobs require `workflow_dispatch` plus explicit `RELEASE` confirmation. See [`CI_POLICY.md`](CI_POLICY.md) and [`docs/CI.md`](docs/CI.md).
+### 4. Build a BricsCAD host adapter
 
-## Runtime/release truth
+The host projects reference the licensed BricsCAD installation externally. Do **not** commit `BrxMgd.dll`, `TD_Mgd.dll` or other proprietary BricsCAD binaries.
 
-Static checks and Core smoke tests can validate source contracts, deterministic logic and regression registration. They **cannot** by themselves prove:
+PowerShell example for V25:
 
-- exact BricsCAD V25 or V26 managed-API compatibility;
+```powershell
+$env:BRICSCAD_V25_DIR = '<BricsCAD V25 installation directory>'
+dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
+```
+
+PowerShell example for V26:
+
+```powershell
+$env:BRICSCAD_V26_DIR = '<BricsCAD V26 installation directory>'
+dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj -c Release -p:Platform=x64
+```
+
+Never point the V25 project at V26 assemblies or the V26 project at V25 assemblies.
+
+## Validation model
+
+QS3D has three different evidence levels. Keep them separate in reviews and release notes.
+
+### 1. Static/source validation
+
+Examples: repository preflights, source-shape/security checks, package/update guards and policy checks.
+
+Useful for finding deterministic source/policy regressions. **Not host-runtime evidence.**
+
+### 2. Deterministic Core validation
+
+`QS3D.Core.SmokeTests` exercises CAD-independent behavior and many regression cases without BricsCAD.
+
+Useful for domain, persistence, geometry, quantity, dependency and interchange correctness. **Still not BricsCAD runtime evidence.**
+
+### 3. Licensed BricsCAD runtime qualification
+
+Required for claims about:
+
+- exact V25/V26 managed API compatibility;
 - `NETLOAD` / DemandLoad behavior;
-- native `Solid3d` authoring/boolean robustness on real drawings;
-- multi-DWG/modeless UI lifecycle under the real host;
-- Ribbon/WPF DPI and visual behavior;
-- signed installer/update rollback behavior;
-- large-project performance.
+- native `Solid3d` generation and boolean robustness on real drawings;
+- multi-DWG and modeless UI lifecycle;
+- Ribbon/WPF/DPI behavior;
+- installer/update/signing behavior;
+- large-project runtime performance.
 
-Those gates belong to local qualification for the exact host major. Do not mark a release production-ready until the exact candidate SHA has runtime evidence on that target.
+Use [`docs/LOCAL-V25-QUALIFICATION.md`](docs/LOCAL-V25-QUALIFICATION.md) and [`docs/LOCAL-V26-QUALIFICATION.md`](docs/LOCAL-V26-QUALIFICATION.md) for the exact host-major gates.
 
-## V26 package/update boundary
+## CI and release policy
 
-The V26 source lane has separate `QS3D-BricsCAD-V26` package, install/uninstall/update asset names and a manual V26 release workflow. Hardened V25 transaction/signature/download logic is reused through guarded host-major transformation rather than copied and allowed to drift. Static regression checks fail if generated V26 package/update scripts retain a V25 token.
+GitHub Actions are **manual-only** unless the repository owner explicitly changes [`CI_POLICY.md`](CI_POLICY.md).
 
-The in-plugin V26 `QS3DUPDATE` command remains fail-safe until the V26-specific one-click client is qualified against an actually signed V26 release channel. The packaged `update-v26.ps1` lane is separate and must pass the V26 signed-package/manifest and local qualification gates before production use.
+Normal commits, reviews, documentation updates, fixes and `continue all` requests do not authorize an Actions dispatch. The Core, V25, V26, focused-gate and release workflows remain owner-controlled `workflow_dispatch` lanes.
 
-## Documentation
+Release workflows require explicit release intent and their configured `RELEASE` confirmation. A production release should be tied to one exact candidate SHA and the matching host-major qualification evidence.
 
-Start at [`docs/README.md`](docs/README.md) for the compact documentation map.
+Representative workflows:
 
-Key durable references:
+- `.github/workflows/ci.yml` — Core/static validation;
+- `.github/workflows/bricscad-v25.yml` — licensed V25 integration/runtime lane;
+- `.github/workflows/bricscad-v26.yml` — licensed V26 integration/runtime lane;
+- `.github/workflows/release-v25.yml` — V25 package/release lane;
+- `.github/workflows/release-v25-cloud.yml` — V25 cloud release helper;
+- `.github/workflows/release-v26.yml` — V26 package/signed-manifest/release lane.
+
+## Engineering constraints worth knowing
+
+A repository-wide source review shows several deliberate trade-offs that future work should preserve or simplify carefully:
+
+- **Shared V25/V26 host source:** reduces duplicate implementation, but every shared host edit has two framework/runtime compatibility surfaces.
+- **Large host lifecycle surface:** drawing ownership, modeless windows, project save/recovery and generated CAD ownership interact heavily; regression tests should accompany lifecycle changes.
+- **Persistence is correctness-critical:** canonical IDs, dirty/freshness state, atomic publication and stale-session detection are part of the product contract, not implementation details.
+- **Many focused preflights:** they provide strong regression fences, but source-shape gates should stay aligned with intended behavior so they do not become accidental architecture locks.
+- **Manual CI by policy:** no automatic workflow run will save a release operator from forgetting host qualification; release discipline is therefore an explicit part of product safety.
+- **Static review has a ceiling:** absence of obvious placeholders or a passing Core/preflight suite does not prove native CAD geometry, WPF lifecycle or updater behavior in a licensed host.
+
+These are not blockers; they are the areas where changes have the highest cross-cutting risk.
+
+## Documentation map
+
+Start with [`docs/README.md`](docs/README.md). Durable references include:
 
 - [`docs/PRODUCT-BOUNDARY.md`](docs/PRODUCT-BOUNDARY.md) — product/hosting boundary;
-- [`docs/SOURCE-OF-TRUTH.md`](docs/SOURCE-OF-TRUTH.md) — canonical data/source rules;
+- [`docs/SOURCE-OF-TRUTH.md`](docs/SOURCE-OF-TRUTH.md) — canonical project/source rules;
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture;
 - [`docs/COMMANDS.md`](docs/COMMANDS.md) — command/workflow catalog;
 - [`docs/HEALTH-AND-PREFLIGHT.md`](docs/HEALTH-AND-PREFLIGHT.md) — health and source gates;
 - [`docs/LOCAL-V25-QUALIFICATION.md`](docs/LOCAL-V25-QUALIFICATION.md) — V25 runtime qualification;
-- [`docs/LOCAL-V26-QUALIFICATION.md`](docs/LOCAL-V26-QUALIFICATION.md) — V26 .NET 8/runtime/package qualification;
-- [`docs/AGENT-WORK-REGISTRATION.md`](docs/AGENT-WORK-REGISTRATION.md) — multi-agent claim protocol.
-
-## Multi-agent contribution rule
-
-This repository is edited concurrently. Before substantive work, follow [`AGENTS.md`](AGENTS.md) and register a non-overlapping ACTIVE claim under `docs/agent-work-claims/`. Re-read current `main` before writing, do not overwrite another active lane, and close the claim with validation evidence after the work is pushed.
+- [`docs/LOCAL-V26-QUALIFICATION.md`](docs/LOCAL-V26-QUALIFICATION.md) — V26 runtime/package qualification;
+- [`docs/AGENT-WORK-REGISTRATION.md`](docs/AGENT-WORK-REGISTRATION.md) — multi-agent reservation protocol.
 
 ## Clean-room policy
 
