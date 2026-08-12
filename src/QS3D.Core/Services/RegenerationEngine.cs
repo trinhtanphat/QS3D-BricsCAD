@@ -16,14 +16,14 @@ namespace QS3D.Core.Services
 
     public static class RegeneratorCatalog
     {
-        public static IReadOnlyList<IElementRegenerator> CreateDefault() => new IElementRegenerator[]
+        public static IReadOnlyList<IElementRegenerator> CreateDefault() => Array.AsReadOnly(new IElementRegenerator[]
         {
             new OpeningRegenerator(),
             new WallRegenerator(),
             new StructuralRegenerator(),
             new RoomRegenerator(),
             new GenericTakeoffRegenerator()
-        };
+        });
     }
 
     public sealed class RegenerationEngine
