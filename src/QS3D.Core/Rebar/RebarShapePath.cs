@@ -37,20 +37,20 @@ namespace QS3D.Core.Rebar
     public static class RebarShapePathBuilder
     {
         private const int MaxLegs = 32;
+        private const int MaxListTextLength = 4096;
         public static RebarShapePath Build(string? shapeCode, double cuttingLengthM, string? legsText = null, string? turnsText = null)
         {
             if (double.IsNaN(cuttingLengthM) || double.IsInfinity(cuttingLengthM) || cuttingLengthM <= 0d) throw new ArgumentOutOfRangeException(nameof(cuttingLengthM));
             var code = Normalize(shapeCode);
             if (IsStraight(code) && string.IsNullOrWhiteSpace(legsText)) return new RebarShapePath(code, new[] { new RebarShapePoint(0d, 0d), new RebarShapePoint(cuttingLengthM, 0d) });
-            var legs = ParsePositiveList(legsText, "RebarShapeLegsM");
+            var legs = ParsePositiveList(legsText, "RebarShapeLegsM", MaxLegs);
             if (legs.Count == 0)
             {
                 if (IsStraight(code)) return new RebarShapePath(code, new[] { new RebarShapePoint(0d, 0d), new RebarShapePoint(cuttingLengthM, 0d) });
                 throw new InvalidOperationException("Rebar shape " + code + " requires RebarShapeLegsM so geometry is not guessed from cutting length alone.");
             }
-            if (legs.Count > MaxLegs) throw new InvalidOperationException("Rebar shape exceeds the supported leg limit of " + MaxLegs + ".");
             ValidateTotal(legs, cuttingLengthM);
-            IReadOnlyList<double> turns = !string.IsNullOrWhiteSpace(turnsText) ? ParseTurns(turnsText) : PresetTurns(code, legs.Count);
+            IReadOnlyList<double> turns = !string.IsNullOrWhiteSpace(turnsText) ? ParseTurns(turnsText, legs.Count - 1) : PresetTurns(code, legs.Count);
             if (turns.Count != legs.Count - 1) throw new InvalidOperationException("RebarShapeTurnsDeg must contain exactly legs-1 values.");
             var points = new List<RebarShapePoint>(legs.Count + 1) { new RebarShapePoint(0d, 0d) };
             var x = 0d; var y = 0d; var angle = 0d;
@@ -71,23 +71,27 @@ namespace QS3D.Core.Rebar
             if (code == "31" || code == "Z") { if (legCount != 3) throw new InvalidOperationException("Z/31 rebar shape requires exactly three legs."); return new[] { 90d, -90d }; }
             throw new InvalidOperationException("Unsupported RebarShapeCode " + code + ". Provide RebarShapeTurnsDeg for an explicit custom segmented path.");
         }
-        private static List<double> ParsePositiveList(string? text, string label)
+        private static List<double> ParsePositiveList(string? text, string label, int maxCount)
         {
             if (string.IsNullOrWhiteSpace(text)) return new List<double>();
+            if (text!.Length > MaxListTextLength) throw new FormatException(label + " exceeds the supported " + MaxListTextLength + "-character limit.");
             var values = new List<double>();
-            foreach (var token in Split(text!))
+            foreach (var token in Split(text))
             {
+                if (values.Count >= maxCount) throw new InvalidOperationException("Rebar shape exceeds the supported leg limit of " + MaxLegs + ".");
                 if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value <= 0d) throw new FormatException(label + " contains an invalid positive number: " + token);
                 values.Add(value);
             }
             return values;
         }
-        private static IReadOnlyList<double> ParseTurns(string? text)
+        private static IReadOnlyList<double> ParseTurns(string? text, int maxCount)
         {
             if (string.IsNullOrWhiteSpace(text)) return Array.Empty<double>();
+            if (text!.Length > MaxListTextLength) throw new FormatException("RebarShapeTurnsDeg exceeds the supported " + MaxListTextLength + "-character limit.");
             var values = new List<double>();
-            foreach (var token in Split(text!))
+            foreach (var token in Split(text))
             {
+                if (values.Count >= maxCount) throw new InvalidOperationException("RebarShapeTurnsDeg must contain exactly legs-1 values.");
                 if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || Math.Abs(value) > 180d) throw new FormatException("RebarShapeTurnsDeg contains an invalid turn angle: " + token);
                 values.Add(value);
             }
