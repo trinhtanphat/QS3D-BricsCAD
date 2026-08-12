@@ -148,8 +148,8 @@ namespace QS3D.Core.Export
 
         private static InterchangeDrawingFingerprintRelation CompareFingerprint(string? source, string? target)
         {
-            var left = source ?? string.Empty;
-            var right = target ?? string.Empty;
+            var left = (source ?? string.Empty).Trim();
+            var right = (target ?? string.Empty).Trim();
             if (left.Length == 0 || right.Length == 0) return InterchangeDrawingFingerprintRelation.Unknown;
             return string.Equals(left, right, StringComparison.Ordinal) ? InterchangeDrawingFingerprintRelation.Match : InterchangeDrawingFingerprintRelation.Different;
         }
