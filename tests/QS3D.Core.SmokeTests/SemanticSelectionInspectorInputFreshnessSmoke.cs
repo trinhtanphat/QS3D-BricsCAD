@@ -11,8 +11,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             var project = new ProjectState("P-SELECTION-FRESHNESS", "Selection freshness smoke");
-            project.Elements.Add(new ProjectElement("E-1", ElementCategory.Wall));
-            project.Elements.Add(new ProjectElement("E-2", ElementCategory.Wall));
+            project.Elements.Add(new ProjectElement("E-1", ElementCategory.ArchitecturalWall));
+            project.Elements.Add(new ProjectElement("E-2", ElementCategory.ArchitecturalWall));
             project.Touch();
 
             var stable = SemanticSelectionInspector.Inspect(project, new[] { "E-2", "E-1" });

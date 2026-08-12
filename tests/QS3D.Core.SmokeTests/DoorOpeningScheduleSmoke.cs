@@ -26,6 +26,7 @@ namespace QS3D.Core.SmokeTests
             family.Properties["Material"] = "Gỗ";
             project.Families.Add(family);
 
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             var first = Door("d1", family.Id, "f1", "wall-a");
             first.Quantities["OpeningAreaM2"] = 1.95d;
             var second = Door("d2", family.Id, "f1", "wall-b");
@@ -57,6 +58,7 @@ namespace QS3D.Core.SmokeTests
             family.Properties["BottomOffsetM"] = "0.15";
             project.Families.Add(family);
 
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             var inherited = new ProjectElement("o1", ElementCategory.WallOpening, family.Id, "f1", "z");
             inherited.Properties["HostWallId"] = "wall-a";
             var overridden = new ProjectElement("o2", ElementCategory.WallOpening, family.Id, "f1", "z");
@@ -83,6 +85,8 @@ namespace QS3D.Core.SmokeTests
             family.Properties["WidthM"] = "-0.9";
             family.Properties["HeightM"] = "2.2";
             project.Families.Add(family);
+            project.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             project.Elements.Add(new ProjectElement("d1", ElementCategory.Door, family.Id, "f", "z"));
             Throws<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
 

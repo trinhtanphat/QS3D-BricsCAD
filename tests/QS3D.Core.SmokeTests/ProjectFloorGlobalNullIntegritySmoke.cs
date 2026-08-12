@@ -24,7 +24,7 @@ namespace QS3D.Core.SmokeTests
             project.Floors.Add(target);
             project.Floors.Add(null!);
             project.ActiveFloorId = source.Id;
-            var element = new ProjectElement("E1", ElementCategory.Beam, string.Empty, source.Id);
+            var element = new ProjectElement("E1", ElementCategory.Beam, string.Empty, source.Id, string.Empty);
             project.Elements.Add(element);
 
             AssertRejectedWithoutMutation(project, target, element, () => ProjectFloorService.Update(project, target.Id, "Level 2 renamed", 3.5d));
@@ -78,7 +78,7 @@ namespace QS3D.Core.SmokeTests
             project.Floors.Add(source);
             project.Floors.Add(target);
             project.ActiveFloorId = source.Id;
-            var element = new ProjectElement("E1", ElementCategory.Beam, string.Empty, source.Id);
+            var element = new ProjectElement("E1", ElementCategory.Beam, string.Empty, source.Id, string.Empty);
             project.Elements.Add(element);
 
             ProjectFloorService.Update(project, target.Id, "Level 2 renamed", 3.5d);

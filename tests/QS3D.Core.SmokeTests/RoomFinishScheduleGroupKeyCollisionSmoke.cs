@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             project.Floors.Add(new FloorDefinition("A" + separator + "B", "Floor AB", 0d));
             project.Floors.Add(new FloorDefinition("A", "Floor A", 3d));
             project.Floors.Add(new FloorDefinition("D", "Floor D", 6d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone Z"));
 
             var roomFamily = new ProjectFamily("room-family", "Phòng", ElementCategory.Room);
             var finishFamily = new ProjectFamily("wf", "Sơn nước", ElementCategory.WallFinish);
