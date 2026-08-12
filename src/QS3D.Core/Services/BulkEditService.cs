@@ -70,8 +70,12 @@ namespace QS3D.Core.Services
                 if (!element.Properties.TryGetValue(key, out var text)) continue;
                 if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var current) || double.IsNaN(current) || double.IsInfinity(current))
                     throw new FormatException("Invalid numeric property " + key + " on " + element.Id + ": " + text);
+                if (current == 0d && HasNonZeroSignificand(text))
+                    throw new InvalidOperationException("Bulk numeric property underflow for " + element.Id + "/" + key + ": " + text);
                 var next = current * factor;
                 if (double.IsNaN(next) || double.IsInfinity(next)) throw new OverflowException("Bulk property multiplication overflow for " + element.Id + "/" + key);
+                if (next == 0d && current != 0d && factor != 0d)
+                    throw new InvalidOperationException("Bulk property multiplication underflow for " + element.Id + "/" + key);
                 if (next.Equals(current)) continue;
                 var formatted = next.ToString("R", CultureInfo.InvariantCulture);
                 updates.Add(new PendingPropertyUpdate { Element = element, Value = formatted });
@@ -337,6 +341,17 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
             if (values is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > MaxTargetInputCount)
                 throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
+        }
+
+        private static bool HasNonZeroSignificand(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var character = value[i];
+                if (character == 'e' || character == 'E') break;
+                if (character >= '1' && character <= '9') return true;
+            }
+            return false;
         }
 
         private static void RequireTargetEnumerationFreshness(ProjectState project, long beforeVersion, string label)
