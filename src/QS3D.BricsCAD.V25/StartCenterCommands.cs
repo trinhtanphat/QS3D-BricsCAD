@@ -60,8 +60,16 @@ namespace QS3D.BricsCAD.V25
         private static void UnsubscribeFromDocumentActivation()
         {
             if (!_documentActivatedSubscribed) return;
-            Application.DocumentManager.DocumentActivated -= OnDocumentActivated;
-            _documentActivatedSubscribed = false;
+
+            try
+            {
+                Application.DocumentManager.DocumentActivated -= OnDocumentActivated;
+                _documentActivatedSubscribed = false;
+            }
+            catch (System.Exception)
+            {
+                // Keep the flag true so later cleanup can retry without creating a duplicate subscription.
+            }
         }
 
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
