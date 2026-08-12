@@ -1,31 +1,34 @@
 # Work claim — Snapshot duplicate identity integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-snapshot-duplicate-identity-integrity`
 - Registered: `2026-08-12T09:33:00+07:00`
 - Baseline main SHA: `4ea70225d91dbc07edfa256c8e29884156f2f932`
+- Regression commit: `6dd689434e069d838f9368bd64ad0156b2ca5caf`
+- Completed source commit: `bafdcc18baaa0eb79c9aa7397fdcd90da353cbfd`
+- Readback main SHA before close-out: `eb56a4c5add6c2707ef5d3ff2fcfafd0f3515d15`
 - Priority: P1 snapshot fail-closed integrity found during owner-requested `continue all` audit.
 
 ## Confirmed defect
 
-`ProjectState.FindZone/FindFloor/FindFamily/FindElement/FindQuantityRule` define duplicate semantic IDs as invalid project state, and QSDB persistence rejects the same duplicates. `ProjectStateSnapshot.Capture(...)` now happens to reject duplicate Zone/Floor/Family/Element IDs while building captured-reference dictionaries, but public `ProjectStateSnapshot.CreateDetachedCopy(...)` calls `Clone(...) -> CopyInto(...)`, whose `ValidateCollectionEntries(...)` checks only null entries. A malformed in-memory project can therefore be cloned with duplicate semantic identities and fail later only when a consumer performs lookup or another integrity-sensitive operation. QuantityRule duplicate IDs are also not rejected by snapshot validation at all.
+`ProjectState.FindZone/FindFloor/FindFamily/FindElement/FindQuantityRule` and QSDB persistence treat duplicate semantic IDs as invalid, but public `ProjectStateSnapshot.CreateDetachedCopy(...)` previously validated only null entries before cloning. A malformed in-memory project could therefore be copied with duplicate semantic identities and fail only later during lookup or other integrity-sensitive work. QuantityRule duplicate IDs were not rejected by snapshot validation at all.
 
-The snapshot boundary should fail closed before producing another malformed ProjectState. This is separate from the completed QuantityRule engine duplicate-ID lane, which only guards rule evaluation/provenance.
+## Implemented contract
 
-## Reserved scope
+1. Snapshot `ValidateCollectionEntries(...)` still performs all existing null checks first.
+2. It now rejects duplicate Zone, Floor, Family, Element and QuantityRule IDs case-insensitively before any target collection is mutated.
+3. A shared `RequireUniqueIds(...)` also rejects missing/whitespace IDs if malformed objects reach the snapshot boundary.
+4. Existing same-project Zone/Floor/Family/Element identity restoration remains unchanged.
+5. Valid `CreateDetachedCopy(...)` behavior remains non-aliasing across all semantic collections, including QuantityRules.
+6. Focused smoke coverage independently injects case-variant duplicate IDs into all five collections and confirms a valid project still clones all entries without reference aliasing.
 
-- `src/QS3D.Core/Persistence/ProjectStateSnapshot.cs`
-- one focused Core smoke source under `tests/QS3D.Core.SmokeTests/`
-- this claim file for close-out
+## Verification
 
-## Plan
-
-1. Re-fetch moving `main`, current snapshot source and this claim before writes.
-2. Extend snapshot collection validation to reject duplicate Zone/Floor/Family/Element/QuantityRule IDs case-insensitively before any target mutation/copy.
-3. Preserve existing null-entry errors and same-project identity restoration; do not change domain service create/delete behavior.
-4. Add smoke coverage proving `CreateDetachedCopy(...)` rejects duplicate IDs for all five semantic collections while a valid project still clones without aliasing.
-5. Read back source/test on current `main`; do not dispatch GitHub Actions or claim BricsCAD runtime PASS.
-6. Close claim only after source/regression remain visible on current `main`.
+- Current-main source readback confirmed null preflight followed by duplicate-ID validation for all five semantic collections.
+- Current-main smoke readback confirmed Zone/Floor/Family/Element/QuantityRule duplicate cases and valid detached-clone behavior.
+- `bafdcc18baaa0eb79c9aa7397fdcd90da353cbfd...main` compared as `ahead` with the source commit as merge base; later concurrent changes touched unrelated reporting/legacy-preflight/grid smoke files.
+- Smoke source was committed but not executed from this remote connector session. Full Core smoke execution/build and GitHub Actions were not run; no PASS is fabricated.
+- This is Core snapshot integrity work and makes no licensed BricsCAD runtime claim.
 
 ## Excluded
 
