@@ -166,7 +166,8 @@ namespace QS3D.Core.Documentation
             return plans
                 .OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+                .ToList()
+                .AsReadOnly();
         }
 
         private static SemanticSheetPlan BuildCore(
