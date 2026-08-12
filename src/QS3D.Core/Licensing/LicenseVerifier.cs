@@ -145,6 +145,7 @@ namespace QS3D.Core.Licensing
                 !string.Equals(root.Name.LocalName, "qs3dLicense", StringComparison.Ordinal))
                 throw new InvalidDataException("Invalid QS3D license root.");
             if (!string.Equals(Required(root, "schema"), "1", StringComparison.Ordinal)) throw new InvalidDataException("Unsupported QS3D license schema.");
+            ValidateDirectChildren(root);
 
             var valid = RequiredSingleElement(root, "valid");
             var features = OptionalSingleElement(root, "features");
@@ -169,6 +170,21 @@ namespace QS3D.Core.Licensing
             if (license.Signature.Length > 1024) throw new InvalidDataException("License signature is too large.");
             license.Validate();
             return license;
+        }
+
+        private static void ValidateDirectChildren(XElement root)
+        {
+            foreach (var child in root.Elements())
+            {
+                if (!string.IsNullOrEmpty(child.Name.NamespaceName))
+                    throw new InvalidDataException("License child elements must not use XML namespaces.");
+                var name = child.Name.LocalName;
+                if (string.Equals(name, "valid", StringComparison.Ordinal) ||
+                    string.Equals(name, "features", StringComparison.Ordinal) ||
+                    string.Equals(name, "signature", StringComparison.Ordinal))
+                    continue;
+                throw new InvalidDataException("Unexpected QS3D license child element: <" + name + ">.");
+            }
         }
 
         private static XElement RequiredSingleElement(XElement parent, string name)
