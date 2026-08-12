@@ -22,6 +22,7 @@ namespace QS3D.Core.Services
             if (supportsMaterialVolume)
                 hasVolume = TryRead(element, VolumeProperty, out volume);
 
+            var hadMeasuredVolume = element.Quantities.TryGetValue("MeasuredSolidVolumeM3", out var previousMeasuredVolume);
             var handled = false;
             var removed = false;
             if (hasSurfaceArea)
@@ -42,14 +43,24 @@ namespace QS3D.Core.Services
                 element.SetQuantity("NetVolumeM3", volume);
                 handled = true;
             }
-            else if (element.Quantities.Remove("MeasuredSolidVolumeM3"))
+            else if (hadMeasuredVolume)
             {
+                element.Quantities.Remove("MeasuredSolidVolumeM3");
+                RemoveQuantityIfMatches(element, "GrossVolumeM3", previousMeasuredVolume);
+                RemoveQuantityIfMatches(element, "NetVolumeM3", previousMeasuredVolume);
                 handled = true;
                 removed = true;
             }
 
             if (removed) element.TouchPersistenceState();
             return handled;
+        }
+
+        private static bool RemoveQuantityIfMatches(ProjectElement element, string key, double expected)
+        {
+            return element.Quantities.TryGetValue(key, out var current) &&
+                   current.Equals(expected) &&
+                   element.Quantities.Remove(key);
         }
 
         private static bool TryRead(ProjectElement element, string key, out double value)
