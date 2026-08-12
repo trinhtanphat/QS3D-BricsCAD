@@ -15,6 +15,7 @@ namespace QS3D.Core.Services
                 RequireFiniteNonNegative(HeightM, nameof(HeightM));
                 var area = WidthM * HeightM;
                 if (double.IsNaN(area) || double.IsInfinity(area)) throw new OverflowException("Opening area is not finite.");
+                if (WidthM != 0d && HeightM != 0d && area == 0d) throw new OverflowException("Opening area underflowed to zero.");
                 return area;
             }
         }
@@ -101,6 +102,7 @@ namespace QS3D.Core.Services
         {
             var result = left * right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " is not finite.");
+            if (left != 0d && right != 0d && result == 0d) throw new OverflowException(label + " underflowed to zero.");
             return result;
         }
     }
