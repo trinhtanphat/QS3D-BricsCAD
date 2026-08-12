@@ -28,7 +28,9 @@ def require(text, tokens, label):
 
 
 require(exporter, (
-    "ValidateEd2NumericParity(detailRows, summaryRows);",
+    "var detailSnapshot = SnapshotEd2Rows(detailRows, nameof(detailRows), \"ED2 CHI_TIET\");",
+    "var summarySnapshot = SnapshotEd2Rows(summaryRows, nameof(summaryRows), \"ED2 TONG_HOP\");",
+    "ValidateEd2NumericParity(detailSnapshot, summarySnapshot);",
     "private static void ValidateEd2NumericParity(",
     "summary.ElementIds",
     "ValidateEd2SummaryIdentity(summary, detail)",
@@ -54,10 +56,14 @@ require(exporter, (
     'new InvalidDataException("ED2 TONG_HOP " + field + " does not equal the CHI_TIET aggregate.")',
 ), "XlsxQuantityExporter.cs")
 
-validation = exporter.find("ValidateEd2NumericParity(detailRows, summaryRows);")
-publication = exporter.find("ExportCore(path, detailRows, summaryRows);")
-if min(validation, publication) < 0 or validation >= publication:
-    errors.append("ED2 numeric parity must be validated before temp-package creation/publication")
+snapshot_detail = exporter.find('var detailSnapshot = SnapshotEd2Rows(detailRows, nameof(detailRows), "ED2 CHI_TIET");')
+snapshot_summary = exporter.find('var summarySnapshot = SnapshotEd2Rows(summaryRows, nameof(summaryRows), "ED2 TONG_HOP");')
+validation = exporter.find("ValidateEd2NumericParity(detailSnapshot, summarySnapshot);")
+publication = exporter.find("ExportCore(path, detailSnapshot, summarySnapshot);")
+if min(snapshot_detail, snapshot_summary, validation, publication) < 0 or not (
+    snapshot_detail < snapshot_summary < validation < publication
+):
+    errors.append("ED2 inputs must be snapshotted before numeric parity validation and validated before temp-package creation/publication")
 
 require(smoke, (
     "CanonicalNumericParityPublishes();",
@@ -88,4 +94,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ED2 validates per-summary count, volume, area, length, density and mass against its CHI_TIET elements before atomic XLSX publication, preserving explicit null density/mass semantics and existing destinations on refusal.")
+print("PASS: ED2 snapshots inputs, validates per-summary count, volume, area, length, density and mass against its CHI_TIET elements before atomic XLSX publication, preserving explicit null density/mass semantics and existing destinations on refusal.")
