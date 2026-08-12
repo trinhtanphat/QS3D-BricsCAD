@@ -71,7 +71,7 @@ namespace QS3D.Core.Diagnostics
                         {
                             Add(issues, "CURTAIN_PANEL_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated curtain panel ownership is ambiguous: " + handle + ".", element);
                         }
-                        if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                        if (element.SourceHandles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase)))
                             Add(issues, "CURTAIN_PANEL_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "A generated curtain panel handle cannot also be a source handle.", element);
                         if (liveHandleIndex != null && !liveHandleIndex.Contains(identity))
                             Add(issues, "CURTAIN_PANEL_GENERATED_SOLID_MISSING", HealthSeverity.Error, "A generated curtain panel solid is missing: " + handle + ".", element);
