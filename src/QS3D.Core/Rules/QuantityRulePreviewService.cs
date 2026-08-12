@@ -107,6 +107,7 @@ namespace QS3D.Core.Rules
         public QuantityRuleProjectPreview PreviewProject(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ValidateUniqueElementIds(project);
             var sourceChangeVersion = project.ChangeVersion;
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var previews = detached.Elements
@@ -268,9 +269,21 @@ namespace QS3D.Core.Rules
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
+            ValidateUniqueElementIds(project);
             var owned = project.FindElement(element.Id);
             if (owned == null || !ReferenceEquals(owned, element))
                 throw new InvalidOperationException("Quantity-rule preview/apply requires the exact element instance owned by the project.");
+        }
+
+        private static void ValidateUniqueElementIds(ProjectState project)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null) continue;
+                if (!seenIds.Add(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+            }
         }
 
         private static void RequirePreviewIdentity(ProjectState project, ProjectElement element, QuantityRuleElementPreview preview)
