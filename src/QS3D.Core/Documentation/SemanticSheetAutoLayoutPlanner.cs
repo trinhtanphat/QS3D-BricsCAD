@@ -71,6 +71,7 @@ namespace QS3D.Core.Documentation
         private const int MaxSheetNumberLength = 64;
         private const int MaxSheetOrdinalLength = 5;
         private const int MaxSheetNumberPrefixLength = MaxSheetNumberLength - MaxSheetOrdinalLength;
+        private const int MaxTitleBlockLength = 160;
 
         public static IReadOnlyList<SemanticSheetPlan> Build(
             IEnumerable<SemanticSheetAutoLayoutItem> items,
@@ -191,6 +192,7 @@ namespace QS3D.Core.Documentation
             Required(options.SheetIdPrefix, nameof(options.SheetIdPrefix));
             Required(options.SheetNumberPrefix, nameof(options.SheetNumberPrefix), MaxSheetNumberPrefixLength);
             Required(options.SheetNamePrefix, nameof(options.SheetNamePrefix));
+            ValidateOptional(options.TitleBlockName, nameof(options.TitleBlockName), MaxTitleBlockLength);
             PositiveFinite(options.PaperWidthMm, nameof(options.PaperWidthMm));
             PositiveFinite(options.PaperHeightMm, nameof(options.PaperHeightMm));
             NonNegativeFinite(options.MarginLeftMm, nameof(options.MarginLeftMm));
@@ -208,6 +210,12 @@ namespace QS3D.Core.Documentation
             var normalized = value!.Trim();
             if (normalized.Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
             return normalized;
+        }
+
+        private static void ValidateOptional(string? value, string name, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            if (value!.Trim().Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
         }
 
         private static void PositiveFinite(double value, string name)
