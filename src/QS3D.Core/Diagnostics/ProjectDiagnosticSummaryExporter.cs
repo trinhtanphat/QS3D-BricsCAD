@@ -110,6 +110,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Diagnostic summary path is required.", nameof(path));
             var fullPath = Path.GetFullPath(path);
+            var content = Build(project, issues);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
             var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
@@ -118,7 +119,7 @@ namespace QS3D.Core.Diagnostics
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (var writer = new StreamWriter(stream, StrictUtf8))
                 {
-                    writer.Write(Build(project, issues));
+                    writer.Write(content);
                     writer.Flush();
                     stream.Flush(true);
                 }
