@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             PacksAcrossSheetsDeterministically();
+            PerSheetPlacementCapPaginates();
             ResultIsReadOnly();
             ReservedTitleBlockAreaIsRespected();
             MissingViewFailsClosed();
@@ -41,6 +42,29 @@ namespace QS3D.Core.SmokeTests
             Equal(10d, sheets[0].Placements[2].Xmm);
             Equal(100d, sheets[0].Placements[2].Ymm);
             Equal("V5", sheets[1].Placements[0].ViewId);
+        }
+
+        private static void PerSheetPlacementCapPaginates()
+        {
+            var views = BuildViews(129);
+            var items = new List<SemanticSheetAutoLayoutItem>();
+            for (var i = 1; i <= 129; i++) items.Add(new SemanticSheetAutoLayoutItem("V" + i, 1d, 1d));
+
+            var sheets = SemanticSheetAutoLayoutPlanner.Build(
+                items,
+                views,
+                new SemanticSheetAutoLayoutOptions(
+                    "CAP", "CAP-", "Placement Cap", 1000d, 1000d,
+                    marginLeftMm: 0d,
+                    marginTopMm: 0d,
+                    marginRightMm: 0d,
+                    marginBottomMm: 0d,
+                    horizontalGapMm: 0d,
+                    verticalGapMm: 0d));
+
+            Equal(2, sheets.Count);
+            Equal(128, sheets[0].Placements.Count);
+            Equal(1, sheets[1].Placements.Count);
         }
 
         private static void ResultIsReadOnly()
